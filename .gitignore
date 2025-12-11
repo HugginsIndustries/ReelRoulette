@@ -1,0 +1,44 @@
+# Build results
+bin/
+obj/
+
+# Visual Studio / Rider
+.vs/
+.idea/
+*.user
+*.suo
+*.userprefs
+*.csproj.user
+
+# VS Code
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# Cursor
+.cursor/*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# NuGet packages
+/packages/
+*.nupkg
+
+# Test results
+/TestResults/
+
+# Logs
+*.log
+
+# User-specific data
+AppData/
+*.cache
+
+# Temporary files
+*.tmp
+*.temp
+

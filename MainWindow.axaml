@@ -1,0 +1,849 @@
+<Window
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:vlc="clr-namespace:LibVLCSharp.Avalonia;assembly=LibVLCSharp.Avalonia"
+    xmlns:local="clr-namespace:ReelRoulette"
+    x:Class="ReelRoulette.MainWindow"
+    Width="1280"
+    Height="720"
+    Title="ReelRoulette">
+
+    <Window.Styles>
+        <Style Selector="ToggleButton.IconToggle">
+            <Setter Property="Background" Value="{StaticResource IconDarkGreyBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource IconDarkGreyBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="3"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Padding" Value="6"/>
+            <Setter Property="FontSize" Value="16"/>
+            <Setter Property="MinWidth" Value="36"/>
+            <Setter Property="MinHeight" Value="36"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="{TemplateBinding CornerRadius}"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                        HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                        VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                        Foreground="{TemplateBinding Foreground}"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+        </Style>
+        <Style Selector="ToggleButton.IconToggle:pointerover:not(:checked)">
+            <Setter Property="Background" Value="{StaticResource IconDarkGreyHoverBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource IconDarkGreyHoverBrush}"/>
+        </Style>
+        <Style Selector="ToggleButton.IconToggle:pressed">
+            <Setter Property="Background" Value="{StaticResource HugginsOrangePressedBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource HugginsOrangePressedBrush}"/>
+        </Style>
+        <Style Selector="ToggleButton.IconToggle:checked">
+            <Setter Property="Background" Value="{StaticResource HugginsOrangeBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource HugginsOrangeBrush}"/>
+        </Style>
+        <Style Selector="ToggleButton.IconToggle:checked:pointerover">
+            <Setter Property="Background" Value="{StaticResource HugginsOrangePressedBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource HugginsOrangePressedBrush}"/>
+        </Style>
+        <Style Selector="ToggleButton.IconToggle:disabled">
+            <Setter Property="Opacity" Value="0.45"/>
+        </Style>
+
+        <Style Selector="Button.PlayRandomButton">
+            <Setter Property="Background" Value="{StaticResource IconDarkGreyBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource IconDarkGreyBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="3"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="MinWidth" Value="44"/>
+            <Setter Property="Height" Value="32"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="{TemplateBinding CornerRadius}"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                        HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                        VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                        Foreground="{TemplateBinding Foreground}"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+        </Style>
+        <Style Selector="Button.PlayRandomButton:pointerover">
+            <Setter Property="Background" Value="{StaticResource HugginsOrangeHoverBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource HugginsOrangeHoverBrush}"/>
+        </Style>
+        <Style Selector="Button.PlayRandomButton:pressed">
+            <Setter Property="Background" Value="{StaticResource HugginsOrangePressedBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource HugginsOrangePressedBrush}"/>
+        </Style>
+    </Window.Styles>
+    
+    <Grid RowDefinitions="Auto,Auto,Auto,Auto,*" Margin="0">
+        <!-- Row 0: Menu bar -->
+        <Menu x:Name="MainMenu" Grid.Row="0">
+            <MenuItem Header="_Playback">
+                <MenuItem x:Name="NoRepeatMenuItem"
+                          Header="No repeats until all played"
+                          ToggleType="CheckBox"
+                          IsChecked="True"
+                          Click="NoRepeatMenuItem_Click"/>
+                <MenuItem x:Name="KeepPlayingMenuItem"
+                          Header="Keep playing (timer)"
+                          ToggleType="CheckBox"
+                          Click="KeepPlayingMenuItem_Click"/>
+                <MenuItem Header="Set interval..."
+                          Click="SetIntervalMenuItem_Click"/>
+                <MenuItem x:Name="AutoPlayNextMenuItem"
+                          Header="Auto-play next on end"
+                          ToggleType="CheckBox"
+                          IsChecked="True"
+                          Click="AutoPlayNextMenuItem_Click"/>
+                <Separator/>
+                <MenuItem Header="Clear playback stats…"
+                          Click="ClearPlaybackStats_Click"/>
+                <Separator/>
+                <MenuItem Header="Seek step">
+                    <MenuItem x:Name="SeekStepFrameMenuItem"
+                              Header="Frame"
+                              ToggleType="Radio"
+                              Click="SeekStepMenuItem_Click"/>
+                    <MenuItem x:Name="SeekStep1sMenuItem"
+                              Header="1s"
+                              ToggleType="Radio"
+                              Click="SeekStepMenuItem_Click"/>
+                    <MenuItem x:Name="SeekStep5sMenuItem"
+                              Header="5s"
+                              ToggleType="Radio"
+                              IsChecked="True"
+                              Click="SeekStepMenuItem_Click"/>
+                    <MenuItem x:Name="SeekStep10sMenuItem"
+                              Header="10s"
+                              ToggleType="Radio"
+                              Click="SeekStepMenuItem_Click"/>
+                </MenuItem>
+                <MenuItem Header="Volume step">
+                    <MenuItem x:Name="VolumeStep1MenuItem"
+                              Header="1"
+                              ToggleType="Radio"
+                              Click="VolumeStepMenuItem_Click"/>
+                    <MenuItem x:Name="VolumeStep2MenuItem"
+                              Header="2"
+                              ToggleType="Radio"
+                              Click="VolumeStepMenuItem_Click"/>
+                    <MenuItem x:Name="VolumeStep5MenuItem"
+                              Header="5"
+                              ToggleType="Radio"
+                              IsChecked="True"
+                              Click="VolumeStepMenuItem_Click"/>
+                </MenuItem>
+            </MenuItem>
+            <MenuItem Header="_Library">
+                <MenuItem x:Name="RememberLastFolderMenuItem"
+                          Header="Remember last folder on startup"
+                          ToggleType="CheckBox"
+                          IsChecked="True"
+                          Click="RememberLastFolderMenuItem_Click"/>
+                <MenuItem x:Name="OnlyFavoritesMenuItem"
+                          Header="Only play favorites"
+                          ToggleType="CheckBox"
+                          Click="OnlyFavoritesMenuItem_Click"/>
+                <MenuItem Header="Duration filter..."
+                          Click="DurationFilterMenuItem_Click"/>
+                <MenuItem Header="Scan durations"
+                          Click="ScanDurations_Click"/>
+            </MenuItem>
+            <MenuItem Header="_View">
+                <MenuItem x:Name="ShowMenuMenuItem"
+                          Header="Show Menu"
+                          ToggleType="CheckBox"
+                          IsChecked="True"
+                          Click="ShowMenuMenuItem_Click"/>
+                <MenuItem x:Name="ShowFolderMenuItem"
+                          Header="Show Folder Selection"
+                          ToggleType="CheckBox"
+                          IsChecked="True"
+                          Click="ShowFolderMenuItem_Click"/>
+                <MenuItem x:Name="ShowStatusMenuItem"
+                          Header="Show Status Line"
+                          ToggleType="CheckBox"
+                          IsChecked="True"
+                          Click="ShowStatusMenuItem_Click"/>
+                <MenuItem x:Name="ShowControlsMenuItem"
+                          Header="Show Controls"
+                          ToggleType="CheckBox"
+                          IsChecked="True"
+                          Click="ShowControlsMenuItem_Click"/>
+                <MenuItem x:Name="ShowBlacklistMenuItem"
+                          Header="Show Blacklist panel"
+                          ToggleType="CheckBox"
+                          IsChecked="False"
+                          Click="ShowBlacklistMenuItem_Click"/>
+                <MenuItem x:Name="ShowFavoritesMenuItem"
+                          Header="Show Favorites panel"
+                          ToggleType="CheckBox"
+                          IsChecked="False"
+                          Click="ShowFavoritesMenuItem_Click"/>
+                <MenuItem x:Name="ShowRecentlyPlayedMenuItem"
+                          Header="Show Recently Played"
+                          ToggleType="CheckBox"
+                          IsChecked="False"
+                          Click="ShowRecentlyPlayedMenuItem_Click"/>
+                <MenuItem x:Name="ShowStatsMenuItem"
+                          Header="Show Stats panel"
+                          ToggleType="CheckBox"
+                          IsChecked="False"
+                          Click="ShowStatsMenuItem_Click"/>
+                <Separator/>
+                <MenuItem x:Name="FullscreenMenuItem"
+                          Header="Fullscreen"
+                          ToggleType="CheckBox"
+                          IsChecked="False"
+                          Click="FullscreenMenuItem_Click"/>
+                <MenuItem x:Name="AlwaysOnTopMenuItem"
+                          Header="Always on top"
+                          ToggleType="CheckBox"
+                          IsChecked="False"
+                          Click="AlwaysOnTopMenuItem_Click"/>
+                <MenuItem x:Name="PlayerViewModeMenuItem"
+                          Header="Player view mode"
+                          ToggleType="CheckBox"
+                          IsChecked="False"
+                          Click="PlayerViewModeMenuItem_Click"/>
+            </MenuItem>
+        </Menu>
+
+        <!-- Row 1: Folder selection -->
+        <Grid x:Name="FolderRow" Grid.Row="1" ColumnDefinitions="Auto * Auto" Margin="10,10,10,10" VerticalAlignment="Center">
+            <TextBlock Text="Video root folder:" 
+                       Grid.Column="0"
+                       VerticalAlignment="Center"
+                       Margin="0,0,8,0"/>
+            <TextBox x:Name="FolderTextBox"
+                     Grid.Column="1"
+                     VerticalAlignment="Center"
+                     Margin="0,0,8,0"/>
+            <Button Content="Browse..."
+                    Grid.Column="2"
+                    VerticalAlignment="Center"
+                    Click="Browse_Click"/>
+        </Grid>
+
+        <!-- Row 2: Status line -->
+        <Grid Grid.Row="2" Margin="10,5,10,5" VerticalAlignment="Center">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock x:Name="StatusTextBlock"
+                       Grid.Column="0"
+                       FontSize="11"
+                       Foreground="Gray"
+                       VerticalAlignment="Center"/>
+            <TextBlock x:Name="StatusTimeTextBlock"
+                       Grid.Column="1"
+                       FontSize="11"
+                       Foreground="Gray"
+                       VerticalAlignment="Center"
+                       Text="00:00:00.000"
+                       HorizontalAlignment="Right"
+                       Margin="8,0,0,0"/>
+        </Grid>
+
+        <!-- Row 3: Controls row -->
+        <Grid x:Name="ControlsRow"
+              Grid.Row="3"
+              Margin="10,0,10,0"
+              VerticalAlignment="Center">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <!-- Previous button -->
+            <Button x:Name="PreviousButton"
+                    Grid.Column="0"
+                    Classes="PlayRandomButton"
+                    ToolTip.Tip="Previous video"
+                    Margin="0,0,8,0"
+                    Click="PreviousButton_Click">
+                <TextBlock Text="⏮"
+                           TextAlignment="Center"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"/>
+            </Button>
+            <!-- Play/Pause button -->
+            <ToggleButton x:Name="PlayPauseButton"
+                          Grid.Column="1"
+                          Classes="IconToggle"
+                          ToolTip.Tip="Play / Pause"
+                          Margin="0,0,8,0"
+                          Click="PlayPauseButton_Click">
+                <TextBlock Text="⏯"
+                           TextAlignment="Center"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"/>
+            </ToggleButton>
+            <!-- Next button -->
+            <Button x:Name="NextButton"
+                    Grid.Column="2"
+                    Classes="PlayRandomButton"
+                    ToolTip.Tip="Next video"
+                    Margin="0,0,8,0"
+                    Click="NextButton_Click">
+                <TextBlock Text="⏭"
+                           TextAlignment="Center"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"/>
+            </Button>
+            <!-- Play Random button -->
+            <Button x:Name="PlayRandomButton"
+                    Grid.Column="3"
+                    Classes="PlayRandomButton"
+                    Content="🎲"
+                    ToolTip.Tip="Play random video"
+                    Margin="0,0,8,0"
+                    Click="PlayRandom_Click"/>
+            <!-- Show in file manager button -->
+            <Button x:Name="ShowInFileManagerButton"
+                    Grid.Column="4"
+                    Classes="PlayRandomButton"
+                    Content="📁"
+                    ToolTip.Tip="Show current video in file manager"
+                    Margin="0,0,8,0"
+                    Click="ShowCurrentVideoInFileManager_Click"/>
+            <!-- Loop toggle -->
+            <ToggleButton x:Name="LoopToggle"
+                          Grid.Column="5"
+                          Classes="IconToggle"
+                          ToolTip.Tip="Loop current video"
+                          IsChecked="True"
+                          Margin="0,0,8,0"
+                          Checked="LoopToggle_Changed"
+                          Unchecked="LoopToggle_Changed">
+                <TextBlock Text="🔂"
+                           TextAlignment="Center"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"/>
+            </ToggleButton>
+            <!-- Auto-play next toggle -->
+            <ToggleButton x:Name="AutoPlayNextCheckBox"
+                          Grid.Column="6"
+                          Classes="IconToggle"
+                          ToolTip.Tip="Auto-play next on end"
+                          IsChecked="True"
+                          Margin="0,0,8,0"
+                          Checked="AutoPlayNext_Changed"
+                          Unchecked="AutoPlayNext_Changed">
+                <TextBlock Text="➡️"
+                           TextAlignment="Center"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"/>
+            </ToggleButton>
+            <!-- Seek bar -->
+            <Slider x:Name="SeekSlider"
+                    Grid.Column="7"
+                    MinWidth="200"
+                    HorizontalAlignment="Stretch"
+                    VerticalAlignment="Center"
+                    Minimum="0"
+                    Maximum="1"
+                    Value="0"
+                    IsEnabled="False"
+                    Margin="0,0,8,0"
+                    PointerPressed="SeekSlider_PointerPressed"
+                    PointerReleased="SeekSlider_PointerReleased"
+                    PointerCaptureLost="SeekSlider_PointerCaptureLost"
+                    ValueChanged="SeekSlider_ValueChanged">
+                <ToolTip.Tip>
+                    <StackPanel>
+                        <Image x:Name="SeekSliderThumbnail" 
+                               Width="160" 
+                               Height="90" 
+                               Stretch="Uniform"
+                               IsVisible="False"
+                               Margin="0,0,0,4"/>
+                        <TextBlock x:Name="SeekSliderTimeText" 
+                                   Text="00:00"
+                                   HorizontalAlignment="Center"/>
+                    </StackPanel>
+                </ToolTip.Tip>
+            </Slider>
+            <!-- Favorite toggle -->
+            <ToggleButton x:Name="FavoriteToggle"
+                          Grid.Column="9"
+                          Classes="IconToggle"
+                          ToolTip.Tip="Mark as favorite"
+                          Margin="0,0,8,0"
+                          Checked="FavoriteToggle_Changed"
+                          Unchecked="FavoriteToggle_Changed">
+                <TextBlock Text="★"
+                           TextAlignment="Center"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"/>
+            </ToggleButton>
+            <!-- Blacklist toggle -->
+            <ToggleButton x:Name="BlacklistToggle"
+                          Grid.Column="10"
+                          Classes="IconToggle"
+                          ToolTip.Tip="Never show again / blacklist current video"
+                          Margin="0,0,8,0"
+                          Checked="BlacklistToggle_Changed"
+                          Unchecked="BlacklistToggle_Changed">
+                <TextBlock Text="👎"
+                           TextAlignment="Center"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"/>
+            </ToggleButton>
+            <!-- Volume slider -->
+            <Slider x:Name="VolumeSlider"
+                    Grid.Column="11"
+                    Width="120"
+                    Minimum="0"
+                    Maximum="200"
+                    Value="100"
+                    VerticalAlignment="Center"
+                    Margin="0,0,8,0"
+                    ValueChanged="VolumeSlider_ValueChanged"
+                    PointerWheelChanged="VolumeSlider_PointerWheelChanged"/>
+            <!-- Mute button -->
+            <ToggleButton x:Name="MuteButton"
+                          Grid.Column="12"
+                          Classes="IconToggle"
+                          ToolTip.Tip="Mute / Unmute"
+                          Checked="MuteButton_Checked"
+                          Unchecked="MuteButton_Unchecked">
+                <TextBlock Text="🔇"
+                           TextAlignment="Center"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"/>
+            </ToggleButton>
+
+            <!-- Hidden controls kept for logic (driven via menus/dialogs) -->
+            <StackPanel Orientation="Horizontal" Spacing="4" IsVisible="False">
+                <CheckBox x:Name="NoRepeatToggle"
+                          IsChecked="True"
+                          Checked="NoRepeatToggle_Changed"
+                          Unchecked="NoRepeatToggle_Changed"/>
+                <CheckBox x:Name="OnlyFavoritesCheckBox"
+                          Checked="OnlyFavoritesCheckBox_Changed"
+                          Unchecked="OnlyFavoritesCheckBox_Changed"/>
+                <ComboBox x:Name="MinDurationComboBox"
+                          Width="100"
+                          SelectionChanged="DurationFilter_Changed">
+                    <ComboBoxItem Content="No Minimum" IsSelected="True"/>
+                    <ComboBoxItem Content="5s"/>
+                    <ComboBoxItem Content="10s"/>
+                    <ComboBoxItem Content="30s"/>
+                    <ComboBoxItem Content="1m"/>
+                    <ComboBoxItem Content="2m"/>
+                    <ComboBoxItem Content="5m"/>
+                    <ComboBoxItem Content="10m"/>
+                    <ComboBoxItem Content="15m"/>
+                    <ComboBoxItem Content="30m"/>
+                </ComboBox>
+                <ComboBox x:Name="MaxDurationComboBox"
+                          Width="100"
+                          SelectionChanged="DurationFilter_Changed">
+                    <ComboBoxItem Content="No Maximum" IsSelected="True"/>
+                    <ComboBoxItem Content="5s"/>
+                    <ComboBoxItem Content="10s"/>
+                    <ComboBoxItem Content="30s"/>
+                    <ComboBoxItem Content="1m"/>
+                    <ComboBoxItem Content="2m"/>
+                    <ComboBoxItem Content="5m"/>
+                    <ComboBoxItem Content="10m"/>
+                    <ComboBoxItem Content="15m"/>
+                    <ComboBoxItem Content="30m"/>
+                </ComboBox>
+                <NumericUpDown x:Name="IntervalNumericUpDown"
+                               Minimum="1"
+                               Maximum="3600"
+                               Value="60"/>
+                <Button x:Name="KeepPlayingButton"
+                        Content="Keep Playing"
+                        Click="KeepPlaying_Click"/>
+            </StackPanel>
+        </Grid>
+
+        <!-- Row 4: Multi-column layout with side panels and video view -->
+        <!-- Columns: 0:Blacklist(Auto) 1:Splitter(4) 2:Favorites(Auto) 3:Splitter(4) 4:Video(*) 5:Splitter(4) 6:RecentlyPlayed(Auto) 7:Splitter(4) 8:Stats(Auto) -->
+        <!-- Note: When dragging the Stats splitter, it resizes columns 6 and 8, which causes column 4 (Video) to adjust -->
+        <!-- To prevent Video from resizing, we'll need to handle the splitter behavior differently -->
+        <Border x:Name="MainContentGridBorder" Grid.Row="4" BorderThickness="0,1,0,0" BorderBrush="Gray">
+            <Grid x:Name="MainContentGrid" ColumnDefinitions="Auto 4 Auto 4 * 4 Auto 4 Auto" Margin="0" VerticalAlignment="Stretch">
+            <!-- Column 0: Blacklist Panel -->
+            <Border x:Name="BlacklistPanelContainer"
+                    Grid.Column="0"
+                    BorderBrush="Gray"
+                    BorderThickness="0,0,1,0"
+                    Padding="8"
+                    MinWidth="200"
+                    MaxWidth="400"
+                    HorizontalAlignment="Stretch"
+                    VerticalAlignment="Stretch"
+                    IsVisible="False">
+                <Grid RowDefinitions="Auto *" VerticalAlignment="Stretch">
+                    <TextBlock Text="Blacklist"
+                               Grid.Row="0"
+                               FontWeight="Bold"
+                               FontSize="14"
+                               Margin="0,0,0,8"/>
+                    <ScrollViewer Grid.Row="1" 
+                                  VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled"
+                                  VerticalAlignment="Stretch">
+                        <ItemsControl x:Name="BlacklistItemsControl">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid ColumnDefinitions="* Auto Auto Auto" Margin="0,4">
+                                        <StackPanel Grid.Column="0" Orientation="Vertical">
+                                            <TextBlock Text="{Binding Converter={x:Static local:PathToFileNameConverter.Instance}}"
+                                                       FontWeight="SemiBold"/>
+                                            <TextBlock Text="{Binding}"
+                                                       FontSize="10"
+                                                       Foreground="Gray"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                        </StackPanel>
+                                        <Button Grid.Column="1"
+                                                Classes="PlayRandomButton"
+                                                MinWidth="36"
+                                                MinHeight="36"
+                                                Margin="4,0,4,0"
+                                                ToolTip.Tip="Play this video"
+                                                Tag="{Binding}"
+                                                Click="BlacklistPlay_Click">
+                                            <TextBlock Text="▶️"
+                                                       TextAlignment="Center"
+                                                       HorizontalAlignment="Center"
+                                                       VerticalAlignment="Center"/>
+                                        </Button>
+                                        <Button Grid.Column="2"
+                                                Classes="PlayRandomButton"
+                                                MinWidth="36"
+                                                MinHeight="36"
+                                                Margin="4,0,4,0"
+                                                ToolTip.Tip="Show in file manager"
+                                                Tag="{Binding}"
+                                                Click="BlacklistShowInFileManager_Click">
+                                            <TextBlock Text="📁"
+                                                       TextAlignment="Center"
+                                                       HorizontalAlignment="Center"
+                                                       VerticalAlignment="Center"/>
+                                        </Button>
+                                        <Button Grid.Column="3"
+                                                Classes="PlayRandomButton"
+                                                MinWidth="36"
+                                                MinHeight="36"
+                                                ToolTip.Tip="Remove from blacklist"
+                                                Tag="{Binding}"
+                                                Click="BlacklistRemove_Click">
+                                            <TextBlock Text="❌"
+                                                       TextAlignment="Center"
+                                                       HorizontalAlignment="Center"
+                                                       VerticalAlignment="Center"/>
+                                        </Button>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </Grid>
+            </Border>
+
+            <!-- Column 1: Splitter between Blacklist and Favorites -->
+            <GridSplitter x:Name="BlacklistFavoritesSplitter"
+                         Grid.Column="1"
+                         Width="4"
+                         ResizeDirection="Columns"
+                         ResizeBehavior="PreviousAndNext"
+                         Background="Gray"
+                         IsVisible="False"/>
+
+            <!-- Column 2: Favorites Panel -->
+            <Border x:Name="FavoritesPanelContainer"
+                    Grid.Column="2"
+                    BorderBrush="Gray"
+                    BorderThickness="0,0,1,0"
+                    Padding="8"
+                    MinWidth="200"
+                    MaxWidth="400"
+                    HorizontalAlignment="Stretch"
+                    VerticalAlignment="Stretch"
+                    IsVisible="False">
+                <Grid RowDefinitions="Auto *" VerticalAlignment="Stretch">
+                    <TextBlock Text="Favorites"
+                               Grid.Row="0"
+                               FontWeight="Bold"
+                               FontSize="14"
+                               Margin="0,0,0,8"/>
+                    <ScrollViewer Grid.Row="1" 
+                                  VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled"
+                                  VerticalAlignment="Stretch">
+                        <ItemsControl x:Name="FavoritesItemsControl">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid ColumnDefinitions="* Auto Auto Auto" Margin="0,4">
+                                        <StackPanel Grid.Column="0" Orientation="Vertical">
+                                            <TextBlock Text="{Binding Converter={x:Static local:PathToFileNameConverter.Instance}}"
+                                                       FontWeight="SemiBold"/>
+                                            <TextBlock Text="{Binding}"
+                                                       FontSize="10"
+                                                       Foreground="Gray"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                        </StackPanel>
+                                        <Button Grid.Column="1"
+                                                Classes="PlayRandomButton"
+                                                MinWidth="36"
+                                                MinHeight="36"
+                                                Margin="4,0,4,0"
+                                                ToolTip.Tip="Play this favorite"
+                                                Tag="{Binding}"
+                                                Click="FavoritesPlay_Click">
+                                            <TextBlock Text="▶️"
+                                                       TextAlignment="Center"
+                                                       HorizontalAlignment="Center"
+                                                       VerticalAlignment="Center"/>
+                                        </Button>
+                                        <Button Grid.Column="2"
+                                                Classes="PlayRandomButton"
+                                                MinWidth="36"
+                                                MinHeight="36"
+                                                Margin="4,0,4,0"
+                                                ToolTip.Tip="Show in file manager"
+                                                Tag="{Binding}"
+                                                Click="FavoritesShowInFileManager_Click">
+                                            <TextBlock Text="📁"
+                                                       TextAlignment="Center"
+                                                       HorizontalAlignment="Center"
+                                                       VerticalAlignment="Center"/>
+                                        </Button>
+                                        <Button Grid.Column="3"
+                                                Classes="PlayRandomButton"
+                                                MinWidth="36"
+                                                MinHeight="36"
+                                                ToolTip.Tip="Remove from favorites"
+                                                Tag="{Binding}"
+                                                Click="FavoritesRemove_Click">
+                                            <TextBlock Text="❌"
+                                                       TextAlignment="Center"
+                                                       HorizontalAlignment="Center"
+                                                       VerticalAlignment="Center"/>
+                                        </Button>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </Grid>
+            </Border>
+
+            <!-- Column 3: Splitter between Favorites and Video -->
+            <GridSplitter x:Name="FavoritesVideoSplitter"
+                         Grid.Column="3"
+                         Width="4"
+                         ResizeDirection="Columns"
+                         ResizeBehavior="PreviousAndNext"
+                         Background="Gray"
+                         IsVisible="False"/>
+
+            <!-- Column 4: Video View Container -->
+            <Border x:Name="VideoViewContainer"
+                    Grid.Column="4"
+                    BorderBrush="Gray"
+                    BorderThickness="0"
+                    Padding="0"
+                    HorizontalAlignment="Stretch"
+                    VerticalAlignment="Stretch">
+                <vlc:VideoView x:Name="VideoView"
+                               HorizontalAlignment="Stretch"
+                               VerticalAlignment="Stretch"
+                               PointerWheelChanged="VideoView_PointerWheelChanged"/>
+            </Border>
+
+            <!-- Column 5: Splitter between Video and Recently Played -->
+            <GridSplitter x:Name="VideoRecentlyPlayedSplitter"
+                         Grid.Column="5"
+                         Width="4"
+                         ResizeDirection="Columns"
+                         ResizeBehavior="PreviousAndNext"
+                         Background="Gray"
+                         IsVisible="False"/>
+
+            <!-- Column 6: Recently Played Panel -->
+            <Border x:Name="RecentlyPlayedPanelContainer"
+                    Grid.Column="6"
+                    BorderBrush="Gray"
+                    BorderThickness="0,0,1,0"
+                    Padding="8"
+                    MinWidth="200"
+                    MaxWidth="400"
+                    HorizontalAlignment="Stretch"
+                    VerticalAlignment="Stretch"
+                    IsVisible="False">
+                <Grid RowDefinitions="Auto *" VerticalAlignment="Stretch">
+                    <TextBlock Text="Recently Played"
+                               Grid.Row="0"
+                               FontWeight="Bold"
+                               FontSize="14"
+                               Margin="0,0,0,8"/>
+                    <ScrollViewer Grid.Row="1" 
+                                  VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled"
+                                  VerticalAlignment="Stretch">
+                        <ItemsControl x:Name="RecentlyPlayedItemsControl">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="local:HistoryEntry">
+                                    <Grid ColumnDefinitions="* Auto Auto Auto" Margin="0,4">
+                                        <StackPanel Grid.Column="0" Orientation="Vertical">
+                                            <TextBlock Text="{Binding FileName}" FontWeight="SemiBold"/>
+                                            <TextBlock Text="{Binding Path}" 
+                                                       FontSize="10" 
+                                                       Foreground="Gray"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                            <TextBlock FontSize="9" 
+                                                       Foreground="DarkGray">
+                                                <TextBlock.Text>
+                                                    <Binding Path="PlayedAt">
+                                                        <Binding.StringFormat>Played at {0:g}</Binding.StringFormat>
+                                                    </Binding>
+                                                </TextBlock.Text>
+                                            </TextBlock>
+                                        </StackPanel>
+                                        <Button Grid.Column="1"
+                                                Classes="PlayRandomButton"
+                                                MinWidth="36"
+                                                MinHeight="36"
+                                                Margin="4,0,4,0"
+                                                ToolTip.Tip="Play this video again"
+                                                Tag="{Binding Path}"
+                                                Click="RecentlyPlayedPlay_Click">
+                                            <TextBlock Text="▶️"
+                                                       TextAlignment="Center"
+                                                       HorizontalAlignment="Center"
+                                                       VerticalAlignment="Center"/>
+                                        </Button>
+                                        <Button Grid.Column="2"
+                                                Classes="PlayRandomButton"
+                                                MinWidth="36"
+                                                MinHeight="36"
+                                                Margin="4,0,4,0"
+                                                ToolTip.Tip="Show in file manager"
+                                                Tag="{Binding Path}"
+                                                Click="RecentlyPlayedShowInFileManager_Click">
+                                            <TextBlock Text="📁"
+                                                       TextAlignment="Center"
+                                                       HorizontalAlignment="Center"
+                                                       VerticalAlignment="Center"/>
+                                        </Button>
+                                        <Button Grid.Column="3"
+                                                Classes="PlayRandomButton"
+                                                MinWidth="36"
+                                                MinHeight="36"
+                                                ToolTip.Tip="Remove from history"
+                                                Tag="{Binding}"
+                                                Click="RecentlyPlayedRemove_Click">
+                                            <TextBlock Text="❌"
+                                                       TextAlignment="Center"
+                                                       HorizontalAlignment="Center"
+                                                       VerticalAlignment="Center"/>
+                                        </Button>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </Grid>
+            </Border>
+
+            <!-- Column 7: Splitter between Recently Played and Stats -->
+            <!-- Stats panel is not resizable - splitter is always hidden -->
+            <GridSplitter x:Name="StatsSplitter"
+                         Grid.Column="7"
+                         Width="4"
+                         ResizeDirection="Columns"
+                         Background="Gray"
+                         ShowsPreview="False"
+                         IsVisible="False"/>
+
+            <!-- Column 8: Stats Panel -->
+            <Border x:Name="StatsPanelContainer"
+                    Grid.Column="8"
+                    BorderBrush="Gray"
+                    BorderThickness="0"
+                    Padding="8"
+                    MinWidth="200"
+                    MaxWidth="400"
+                    HorizontalAlignment="Stretch"
+                    VerticalAlignment="Stretch"
+                    IsVisible="False">
+                <Grid RowDefinitions="Auto *" VerticalAlignment="Stretch">
+                    <TextBlock Text="Stats"
+                               Grid.Row="0"
+                               FontWeight="Bold"
+                               FontSize="14"
+                               Margin="0,0,0,8"/>
+                    <ScrollViewer Grid.Row="1" 
+                                  VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled"
+                                  VerticalAlignment="Stretch">
+                        <StackPanel Spacing="8" x:DataType="local:MainWindow">
+                            <!-- Global Stats Section -->
+                            <TextBlock Text="Global"
+                                       FontWeight="Bold"
+                                       FontSize="12"
+                                       Margin="0,0,0,4"/>
+                            <TextBlock Text="{Binding GlobalTotalVideosKnown, StringFormat='Total videos (all libraries): {0}'}"/>
+                            <TextBlock Text="{Binding GlobalTotalPlays, StringFormat='Total plays (all time): {0}'}"/>
+                            <TextBlock Text="{Binding GlobalUniqueVideosPlayed, StringFormat='Unique videos played: {0}'}"/>
+                            <TextBlock Text="{Binding GlobalNeverPlayedKnown, StringFormat='Never played (known videos): {0}'}"/>
+                            <TextBlock Text="{Binding GlobalFavoritesCount, StringFormat='Favorites (all libraries): {0}'}"/>
+                            <TextBlock Text="{Binding GlobalBlacklistCount, StringFormat='Blacklisted (all libraries): {0}'}"/>
+                            
+                            <!-- Current Video Stats Section -->
+                            <TextBlock Text="Current video"
+                                       FontWeight="Bold"
+                                       FontSize="12"
+                                       Margin="0,8,0,4"/>
+                            <TextBlock Text="{Binding CurrentVideoFileName, StringFormat='File: {0}'}"
+                                       TextWrapping="Wrap"/>
+                            <TextBlock Text="{Binding CurrentVideoFullPath}"
+                                       FontSize="10"
+                                       Foreground="Gray"
+                                       TextWrapping="Wrap"/>
+                            <TextBlock Text="{Binding CurrentVideoPlayCount, StringFormat='Plays: {0}'}"/>
+                            <TextBlock Text="{Binding CurrentVideoLastPlayedDisplay, StringFormat='Last played: {0}'}"/>
+                            <TextBlock Text="{Binding CurrentVideoIsFavoriteDisplay, StringFormat='Favorite: {0}'}"/>
+                            <TextBlock Text="{Binding CurrentVideoIsBlacklistedDisplay, StringFormat='Blacklisted: {0}'}"/>
+                            <TextBlock Text="{Binding CurrentVideoDurationDisplay, StringFormat='Duration: {0}'}"/>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>
