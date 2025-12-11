@@ -1065,10 +1065,10 @@ namespace ReelRoulette
         private async Task ScanDurationsAsync(string rootFolder, CancellationToken cancellationToken)
         {
             // Get all video files in the folder tree
-            string[] files;
+            string[] allFiles;
             try
             {
-                files = Directory.GetFiles(rootFolder, "*.*", SearchOption.AllDirectories)
+                allFiles = Directory.GetFiles(rootFolder, "*.*", SearchOption.AllDirectories)
                     .Where(f => _videoExtensions.Contains(
                         Path.GetExtension(f).ToLowerInvariant()))
                     .ToArray();
@@ -1082,31 +1082,46 @@ namespace ReelRoulette
                 return;
             }
 
-            int processed = 0;
-            int total = files.Length;
+            // Filter out already-cached files upfront (batch check for performance)
+            string[] filesToScan;
+            int alreadyCachedCount;
+            lock (_durationCache)
+            {
+                filesToScan = allFiles.Where(f => !_durationCache.ContainsKey(f)).ToArray();
+                alreadyCachedCount = allFiles.Length - filesToScan.Length;
+            }
+
+            int total = allFiles.Length;
+            int processed = alreadyCachedCount; // Start with already cached count
 
             // Update UI to show scan started
             Avalonia.Threading.Dispatcher.UIThread.Post(() =>
             {
-                StatusTextBlock.Text = $"Scanning / indexing… (0/{total} files processed)";
+                if (alreadyCachedCount > 0)
+                {
+                    StatusTextBlock.Text = $"Scanning / indexing… ({alreadyCachedCount} already cached, {filesToScan.Length} to scan)";
+                }
+                else
+                {
+                    StatusTextBlock.Text = $"Scanning / indexing… (0/{total} files processed)";
+                }
             });
 
-            foreach (var file in files)
+            // If all files are already cached, we're done
+            if (filesToScan.Length == 0)
+            {
+                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                {
+                    StatusTextBlock.Text = $"Ready ({total} files, all cached)";
+                });
+                return;
+            }
+
+            // Process only uncached files
+            foreach (var file in filesToScan)
             {
                 if (cancellationToken.IsCancellationRequested)
                     return;
-
-                // Skip if already cached (thread-safe check)
-                bool alreadyCached;
-                lock (_durationCache)
-                {
-                    alreadyCached = _durationCache.ContainsKey(file);
-                }
-                if (alreadyCached)
-                {
-                    processed++;
-                    continue;
-                }
 
                 // Verify file exists and is accessible
                 if (!System.IO.File.Exists(file))
@@ -1141,7 +1156,7 @@ namespace ReelRoulette
                     // Skip files that can't be parsed - they'll be excluded when filters are active
                     // TagLib# may throw for unsupported formats, corrupted files, etc.
                     // Only log first few errors to avoid spam
-                    if (processed < 3)
+                    if (processed - alreadyCachedCount < 3)
                     {
                         System.Diagnostics.Debug.WriteLine($"Failed to parse {System.IO.Path.GetFileName(file)}: {ex.GetType().Name} - {ex.Message}");
                     }
@@ -1150,7 +1165,7 @@ namespace ReelRoulette
                 processed++;
 
                 // Update UI progress and save cache periodically (every 50 files)
-                if (processed % 50 == 0 || processed == total)
+                if ((processed - alreadyCachedCount) % 50 == 0 || processed == total)
                 {
                     SaveDurationsCache(); // Save periodically during scan
                     Avalonia.Threading.Dispatcher.UIThread.Post(() =>
@@ -1160,7 +1175,7 @@ namespace ReelRoulette
                 }
 
                 // Small yield to keep UI responsive
-                if (processed % 10 == 0)
+                if ((processed - alreadyCachedCount) % 10 == 0)
                 {
                     await Task.Yield();
                 }
