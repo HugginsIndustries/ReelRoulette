@@ -556,57 +556,102 @@ namespace ReelRoulette
 
         private async Task HandleEndReachedAsync()
         {
-            // Ensure play/pause toggle reflects stopped state before any restart logic runs
-            await Dispatcher.UIThread.InvokeAsync(() => PlayPauseButton.IsChecked = false);
-
-            if (_isLoopEnabled && _currentVideoPath != null && _mediaPlayer != null && _libVLC != null)
+            try
             {
-                // Stop and reset position on the UI thread to avoid cross-thread libVLC usage
-                await Dispatcher.UIThread.InvokeAsync(() =>
+                // Ensure play/pause toggle reflects stopped state before any restart logic runs
+                await Dispatcher.UIThread.InvokeAsync(() => PlayPauseButton.IsChecked = false);
+
+                if (_isLoopEnabled && _currentVideoPath != null && _mediaPlayer != null && _libVLC != null)
                 {
-                    _mediaPlayer.Stop();
-                    _mediaPlayer.Time = 0;
-                    InitializeSeekBar(); // Reset slider to 0
-                });
+                    string? loopPath = null;
+                    Media? preparedMedia = null;
 
-                var path = _currentVideoPath;
-                Media? nextMedia = null;
-                var mediaToDispose = _currentMedia;
-                _currentMedia = null;
-
-                // Prepare and parse the next media on a background thread to avoid UI stalls
-                await Task.Run(() =>
-                {
-                    mediaToDispose?.Dispose();
-                    nextMedia = new Media(_libVLC, path, FromType.FromPath);
-                    nextMedia.Parse();
-                });
-
-                if (nextMedia != null)
-                {
-                    var preparedMedia = nextMedia;
-
-                    // Kick off playback on the UI thread using the freshly parsed media
+                    // Keep LibVLC media lifecycle work on the UI thread
                     await Dispatcher.UIThread.InvokeAsync(() =>
                     {
-                        if (!string.Equals(_currentVideoPath, path, StringComparison.OrdinalIgnoreCase))
+                        if (_mediaPlayer == null || _libVLC == null || _currentVideoPath == null)
                         {
-                            preparedMedia.Dispose();
                             return;
                         }
 
-                        _currentMedia = preparedMedia;
-                        UpdateAspectRatioFromTracks();
-                        _mediaPlayer.Play(preparedMedia);
-                        _mediaPlayer.Time = 0; // Ensure we start at 0
-                        PlayPauseButton.IsChecked = true;
+                        _mediaPlayer.Stop();
+                        _mediaPlayer.Time = 0;
+                        InitializeSeekBar(); // Reset slider to 0
+
+                        loopPath = _currentVideoPath;
+
+                        var mediaToDispose = _currentMedia;
+                        _currentMedia = null;
+                        mediaToDispose?.Dispose();
+
+                        preparedMedia = new Media(_libVLC, loopPath, FromType.FromPath);
                     });
+
+                    if (preparedMedia == null || loopPath == null)
+                    {
+                        return;
+                    }
+
+                    try
+                    {
+                        // Parse in the background to avoid UI stalls
+                        await Task.Run(() => preparedMedia.Parse());
+                    }
+                    catch (Exception parseEx)
+                    {
+                        await Dispatcher.UIThread.InvokeAsync(() =>
+                        {
+                            preparedMedia.Dispose();
+                            StatusTextBlock.Text = $"Failed to prepare video for replay: {parseEx.Message}";
+                        });
+                        return;
+                    }
+
+                    if (_mediaPlayer == null || _libVLC == null)
+                    {
+                        await Dispatcher.UIThread.InvokeAsync(() => preparedMedia.Dispose());
+                        return;
+                    }
+
+                    try
+                    {
+                        // Kick off playback on the UI thread using the freshly parsed media
+                        await Dispatcher.UIThread.InvokeAsync(() =>
+                        {
+                            if (_mediaPlayer == null || _libVLC == null || !string.Equals(_currentVideoPath, loopPath, StringComparison.OrdinalIgnoreCase))
+                            {
+                                preparedMedia.Dispose();
+                                return;
+                            }
+
+                            _currentMedia = preparedMedia;
+                            UpdateAspectRatioFromTracks();
+                            _mediaPlayer.Play(preparedMedia);
+                            _mediaPlayer.Time = 0; // Ensure we start at 0
+                            PlayPauseButton.IsChecked = true;
+                        });
+                    }
+                    catch (Exception playbackEx)
+                    {
+                        await Dispatcher.UIThread.InvokeAsync(() =>
+                        {
+                            preparedMedia.Dispose();
+                            StatusTextBlock.Text = $"Failed to restart video: {playbackEx.Message}";
+                        });
+                    }
+                }
+                else if (_autoPlayNext && !_isLoopEnabled)
+                {
+                    // If loop is off, honor autoplay to move to the next random selection
+                    await Dispatcher.UIThread.InvokeAsync(() => PlayRandomVideo());
                 }
             }
-            else if (_autoPlayNext && !_isLoopEnabled)
+            catch (Exception ex)
             {
-                // If loop is off, honor autoplay to move to the next random selection
-                await Dispatcher.UIThread.InvokeAsync(() => PlayRandomVideo());
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    StatusTextBlock.Text = $"Playback error: {ex.Message}";
+                });
             }
         }
 
