@@ -2908,8 +2908,7 @@ namespace ReelRoulette
         {
             if (_playbackTimeline.Count == 0)
             {
-                // No timeline, act like Play Random
-                PlayRandomVideo();
+                // No timeline, do nothing (button should be disabled)
                 return;
             }
 
@@ -2923,11 +2922,7 @@ namespace ReelRoulette
                 PreviousButton.IsEnabled = true;
                 NextButton.IsEnabled = _timelineIndex < _playbackTimeline.Count - 1;
             }
-            else
-            {
-                // At end of timeline, get next random
-                PlayRandomVideo();
-            }
+            // At end of timeline - do nothing (button is disabled, user can use "R" for random)
         }
 
         private void PlayPauseButton_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -3483,6 +3478,11 @@ namespace ReelRoulette
 
         private void HandleNextShortcut()
         {
+            // Only proceed if there's a next video in the timeline (same check as button enabled state)
+            if (_playbackTimeline.Count == 0 || _timelineIndex >= _playbackTimeline.Count - 1)
+            {
+                return; // No next video, do nothing (user can use "R" for random)
+            }
             NextButton_Click(this, new RoutedEventArgs());
         }
 
