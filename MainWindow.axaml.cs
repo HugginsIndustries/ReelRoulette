@@ -1940,7 +1940,7 @@ namespace ReelRoulette
             }
         }
 
-        private void SaveViewPreferences(params string[] changedSettings)
+        private void SaveViewPreferences()
         {
             try
             {
@@ -1964,13 +1964,6 @@ namespace ReelRoulette
                 };
                 var json = JsonSerializer.Serialize(prefs, new JsonSerializerOptions { WriteIndented = true });
                 File.WriteAllText(path, json);
-                
-                // Show status message if settings were changed
-                if (changedSettings != null && changedSettings.Length > 0)
-                {
-                    var settingsList = string.Join(", ", changedSettings);
-                    StatusTextBlock.Text = $"Settings updated: {settingsList}";
-                }
             }
             catch
             {
@@ -2387,35 +2380,35 @@ namespace ReelRoulette
         private void ShowMenuMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
             _showMenu = ShowMenuMenuItem.IsChecked == true;
-            SaveViewPreferences("Show Menu");
+            SaveViewPreferences();
             ApplyViewPreferences();
         }
 
         private void ShowFolderMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
             _showFolderSelection = ShowFolderMenuItem.IsChecked == true;
-            SaveViewPreferences("Show Folder Selection");
+            SaveViewPreferences();
             ApplyViewPreferences();
         }
 
         private void ShowStatusMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
             _showStatusLine = ShowStatusMenuItem.IsChecked == true;
-            SaveViewPreferences("Show Status Line");
+            SaveViewPreferences();
             ApplyViewPreferences();
         }
 
         private void ShowControlsMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
             _showControls = ShowControlsMenuItem.IsChecked == true;
-            SaveViewPreferences("Show Controls");
+            SaveViewPreferences();
             ApplyViewPreferences();
         }
 
         private void ShowBlacklistMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
             _showBlacklistPanel = ShowBlacklistMenuItem.IsChecked == true;
-            SaveViewPreferences("Show Blacklist Panel");
+            SaveViewPreferences();
             ApplyViewPreferences();
             if (_showBlacklistPanel)
             {
@@ -2426,7 +2419,7 @@ namespace ReelRoulette
         private void ShowFavoritesMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
             _showFavoritesPanel = ShowFavoritesMenuItem.IsChecked == true;
-            SaveViewPreferences("Show Favorites Panel");
+            SaveViewPreferences();
             ApplyViewPreferences();
             if (_showFavoritesPanel)
             {
@@ -2437,14 +2430,14 @@ namespace ReelRoulette
         private void ShowRecentlyPlayedMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
             _showRecentlyPlayedPanel = ShowRecentlyPlayedMenuItem.IsChecked == true;
-            SaveViewPreferences("Show Recently Played");
+            SaveViewPreferences();
             ApplyViewPreferences();
         }
 
         private void ShowStatsMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
             _showStatsPanel = ShowStatsMenuItem.IsChecked == true;
-            SaveViewPreferences("Show Stats Panel");
+            SaveViewPreferences();
             ApplyViewPreferences();
         }
 
@@ -2507,21 +2500,21 @@ namespace ReelRoulette
         private void RememberLastFolderMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
             _rememberLastFolder = RememberLastFolderMenuItem.IsChecked == true;
-            SaveViewPreferences("Remember Last Folder");
+            SaveViewPreferences();
         }
 
         private void AlwaysOnTopMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
             _alwaysOnTop = AlwaysOnTopMenuItem.IsChecked == true;
             this.Topmost = _alwaysOnTop;
-            SaveViewPreferences("Always On Top");
+            SaveViewPreferences();
         }
 
         private void PlayerViewModeMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
             _isPlayerViewMode = PlayerViewModeMenuItem.IsChecked == true;
             ApplyPlayerViewMode();
-            SaveViewPreferences("Player View Mode");
+            SaveViewPreferences();
         }
 
         private bool IsFullScreen
@@ -3385,7 +3378,7 @@ namespace ReelRoulette
                     {
                         AlwaysOnTopMenuItem.IsChecked = _alwaysOnTop;
                     }
-                    SaveViewPreferences("Always On Top");
+                    SaveViewPreferences();
                     e.Handled = true;
                     break;
 
@@ -3397,32 +3390,32 @@ namespace ReelRoulette
                         PlayerViewModeMenuItem.IsChecked = _isPlayerViewMode;
                     }
                     ApplyPlayerViewMode();
-                    SaveViewPreferences("Player View Mode");
+                    SaveViewPreferences();
                     e.Handled = true;
                     break;
 
                 case Key.D1: // Number 1 - Show Menu
-                    ToggleViewPreference(ref _showMenu, ShowMenuMenuItem, "Show Menu");
+                    ToggleViewPreference(ref _showMenu, ShowMenuMenuItem);
                     e.Handled = true;
                     break;
 
                 case Key.D2: // Number 2 - Show Folder Selection
-                    ToggleViewPreference(ref _showFolderSelection, ShowFolderMenuItem, "Show Folder Selection");
+                    ToggleViewPreference(ref _showFolderSelection, ShowFolderMenuItem);
                     e.Handled = true;
                     break;
 
                 case Key.D3: // Number 3 - Show Status Line
-                    ToggleViewPreference(ref _showStatusLine, ShowStatusMenuItem, "Show Status Line");
+                    ToggleViewPreference(ref _showStatusLine, ShowStatusMenuItem);
                     e.Handled = true;
                     break;
 
                 case Key.D4: // Number 4 - Show Controls
-                    ToggleViewPreference(ref _showControls, ShowControlsMenuItem, "Show Controls");
+                    ToggleViewPreference(ref _showControls, ShowControlsMenuItem);
                     e.Handled = true;
                     break;
 
                 case Key.D5: // Number 5 - Show Blacklist panel
-                    ToggleViewPreference(ref _showBlacklistPanel, ShowBlacklistMenuItem, "Show Blacklist Panel");
+                    ToggleViewPreference(ref _showBlacklistPanel, ShowBlacklistMenuItem);
                     if (_showBlacklistPanel)
                     {
                         UpdateBlacklistUI();
@@ -3431,7 +3424,7 @@ namespace ReelRoulette
                     break;
 
                 case Key.D6: // Number 6 - Show Favorites panel
-                    ToggleViewPreference(ref _showFavoritesPanel, ShowFavoritesMenuItem, "Show Favorites Panel");
+                    ToggleViewPreference(ref _showFavoritesPanel, ShowFavoritesMenuItem);
                     if (_showFavoritesPanel)
                     {
                         UpdateFavoritesUI();
@@ -3440,12 +3433,12 @@ namespace ReelRoulette
                     break;
 
                 case Key.D7: // Number 7 - Show Recently Played
-                    ToggleViewPreference(ref _showRecentlyPlayedPanel, ShowRecentlyPlayedMenuItem, "Show Recently Played");
+                    ToggleViewPreference(ref _showRecentlyPlayedPanel, ShowRecentlyPlayedMenuItem);
                     e.Handled = true;
                     break;
 
                 case Key.D8: // Number 8 - Show Stats panel
-                    ToggleViewPreference(ref _showStatsPanel, ShowStatsMenuItem, "Show Stats Panel");
+                    ToggleViewPreference(ref _showStatsPanel, ShowStatsMenuItem);
                     e.Handled = true;
                     break;
 
@@ -3456,7 +3449,7 @@ namespace ReelRoulette
         }
 
         // Helper method for toggling view preferences via keyboard shortcuts
-        private void ToggleViewPreference(ref bool flag, MenuItem? menuItem, string settingName)
+        private void ToggleViewPreference(ref bool flag, MenuItem? menuItem)
         {
             // Special case: ShowMenu can be toggled even in player view mode
             // (but menu will remain hidden while player view mode is active)
@@ -3473,7 +3466,7 @@ namespace ReelRoulette
             {
                 menuItem.IsChecked = flag;
             }
-            SaveViewPreferences(settingName);
+            SaveViewPreferences();
             ApplyViewPreferences();
         }
 
