@@ -242,7 +242,7 @@
         </Grid>
 
         <!-- Row 2: Status line -->
-        <Grid Grid.Row="2" Margin="10,5,10,5" VerticalAlignment="Center">
+        <Grid x:Name="StatusLineGrid" Grid.Row="2" Margin="10,5,10,5" VerticalAlignment="Center">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>

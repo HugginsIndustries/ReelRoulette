@@ -558,87 +558,14 @@ namespace ReelRoulette
         {
             try
             {
-                // Ensure play/pause toggle reflects stopped state before any restart logic runs
+                // Ensure play/pause toggle reflects stopped state
                 await Dispatcher.UIThread.InvokeAsync(() => PlayPauseButton.IsChecked = false);
 
-                if (_isLoopEnabled && _currentVideoPath != null && _mediaPlayer != null && _libVLC != null)
+                if (_isLoopEnabled)
                 {
-                    string? loopPath = null;
-                    Media? preparedMedia = null;
-
-                    // Keep LibVLC media lifecycle work on the UI thread
-                    await Dispatcher.UIThread.InvokeAsync(() =>
-                    {
-                        if (_mediaPlayer == null || _libVLC == null || _currentVideoPath == null)
-                        {
-                            return;
-                        }
-
-                        _mediaPlayer.Stop();
-                        _mediaPlayer.Time = 0;
-                        InitializeSeekBar(); // Reset slider to 0
-
-                        loopPath = _currentVideoPath;
-
-                        var mediaToDispose = _currentMedia;
-                        _currentMedia = null;
-                        mediaToDispose?.Dispose();
-
-                        preparedMedia = new Media(_libVLC, loopPath, FromType.FromPath);
-                    });
-
-                    if (preparedMedia == null || loopPath == null)
-                    {
-                        return;
-                    }
-
-                    try
-                    {
-                        // Parse in the background to avoid UI stalls
-                        await Task.Run(() => preparedMedia.Parse());
-                    }
-                    catch (Exception parseEx)
-                    {
-                        await Dispatcher.UIThread.InvokeAsync(() =>
-                        {
-                            preparedMedia.Dispose();
-                            StatusTextBlock.Text = $"Failed to prepare video for replay: {parseEx.Message}";
-                        });
-                        return;
-                    }
-
-                    if (_mediaPlayer == null || _libVLC == null)
-                    {
-                        await Dispatcher.UIThread.InvokeAsync(() => preparedMedia.Dispose());
-                        return;
-                    }
-
-                    try
-                    {
-                        // Kick off playback on the UI thread using the freshly parsed media
-                        await Dispatcher.UIThread.InvokeAsync(() =>
-                        {
-                            if (_mediaPlayer == null || _libVLC == null || !string.Equals(_currentVideoPath, loopPath, StringComparison.OrdinalIgnoreCase))
-                            {
-                                preparedMedia.Dispose();
-                                return;
-                            }
-
-                            _currentMedia = preparedMedia;
-                            UpdateAspectRatioFromTracks();
-                            _mediaPlayer.Play(preparedMedia);
-                            _mediaPlayer.Time = 0; // Ensure we start at 0
-                            PlayPauseButton.IsChecked = true;
-                        });
-                    }
-                    catch (Exception playbackEx)
-                    {
-                        await Dispatcher.UIThread.InvokeAsync(() =>
-                        {
-                            preparedMedia.Dispose();
-                            StatusTextBlock.Text = $"Failed to restart video: {playbackEx.Message}";
-                        });
-                    }
+                    // LibVLC handles looping automatically via input-repeat option
+                    // No action needed - the video will loop seamlessly
+                    return;
                 }
                 else if (_autoPlayNext && !_isLoopEnabled)
                 {
@@ -1713,10 +1640,15 @@ namespace ReelRoulette
                 _currentMedia?.Dispose();
 
                 // Create and play new media
-                // Don't set input-repeat option - handle looping purely in EndReached handler
                 if (videoPath != null)
                 {
                     _currentMedia = new Media(_libVLC, videoPath, FromType.FromPath);
+                    
+                    // Set input-repeat option for seamless looping when loop is enabled
+                    if (_isLoopEnabled)
+                    {
+                        _currentMedia.AddOption(":input-repeat=65535");
+                    }
                     
                     // Parse media to get track information (including video dimensions)
                     _currentMedia.Parse();
@@ -1859,9 +1791,58 @@ namespace ReelRoulette
 
         private void LoopToggle_Changed(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
-            // Update the loop flag - EndReached handler will respect this on next video end
+            // Update the loop flag
             _isLoopEnabled = LoopToggle.IsChecked == true;
-            // No need to modify current media - EndReached handler checks _isLoopEnabled directly
+            
+            // If media is currently playing, update the input-repeat option
+            // Note: This requires recreating the media, which may cause a brief reset
+            if (_currentMedia != null && _mediaPlayer != null && _libVLC != null && _currentVideoPath != null)
+            {
+                try
+                {
+                    var wasPlaying = _mediaPlayer.IsPlaying;
+                    var currentTime = _mediaPlayer.Time;
+                    
+                    // Stop current playback
+                    _mediaPlayer.Stop();
+                    
+                    // Dispose current media
+                    var mediaToDispose = _currentMedia;
+                    _currentMedia = null;
+                    mediaToDispose?.Dispose();
+                    
+                    // Create new media with updated loop option
+                    _currentMedia = new Media(_libVLC, _currentVideoPath, FromType.FromPath);
+                    
+                    if (_isLoopEnabled)
+                    {
+                        _currentMedia.AddOption(":input-repeat=65535");
+                    }
+                    
+                    // Parse and set media
+                    _currentMedia.Parse();
+                    UpdateAspectRatioFromTracks();
+                    
+                    // Set media and restore playback position
+                    _mediaPlayer.Play(_currentMedia);
+                    _mediaPlayer.Time = currentTime;
+                    
+                    // Restore playback state
+                    if (wasPlaying)
+                    {
+                        PlayPauseButton.IsChecked = true;
+                    }
+                    else
+                    {
+                        _mediaPlayer.Pause();
+                        PlayPauseButton.IsChecked = false;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    StatusTextBlock.Text = $"Failed to update loop setting: {ex.Message}";
+                }
+            }
         }
 
         #endregion
@@ -2003,7 +1984,7 @@ namespace ReelRoulette
                 
                 // Hide all UI elements except video
                 FolderRow.IsVisible = false;
-                StatusTextBlock.IsVisible = false;
+                StatusLineGrid.IsVisible = false;
                 ControlsRow.IsVisible = false;
                 
                 // Hide all panels
@@ -2051,7 +2032,7 @@ namespace ReelRoulette
             }
             
             FolderRow.IsVisible = _showFolderSelection;
-            StatusTextBlock.IsVisible = _showStatusLine;
+            StatusLineGrid.IsVisible = _showStatusLine;
             ControlsRow.IsVisible = _showControls;
             
             // Show top border on MainContentGrid only when there's a visible row above it
