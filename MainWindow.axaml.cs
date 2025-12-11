@@ -1940,7 +1940,7 @@ namespace ReelRoulette
             }
         }
 
-        private void SaveViewPreferences()
+        private void SaveViewPreferences(params string[] changedSettings)
         {
             try
             {
@@ -1964,6 +1964,13 @@ namespace ReelRoulette
                 };
                 var json = JsonSerializer.Serialize(prefs, new JsonSerializerOptions { WriteIndented = true });
                 File.WriteAllText(path, json);
+                
+                // Show status message if settings were changed
+                if (changedSettings != null && changedSettings.Length > 0)
+                {
+                    var settingsList = string.Join(", ", changedSettings);
+                    StatusTextBlock.Text = $"Settings updated: {settingsList}";
+                }
             }
             catch
             {
@@ -2380,35 +2387,35 @@ namespace ReelRoulette
         private void ShowMenuMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
             _showMenu = ShowMenuMenuItem.IsChecked == true;
-            SaveViewPreferences();
+            SaveViewPreferences("Show Menu");
             ApplyViewPreferences();
         }
 
         private void ShowFolderMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
             _showFolderSelection = ShowFolderMenuItem.IsChecked == true;
-            SaveViewPreferences();
+            SaveViewPreferences("Show Folder Selection");
             ApplyViewPreferences();
         }
 
         private void ShowStatusMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
             _showStatusLine = ShowStatusMenuItem.IsChecked == true;
-            SaveViewPreferences();
+            SaveViewPreferences("Show Status Line");
             ApplyViewPreferences();
         }
 
         private void ShowControlsMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
             _showControls = ShowControlsMenuItem.IsChecked == true;
-            SaveViewPreferences();
+            SaveViewPreferences("Show Controls");
             ApplyViewPreferences();
         }
 
         private void ShowBlacklistMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
             _showBlacklistPanel = ShowBlacklistMenuItem.IsChecked == true;
-            SaveViewPreferences();
+            SaveViewPreferences("Show Blacklist Panel");
             ApplyViewPreferences();
             if (_showBlacklistPanel)
             {
@@ -2419,7 +2426,7 @@ namespace ReelRoulette
         private void ShowFavoritesMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
             _showFavoritesPanel = ShowFavoritesMenuItem.IsChecked == true;
-            SaveViewPreferences();
+            SaveViewPreferences("Show Favorites Panel");
             ApplyViewPreferences();
             if (_showFavoritesPanel)
             {
@@ -2430,14 +2437,14 @@ namespace ReelRoulette
         private void ShowRecentlyPlayedMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
             _showRecentlyPlayedPanel = ShowRecentlyPlayedMenuItem.IsChecked == true;
-            SaveViewPreferences();
+            SaveViewPreferences("Show Recently Played");
             ApplyViewPreferences();
         }
 
         private void ShowStatsMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
             _showStatsPanel = ShowStatsMenuItem.IsChecked == true;
-            SaveViewPreferences();
+            SaveViewPreferences("Show Stats Panel");
             ApplyViewPreferences();
         }
 
@@ -2500,21 +2507,21 @@ namespace ReelRoulette
         private void RememberLastFolderMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
             _rememberLastFolder = RememberLastFolderMenuItem.IsChecked == true;
-            SaveViewPreferences();
+            SaveViewPreferences("Remember Last Folder");
         }
 
         private void AlwaysOnTopMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
             _alwaysOnTop = AlwaysOnTopMenuItem.IsChecked == true;
             this.Topmost = _alwaysOnTop;
-            SaveViewPreferences();
+            SaveViewPreferences("Always On Top");
         }
 
         private void PlayerViewModeMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
             _isPlayerViewMode = PlayerViewModeMenuItem.IsChecked == true;
             ApplyPlayerViewMode();
-            SaveViewPreferences();
+            SaveViewPreferences("Player View Mode");
         }
 
         private bool IsFullScreen
@@ -2569,6 +2576,7 @@ namespace ReelRoulette
         private void DurationFilter_Changed(object? sender, Avalonia.Controls.SelectionChangedEventArgs e)
         {
             ApplyDurationFilterChanges();
+            SavePlaybackSettings("Duration filter");
         }
 
         #endregion
@@ -2625,6 +2633,7 @@ namespace ReelRoulette
             ok.Click += (_, __) =>
             {
                 IntervalNumericUpDown.Value = numeric.Value;
+                SavePlaybackSettings("Interval");
                 dialog.Close(true);
             };
             cancel.Click += (_, __) => dialog.Close(false);
@@ -2723,6 +2732,7 @@ namespace ReelRoulette
                 SetComboSelectionByContent(MaxDurationComboBox, GetComboContent(maxCombo));
                 dialog.Close(true);
                 ApplyDurationFilterChanges();
+                SavePlaybackSettings("Duration filter");
             };
             cancel.Click += (_, __) => dialog.Close(false);
 
@@ -3187,7 +3197,7 @@ namespace ReelRoulette
 
                 // Update seek step
                 _seekStep = item.Header?.ToString() ?? "5s";
-                SavePlaybackSettings();
+                SavePlaybackSettings("Seek step");
             }
         }
 
@@ -3207,7 +3217,7 @@ namespace ReelRoulette
                 if (int.TryParse(item.Header?.ToString(), out var step))
                 {
                     _volumeStep = step;
-                    SavePlaybackSettings();
+                    SavePlaybackSettings("Volume step");
                 }
             }
         }
@@ -3375,7 +3385,7 @@ namespace ReelRoulette
                     {
                         AlwaysOnTopMenuItem.IsChecked = _alwaysOnTop;
                     }
-                    SaveViewPreferences();
+                    SaveViewPreferences("Always On Top");
                     e.Handled = true;
                     break;
 
@@ -3387,32 +3397,32 @@ namespace ReelRoulette
                         PlayerViewModeMenuItem.IsChecked = _isPlayerViewMode;
                     }
                     ApplyPlayerViewMode();
-                    SaveViewPreferences();
+                    SaveViewPreferences("Player View Mode");
                     e.Handled = true;
                     break;
 
                 case Key.D1: // Number 1 - Show Menu
-                    ToggleViewPreference(ref _showMenu, ShowMenuMenuItem);
+                    ToggleViewPreference(ref _showMenu, ShowMenuMenuItem, "Show Menu");
                     e.Handled = true;
                     break;
 
                 case Key.D2: // Number 2 - Show Folder Selection
-                    ToggleViewPreference(ref _showFolderSelection, ShowFolderMenuItem);
+                    ToggleViewPreference(ref _showFolderSelection, ShowFolderMenuItem, "Show Folder Selection");
                     e.Handled = true;
                     break;
 
                 case Key.D3: // Number 3 - Show Status Line
-                    ToggleViewPreference(ref _showStatusLine, ShowStatusMenuItem);
+                    ToggleViewPreference(ref _showStatusLine, ShowStatusMenuItem, "Show Status Line");
                     e.Handled = true;
                     break;
 
                 case Key.D4: // Number 4 - Show Controls
-                    ToggleViewPreference(ref _showControls, ShowControlsMenuItem);
+                    ToggleViewPreference(ref _showControls, ShowControlsMenuItem, "Show Controls");
                     e.Handled = true;
                     break;
 
                 case Key.D5: // Number 5 - Show Blacklist panel
-                    ToggleViewPreference(ref _showBlacklistPanel, ShowBlacklistMenuItem);
+                    ToggleViewPreference(ref _showBlacklistPanel, ShowBlacklistMenuItem, "Show Blacklist Panel");
                     if (_showBlacklistPanel)
                     {
                         UpdateBlacklistUI();
@@ -3421,7 +3431,7 @@ namespace ReelRoulette
                     break;
 
                 case Key.D6: // Number 6 - Show Favorites panel
-                    ToggleViewPreference(ref _showFavoritesPanel, ShowFavoritesMenuItem);
+                    ToggleViewPreference(ref _showFavoritesPanel, ShowFavoritesMenuItem, "Show Favorites Panel");
                     if (_showFavoritesPanel)
                     {
                         UpdateFavoritesUI();
@@ -3430,12 +3440,12 @@ namespace ReelRoulette
                     break;
 
                 case Key.D7: // Number 7 - Show Recently Played
-                    ToggleViewPreference(ref _showRecentlyPlayedPanel, ShowRecentlyPlayedMenuItem);
+                    ToggleViewPreference(ref _showRecentlyPlayedPanel, ShowRecentlyPlayedMenuItem, "Show Recently Played");
                     e.Handled = true;
                     break;
 
                 case Key.D8: // Number 8 - Show Stats panel
-                    ToggleViewPreference(ref _showStatsPanel, ShowStatsMenuItem);
+                    ToggleViewPreference(ref _showStatsPanel, ShowStatsMenuItem, "Show Stats Panel");
                     e.Handled = true;
                     break;
 
@@ -3446,7 +3456,7 @@ namespace ReelRoulette
         }
 
         // Helper method for toggling view preferences via keyboard shortcuts
-        private void ToggleViewPreference(ref bool flag, MenuItem? menuItem)
+        private void ToggleViewPreference(ref bool flag, MenuItem? menuItem, string settingName)
         {
             // Special case: ShowMenu can be toggled even in player view mode
             // (but menu will remain hidden while player view mode is active)
@@ -3463,7 +3473,7 @@ namespace ReelRoulette
             {
                 menuItem.IsChecked = flag;
             }
-            SaveViewPreferences();
+            SaveViewPreferences(settingName);
             ApplyViewPreferences();
         }
 
@@ -3695,6 +3705,22 @@ namespace ReelRoulette
                     {
                         _seekStep = settings.SeekStep ?? "5s";
                         _volumeStep = settings.VolumeStep > 0 ? settings.VolumeStep : 5;
+                        
+                        // Load duration filter settings
+                        if (!string.IsNullOrEmpty(settings.MinDuration))
+                        {
+                            SetComboSelectionByContent(MinDurationComboBox, settings.MinDuration);
+                        }
+                        if (!string.IsNullOrEmpty(settings.MaxDuration))
+                        {
+                            SetComboSelectionByContent(MaxDurationComboBox, settings.MaxDuration);
+                        }
+                        
+                        // Load interval setting
+                        if (settings.IntervalSeconds.HasValue && settings.IntervalSeconds.Value >= 1 && settings.IntervalSeconds.Value <= 3600)
+                        {
+                            IntervalNumericUpDown.Value = (decimal)settings.IntervalSeconds.Value;
+                        }
                     }
                 }
             }
@@ -3714,7 +3740,7 @@ namespace ReelRoulette
             VolumeStep5MenuItem.IsChecked = _volumeStep == 5;
         }
 
-        private void SavePlaybackSettings()
+        private void SavePlaybackSettings(params string[] changedSettings)
         {
             try
             {
@@ -3722,10 +3748,20 @@ namespace ReelRoulette
                 var settings = new PlaybackSettings
                 {
                     SeekStep = _seekStep,
-                    VolumeStep = _volumeStep
+                    VolumeStep = _volumeStep,
+                    MinDuration = GetComboContent(MinDurationComboBox),
+                    MaxDuration = GetComboContent(MaxDurationComboBox),
+                    IntervalSeconds = IntervalNumericUpDown.Value.HasValue ? (double?)IntervalNumericUpDown.Value.Value : null
                 };
                 var json = JsonSerializer.Serialize(settings, new JsonSerializerOptions { WriteIndented = true });
                 File.WriteAllText(path, json);
+                
+                // Show status message if settings were changed
+                if (changedSettings != null && changedSettings.Length > 0)
+                {
+                    var settingsList = string.Join(", ", changedSettings);
+                    StatusTextBlock.Text = $"Settings updated: {settingsList}";
+                }
             }
             catch
             {
@@ -3741,6 +3777,9 @@ namespace ReelRoulette
     {
         public string? SeekStep { get; set; }
         public int VolumeStep { get; set; }
+        public string? MinDuration { get; set; }
+        public string? MaxDuration { get; set; }
+        public double? IntervalSeconds { get; set; }
     }
 
     // Playback stats data model

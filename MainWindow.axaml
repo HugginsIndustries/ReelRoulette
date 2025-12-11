@@ -795,8 +795,8 @@
                     BorderBrush="Gray"
                     BorderThickness="0"
                     Padding="8"
-                    MinWidth="200"
-                    MaxWidth="400"
+                    MinWidth="270"
+                    MaxWidth="270"
                     HorizontalAlignment="Stretch"
                     VerticalAlignment="Stretch"
                     IsVisible="False">
