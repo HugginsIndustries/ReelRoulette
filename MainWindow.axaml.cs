@@ -550,37 +550,55 @@ namespace ReelRoulette
 
         private void MediaPlayer_EndReached(object? sender, EventArgs e)
         {
-            Dispatcher.UIThread.Post(() =>
-            {
-                PlayPauseButton.IsChecked = false;
+            // Hand off end-of-media work asynchronously so UI thread stays responsive
+            _ = HandleEndReachedAsync();
+        }
 
-                if (_isLoopEnabled && _currentVideoPath != null && _mediaPlayer != null)
+        private async Task HandleEndReachedAsync()
+        {
+            // Ensure play/pause toggle reflects stopped state before any restart logic runs
+            await Dispatcher.UIThread.InvokeAsync(() => PlayPauseButton.IsChecked = false);
+
+            if (_isLoopEnabled && _currentVideoPath != null && _mediaPlayer != null && _libVLC != null)
+            {
+                // Stop and reset position on the UI thread to avoid cross-thread libVLC usage
+                await Dispatcher.UIThread.InvokeAsync(() =>
                 {
-                    // Loop: restart from beginning (time 0)
                     _mediaPlayer.Stop();
                     _mediaPlayer.Time = 0;
                     InitializeSeekBar(); // Reset slider to 0
-                    
-                    try
+                });
+
+                var path = _currentVideoPath;
+                Media? nextMedia = null;
+
+                // Prepare and parse the next media on a background thread to avoid UI stalls
+                await Task.Run(() =>
+                {
+                    _currentMedia?.Dispose();
+                    nextMedia = new Media(_libVLC, path, FromType.FromPath);
+                    nextMedia.Parse();
+                });
+
+                if (nextMedia != null)
+                {
+                    _currentMedia = nextMedia;
+
+                    // Kick off playback on the UI thread using the freshly parsed media
+                    await Dispatcher.UIThread.InvokeAsync(() =>
                     {
-                        _currentMedia?.Dispose();
-                        _currentMedia = new Media(_libVLC!, _currentVideoPath, FromType.FromPath);
-                        _currentMedia.Parse();
                         UpdateAspectRatioFromTracks();
                         _mediaPlayer.Play(_currentMedia);
                         _mediaPlayer.Time = 0; // Ensure we start at 0
                         PlayPauseButton.IsChecked = true;
-                    }
-                    catch
-                    {
-                        // If replay fails, fall through
-                    }
+                    });
                 }
-                else if (_autoPlayNext && !_isLoopEnabled)
-                {
-                    PlayRandomVideo();
-                }
-            });
+            }
+            else if (_autoPlayNext && !_isLoopEnabled)
+            {
+                // If loop is off, honor autoplay to move to the next random selection
+                await Dispatcher.UIThread.InvokeAsync(() => PlayRandomVideo());
+            }
         }
 
         #region Favorites System
