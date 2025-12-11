@@ -571,24 +571,33 @@ namespace ReelRoulette
 
                 var path = _currentVideoPath;
                 Media? nextMedia = null;
+                var mediaToDispose = _currentMedia;
+                _currentMedia = null;
 
                 // Prepare and parse the next media on a background thread to avoid UI stalls
                 await Task.Run(() =>
                 {
-                    _currentMedia?.Dispose();
+                    mediaToDispose?.Dispose();
                     nextMedia = new Media(_libVLC, path, FromType.FromPath);
                     nextMedia.Parse();
                 });
 
                 if (nextMedia != null)
                 {
-                    _currentMedia = nextMedia;
+                    var preparedMedia = nextMedia;
 
                     // Kick off playback on the UI thread using the freshly parsed media
                     await Dispatcher.UIThread.InvokeAsync(() =>
                     {
+                        if (!string.Equals(_currentVideoPath, path, StringComparison.OrdinalIgnoreCase))
+                        {
+                            preparedMedia.Dispose();
+                            return;
+                        }
+
+                        _currentMedia = preparedMedia;
                         UpdateAspectRatioFromTracks();
-                        _mediaPlayer.Play(_currentMedia);
+                        _mediaPlayer.Play(preparedMedia);
                         _mediaPlayer.Time = 0; // Ensure we start at 0
                         PlayPauseButton.IsChecked = true;
                     });
