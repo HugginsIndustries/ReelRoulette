@@ -1139,7 +1139,7 @@ namespace ReelRoulette
                 }
 
                 // Loudness display
-                if (loudnessInfo.HasAudio == true && loudnessInfo.MeanVolumeDb != 0.0)
+                if (loudnessInfo.HasAudio == true)
                 {
                     CurrentVideoLoudnessDisplay = $"{loudnessInfo.MeanVolumeDb:F1} dB";
                 }
@@ -1153,7 +1153,7 @@ namespace ReelRoulette
                 }
 
                 // Peak display
-                if (loudnessInfo.HasAudio == true && loudnessInfo.PeakDb != 0.0)
+                if (loudnessInfo.HasAudio == true)
                 {
                     CurrentVideoPeakDisplay = $"{loudnessInfo.PeakDb:F1} dB";
                 }
