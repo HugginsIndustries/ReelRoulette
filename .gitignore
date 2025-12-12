@@ -42,3 +42,8 @@ AppData/
 *.tmp
 *.temp
 
+# FFmpeg binaries (too large for GitHub)
+ffprobe.exe
+*/ffprobe.exe
+**/ffprobe.exe
+

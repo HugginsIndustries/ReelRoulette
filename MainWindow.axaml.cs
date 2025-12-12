@@ -8,7 +8,6 @@ using Avalonia.Layout;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using LibVLCSharp.Shared;
-using TagLibFile = TagLib.File;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -66,6 +65,8 @@ namespace ReelRoulette
 
         // Duration scanning
         private CancellationTokenSource? _scanCancellationSource;
+        private static SemaphoreSlim? _ffprobeSemaphore;
+        private static readonly object _ffprobeSemaphoreLock = new object();
 
         // View prefs
         private bool _showMenu = true;
@@ -1062,6 +1063,160 @@ namespace ReelRoulette
             }, token, TaskCreationOptions.LongRunning, TaskScheduler.Default);
         }
 
+        private static async Task<TimeSpan?> GetVideoDurationAsync(string filePath, CancellationToken cancellationToken)
+        {
+            // Initialize semaphore on first use (thread-safe)
+            if (_ffprobeSemaphore == null)
+            {
+                lock (_ffprobeSemaphoreLock)
+                {
+                    if (_ffprobeSemaphore == null)
+                    {
+                        var maxConcurrency = Math.Clamp(Environment.ProcessorCount / 2, 2, 8);
+                        _ffprobeSemaphore = new SemaphoreSlim(maxConcurrency, maxConcurrency);
+                    }
+                }
+            }
+
+            bool semaphoreAcquired = false;
+            try
+            {
+                await _ffprobeSemaphore.WaitAsync(cancellationToken);
+                semaphoreAcquired = true;
+                // Get FFprobe path (bundled or system)
+                var ffprobePath = NativeBinaryHelper.GetFFprobePath();
+                if (string.IsNullOrEmpty(ffprobePath))
+                {
+                    // Fall back to system ffprobe on PATH
+                    ffprobePath = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "ffprobe.exe" : "ffprobe";
+                }
+
+                var startInfo = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = ffprobePath,
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true
+                };
+
+                // Use ArgumentList to safely handle paths with spaces and special characters
+                startInfo.ArgumentList.Add("-v");
+                startInfo.ArgumentList.Add("error");
+                startInfo.ArgumentList.Add("-select_streams");
+                startInfo.ArgumentList.Add("v:0");
+                startInfo.ArgumentList.Add("-show_entries");
+                startInfo.ArgumentList.Add("format=duration,stream=duration");
+                startInfo.ArgumentList.Add("-of");
+                startInfo.ArgumentList.Add("json");
+                startInfo.ArgumentList.Add("-i");
+                startInfo.ArgumentList.Add(filePath);
+
+                using var process = new System.Diagnostics.Process { StartInfo = startInfo };
+                using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+                using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
+
+                var outputTask = Task.Run(async () =>
+                {
+                    try
+                    {
+                        process.Start();
+                        // Read both stdout and stderr to prevent deadlocks
+                        var stdoutTask = process.StandardOutput.ReadToEndAsync(linkedCts.Token);
+                        var stderrTask = process.StandardError.ReadToEndAsync(linkedCts.Token);
+                        await process.WaitForExitAsync(linkedCts.Token);
+                        await Task.WhenAll(stdoutTask, stderrTask);
+                        return await stdoutTask;
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        try
+                        {
+                            if (!process.HasExited)
+                            {
+                                process.Kill();
+                            }
+                        }
+                        catch { }
+                        throw;
+                    }
+                }, linkedCts.Token);
+
+                try
+                {
+                    var output = await outputTask;
+                    
+                    if (process.ExitCode != 0 || string.IsNullOrWhiteSpace(output))
+                        return null;
+
+                    // Parse JSON output
+                    using var doc = JsonDocument.Parse(output);
+                    var root = doc.RootElement;
+
+                    // Prefer format.duration if present and > 0
+                    if (root.TryGetProperty("format", out var format) &&
+                        format.TryGetProperty("duration", out var formatDuration) &&
+                        formatDuration.ValueKind == JsonValueKind.String)
+                    {
+                        if (double.TryParse(formatDuration.GetString(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var durationSeconds) &&
+                            durationSeconds > 0)
+                        {
+                            return TimeSpan.FromSeconds(durationSeconds);
+                        }
+                    }
+
+                    // Fall back to stream duration
+                    if (root.TryGetProperty("streams", out var streams) &&
+                        streams.ValueKind == JsonValueKind.Array &&
+                        streams.GetArrayLength() > 0)
+                    {
+                        var firstStream = streams[0];
+                        if (firstStream.TryGetProperty("duration", out var streamDuration) &&
+                            streamDuration.ValueKind == JsonValueKind.String)
+                        {
+                            if (double.TryParse(streamDuration.GetString(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var durationSeconds) &&
+                                durationSeconds > 0)
+                            {
+                                return TimeSpan.FromSeconds(durationSeconds);
+                            }
+                        }
+                    }
+
+                    return null;
+                }
+                catch (OperationCanceledException)
+                {
+                    // Timeout or cancellation - ensure process is killed
+                    try
+                    {
+                        if (!process.HasExited)
+                        {
+                            process.Kill();
+                        }
+                    }
+                    catch { }
+                    return null;
+                }
+                catch (JsonException)
+                {
+                    // Invalid JSON - file might be corrupted or not a video
+                    return null;
+                }
+                catch (Exception)
+                {
+                    // Other errors - return null to skip this file
+                    return null;
+                }
+            }
+            finally
+            {
+                if (semaphoreAcquired)
+                {
+                    _ffprobeSemaphore.Release();
+                }
+            }
+        }
+
         private async Task ScanDurationsAsync(string rootFolder, CancellationToken cancellationToken)
         {
             // Get all video files in the folder tree
@@ -1093,6 +1248,7 @@ namespace ReelRoulette
 
             int total = allFiles.Length;
             int processed = alreadyCachedCount; // Start with already cached count
+            var processedLock = new object();
 
             // Update UI to show scan started
             Avalonia.Threading.Dispatcher.UIThread.Post(() =>
@@ -1117,8 +1273,19 @@ namespace ReelRoulette
                 return;
             }
 
-            // Process only uncached files
-            foreach (var file in filesToScan)
+            // Log which FFprobe binary is being used (on first scan)
+            var ffprobePath = NativeBinaryHelper.GetFFprobePath();
+            if (!string.IsNullOrEmpty(ffprobePath))
+            {
+                System.Diagnostics.Debug.WriteLine($"Using bundled FFprobe: {ffprobePath}");
+            }
+            else
+            {
+                System.Diagnostics.Debug.WriteLine("Using system FFprobe from PATH");
+            }
+
+            // Process only uncached files with parallel async execution
+            var scanTasks = filesToScan.Select(async file =>
             {
                 if (cancellationToken.IsCancellationRequested)
                     return;
@@ -1126,60 +1293,47 @@ namespace ReelRoulette
                 // Verify file exists and is accessible
                 if (!System.IO.File.Exists(file))
                 {
+                    lock (processedLock)
+                    {
+                        processed++;
+                    }
+                    return;
+                }
+
+                // Use FFprobe to get duration
+                var duration = await GetVideoDurationAsync(file, cancellationToken);
+                
+                if (duration.HasValue && duration.Value.TotalSeconds > 0)
+                {
+                    var durationSeconds = (long)duration.Value.TotalSeconds;
+                    // Thread-safe access to dictionary
+                    lock (_durationCache)
+                    {
+                        _durationCache[file] = durationSeconds;
+                    }
+                }
+                // If duration is null, skip this file (don't write 0 - treat as "Unknown")
+
+                int newProcessed;
+                lock (processedLock)
+                {
                     processed++;
-                    continue;
+                    newProcessed = processed;
                 }
-
-                // Use TagLib# to get duration
-                try
-                {
-                    // TagLib# File.Create can throw for unsupported/corrupted files
-                    using (var tfile = TagLibFile.Create(file))
-                    {
-                        if (tfile?.Properties != null)
-                        {
-                            var duration = tfile.Properties.Duration;
-                            if (duration.TotalSeconds > 0)
-                            {
-                                var durationSeconds = (long)duration.TotalSeconds;
-                                // Thread-safe access to dictionary
-                                lock (_durationCache)
-                                {
-                                    _durationCache[file] = durationSeconds;
-                                }
-                            }
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    // Skip files that can't be parsed - they'll be excluded when filters are active
-                    // TagLib# may throw for unsupported formats, corrupted files, etc.
-                    // Only log first few errors to avoid spam
-                    if (processed - alreadyCachedCount < 3)
-                    {
-                        System.Diagnostics.Debug.WriteLine($"Failed to parse {System.IO.Path.GetFileName(file)}: {ex.GetType().Name} - {ex.Message}");
-                    }
-                }
-
-                processed++;
 
                 // Update UI progress and save cache periodically (every 50 files)
-                if ((processed - alreadyCachedCount) % 50 == 0 || processed == total)
+                if ((newProcessed - alreadyCachedCount) % 50 == 0 || newProcessed == total)
                 {
                     SaveDurationsCache(); // Save periodically during scan
                     Avalonia.Threading.Dispatcher.UIThread.Post(() =>
                     {
-                        StatusTextBlock.Text = $"Scanning / indexing… ({processed}/{total} files processed)";
+                        StatusTextBlock.Text = $"Scanning / indexing… ({newProcessed}/{total} files processed)";
                     });
                 }
+            });
 
-                // Small yield to keep UI responsive
-                if ((processed - alreadyCachedCount) % 10 == 0)
-                {
-                    await Task.Yield();
-                }
-            }
+            // Wait for all scan tasks to complete
+            await Task.WhenAll(scanTasks);
 
             // Final save cache and update UI
             SaveDurationsCache();

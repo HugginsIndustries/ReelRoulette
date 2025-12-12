@@ -20,4 +20,52 @@
     <PackageReference Include="LibVLCSharp.Avalonia" Version="3.8.0" />
     <PackageReference Include="TagLibSharp" Version="2.3.0" />
   </ItemGroup>
+
+  <ItemGroup>
+    <!-- FFprobe Windows x64 -->
+    <None Include="runtimes\win-x64\native\ffprobe.exe" Condition="'$(RuntimeIdentifier)' == 'win-x64'">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <!-- FFprobe Linux x64 -->
+    <None Include="runtimes\linux-x64\native\ffprobe" Condition="'$(RuntimeIdentifier)' == 'linux-x64'">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>runtimes\linux-x64\native\ffprobe</Link>
+    </None>
+    <!-- FFprobe macOS x64 -->
+    <None Include="runtimes\osx-x64\native\ffprobe" Condition="'$(RuntimeIdentifier)' == 'osx-x64'">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>runtimes\osx-x64\native\ffprobe</Link>
+    </None>
+    <!-- FFprobe macOS ARM64 -->
+    <None Include="runtimes\osx-arm64\native\ffprobe" Condition="'$(RuntimeIdentifier)' == 'osx-arm64'">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>runtimes\osx-arm64\native\ffprobe</Link>
+    </None>
+    
+    <!-- LibVLC Windows x64 -->
+    <None Include="runtimes\win-x64\native\libvlc\**\*" Condition="'$(RuntimeIdentifier)' == 'win-x64'">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>runtimes\win-x64\native\libvlc\%(RecursiveDir)%(Filename)%(Extension)</Link>
+    </None>
+    <!-- LibVLC Linux x64 -->
+    <None Include="runtimes\linux-x64\native\libvlc\**\*" Condition="'$(RuntimeIdentifier)' == 'linux-x64'">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>runtimes\linux-x64\native\libvlc\%(RecursiveDir)%(Filename)%(Extension)</Link>
+    </None>
+    <!-- LibVLC macOS x64 -->
+    <None Include="runtimes\osx-x64\native\libvlc\**\*" Condition="'$(RuntimeIdentifier)' == 'osx-x64'">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>runtimes\osx-x64\native\libvlc\%(RecursiveDir)%(Filename)%(Extension)</Link>
+    </None>
+    <!-- LibVLC macOS ARM64 -->
+    <None Include="runtimes\osx-arm64\native\libvlc\**\*" Condition="'$(RuntimeIdentifier)' == 'osx-arm64'">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>runtimes\osx-arm64\native\libvlc\%(RecursiveDir)%(Filename)%(Extension)</Link>
+    </None>
+    
+    <!-- License files -->
+    <None Include="licenses\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
 </Project>
