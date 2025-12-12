@@ -168,6 +168,22 @@
                               ToggleType="Radio"
                               Click="VolumeNormalizationMenuItem_Click"/>
                 </MenuItem>
+                <Separator/>
+                <MenuItem Header="Audio filter">
+                    <MenuItem x:Name="AudioFilterPlayAllMenuItem"
+                              Header="Play all"
+                              ToggleType="Radio"
+                              IsChecked="True"
+                              Click="AudioFilterMenuItem_Click"/>
+                    <MenuItem x:Name="AudioFilterWithAudioOnlyMenuItem"
+                              Header="Only with audio"
+                              ToggleType="Radio"
+                              Click="AudioFilterMenuItem_Click"/>
+                    <MenuItem x:Name="AudioFilterWithoutAudioOnlyMenuItem"
+                              Header="Only without audio"
+                              ToggleType="Radio"
+                              Click="AudioFilterMenuItem_Click"/>
+                </MenuItem>
             </MenuItem>
             <MenuItem Header="_Library">
                 <MenuItem x:Name="RememberLastFolderMenuItem"
@@ -227,6 +243,8 @@
                           ToggleType="CheckBox"
                           IsChecked="False"
                           Click="ShowStatsMenuItem_Click"/>
+                <MenuItem Header="Show FFmpeg logs"
+                          Click="ShowFFmpegLogsMenuItem_Click"/>
                 <Separator/>
                 <MenuItem x:Name="FullscreenMenuItem"
                           Header="Fullscreen"
@@ -837,12 +855,14 @@
                                        FontWeight="Bold"
                                        FontSize="12"
                                        Margin="0,0,0,4"/>
-                            <TextBlock Text="{Binding GlobalTotalVideosKnown, StringFormat='Total videos (all libraries): {0}'}"/>
+                            <TextBlock Text="{Binding GlobalTotalVideosKnown, StringFormat='Total videos: {0}'}"/>
                             <TextBlock Text="{Binding GlobalTotalPlays, StringFormat='Total plays (all time): {0}'}"/>
                             <TextBlock Text="{Binding GlobalUniqueVideosPlayed, StringFormat='Unique videos played: {0}'}"/>
                             <TextBlock Text="{Binding GlobalNeverPlayedKnown, StringFormat='Never played (known videos): {0}'}"/>
-                            <TextBlock Text="{Binding GlobalFavoritesCount, StringFormat='Favorites (all libraries): {0}'}"/>
-                            <TextBlock Text="{Binding GlobalBlacklistCount, StringFormat='Blacklisted (all libraries): {0}'}"/>
+                            <TextBlock Text="{Binding GlobalFavoritesCount, StringFormat='Favorites: {0}'}"/>
+                            <TextBlock Text="{Binding GlobalBlacklistCount, StringFormat='Blacklisted: {0}'}"/>
+                            <TextBlock Text="{Binding GlobalVideosWithAudio, StringFormat='Videos with audio: {0}'}"/>
+                            <TextBlock Text="{Binding GlobalVideosWithoutAudio, StringFormat='Videos without audio: {0}'}"/>
                             
                             <!-- Current Video Stats Section -->
                             <TextBlock Text="Current video"
@@ -860,6 +880,9 @@
                             <TextBlock Text="{Binding CurrentVideoIsFavoriteDisplay, StringFormat='Favorite: {0}'}"/>
                             <TextBlock Text="{Binding CurrentVideoIsBlacklistedDisplay, StringFormat='Blacklisted: {0}'}"/>
                             <TextBlock Text="{Binding CurrentVideoDurationDisplay, StringFormat='Duration: {0}'}"/>
+                            <TextBlock Text="{Binding CurrentVideoHasAudioDisplay, StringFormat='Has audio: {0}'}"/>
+                            <TextBlock Text="{Binding CurrentVideoLoudnessDisplay, StringFormat='Loudness: {0}'}"/>
+                            <TextBlock Text="{Binding CurrentVideoPeakDisplay, StringFormat='Peak: {0}'}"/>
                         </StackPanel>
                     </ScrollViewer>
                 </Grid>

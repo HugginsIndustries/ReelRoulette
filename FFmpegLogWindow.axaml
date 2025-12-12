@@ -1,0 +1,41 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:ReelRoulette"
+        x:Class="ReelRoulette.FFmpegLogWindow"
+        Title="FFmpeg Logs"
+        Width="900"
+        Height="600"
+        WindowStartupLocation="CenterOwner">
+    <Grid RowDefinitions="Auto * Auto" Margin="8">
+        <TextBlock Grid.Row="0" 
+                   Text="FFmpeg Execution Logs"
+                   FontWeight="Bold"
+                   FontSize="14"
+                   Margin="0,0,0,8"/>
+        <ScrollViewer Grid.Row="1"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Auto">
+            <TextBox x:Name="LogTextBox"
+                     IsReadOnly="True"
+                     TextWrapping="Wrap"
+                     FontFamily="Consolas, Courier New, monospace"
+                     FontSize="10"/>
+        </ScrollViewer>
+        <StackPanel Grid.Row="2" 
+                    Orientation="Horizontal" 
+                    HorizontalAlignment="Right"
+                    Margin="0,8,0,0">
+            <Button Content="Copy Logs"
+                    Click="CopyLogsButton_Click"
+                    Margin="0,0,8,0"
+                    MinWidth="100"/>
+            <Button Content="Clear"
+                    Click="ClearLogsButton_Click"
+                    Margin="0,0,8,0"
+                    MinWidth="100"/>
+            <Button Content="Close"
+                    Click="CloseButton_Click"
+                    MinWidth="100"/>
+        </StackPanel>
+    </Grid>
+</Window>

@@ -1,6 +1,35 @@
 # Changelog
 
 ## Unreleased
+
+- **Add audio statistics and scan status improvements**:
+  - Distinguish between "no audio" videos (successful scan) and genuine errors during loudness scanning
+  - Add separate counters for no-audio files vs errors in scan status messages
+  - Improve scan progress updates: update every file with throttling (max once per 100ms) instead of every 50 files
+  - Add `HasAudio` property to loudness metadata to track audio presence
+  - Add backward compatibility handling for existing loudness stats without `HasAudio` field
+  - Fix: Videos with -91.0 dB loudness (placeholder value) now correctly marked as no-audio
+  - Add global audio statistics: "Videos with audio" and "Videos without audio" counts in Stats panel
+  - Add current video audio stats: "Has audio" status and loudness/peak dB values in Stats panel
+- **Add audio filter mode for playback**:
+  - New filter modes: Play all, Only with audio, Only without audio
+  - Audio filter settings moved to Playback menu
+  - Filter persists in playback settings and applies to random/queue selection
+  - Direct play actions (favorites, blacklist, etc.) always work regardless of filter mode
+- **Improve volume normalization algorithm**:
+  - Increase target loudness from -18.0 dB to -16.0 dB for better perceived volume
+  - Increase max gain adjustment from ±12.0 dB to ±20.0 dB for very quiet videos
+  - Add peak-based limiter to prevent loud videos from exceeding -3.0 dB (prevents clipping/distortion)
+  - Use PeakDb data to inform limiting decisions alongside MeanVolumeDb
+  - Refactor normalization calculation into single helper method for consistency
+- **Add FFmpeg logging window**:
+  - New "Show FFmpeg logs" option in View menu
+  - Displays detailed FFmpeg execution logs (exit codes, output, results) in separate non-modal window
+  - Includes Copy Logs and Clear buttons for debugging loudness scanning issues
+  - Auto-refreshes every 2 seconds to show new logs during scanning
+- **UI improvements**:
+  - Remove "(all libraries)" suffix from global stats labels for cleaner display
+  - Add peak dB display to current video stats in Stats panel
 - **Add volume normalization system** with four modes:
   - Off: No normalization (direct volume control)
   - Simple: Real-time normalization using LibVLC `normvol` audio filter only
@@ -11,7 +40,6 @@
 - Add volume normalization menu controls in Playback menu
 - Add "Scan loudness…" option in Library menu for per-file loudness analysis
 - Extend NativeBinaryHelper with GetFFmpegPath() for loudness scanning
-- Volume normalization uses target loudness of -18 dB with ±12 dB gain adjustment cap (increased from ±6 dB)
 - Library-aware and Advanced modes automatically adjust volume per-file based on scanned loudness data
 - Fix: Switching normalization modes during playback now properly recreates media with correct options
 - Fix: Mute button now correctly preserves user volume preference instead of normalized volume value
