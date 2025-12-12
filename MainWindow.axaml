@@ -160,7 +160,11 @@
                               ToggleType="Radio"
                               Click="VolumeNormalizationMenuItem_Click"/>
                     <MenuItem x:Name="VolumeNormalizationLibraryAwareMenuItem"
-                              Header="Library-aware (per-file + real-time)"
+                              Header="Library-aware (per-file)"
+                              ToggleType="Radio"
+                              Click="VolumeNormalizationMenuItem_Click"/>
+                    <MenuItem x:Name="VolumeNormalizationAdvancedMenuItem"
+                              Header="Advanced (per-file + real-time)"
                               ToggleType="Radio"
                               Click="VolumeNormalizationMenuItem_Click"/>
                 </MenuItem>

@@ -27,7 +27,8 @@ namespace ReelRoulette
     {
         Off = 0,
         Simple = 1,
-        LibraryAware = 2
+        LibraryAware = 2,
+        Advanced = 3
     }
 
     public partial class MainWindow : Window, INotifyPropertyChanged
@@ -57,7 +58,7 @@ namespace ReelRoulette
 
         // Volume normalization constants
         private const double TargetLoudnessDb = -18.0;  // Target mean volume in dB
-        private const double MaxGainDb = 6.0;          // Maximum gain adjustment in dB (±6.0)
+        private const double MaxGainDb = 12.0;          // Maximum gain adjustment in dB (±12.0)
 
         // Volume normalization
         private VolumeNormalizationMode _volumeNormalizationMode = VolumeNormalizationMode.Off;
@@ -3190,6 +3191,7 @@ namespace ReelRoulette
                 VolumeNormalizationOffMenuItem.IsChecked = false;
                 VolumeNormalizationSimpleMenuItem.IsChecked = false;
                 VolumeNormalizationLibraryAwareMenuItem.IsChecked = false;
+                VolumeNormalizationAdvancedMenuItem.IsChecked = false;
 
                 // Check the clicked item
                 item.IsChecked = true;
@@ -3208,15 +3210,67 @@ namespace ReelRoulette
                 {
                     newMode = VolumeNormalizationMode.LibraryAware;
                 }
+                else if (item == VolumeNormalizationAdvancedMenuItem)
+                {
+                    newMode = VolumeNormalizationMode.Advanced;
+                }
 
                 // Update mode
                 _volumeNormalizationMode = newMode;
                 SavePlaybackSettings("Volume normalization");
 
                 // Apply to current media if playing
-                if (_currentMedia != null && _mediaPlayer != null && !string.IsNullOrEmpty(_currentVideoPath))
+                // Bug fix: Media options must be set before playback begins, so we need to recreate the media
+                if (_currentMedia != null && _mediaPlayer != null && _libVLC != null && !string.IsNullOrEmpty(_currentVideoPath))
                 {
-                    ApplyVolumeNormalization();
+                    try
+                    {
+                        var wasPlaying = _mediaPlayer.IsPlaying;
+                        var currentTime = _mediaPlayer.Time;
+                        
+                        // Stop current playback
+                        _mediaPlayer.Stop();
+                        
+                        // Dispose current media
+                        var mediaToDispose = _currentMedia;
+                        _currentMedia = null;
+                        mediaToDispose?.Dispose();
+                        
+                        // Create new media with updated normalization options
+                        _currentMedia = new Media(_libVLC, _currentVideoPath, FromType.FromPath);
+                        
+                        // Set input-repeat option for seamless looping when loop is enabled
+                        if (_isLoopEnabled)
+                        {
+                            _currentMedia.AddOption(":input-repeat=65535");
+                        }
+                        
+                        // Apply volume normalization (must be called before Parse/Play)
+                        ApplyVolumeNormalization();
+                        
+                        // Parse and set media
+                        _currentMedia.Parse();
+                        UpdateAspectRatioFromTracks();
+                        
+                        // Set media and restore playback position
+                        _mediaPlayer.Play(_currentMedia);
+                        _mediaPlayer.Time = currentTime;
+                        
+                        // Restore playback state
+                        if (wasPlaying)
+                        {
+                            PlayPauseButton.IsChecked = true;
+                        }
+                        else
+                        {
+                            _mediaPlayer.Pause();
+                            PlayPauseButton.IsChecked = false;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        StatusTextBlock.Text = $"Error updating normalization: {ex.Message}";
+                    }
                 }
             }
         }
@@ -3606,8 +3660,8 @@ namespace ReelRoulette
                 return;
             }
 
-            // If mode is Simple or LibraryAware: add audio filter (only once per media creation)
-            if (_volumeNormalizationMode == VolumeNormalizationMode.Simple || _volumeNormalizationMode == VolumeNormalizationMode.LibraryAware)
+            // If mode is Simple or Advanced: add audio filter (only once per media creation)
+            if (_volumeNormalizationMode == VolumeNormalizationMode.Simple || _volumeNormalizationMode == VolumeNormalizationMode.Advanced)
             {
                 // Add the audio filter only one time per media creation
                 // Use normvol filter for gentle real-time normalization
@@ -3616,8 +3670,8 @@ namespace ReelRoulette
                 _currentMedia.AddOption(":normvol-preamp=0.0");
             }
 
-            // If mode is LibraryAware: apply per-file gain adjustment
-            if (_volumeNormalizationMode == VolumeNormalizationMode.LibraryAware)
+            // If mode is LibraryAware or Advanced: apply per-file gain adjustment
+            if (_volumeNormalizationMode == VolumeNormalizationMode.LibraryAware || _volumeNormalizationMode == VolumeNormalizationMode.Advanced)
             {
                 FileLoudnessInfo? info = null;
                 lock (_loudnessStats)
@@ -3648,8 +3702,17 @@ namespace ReelRoulette
                 }
                 else
                 {
-                    // Fall back to Simple mode behavior (real-time filter only)
-                    _mediaPlayer.Volume = _userVolumePreference;
+                    // Fall back: if Library-aware mode but no stats, use direct volume
+                    // If Advanced mode but no stats, still use real-time filter (already added above)
+                    if (_volumeNormalizationMode == VolumeNormalizationMode.LibraryAware)
+                    {
+                        _mediaPlayer.Volume = _userVolumePreference;
+                    }
+                    else
+                    {
+                        // Advanced mode: real-time filter already added, use slider value
+                        _mediaPlayer.Volume = _userVolumePreference;
+                    }
                 }
             }
             else
@@ -3667,8 +3730,8 @@ namespace ReelRoulette
             var newVolume = (int)VolumeSlider.Value;
             _userVolumePreference = newVolume;
 
-            // If mode is LibraryAware and current video exists, recalculate normalized volume
-            if (_volumeNormalizationMode == VolumeNormalizationMode.LibraryAware && !string.IsNullOrEmpty(_currentVideoPath))
+            // If mode is LibraryAware or Advanced and current video exists, recalculate normalized volume
+            if ((_volumeNormalizationMode == VolumeNormalizationMode.LibraryAware || _volumeNormalizationMode == VolumeNormalizationMode.Advanced) && !string.IsNullOrEmpty(_currentVideoPath))
             {
                 FileLoudnessInfo? info = null;
                 lock (_loudnessStats)
@@ -3720,10 +3783,11 @@ namespace ReelRoulette
             if (_mediaPlayer == null)
                 return;
 
-            // Mute: save current volume and set to 0
-            if (_mediaPlayer.Volume > 0)
+            // Bug fix: Save user volume preference instead of normalized MediaPlayer volume
+            // In normalization modes, _mediaPlayer.Volume contains the normalized value, not the user's preference
+            if (_userVolumePreference > 0)
             {
-                _lastNonZeroVolume = _mediaPlayer.Volume;
+                _lastNonZeroVolume = _userVolumePreference;
             }
             _mediaPlayer.Volume = 0;
             VolumeSlider.Value = 0;
@@ -3742,8 +3806,8 @@ namespace ReelRoulette
             _userVolumePreference = _lastNonZeroVolume;
             VolumeSlider.Value = _lastNonZeroVolume;
             
-            // Reapply normalization if in Library-aware mode
-            if (_volumeNormalizationMode == VolumeNormalizationMode.LibraryAware && !string.IsNullOrEmpty(_currentVideoPath))
+            // Reapply normalization if in Library-aware or Advanced mode
+            if ((_volumeNormalizationMode == VolumeNormalizationMode.LibraryAware || _volumeNormalizationMode == VolumeNormalizationMode.Advanced) && !string.IsNullOrEmpty(_currentVideoPath))
             {
                 FileLoudnessInfo? info = null;
                 lock (_loudnessStats)
@@ -4026,7 +4090,7 @@ namespace ReelRoulette
             VolumeSlider.Value = newPreference;
 
             // Apply normalization if in Library-aware mode
-            if (_volumeNormalizationMode == VolumeNormalizationMode.LibraryAware && !string.IsNullOrEmpty(_currentVideoPath))
+            if ((_volumeNormalizationMode == VolumeNormalizationMode.LibraryAware || _volumeNormalizationMode == VolumeNormalizationMode.Advanced) && !string.IsNullOrEmpty(_currentVideoPath))
             {
                 FileLoudnessInfo? info = null;
                 lock (_loudnessStats)
@@ -4367,7 +4431,7 @@ namespace ReelRoulette
             VolumeSlider.Value = newPreference;
 
             // Apply normalization if in Library-aware mode
-            if (_volumeNormalizationMode == VolumeNormalizationMode.LibraryAware && !string.IsNullOrEmpty(_currentVideoPath))
+            if ((_volumeNormalizationMode == VolumeNormalizationMode.LibraryAware || _volumeNormalizationMode == VolumeNormalizationMode.Advanced) && !string.IsNullOrEmpty(_currentVideoPath))
             {
                 FileLoudnessInfo? info = null;
                 lock (_loudnessStats)
@@ -4422,7 +4486,7 @@ namespace ReelRoulette
             VolumeSlider.Value = newPreference;
 
             // Apply normalization if in Library-aware mode
-            if (_volumeNormalizationMode == VolumeNormalizationMode.LibraryAware && !string.IsNullOrEmpty(_currentVideoPath))
+            if ((_volumeNormalizationMode == VolumeNormalizationMode.LibraryAware || _volumeNormalizationMode == VolumeNormalizationMode.Advanced) && !string.IsNullOrEmpty(_currentVideoPath))
             {
                 FileLoudnessInfo? info = null;
                 lock (_loudnessStats)
@@ -4618,6 +4682,7 @@ namespace ReelRoulette
             VolumeNormalizationOffMenuItem.IsChecked = _volumeNormalizationMode == VolumeNormalizationMode.Off;
             VolumeNormalizationSimpleMenuItem.IsChecked = _volumeNormalizationMode == VolumeNormalizationMode.Simple;
             VolumeNormalizationLibraryAwareMenuItem.IsChecked = _volumeNormalizationMode == VolumeNormalizationMode.LibraryAware;
+            VolumeNormalizationAdvancedMenuItem.IsChecked = _volumeNormalizationMode == VolumeNormalizationMode.Advanced;
         }
 
         private void SavePlaybackSettings(params string[] changedSettings)
