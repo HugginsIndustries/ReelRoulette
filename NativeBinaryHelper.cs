@@ -7,8 +7,10 @@ namespace ReelRoulette
     public static class NativeBinaryHelper
     {
         private static string? _cachedFFprobePath;
+        private static string? _cachedFFmpegPath;
         private static string? _cachedLibVlcPath;
         private static readonly object _ffprobePathLock = new object();
+        private static readonly object _ffmpegPathLock = new object();
         private static readonly object _libVlcPathLock = new object();
 
         public static string GetFFprobePath()
@@ -35,6 +37,41 @@ namespace ReelRoulette
                 
                 _cachedFFprobePath = File.Exists(path) ? path : "";
                 return _cachedFFprobePath;
+            }
+        }
+
+        public static string GetFFmpegPath()
+        {
+            if (_cachedFFmpegPath != null)
+                return _cachedFFmpegPath;
+
+            lock (_ffmpegPathLock)
+            {
+                if (_cachedFFmpegPath != null)
+                    return _cachedFFmpegPath;
+
+                var exeDir = AppContext.BaseDirectory;
+                var rid = GetRuntimeIdentifier();
+                
+                if (string.IsNullOrEmpty(rid))
+                {
+                    _cachedFFmpegPath = "";
+                    return "";
+                }
+                
+                var exeName = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "ffmpeg.exe" : "ffmpeg";
+                var path = Path.Combine(exeDir, "runtimes", rid, "native", exeName);
+                
+                // If bundled ffmpeg doesn't exist, fall back to system PATH
+                if (File.Exists(path))
+                {
+                    _cachedFFmpegPath = path;
+                }
+                else
+                {
+                    _cachedFFmpegPath = exeName; // Will use system PATH
+                }
+                return _cachedFFmpegPath;
             }
         }
         

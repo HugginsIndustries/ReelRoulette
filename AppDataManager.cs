@@ -60,6 +60,11 @@ namespace ReelRoulette
         {
             return Path.Combine(AppDataDirectory, "playbackStats.json");
         }
+
+        public static string GetLoudnessStatsPath()
+        {
+            return Path.Combine(AppDataDirectory, "loudnessStats.json");
+        }
     }
 }
 

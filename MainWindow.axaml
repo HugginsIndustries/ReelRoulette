@@ -149,6 +149,21 @@
                               IsChecked="True"
                               Click="VolumeStepMenuItem_Click"/>
                 </MenuItem>
+                <MenuItem Header="Volume normalization">
+                    <MenuItem x:Name="VolumeNormalizationOffMenuItem"
+                              Header="Off"
+                              ToggleType="Radio"
+                              IsChecked="True"
+                              Click="VolumeNormalizationMenuItem_Click"/>
+                    <MenuItem x:Name="VolumeNormalizationSimpleMenuItem"
+                              Header="Simple (real-time)"
+                              ToggleType="Radio"
+                              Click="VolumeNormalizationMenuItem_Click"/>
+                    <MenuItem x:Name="VolumeNormalizationLibraryAwareMenuItem"
+                              Header="Library-aware (per-file + real-time)"
+                              ToggleType="Radio"
+                              Click="VolumeNormalizationMenuItem_Click"/>
+                </MenuItem>
             </MenuItem>
             <MenuItem Header="_Library">
                 <MenuItem x:Name="RememberLastFolderMenuItem"
@@ -164,6 +179,8 @@
                           Click="DurationFilterMenuItem_Click"/>
                 <MenuItem Header="Scan durations"
                           Click="ScanDurations_Click"/>
+                <MenuItem Header="Scan loudness…"
+                          Click="ScanLoudness_Click"/>
             </MenuItem>
             <MenuItem Header="_View">
                 <MenuItem x:Name="ShowMenuMenuItem"
