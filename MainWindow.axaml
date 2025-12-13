@@ -6,7 +6,8 @@
     x:Class="ReelRoulette.MainWindow"
     Width="1280"
     Height="720"
-    Title="ReelRoulette">
+    Title="ReelRoulette"
+    Icon="/assets/HI.ico">
 
     <Window.Styles>
         <Style Selector="ToggleButton.IconToggle">
