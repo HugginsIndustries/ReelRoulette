@@ -4130,7 +4130,10 @@ namespace ReelRoulette
                 // For cuts (negative), always allow (making loud videos quieter is safe)
                 if (diffDb > 0)
                 {
-                    diffDb = Math.Min(diffDb, maxAllowedGain);
+                    // If peak is already above limit (maxAllowedGain < 0), cap boost at 0
+                    // This prevents applying an unintended cut when a boost was desired
+                    // Otherwise, use the more restrictive of target gain or peak-limited gain
+                    diffDb = maxAllowedGain < 0 ? 0 : Math.Min(diffDb, maxAllowedGain);
                 }
             }
             
