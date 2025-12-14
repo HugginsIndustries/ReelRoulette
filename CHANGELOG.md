@@ -2,6 +2,33 @@
 
 ## Unreleased
 
+- **Major: Library Refactor - Transform to library-based system**:
+  - Replace folder-based model with persistent library system using `library.json`
+  - New unified Library panel replaces separate Favorites, Blacklist, and Recently Played panels
+  - Add Library Sources: Import and manage multiple folder sources, enable/disable individual sources
+  - Add Tags system: Create and manage tags, assign tags to individual videos, filter by tags (AND/OR logic)
+  - Add unified FilterDialog: Single source of truth for all filtering (favorites, blacklist, audio, duration, tags, playback status)
+  - Add Library Info Row: Display library statistics and quick access to filter configuration
+  - Consolidate data storage: Merge favorites, blacklist, durations, playback stats, loudness stats, and history into `library.json`
+  - Consolidate settings: Merge playback settings, view preferences, and filter state into `settings.json`
+  - Add one-time data migration: Automatically migrate existing data from legacy JSON files into new library structure
+  - Update random playback: Now uses library system with filter state instead of folder scanning
+  - Update stats panel: Now calculates from library data, includes tags display for current video
+  - Performance improvements: Async library info calculation to prevent UI blocking, optimized filtering operations
+  - Remove legacy UI: Old panel toggles, folder selection row, and separate filter controls removed
+- **Add comprehensive logging system**:
+  - Unified logging: All application logging consolidated into single `last.log` file in AppData directory
+  - Logging coverage: Added detailed logging across all major operations:
+    - Application startup and initialization
+    - Media playback operations (play, pause, stop, seek, volume changes)
+    - Library operations (load, save, import, updates)
+    - Scanning operations (duration and loudness scans)
+    - UI event handlers (button clicks, menu actions, user interactions)
+    - File and folder operations
+    - Error handling and exception logging
+    - State changes (filter updates, queue rebuilds, settings saves)
+  - Timestamped entries: All log entries include precise timestamps for debugging
+  - Log rotation: `last.log` is overwritten on each application run for easy access to latest session
 - **Add audio statistics and scan status improvements**:
   - Distinguish between "no audio" videos (successful scan) and genuine errors during loudness scanning
   - Add separate counters for no-audio files vs errors in scan status messages

@@ -41,6 +41,7 @@ AppData/
 # Temporary files
 *.tmp
 *.temp
+COMMIT_MESSAGE.txt
 
 # FFmpeg binaries (too large for GitHub)
 ffprobe.exe

@@ -10,9 +10,58 @@ class Program
     // Initialization code. Don't use any Avalonia, third-party APIs or any
     // SynchronizationContext-reliant code before AppMain is called: things aren't initialized
     // yet and stuff might break.
+    private static string GetLogPath()
+    {
+        var appDataDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ReelRoulette");
+        if (!Directory.Exists(appDataDir))
+        {
+            Directory.CreateDirectory(appDataDir);
+        }
+        return Path.Combine(appDataDir, "last.log");
+    }
+
+    private static void Log(string message)
+    {
+        try
+        {
+            var logPath = GetLogPath();
+            File.AppendAllText(logPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {message}\n");
+        }
+        catch { }
+    }
+
     [STAThread]
     public static void Main(string[] args)
     {
+        // Clear log file at startup
+        try
+        {
+            var logPath = GetLogPath();
+            if (File.Exists(logPath))
+            {
+                File.Delete(logPath);
+            }
+            Log("=== Application Startup ===");
+        }
+        catch { }
+
+        // Add global exception handlers to capture crashes
+        AppDomain.CurrentDomain.UnhandledException += (sender, e) =>
+        {
+            var ex = e.ExceptionObject as Exception;
+            var errorMsg = $"=== UNHANDLED EXCEPTION ===\n" +
+                          $"Exception: {ex?.GetType().Name ?? "Unknown"}\n" +
+                          $"Message: {ex?.Message ?? "No message"}\n" +
+                          $"Stack Trace:\n{ex?.StackTrace ?? "No stack trace"}";
+            if (ex?.InnerException != null)
+            {
+                errorMsg += $"\nInner Exception: {ex.InnerException.Message}\n" +
+                           $"Inner Stack Trace:\n{ex.InnerException.StackTrace}";
+            }
+            errorMsg += "\n===========================";
+            Log(errorMsg);
+        };
+
         // Initialize LibVLC core before starting Avalonia
         // Try bundled LibVLC first, then fall back to system installation
         bool initialized = false;
@@ -34,11 +83,12 @@ class Program
                 Core.Initialize(bundledLibVlcPath);
                 initialized = true;
                 libVlcSource = $"bundled ({bundledLibVlcPath})";
-                System.Diagnostics.Debug.WriteLine($"Using bundled LibVLC: {bundledLibVlcPath}");
+                Log($"Using bundled LibVLC: {bundledLibVlcPath}");
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Failed to initialize bundled LibVLC: {ex.Message}");
+                Log($"Failed to initialize bundled LibVLC: {ex.Message}");
+                Log($"Failed to initialize bundled LibVLC: Stack trace: {ex.StackTrace}");
             }
         }
 
@@ -50,7 +100,7 @@ class Program
                 Core.Initialize();
                 initialized = true;
                 libVlcSource = "system (default)";
-                System.Diagnostics.Debug.WriteLine("Using system LibVLC (default initialization)");
+                Log("Using system LibVLC (default initialization)");
             }
             catch (Exception)
             {
@@ -71,7 +121,7 @@ class Program
                             Core.Initialize(path);
                             initialized = true;
                             libVlcSource = $"system ({path})";
-                            System.Diagnostics.Debug.WriteLine($"Using system LibVLC: {path}");
+                            Log($"Using system LibVLC: {path}");
                             break;
                         }
                         catch
@@ -85,14 +135,14 @@ class Program
 
         if (!initialized)
         {
-            Console.WriteLine("ERROR: LibVLC native libraries not found.");
-            Console.WriteLine("Please install VLC media player or ensure bundled libraries are available.");
+            var errorMsg = "ERROR: LibVLC native libraries not found. Please install VLC media player or ensure bundled libraries are available.";
+            Log(errorMsg);
             return;
         }
 
         if (libVlcSource != null)
         {
-            System.Diagnostics.Debug.WriteLine($"LibVLC initialized successfully from: {libVlcSource}");
+            Log($"LibVLC initialized successfully from: {libVlcSource}");
         }
         
         BuildAvaloniaApp()

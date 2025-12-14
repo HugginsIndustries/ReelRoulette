@@ -1,0 +1,175 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:ReelRoulette"
+        x:Class="ReelRoulette.FilterDialog"
+        x:DataType="local:FilterDialog"
+        Title="Filter Videos"
+        Width="600"
+        Height="700"
+        WindowStartupLocation="CenterOwner"
+        MinWidth="500"
+        MinHeight="500">
+    <Grid RowDefinitions="Auto * Auto" Margin="12">
+        <!-- Header -->
+        <TextBlock Grid.Row="0" 
+                   Text="Configure Filters"
+                   FontWeight="Bold"
+                   FontSize="16"
+                   Margin="0,0,0,16"/>
+
+        <!-- Content -->
+        <ScrollViewer Grid.Row="1" 
+                      VerticalScrollBarVisibility="Auto"
+                      Margin="0,0,0,16">
+            <StackPanel Spacing="16">
+                <!-- Basic Flags Section -->
+                <StackPanel Spacing="8">
+                    <TextBlock Text="Basic Filters" 
+                               FontWeight="SemiBold" 
+                               FontSize="13"
+                               Margin="0,0,0,4"/>
+                    <CheckBox x:Name="FavoritesOnlyCheckBox"
+                              Content="Favorites only"
+                              IsChecked="{Binding FavoritesOnly}"/>
+                    <CheckBox x:Name="ExcludeBlacklistedCheckBox"
+                              Content="Exclude blacklisted"
+                              IsChecked="{Binding ExcludeBlacklisted}"/>
+                    <CheckBox x:Name="OnlyNeverPlayedCheckBox"
+                              Content="Only never played"
+                              IsChecked="{Binding OnlyNeverPlayed}"/>
+                    <CheckBox x:Name="OnlyKnownDurationCheckBox"
+                              Content="Only videos with known duration"
+                              IsChecked="{Binding OnlyKnownDuration}"/>
+                    <CheckBox x:Name="OnlyKnownLoudnessCheckBox"
+                              Content="Only videos with known loudness"
+                              IsChecked="{Binding OnlyKnownLoudness}"/>
+                </StackPanel>
+
+                <!-- Audio Section -->
+                <StackPanel Spacing="8">
+                    <TextBlock Text="Audio Filter" 
+                               FontWeight="SemiBold" 
+                               FontSize="13"
+                               Margin="0,0,0,4"/>
+                    <RadioButton x:Name="AudioFilterAllRadio"
+                                 Content="All videos"
+                                 GroupName="AudioFilter"
+                                 IsChecked="{Binding AudioFilterAll}"/>
+                    <RadioButton x:Name="AudioFilterWithAudioRadio"
+                                 Content="Only videos with audio"
+                                 GroupName="AudioFilter"
+                                 IsChecked="{Binding AudioFilterWithAudio}"/>
+                    <RadioButton x:Name="AudioFilterWithoutAudioRadio"
+                                 Content="Only videos without audio"
+                                 GroupName="AudioFilter"
+                                 IsChecked="{Binding AudioFilterWithoutAudio}"/>
+                </StackPanel>
+
+                <!-- Duration Section -->
+                <StackPanel Spacing="8">
+                    <TextBlock Text="Duration Filter" 
+                               FontWeight="SemiBold" 
+                               FontSize="13"
+                               Margin="0,0,0,4"/>
+                    <Grid ColumnDefinitions="Auto * Auto" ColumnSpacing="8">
+                        <TextBlock Grid.Column="0" 
+                                   Text="Min:" 
+                                   VerticalAlignment="Center"
+                                   MinWidth="50"/>
+                        <TextBox x:Name="MinDurationTextBox"
+                                 Grid.Column="1"
+                                 Watermark="HH:MM:SS or leave empty"
+                                 Text="{Binding MinDurationText}"/>
+                        <CheckBox x:Name="NoMinDurationCheckBox"
+                                  Grid.Column="2"
+                                  Content="No minimum"
+                                  IsChecked="{Binding NoMinDuration}"
+                                  VerticalAlignment="Center"/>
+                    </Grid>
+                    <Grid ColumnDefinitions="Auto * Auto" ColumnSpacing="8">
+                        <TextBlock Grid.Column="0" 
+                                   Text="Max:" 
+                                   VerticalAlignment="Center"
+                                   MinWidth="50"/>
+                        <TextBox x:Name="MaxDurationTextBox"
+                                 Grid.Column="1"
+                                 Watermark="HH:MM:SS or leave empty"
+                                 Text="{Binding MaxDurationText}"/>
+                        <CheckBox x:Name="NoMaxDurationCheckBox"
+                                  Grid.Column="2"
+                                  Content="No maximum"
+                                  IsChecked="{Binding NoMaxDuration}"
+                                  VerticalAlignment="Center"/>
+                    </Grid>
+                </StackPanel>
+
+                <!-- Tags Section -->
+                <StackPanel Spacing="8">
+                    <TextBlock Text="Tags Filter" 
+                               FontWeight="SemiBold" 
+                               FontSize="13"
+                               Margin="0,0,0,4"/>
+                    <TextBlock x:Name="NoTagsTextBlock"
+                               Text="No tags available. Use Library → Manage Tags to create tags."
+                               Foreground="Gray"
+                               TextWrapping="Wrap"
+                               Margin="0,0,0,8"
+                               IsVisible="{Binding HasNoTags}"/>
+                    <ScrollViewer MaxHeight="200"
+                                  VerticalScrollBarVisibility="Auto"
+                                  IsVisible="{Binding HasTags}">
+                        <ItemsControl x:Name="TagsItemsControl"
+                                      ItemsSource="{Binding AvailableTags}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <UniformGrid Columns="4" Rows="0"/>
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="local:TagViewModel">
+                                    <ToggleButton Content="{Binding Tag}"
+                                                  IsChecked="{Binding IsSelected}"
+                                                  Classes="IconToggle"
+                                                  Margin="4"
+                                                  Click="TagToggleButton_Click"/>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                    <StackPanel Orientation="Horizontal" 
+                                Spacing="8"
+                                Margin="0,8,0,0"
+                                IsVisible="{Binding HasTags}">
+                        <TextBlock Text="Match mode:" 
+                                   VerticalAlignment="Center"/>
+                        <RadioButton x:Name="TagMatchAndRadio"
+                                     Content="All selected (AND)"
+                                     GroupName="TagMatch"
+                                     IsChecked="{Binding TagMatchAnd}"/>
+                        <RadioButton x:Name="TagMatchOrRadio"
+                                     Content="Any selected (OR)"
+                                     GroupName="TagMatch"
+                                     IsChecked="{Binding TagMatchOr}"/>
+                    </StackPanel>
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Buttons -->
+        <StackPanel Grid.Row="2" 
+                    Orientation="Horizontal" 
+                    HorizontalAlignment="Right"
+                    Spacing="8">
+            <Button Content="Clear all filters"
+                    Click="ClearAllButton_Click"
+                    MinWidth="120"/>
+            <Button Content="Cancel"
+                    Click="CancelButton_Click"
+                    MinWidth="100"/>
+            <Button Content="Apply"
+                    Click="ApplyButton_Click"
+                    MinWidth="100"
+                    IsDefault="True"/>
+        </StackPanel>
+    </Grid>
+</Window>
