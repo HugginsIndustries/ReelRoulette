@@ -3118,7 +3118,8 @@ namespace ReelRoulette
                         if (shouldApplyFilterState && _currentFilterState != null)
                         {
                             Log("UpdateLibraryPanel: Applying FilterState...");
-                            var eligibleItems = _filterService.BuildEligibleSet(_currentFilterState, _libraryIndex).ToList();
+                            // Use BuildEligibleSetWithoutFileCheck for performance - file existence will be checked when video is played
+                            var eligibleItems = _filterService.BuildEligibleSetWithoutFileCheck(_currentFilterState, _libraryIndex).ToList();
                             Log($"UpdateLibraryPanel: FilterService returned {eligibleItems.Count} eligible items.");
                             items = items.Where(item => eligibleItems.Any(eligible => eligible.FullPath == item.FullPath)).ToList();
                             Log($"UpdateLibraryPanel: After FilterState: {items.Count} items.");
@@ -3647,7 +3648,8 @@ namespace ReelRoulette
                 }
 
                 Log($"GetEligiblePool: Using FilterService with {_libraryIndex.Items.Count} items");
-                var eligibleItems = _filterService.BuildEligibleSet(_currentFilterState, _libraryIndex);
+                // Use BuildEligibleSetWithoutFileCheck for performance - file existence will be checked when video is actually played
+                var eligibleItems = _filterService.BuildEligibleSetWithoutFileCheck(_currentFilterState, _libraryIndex);
                 var result = eligibleItems.Select(item => item.FullPath).ToArray();
                 Log($"GetEligiblePool: FilterService returned {result.Length} eligible items after filtering");
                 return result;
@@ -3690,36 +3692,90 @@ namespace ReelRoulette
             var pool = await GetEligiblePoolAsync();
             Log($"RebuildPlayQueueIfNeededAsync: Eligible pool has {pool.Length} videos");
             
-            if (pool.Length == 0)
+            // Get current queue contents to exclude from rebuild (prevents duplicates)
+            var currentQueueItems = await Dispatcher.UIThread.InvokeAsync(() =>
             {
-                Log("RebuildPlayQueueIfNeededAsync: No eligible videos found, clearing queue");
+                return new HashSet<string>(_playQueue, StringComparer.OrdinalIgnoreCase);
+            });
+            Log($"RebuildPlayQueueIfNeededAsync: Current queue has {currentQueueItems.Count} videos that will be excluded from rebuild");
+            
+            // Exclude videos that are already in the current queue
+            var poolSet = new HashSet<string>(pool, StringComparer.OrdinalIgnoreCase);
+            poolSet.ExceptWith(currentQueueItems);
+            var poolWithoutQueueItems = poolSet.ToArray();
+            Log($"RebuildPlayQueueIfNeededAsync: After excluding current queue items, {poolWithoutQueueItems.Length} videos remain");
+            
+            if (poolWithoutQueueItems.Length == 0)
+            {
+                // No new videos to add - if queue is empty, we need to cycle through all videos again
                 await Dispatcher.UIThread.InvokeAsync(() =>
                 {
-                    var oldCount = _playQueue.Count;
-                    _playQueue.Clear();
-                    Log($"STATE CHANGE: Queue cleared - Previous size: {oldCount}, New size: {_playQueue.Count}");
-                    // Clear the "Finding eligible videos..." message
+                    if (_playQueue.Count == 0)
+                    {
+                        Log("RebuildPlayQueueIfNeededAsync: Queue is empty and no new videos available - rebuilding with all eligible videos to cycle again");
+                        // Queue is empty, cycle through all videos again
+                        var shuffled = pool.OrderBy(x => _rng.Next()).ToList();
+                        _playQueue = new Queue<string>(shuffled);
+                        Log($"STATE CHANGE: Queue cycled - New size: {_playQueue.Count}");
+                    }
+                    else
+                    {
+                        Log("RebuildPlayQueueIfNeededAsync: No new videos to add, keeping existing queue");
+                        // Keep existing queue - no changes needed
+                    }
+                    // Clear the status messages
                     if (StatusTextBlock.Text == "Finding eligible videos..." || 
                         StatusTextBlock.Text == "Applying filters and rebuilding queue...")
                     {
-                        StatusTextBlock.Text = "No eligible videos found. Check your filters.";
+                        StatusTextBlock.Text = "";
                     }
                 });
                 return;
             }
 
-            Log($"RebuildPlayQueueIfNeededAsync: Shuffling {pool.Length} videos...");
+            Log($"RebuildPlayQueueIfNeededAsync: Shuffling {poolWithoutQueueItems.Length} videos...");
             // Shuffle using Fisher-Yates (on background thread)
-            var shuffled = pool.OrderBy(x => _rng.Next()).ToList();
+            var shuffled = poolWithoutQueueItems.OrderBy(x => _rng.Next()).ToList();
             Log($"RebuildPlayQueueIfNeededAsync: Shuffling complete, updating queue on UI thread");
             
-            // Update queue on UI thread
+            // Update queue on UI thread - preserve existing queue items (if still eligible) and append new ones
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
                 var oldCount = _playQueue.Count;
-                _playQueue = new Queue<string>(shuffled);
-                Log($"STATE CHANGE: Queue rebuilt - Previous size: {oldCount}, New size: {_playQueue.Count}");
-                Log($"RebuildPlayQueueIfNeededAsync: Queue rebuilt with {_playQueue.Count} videos");
+                var eligibleSet = new HashSet<string>(pool, StringComparer.OrdinalIgnoreCase);
+                
+                // If queue is empty, replace it entirely. Otherwise, filter existing queue and append new items
+                if (_playQueue.Count == 0)
+                {
+                    _playQueue = new Queue<string>(shuffled);
+                    Log($"STATE CHANGE: Queue rebuilt (empty) - New size: {_playQueue.Count}");
+                }
+                else
+                {
+                    // Filter existing queue to remove items that are no longer eligible
+                    var filteredExistingQueue = new Queue<string>();
+                    int removedCount = 0;
+                    while (_playQueue.Count > 0)
+                    {
+                        var item = _playQueue.Dequeue();
+                        if (eligibleSet.Contains(item))
+                        {
+                            filteredExistingQueue.Enqueue(item);
+                        }
+                        else
+                        {
+                            removedCount++;
+                        }
+                    }
+                    _playQueue = filteredExistingQueue;
+                    
+                    // Append new items to filtered existing queue
+                    foreach (var item in shuffled)
+                    {
+                        _playQueue.Enqueue(item);
+                    }
+                    Log($"STATE CHANGE: Queue rebuilt - Previous size: {oldCount}, Removed (no longer eligible): {removedCount}, Added: {shuffled.Count}, New size: {_playQueue.Count}");
+                }
                 // Clear the status messages once queue is built
                 if (StatusTextBlock.Text == "Finding eligible videos..." || 
                     StatusTextBlock.Text == "Applying filters and rebuilding queue...")
@@ -5360,6 +5416,7 @@ namespace ReelRoulette
             // OnlyFavoritesMenuItem removed - now using FilterDialog
             FavoriteToggle.IsEnabled = !string.IsNullOrEmpty(_currentVideoPath);
             BlacklistToggle.IsEnabled = !string.IsNullOrEmpty(_currentVideoPath);
+            ManageTagsButton.IsEnabled = !string.IsNullOrEmpty(_currentVideoPath);
             
             // Audio filter menu items removed - now using FilterDialog
         }
@@ -5511,6 +5568,50 @@ namespace ReelRoulette
             }
         }
 
+        private async void ManageTagsForCurrentVideo_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            Log("UI ACTION: ManageTagsForCurrentVideo button clicked");
+            
+            if (string.IsNullOrEmpty(_currentVideoPath))
+            {
+                Log("ManageTagsForCurrentVideo_Click: No current video selected");
+                StatusTextBlock.Text = "No video selected.";
+                return;
+            }
+
+            if (_libraryIndex == null || _libraryService == null)
+            {
+                Log("ManageTagsForCurrentVideo_Click: Library system not available");
+                StatusTextBlock.Text = "Library system not available.";
+                return;
+            }
+
+            var item = _libraryService.FindItemByPath(_currentVideoPath);
+            if (item == null)
+            {
+                Log($"ManageTagsForCurrentVideo_Click: Could not find library item for path: {_currentVideoPath}");
+                StatusTextBlock.Text = "Video not found in library.";
+                return;
+            }
+
+            Log($"ManageTagsForCurrentVideo_Click: Opening tags dialog for current video: {item.FileName}");
+            var dialog = new ItemTagsDialog(item, _libraryIndex, _libraryService);
+            var result = await dialog.ShowDialog<bool?>(this);
+            
+            if (result == true)
+            {
+                Log($"ManageTagsForCurrentVideo_Click: Tags updated for: {item.FileName}");
+                // Update library panel if visible
+                if (_showLibraryPanel)
+                {
+                    UpdateLibraryPanel();
+                }
+                // Update stats for current video
+                UpdateCurrentVideoStatsUi();
+                StatusTextBlock.Text = $"Tags updated for {Path.GetFileName(_currentVideoPath)}";
+            }
+        }
+
         private void BlacklistToggle_Changed(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
             Log("BlacklistToggle_Changed: Blacklist toggle changed event fired");
@@ -5615,6 +5716,7 @@ namespace ReelRoulette
             FavoriteToggle.IsEnabled = hasVideo;
             BlacklistToggle.IsEnabled = hasVideo;
             ShowInFileManagerButton.IsEnabled = hasVideo;
+            ManageTagsButton.IsEnabled = hasVideo;
 
             if (!hasVideo)
             {

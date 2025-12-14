@@ -245,19 +245,36 @@
         </Menu>
 
         <!-- Row 1: Library info and filter -->
-        <Grid x:Name="LibraryInfoRow" Grid.Row="1" ColumnDefinitions="* Auto" Margin="10,10,10,10" VerticalAlignment="Center" x:DataType="local:MainWindow">
+        <Grid x:Name="LibraryInfoRow" Grid.Row="1" ColumnDefinitions="* Auto Auto" Margin="10,10,10,10" VerticalAlignment="Center" x:DataType="local:MainWindow">
             <TextBlock x:Name="LibraryInfoTextBlock"
                        Grid.Column="0"
                        VerticalAlignment="Center"
                        Text="{Binding LibraryInfoText}"/>
             <Button x:Name="FilterButton"
                     Grid.Column="1"
-                    Content="🎚️"
-                    Classes="IconToggle"
+                    Classes="PlayRandomButton"
                     ToolTip.Tip="Select filters..."
                     Click="FilterMenuItem_Click"
                     MinWidth="36"
-                    MinHeight="36"/>
+                    MinHeight="36"
+                    Margin="0,0,5,0">
+                <TextBlock Text="🎚️"
+                           TextAlignment="Center"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"/>
+            </Button>
+            <Button x:Name="ManageTagsButton"
+                    Grid.Column="2"
+                    Classes="PlayRandomButton"
+                    ToolTip.Tip="Manage tags for current video"
+                    Click="ManageTagsForCurrentVideo_Click"
+                    MinWidth="36"
+                    MinHeight="36">
+                <TextBlock Text="🏷️"
+                           TextAlignment="Center"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"/>
+            </Button>
         </Grid>
 
         <!-- Row 2: Status line -->
@@ -307,6 +324,8 @@
                     Classes="PlayRandomButton"
                     ToolTip.Tip="Previous video"
                     Margin="0,0,8,0"
+                    MinWidth="36"
+                    MinHeight="36"
                     Click="PreviousButton_Click">
                 <TextBlock Text="⏮"
                            TextAlignment="Center"
@@ -331,6 +350,8 @@
                     Classes="PlayRandomButton"
                     ToolTip.Tip="Next video"
                     Margin="0,0,8,0"
+                    MinWidth="36"
+                    MinHeight="36"
                     Click="NextButton_Click">
                 <TextBlock Text="⏭"
                            TextAlignment="Center"
@@ -341,18 +362,30 @@
             <Button x:Name="PlayRandomButton"
                     Grid.Column="3"
                     Classes="PlayRandomButton"
-                    Content="🎲"
                     ToolTip.Tip="Play random video"
                     Margin="0,0,8,0"
-                    Click="PlayRandom_Click"/>
+                    MinWidth="36"
+                    MinHeight="36"
+                    Click="PlayRandom_Click">
+                <TextBlock Text="🎲"
+                           TextAlignment="Center"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"/>
+            </Button>
             <!-- Show in file manager button -->
             <Button x:Name="ShowInFileManagerButton"
                     Grid.Column="4"
                     Classes="PlayRandomButton"
-                    Content="📁"
                     ToolTip.Tip="Show current video in file manager"
                     Margin="0,0,8,0"
-                    Click="ShowCurrentVideoInFileManager_Click"/>
+                    MinWidth="36"
+                    MinHeight="36"
+                    Click="ShowCurrentVideoInFileManager_Click">
+                <TextBlock Text="📁"
+                           TextAlignment="Center"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"/>
+            </Button>
             <!-- Loop toggle -->
             <ToggleButton x:Name="LoopToggle"
                           Grid.Column="5"
@@ -527,10 +560,17 @@
                         </ComboBox>
                         <Button x:Name="LibraryFilterButton"
                                Grid.Column="1"
-                               Content="Filter..."
                                Classes="PlayRandomButton"
+                               ToolTip.Tip="Select filters..."
                                Margin="0,0,4,0"
-                               Click="LibraryFilterButton_Click"/>
+                               MinWidth="36"
+                               MinHeight="36"
+                               Click="LibraryFilterButton_Click">
+                            <TextBlock Text="🎚️"
+                                       TextAlignment="Center"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"/>
+                        </Button>
                         <CheckBox x:Name="LibraryRespectFiltersCheckBox"
                                  Grid.Column="2"
                                  Content="Respect filters"

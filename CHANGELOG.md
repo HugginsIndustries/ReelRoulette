@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **UI improvements and fixes**:
+  - Add "Manage tags for current video" button to Library Info Row (next to filter button)
+  - Standardize all icon buttons: Make all buttons square with rounded edges and centered icons
+  - Unify filter button styling: Library panel "Filter..." button now matches "Select filters..." button (same icon and style)
+  - Fix no-repeat mode: Properly prevent duplicate videos until all eligible videos have been played
+  - Improve no-repeat queue logic: Exclude already-queued videos when rebuilding, filter out ineligible items when filters change
+  - Performance optimization: Skip File.Exists checks in filtering operations for UI display and queue building (file existence still validated during actual playback)
 - **Major: Library Refactor - Transform to library-based system**:
   - Replace folder-based model with persistent library system using `library.json`
   - New unified Library panel replaces separate Favorites, Blacklist, and Recently Played panels
