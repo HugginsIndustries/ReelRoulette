@@ -4007,15 +4007,19 @@ namespace ReelRoulette
                             });
                             
                             // Update library index reference (after save completes)
-                            _libraryIndex = _libraryService.LibraryIndex;
+                            var updatedIndex = _libraryService.LibraryIndex;
                             
-                            // Update UI if library panel is visible
-                            if (_showLibraryPanel)
+                            await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
                             {
-                                UpdateLibraryPanel();
-                            }
-                            
-                            StatusTextBlock.Text = $"File path updated: {Path.GetFileName(newPath)}";
+                                _libraryIndex = updatedIndex;
+
+                                if (_showLibraryPanel)
+                                {
+                                    UpdateLibraryPanel();
+                                }
+
+                                SetStatusMessage($"File path updated: {Path.GetFileName(newPath)}");
+                            });
                             return newPath;
                         }
                         else
@@ -4076,19 +4080,23 @@ namespace ReelRoulette
                 });
                 
                 // Update library index reference
-                _libraryIndex = _libraryService.LibraryIndex;
+                var updatedIndex = _libraryService.LibraryIndex;
                 
-                // Update UI
-                if (_showLibraryPanel)
+                await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
                 {
-                    UpdateLibraryPanel();
-                }
-                
-                // Recalculate stats
-                RecalculateGlobalStats();
-                
-                // Set success status message
-                StatusTextBlock.Text = $"Removed from library: {Path.GetFileName(path)}";
+                    _libraryIndex = updatedIndex;
+                    
+                    if (_showLibraryPanel)
+                    {
+                        UpdateLibraryPanel();
+                    }
+                    
+                    // Recalculate stats
+                    RecalculateGlobalStats();
+                    
+                    // Set success status message
+                    SetStatusMessage($"Removed from library: {Path.GetFileName(path)}");
+                });
                 
                 Log($"RemoveLibraryItemAsync: Successfully removed item: {Path.GetFileName(path)}");
             }
@@ -4104,25 +4112,26 @@ namespace ReelRoulette
         {
             CancellationTokenSource? previousCts;
             CancellationTokenSource? newCts;
+            double delayMs;
 
             lock (_statusMessageLock)
             {
                 previousCts = _statusMessageCancellation;
                 _statusMessageCancellation = new CancellationTokenSource();
                 newCts = _statusMessageCancellation;
+                
+                var now = DateTime.UtcNow;
+                var elapsed = (now - _lastStatusMessageTime).TotalMilliseconds;
+                delayMs = elapsed >= minimumDisplayMilliseconds
+                    ? 0
+                    : minimumDisplayMilliseconds - elapsed;
             }
 
             previousCts?.Cancel();
 
-            var now = DateTime.UtcNow;
-            var elapsed = (now - _lastStatusMessageTime).TotalMilliseconds;
-            var delayMs = elapsed >= minimumDisplayMilliseconds
-                ? 0
-                : (int)(minimumDisplayMilliseconds - elapsed);
-
             if (delayMs > 0)
             {
-                Log($"SetStatusMessage: Delaying status update by {delayMs}ms to honor minimum display time");
+                Log($"SetStatusMessage: Delaying status update by {(int)delayMs}ms to honor minimum display time");
             }
 
             _ = Task.Run(async () =>
@@ -4131,7 +4140,7 @@ namespace ReelRoulette
                 {
                     if (delayMs > 0)
                     {
-                        await Task.Delay(delayMs, newCts!.Token);
+                        await Task.Delay((int)delayMs, newCts!.Token);
                     }
 
                     Avalonia.Threading.Dispatcher.UIThread.Post(() =>
@@ -4141,8 +4150,16 @@ namespace ReelRoulette
                             return;
                         }
 
-                        StatusTextBlock.Text = message;
-                        _lastStatusMessageTime = DateTime.UtcNow;
+                        lock (_statusMessageLock)
+                        {
+                            if (!ReferenceEquals(_statusMessageCancellation, newCts))
+                            {
+                                return;
+                            }
+
+                            StatusTextBlock.Text = message;
+                            _lastStatusMessageTime = DateTime.UtcNow;
+                        }
                     });
                 }
                 catch (TaskCanceledException)
