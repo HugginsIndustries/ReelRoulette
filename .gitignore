@@ -42,6 +42,7 @@ AppData/
 *.tmp
 *.temp
 COMMIT_MESSAGE.txt
+AGENTS.md
 
 # FFmpeg binaries (too large for GitHub)
 ffprobe.exe
