@@ -3860,7 +3860,7 @@ namespace ReelRoulette
                 else
                 {
                     // Cancel - just show status
-                    StatusTextBlock.Text = "Video file not found.";
+                    SetStatusMessage("Video file not found.");
                 }
                 return;
             }
@@ -3939,7 +3939,7 @@ namespace ReelRoulette
                     if (!_videoExtensions.Contains(extension))
                     {
                         Log($"HandleLocateFileAsync: Selected file is not a valid video file: {extension}");
-                        StatusTextBlock.Text = "Selected file is not a valid video file.";
+                        SetStatusMessage("Selected file is not a valid video file.");
                         return null;
                     }
                     
@@ -4030,7 +4030,7 @@ namespace ReelRoulette
                         else
                         {
                             Log($"HandleLocateFileAsync: Library item not found for old path: {oldPath}");
-                            StatusTextBlock.Text = "Library item not found.";
+                            SetStatusMessage("Library item not found.");
                             return null;
                         }
                     }
@@ -4109,7 +4109,10 @@ namespace ReelRoulette
             {
                 Log($"RemoveLibraryItemAsync: ERROR - Exception: {ex.GetType().Name}, Message: {ex.Message}");
                 Log($"RemoveLibraryItemAsync: ERROR - Stack trace: {ex.StackTrace}");
-                StatusTextBlock.Text = $"Error removing item: {ex.Message}";
+                await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    SetStatusMessage($"Error removing item: {ex.Message}");
+                });
             }
         }
 
