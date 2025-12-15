@@ -1,0 +1,57 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:ReelRoulette"
+        x:Class="ReelRoulette.MissingFileDialog"
+        Title="File Not Found"
+        Width="600"
+        Height="250"
+        WindowStartupLocation="CenterOwner"
+        MinWidth="500"
+        MinHeight="200">
+    <Grid RowDefinitions="Auto * Auto" Margin="16">
+        <!-- Header -->
+        <TextBlock Grid.Row="0" 
+                   Text="File Not Found"
+                   FontWeight="Bold"
+                   FontSize="16"
+                   Margin="0,0,0,12"/>
+
+        <!-- Content -->
+        <StackPanel Grid.Row="1" 
+                    Spacing="12"
+                    Margin="0,0,0,16">
+            <TextBlock Text="The following file could not be found:"
+                       TextWrapping="Wrap"/>
+            <TextBlock x:Name="FileNameTextBlock"
+                       FontWeight="SemiBold"
+                       FontSize="14"
+                       TextWrapping="Wrap"
+                       Margin="0,4,0,0"/>
+            <TextBlock x:Name="FilePathTextBlock"
+                       Foreground="Gray"
+                       FontSize="11"
+                       TextWrapping="Wrap"
+                       Margin="0,4,0,0"/>
+            <TextBlock Text="What would you like to do?"
+                       Margin="0,12,0,0"
+                       TextWrapping="Wrap"/>
+        </StackPanel>
+
+        <!-- Buttons -->
+        <StackPanel Grid.Row="2" 
+                    Orientation="Horizontal" 
+                    HorizontalAlignment="Right"
+                    Spacing="8">
+            <Button Content="Cancel"
+                    Click="CancelButton_Click"
+                    MinWidth="100"/>
+            <Button Content="Remove from Library"
+                    Click="RemoveButton_Click"
+                    MinWidth="140"/>
+            <Button Content="Locate File..."
+                    Click="LocateButton_Click"
+                    MinWidth="120"
+                    IsDefault="True"/>
+        </StackPanel>
+    </Grid>
+</Window>

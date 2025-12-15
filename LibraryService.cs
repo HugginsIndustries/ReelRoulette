@@ -274,6 +274,34 @@ namespace ReelRoulette
         }
 
         /// <summary>
+        /// Removes a library item by its full path.
+        /// </summary>
+        public void RemoveItem(string fullPath)
+        {
+            if (string.IsNullOrEmpty(fullPath))
+            {
+                Log("LibraryService.RemoveItem: ERROR - fullPath is null or empty");
+                throw new ArgumentException("Full path cannot be null or empty", nameof(fullPath));
+            }
+
+            lock (_lock)
+            {
+                var item = _libraryIndex.Items.FirstOrDefault(i =>
+                    string.Equals(i.FullPath, fullPath, StringComparison.OrdinalIgnoreCase));
+
+                if (item != null)
+                {
+                    _libraryIndex.Items.Remove(item);
+                    Log($"LibraryService.RemoveItem: Removed item - {Path.GetFileName(fullPath)}");
+                }
+                else
+                {
+                    Log($"LibraryService.RemoveItem: Item not found for path: {fullPath}");
+                }
+            }
+        }
+
+        /// <summary>
         /// Gets all items, optionally filtered by source.
         /// </summary>
         public IEnumerable<LibraryItem> GetItemsBySource(string? sourceId = null)

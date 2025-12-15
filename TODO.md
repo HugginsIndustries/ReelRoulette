@@ -2,19 +2,6 @@
 
 ## Future Improvements (from playback_audio_stats_and_scan_status plan)
 
-### Periodic Cleanup of Stale Loudness Stats Entries
-
-- **Status**: Future enhancement (not required for initial implementation)
-- **Description**: Periodically prune loudness stats entries for files that no longer exist on disk to keep global stats accurate and prevent the JSON file from growing forever.
-- **Implementation**:
-  - Add `CleanupLoudnessStats()` method that:
-    - Locks `_loudnessStats` dictionary
-    - Finds all keys where `!File.Exists(k)`
-    - Removes those entries
-    - Saves loudness stats
-    - Calls `RecalculateGlobalStats()` after cleanup
-  - Call this periodically (e.g., on startup, after scans complete, or on a timer)
-
 ### Enhanced Logging for Loudness/Duration Scanning
 
 - **Status**: Future enhancement (not required for initial implementation)

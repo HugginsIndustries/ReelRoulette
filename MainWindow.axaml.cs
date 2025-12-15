@@ -3823,7 +3823,7 @@ namespace ReelRoulette
 
         #region Video Playback
 
-        private void PlayFromPath(string videoPath)
+        private async Task PlayFromPathAsync(string videoPath)
         {
             Log($"PlayFromPath: Starting - videoPath: {videoPath ?? "null"}");
             
@@ -3836,12 +3836,246 @@ namespace ReelRoulette
             if (string.IsNullOrEmpty(videoPath) || !File.Exists(videoPath))
             {
                 Log($"PlayFromPath: ERROR - Video file not found or path is empty. Path: {videoPath ?? "null"}, Exists: {(!string.IsNullOrEmpty(videoPath) && File.Exists(videoPath))}");
-                StatusTextBlock.Text = "Video file not found.";
+                
+                // Show missing file dialog
+                var result = await ShowMissingFileDialogAsync(videoPath);
+                
+                if (result == MissingFileDialogResult.RemoveFromLibrary)
+                {
+                    await RemoveLibraryItemAsync(videoPath);
+                    StatusTextBlock.Text = $"Removed from library: {System.IO.Path.GetFileName(videoPath)}";
+                }
+                else if (result == MissingFileDialogResult.LocateFile)
+                {
+                    var newPath = await HandleLocateFileAsync(videoPath);
+                    if (!string.IsNullOrEmpty(newPath) && File.Exists(newPath))
+                    {
+                        // Retry playback with new path
+                        Log($"PlayFromPath: File located, retrying playback with new path: {newPath}");
+                        await PlayFromPathAsync(newPath);
+                    }
+                    else
+                    {
+                        StatusTextBlock.Text = "File location cancelled or invalid.";
+                    }
+                }
+                else
+                {
+                    // Cancel - just show status
+                    StatusTextBlock.Text = "Video file not found.";
+                }
                 return;
             }
 
             Log($"PlayFromPath: File exists, calling PlayVideo - addToHistory: true");
             PlayVideo(videoPath, addToHistory: true);
+        }
+
+        private void PlayFromPath(string videoPath)
+        {
+            // Synchronous wrapper for backward compatibility
+            _ = PlayFromPathAsync(videoPath);
+        }
+
+        private async Task<MissingFileDialogResult> ShowMissingFileDialogAsync(string? missingPath)
+        {
+            Log($"ShowMissingFileDialogAsync: Showing dialog for missing file: {missingPath ?? "null"}");
+            
+            var dialog = new MissingFileDialog(missingPath ?? "");
+            var result = await dialog.ShowDialog<MissingFileDialogResult>(this);
+            
+            Log($"ShowMissingFileDialogAsync: User selected: {result}");
+            return result;
+        }
+
+        private async Task<string?> HandleLocateFileAsync(string? oldPath)
+        {
+            Log($"HandleLocateFileAsync: Opening file picker for missing file: {oldPath ?? "null"}");
+            
+            try
+            {
+                var options = new FilePickerOpenOptions
+                {
+                    Title = "Locate Video File",
+                    AllowMultiple = false,
+                    FileTypeFilter = new[]
+                    {
+                        new FilePickerFileType("Video Files")
+                        {
+                            Patterns = new[] { "*.mp4", "*.mkv", "*.avi", "*.mov", "*.wmv", "*.mpg", "*.mpeg" }
+                        },
+                        new FilePickerFileType("All Files") { Patterns = new[] { "*" } }
+                    }
+                };
+
+                // Try to set initial directory to the old file's directory if it exists
+                if (!string.IsNullOrEmpty(oldPath))
+                {
+                    try
+                    {
+                        var oldDir = Path.GetDirectoryName(oldPath);
+                        if (!string.IsNullOrEmpty(oldDir) && Directory.Exists(oldDir))
+                        {
+                            var storageFolder = await StorageProvider.TryGetFolderFromPathAsync(oldDir);
+                            if (storageFolder != null)
+                            {
+                                options.SuggestedStartLocation = storageFolder;
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Log($"HandleLocateFileAsync: Could not set suggested start location - {ex.Message}");
+                    }
+                }
+
+                var result = await StorageProvider.OpenFilePickerAsync(options);
+                
+                if (result.Count > 0 && result[0] != null)
+                {
+                    var newPath = result[0].Path.LocalPath;
+                    Log($"HandleLocateFileAsync: User selected file: {newPath}");
+                    
+                    // Verify it's a valid video file
+                    var extension = Path.GetExtension(newPath).ToLowerInvariant();
+                    if (!_videoExtensions.Contains(extension))
+                    {
+                        Log($"HandleLocateFileAsync: Selected file is not a valid video file: {extension}");
+                        StatusTextBlock.Text = "Selected file is not a valid video file.";
+                        return null;
+                    }
+                    
+                    // Update library item with new path
+                    if (_libraryIndex != null && !string.IsNullOrEmpty(oldPath))
+                    {
+                        var item = _libraryService.FindItemByPath(oldPath);
+                        if (item != null)
+                        {
+                            Log($"HandleLocateFileAsync: Updating library item path from {oldPath} to {newPath}");
+                            
+                            // Check if new path is in an existing source
+                            var newDir = Path.GetDirectoryName(newPath);
+                            var matchingSource = _libraryIndex.Sources.FirstOrDefault(s => 
+                                !string.IsNullOrEmpty(newDir) && 
+                                newDir.StartsWith(s.RootPath, StringComparison.OrdinalIgnoreCase));
+                            
+                            if (matchingSource != null)
+                            {
+                                item.SourceId = matchingSource.Id;
+                                // Calculate relative path
+                                var rootUri = new Uri(Path.GetFullPath(matchingSource.RootPath) + Path.DirectorySeparatorChar);
+                                var fileUri = new Uri(Path.GetFullPath(newPath));
+                                var relativeUri = rootUri.MakeRelativeUri(fileUri);
+                                item.RelativePath = Uri.UnescapeDataString(relativeUri.ToString().Replace('/', Path.DirectorySeparatorChar));
+                            }
+                            
+                            item.FullPath = newPath;
+                            item.FileName = Path.GetFileName(newPath);
+                            
+                            _libraryService.UpdateItem(item);
+                            
+                            // Save library asynchronously
+                            _ = Task.Run(() =>
+                            {
+                                try
+                                {
+                                    _libraryService.SaveLibrary();
+                                    Log("HandleLocateFileAsync: Library saved successfully");
+                                }
+                                catch (Exception ex)
+                                {
+                                    Log($"HandleLocateFileAsync: ERROR saving library - Exception: {ex.GetType().Name}, Message: {ex.Message}");
+                                }
+                            });
+                            
+                            // Update library index reference
+                            _libraryIndex = _libraryService.LibraryIndex;
+                            
+                            // Update UI if library panel is visible
+                            if (_showLibraryPanel)
+                            {
+                                UpdateLibraryPanel();
+                            }
+                            
+                            StatusTextBlock.Text = $"File path updated: {Path.GetFileName(newPath)}";
+                            return newPath;
+                        }
+                        else
+                        {
+                            Log($"HandleLocateFileAsync: Library item not found for old path: {oldPath}");
+                            StatusTextBlock.Text = "Library item not found.";
+                            return null;
+                        }
+                    }
+                    else
+                    {
+                        Log("HandleLocateFileAsync: Library index is null or old path is empty");
+                        return newPath; // Return path even if we can't update library
+                    }
+                }
+                else
+                {
+                    Log("HandleLocateFileAsync: User cancelled file picker");
+                    return null;
+                }
+            }
+            catch (Exception ex)
+            {
+                Log($"HandleLocateFileAsync: ERROR - Exception: {ex.GetType().Name}, Message: {ex.Message}");
+                Log($"HandleLocateFileAsync: ERROR - Stack trace: {ex.StackTrace}");
+                StatusTextBlock.Text = $"Error locating file: {ex.Message}";
+                return null;
+            }
+        }
+
+        private async Task RemoveLibraryItemAsync(string? path)
+        {
+            Log($"RemoveLibraryItemAsync: Removing library item: {path ?? "null"}");
+            
+            if (string.IsNullOrEmpty(path))
+            {
+                Log("RemoveLibraryItemAsync: Path is null or empty");
+                return;
+            }
+            
+            try
+            {
+                _libraryService.RemoveItem(path);
+                
+                // Save library asynchronously
+                await Task.Run(() =>
+                {
+                    try
+                    {
+                        _libraryService.SaveLibrary();
+                        Log("RemoveLibraryItemAsync: Library saved successfully");
+                    }
+                    catch (Exception ex)
+                    {
+                        Log($"RemoveLibraryItemAsync: ERROR saving library - Exception: {ex.GetType().Name}, Message: {ex.Message}");
+                    }
+                });
+                
+                // Update library index reference
+                _libraryIndex = _libraryService.LibraryIndex;
+                
+                // Update UI
+                if (_showLibraryPanel)
+                {
+                    UpdateLibraryPanel();
+                }
+                
+                // Recalculate stats
+                RecalculateGlobalStats();
+                
+                Log($"RemoveLibraryItemAsync: Successfully removed item: {Path.GetFileName(path)}");
+            }
+            catch (Exception ex)
+            {
+                Log($"RemoveLibraryItemAsync: ERROR - Exception: {ex.GetType().Name}, Message: {ex.Message}");
+                Log($"RemoveLibraryItemAsync: ERROR - Stack trace: {ex.StackTrace}");
+                StatusTextBlock.Text = $"Error removing item: {ex.Message}";
+            }
         }
 
         private void OpenFileLocation(string? path)

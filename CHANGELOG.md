@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **Add missing file dialog for library management**:
+  - Show dialog when video file no longer exists during playback
+  - Allow users to remove missing files from library or locate and update file paths
+  - Automatically update library item paths when user locates moved files
+  - Update source references and relative paths when files are relocated
+  - Remove old "Periodic Cleanup of Stale Loudness Stats Entries" TODO (replaced with user-driven solution)
 - **UI reorganization and improvements**:
   - Remove Library/Filter Info Row: Moved library information and filter controls into Library panel header
   - Reorganize Library panel: New header layout with library stats, filter summary, unified controls row, and search
