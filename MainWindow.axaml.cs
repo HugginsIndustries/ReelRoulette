@@ -97,7 +97,6 @@ namespace ReelRoulette
 
         // View prefs
         private bool _showMenu = true;
-        private bool _showLibraryInfo = true;
         private bool _showStatusLine = true;
         private bool _showControls = true;
         private bool _showLibraryPanel = false;
@@ -105,7 +104,6 @@ namespace ReelRoulette
         private bool _isFullScreen = false;
         private bool _alwaysOnTop = false;
         private bool _isPlayerViewMode = false;
-        private bool _savedShowLibraryInfo = true;
         private bool _savedShowStatusLine = true;
         private bool _savedShowControls = true;
         private bool _savedShowLibraryPanel = false;
@@ -480,6 +478,21 @@ namespace ReelRoulette
                 if (_libraryInfoText != value)
                 {
                     _libraryInfoText = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private string _filterSummaryText = "Filters: None";
+
+        public string FilterSummaryText
+        {
+            get => _filterSummaryText;
+            private set
+            {
+                if (_filterSummaryText != value)
+                {
+                    _filterSummaryText = value;
                     OnPropertyChanged();
                 }
             }
@@ -1109,6 +1122,7 @@ namespace ReelRoulette
             
             // Update library info text
             UpdateLibraryInfoText();
+            UpdateFilterSummaryText();
         }
 
         private void UpdateLibraryInfoText()
@@ -1116,38 +1130,17 @@ namespace ReelRoulette
             // Update immediately with total count (fast)
             if (_libraryIndex == null)
             {
-                LibraryInfoText = "🎞️ 0 videos · 🎯 0 selected";
+                LibraryInfoText = "Library · 🎞️ 0 videos · 🎯 0 selected";
                 return;
             }
 
             int totalVideos = _libraryIndex.Items.Count;
-            
-            // Build filter summary (fast - no I/O)
-            string filterSummary = "";
-            if (_currentFilterState != null)
-            {
-                var filterParts = new List<string>();
-                if (_currentFilterState.FavoritesOnly)
-                    filterParts.Add("Favorites");
-                if (_currentFilterState.OnlyNeverPlayed)
-                    filterParts.Add("Never played");
-                if (_currentFilterState.AudioFilter == AudioFilterMode.WithAudioOnly)
-                    filterParts.Add("With audio");
-                else if (_currentFilterState.AudioFilter == AudioFilterMode.WithoutAudioOnly)
-                    filterParts.Add("Without audio");
-                if (_currentFilterState.MinDuration.HasValue || _currentFilterState.MaxDuration.HasValue)
-                    filterParts.Add("Duration");
-                if (_currentFilterState.SelectedTags != null && _currentFilterState.SelectedTags.Count > 0)
-                    filterParts.Add($"{_currentFilterState.SelectedTags.Count} tag(s)");
-
-                if (filterParts.Count > 0)
-                {
-                    filterSummary = " · " + string.Join(", ", filterParts);
-                }
-            }
 
             // Show total immediately, calculate selected count asynchronously
-            LibraryInfoText = $"🎞️ {totalVideos:N0} videos · 🎯 calculating...{filterSummary}";
+            LibraryInfoText = $"Library · 🎞️ {totalVideos:N0} videos · 🎯 calculating...";
+            
+            // Update filter summary separately
+            UpdateFilterSummaryText();
             
             // Calculate selected count asynchronously to avoid blocking UI
             _ = Task.Run(() =>
@@ -1203,7 +1196,7 @@ namespace ReelRoulette
                     // Update UI on UI thread
                     Dispatcher.UIThread.Post(() =>
                     {
-                        LibraryInfoText = $"🎞️ {totalVideos:N0} videos · 🎯 {selectedCount:N0} selected{filterSummary}";
+                        LibraryInfoText = $"Library · 🎞️ {totalVideos:N0} videos · 🎯 {selectedCount:N0} selected";
                     });
                 }
                 catch (Exception ex)
@@ -1212,10 +1205,42 @@ namespace ReelRoulette
                     // Fallback: show total as selected
                     Dispatcher.UIThread.Post(() =>
                     {
-                        LibraryInfoText = $"🎞️ {totalVideos:N0} videos · 🎯 {totalVideos:N0} selected{filterSummary}";
+                        LibraryInfoText = $"Library · 🎞️ {totalVideos:N0} videos · 🎯 {totalVideos:N0} selected";
                     });
                 }
             });
+        }
+
+        private void UpdateFilterSummaryText()
+        {
+            if (_currentFilterState == null)
+            {
+                FilterSummaryText = "Filters: None";
+                return;
+            }
+
+            var filterParts = new List<string>();
+            if (_currentFilterState.FavoritesOnly)
+                filterParts.Add("Favorites");
+            if (_currentFilterState.OnlyNeverPlayed)
+                filterParts.Add("Never played");
+            if (_currentFilterState.AudioFilter == AudioFilterMode.WithAudioOnly)
+                filterParts.Add("With audio");
+            else if (_currentFilterState.AudioFilter == AudioFilterMode.WithoutAudioOnly)
+                filterParts.Add("Without audio");
+            if (_currentFilterState.MinDuration.HasValue || _currentFilterState.MaxDuration.HasValue)
+                filterParts.Add("Duration");
+            if (_currentFilterState.SelectedTags != null && _currentFilterState.SelectedTags.Count > 0)
+                filterParts.Add($"{_currentFilterState.SelectedTags.Count} tag(s)");
+
+            if (filterParts.Count > 0)
+            {
+                FilterSummaryText = "Filters: " + string.Join(", ", filterParts);
+            }
+            else
+            {
+                FilterSummaryText = "Filters: None";
+            }
         }
 
         private void UpdateCurrentVideoStatsUi()
@@ -2911,17 +2936,26 @@ namespace ReelRoulette
                     
                     // Update library info text
                     UpdateLibraryInfoText();
+                    UpdateFilterSummaryText();
                     
-                    // Show message if library is empty
-                    if (_libraryIndex.Items.Count == 0)
+                    // Show startup message
+                    if (_libraryIndex.Items.Count > 0)
+                    {
+                        StatusTextBlock.Text = "Ready: Library loaded.";
+                        Log("InitializeLibraryPanel: Library loaded, showing startup message");
+                    }
+                    else
                     {
                         StatusTextBlock.Text = "Import a folder to get started (Library → Import Folder).";
+                        Log("InitializeLibraryPanel: Library is empty, showing import message");
                     }
                 }
                 else
                 {
                     Log("  WARNING: _libraryIndex is null, skipping UpdateLibraryPanel()");
-                    LibraryInfoText = "🎞️ 0 videos · 🎯 0 selected";
+                    LibraryInfoText = "Library · 🎞️ 0 videos · 🎯 0 selected";
+                    UpdateFilterSummaryText();
+                    StatusTextBlock.Text = "Ready: No library loaded.";
                 }
                 
                 _isInitializingLibraryPanel = false; // Re-enable event handlers after initialization
@@ -3075,7 +3109,7 @@ namespace ReelRoulette
                 }
 
                 // Capture UI control values on UI thread before entering background thread
-                bool respectFilters = LibraryRespectFiltersCheckBox?.IsChecked == true;
+                bool respectFilters = LibraryRespectFiltersToggle?.IsChecked == true;
                 
                 Log($"UpdateLibraryPanel: Processing {_libraryIndex.Items.Count} items, view preset: {_currentViewPreset ?? "null"}, source: {_selectedSourceId ?? "null"}, search: '{_librarySearchText}', respect filters: {respectFilters}");
                 // Run filtering and sorting on background thread
@@ -3324,10 +3358,10 @@ namespace ReelRoulette
             FilterMenuItem_Click(sender, e);
         }
 
-        private void LibraryRespectFiltersCheckBox_Changed(object? sender, RoutedEventArgs e)
+        private void LibraryRespectFiltersToggle_Changed(object? sender, RoutedEventArgs e)
         {
-            var isChecked = LibraryRespectFiltersCheckBox?.IsChecked == true;
-            Log($"UI ACTION: LibraryRespectFiltersCheckBox changed to: {isChecked}");
+            var isChecked = LibraryRespectFiltersToggle?.IsChecked == true;
+            Log($"UI ACTION: LibraryRespectFiltersToggle changed to: {isChecked}");
             UpdateLibraryPanel();
         }
 
@@ -3433,43 +3467,6 @@ namespace ReelRoulette
             }
         }
 
-        private void LibraryItemRemove_Click(object? sender, RoutedEventArgs e)
-        {
-            // Context-aware remove:
-            // - If viewing "Blacklisted only", un-blacklist
-            // - If viewing "Favorites only", un-favorite
-            // - Otherwise, blacklist it
-            if (sender is Button button && button.Tag is LibraryItem item)
-            {
-                Log($"UI ACTION: LibraryItemRemove clicked for '{item.FileName}' (current view preset: {_currentViewPreset ?? "null"})");
-                if (_currentViewPreset == "Blacklisted")
-                {
-                    Log($"  Action: Un-blacklisting '{item.FileName}'");
-                    item.IsBlacklisted = false;
-                    _libraryService.UpdateItem(item);
-                    _ = Task.Run(() => _libraryService.SaveLibrary());
-                    UpdateLibraryPanel();
-                }
-                else if (_currentViewPreset == "Favorites")
-                {
-                    Log($"  Action: Un-favoriting '{item.FileName}'");
-                    item.IsFavorite = false;
-                    _libraryService.UpdateItem(item);
-                    _ = Task.Run(() => _libraryService.SaveLibrary());
-                    UpdateLibraryPanel();
-                }
-                else
-                {
-                    // Default: blacklist it
-                    Log($"  Action: Blacklisting '{item.FileName}'");
-                    item.IsBlacklisted = true;
-                    _libraryService.UpdateItem(item);
-                    _ = Task.Run(() => _libraryService.SaveLibrary());
-                    UpdateLibraryPanel();
-                    RebuildPlayQueueIfNeeded();
-                }
-            }
-        }
 
         private void ShowLibraryPanelMenuItem_Click(object? sender, RoutedEventArgs e)
         {
@@ -3708,8 +3705,11 @@ namespace ReelRoulette
             if (poolWithoutQueueItems.Length == 0)
             {
                 // No new videos to add - if queue is empty, we need to cycle through all videos again
+                // If queue is not empty, we still need to filter it to remove ineligible items
                 await Dispatcher.UIThread.InvokeAsync(() =>
                 {
+                    var eligibleSet = new HashSet<string>(pool, StringComparer.OrdinalIgnoreCase);
+                    
                     if (_playQueue.Count == 0)
                     {
                         Log("RebuildPlayQueueIfNeededAsync: Queue is empty and no new videos available - rebuilding with all eligible videos to cycle again");
@@ -3720,14 +3720,30 @@ namespace ReelRoulette
                     }
                     else
                     {
-                        Log("RebuildPlayQueueIfNeededAsync: No new videos to add, keeping existing queue");
-                        // Keep existing queue - no changes needed
+                        Log("RebuildPlayQueueIfNeededAsync: No new videos to add, filtering existing queue to remove ineligible items");
+                        // Filter existing queue to remove items that are no longer eligible
+                        var filteredExistingQueue = new Queue<string>();
+                        int removedCount = 0;
+                        while (_playQueue.Count > 0)
+                        {
+                            var item = _playQueue.Dequeue();
+                            if (eligibleSet.Contains(item))
+                            {
+                                filteredExistingQueue.Enqueue(item);
+                            }
+                            else
+                            {
+                                removedCount++;
+                            }
+                        }
+                        _playQueue = filteredExistingQueue;
+                        Log($"STATE CHANGE: Queue filtered - Removed (no longer eligible): {removedCount}, Remaining: {_playQueue.Count}");
                     }
                     // Clear the status messages
                     if (StatusTextBlock.Text == "Finding eligible videos..." || 
                         StatusTextBlock.Text == "Applying filters and rebuilding queue...")
                     {
-                        StatusTextBlock.Text = "";
+                        StatusTextBlock.Text = "Ready";
                     }
                 });
                 return;
@@ -3780,8 +3796,7 @@ namespace ReelRoulette
                 if (StatusTextBlock.Text == "Finding eligible videos..." || 
                     StatusTextBlock.Text == "Applying filters and rebuilding queue...")
                 {
-                    // Don't show a message - just clear it, the video will start playing
-                    StatusTextBlock.Text = "";
+                    StatusTextBlock.Text = "Ready";
                 }
             });
             Log("RebuildPlayQueueIfNeededAsync: Queue rebuild complete");
@@ -4215,7 +4230,6 @@ namespace ReelRoulette
         {
             // View preferences
             public bool ShowMenu { get; set; } = true;
-            public bool ShowLibraryInfo { get; set; } = true;
             public bool ShowStatusLine { get; set; } = true;
             public bool ShowControls { get; set; } = true;
             public bool ShowLibraryPanel { get; set; } = false;
@@ -4264,7 +4278,6 @@ namespace ReelRoulette
             
             // Apply view preferences from settings
             _showMenu = settings.ShowMenu;
-            _showLibraryInfo = settings.ShowLibraryInfo;
             _showStatusLine = settings.ShowStatusLine;
             _showControls = settings.ShowControls;
             _showLibraryPanel = settings.ShowLibraryPanel;
@@ -4313,10 +4326,6 @@ namespace ReelRoulette
             {
                 ShowMenuMenuItem.IsChecked = _showMenu;
             }
-            if (RememberLastFolderMenuItem != null)
-            {
-                RememberLastFolderMenuItem.IsChecked = _rememberLastFolder;
-            }
             
             // If player view mode was saved as true, we need to:
             // 1. The loaded _show* values represent the state before entering player view mode
@@ -4324,7 +4333,6 @@ namespace ReelRoulette
             // 3. Then apply player view mode (which will hide everything)
             if (_isPlayerViewMode)
             {
-                _savedShowLibraryInfo = _showLibraryInfo;
                 _savedShowStatusLine = _showStatusLine;
                 _savedShowControls = _showControls;
                 _savedShowLibraryPanel = _showLibraryPanel;
@@ -4378,11 +4386,6 @@ namespace ReelRoulette
                     
                     if (root.TryGetProperty("ShowMenu", out var showMenu))
                         settings.ShowMenu = showMenu.GetBoolean();
-                    if (root.TryGetProperty("ShowLibraryInfo", out var showLibraryInfo))
-                        settings.ShowLibraryInfo = showLibraryInfo.GetBoolean();
-                    // Migration: also check old ShowFolderSelection name
-                    else if (root.TryGetProperty("ShowFolderSelection", out var showFolder))
-                        settings.ShowLibraryInfo = showFolder.GetBoolean();
                     if (root.TryGetProperty("ShowStatusLine", out var showStatus))
                         settings.ShowStatusLine = showStatus.GetBoolean();
                     if (root.TryGetProperty("ShowControls", out var showControls))
@@ -4505,7 +4508,6 @@ namespace ReelRoulette
                 {
                     // View preferences
                     ShowMenu = _showMenu,
-                    ShowLibraryInfo = _isPlayerViewMode ? _savedShowLibraryInfo : _showLibraryInfo,
                     ShowStatusLine = _isPlayerViewMode ? _savedShowStatusLine : _showStatusLine,
                     ShowControls = _isPlayerViewMode ? _savedShowControls : _showControls,
                     ShowLibraryPanel = _isPlayerViewMode ? _savedShowLibraryPanel : _showLibraryPanel,
@@ -4563,7 +4565,6 @@ namespace ReelRoulette
                 }
                 
                 // Hide all UI elements except video
-                LibraryInfoRow.IsVisible = false;
                 StatusLineGrid.IsVisible = false;
                 ControlsRow.IsVisible = false;
                 
@@ -4571,22 +4572,19 @@ namespace ReelRoulette
                 if (MainContentGrid != null)
                 {
                     var columns = MainContentGrid.ColumnDefinitions;
-                    if (columns.Count >= 5)
+                    if (columns.Count >= 4)
                     {
                         LibraryPanelContainer.IsVisible = false;
                         columns[0].Width = new GridLength(0);
                         LibraryVideoSplitter.IsVisible = false;
                         columns[1].Width = new GridLength(0);
                         // Column 2: Video View (always visible)
-                        VideoStatsSplitter.IsVisible = false;
-                        columns[3].Width = new GridLength(0);
                         StatsPanelContainer.IsVisible = false;
-                        columns[4].Width = new GridLength(0);
+                        columns[3].Width = new GridLength(0);
                     }
                 }
                 
                 // Update menu item checked states (but they won't be visible)
-                ShowLibraryInfoMenuItem.IsChecked = false;
                 ShowStatusMenuItem.IsChecked = false;
                 ShowControlsMenuItem.IsChecked = false;
                 ShowLibraryPanelMenuItem.IsChecked = false;
@@ -4601,14 +4599,13 @@ namespace ReelRoulette
                 MainMenu.IsVisible = _showMenu;
             }
             
-            LibraryInfoRow.IsVisible = _showLibraryInfo;
             StatusLineGrid.IsVisible = _showStatusLine;
             ControlsRow.IsVisible = _showControls;
             
             // Show top border on MainContentGrid only when there's a visible row above it
             if (MainContentGridBorder != null)
             {
-                bool hasVisibleRowAbove = _showLibraryInfo || _showStatusLine || _showControls;
+                bool hasVisibleRowAbove = _showStatusLine || _showControls;
                 MainContentGridBorder.BorderThickness = hasVisibleRowAbove ? new Avalonia.Thickness(0, 1, 0, 0) : new Avalonia.Thickness(0);
             }
 
@@ -4617,7 +4614,7 @@ namespace ReelRoulette
             if (MainContentGrid != null)
             {
                 var columns = MainContentGrid.ColumnDefinitions;
-                if (columns.Count >= 5)
+                if (columns.Count >= 4)
                 {
                     // Column 0: Library Panel
                     LibraryPanelContainer.IsVisible = _showLibraryPanel;
@@ -4630,13 +4627,9 @@ namespace ReelRoulette
                     // Column 2: Video View (always visible, star sized)
                     // No change needed
 
-                    // Column 3: Splitter between Video and Stats
-                    VideoStatsSplitter.IsVisible = _showStatsPanel;
-                    columns[3].Width = _showStatsPanel ? new GridLength(4) : new GridLength(0);
-
-                    // Column 4: Stats Panel
+                    // Column 3: Stats Panel (fixed width, not resizable)
                     StatsPanelContainer.IsVisible = _showStatsPanel;
-                    columns[4].Width = _showStatsPanel ? GridLength.Auto : new GridLength(0);
+                    columns[3].Width = _showStatsPanel ? GridLength.Auto : new GridLength(0);
                 }
             }
             
@@ -4652,7 +4645,6 @@ namespace ReelRoulette
 
             // Update menu item checked states
             ShowMenuMenuItem.IsChecked = _showMenu;
-            ShowLibraryInfoMenuItem.IsChecked = _showLibraryInfo;
             ShowStatusMenuItem.IsChecked = _showStatusLine;
             ShowControlsMenuItem.IsChecked = _showControls;
             ShowLibraryPanelMenuItem.IsChecked = _showLibraryPanel;
@@ -4664,13 +4656,11 @@ namespace ReelRoulette
             if (_isPlayerViewMode)
             {
                 // Entering player view mode - save current state
-                var oldLibraryInfo = _showLibraryInfo;
                 var oldStatusLine = _showStatusLine;
                 var oldControls = _showControls;
                 var oldLibraryPanel = _showLibraryPanel;
                 var oldStatsPanel = _showStatsPanel;
                 
-                _savedShowLibraryInfo = _showLibraryInfo;
                 _savedShowStatusLine = _showStatusLine;
                 _savedShowControls = _showControls;
                 _savedShowLibraryPanel = _showLibraryPanel;
@@ -4678,13 +4668,12 @@ namespace ReelRoulette
                 
                 // Hide everything (ApplyViewPreferences will handle the actual hiding)
                 // But we need to set flags to false so ApplyViewPreferences knows what to do
-                _showLibraryInfo = false;
                 _showStatusLine = false;
                 _showControls = false;
                 _showLibraryPanel = false;
                 _showStatsPanel = false;
                 
-                Log($"STATE CHANGE: Entering player view mode - Saved states: LibraryInfo={oldLibraryInfo}, StatusLine={oldStatusLine}, Controls={oldControls}, LibraryPanel={oldLibraryPanel}, StatsPanel={oldStatsPanel}");
+                Log($"STATE CHANGE: Entering player view mode - Saved states: StatusLine={oldStatusLine}, Controls={oldControls}, LibraryPanel={oldLibraryPanel}, StatsPanel={oldStatsPanel}");
                 
                 // Update window size tracking for aspect ratio locking
                 _lastWindowSize = new Size(this.Width, this.Height);
@@ -4692,19 +4681,17 @@ namespace ReelRoulette
             else
             {
                 // Exiting player view mode - restore saved state
-                var oldLibraryInfo = _showLibraryInfo;
                 var oldStatusLine = _showStatusLine;
                 var oldControls = _showControls;
                 var oldLibraryPanel = _showLibraryPanel;
                 var oldStatsPanel = _showStatsPanel;
                 
-                _showLibraryInfo = _savedShowLibraryInfo;
                 _showStatusLine = _savedShowStatusLine;
                 _showControls = _savedShowControls;
                 _showLibraryPanel = _savedShowLibraryPanel;
                 _showStatsPanel = _savedShowStatsPanel;
                 
-                Log($"STATE CHANGE: Exiting player view mode - Restored states: LibraryInfo={oldLibraryInfo} -> {_showLibraryInfo}, StatusLine={oldStatusLine} -> {_showStatusLine}, Controls={oldControls} -> {_showControls}, LibraryPanel={oldLibraryPanel} -> {_showLibraryPanel}, StatsPanel={oldStatsPanel} -> {_showStatsPanel}");
+                Log($"STATE CHANGE: Exiting player view mode - Restored states: StatusLine={oldStatusLine} -> {_showStatusLine}, Controls={oldControls} -> {_showControls}, LibraryPanel={oldLibraryPanel} -> {_showLibraryPanel}, StatsPanel={oldStatsPanel} -> {_showStatsPanel}");
             }
             
             // Apply the visibility changes
@@ -4969,14 +4956,6 @@ namespace ReelRoulette
             ApplyViewPreferences();
         }
 
-        private void ShowLibraryInfoMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-        {
-            _showLibraryInfo = ShowLibraryInfoMenuItem.IsChecked == true;
-            Log($"UI ACTION: ShowLibraryInfoMenuItem clicked, setting show library info to: {_showLibraryInfo}");
-            LibraryInfoRow.IsVisible = _showLibraryInfo;
-            SaveSettings();
-            ApplyViewPreferences();
-        }
 
         private void ShowStatusMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
@@ -5114,12 +5093,6 @@ namespace ReelRoulette
             }
         }
 
-        private void RememberLastFolderMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-        {
-            _rememberLastFolder = RememberLastFolderMenuItem.IsChecked == true;
-            Log($"UI ACTION: RememberLastFolderMenuItem clicked, setting remember last folder to: {_rememberLastFolder}");
-            SaveSettings();
-        }
 
         private void AlwaysOnTopMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
@@ -5182,7 +5155,6 @@ namespace ReelRoulette
         {
             _autoPlayNext = AutoPlayNextCheckBox.IsChecked == true;
             Log($"UI ACTION: AutoPlayNext changed to: {_autoPlayNext}");
-            AutoPlayNextMenuItem.IsChecked = _autoPlayNext;
         }
 
         private void ScanDurations_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -5412,7 +5384,6 @@ namespace ReelRoulette
         {
             NoRepeatMenuItem.IsChecked = _noRepeatMode;
             KeepPlayingMenuItem.IsChecked = _isKeepPlayingActive;
-            AutoPlayNextMenuItem.IsChecked = _autoPlayNext;
             // OnlyFavoritesMenuItem removed - now using FilterDialog
             FavoriteToggle.IsEnabled = !string.IsNullOrEmpty(_currentVideoPath);
             BlacklistToggle.IsEnabled = !string.IsNullOrEmpty(_currentVideoPath);
@@ -5485,10 +5456,6 @@ namespace ReelRoulette
             await dialog.ShowDialog<bool?>(this);
         }
 
-        private void AutoPlayNextMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-        {
-            AutoPlayNextCheckBox.IsChecked = AutoPlayNextMenuItem.IsChecked;
-        }
 
         // OnlyFavoritesMenuItem removed - now using FilterDialog
 
@@ -5558,6 +5525,7 @@ namespace ReelRoulette
                 
                 // Update library info text to reflect new filter state
                 UpdateLibraryInfoText();
+                UpdateFilterSummaryText();
                 
                 // Show message and rebuild queue to apply new filters
                 StatusTextBlock.Text = "Applying filters and rebuilding queue...";
@@ -6518,27 +6486,27 @@ namespace ReelRoulette
                     e.Handled = true;
                     break;
 
-                case Key.D2: // Number 2 - Show Library / Filter Info
-                    ToggleViewPreference(ref _showLibraryInfo, ShowLibraryInfoMenuItem);
-                    e.Handled = true;
-                    break;
-
-                case Key.D3: // Number 3 - Show Status Line
+                case Key.D2: // Number 2 - Show Status Line
                     ToggleViewPreference(ref _showStatusLine, ShowStatusMenuItem);
                     e.Handled = true;
                     break;
 
-                case Key.D4: // Number 4 - Show Controls
+                case Key.D3: // Number 3 - Show Controls
                     ToggleViewPreference(ref _showControls, ShowControlsMenuItem);
                     e.Handled = true;
                     break;
 
-                case Key.D5: // Number 5 - Show Library panel
+                case Key.D4: // Number 4 - Show Library Panel
                     ToggleViewPreference(ref _showLibraryPanel, ShowLibraryPanelMenuItem);
                     if (_showLibraryPanel)
                     {
                         UpdateLibraryPanel();
                     }
+                    e.Handled = true;
+                    break;
+
+                case Key.D5: // Number 5 - Show Stats Panel
+                    ToggleViewPreference(ref _showStatsPanel, ShowStatsMenuItem);
                     e.Handled = true;
                     break;
 
@@ -6550,8 +6518,7 @@ namespace ReelRoulette
                     e.Handled = true;
                     break;
 
-                case Key.D8: // Number 8 - Show Stats panel
-                    ToggleViewPreference(ref _showStatsPanel, ShowStatsMenuItem);
+                case Key.D8: // Number 8 - (removed - was Stats panel, now D5)
                     e.Handled = true;
                     break;
 

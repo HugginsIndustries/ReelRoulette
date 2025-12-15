@@ -2,8 +2,20 @@
 
 ## Unreleased
 
+- **UI reorganization and improvements**:
+  - Remove Library/Filter Info Row: Moved library information and filter controls into Library panel header
+  - Reorganize Library panel: New header layout with library stats, filter summary, unified controls row, and search
+  - Unified button styles: Create four consistent button style classes (IconToggleLarge, IconToggleSmall, IconMomentaryLarge, IconMomentarySmall) for all icon buttons throughout the UI
+  - Move filter and tags buttons: "Select filters" and "Manage tags for current video" buttons moved to main Controls row for better accessibility
+  - Replace checkbox with toggle: "Respect filters" control now uses toggle button style (IconToggleSmall) instead of checkbox
+  - Update keyboard shortcuts: Reassign number keys (D1-D8) for view toggles (D1=Menu, D2=Status, D3=Controls, D4=Library Panel, D5=Stats Panel)
+  - Add keyboard shortcuts to menus: All menu items now display their keyboard shortcuts in parentheses (e.g., "Show Menu (1)", "Fullscreen (F11)")
+  - Status line improvements: Status line always displays a meaningful message, shows "Ready: Library loaded." on startup
+  - Remove redundant UI elements: Removed "Remove from view" button, "Auto-play next on end" menu item, "Remember last folder" menu item, redundant "Filter..." menu item
+  - Standardize menu naming: All menu items use consistent capitalization and remove ellipses for cleaner appearance
+  - Stats panel: Made non-resizable with fixed width, removed movable divider
 - **UI improvements and fixes**:
-  - Add "Manage tags for current video" button to Library Info Row (next to filter button)
+  - Add "Manage tags for current video" button (moved to Controls row)
   - Standardize all icon buttons: Make all buttons square with rounded edges and centered icons
   - Unify filter button styling: Library panel "Filter..." button now matches "Select filters..." button (same icon and style)
   - Fix no-repeat mode: Properly prevent duplicate videos until all eligible videos have been played
