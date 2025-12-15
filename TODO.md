@@ -14,17 +14,6 @@
 
 ## Future Enhancements (from Library Refactor plan)
 
-### Source Management UI
-
-- **Status**: Future enhancement (not required for initial implementation)
-- **Description**: Add UI for managing library sources, including the ability to enable/disable, rename, and remove sources.
-- **Implementation**:
-  - Add source management dialog or panel section
-  - Allow users to toggle source enabled/disabled state
-  - Allow users to rename sources (custom display names)
-  - Allow users to remove sources (with confirmation)
-  - Update Library panel to reflect source changes immediately
-
 ### Library Panel Virtualization
 
 - **Status**: Future enhancement (not required for initial implementation)

@@ -100,6 +100,10 @@ namespace ReelRoulette
         private readonly object _ffmpegLogsLock = new object();
         private Window? _ffmpegLogWindow;
 
+        // Window position tracking (Avalonia's Position property doesn't always work correctly)
+        private PixelPoint _lastKnownPosition = new PixelPoint(0, 0);
+        private DateTime _lastPositionLogTime = DateTime.MinValue;
+        
         // View prefs
         private bool _showMenu = true;
         private bool _showStatusLine = true;
@@ -536,6 +540,20 @@ namespace ReelRoulette
             // Initialize window size tracking for aspect ratio locking
             _lastWindowSize = new Size(this.Width, this.Height);
             this.SizeChanged += Window_SizeChanged;
+            
+            // Track window position changes (Avalonia's Position property doesn't always update correctly)
+            this.PositionChanged += (s, e) =>
+            {
+                _lastKnownPosition = e.Point;
+                
+                // Throttle logging to once per second to avoid spam
+                var now = DateTime.UtcNow;
+                if ((now - _lastPositionLogTime).TotalSeconds >= 1.0)
+                {
+                    Log($"Window position changed to ({e.Point.X}, {e.Point.Y})");
+                    _lastPositionLogTime = now;
+                }
+            };
             
             // Create LibVLC instances (Core.Initialize() called in Program.cs)
             _libVLC = new LibVLC();
@@ -2992,14 +3010,46 @@ namespace ReelRoulette
                 LibrarySourceComboBox.Items.Add(allSourcesItem);
                 Log("    Added 'All sources' option.");
                 
-                // Add each source
+                // Add each source with checkbox for enable/disable
                 Log($"    Adding {_libraryIndex.Sources.Count} sources...");
                 foreach (var source in _libraryIndex.Sources)
                 {
                     var displayName = !string.IsNullOrEmpty(source.DisplayName) 
                         ? source.DisplayName 
                         : System.IO.Path.GetFileName(source.RootPath);
-                    var item = new ComboBoxItem { Content = displayName, Tag = source.Id };
+                    
+                    // Get item count for this source
+                    var itemCount = _libraryIndex.Items.Count(i => i.SourceId == source.Id);
+                    
+                    // Create a StackPanel with CheckBox and text
+                    var checkBox = new CheckBox
+                    {
+                        IsChecked = source.IsEnabled,
+                        Margin = new Thickness(0, 0, 8, 0),
+                        VerticalAlignment = VerticalAlignment.Center,
+                        Tag = source.Id
+                    };
+                    
+                    // Handle checkbox changes
+                    checkBox.Click += SourceEnableCheckBox_Click;
+                    
+                    var textBlock = new TextBlock
+                    {
+                        Text = $"{displayName} ({itemCount} videos)",
+                        VerticalAlignment = VerticalAlignment.Center
+                    };
+                    
+                    var panel = new StackPanel
+                    {
+                        Orientation = Orientation.Horizontal,
+                        Children = { checkBox, textBlock }
+                    };
+                    
+                    var item = new ComboBoxItem 
+                    { 
+                        Content = panel, 
+                        Tag = source.Id 
+                    };
                     LibrarySourceComboBox.Items.Add(item);
                 }
                 
@@ -3023,6 +3073,50 @@ namespace ReelRoulette
                 Log(errorMsg);
                 throw;
             }
+        }
+
+        private void SourceEnableCheckBox_Click(object? sender, RoutedEventArgs e)
+        {
+            if (sender is CheckBox checkBox && checkBox.Tag is string sourceId)
+            {
+                Log($"SourceEnableCheckBox_Click: Source {sourceId} toggled to {checkBox.IsChecked}");
+                
+                var source = _libraryIndex?.Sources.FirstOrDefault(s => s.Id == sourceId);
+                if (source != null)
+                {
+                    source.IsEnabled = checkBox.IsChecked ?? true;
+                    _libraryService.UpdateSource(source);
+                    
+                    // Save library asynchronously
+                    _ = Task.Run(() =>
+                    {
+                        try
+                        {
+                            _libraryService.SaveLibrary();
+                            Log($"SourceEnableCheckBox_Click: Library saved successfully");
+                        }
+                        catch (Exception ex)
+                        {
+                            Log($"SourceEnableCheckBox_Click: ERROR saving library - {ex.Message}");
+                        }
+                    });
+                    
+                    // Update Library panel if visible
+                    if (_showLibraryPanel)
+                    {
+                        UpdateLibraryPanel();
+                    }
+                    
+                    // Rebuild queue to respect source enable/disable changes
+                    RebuildPlayQueueIfNeeded();
+                    
+                    // Update library info
+                    UpdateLibraryInfoText();
+                }
+            }
+            
+            // Prevent the ComboBox from closing when clicking the checkbox
+            e.Handled = true;
         }
 
         private void UpdateLibraryPanel()
@@ -3113,6 +3207,14 @@ namespace ReelRoulette
                         Log("UpdateLibraryPanel: Task.Run started.");
                         var items = _libraryIndex.Items.ToList();
                         Log($"UpdateLibraryPanel: Got {items.Count} items from library.");
+
+                        // Filter out items from disabled sources
+                        var enabledSourceIds = _libraryIndex.Sources
+                            .Where(s => s.IsEnabled)
+                            .Select(s => s.Id)
+                            .ToHashSet();
+                        items = items.Where(item => enabledSourceIds.Contains(item.SourceId)).ToList();
+                        Log($"UpdateLibraryPanel: After disabled source filter: {items.Count} items.");
 
                         // Apply view preset filters
                         items = ApplyViewPresetFilter(items);
@@ -4576,6 +4678,14 @@ namespace ReelRoulette
             public bool RememberLastFolder { get; set; } = true;
             public string? LastFolderPath { get; set; } = null;
             
+            // Window state
+            public double? WindowX { get; set; }
+            public double? WindowY { get; set; }
+            public double? WindowWidth { get; set; }
+            public double? WindowHeight { get; set; }
+            public int WindowState { get; set; } = 0; // 0=Normal, 1=Minimized, 2=Maximized, 3=FullScreen
+            public double? LibraryPanelWidth { get; set; }
+            
             // Playback settings
             public string? SeekStep { get; set; }
             public int VolumeStep { get; set; } = 5;
@@ -4623,6 +4733,55 @@ namespace ReelRoulette
             _isPlayerViewMode = settings.IsPlayerViewMode;
             _rememberLastFolder = settings.RememberLastFolder;
             _lastFolderPath = settings.LastFolderPath;
+            
+            // Set WindowStartupLocation to Manual if we have a saved position
+            // This MUST be set before the window is shown
+            if (settings.WindowX.HasValue && settings.WindowY.HasValue)
+            {
+                WindowStartupLocation = WindowStartupLocation.Manual;
+                var restoredPosition = new PixelPoint((int)settings.WindowX.Value, (int)settings.WindowY.Value);
+                Position = restoredPosition;
+                _lastKnownPosition = restoredPosition; // Track it ourselves since Position property doesn't always work
+                Log($"LoadSettings: Set WindowStartupLocation to Manual");
+                Log($"LoadSettings: Restored position from settings - WindowX={settings.WindowX.Value}, WindowY={settings.WindowY.Value}");
+                Log($"LoadSettings: Set Position to ({restoredPosition.X}, {restoredPosition.Y}), tracking as _lastKnownPosition");
+            }
+            else
+            {
+                Log($"LoadSettings: No saved position found (WindowX={settings.WindowX}, WindowY={settings.WindowY}), using default positioning");
+            }
+            
+            // Apply window size
+            if (settings.WindowWidth.HasValue && settings.WindowHeight.HasValue)
+            {
+                Width = settings.WindowWidth.Value;
+                Height = settings.WindowHeight.Value;
+                Log($"LoadSettings: Set window size to {Width}x{Height}");
+            }
+            
+            // Restore window state (normal, maximized)
+            if (settings.WindowState == 2) // Maximized
+            {
+                WindowState = WindowState.Maximized;
+                Log("LoadSettings: Set window state to Maximized");
+            }
+            else
+            {
+                WindowState = WindowState.Normal;
+            }
+            
+            // Restore library panel width after window is loaded
+            if (settings.LibraryPanelWidth.HasValue && settings.LibraryPanelWidth.Value >= 400)
+            {
+                this.Loaded += (s, e) =>
+                {
+                    if (MainContentGrid?.ColumnDefinitions.Count > 0)
+                    {
+                        MainContentGrid.ColumnDefinitions[0].Width = new GridLength(settings.LibraryPanelWidth.Value);
+                        Log($"LoadSettings: Restored library panel width to {settings.LibraryPanelWidth.Value}");
+                    }
+                };
+            }
             
             // Apply playback settings
             _seekStep = settings.SeekStep ?? "5s";
@@ -4854,6 +5013,14 @@ namespace ReelRoulette
                     RememberLastFolder = _rememberLastFolder,
                     LastFolderPath = _lastFolderPath,
                     
+                    // Window state (use _lastKnownPosition since Position property doesn't always update)
+                    WindowX = (double)_lastKnownPosition.X,
+                    WindowY = (double)_lastKnownPosition.Y,
+                    WindowWidth = Width,
+                    WindowHeight = Height,
+                    WindowState = (int)WindowState, // 0=Normal, 2=Maximized
+                    LibraryPanelWidth = LibraryPanelContainer?.Bounds.Width,
+                    
                     // Playback settings
                     SeekStep = _seekStep,
                     VolumeStep = _volumeStep,
@@ -4865,6 +5032,9 @@ namespace ReelRoulette
                     FilterState = _currentFilterState ?? new FilterState()
                 };
                 
+                Log($"SaveSettings: Window position - Position.X={Position.X}, _lastKnownPosition=({_lastKnownPosition.X}, {_lastKnownPosition.Y}), saved as WindowX={settings.WindowX}, WindowY={settings.WindowY}");
+                Log($"SaveSettings: Window size - Width={Width}, Height={Height}, WindowState={(WindowState)settings.WindowState}");
+                Log($"SaveSettings: Library panel width={settings.LibraryPanelWidth}");
                 Log($"SaveSettings: Created AppSettings object. FilterState is null: {settings.FilterState == null}");
                 if (settings.FilterState != null)
                 {
@@ -5155,9 +5325,10 @@ namespace ReelRoulette
                 {
                     StatusTextBlock.Text = "Importing folder...";
                     
-                    // Import the folder
-                    int importedCount = _libraryService.ImportFolder(path, null);
-                    Log($"UI ACTION: ImportFolder completed, imported {importedCount} items");
+                    // Import the folder with folder name as default display name
+                    var folderName = Path.GetFileName(path);
+                    int importedCount = _libraryService.ImportFolder(path, folderName);
+                    Log($"UI ACTION: ImportFolder completed, imported {importedCount} items with source name '{folderName}'");
                     
                     // Save the library
                     _libraryService.SaveLibrary();
@@ -5432,6 +5603,25 @@ namespace ReelRoulette
             }
         }
 
+        private async void ManageSourcesMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            Log("UI ACTION: ManageSourcesMenuItem clicked");
+            var dialog = new ManageSourcesDialog(_libraryService);
+            await dialog.ShowDialog(this);
+            
+            Log("ManageSourcesMenuItem_Click: Dialog closed, refreshing UI");
+            // Refresh UI after dialog closes
+            UpdateLibrarySourceComboBox();
+            if (_showLibraryPanel)
+            {
+                UpdateLibraryPanel();
+            }
+            RecalculateGlobalStats();
+            UpdateLibraryInfoText();
+            
+            // Rebuild queue to respect any source enable/disable changes
+            RebuildPlayQueueIfNeeded();
+        }
 
         private void AlwaysOnTopMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {

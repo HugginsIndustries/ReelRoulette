@@ -2,6 +2,31 @@
 
 ## Unreleased
 
+- **Add Source Management UI**:
+  - Add comprehensive source management dialog with enable/disable, rename, remove, and refresh functionality
+  - Display per-source statistics (video count, total duration, audio/no-audio counts)
+  - Add inline enable/disable checkboxes in Library panel source ComboBox
+  - Add UpdateSource() and GetSourceStatistics() methods to LibraryService
+  - Filter out items from disabled sources in Library panel and playback queue
+  - Rebuild queue automatically when source enabled state changes
+  - Show empty state message when no sources exist
+  - Add "Manage Sources" menu item in Library menu
+  - Set default source name to folder name when importing (e.g., "Movies" instead of blank)
+  - Fix concurrent library save errors with dedicated save lock and atomic file replace
+  - Improve Library panel layout and UX:
+    - Remove MaxWidth constraint, make ComboBoxes fill column width evenly
+    - Add right margin to items to prevent scrollbar overlap
+    - Add text trimming to file names, display full paths
+    - Increase MinWidth to 400px and prevent splitter from clipping content
+  - Add window state persistence (position, size, maximized state, panel widths):
+    - Save and restore window position, size, and maximized state
+    - Save and restore Library panel splitter width
+    - Set WindowStartupLocation to Manual and Position before window initialization
+    - Track position changes with custom _lastKnownPosition field (Avalonia Position property unreliable)
+    - Properly handles multi-monitor setups and arbitrary window positions
+    - Window always opens exactly as user left it, in the same location
+    - Throttle position change logging to once per second to avoid log spam
+  - Fix empty state display bug in ManageSourcesDialog
 - **Status line stability and scan throttling**:
   - Enforce minimum 1s display for status messages with coalesced updates and logging for delayed/cancelled updates
   - Throttle duration and loudness scan progress updates to once per second while preserving completion messages

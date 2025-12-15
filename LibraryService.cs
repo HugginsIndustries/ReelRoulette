@@ -27,6 +27,7 @@ namespace ReelRoulette
 
         private LibraryIndex _libraryIndex = new LibraryIndex();
         private readonly object _lock = new object();
+        private readonly object _saveLock = new object(); // Separate lock for file I/O operations
 
         /// <summary>
         /// Gets the current library index.
@@ -95,36 +96,46 @@ namespace ReelRoulette
         public void SaveLibrary()
         {
             Log("LibraryService.SaveLibrary: Starting...");
-            try
+            
+            // Use a dedicated lock for file I/O to prevent concurrent writes
+            lock (_saveLock)
             {
-                var path = AppDataManager.GetLibraryIndexPath();
-                LibraryIndex indexToSave;
-                lock (_lock)
+                try
                 {
-                    indexToSave = _libraryIndex;
-                }
-                
-                Log($"LibraryService.SaveLibrary: Saving {indexToSave.Items.Count} items, {indexToSave.Sources.Count} sources to {path}");
+                    var path = AppDataManager.GetLibraryIndexPath();
+                    LibraryIndex indexToSave;
+                    lock (_lock)
+                    {
+                        indexToSave = _libraryIndex;
+                    }
+                    
+                    Log($"LibraryService.SaveLibrary: Saving {indexToSave.Items.Count} items, {indexToSave.Sources.Count} sources to {path}");
 
-                var options = new JsonSerializerOptions
-                {
-                    WriteIndented = true
-                };
-                var json = JsonSerializer.Serialize(indexToSave, options);
-                Log($"LibraryService.SaveLibrary: Serialized to JSON, length = {json.Length} characters");
-                
-                File.WriteAllText(path, json);
-                Log($"LibraryService.SaveLibrary: Successfully saved library to {path}");
-            }
-            catch (Exception ex)
-            {
-                Log($"LibraryService.SaveLibrary: ERROR - Exception: {ex.GetType().Name}, Message: {ex.Message}");
-                Log($"LibraryService.SaveLibrary: ERROR - Stack trace: {ex.StackTrace}");
-                if (ex.InnerException != null)
-                {
-                    Log($"LibraryService.SaveLibrary: ERROR - Inner exception: {ex.InnerException.Message}");
+                    var options = new JsonSerializerOptions
+                    {
+                        WriteIndented = true
+                    };
+                    var json = JsonSerializer.Serialize(indexToSave, options);
+                    Log($"LibraryService.SaveLibrary: Serialized to JSON, length = {json.Length} characters");
+                    
+                    // Write to a temp file first, then move it to prevent corruption
+                    var tempPath = path + ".tmp";
+                    File.WriteAllText(tempPath, json);
+                    
+                    // Replace the old file with the new one atomically
+                    File.Move(tempPath, path, true);
+                    Log($"LibraryService.SaveLibrary: Successfully saved library to {path}");
                 }
-                throw;
+                catch (Exception ex)
+                {
+                    Log($"LibraryService.SaveLibrary: ERROR - Exception: {ex.GetType().Name}, Message: {ex.Message}");
+                    Log($"LibraryService.SaveLibrary: ERROR - Stack trace: {ex.StackTrace}");
+                    if (ex.InnerException != null)
+                    {
+                        Log($"LibraryService.SaveLibrary: ERROR - Inner exception: {ex.InnerException.Message}");
+                    }
+                    throw;
+                }
             }
         }
 
@@ -469,6 +480,68 @@ namespace ReelRoulette
             var relativeUri = rootUri.MakeRelativeUri(fileUri);
             return Uri.UnescapeDataString(relativeUri.ToString().Replace('/', Path.DirectorySeparatorChar));
         }
+
+        /// <summary>
+        /// Updates an existing source (for rename, enable/disable operations).
+        /// </summary>
+        public void UpdateSource(LibrarySource source)
+        {
+            if (source == null)
+            {
+                Log("LibraryService.UpdateSource: ERROR - source is null");
+                throw new ArgumentNullException(nameof(source));
+            }
+
+            lock (_lock)
+            {
+                var existingIndex = _libraryIndex.Sources.FindIndex(s => s.Id == source.Id);
+                if (existingIndex >= 0)
+                {
+                    _libraryIndex.Sources[existingIndex] = source;
+                    Log($"LibraryService.UpdateSource: Updated source - Id: {source.Id}, DisplayName: {source.DisplayName}, IsEnabled: {source.IsEnabled}");
+                }
+                else
+                {
+                    Log($"LibraryService.UpdateSource: ERROR - Source not found with Id: {source.Id}");
+                    throw new ArgumentException($"Source not found with Id: {source.Id}", nameof(source));
+                }
+            }
+        }
+
+        /// <summary>
+        /// Gets statistics for a specific source.
+        /// </summary>
+        public SourceStatistics GetSourceStatistics(string sourceId)
+        {
+            Log($"LibraryService.GetSourceStatistics: Starting - sourceId = {sourceId}");
+            lock (_lock)
+            {
+                var items = _libraryIndex.Items.Where(i => i.SourceId == sourceId).ToList();
+                
+                var stats = new SourceStatistics
+                {
+                    TotalVideos = items.Count,
+                    VideosWithAudio = items.Count(i => i.HasAudio == true),
+                    VideosWithoutAudio = items.Count(i => i.HasAudio == false)
+                };
+
+                // Calculate total duration for items with known durations
+                var itemsWithDuration = items.Where(i => i.Duration.HasValue).ToList();
+                if (itemsWithDuration.Any())
+                {
+                    stats.TotalDuration = TimeSpan.FromTicks(itemsWithDuration.Sum(i => i.Duration!.Value.Ticks));
+                    stats.AverageDuration = TimeSpan.FromTicks((long)itemsWithDuration.Average(i => i.Duration!.Value.Ticks));
+                }
+                else
+                {
+                    stats.TotalDuration = TimeSpan.Zero;
+                    stats.AverageDuration = null;
+                }
+
+                Log($"LibraryService.GetSourceStatistics: Completed - TotalVideos: {stats.TotalVideos}, TotalDuration: {stats.TotalDuration}");
+                return stats;
+            }
+        }
     }
 
     /// <summary>
@@ -479,6 +552,35 @@ namespace ReelRoulette
         public int Added { get; set; }
         public int Removed { get; set; }
         public int Updated { get; set; }
+    }
+
+    /// <summary>
+    /// Statistics for a library source.
+    /// </summary>
+    public class SourceStatistics
+    {
+        public int TotalVideos { get; set; }
+        public int VideosWithAudio { get; set; }
+        public int VideosWithoutAudio { get; set; }
+        public TimeSpan TotalDuration { get; set; }
+        public TimeSpan? AverageDuration { get; set; }
+
+        /// <summary>
+        /// Formatted total duration for display (e.g., "2h 30m").
+        /// </summary>
+        public string TotalDurationFormatted
+        {
+            get
+            {
+                if (TotalDuration == TimeSpan.Zero)
+                    return "0m";
+                
+                if (TotalDuration.TotalHours >= 1)
+                    return $"{(int)TotalDuration.TotalHours}h {TotalDuration.Minutes}m";
+                
+                return $"{TotalDuration.Minutes}m";
+            }
+        }
     }
 }
 

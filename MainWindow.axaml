@@ -267,6 +267,9 @@
                 <MenuItem x:Name="ManageTagsMenuItem"
                           Header="Manage Tags"
                           Click="ManageTagsMenuItem_Click"/>
+                <MenuItem x:Name="ManageSourcesMenuItem"
+                          Header="Manage Sources"
+                          Click="ManageSourcesMenuItem_Click"/>
                 <MenuItem Header="Scan Durations"
                           Click="ScanDurations_Click"/>
                 <MenuItem Header="Scan Loudness"
@@ -572,15 +575,19 @@
         <!-- Row 3: Three-column layout with Library panel, Video, and Stats panel -->
         <!-- Columns: 0:Library(Auto) 1:Splitter(4) 2:Video(*) 3:Stats(Auto) -->
         <Border x:Name="MainContentGridBorder" Grid.Row="3" BorderThickness="0,1,0,0" BorderBrush="Gray">
-            <Grid x:Name="MainContentGrid" ColumnDefinitions="Auto 4 * Auto" Margin="0" VerticalAlignment="Stretch">
+            <Grid x:Name="MainContentGrid" Margin="0" VerticalAlignment="Stretch">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" MinWidth="400"/>
+                    <ColumnDefinition Width="4"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
             <!-- Column 0: Library Panel -->
             <Border x:Name="LibraryPanelContainer"
                     Grid.Column="0"
                     BorderBrush="Gray"
                     BorderThickness="0,0,1,0"
                     Padding="8"
-                    MinWidth="300"
-                    MaxWidth="500"
                     HorizontalAlignment="Stretch"
                     VerticalAlignment="Stretch"
                     IsVisible="False">
@@ -624,10 +631,10 @@
                     </Grid>
                     
                     <!-- Row 2: Controls row (view preset, source, sort) -->
-                    <Grid Grid.Row="2" ColumnDefinitions="* * *" ColumnSpacing="4" Margin="0,0,0,8">
+                    <Grid Grid.Row="2" ColumnDefinitions="* * *" ColumnSpacing="8" Margin="0,0,0,8">
                         <ComboBox x:Name="LibraryViewPresetComboBox"
                                  Grid.Column="0"
-                                 Margin="0,0,4,0"
+                                 HorizontalAlignment="Stretch"
                                  SelectionChanged="LibraryViewPresetComboBox_SelectionChanged">
                             <ComboBoxItem Content="All videos" Tag="All"/>
                             <ComboBoxItem Content="Favorites only" Tag="Favorites"/>
@@ -637,11 +644,11 @@
                         </ComboBox>
                         <ComboBox x:Name="LibrarySourceComboBox"
                                  Grid.Column="1"
-                                 Margin="4,0"
+                                 HorizontalAlignment="Stretch"
                                  SelectionChanged="LibrarySourceComboBox_SelectionChanged"/>
                         <ComboBox x:Name="LibrarySortComboBox"
                                  Grid.Column="2"
-                                 Margin="4,0,0,0"
+                                 HorizontalAlignment="Stretch"
                                  SelectionChanged="LibrarySortComboBox_SelectionChanged">
                             <ComboBoxItem Content="Name (A-Z)" Tag="Name"/>
                             <ComboBoxItem Content="Last played (newest)" Tag="LastPlayed"/>
@@ -665,11 +672,12 @@
                         <ItemsControl x:Name="LibraryItemsControl">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate DataType="local:LibraryItem">
-                                    <Grid ColumnDefinitions="* Auto Auto Auto Auto Auto" Margin="0,4">
+                                    <Grid ColumnDefinitions="* Auto Auto Auto Auto Auto" Margin="0,4,16,4">
                                         <StackPanel Grid.Column="0" Orientation="Vertical">
                                             <TextBlock Text="{Binding FileName}"
-                                                       FontWeight="SemiBold"/>
-                                            <TextBlock Text="{Binding RelativePath}"
+                                                       FontWeight="SemiBold"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                            <TextBlock Text="{Binding FullPath}"
                                                        FontSize="10"
                                                        Foreground="Gray"
                                                        TextTrimming="CharacterEllipsis"/>
