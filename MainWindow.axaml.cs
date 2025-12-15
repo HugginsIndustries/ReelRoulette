@@ -89,6 +89,11 @@ namespace ReelRoulette
         private static readonly object _ffmpegSemaphoreLock = new object();
         private DateTime _lastLoudnessStatusUpdate = DateTime.MinValue;
         private readonly object _loudnessStatusUpdateLock = new object();
+
+        // Status message throttling (minimum display window + coalescing)
+        private DateTime _lastStatusMessageTime = DateTime.MinValue;
+        private CancellationTokenSource? _statusMessageCancellation;
+        private readonly object _statusMessageLock = new object();
         
         // FFmpeg logging
         private readonly List<FFmpegLogEntry> _ffmpegLogs = new();
@@ -1707,11 +1712,11 @@ namespace ReelRoulette
             {
                 if (alreadyCachedCount > 0)
                 {
-                    StatusTextBlock.Text = $"Scanning / indexing… ({alreadyCachedCount} already cached, {filesToScan.Length} to scan)";
+                    SetStatusMessage($"Scanning / indexing… ({alreadyCachedCount} already cached, {filesToScan.Length} to scan)");
                 }
                 else
                 {
-                    StatusTextBlock.Text = $"Scanning / indexing… (0/{total} files processed)";
+                    SetStatusMessage($"Scanning / indexing… (0/{total} files processed)");
                 }
             });
 
@@ -1721,7 +1726,7 @@ namespace ReelRoulette
                 Log($"ScanDurationsAsync: All {total} files already have duration cached, skipping scan");
                 Avalonia.Threading.Dispatcher.UIThread.Post(() =>
                 {
-                    StatusTextBlock.Text = $"Ready ({total} files, all cached)";
+                    SetStatusMessage($"Ready ({total} files, all cached)");
                 });
                 return;
             }
@@ -1799,7 +1804,7 @@ namespace ReelRoulette
                 lock (_durationStatusUpdateLock)
                 {
                     var now = DateTime.UtcNow;
-                    if ((now - _lastDurationStatusUpdate).TotalMilliseconds >= 100 || newProcessed == total)
+                    if ((now - _lastDurationStatusUpdate).TotalMilliseconds >= 1000 || newProcessed == total)
                     {
                         _lastDurationStatusUpdate = now;
                         shouldUpdate = true;
@@ -1831,7 +1836,7 @@ namespace ReelRoulette
                     
                     Avalonia.Threading.Dispatcher.UIThread.Post(() =>
                     {
-                        StatusTextBlock.Text = $"Scanning / indexing… ({newProcessed}/{total} files processed)";
+                        SetStatusMessage($"Scanning / indexing… ({newProcessed}/{total} files processed)");
                     });
                 }
             });
@@ -1868,14 +1873,8 @@ namespace ReelRoulette
             {
                 RecalculateGlobalStats();
                 UpdateCurrentVideoStatsUi();
-                if (string.IsNullOrEmpty(_currentVideoPath))
-                {
-                    StatusTextBlock.Text = "Ready";
-                }
-                else
-                {
-                    StatusTextBlock.Text = $"Playing: {System.IO.Path.GetFileName(_currentVideoPath)}";
-                }
+                // Always show scan completion message
+                SetStatusMessage($"Duration scan complete ({total} files)");
             });
             Log("ScanDurationsAsync: Duration scan complete");
         }
@@ -2050,11 +2049,11 @@ namespace ReelRoulette
             {
                 if (alreadyScannedCount > 0)
                 {
-                    StatusTextBlock.Text = $"Scanning loudness… ({alreadyScannedCount} already scanned, {filesToScan.Length} to scan)";
+                    SetStatusMessage($"Scanning loudness… ({alreadyScannedCount} already scanned, {filesToScan.Length} to scan)");
                 }
                 else
                 {
-                    StatusTextBlock.Text = $"Scanning loudness… (0/{total} files processed)";
+                    SetStatusMessage($"Scanning loudness… (0/{total} files processed)");
                 }
             });
 
@@ -2064,7 +2063,7 @@ namespace ReelRoulette
                 Log($"ScanLoudnessAsync: All {total} files already have loudness data, skipping scan");
                 Avalonia.Threading.Dispatcher.UIThread.Post(() =>
                 {
-                    StatusTextBlock.Text = $"Ready ({total} files, all scanned)";
+                    SetStatusMessage($"Ready ({total} files, all scanned)");
                 });
                 return;
             }
@@ -2330,7 +2329,7 @@ namespace ReelRoulette
                 lock (_loudnessStatusUpdateLock)
                 {
                     var now = DateTime.UtcNow;
-                    if ((now - _lastLoudnessStatusUpdate).TotalMilliseconds >= 100 || newProcessed == total)
+                    if ((now - _lastLoudnessStatusUpdate).TotalMilliseconds >= 1000 || newProcessed == total)
                     {
                         _lastLoudnessStatusUpdate = now;
                         shouldUpdate = true;
@@ -2364,7 +2363,7 @@ namespace ReelRoulette
                     {
                         var noAudioText = currentNoAudio > 0 ? $", {currentNoAudio} without audio" : "";
                         var errorText = currentErrors > 0 ? $", {currentErrors} errors" : "";
-                        StatusTextBlock.Text = $"Scanning loudness… ({newProcessed}/{total} files processed{noAudioText}{errorText})";
+                        SetStatusMessage($"Scanning loudness… ({newProcessed}/{total} files processed{noAudioText}{errorText})");
                     });
                 }
             });
@@ -2403,14 +2402,8 @@ namespace ReelRoulette
             {
                 var noAudioText = noAudioCount > 0 ? $", {noAudioCount} without audio" : "";
                 var errorText = errorCount > 0 ? $", {errorCount} errors" : "";
-                if (string.IsNullOrEmpty(_currentVideoPath))
-                {
-                    StatusTextBlock.Text = $"Ready ({total} files scanned{noAudioText}{errorText})";
-                }
-                else
-                {
-                    StatusTextBlock.Text = $"Playing: {System.IO.Path.GetFileName(_currentVideoPath)}";
-                }
+                // Always show scan completion message
+                SetStatusMessage($"Loudness scan complete ({total} files{noAudioText}{errorText})");
             });
             Log("ScanLoudnessAsync: Loudness scan complete");
         }
@@ -4094,6 +4087,9 @@ namespace ReelRoulette
                 // Recalculate stats
                 RecalculateGlobalStats();
                 
+                // Set success status message
+                StatusTextBlock.Text = $"Removed from library: {Path.GetFileName(path)}";
+                
                 Log($"RemoveLibraryItemAsync: Successfully removed item: {Path.GetFileName(path)}");
             }
             catch (Exception ex)
@@ -4102,6 +4098,62 @@ namespace ReelRoulette
                 Log($"RemoveLibraryItemAsync: ERROR - Stack trace: {ex.StackTrace}");
                 StatusTextBlock.Text = $"Error removing item: {ex.Message}";
             }
+        }
+
+        private void SetStatusMessage(string message, int minimumDisplayMilliseconds = 1000)
+        {
+            CancellationTokenSource? previousCts;
+            CancellationTokenSource? newCts;
+
+            lock (_statusMessageLock)
+            {
+                previousCts = _statusMessageCancellation;
+                _statusMessageCancellation = new CancellationTokenSource();
+                newCts = _statusMessageCancellation;
+            }
+
+            previousCts?.Cancel();
+
+            var now = DateTime.UtcNow;
+            var elapsed = (now - _lastStatusMessageTime).TotalMilliseconds;
+            var delayMs = elapsed >= minimumDisplayMilliseconds
+                ? 0
+                : (int)(minimumDisplayMilliseconds - elapsed);
+
+            if (delayMs > 0)
+            {
+                Log($"SetStatusMessage: Delaying status update by {delayMs}ms to honor minimum display time");
+            }
+
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    if (delayMs > 0)
+                    {
+                        await Task.Delay(delayMs, newCts!.Token);
+                    }
+
+                    Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                    {
+                        if (newCts.IsCancellationRequested)
+                        {
+                            return;
+                        }
+
+                        StatusTextBlock.Text = message;
+                        _lastStatusMessageTime = DateTime.UtcNow;
+                    });
+                }
+                catch (TaskCanceledException)
+                {
+                    Log($"SetStatusMessage: Update cancelled for message: {message}");
+                }
+                catch (Exception ex)
+                {
+                    Log($"SetStatusMessage: ERROR scheduling status update - Exception: {ex.GetType().Name}, Message: {ex.Message}");
+                }
+            });
         }
 
         private void OpenFileLocation(string? path)
@@ -5098,9 +5150,11 @@ namespace ReelRoulette
                     // Update library info text
                     UpdateLibraryInfoText();
                     
-                    // Show success message
-                    var folderName = Path.GetFileName(path) ?? path;
-                    StatusTextBlock.Text = $"Imported {importedCount} files from {folderName}";
+                    // Show success message with source name
+                    var source = _libraryIndex?.Sources.FirstOrDefault(s => 
+                        string.Equals(s.RootPath, path, StringComparison.OrdinalIgnoreCase));
+                    var sourceName = source?.DisplayName ?? Path.GetFileName(path) ?? path;
+                    StatusTextBlock.Text = $"Imported {importedCount} files from {sourceName}";
                 }
                 catch (Exception ex)
                 {

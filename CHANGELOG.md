@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **Status line stability and scan throttling**:
+  - Enforce minimum 1s display for status messages with coalesced updates and logging for delayed/cancelled updates
+  - Throttle duration and loudness scan progress updates to once per second while preserving completion messages
 - **Fix missing file dialog bugs and UI improvements**:
   - Fix status message overwrite: Remove unconditional status message after library item removal to preserve error messages
   - Fix library item consistency: Clear RelativePath when file is moved outside all sources to prevent data inconsistency
