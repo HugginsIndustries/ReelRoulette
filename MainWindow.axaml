@@ -819,7 +819,8 @@
                             <TextBlock Text="{Binding CurrentVideoHasAudioDisplay, StringFormat='Has audio: {0}'}"/>
                             <TextBlock Text="{Binding CurrentVideoLoudnessDisplay, StringFormat='Loudness: {0}'}"/>
                             <TextBlock Text="{Binding CurrentVideoPeakDisplay, StringFormat='Peak: {0}'}"/>
-                            <TextBlock Text="{Binding CurrentVideoTagsDisplay, StringFormat='Tags: {0}'}"/>
+                            <TextBlock Text="{Binding CurrentVideoTagsDisplay, StringFormat='Tags: {0}'}"
+                                       TextWrapping="Wrap"/>
                         </StackPanel>
                     </ScrollViewer>
                 </Grid>

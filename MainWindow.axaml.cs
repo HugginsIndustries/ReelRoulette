@@ -3843,7 +3843,7 @@ namespace ReelRoulette
                 if (result == MissingFileDialogResult.RemoveFromLibrary)
                 {
                     await RemoveLibraryItemAsync(videoPath);
-                    StatusTextBlock.Text = $"Removed from library: {System.IO.Path.GetFileName(videoPath)}";
+                    // Status message is already set by RemoveLibraryItemAsync (success or error)
                 }
                 else if (result == MissingFileDialogResult.LocateFile)
                 {
@@ -3968,14 +3968,22 @@ namespace ReelRoulette
                                 var relativeUri = rootUri.MakeRelativeUri(fileUri);
                                 item.RelativePath = Uri.UnescapeDataString(relativeUri.ToString().Replace('/', Path.DirectorySeparatorChar));
                             }
+                            else
+                            {
+                                // File moved outside all sources - clear RelativePath to prevent inconsistency
+                                // RelativePath is invalid since file is no longer relative to any source
+                                // Keep SourceId as-is to avoid breaking code that expects it, but RelativePath must be cleared
+                                item.RelativePath = string.Empty;
+                                Log($"HandleLocateFileAsync: New file location is not within any existing source - RelativePath cleared, SourceId unchanged");
+                            }
                             
                             item.FullPath = newPath;
                             item.FileName = Path.GetFileName(newPath);
                             
                             _libraryService.UpdateItem(item);
                             
-                            // Save library asynchronously
-                            _ = Task.Run(() =>
+                            // Save library asynchronously (await to ensure save completes before updating UI)
+                            await Task.Run(() =>
                             {
                                 try
                                 {
@@ -3985,10 +3993,11 @@ namespace ReelRoulette
                                 catch (Exception ex)
                                 {
                                     Log($"HandleLocateFileAsync: ERROR saving library - Exception: {ex.GetType().Name}, Message: {ex.Message}");
+                                    throw; // Re-throw to be caught by outer try-catch
                                 }
                             });
                             
-                            // Update library index reference
+                            // Update library index reference (after save completes)
                             _libraryIndex = _libraryService.LibraryIndex;
                             
                             // Update UI if library panel is visible
