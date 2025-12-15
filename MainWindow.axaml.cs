@@ -3849,7 +3849,12 @@ namespace ReelRoulette
                     }
                     else
                     {
-                        StatusTextBlock.Text = "File location cancelled or invalid.";
+                        // Preserve any specific validation/error message set during locate;
+                        // only show generic text if nothing was set.
+                        if (string.IsNullOrEmpty(StatusTextBlock.Text))
+                        {
+                            SetStatusMessage("File location cancelled or invalid.");
+                        }
                     }
                 }
                 else
