@@ -4759,15 +4759,22 @@ namespace ReelRoulette
                 Log($"LoadSettings: Set window size to {Width}x{Height}");
             }
             
-            // Restore window state (normal, maximized)
+            // Restore window state (normal, minimized, maximized, fullscreen)
+            // Note: We intentionally don't restore Minimized state (1) to avoid starting hidden
             if (settings.WindowState == 2) // Maximized
             {
                 WindowState = WindowState.Maximized;
                 Log("LoadSettings: Set window state to Maximized");
             }
-            else
+            else if (settings.WindowState == 3) // FullScreen
+            {
+                WindowState = WindowState.FullScreen;
+                Log("LoadSettings: Set window state to FullScreen");
+            }
+            else // Normal (0) or Minimized (1, but we restore as Normal)
             {
                 WindowState = WindowState.Normal;
+                Log($"LoadSettings: Set window state to Normal (saved state was {settings.WindowState})");
             }
             
             // Restore library panel width after window is loaded
@@ -5018,7 +5025,7 @@ namespace ReelRoulette
                     WindowY = (double)_lastKnownPosition.Y,
                     WindowWidth = Width,
                     WindowHeight = Height,
-                    WindowState = (int)WindowState, // 0=Normal, 2=Maximized
+                    WindowState = (int)WindowState, // 0=Normal, 1=Minimized, 2=Maximized, 3=FullScreen
                     LibraryPanelWidth = LibraryPanelContainer?.Bounds.Width,
                     
                     // Playback settings
