@@ -3954,10 +3954,26 @@ namespace ReelRoulette
                             Log($"HandleLocateFileAsync: Updating library item path from {oldPath} to {newPath}");
                             
                             // Check if new path is in an existing source
+                            // Use normalized paths with separator validation to prevent false matches
+                            // (e.g., C:\VideoRecordings should not match C:\Videos)
                             var newDir = Path.GetDirectoryName(newPath);
                             var matchingSource = _libraryIndex.Sources.FirstOrDefault(s => 
-                                !string.IsNullOrEmpty(newDir) && 
-                                newDir.StartsWith(s.RootPath, StringComparison.OrdinalIgnoreCase));
+                            {
+                                if (string.IsNullOrEmpty(newDir) || string.IsNullOrEmpty(s.RootPath))
+                                    return false;
+                                
+                                // Normalize both paths for comparison
+                                var normalizedNewDir = Path.GetFullPath(newDir);
+                                var normalizedRoot = Path.GetFullPath(s.RootPath);
+                                
+                                // Check if newDir is exactly the root, or is a subdirectory of root
+                                if (normalizedNewDir.Equals(normalizedRoot, StringComparison.OrdinalIgnoreCase))
+                                    return true;
+                                
+                                // Check if newDir starts with root + separator (prevents false matches)
+                                var rootWithSeparator = normalizedRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+                                return normalizedNewDir.StartsWith(rootWithSeparator, StringComparison.OrdinalIgnoreCase);
+                            });
                             
                             if (matchingSource != null)
                             {
@@ -4062,6 +4078,7 @@ namespace ReelRoulette
                     catch (Exception ex)
                     {
                         Log($"RemoveLibraryItemAsync: ERROR saving library - Exception: {ex.GetType().Name}, Message: {ex.Message}");
+                        throw; // Re-throw to be caught by outer try-catch and displayed to user
                     }
                 });
                 
