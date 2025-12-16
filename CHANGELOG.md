@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **Restructure and expand TODO.md**:
+  - Add comprehensive priority system (P1/P2/P3) with clear impact definitions
+  - Reorganize all TODO items by priority level for better planning
+  - Standardize entry format: Title, Priority, Impact, Description, Implementation, Notes
+  - Add 11 new proposed features with detailed specifications
+  - Move completed features to archive section
+  - Add implementation guidelines and contribution workflow
+  - Total: 2 P1 items, 7 P2 items, 7 P3 items
+
 - **Fix window state restoration for FullScreen mode**:
   - Add explicit handling for FullScreen state (value 3) in window restoration logic
   - Previously, closing in FullScreen would restore as Normal instead of FullScreen
