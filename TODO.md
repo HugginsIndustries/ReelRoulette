@@ -449,9 +449,11 @@ Each TODO entry follows this structure:
       - No repeats until all played (checkbox, default: enabled)
       - Seek/volume step sizes
     - **Optional Features Page**:
-      - Start with Windows (checkbox)
-      - Start minimized (checkbox, if System Tray implemented)
-      - Show in system tray (checkbox, if System Tray implemented)
+      - Start with Windows (checkbox, default: disabled)
+      - Start minimized to taskbar (checkbox, default: disabled)
+      - Start minimized to tray (checkbox, default: disabled, grayed out if System Tray not implemented)
+      - Minimize to system tray (checkbox, default: disabled, grayed out if System Tray not implemented)
+      - Show tray notifications (checkbox, default: enabled, grayed out if System Tray not implemented)
       - Create desktop shortcut (checkbox, default: enabled)
     - **Complete Page**:
       - "Setup complete!" message
@@ -484,6 +486,13 @@ Each TODO entry follows this structure:
   - Desktop shortcut creation may require elevated permissions on some systems
   - Quick Setup mode is recommended for most users (simplicity and speed)
   - Custom Setup mode for power users who want full control over configuration
+  - **Settings consistency**: All Optional Features Page settings use identical terminology and defaults as their corresponding Settings Dialog entries:
+    - "Start with Windows" → P3 "Start with Windows" feature (default: disabled)
+    - "Start minimized to taskbar" → P3 "Start with Windows" feature (default: disabled)
+    - "Start minimized to tray" → P3 "Start with Windows" feature (default: disabled, requires System Tray)
+    - "Minimize to system tray" → P3 "System Tray Integration" feature (default: disabled)
+    - "Show tray notifications" → P3 "System Tray Integration" feature (default: enabled)
+  - Group System Tray settings together in wizard UI with explanatory text: "System Tray features (optional)"
 
 ---
 
