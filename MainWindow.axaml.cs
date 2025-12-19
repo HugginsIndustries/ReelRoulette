@@ -627,6 +627,15 @@ namespace ReelRoulette
                     InitializeLibraryPanel();
                     Log("MainWindow Loaded event: Library panel initialized successfully.");
                     
+                    // Apply saved library panel width if panel is visible on startup
+                    // This ensures the width is applied after the Grid is fully initialized
+                    if (_showLibraryPanel && MainContentGrid?.ColumnDefinitions.Count > 0)
+                    {
+                        MainContentGrid.ColumnDefinitions[0].MinWidth = 400;
+                        MainContentGrid.ColumnDefinitions[0].Width = new GridLength(_libraryPanelWidth);
+                        Log($"MainWindow Loaded event: Applied saved library panel width: {_libraryPanelWidth}");
+                    }
+                    
                     // Set up GridSplitter event handler to track manual resizing
                     if (LibraryVideoSplitter != null)
                     {

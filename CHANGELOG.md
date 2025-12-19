@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **Fix library panel width not restored on startup** (2025-12-19):
+  - Apply saved library panel width in Loaded event handler when panel is visible on startup
+  - Ensures width is applied after Grid is fully initialized
+  - Fixes issue where panel would use default XAML width instead of user's saved width
+  - Previously, width was loaded from settings but not applied during window initialization
+
 - **Fix library panel collapse and size persistence** (2025-12-19):
   - Fix blank area appearing when library panel is hidden via View menu
   - Dynamically clear MinWidth constraint (set to 0) when hiding panel to allow proper collapse
