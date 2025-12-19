@@ -409,6 +409,61 @@ Each TODO entry follows this structure:
   - Position should persist across app restarts
   - Consider adding "Resume without asking" option to skip dialog
 
+### Installation and First-Run Setup Wizard
+
+- **Priority**: P2
+- **Impact**: Medium - Significantly improves first-run experience and onboarding
+- **Description**: Create a guided setup wizard that runs on first launch to help users configure ReelRoulette. Currently, new users must manually discover and configure settings, import library sources, and learn features through trial and error. A setup wizard provides a smooth onboarding experience and ensures proper initial configuration.
+- **Implementation**:
+  - Detect first run (check for existence of `settings.json` or add `IsFirstRun` flag)
+  - Create `SetupWizardWindow.axaml` and `SetupWizardWindow.axaml.cs`
+  - Wizard pages (sequential navigation with Next/Back/Skip buttons):
+    - **Welcome Page**:
+      - App logo and title
+      - Brief description of ReelRoulette
+      - "Get Started" button to begin setup
+      - "Skip Setup" option (uses all defaults)
+    - **Library Setup Page**:
+      - "Add your first video folder" prompt
+      - Folder browser button
+      - List of added folders (can add multiple)
+      - Option to scan for duration/loudness immediately or later
+      - Estimated scan time based on folder size
+    - **Playback Preferences Page**:
+      - Volume normalization mode selection (simple explanation of each)
+      - Auto-play next video (checkbox)
+      - No repeats until all played (checkbox)
+      - Seek/volume step sizes
+    - **Optional Features Page**:
+      - Start with Windows (checkbox)
+      - Start minimized (checkbox, if System Tray implemented)
+      - Show in system tray (checkbox, if System Tray implemented)
+      - Create desktop shortcut (checkbox, default: enabled)
+    - **Complete Page**:
+      - "Setup complete!" message
+      - Summary of configured settings
+      - Quick tips: Keyboard shortcuts cheat sheet, filter button location, etc.
+      - "Open ReelRoulette" button
+  - Store wizard completion flag in `settings.json` (`IsFirstRun = false`)
+  - Option to re-run wizard: Help → "Run Setup Wizard Again"
+  - During wizard, show progress indicator (Page X of Y)
+  - All wizard settings should integrate with existing Settings Dialog
+  - Validate inputs (ensure at least one library source added, valid paths)
+  - Two setup modes:
+    - **Quick Setup**: Use sensible defaults, only ask for library folder (1 page)
+    - **Custom Setup**: Show all wizard pages (full walkthrough)
+  - Wizard window should be modal and centered on screen
+- **Notes**:
+  - Should feel lightweight and quick (under 2 minutes to complete)
+  - All steps should be optional/skippable (can configure later in Settings)
+  - Wizard should not block access to app - users can close and configure manually
+  - Add tooltip help icons on each page explaining options
+  - Consider "Import from another video manager" option if feasible
+  - After completion, mark `IsFirstRun = false` in settings
+  - Desktop shortcut creation may require elevated permissions on some systems
+  - Quick Setup mode is recommended for most users (simplicity)
+  - Custom Setup mode for power users who want full control
+
 ---
 
 ## P3 - Low Priority
@@ -451,11 +506,13 @@ Each TODO entry follows this structure:
   - **Add to Settings Dialog** (requires P2 "Centralized Settings Dialog"):
     - Add to General tab:
       - Start with Windows (checkbox, default: disabled)
-      - Start minimized (checkbox, default: disabled, requires P3 "System Tray Integration")
+      - Start minimized to taskbar (checkbox, default: disabled)
+      - Start minimized to tray (checkbox, default: disabled, requires P3 "System Tray Integration")
 - **Notes**:
   - Windows-specific feature
   - Should handle uninstall scenario (remove registry entry)
-  - Consider combining with "Start minimized to tray" for minimal startup presence
+  - "Start minimized to taskbar" is a basic OS feature (no dependencies)
+  - "Start minimized to tray" requires System Tray Integration to be implemented first
   - May need UAC elevation on first enable
 
 ### Playback Speed Control
