@@ -462,21 +462,28 @@ Each TODO entry follows this structure:
   - Option to re-run wizard: Help → "Run Setup Wizard Again"
   - During wizard, show progress indicator (Page X of Y)
   - All wizard settings should integrate with existing Settings Dialog
-  - Validate inputs (ensure at least one library source added, valid paths)
+  - Validation rules:
+    - **Quick Setup mode**: At least one library source is required (show error if user tries to finish without adding a folder)
+    - **Custom Setup mode**: Library source is optional, but show warning if skipped: "You can add library sources later in Settings"
+    - **"Skip Setup" button**: Bypasses all validation, uses defaults, marks wizard as complete
+    - Path validation: Ensure all added folder paths are valid and accessible
   - Two setup modes:
-    - **Quick Setup**: Use sensible defaults, only ask for library folder (1 page)
-    - **Custom Setup**: Show all wizard pages (full walkthrough)
-  - Wizard window should be modal and centered on screen
+    - **Quick Setup**: Use sensible defaults, only ask for library folder (1 page, source required)
+    - **Custom Setup**: Show all wizard pages (full walkthrough, all pages can be skipped)
+  - Wizard window should be modal (blocks main window) and centered on screen
+  - Users can close wizard at any time via X button or Cancel (wizard can be re-run later)
 - **Notes**:
   - Should feel lightweight and quick (under 2 minutes to complete)
-  - All steps should be optional/skippable (can configure later in Settings)
-  - Wizard should not block access to app - users can close and configure manually
+  - Wizard is modal (blocks main window) but can be closed/cancelled at any time
+  - Incomplete wizard can be re-run from Help menu - users aren't forced to complete it on first run
+  - In Custom Setup, individual pages can be skipped (uses defaults for that page)
+  - In Quick Setup, the library folder selection is mandatory (core requirement)
   - Add tooltip help icons on each page explaining options
   - Consider "Import from another video manager" option if feasible
   - After completion, mark `IsFirstRun = false` in settings
   - Desktop shortcut creation may require elevated permissions on some systems
-  - Quick Setup mode is recommended for most users (simplicity)
-  - Custom Setup mode for power users who want full control
+  - Quick Setup mode is recommended for most users (simplicity and speed)
+  - Custom Setup mode for power users who want full control over configuration
 
 ---
 
