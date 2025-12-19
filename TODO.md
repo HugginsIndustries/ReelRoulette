@@ -229,6 +229,135 @@ Each TODO entry follows this structure:
     - Allow mixing flat and categorized tags
 - **Notes**: Example categories: Genre, Mood, Creator, Series, Quality, Language, Year. Consider exporting category structure as JSON for backup.
 
+### Centralized Settings Dialog
+
+- **Priority**: P2
+- **Impact**: Medium - Improves settings discoverability and organization
+- **Description**: Create a centralized Settings/Preferences dialog with core settings that can be implemented immediately. This consolidates existing menu-based settings into a unified UI. Additional settings will be added by other TODO features as they are implemented (each feature adds its own settings).
+- **Implementation**:
+  - Create `SettingsDialog.axaml` and `SettingsDialog.axaml.cs`
+  - Add menu item: View → "Settings..." or Edit → "Preferences..." (Ctrl+,)
+  - Dialog layout with tabbed sections:
+    - **General Tab**:
+      - Show hidden files in imports (checkbox, default: disabled)
+      - Confirm before removing items (checkbox, default: enabled)
+      - Auto-scan sources on startup (checkbox, default: disabled)
+    - **Playback Tab**:
+      - No repeats until all played (checkbox, default: enabled)
+      - Timer interval (numeric input, 1-3600 seconds, default: 60)
+      - Seek step (radio buttons: Frame, 1s, 5s, 10s - default: 5s)
+      - Volume step (radio buttons: 1, 2, 5 - default: 5)
+      - Volume normalization mode (radio buttons):
+        - Off (default)
+        - Simple (real-time)
+        - Library-aware (per-file)
+        - Advanced (per-file + real-time)
+    - **Metadata Sync Tab**:
+      - Show placeholder message: "Settings will be available when File Metadata Sync feature is implemented"
+      - All controls grayed out/disabled for now
+    - **Advanced Tab**:
+      - Show placeholder message: "Advanced settings will be added in future updates"
+      - All controls grayed out/disabled for now
+  - Settings storage in `settings.json` (existing file, extend structure)
+  - Apply/OK/Cancel button pattern:
+    - OK: Save changes and close
+    - Cancel: Discard changes and close
+    - Apply: Save changes but keep dialog open
+  - "Reset to Defaults" button per tab
+  - Validation: Ensure numeric inputs are in valid ranges
+  - Sync settings with existing menu items (two-way binding)
+- **Notes**: 
+  - This should be implemented before "File Metadata Sync" feature
+  - Settings migrated from Playback menu:
+    - "No Repeats Until All Played" → Playback tab (remove from menu after implementation)
+    - "Set Interval" → Playback tab (remove from menu after implementation)
+    - "Seek Step" submenu → Playback tab (remove from menu after implementation)
+    - "Volume Step" submenu → Playback tab (remove from menu after implementation)
+    - "Volume Normalization" submenu → Playback tab (remove from menu after implementation)
+  - Settings to KEEP in menus:
+    - Playback menu: "Keep Playing (Timer)", "Clear Playback Stats"
+    - Library menu: Keep all items
+    - View menu: Keep all items (panel toggles, fullscreen, always on top, etc.)
+  - Placeholder tabs show what's coming but don't block initial implementation
+  - Tooltip help text should explain each setting
+  - Settings dialog should be modal (blocks main window while open)
+  - Changes apply immediately to corresponding menu items when Apply/OK is clicked
+  - Other features will add their settings to this dialog as they are implemented
+
+### File Metadata Sync (Import/Export Tags and Metadata)
+
+- **Priority**: P2
+- **Impact**: Medium - Enables portability and standards-compliant metadata management
+- **Description**: Sync tags and metadata between ReelRoulette's library database and actual video file metadata. Currently, tags and metadata exist only in `library.json`, making them non-portable. Users cannot import existing file tags from other applications (Windows File Explorer, video editors) or export ReelRoulette tags for use elsewhere. This feature would read/write standard metadata fields using TagLibSharp (already installed).
+- **Implementation**:
+  - **Phase 1 - Tag Import**:
+    - Read tags from video file metadata during import/refresh operations
+    - Use `TagLib.File.Create()` to access file tags/keywords field
+    - Field mapping by format:
+      - MP4/M4V: Use iTunes-style keywords/tags field
+      - MKV: Use Matroska tags (custom "KEYWORDS" or "TAGS" tag)
+      - Other formats: Fall back to parsing `Tag.Comment` field
+    - Merge strategy options (user configurable):
+      - **Union**: Combine file tags + library tags (default)
+      - **File Overwrites Library**: Replace library tags with file tags
+      - **Library Overwrites File**: Keep library tags, ignore file tags
+    - Show import summary: "Imported 45 tags from 120 video files"
+  - **Phase 2 - Tag Export**:
+    - Add "Export Tags to File Metadata" context menu option in Library panel
+    - Write `LibraryItem.Tags` to proper tags/keywords metadata field
+    - Batch export: "Export Tags for All Videos" in Library menu
+    - Optional auto-export on tag change (setting: `MetadataSync.AutoExport`)
+    - Confirmation dialog before writing (warns about file modification)
+    - Handle locked files gracefully (skip if video is playing)
+  - **Phase 3 - Extended Metadata Support**:
+    - Import additional metadata fields during scan (separate from tags):
+      - Genre (Tag.Genres array - actual genre like "Action", "Documentary")
+      - Year (Tag.Year)
+      - Artist/Creator (Tag.FirstPerformer)
+      - Title (Tag.Title)
+      - Album/Series (Tag.Album)
+      - Comment (Tag.Comment)
+      - Rating (Tag.Rating)
+    - Store in `LibraryItem.ExtendedMetadata` dictionary
+    - Display metadata in Library panel: Show Genre, Year, Artist, Album columns (sortable, not filterable)
+    - Add metadata filtering to FilterDialog (consistent with existing filter patterns):
+      - **Genre filter**: Multi-select buttons identical to Tag filter (AND/OR logic toggle)
+      - **Artist filter**: Multi-select buttons identical to Tag filter (AND/OR logic toggle)
+      - **Album/Series filter**: Multi-select buttons identical to Tag filter (AND/OR logic toggle)
+      - **Year filter**: Min/Max year inputs identical to Duration filter ("no min", "no max" options)
+    - Expand ItemTagsDialog (rename to "Manage Tags & Metadata") to edit all metadata fields
+    - Support batch metadata editing via P2 "Batch Operations in Library Panel":
+      - Select multiple videos → Edit Metadata → Apply to all selected
+      - Batch-editable fields: Tags, Genre, Year, Artist, Album/Series, Comment, Rating
+      - Title is NOT batch-editable (typically unique per video)
+      - "Clear Metadata" batch operation (clears all fields except Title)
+    - Export all extended metadata when writing tags (preserve all fields)
+  - **Settings UI**:
+    - Add settings to "Metadata Sync" tab in Settings Dialog (requires P2 "Centralized Settings Dialog")
+    - Replace placeholder message with actual controls:
+      - Enable/disable auto-import on refresh (checkbox, default: enabled)
+      - Enable/disable auto-export on tag change (checkbox, default: disabled)
+      - Choose tag format (radio buttons: Native keywords, Comment field, Both - default: Native keywords)
+      - Warn before writing to files (checkbox, default: enabled)
+      - Merge strategy (dropdown: Union, File Overwrites Library, Library Overwrites File - default: Union)
+  - **Error Handling**:
+    - Catch `TagLib.UnsupportedFormatException` for incompatible formats
+    - Skip read-only files, network drives with access issues
+    - Log errors to `last.log` with file paths
+    - Show summary: "45 succeeded, 3 failed (read-only), 2 unsupported formats"
+- **Notes**: 
+  - Format compatibility: MP4/M4V (excellent), MKV (good), AVI (limited), MOV (good)
+  - TagLibSharp already installed, no new dependencies needed
+  - Performance consideration: Batch operations could be slow (50-100ms per file)
+  - Should provide "Backup" warning before first export operation
+  - Cross-feature integration:
+    - Requires P2 "Centralized Settings Dialog": Dialog must exist first, this feature adds Metadata Sync tab
+    - Requires P2 "Batch Operations in Library Panel": Batch metadata editing for multiple videos
+    - Works with P1 "Background Refresh": Auto-import tags when new files detected
+    - Complements P2 "Tag Categories": Could map file genres to tag categories
+  - Makes P3 "Video Metadata Editor" redundant: This syncs with actual file, that was for library-only metadata
+  - ItemTagsDialog should be renamed to ItemMetadataDialog or similar to reflect expanded scope
+
 ### Playback History Analytics and Visualization
 
 - **Priority**: P2
@@ -256,9 +385,244 @@ Each TODO entry follows this structure:
     - Most active day/time
 - **Notes**: Power user feature. Consider making this extensible (plugin architecture) for custom charts. Most useful with 6+ months of playback history.
 
+### Remember Playback Position
+
+- **Priority**: P2
+- **Impact**: Medium - Quality of life improvement for long videos
+- **Description**: Remember where each video was paused and automatically resume from that position when played again. Particularly useful for long-form content (tutorials, movies, lectures) that users may watch in multiple sessions.
+- **Implementation**:
+  - Add `LastPosition` field to `LibraryItem` (TimeSpan, nullable)
+  - Update position periodically during playback (every 5 seconds or on pause)
+  - On video end, clear the stored position (completed watching)
+  - On video load, check if `LastPosition` exists and > 0
+  - Show resume dialog: "Resume from [timestamp] or Start from beginning?"
+  - Clear all positions option: Playback → "Clear All Resume Positions"
+  - Show resume indicator in Library panel (small clock icon or "⏱" next to filename)
+  - **Add to Settings Dialog** (requires P2 "Centralized Settings Dialog"):
+    - Add to Playback tab:
+      - Enable resume feature (checkbox, default: enabled)
+      - Auto-resume threshold - don't resume if close to start/end (checkbox, default: enabled)
+      - Minimum video length for resume (numeric input, seconds, default: 120)
+      - Auto-clear positions older than (dropdown: Never, 7 days, 30 days, 90 days - default: Never)
+- **Notes**:
+  - Store positions in `library.json` as part of LibraryItem
+  - Position should persist across app restarts
+  - Consider adding "Resume without asking" option to skip dialog
+
 ---
 
 ## P3 - Low Priority
+
+### System Tray Integration
+
+- **Priority**: P3
+- **Impact**: Low - Convenience for users who want minimal taskbar presence
+- **Description**: Add system tray icon and minimize-to-tray functionality. Allows app to run in background without taking up taskbar space.
+- **Implementation**:
+  - Add system tray icon (use existing app icon or create smaller 16x16 variant)
+  - When enabled: Minimize button sends app to tray instead of taskbar
+  - Tray icon context menu:
+    - "Show/Hide Window" (default double-click action)
+    - "Play Random Video" (quick action)
+    - "Exit" (closes application)
+  - Notification on first minimize: "ReelRoulette is still running in system tray"
+  - Optional: Show toast notifications for certain events (video ended, timer expired)
+  - **Add to Settings Dialog** (requires P2 "Centralized Settings Dialog"):
+    - Add to General tab:
+      - Minimize to system tray (checkbox, default: disabled)
+      - Start minimized to tray (checkbox, default: disabled)
+      - Show tray notifications (checkbox, default: enabled)
+- **Notes**:
+  - Windows-specific feature (may need platform detection for cross-platform builds)
+  - Tray icon should update if video is playing (optional visual indicator)
+
+### Start with Windows
+
+- **Priority**: P3
+- **Impact**: Low - Convenience for dedicated users
+- **Description**: Add option to automatically launch ReelRoulette when Windows starts. Useful for users who use the app daily or want timer-based playback on startup.
+- **Implementation**:
+  - When enabled: Create registry entry or shortcut in Windows Startup folder
+  - Registry path: `HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run`
+  - Key name: "ReelRoulette"
+  - Value: Path to ReelRoulette.exe
+  - Detect if already enabled on settings load (sync checkbox with actual registry state)
+  - Admin permissions may be required for registry write
+  - **Add to Settings Dialog** (requires P2 "Centralized Settings Dialog"):
+    - Add to General tab:
+      - Start with Windows (checkbox, default: disabled)
+      - Start minimized (checkbox, default: disabled, requires P3 "System Tray Integration")
+- **Notes**:
+  - Windows-specific feature
+  - Should handle uninstall scenario (remove registry entry)
+  - Consider combining with "Start minimized to tray" for minimal startup presence
+  - May need UAC elevation on first enable
+
+### Playback Speed Control
+
+- **Priority**: P3
+- **Impact**: Low - Niche use case for speed watching or slow motion
+- **Description**: Add default playback speed setting and runtime speed control. Allows users to watch videos faster (tutorials, lectures) or slower (detailed observation).
+- **Implementation**:
+  - Apply default speed when video loads
+  - Add runtime controls:
+    - Keyboard shortcuts: [ = slower, ] = faster, \ = reset to 1x
+    - Menu item: Playback → Speed submenu with options: 0.25x, 0.5x, 0.75x, 1x, 1.25x, 1.5x, 1.75x, 2x
+    - Optional: Show current speed in status bar
+  - LibVLC integration: Use `MediaPlayer.SetRate()` method
+  - Speed affects video but not audio pitch (use time-stretching)
+  - **Add to Settings Dialog** (requires P2 "Centralized Settings Dialog"):
+    - Add to Playback tab:
+      - Default playback speed (dropdown: 0.25x, 0.5x, 0.75x, 1x, 1.25x, 1.5x, 1.75x, 2x - default: 1x)
+      - Remember speed per video (checkbox, default: disabled)
+- **Notes**:
+  - Most useful for educational content or tutorials
+  - Audio quality may degrade at extreme speeds (< 0.5x or > 2x)
+  - May interact with volume normalization features
+
+### Custom FFmpeg/FFprobe Paths
+
+- **Priority**: P3
+- **Impact**: Low - Advanced users with custom builds only
+- **Description**: Allow users to specify custom paths for FFmpeg and FFprobe executables. Useful for advanced users who want to use newer versions, custom builds, or system-installed binaries instead of bundled versions.
+- **Implementation**:
+  - Validation: Check if specified files exist and are executable
+  - Test button: Run `ffmpeg -version` to verify working binary
+  - Fall back to bundled version if custom path is invalid
+  - Update `NativeBinaryHelper.cs` to check settings before using bundled paths
+  - **Add to Settings Dialog** (requires P2 "Centralized Settings Dialog"):
+    - Add to Advanced tab → FFmpeg/FFprobe section:
+      - Use bundled binaries (checkbox, default: enabled)
+      - FFmpeg path (text input with Browse button, disabled if using bundled)
+      - FFprobe path (text input with Browse button, disabled if using bundled)
+      - Test binaries button (shows version info or error)
+- **Notes**:
+  - Most users should use bundled binaries (simpler, tested)
+  - Useful for testing new FFmpeg features or performance
+  - Should validate version compatibility (minimum FFmpeg 4.0 or similar)
+  - Clear warning: "Custom binaries may cause instability"
+
+### Advanced Logging Controls
+
+- **Priority**: P3
+- **Impact**: Low - Primarily for debugging and development
+- **Description**: Add user-configurable logging levels and log management. Helps with troubleshooting and reduces log file size for normal users.
+- **Implementation**:
+  - Log levels:
+    - Error: Only log errors and exceptions
+    - Warning: Errors + warnings
+    - Info: Errors + warnings + informational messages (current behavior)
+    - Debug: Everything including detailed operation traces
+  - Update logging calls to respect level (filter before writing)
+  - Implement log rotation when file size limit reached
+  - **Add to Settings Dialog** (requires P2 "Centralized Settings Dialog"):
+    - Add to Advanced tab → Logging section:
+      - Log level (dropdown: Error, Warning, Info, Debug - default: Info)
+      - Log rotation (dropdown: 1MB, 5MB, 10MB, Unlimited - default: 5MB)
+      - Open log file button (opens last.log in default text editor)
+      - Clear log file button (truncates last.log with confirmation)
+- **Notes**:
+  - Debug level may impact performance with very verbose logging
+  - Consider timestamped log archives (last.log.1, last.log.2, etc.)
+  - Useful for troubleshooting scan failures or playback issues
+  - Default Info level is good balance for most users
+
+### Cache Management and Limits
+
+- **Priority**: P3
+- **Impact**: Low - Disk space management for users with large libraries
+- **Description**: Add user-configurable cache size limits and management for various cached data (thumbnails, metadata, preview frames). Helps users control disk space usage and clean up old cached data.
+- **Implementation**:
+  - Implement cache size tracking and cleanup logic
+  - Thumbnail cache cleanup (requires P2 "Video Thumbnail Generation")
+  - Metadata cache for raw FFprobe JSON output
+  - Preview frames cache (future feature)
+  - Library index auto-backup before major operations
+  - Cache statistics calculation
+  - Low disk space warning system (< 1GB free)
+  - **Add to Settings Dialog** (requires P2 "Centralized Settings Dialog"):
+    - Add to Advanced tab → Cache section:
+      - **Thumbnail cache** (requires P2 "Video Thumbnail Generation"):
+        - Limit (dropdown: 100MB, 500MB, 1GB, 2GB, 5GB, Unlimited - default: 1GB)
+        - Cleanup strategy (dropdown: LRU, Oldest first, By source)
+        - Clear Thumbnail Cache button (shows size freed)
+      - **Metadata cache**:
+        - Limit (dropdown: 10MB, 50MB, 100MB, Unlimited - default: 50MB)
+        - Auto-clear older than (dropdown: 30 days, 90 days, 1 year, Never - default: 90 days)
+        - Clear Metadata Cache button
+      - **Preview cache** (future feature):
+        - Limit (dropdown: 500MB, 1GB, 2GB, 5GB, Unlimited - default: 1GB)
+        - Clear Preview Cache button
+      - **Library backups**:
+        - Keep last N backups (numeric input: 5-50, default: 10)
+        - Manage Backups button (opens dialog with backup list)
+      - **Cache statistics** (read-only displays):
+        - Current thumbnail cache size / items
+        - Current metadata cache size / items
+        - Current preview cache size / items
+        - Last cleanup date
+      - Auto-cleanup when limit reached (checkbox, default: enabled)
+      - Clear All Caches button (master cleanup with confirmation)
+- **Notes**:
+  - Thumbnail cache: ~20-50KB per thumbnail at 128x128, so 10,000 thumbnails ≈ 200-500MB
+  - Metadata cache: Very small, mostly text, rarely exceeds 100MB even for huge libraries
+  - Preview frames: Much larger, 1-5MB per video depending on frame count
+  - Each library.json backup: 1-10MB depending on library size
+  - Most features are placeholders for future thumbnail/preview features
+  - Useful for users with limited disk space or very large libraries
+
+### Performance and Resource Controls
+
+- **Priority**: P3
+- **Impact**: Low - Fine-tuning for specific hardware/usage scenarios
+- **Description**: Add user-configurable performance options to control how the app uses system resources (CPU, memory, network). Useful for users with slower hardware, network drives, or who want to minimize resource usage.
+- **Implementation**:
+  - Implement concurrent operation limits for FFmpeg/thumbnails
+  - Background throttling logic (requires P1 "Background Refresh")
+  - Network timeout and retry handling
+  - Library panel virtualization tuning (requires P1 "Library Panel Virtualization")
+  - Memory management strategies
+  - Hardware acceleration controls
+  - Performance monitoring (optional)
+  - **Add to Settings Dialog** (requires P2 "Centralized Settings Dialog"):
+    - Add to Advanced tab → Performance section:
+      - **Performance preset** (dropdown: Low-end PC, Balanced, High-performance, Custom - default: Balanced)
+      - **Concurrent Operations**:
+        - Max FFmpeg/FFprobe processes (dropdown: 1, 2, 4, 8 - default: 4)
+        - Max thumbnail tasks (dropdown: 1, 2, 4, 8 - default: 2, requires P2 "Video Thumbnail Generation")
+      - **Background Operations** (requires P1 "Background Refresh"):
+        - Scan interval when minimized (dropdown: Immediate, 5min, 30min, Hourly, Disabled - default: 30min)
+        - CPU priority (dropdown: Low, Normal, High - default: Low)
+        - Pause on low battery (checkbox, default: enabled)
+        - Pause when apps fullscreen (checkbox, default: disabled)
+      - **Network Drives**:
+        - Operation timeout (dropdown: 5s, 10s, 30s, 60s - default: 10s)
+        - Retry attempts (dropdown: 0, 1, 3, 5 - default: 3)
+        - Skip thumbnails on network (checkbox, default: enabled)
+        - Cache file checks (dropdown: 30s, 1min, 5min, Never - default: 1min)
+      - **Library Panel** (requires P1 "Library Panel Virtualization"):
+        - Pre-render items (dropdown: 10, 20, 50, 100 - default: 20)
+        - Render batch size (dropdown: 5, 10, 20, 50 - default: 10)
+        - Scroll buffer (dropdown: 250px, 500px, 1000px - default: 500px)
+      - **Memory**:
+        - Cache strategy (dropdown: Keep all, Unload inactive - default: Keep all)
+        - Force GC after operations (checkbox, default: enabled)
+        - Video buffer size (dropdown: Auto, 512KB, 1MB, 2MB, 4MB - default: Auto)
+      - **UI Rendering**:
+        - Hardware acceleration (dropdown: Auto, Enabled, Disabled - default: Auto)
+        - Frame rate limit (dropdown: 30, 60, 120 FPS, Unlimited - default: 60 FPS)
+        - Smooth scrolling (checkbox, default: enabled)
+        - Reduce animations on battery (checkbox, default: enabled)
+      - Reset to Defaults button (for performance section only)
+- **Notes**:
+  - Most users should use default settings (balanced performance)
+  - Performance presets auto-configure all settings (Custom allows manual tuning)
+  - Concurrent operations: Critical for scan performance with large libraries
+  - Network optimizations: Essential for users with NAS/network storage
+  - Background throttling: Prevents app from hogging resources when not in focus
+  - Memory settings: Useful for users with 8GB RAM or less
+  - UI rendering: Hardware acceleration issues rare but possible on older GPUs
+  - Most features depend on other TODOs (virtualization, thumbnails, background refresh)
 
 ### Export/Import Library Index
 
