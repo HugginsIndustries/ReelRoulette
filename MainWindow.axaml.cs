@@ -130,6 +130,7 @@ namespace ReelRoulette
         private ObservableCollection<LibraryItem> _libraryItems = new ObservableCollection<LibraryItem>();
         private string? _currentViewPreset = null; // null = All videos, or "Favorites", "Blacklisted", "RecentlyPlayed", "NeverPlayed"
         private string? _selectedSourceId = null; // null = All sources
+        private double _libraryPanelWidth = 400; // Track panel width independently from Bounds (default matches XAML MinWidth)
         private string _librarySearchText = "";
         private string _librarySortMode = "Name"; // "Name", "LastPlayed", "PlayCount", "Duration"
         
@@ -625,6 +626,24 @@ namespace ReelRoulette
                     Log("MainWindow Loaded event: Initializing Library panel...");
                     InitializeLibraryPanel();
                     Log("MainWindow Loaded event: Library panel initialized successfully.");
+                    
+                    // Set up GridSplitter event handler to track manual resizing
+                    if (LibraryVideoSplitter != null)
+                    {
+                        LibraryVideoSplitter.DragCompleted += (splitterSender, dragArgs) =>
+                        {
+                            if (MainContentGrid?.ColumnDefinitions.Count > 0)
+                            {
+                                var currentWidth = MainContentGrid.ColumnDefinitions[0].Width;
+                                if (currentWidth.IsAbsolute && currentWidth.Value >= 400)
+                                {
+                                    _libraryPanelWidth = currentWidth.Value;
+                                    Log($"LibraryVideoSplitter DragCompleted: Captured new panel width: {_libraryPanelWidth}");
+                                }
+                            }
+                        };
+                        Log("MainWindow Loaded event: GridSplitter event handler set up.");
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -3568,6 +3587,18 @@ namespace ReelRoulette
             var showPanel = ShowLibraryPanelMenuItem.IsChecked == true;
             Log($"UI ACTION: ShowLibraryPanelMenuItem clicked, setting show panel to: {showPanel}");
             var oldValue = _showLibraryPanel;
+            
+            // If hiding the panel, capture current width before applying the change
+            if (oldValue && !showPanel && MainContentGrid?.ColumnDefinitions.Count > 0)
+            {
+                var currentWidth = MainContentGrid.ColumnDefinitions[0].Width;
+                if (currentWidth.IsAbsolute && currentWidth.Value >= 400)
+                {
+                    _libraryPanelWidth = currentWidth.Value;
+                    Log($"ShowLibraryPanelMenuItem_Click: Captured library panel width before hiding: {_libraryPanelWidth}");
+                }
+            }
+            
             _showLibraryPanel = showPanel;
             if (oldValue != _showLibraryPanel)
             {
@@ -4777,17 +4808,15 @@ namespace ReelRoulette
                 Log($"LoadSettings: Set window state to Normal (saved state was {settings.WindowState})");
             }
             
-            // Restore library panel width after window is loaded
+            // Restore library panel width (ApplyViewPreferences will apply it when showing the panel)
             if (settings.LibraryPanelWidth.HasValue && settings.LibraryPanelWidth.Value >= 400)
             {
-                this.Loaded += (s, e) =>
-                {
-                    if (MainContentGrid?.ColumnDefinitions.Count > 0)
-                    {
-                        MainContentGrid.ColumnDefinitions[0].Width = new GridLength(settings.LibraryPanelWidth.Value);
-                        Log($"LoadSettings: Restored library panel width to {settings.LibraryPanelWidth.Value}");
-                    }
-                };
+                _libraryPanelWidth = settings.LibraryPanelWidth.Value;
+                Log($"LoadSettings: Initialized library panel width to {_libraryPanelWidth}");
+            }
+            else
+            {
+                Log($"LoadSettings: Using default library panel width: {_libraryPanelWidth}");
             }
             
             // Apply playback settings
@@ -5005,6 +5034,17 @@ namespace ReelRoulette
                 
                 Log($"SaveSettings: Using intervalValue = {intervalValue}");
                 
+                // Capture current library panel width if visible and resized
+                if (_showLibraryPanel && MainContentGrid?.ColumnDefinitions.Count > 0)
+                {
+                    var currentWidth = MainContentGrid.ColumnDefinitions[0].Width;
+                    if (currentWidth.IsAbsolute && currentWidth.Value >= 400)
+                    {
+                        _libraryPanelWidth = currentWidth.Value;
+                        Log($"SaveSettings: Captured current library panel width from column: {_libraryPanelWidth}");
+                    }
+                }
+                
                 // When in player view mode, save the saved state (what user wants when NOT in player view mode)
                 // Otherwise, save the current state
                 var settings = new AppSettings
@@ -5026,7 +5066,7 @@ namespace ReelRoulette
                     WindowWidth = Width,
                     WindowHeight = Height,
                     WindowState = (int)WindowState, // 0=Normal, 1=Minimized, 2=Maximized, 3=FullScreen
-                    LibraryPanelWidth = LibraryPanelContainer?.Bounds.Width,
+                    LibraryPanelWidth = _libraryPanelWidth,
                     
                     // Playback settings
                     SeekStep = _seekStep,
@@ -5089,6 +5129,7 @@ namespace ReelRoulette
                     if (columns.Count >= 4)
                     {
                         LibraryPanelContainer.IsVisible = false;
+                        columns[0].MinWidth = 0;  // Remove MinWidth constraint to allow collapse
                         columns[0].Width = new GridLength(0);
                         LibraryVideoSplitter.IsVisible = false;
                         columns[1].Width = new GridLength(0);
@@ -5131,8 +5172,25 @@ namespace ReelRoulette
                 if (columns.Count >= 4)
                 {
                     // Column 0: Library Panel
-                    LibraryPanelContainer.IsVisible = _showLibraryPanel;
-                    columns[0].Width = _showLibraryPanel ? GridLength.Auto : new GridLength(0);
+                    if (_showLibraryPanel)
+                    {
+                        // Showing panel - restore saved width and MinWidth constraint
+                        LibraryPanelContainer.IsVisible = true;
+                        columns[0].MinWidth = 400;
+                        columns[0].Width = new GridLength(_libraryPanelWidth);
+                    }
+                    else
+                    {
+                        // Hiding panel - first capture current width if it's a valid size
+                        if (columns[0].Width.IsAbsolute && columns[0].Width.Value >= 400)
+                        {
+                            _libraryPanelWidth = columns[0].Width.Value;
+                            Log($"ApplyViewPreferences: Captured library panel width before hiding: {_libraryPanelWidth}");
+                        }
+                        LibraryPanelContainer.IsVisible = false;
+                        columns[0].MinWidth = 0;  // Remove MinWidth constraint to allow collapse
+                        columns[0].Width = new GridLength(0);
+                    }
                     
                     // Column 1: Splitter between Library and Video
                     LibraryVideoSplitter.IsVisible = _showLibraryPanel;

@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- **Fix library panel collapse and size persistence** (2025-12-19):
+  - Fix blank area appearing when library panel is hidden via View menu
+  - Dynamically clear MinWidth constraint (set to 0) when hiding panel to allow proper collapse
+  - Add _libraryPanelWidth field to track panel width independently from Bounds property
+  - Capture panel width before hiding to preserve user's resize preference
+  - Restore saved width and MinWidth constraint when showing panel again
+  - Add GridSplitter DragCompleted event handler to track manual resizing via splitter
+  - Update SaveSettings() to capture and save panel width at hide/show time, not just on exit
+  - Apply same MinWidth clearing logic to player view mode for consistent behavior
+
 - **Restructure and expand TODO.md**:
   - Add comprehensive priority system (P1/P2/P3) with clear impact definitions
   - Reorganize all TODO items by priority level for better planning
