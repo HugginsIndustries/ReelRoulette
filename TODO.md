@@ -243,6 +243,9 @@ Each TODO entry follows this structure:
       - Confirm before removing items (checkbox, default: enabled)
       - Auto-scan sources on startup (checkbox, default: disabled)
     - **Playback Tab**:
+      - Loop current video (checkbox, default: enabled)
+      - Auto-play next video (checkbox, default: enabled)
+      - Start muted (checkbox, default: disabled)
       - No repeats until all played (checkbox, default: enabled)
       - Timer interval (numeric input, 1-3600 seconds, default: 60)
       - Seek step (radio buttons: Frame, 1s, 5s, 10s - default: 5s)
@@ -259,14 +262,20 @@ Each TODO entry follows this structure:
       - Show placeholder message: "Advanced settings will be added in future updates"
       - All controls grayed out/disabled for now
   - Settings storage in `settings.json` (existing file, extend structure)
+  - Add new fields to `AppSettings` class to persist playback preferences:
+    - `LoopEnabled` (bool, default: true) - Currently exists as `_isLoopEnabled` but not persisted
+    - `AutoPlayNext` (bool, default: true) - Currently exists as `_autoPlayNext` but not persisted
+    - `StartMuted` (bool, default: false) - Currently not persisted
+  - Update `LoadSettings()` to restore these values to UI toggles on app start
+  - Update `SaveSettings()` to persist these values when changed
   - Apply/OK/Cancel button pattern:
     - OK: Save changes and close
     - Cancel: Discard changes and close
     - Apply: Save changes but keep dialog open
   - "Reset to Defaults" button per tab
   - Validation: Ensure numeric inputs are in valid ranges
-  - Sync settings with existing menu items (two-way binding)
-- **Notes**: 
+  - Sync settings with existing menu items and UI toggles (two-way binding)
+- **Notes**:
   - This should be implemented before "File Metadata Sync" feature
   - Settings migrated from Playback menu:
     - "No Repeats Until All Played" → Playback tab (remove from menu after implementation)
@@ -281,8 +290,11 @@ Each TODO entry follows this structure:
   - Placeholder tabs show what's coming but don't block initial implementation
   - Tooltip help text should explain each setting
   - Settings dialog should be modal (blocks main window while open)
-  - Changes apply immediately to corresponding menu items when Apply/OK is clicked
+  - Changes apply immediately to corresponding menu items and UI toggles when Apply/OK is clicked
   - Other features will add their settings to this dialog as they are implemented
+  - **Important**: Loop, Auto-play next, and Mute currently exist as UI toggles but reset to defaults on app restart
+    - These settings MUST be persisted to AppSettings to maintain user preferences between sessions
+    - UI toggles (LoopToggle, AutoPlayNextCheckBox, MuteButton) should sync with saved settings on load
 
 ### File Metadata Sync (Import/Export Tags and Metadata)
 
@@ -345,7 +357,7 @@ Each TODO entry follows this structure:
     - Skip read-only files, network drives with access issues
     - Log errors to `last.log` with file paths
     - Show summary: "45 succeeded, 3 failed (read-only), 2 unsupported formats"
-- **Notes**: 
+- **Notes**:
   - Format compatibility: MP4/M4V (excellent), MKV (good), AVI (limited), MOV (good)
   - TagLibSharp already installed, no new dependencies needed
   - Performance consideration: Batch operations could be slow (50-100ms per file)
@@ -431,8 +443,10 @@ Each TODO entry follows this structure:
       - Estimated scan time based on folder size
     - **Playback Preferences Page**:
       - Volume normalization mode selection (simple explanation of each)
-      - Auto-play next video (checkbox)
-      - No repeats until all played (checkbox)
+      - Loop current video (checkbox, default: enabled)
+      - Auto-play next video (checkbox, default: enabled)
+      - Start muted (checkbox, default: disabled)
+      - No repeats until all played (checkbox, default: enabled)
       - Seek/volume step sizes
     - **Optional Features Page**:
       - Start with Windows (checkbox)
@@ -485,11 +499,11 @@ Each TODO entry follows this structure:
   - **Add to Settings Dialog** (requires P2 "Centralized Settings Dialog"):
     - Add to General tab:
       - Minimize to system tray (checkbox, default: disabled)
-      - Start minimized to tray (checkbox, default: disabled)
       - Show tray notifications (checkbox, default: enabled)
 - **Notes**:
   - Windows-specific feature (may need platform detection for cross-platform builds)
   - Tray icon should update if video is playing (optional visual indicator)
+  - "Start minimized to tray" setting is part of P3 "Start with Windows" feature
 
 ### Start with Windows
 
