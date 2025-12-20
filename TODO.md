@@ -229,73 +229,6 @@ Each TODO entry follows this structure:
     - Allow mixing flat and categorized tags
 - **Notes**: Example categories: Genre, Mood, Creator, Series, Quality, Language, Year. Consider exporting category structure as JSON for backup.
 
-### Centralized Settings Dialog
-
-- **Priority**: P2
-- **Impact**: Medium - Improves settings discoverability and organization
-- **Description**: Create a centralized Settings/Preferences dialog with core settings that can be implemented immediately. This consolidates existing menu-based settings into a unified UI. Additional settings will be added by other TODO features as they are implemented (each feature adds its own settings).
-- **Implementation**:
-  - Create `SettingsDialog.axaml` and `SettingsDialog.axaml.cs`
-  - Add menu item: View → "Settings..." or Edit → "Preferences..." (Ctrl+,)
-  - Dialog layout with tabbed sections:
-    - **General Tab**:
-      - Show hidden files in imports (checkbox, default: disabled)
-      - Confirm before removing items (checkbox, default: enabled)
-      - Auto-scan sources on startup (checkbox, default: disabled)
-    - **Playback Tab**:
-      - Loop current video (checkbox, default: enabled)
-      - Auto-play next video (checkbox, default: enabled)
-      - Start muted (checkbox, default: disabled)
-      - No repeats until all played (checkbox, default: enabled)
-      - Timer interval (numeric input, 1-3600 seconds, default: 60)
-      - Seek step (radio buttons: Frame, 1s, 5s, 10s - default: 5s)
-      - Volume step (radio buttons: 1, 2, 5 - default: 5)
-      - Volume normalization mode (radio buttons):
-        - Off (default)
-        - Simple (real-time)
-        - Library-aware (per-file)
-        - Advanced (per-file + real-time)
-    - **Metadata Sync Tab**:
-      - Show placeholder message: "Settings will be available when File Metadata Sync feature is implemented"
-      - All controls grayed out/disabled for now
-    - **Advanced Tab**:
-      - Show placeholder message: "Advanced settings will be added in future updates"
-      - All controls grayed out/disabled for now
-  - Settings storage in `settings.json` (existing file, extend structure)
-  - Add new fields to `AppSettings` class to persist playback preferences:
-    - `LoopEnabled` (bool, default: true) - Currently exists as `_isLoopEnabled` but not persisted
-    - `AutoPlayNext` (bool, default: true) - Currently exists as `_autoPlayNext` but not persisted
-    - `StartMuted` (bool, default: false) - Currently not persisted
-  - Update `LoadSettings()` to restore these values to UI toggles on app start
-  - Update `SaveSettings()` to persist these values when changed
-  - Apply/OK/Cancel button pattern:
-    - OK: Save changes and close
-    - Cancel: Discard changes and close
-    - Apply: Save changes but keep dialog open
-  - "Reset to Defaults" button per tab
-  - Validation: Ensure numeric inputs are in valid ranges
-  - Sync settings with existing menu items and UI toggles (two-way binding)
-- **Notes**:
-  - This should be implemented before "File Metadata Sync" feature
-  - Settings migrated from Playback menu:
-    - "No Repeats Until All Played" → Playback tab (remove from menu after implementation)
-    - "Set Interval" → Playback tab (remove from menu after implementation)
-    - "Seek Step" submenu → Playback tab (remove from menu after implementation)
-    - "Volume Step" submenu → Playback tab (remove from menu after implementation)
-    - "Volume Normalization" submenu → Playback tab (remove from menu after implementation)
-  - Settings to KEEP in menus:
-    - Playback menu: "Keep Playing (Timer)", "Clear Playback Stats"
-    - Library menu: Keep all items
-    - View menu: Keep all items (panel toggles, fullscreen, always on top, etc.)
-  - Placeholder tabs show what's coming but don't block initial implementation
-  - Tooltip help text should explain each setting
-  - Settings dialog should be modal (blocks main window while open)
-  - Changes apply immediately to corresponding menu items and UI toggles when Apply/OK is clicked
-  - Other features will add their settings to this dialog as they are implemented
-  - **Important**: Loop, Auto-play next, and Mute currently exist as UI toggles but reset to defaults on app restart
-    - These settings MUST be persisted to AppSettings to maintain user preferences between sessions
-    - UI toggles (LoopToggle, AutoPlayNextCheckBox, MuteButton) should sync with saved settings on load
-
 ### File Metadata Sync (Import/Export Tags and Metadata)
 
 - **Priority**: P2
@@ -896,6 +829,16 @@ Each TODO entry follows this structure:
 
 These features have been fully implemented and are no longer on the TODO list:
 
+- ✅ **Centralized Settings Dialog** - Tabbed settings dialog with playback preferences, keyboard shortcuts, and persistence (Completed 2025-12-19)
+  - General tab (placeholder) and Playback tab implemented
+  - Loop, Auto-play, Mute state, Volume level, No Repeat settings now persist
+  - Seek step, Volume step, Volume normalization consolidated into dialog
+  - Removed redundant submenus from Playback menu
+  - Keyboard shortcut 'S' opens Settings dialog
+  - Fixed keyboard shortcuts reliability (window focusable, improved event handling)
+  - Fixed recursive settings saves with `_isApplyingSettings` flag
+  - Volume level (0-200) persists between sessions
+  - Mute state and volume restore correctly after app restart
 - ✅ **Source Management UI** - Comprehensive dialog for managing library sources with enable/disable, rename, remove, refresh (Completed 2025-12-15)
 - ✅ **Window State Persistence** - Save/restore window position, size, maximized state, panel widths (Completed 2025-12-15)
 - ✅ **Tag Management System** - Create, rename, delete tags with usage counts and bulk operations (Completed 2025-12)

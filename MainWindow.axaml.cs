@@ -76,6 +76,7 @@ namespace ReelRoulette
         private DateTime? _previousLastPlayedUtc;
         private bool _isLoopEnabled = true;
         private bool _autoPlayNext = true;
+        private bool _isMuted = false; // Track mute state for persistence
 
         // Duration scanning
         private CancellationTokenSource? _scanCancellationSource;
@@ -94,6 +95,9 @@ namespace ReelRoulette
         private DateTime _lastStatusMessageTime = DateTime.MinValue;
         private CancellationTokenSource? _statusMessageCancellation;
         private readonly object _statusMessageLock = new object();
+        
+        // Prevent recursive SaveSettings calls when updating UI from settings
+        private bool _isApplyingSettings = false;
         
         // FFmpeg logging
         private readonly List<FFmpegLogEntry> _ffmpegLogs = new();
@@ -677,11 +681,26 @@ namespace ReelRoulette
             // Set DataContext for bindings (after all initialization)
             DataContext = this;
             
-            // Initialize volume
+            // Initialize volume - but respect loaded mute state from settings
+            // Note: LoadSettings() is called before this point in the constructor
             if (_mediaPlayer != null)
             {
-                _mediaPlayer.Volume = 100;
-                VolumeSlider.Value = 100;
+                if (_isMuted)
+                {
+                    // If muted from settings, initialize to 0
+                    _mediaPlayer.Volume = 0;
+                    VolumeSlider.Value = 0;
+                    if (MuteButton != null)
+                    {
+                        MuteButton.IsChecked = true;
+                    }
+                }
+                else
+                {
+                    // Restore saved volume level from settings
+                    _mediaPlayer.Volume = _userVolumePreference;
+                    VolumeSlider.Value = _userVolumePreference;
+                }
                 UpdateVolumeTooltip();
             }
 
@@ -3952,6 +3971,12 @@ namespace ReelRoulette
                 _playQueue.Clear();
                 Log($"STATE CHANGE: Queue cleared (no-repeat mode disabled) - Previous size: {oldCount}, New size: {_playQueue.Count}");
             }
+            
+            // Persist the setting (unless we're applying settings from dialog)
+            if (!_isApplyingSettings)
+            {
+                SaveSettings();
+            }
         }
 
         #endregion
@@ -4518,6 +4543,17 @@ namespace ReelRoulette
                     VolumeSlider.Value = 100;
                 }
 
+                // Apply saved mute state
+                if (_isMuted)
+                {
+                    Log("PlayVideo: Applying saved mute state");
+                    _mediaPlayer.Mute = true;
+                    if (MuteButton != null)
+                    {
+                        MuteButton.IsChecked = true;
+                    }
+                }
+
                 // History is now tracked via LibraryItem.LastPlayedUtc (updated in RecordPlayback)
 
                 // Note: UpdateCurrentVideoStatsUi() is already called by RecordPlayback()
@@ -4650,6 +4686,12 @@ namespace ReelRoulette
             _isLoopEnabled = LoopToggle.IsChecked == true;
             Log($"UI ACTION: LoopToggle changed to: {_isLoopEnabled}");
             
+            // Persist the setting (unless we're applying settings from dialog)
+            if (!_isApplyingSettings)
+            {
+                SaveSettings();
+            }
+            
             // If media is currently playing, update the input-repeat option
             // Note: This requires recreating the media, which may cause a brief reset
             if (_currentMedia != null && _mediaPlayer != null && _libVLC != null && _currentVideoPath != null)
@@ -4732,6 +4774,13 @@ namespace ReelRoulette
             public double? IntervalSeconds { get; set; }
             public VolumeNormalizationMode VolumeNormalizationMode { get; set; } = VolumeNormalizationMode.Off;
             public AudioFilterMode AudioFilterMode { get; set; } = AudioFilterMode.PlayAll;
+            
+            // Playback preferences (now persisted)
+            public bool LoopEnabled { get; set; } = true;
+            public bool AutoPlayNext { get; set; } = true;
+            public bool IsMuted { get; set; } = false; // Persist mute state
+            public int VolumeLevel { get; set; } = 100; // Persist volume level (0-200)
+            public bool NoRepeatMode { get; set; } = true;
             
             // Filter state
             public FilterState? FilterState { get; set; }
@@ -4843,6 +4892,46 @@ namespace ReelRoulette
             _volumeNormalizationMode = settings.VolumeNormalizationMode;
             _audioFilterMode = settings.AudioFilterMode;
             
+            // Apply playback preferences (now persisted)
+            _isLoopEnabled = settings.LoopEnabled;
+            _autoPlayNext = settings.AutoPlayNext;
+            _isMuted = settings.IsMuted;
+            _userVolumePreference = settings.VolumeLevel; // Restore saved volume level
+            _noRepeatMode = settings.NoRepeatMode;
+            
+            // Bug fix: Initialize _lastNonZeroVolume with saved volume level
+            // This ensures unmuting restores the correct volume, not the default (100)
+            if (_userVolumePreference > 0)
+            {
+                _lastNonZeroVolume = _userVolumePreference;
+            }
+            
+            // Sync UI controls with loaded settings
+            if (LoopToggle != null)
+            {
+                LoopToggle.IsChecked = _isLoopEnabled;
+            }
+            if (AutoPlayNextCheckBox != null)
+            {
+                AutoPlayNextCheckBox.IsChecked = _autoPlayNext;
+            }
+            if (NoRepeatMenuItem != null)
+            {
+                NoRepeatMenuItem.IsChecked = _noRepeatMode;
+            }
+            
+            // Apply muted state when media player is ready
+            if (_mediaPlayer != null)
+            {
+                _mediaPlayer.Mute = _isMuted;
+                if (MuteButton != null)
+                {
+                    MuteButton.IsChecked = _isMuted;
+                }
+            }
+            
+            Log($"LoadSettings: Restored playback preferences - Loop={_isLoopEnabled}, AutoPlay={_autoPlayNext}, Muted={_isMuted}, NoRepeat={_noRepeatMode}");
+            
             // Apply filter state
             var previousFilterState = _currentFilterState;
             _currentFilterState = settings.FilterState ?? new FilterState();
@@ -4881,33 +4970,6 @@ namespace ReelRoulette
                 // Now ApplyPlayerViewMode will set _show* to false and hide everything
                 ApplyPlayerViewMode();
             }
-            
-            // Sync menu states for playback settings
-            if (SeekStepFrameMenuItem != null)
-                SeekStepFrameMenuItem.IsChecked = _seekStep == "Frame";
-            if (SeekStep1sMenuItem != null)
-                SeekStep1sMenuItem.IsChecked = _seekStep == "1s";
-            if (SeekStep5sMenuItem != null)
-                SeekStep5sMenuItem.IsChecked = _seekStep == "5s";
-            if (SeekStep10sMenuItem != null)
-                SeekStep10sMenuItem.IsChecked = _seekStep == "10s";
-
-            if (VolumeStep1MenuItem != null)
-                VolumeStep1MenuItem.IsChecked = _volumeStep == 1;
-            if (VolumeStep2MenuItem != null)
-                VolumeStep2MenuItem.IsChecked = _volumeStep == 2;
-            if (VolumeStep5MenuItem != null)
-                VolumeStep5MenuItem.IsChecked = _volumeStep == 5;
-
-            // Sync volume normalization menu states
-            if (VolumeNormalizationOffMenuItem != null)
-                VolumeNormalizationOffMenuItem.IsChecked = _volumeNormalizationMode == VolumeNormalizationMode.Off;
-            if (VolumeNormalizationSimpleMenuItem != null)
-                VolumeNormalizationSimpleMenuItem.IsChecked = _volumeNormalizationMode == VolumeNormalizationMode.Simple;
-            if (VolumeNormalizationLibraryAwareMenuItem != null)
-                VolumeNormalizationLibraryAwareMenuItem.IsChecked = _volumeNormalizationMode == VolumeNormalizationMode.LibraryAware;
-            if (VolumeNormalizationAdvancedMenuItem != null)
-                VolumeNormalizationAdvancedMenuItem.IsChecked = _volumeNormalizationMode == VolumeNormalizationMode.Advanced;
         }
         
         /// <summary>
@@ -5083,6 +5145,13 @@ namespace ReelRoulette
                     IntervalSeconds = intervalValue.HasValue ? (double?)intervalValue.Value : null,
                     VolumeNormalizationMode = _volumeNormalizationMode,
                     AudioFilterMode = _audioFilterMode,
+                    
+                    // Playback preferences (now persisted)
+                    LoopEnabled = _isLoopEnabled,
+                    AutoPlayNext = _autoPlayNext,
+                    IsMuted = _isMuted, // Save our tracked mute state
+                    VolumeLevel = _isMuted ? _lastNonZeroVolume : _userVolumePreference, // Save last non-zero volume when muted
+                    NoRepeatMode = _noRepeatMode,
                     
                     // Filter state (always save an object, never null)
                     FilterState = _currentFilterState ?? new FilterState()
@@ -5718,6 +5787,122 @@ namespace ReelRoulette
             SaveSettings();
         }
 
+        private async void SettingsMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            Log("Settings: Opening Settings dialog");
+            
+            var dialog = new SettingsDialog();
+            
+            // Load current settings into dialog
+            var intervalValue = IntervalNumericUpDown?.Value ?? 300;
+            dialog.LoadFromSettings(
+                _isLoopEnabled,
+                _autoPlayNext,
+                _noRepeatMode,
+                (double)intervalValue,
+                _seekStep,
+                _volumeStep,
+                _volumeNormalizationMode
+            );
+            
+            await dialog.ShowDialog<bool?>(this);
+            
+            if (dialog.WasApplied)
+            {
+                Log("Settings: User clicked Apply/OK, applying settings");
+                
+                // Set flag to prevent recursive SaveSettings calls
+                _isApplyingSettings = true;
+                
+                try
+                {
+                    // Apply settings from dialog
+                    _isLoopEnabled = dialog.LoopEnabled;
+                    _autoPlayNext = dialog.AutoPlayNext;
+                    _noRepeatMode = dialog.NoRepeatMode;
+                    _seekStep = dialog.GetSeekStep();
+                    _volumeStep = dialog.GetVolumeStep();
+                    _volumeNormalizationMode = dialog.GetVolumeNormalizationMode();
+                    
+                    // Update UI controls (these will trigger change handlers, but won't save due to flag)
+                    Dispatcher.UIThread.Post(() =>
+                    {
+                        if (LoopToggle != null) LoopToggle.IsChecked = _isLoopEnabled;
+                        if (AutoPlayNextCheckBox != null) AutoPlayNextCheckBox.IsChecked = _autoPlayNext;
+                        if (NoRepeatMenuItem != null) NoRepeatMenuItem.IsChecked = _noRepeatMode;
+                        if (NoRepeatToggle != null) NoRepeatToggle.IsChecked = _noRepeatMode;
+                        if (IntervalNumericUpDown != null) IntervalNumericUpDown.Value = dialog.TimerIntervalSeconds;
+                    });
+                    
+                    // Apply loop setting to current media if playing
+                    // Loop setting requires recreating the media, handled by LoopToggle_Changed logic
+                    if (!string.IsNullOrEmpty(_currentVideoPath) && _currentMedia != null && _mediaPlayer != null && _libVLC != null)
+                    {
+                        try
+                        {
+                            var wasPlaying = _mediaPlayer.IsPlaying;
+                            var currentTime = _mediaPlayer.Time;
+                            
+                            // Stop current playback
+                            _mediaPlayer.Stop();
+                            
+                            // Dispose current media
+                            var mediaToDispose = _currentMedia;
+                            _currentMedia = null;
+                            mediaToDispose?.Dispose();
+                            
+                            // Create new media with updated loop option
+                            _currentMedia = new Media(_libVLC, _currentVideoPath, FromType.FromPath);
+                            
+                            if (_isLoopEnabled)
+                            {
+                                _currentMedia.AddOption(":input-repeat=65535");
+                            }
+                            
+                            // Parse and set media (fire and forget, same pattern used elsewhere)
+#pragma warning disable CS4014
+                            _currentMedia.Parse();
+#pragma warning restore CS4014
+                            UpdateAspectRatioFromTracks();
+                            
+                            // Set media and restore playback position
+                            _mediaPlayer.Play(_currentMedia);
+                            _mediaPlayer.Time = currentTime;
+                            
+                            // Restore playback state
+                            if (wasPlaying)
+                            {
+                                PlayPauseButton.IsChecked = true;
+                            }
+                            else
+                            {
+                                _mediaPlayer.Pause();
+                                PlayPauseButton.IsChecked = false;
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Log($"Settings: ERROR updating loop setting - {ex.Message}");
+                        }
+                    }
+                    
+                    // Save settings to disk (now that all fields are updated)
+                    SaveSettings();
+                    
+                    Log($"Settings: Applied and saved - Loop={_isLoopEnabled}, AutoPlay={_autoPlayNext}, NoRepeat={_noRepeatMode}, SeekStep={_seekStep}, VolumeStep={_volumeStep}, VolumeNorm={_volumeNormalizationMode}");
+                }
+                finally
+                {
+                    // Always clear the flag
+                    _isApplyingSettings = false;
+                }
+            }
+            else
+            {
+                Log("Settings: User cancelled, no changes applied");
+            }
+        }
+
         private bool IsFullScreen
         {
             get => _isFullScreen;
@@ -5758,6 +5943,12 @@ namespace ReelRoulette
         {
             _autoPlayNext = AutoPlayNextCheckBox.IsChecked == true;
             Log($"UI ACTION: AutoPlayNext changed to: {_autoPlayNext}");
+            
+            // Persist the setting (unless we're applying settings from dialog)
+            if (!_isApplyingSettings)
+            {
+                SaveSettings();
+            }
         }
 
         private void ScanDurations_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -5822,110 +6013,6 @@ namespace ReelRoulette
             
             // Start scan for first source (could be enhanced to scan all sources)
             StartLoudnessScan(sourceRoots[0]);
-        }
-
-        private void VolumeNormalizationMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-        {
-            if (sender is MenuItem item)
-            {
-                // Uncheck all volume normalization items
-                VolumeNormalizationOffMenuItem.IsChecked = false;
-                VolumeNormalizationSimpleMenuItem.IsChecked = false;
-                VolumeNormalizationLibraryAwareMenuItem.IsChecked = false;
-                VolumeNormalizationAdvancedMenuItem.IsChecked = false;
-
-                // Check the clicked item
-                item.IsChecked = true;
-
-                // Determine selected mode
-                VolumeNormalizationMode newMode = VolumeNormalizationMode.Off;
-                string modeName = "Off";
-                if (item == VolumeNormalizationOffMenuItem)
-                {
-                    newMode = VolumeNormalizationMode.Off;
-                    modeName = "Off";
-                }
-                else if (item == VolumeNormalizationSimpleMenuItem)
-                {
-                    newMode = VolumeNormalizationMode.Simple;
-                    modeName = "Simple";
-                }
-                else if (item == VolumeNormalizationLibraryAwareMenuItem)
-                {
-                    newMode = VolumeNormalizationMode.LibraryAware;
-                    modeName = "LibraryAware";
-                }
-                else if (item == VolumeNormalizationAdvancedMenuItem)
-                {
-                    newMode = VolumeNormalizationMode.Advanced;
-                    modeName = "Advanced";
-                }
-
-                Log($"UI ACTION: VolumeNormalizationMenuItem clicked, setting mode to: {modeName}");
-                // Update mode
-                _volumeNormalizationMode = newMode;
-                SavePlaybackSettings("Volume normalization");
-
-                // Apply to current media if playing
-                // Bug fix: Media options must be set before playback begins, so we need to recreate the media
-                if (_currentMedia != null && _mediaPlayer != null && _libVLC != null && !string.IsNullOrEmpty(_currentVideoPath))
-                {
-                    try
-                    {
-                        var wasPlaying = _mediaPlayer.IsPlaying;
-                        var currentTime = _mediaPlayer.Time;
-                        
-                        // Stop current playback
-                        _mediaPlayer.Stop();
-                        
-                        // Dispose current media
-                        var mediaToDispose = _currentMedia;
-                        _currentMedia = null;
-                        mediaToDispose?.Dispose();
-                        
-                        // Create new media with updated normalization options
-                        _currentMedia = new Media(_libVLC, _currentVideoPath, FromType.FromPath);
-                        
-                        // Set input-repeat option for seamless looping when loop is enabled
-                        if (_isLoopEnabled)
-                        {
-                            _currentMedia.AddOption(":input-repeat=65535");
-                        }
-                        
-                        // Apply volume normalization (must be called before Parse/Play)
-                        ApplyVolumeNormalization();
-                        
-                        // Parse and set media
-                        _currentMedia.Parse();
-                        UpdateAspectRatioFromTracks();
-                        
-                        // Set media and restore playback position
-                        _mediaPlayer.Play(_currentMedia);
-                        _mediaPlayer.Time = currentTime;
-                        
-                        // Restore playback state
-                        if (wasPlaying)
-                        {
-                            PlayPauseButton.IsChecked = true;
-                        }
-                        else
-                        {
-                            _mediaPlayer.Pause();
-                            PlayPauseButton.IsChecked = false;
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Log($"VolumeNormalizationMenuItem_Click: ERROR updating normalization - Exception: {ex.GetType().Name}, Message: {ex.Message}");
-                        Log($"VolumeNormalizationMenuItem_Click: ERROR - Stack trace: {ex.StackTrace}");
-                        if (ex.InnerException != null)
-                        {
-                            Log($"VolumeNormalizationMenuItem_Click: ERROR - Inner exception: {ex.InnerException.GetType().Name}, Message: {ex.InnerException.Message}");
-                        }
-                        StatusTextBlock.Text = $"Error updating normalization: {ex.Message}";
-                    }
-                }
-            }
         }
 
         // DurationFilter_Changed handler removed - now using FilterDialog
@@ -5997,7 +6084,21 @@ namespace ReelRoulette
 
         private void NoRepeatMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
-            NoRepeatToggle.IsChecked = NoRepeatMenuItem.IsChecked;
+            _noRepeatMode = NoRepeatMenuItem.IsChecked == true;
+            
+            // Sync with toggle button
+            if (NoRepeatToggle != null)
+            {
+                NoRepeatToggle.IsChecked = _noRepeatMode;
+            }
+            
+            Log($"UI ACTION: NoRepeatMenuItem changed to: {_noRepeatMode}");
+            
+            // Persist the setting (unless we're applying settings from dialog)
+            if (!_isApplyingSettings)
+            {
+                SaveSettings();
+            }
         }
 
         private void KeepPlayingMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -6583,6 +6684,12 @@ namespace ReelRoulette
             }
             
             UpdateVolumeTooltip();
+            
+            // Persist volume level (unless we're applying settings from dialog)
+            if (!_isApplyingSettings)
+            {
+                SaveSettings();
+            }
         }
 
         private void MuteButton_Checked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -6601,6 +6708,13 @@ namespace ReelRoulette
             // Preserve user volume preference when muting
             // _userVolumePreference remains unchanged
             UpdateVolumeTooltip();
+            
+            // Persist mute state
+            _isMuted = true;
+            if (!_isApplyingSettings)
+            {
+                SaveSettings();
+            }
         }
 
         private void MuteButton_Unchecked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -6634,6 +6748,13 @@ namespace ReelRoulette
             }
             
             UpdateVolumeTooltip();
+            
+            // Persist mute state
+            _isMuted = false;
+            if (!_isApplyingSettings)
+            {
+                SaveSettings();
+            }
         }
 
         #region Seek Bar
@@ -6819,47 +6940,7 @@ namespace ReelRoulette
 
         #endregion
 
-        private void SeekStepMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-        {
-            if (sender is MenuItem item)
-            {
-                // Uncheck all seek step items
-                SeekStepFrameMenuItem.IsChecked = false;
-                SeekStep1sMenuItem.IsChecked = false;
-                SeekStep5sMenuItem.IsChecked = false;
-                SeekStep10sMenuItem.IsChecked = false;
-
-                // Check the clicked item
-                item.IsChecked = true;
-
-                // Update seek step
-                _seekStep = item.Header?.ToString() ?? "5s";
-                SavePlaybackSettings("Seek step");
-            }
-        }
-
-        // Audio filter menu handler removed - now using FilterDialog
-
-        private void VolumeStepMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-        {
-            if (sender is MenuItem item)
-            {
-                // Uncheck all volume step items
-                VolumeStep1MenuItem.IsChecked = false;
-                VolumeStep2MenuItem.IsChecked = false;
-                VolumeStep5MenuItem.IsChecked = false;
-
-                // Check the clicked item
-                item.IsChecked = true;
-
-                // Update volume step
-                if (int.TryParse(item.Header?.ToString(), out var step))
-                {
-                    _volumeStep = step;
-                    SavePlaybackSettings("Volume step");
-                }
-            }
-        }
+        // Seek step, volume step, and volume normalization handlers removed - now in Settings dialog
 
         private void VideoView_PointerWheelChanged(object? sender, Avalonia.Input.PointerWheelEventArgs e)
         {
@@ -6937,10 +7018,20 @@ namespace ReelRoulette
             }
             
             UpdateVolumeTooltip();
+            
+            // Persist volume level (unless we're applying settings from dialog)
+            if (!_isApplyingSettings)
+            {
+                SaveSettings();
+            }
         }
 
         private void OnGlobalKeyDown(object? sender, KeyEventArgs e)
         {
+            // Debug: Log all key presses to help diagnose issues
+            var sourceName = e.Source?.GetType().Name ?? "null";
+            Log($"OnGlobalKeyDown: Key={e.Key}, Source={sourceName}, Handled={e.Handled}");
+            
             // F11 should work even when TextBox has focus, so handle it first
             if (e.Key == Key.F11)
             {
@@ -6954,6 +7045,7 @@ namespace ReelRoulette
             // Check if the source is a TextBox
             if (e.Source is TextBox)
             {
+                Log($"OnGlobalKeyDown: Skipping - TextBox has focus");
                 // Let TextBox handle everything (space, arrows, etc.)
                 return;
             }
@@ -6961,8 +7053,12 @@ namespace ReelRoulette
             // Check if focus is in a menu; if so, skip shortcuts
             if (e.Source is MenuItem)
             {
+                Log($"OnGlobalKeyDown: Skipping - MenuItem has focus");
                 return;
             }
+            
+            // Don't skip on Button or other controls - handle the shortcuts anyway
+            Log($"OnGlobalKeyDown: Processing shortcut for Key={e.Key}");
 
             switch (e.Key)
             {
@@ -7081,6 +7177,13 @@ namespace ReelRoulette
                     }
                     ApplyPlayerViewMode();
                     SaveSettings();
+                    e.Handled = true;
+                    break;
+
+                case Key.S:
+                    // Open Settings dialog
+                    Log("UI ACTION: Keyboard shortcut S pressed - opening Settings");
+                    SettingsMenuItem_Click(sender, e);
                     e.Handled = true;
                     break;
 

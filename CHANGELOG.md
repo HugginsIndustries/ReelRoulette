@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+- **Implement centralized Settings dialog with persistence** (2025-12-19):
+  - Add Settings dialog accessible from View → Settings (S) menu or 'S' keyboard shortcut
+  - Settings dialog features General (placeholder) and Playback tabs
+  - **CRITICAL FIX**: Loop, Auto-play, Mute state, Volume level, and No Repeat settings now persist across app restarts
+  - **Mute state and volume level persist directly** - app restores exact volume and mute state from last session
+  - Volume level (0-200) now persists between sessions - any volume setting is remembered
+  - Consolidate seek step, volume step, and volume normalization settings into Settings dialog
+  - Remove redundant submenus from Playback menu (Seek Step, Volume Step, Volume Normalization)
+  - Keep "No Repeats Until All Played" and "Set Interval" in Playback menu for quick access
+  - Add Apply/OK/Cancel button pattern (consistent with FilterDialog)
+  - All playback settings now automatically persist when changed via UI controls or dialog
+  - Mute button and volume slider now save state when toggled/changed
+  - Add comprehensive Settings dialog with all playback preferences in one location
+  - Create SettingsDialog.axaml and SettingsDialog.axaml.cs with WasApplied pattern
+  - Extend AppSettings class with LoopEnabled, AutoPlayNext, IsMuted, VolumeLevel, NoRepeatMode fields
+  - **Fix keyboard shortcuts not working reliably** - add Focusable="True" to Window
+  - Add debug logging to keyboard shortcut handler for diagnostics
+  - Remove overly restrictive filtering that blocked shortcuts when buttons had focus
+  - **Fix settings sync issue** - prevent recursive SaveSettings calls with _isApplyingSettings flag
+
 - **Fix library panel width not restored on startup** (2025-12-19):
   - Apply saved library panel width in Loaded event handler when panel is visible on startup
   - Ensures width is applied after Grid is fully initialized

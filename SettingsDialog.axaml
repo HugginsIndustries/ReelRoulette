@@ -1,0 +1,153 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:ReelRoulette"
+        x:Class="ReelRoulette.SettingsDialog"
+        x:DataType="local:SettingsDialog"
+        Title="Settings"
+        Width="600"
+        Height="500"
+        WindowStartupLocation="CenterOwner"
+        MinWidth="500"
+        MinHeight="400">
+    <Grid RowDefinitions="* Auto" Margin="12">
+        <!-- Tab Control -->
+        <TabControl Grid.Row="0" Margin="0,0,0,16">
+            <!-- General Tab -->
+            <TabItem Header="General">
+                <Grid>
+                    <TextBlock Text="General settings will be added in future updates"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center"
+                               Foreground="Gray"
+                               FontSize="14"
+                               TextWrapping="Wrap"
+                               Margin="40"/>
+                </Grid>
+            </TabItem>
+            
+            <!-- Playback Tab -->
+            <TabItem Header="Playback">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Spacing="20" Margin="12">
+                        <!-- Playback Behavior Section -->
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="Playback Behavior" 
+                                       FontWeight="SemiBold" 
+                                       FontSize="13"
+                                       Margin="0,0,0,4"/>
+                            <CheckBox Content="Loop current video"
+                                      IsChecked="{Binding LoopEnabled}"/>
+                            <CheckBox Content="Auto-play next video"
+                                      IsChecked="{Binding AutoPlayNext}"/>
+                            <CheckBox Content="No repeats until all played"
+                                      IsChecked="{Binding NoRepeatMode}"/>
+                        </StackPanel>
+                        
+                        <!-- Timer Interval Section -->
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="Timer Interval" 
+                                       FontWeight="SemiBold" 
+                                       FontSize="13"
+                                       Margin="0,0,0,4"/>
+                            <Grid ColumnDefinitions="Auto * Auto" ColumnSpacing="8">
+                                <TextBlock Grid.Column="0" 
+                                           Text="Interval (seconds):" 
+                                           VerticalAlignment="Center"/>
+                                <NumericUpDown Grid.Column="1"
+                                               x:Name="TimerIntervalNumericUpDown"
+                                               Value="{Binding TimerIntervalSeconds}"
+                                               Minimum="1"
+                                               Maximum="3600"
+                                               FormatString="0"
+                                               Increment="1"
+                                               ShowButtonSpinner="True"
+                                               HorizontalAlignment="Left"
+                                               Width="150"/>
+                                <TextBlock Grid.Column="2"
+                                           Text="(1-3600)"
+                                           VerticalAlignment="Center"
+                                           Foreground="Gray"
+                                           FontSize="12"/>
+                            </Grid>
+                        </StackPanel>
+                        
+                        <!-- Seek Step Section -->
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="Seek Step" 
+                                       FontWeight="SemiBold" 
+                                       FontSize="13"
+                                       Margin="0,0,0,4"/>
+                            <RadioButton Content="Frame (Shift + arrow keys)"
+                                         GroupName="SeekStep"
+                                         IsChecked="{Binding SeekStepFrame}"/>
+                            <RadioButton Content="1 second"
+                                         GroupName="SeekStep"
+                                         IsChecked="{Binding SeekStep1s}"/>
+                            <RadioButton Content="5 seconds"
+                                         GroupName="SeekStep"
+                                         IsChecked="{Binding SeekStep5s}"/>
+                            <RadioButton Content="10 seconds"
+                                         GroupName="SeekStep"
+                                         IsChecked="{Binding SeekStep10s}"/>
+                        </StackPanel>
+                        
+                        <!-- Volume Step Section -->
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="Volume Step" 
+                                       FontWeight="SemiBold" 
+                                       FontSize="13"
+                                       Margin="0,0,0,4"/>
+                            <RadioButton Content="1%"
+                                         GroupName="VolumeStep"
+                                         IsChecked="{Binding VolumeStep1}"/>
+                            <RadioButton Content="2%"
+                                         GroupName="VolumeStep"
+                                         IsChecked="{Binding VolumeStep2}"/>
+                            <RadioButton Content="5%"
+                                         GroupName="VolumeStep"
+                                         IsChecked="{Binding VolumeStep5}"/>
+                        </StackPanel>
+                        
+                        <!-- Volume Normalization Section -->
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="Volume Normalization" 
+                                       FontWeight="SemiBold" 
+                                       FontSize="13"
+                                       Margin="0,0,0,4"/>
+                            <RadioButton Content="Off"
+                                         GroupName="VolumeNormalization"
+                                         IsChecked="{Binding VolumeNormOff}"/>
+                            <RadioButton Content="Simple (per-video)"
+                                         GroupName="VolumeNormalization"
+                                         IsChecked="{Binding VolumeNormSimple}"/>
+                            <RadioButton Content="Library-aware"
+                                         GroupName="VolumeNormalization"
+                                         IsChecked="{Binding VolumeNormLibrary}"/>
+                            <RadioButton Content="Advanced (FFmpeg)"
+                                         GroupName="VolumeNormalization"
+                                         IsChecked="{Binding VolumeNormAdvanced}"/>
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+        </TabControl>
+        
+        <!-- Buttons -->
+        <StackPanel Grid.Row="1" 
+                    Orientation="Horizontal" 
+                    HorizontalAlignment="Right"
+                    Spacing="8">
+            <Button Content="Apply"
+                    Click="ApplyButton_Click"
+                    MinWidth="100"/>
+            <Button Content="OK"
+                    Click="OKButton_Click"
+                    MinWidth="100"
+                    IsDefault="True"/>
+            <Button Content="Cancel"
+                    Click="CancelButton_Click"
+                    MinWidth="100"/>
+        </StackPanel>
+    </Grid>
+</Window>
+
