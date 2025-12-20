@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **Fix audio output bug after volume persistence** (2025-12-19):
+  - Fix bug where audio had no output when unmuted due to mute state not being explicitly set to false
+  - Changed PlayVideo method to always set _mediaPlayer.Mute to match saved _isMuted preference
+  - Previously only set mute state when _isMuted was true, leaving player muted from previous state when unmuted
+  - Now ensures mute state is always synchronized with saved preference when starting playback
+
 - **Implement centralized Settings dialog with persistence** (2025-12-19):
   - Add Settings dialog accessible from View → Settings (S) menu or 'S' keyboard shortcut
   - Settings dialog features General (placeholder) and Playback tabs

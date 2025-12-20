@@ -4544,15 +4544,12 @@ namespace ReelRoulette
                 }
 
                 // Apply saved mute state
-                if (_isMuted)
+                _mediaPlayer.Mute = _isMuted;
+                if (MuteButton != null)
                 {
-                    Log("PlayVideo: Applying saved mute state");
-                    _mediaPlayer.Mute = true;
-                    if (MuteButton != null)
-                    {
-                        MuteButton.IsChecked = true;
-                    }
+                    MuteButton.IsChecked = _isMuted;
                 }
+                Log($"PlayVideo: Applied saved mute state: {_isMuted}");
 
                 // History is now tracked via LibraryItem.LastPlayedUtc (updated in RecordPlayback)
 
