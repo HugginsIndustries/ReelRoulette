@@ -111,6 +111,11 @@ namespace ReelRoulette
         
         // Missing file behavior
         private MissingFileBehavior _missingFileBehavior = MissingFileBehavior.AlwaysShowDialog;
+        
+        // Backup settings
+        private bool _backupLibraryEnabled = true;
+        private int _minimumBackupGapMinutes = 15;
+        private int _numberOfBackups = 10;
 
         // Duration scanning
         private CancellationTokenSource? _scanCancellationSource;
@@ -910,6 +915,25 @@ namespace ReelRoulette
             // Save data
             SaveSettings();
             Log("OnClosed: Settings save completed");
+            
+            // Create backup before saving library (if enabled)
+            if (_libraryIndex != null)
+            {
+                try
+                {
+                    _libraryService.CreateBackupIfNeeded(_backupLibraryEnabled, _minimumBackupGapMinutes, _numberOfBackups);
+                }
+                catch (Exception ex)
+                {
+                    Log($"OnClosed: ERROR creating backup - Exception: {ex.GetType().Name}, Message: {ex.Message}");
+                    Log($"OnClosed: ERROR - Stack trace: {ex.StackTrace}");
+                    if (ex.InnerException != null)
+                    {
+                        Log($"OnClosed: ERROR - Inner exception: {ex.InnerException.GetType().Name}, Message: {ex.InnerException.Message}");
+                    }
+                    // Don't throw - backup failures shouldn't prevent library save
+                }
+            }
             
             // Save library (final save on shutdown - contains all data now)
             if (_libraryIndex != null)
@@ -3776,24 +3800,40 @@ namespace ReelRoulette
         {
             // Don't process if we're updating the library items UI
             if (_isUpdatingLibraryItems || _isInitializingLibraryPanel)
+            {
+                Log($"LibraryItemFavorite_Changed: Ignoring - UI update in progress");
                 return;
-                
-            // Don't process if this is being set programmatically (during UI binding updates)
+            }
+            
             // Only process if it's a user interaction (the toggle button is loaded and user clicks it)
             if (sender is ToggleButton toggle && toggle.Tag is LibraryItem item)
             {
-                // Check if the toggle's IsChecked matches the item's current state
-                // If it doesn't match, this is a user action. If it matches, it's just a binding update.
                 var toggleState = toggle.IsChecked == true;
-                if (item.IsFavorite == toggleState)
+                
+                // CRITICAL FIX: Get the item from the library index to ensure we have the latest state
+                // The bound item might be stale due to virtualization recycling
+                var libraryItem = _libraryService.FindItemByPath(item.FullPath);
+                if (libraryItem == null)
                 {
-                    // State matches - this is likely a binding update, not a user action
+                    Log($"LibraryItemFavorite_Changed: Item not found in library: {item.FileName}");
                     return;
                 }
                 
-                Log($"UI ACTION: LibraryItemFavorite toggled for '{item.FileName}' to: {toggleState}");
-                item.IsFavorite = toggleState;
-                _libraryService.UpdateItem(item);
+                // CRITICAL FIX: Check if the item's state already matches the toggle state
+                // If it matches, this is a binding update from virtualization, not a user action
+                // This prevents favorites from being incorrectly removed when scrolling
+                // When virtualization recycles items, bindings update and fire events even when state matches
+                if (libraryItem.IsFavorite == toggleState)
+                {
+                    // State already matches - this is definitely a binding update, not a user action
+                    // This happens when virtualization recycles items and updates bindings during scrolling
+                    Log($"LibraryItemFavorite_Changed: Ignoring binding update for '{item.FileName}' - state already matches: {toggleState}");
+                    return;
+                }
+                
+                Log($"UI ACTION: LibraryItemFavorite toggled for '{item.FileName}' to: {toggleState} (was: {libraryItem.IsFavorite})");
+                libraryItem.IsFavorite = toggleState;
+                _libraryService.UpdateItem(libraryItem);
                 _ = Task.Run(() => _libraryService.SaveLibrary());
                 UpdateLibraryPanel();
             }
@@ -5461,6 +5501,11 @@ namespace ReelRoulette
             // Missing file behavior
             public MissingFileBehavior MissingFileBehavior { get; set; } = MissingFileBehavior.AlwaysShowDialog;
             
+            // Backup settings
+            public bool BackupLibraryEnabled { get; set; } = true;
+            public int MinimumBackupGapMinutes { get; set; } = 15;
+            public int NumberOfBackups { get; set; } = 10;
+            
             // Filter state
             public FilterState? FilterState { get; set; }
         }
@@ -5589,6 +5634,12 @@ namespace ReelRoulette
             // Load missing file behavior setting
             _missingFileBehavior = settings.MissingFileBehavior;
             Log($"LoadSettings: Restored missing file behavior: {_missingFileBehavior}");
+            
+            // Load backup settings
+            _backupLibraryEnabled = settings.BackupLibraryEnabled;
+            _minimumBackupGapMinutes = settings.MinimumBackupGapMinutes > 0 ? settings.MinimumBackupGapMinutes : 15;
+            _numberOfBackups = settings.NumberOfBackups > 0 ? settings.NumberOfBackups : 10;
+            Log($"LoadSettings: Restored backup settings - Enabled: {_backupLibraryEnabled}, MinGap: {_minimumBackupGapMinutes} minutes, Count: {_numberOfBackups}");
             
             // Bug fix: Initialize _lastNonZeroVolume with saved volume level
             // This ensures unmuting restores the correct volume, not the default (100)
@@ -5852,6 +5903,11 @@ namespace ReelRoulette
                     
                     // Missing file behavior
                     MissingFileBehavior = _missingFileBehavior,
+                    
+                    // Backup settings
+                    BackupLibraryEnabled = _backupLibraryEnabled,
+                    MinimumBackupGapMinutes = _minimumBackupGapMinutes,
+                    NumberOfBackups = _numberOfBackups,
                     
                     // Filter state (always save an object, never null)
                     FilterState = _currentFilterState ?? new FilterState()
@@ -6508,7 +6564,10 @@ namespace ReelRoulette
                 _imageScalingMode,
                 _fixedImageMaxWidth,
                 _fixedImageMaxHeight,
-                _missingFileBehavior
+                _missingFileBehavior,
+                _backupLibraryEnabled,
+                _minimumBackupGapMinutes,
+                _numberOfBackups
             );
             
             await dialog.ShowDialog<bool?>(this);
@@ -6544,6 +6603,15 @@ namespace ReelRoulette
                     var oldMissingFileBehavior = _missingFileBehavior;
                     _missingFileBehavior = dialog.MissingFileBehavior;
                     Log($"Settings: Missing file behavior changed from {oldMissingFileBehavior} to {_missingFileBehavior}");
+                    
+                    // Update backup settings
+                    var oldBackupEnabled = _backupLibraryEnabled;
+                    var oldMinGap = _minimumBackupGapMinutes;
+                    var oldBackupCount = _numberOfBackups;
+                    _backupLibraryEnabled = dialog.GetBackupLibraryEnabled();
+                    _minimumBackupGapMinutes = dialog.GetMinimumBackupGapMinutes();
+                    _numberOfBackups = dialog.GetNumberOfBackups();
+                    Log($"Settings: Backup settings changed - Enabled: {oldBackupEnabled} -> {_backupLibraryEnabled}, MinGap: {oldMinGap} -> {_minimumBackupGapMinutes} minutes, Count: {oldBackupCount} -> {_numberOfBackups}");
                     
                     // Update UI controls (these will trigger change handlers, but won't save due to flag)
                     Dispatcher.UIThread.Post(() =>

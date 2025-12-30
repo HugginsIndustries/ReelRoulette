@@ -14,15 +14,59 @@
         <TabControl Grid.Row="0" Margin="0,0,0,16">
             <!-- General Tab -->
             <TabItem Header="General">
-                <Grid>
-                    <TextBlock Text="General settings will be added in future updates"
-                               HorizontalAlignment="Center"
-                               VerticalAlignment="Center"
-                               Foreground="Gray"
-                               FontSize="14"
-                               TextWrapping="Wrap"
-                               Margin="40"/>
-                </Grid>
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Spacing="20" Margin="12">
+                        <!-- Library Backup Section -->
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="Library Backup" 
+                                       FontWeight="SemiBold" 
+                                       FontSize="13"
+                                       Margin="0,0,0,4"/>
+                            <CheckBox Content="Backup Library?"
+                                      IsChecked="{Binding BackupLibraryEnabled}"/>
+                            <Grid ColumnDefinitions="Auto * Auto" ColumnSpacing="8" Margin="20,4,0,4">
+                                <TextBlock Grid.Column="0" 
+                                           Text="Minimum Backup Gap (minutes):" 
+                                           VerticalAlignment="Center"/>
+                                <NumericUpDown Grid.Column="1"
+                                               x:Name="MinimumBackupGapNumericUpDown"
+                                               Value="{Binding MinimumBackupGapMinutes}"
+                                               Minimum="1"
+                                               Maximum="60"
+                                               FormatString="0"
+                                               Increment="1"
+                                               ShowButtonSpinner="True"
+                                               HorizontalAlignment="Left"
+                                               Width="150"/>
+                                <TextBlock Grid.Column="2"
+                                           Text="(1-60)"
+                                           VerticalAlignment="Center"
+                                           Foreground="Gray"
+                                           FontSize="12"/>
+                            </Grid>
+                            <Grid ColumnDefinitions="Auto * Auto" ColumnSpacing="8" Margin="20,4,0,4">
+                                <TextBlock Grid.Column="0" 
+                                           Text="Number of Backups:" 
+                                           VerticalAlignment="Center"/>
+                                <NumericUpDown Grid.Column="1"
+                                               x:Name="NumberOfBackupsNumericUpDown"
+                                               Value="{Binding NumberOfBackups}"
+                                               Minimum="1"
+                                               Maximum="30"
+                                               FormatString="0"
+                                               Increment="1"
+                                               ShowButtonSpinner="True"
+                                               HorizontalAlignment="Left"
+                                               Width="150"/>
+                                <TextBlock Grid.Column="2"
+                                           Text="(1-30)"
+                                           VerticalAlignment="Center"
+                                           Foreground="Gray"
+                                           FontSize="12"/>
+                            </Grid>
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
             </TabItem>
             
             <!-- Playback Tab -->

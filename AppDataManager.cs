@@ -99,6 +99,25 @@ namespace ReelRoulette
         {
             return Path.Combine(AppDataDirectory, "filterState.json");
         }
+
+        public static string GetBackupDirectoryPath()
+        {
+            var backupDir = Path.Combine(AppDataDirectory, "backups");
+            if (!Directory.Exists(backupDir))
+            {
+                try
+                {
+                    Directory.CreateDirectory(backupDir);
+                    Log($"AppDataManager: Created backup directory: {backupDir}");
+                }
+                catch (Exception ex)
+                {
+                    Log($"AppDataManager: ERROR - Failed to create backup directory: {ex.Message}");
+                    throw;
+                }
+            }
+            return backupDir;
+        }
     }
 }
 

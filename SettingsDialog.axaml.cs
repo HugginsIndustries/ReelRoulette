@@ -337,6 +337,11 @@ namespace ReelRoulette
         
         // Missing file behavior
         private MissingFileBehavior _missingFileBehavior = MissingFileBehavior.AlwaysShowDialog;
+        
+        // Backup settings
+        private bool _backupLibraryEnabled = true;
+        private int _minimumBackupGapMinutes = 15;
+        private int _numberOfBackups = 10;
 
         // Image scaling mode properties
         public bool ImageScalingOff
@@ -444,6 +449,46 @@ namespace ReelRoulette
 
         public MissingFileBehavior MissingFileBehavior => _missingFileBehavior;
 
+        // Backup settings properties
+        public bool BackupLibraryEnabled
+        {
+            get => _backupLibraryEnabled;
+            set
+            {
+                if (_backupLibraryEnabled != value)
+                {
+                    _backupLibraryEnabled = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public int MinimumBackupGapMinutes
+        {
+            get => _minimumBackupGapMinutes;
+            set
+            {
+                if (_minimumBackupGapMinutes != value)
+                {
+                    _minimumBackupGapMinutes = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public int NumberOfBackups
+        {
+            get => _numberOfBackups;
+            set
+            {
+                if (_numberOfBackups != value)
+                {
+                    _numberOfBackups = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
         // Helper methods to get/set from AppSettings-like structure
         public void LoadFromSettings(
             bool loopEnabled,
@@ -457,7 +502,10 @@ namespace ReelRoulette
             ImageScalingMode imageScalingMode = ImageScalingMode.Auto,
             int fixedImageMaxWidth = 3840,
             int fixedImageMaxHeight = 2160,
-            MissingFileBehavior missingFileBehavior = MissingFileBehavior.AlwaysShowDialog)
+            MissingFileBehavior missingFileBehavior = MissingFileBehavior.AlwaysShowDialog,
+            bool backupLibraryEnabled = true,
+            int minimumBackupGapMinutes = 15,
+            int numberOfBackups = 10)
         {
             // Set backing fields directly and notify
             _loopEnabled = loopEnabled;
@@ -575,6 +623,14 @@ namespace ReelRoulette
             _missingFileBehavior = missingFileBehavior;
             OnPropertyChanged(nameof(MissingFileBehaviorAlwaysShowDialog));
             OnPropertyChanged(nameof(MissingFileBehaviorAlwaysRemoveFromLibrary));
+            
+            // Backup settings
+            _backupLibraryEnabled = backupLibraryEnabled;
+            _minimumBackupGapMinutes = minimumBackupGapMinutes;
+            _numberOfBackups = numberOfBackups;
+            OnPropertyChanged(nameof(BackupLibraryEnabled));
+            OnPropertyChanged(nameof(MinimumBackupGapMinutes));
+            OnPropertyChanged(nameof(NumberOfBackups));
         }
 
         public string GetSeekStep()
@@ -601,6 +657,10 @@ namespace ReelRoulette
             return VolumeNormalizationMode.Off;
         }
 
+        public bool GetBackupLibraryEnabled() => _backupLibraryEnabled;
+        public int GetMinimumBackupGapMinutes() => _minimumBackupGapMinutes;
+        public int GetNumberOfBackups() => _numberOfBackups;
+
         private bool ValidateSettings()
         {
             // Validate timer interval
@@ -624,6 +684,16 @@ namespace ReelRoulette
                 return false;
             }
             if (_fixedImageMaxHeight < 100 || _fixedImageMaxHeight > 16384)
+            {
+                return false;
+            }
+            
+            // Validate backup settings
+            if (_minimumBackupGapMinutes < 1 || _minimumBackupGapMinutes > 60)
+            {
+                return false;
+            }
+            if (_numberOfBackups < 1 || _numberOfBackups > 30)
             {
                 return false;
             }

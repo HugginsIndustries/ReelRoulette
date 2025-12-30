@@ -148,6 +148,190 @@ namespace ReelRoulette
         }
 
         /// <summary>
+        /// Creates a backup of the library if needed, based on backup settings.
+        /// </summary>
+        /// <param name="backupEnabled">Whether backups are enabled</param>
+        /// <param name="minimumGapMinutes">Minimum time gap in minutes between backups</param>
+        /// <param name="numberOfBackups">Maximum number of backups to keep</param>
+        public void CreateBackupIfNeeded(bool backupEnabled, int minimumGapMinutes, int numberOfBackups)
+        {
+            Log("LibraryService.CreateBackupIfNeeded: Starting...");
+            
+            if (!backupEnabled)
+            {
+                Log("LibraryService.CreateBackupIfNeeded: Backup is disabled, skipping");
+                return;
+            }
+
+            try
+            {
+                var backupDir = AppDataManager.GetBackupDirectoryPath();
+                var backupFiles = GetBackupFiles(backupDir);
+                var lastBackupTime = GetLastBackupTime(backupFiles);
+                
+                // Calculate time since last backup (or TimeSpan.MaxValue if no previous backup)
+                var timeSinceLastBackup = lastBackupTime.HasValue 
+                    ? DateTime.Now - lastBackupTime.Value 
+                    : TimeSpan.MaxValue;
+                
+                Log($"LibraryService.CreateBackupIfNeeded: Current backup count: {backupFiles.Count}, Time since last backup: {(timeSinceLastBackup == TimeSpan.MaxValue ? "N/A (no previous backup)" : $"{timeSinceLastBackup.TotalMinutes:F1} minutes")}");
+                
+                // If at limit, determine which backup to delete
+                if (backupFiles.Count >= numberOfBackups)
+                {
+                    var minimumGap = TimeSpan.FromMinutes(minimumGapMinutes);
+                    
+                    if (timeSinceLastBackup < minimumGap)
+                    {
+                        // Last backup was too soon, replace it
+                        Log($"LibraryService.CreateBackupIfNeeded: Last backup was {timeSinceLastBackup.TotalMinutes:F1} minutes ago (less than {minimumGapMinutes} minutes), deleting most recent backup");
+                        DeleteMostRecentBackup(backupFiles);
+                    }
+                    else
+                    {
+                        // Normal rotation, delete oldest
+                        Log($"LibraryService.CreateBackupIfNeeded: Last backup was {timeSinceLastBackup.TotalMinutes:F1} minutes ago (>= {minimumGapMinutes} minutes), deleting oldest backup");
+                        DeleteOldestBackup(backupFiles);
+                    }
+                }
+                
+                // Always create new backup (if enabled)
+                CreateBackup(backupDir);
+                Log("LibraryService.CreateBackupIfNeeded: Backup created successfully");
+            }
+            catch (Exception ex)
+            {
+                Log($"LibraryService.CreateBackupIfNeeded: ERROR - Exception: {ex.GetType().Name}, Message: {ex.Message}");
+                Log($"LibraryService.CreateBackupIfNeeded: ERROR - Stack trace: {ex.StackTrace}");
+                if (ex.InnerException != null)
+                {
+                    Log($"LibraryService.CreateBackupIfNeeded: ERROR - Inner exception: {ex.InnerException.Message}");
+                }
+                // Don't throw - backup failures shouldn't prevent library save
+            }
+        }
+
+        /// <summary>
+        /// Gets a list of backup files sorted by creation time (oldest first).
+        /// </summary>
+        private List<FileInfo> GetBackupFiles(string backupDir)
+        {
+            try
+            {
+                if (!Directory.Exists(backupDir))
+                {
+                    return new List<FileInfo>();
+                }
+
+                var backupFiles = Directory.GetFiles(backupDir, "library.json.backup.*")
+                    .Select(f => new FileInfo(f))
+                    .OrderBy(f => f.CreationTime)
+                    .ToList();
+                
+                Log($"LibraryService.GetBackupFiles: Found {backupFiles.Count} backup files");
+                return backupFiles;
+            }
+            catch (Exception ex)
+            {
+                Log($"LibraryService.GetBackupFiles: ERROR - Exception: {ex.GetType().Name}, Message: {ex.Message}");
+                return new List<FileInfo>();
+            }
+        }
+
+        /// <summary>
+        /// Gets the creation time of the most recent backup, or null if none exists.
+        /// </summary>
+        private DateTime? GetLastBackupTime(List<FileInfo> backupFiles)
+        {
+            if (backupFiles == null || backupFiles.Count == 0)
+            {
+                return null;
+            }
+
+            // Files are sorted oldest first, so get the last one
+            return backupFiles[backupFiles.Count - 1].CreationTime;
+        }
+
+        /// <summary>
+        /// Deletes the oldest backup file.
+        /// </summary>
+        private void DeleteOldestBackup(List<FileInfo> backupFiles)
+        {
+            if (backupFiles == null || backupFiles.Count == 0)
+            {
+                return;
+            }
+
+            try
+            {
+                var oldestBackup = backupFiles[0];
+                File.Delete(oldestBackup.FullName);
+                backupFiles.RemoveAt(0);
+                Log($"LibraryService.DeleteOldestBackup: Deleted oldest backup: {oldestBackup.Name}");
+            }
+            catch (Exception ex)
+            {
+                Log($"LibraryService.DeleteOldestBackup: ERROR - Exception: {ex.GetType().Name}, Message: {ex.Message}");
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// Deletes the most recent backup file.
+        /// </summary>
+        private void DeleteMostRecentBackup(List<FileInfo> backupFiles)
+        {
+            if (backupFiles == null || backupFiles.Count == 0)
+            {
+                return;
+            }
+
+            try
+            {
+                // Files are sorted oldest first, so get the last one
+                var mostRecentBackup = backupFiles[backupFiles.Count - 1];
+                File.Delete(mostRecentBackup.FullName);
+                backupFiles.RemoveAt(backupFiles.Count - 1);
+                Log($"LibraryService.DeleteMostRecentBackup: Deleted most recent backup: {mostRecentBackup.Name}");
+            }
+            catch (Exception ex)
+            {
+                Log($"LibraryService.DeleteMostRecentBackup: ERROR - Exception: {ex.GetType().Name}, Message: {ex.Message}");
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// Creates a new backup file with timestamp.
+        /// </summary>
+        private void CreateBackup(string backupDir)
+        {
+            try
+            {
+                var sourcePath = AppDataManager.GetLibraryIndexPath();
+                
+                if (!File.Exists(sourcePath))
+                {
+                    Log("LibraryService.CreateBackup: Source library file does not exist, skipping backup");
+                    return;
+                }
+
+                var timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
+                var backupFileName = $"library.json.backup.{timestamp}";
+                var backupPath = Path.Combine(backupDir, backupFileName);
+                
+                // Copy the library file to the backup location
+                File.Copy(sourcePath, backupPath, true);
+                Log($"LibraryService.CreateBackup: Created backup: {backupFileName}");
+            }
+            catch (Exception ex)
+            {
+                Log($"LibraryService.CreateBackup: ERROR - Exception: {ex.GetType().Name}, Message: {ex.Message}");
+                throw;
+            }
+        }
+
+        /// <summary>
         /// Imports a folder and scans for video files, creating LibraryItems.
         /// Preserves existing metadata for files that already exist in the library.
         /// </summary>

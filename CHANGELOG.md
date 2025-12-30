@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- **Implement automatic library backup system** (2025-12-29):
+  - Add automatic backup creation at program exit (before saving library)
+  - Add backup settings to General tab in Settings dialog:
+    - "Backup Library?" checkbox (default: enabled)
+    - "Minimum Backup Gap" numeric input (1-60 minutes, default: 15)
+    - "Number of Backups" numeric input (1-30 backups, default: 10)
+  - Smart backup retention logic:
+    - During testing (frequent restarts < minimum gap): Replaces most recent backup to preserve older backups
+    - During normal use (>= minimum gap): Deletes oldest backup for normal rotation
+  - Backup files stored in {AppData}/ReelRoulette/backups/ directory
+  - Backup naming format: library.json.backup.YYYY-MM-DD_HH-MM-SS
+  - All backup operations logged with comprehensive error handling
+  - Backup failures don't prevent library save (non-blocking)
+  - Prevents data loss during frequent testing by intelligently managing backup retention
+
 - **Add comprehensive statistics and improve stats panel UI** (2025-12-29):
   - Add photo and aggregate media statistics: GlobalTotalPhotosKnown, GlobalTotalMediaKnown, GlobalUniquePhotosPlayed, GlobalUniqueMediaPlayed
   - Add never-played statistics: GlobalNeverPlayedPhotosKnown, GlobalNeverPlayedMediaKnown

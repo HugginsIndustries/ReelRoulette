@@ -815,6 +815,14 @@ Each TODO entry follows this structure:
 
 These features have been fully implemented and are no longer on the TODO list:
 
+- ✅ **Library Backup System** - Automatic library backup system with configurable settings to prevent data loss during testing and development (Completed 2025-12-29)
+  - Backups created automatically at program exit (before saving library)
+  - Configurable settings: Enable/disable backups, minimum backup gap (1-60 minutes), number of backups to keep (1-30)
+  - Smart backup retention: During testing (frequent restarts < min gap), replaces most recent backup; during normal use (>= min gap), rotates oldest backup
+  - Backup files stored in {AppData}/ReelRoulette/backups/ with timestamp naming: library.json.backup.YYYY-MM-DD_HH-MM-SS
+  - Settings available in General tab of Settings dialog
+  - All backup operations logged; failures don't prevent library save
+  - Prevents data loss during frequent testing by preserving older backups when creating backups too soon
 - ✅ **Photo Support** - Comprehensive photo support with media type filtering, configurable display duration, and mixed video/photo slideshow functionality (Completed 2025-12-28)
   - Added MediaType enum (Video/Photo) and MediaTypeFilter (All/VideosOnly/PhotosOnly)
   - Library system now scans and categorizes both videos and photos
