@@ -39,11 +39,32 @@ namespace ReelRoulette
         WithoutAudioOnly = 2    // Only videos without audio
     }
 
+    public enum ImageScalingMode
+    {
+        Off = 0,      // No scaling
+        Auto = 1,     // Scale based on screen size
+        Fixed = 2     // Scale to fixed maximum dimensions
+    }
+
+    public enum MissingFileBehavior
+    {
+        AlwaysShowDialog = 0,      // Always show dialog when file is missing
+        AlwaysRemoveFromLibrary = 1 // Always remove from library without showing dialog
+    }
+
     public partial class MainWindow : Window, INotifyPropertyChanged
     {
         private readonly string[] _videoExtensions =
         {
             ".mp4", ".mkv", ".avi", ".mov", ".wmv", ".mpg", ".mpeg"
+        };
+
+        private readonly string[] _photoExtensions =
+        {
+            // Primary formats (VLC native)
+            ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp",
+            // Extended formats (bonus support)
+            ".tiff", ".tif", ".heic", ".heif", ".avif", ".ico", ".svg", ".raw", ".cr2", ".nef", ".orf", ".sr2"
         };
 
         private readonly Random _rng = new();
@@ -77,6 +98,19 @@ namespace ReelRoulette
         private bool _isLoopEnabled = true;
         private bool _autoPlayNext = true;
         private bool _isMuted = false; // Track mute state for persistence
+
+        // Photo playback
+        private System.Timers.Timer? _photoDisplayTimer;
+        private bool _isCurrentlyPlayingPhoto = false;
+        private int _photoDisplayDurationSeconds = 5; // Default 5 seconds
+        
+        // Image scaling
+        private ImageScalingMode _imageScalingMode = ImageScalingMode.Auto;
+        private int _fixedImageMaxWidth = 3840;
+        private int _fixedImageMaxHeight = 2160;
+        
+        // Missing file behavior
+        private MissingFileBehavior _missingFileBehavior = MissingFileBehavior.AlwaysShowDialog;
 
         // Duration scanning
         private CancellationTokenSource? _scanCancellationSource;
@@ -157,8 +191,14 @@ namespace ReelRoulette
         // Global stats backing fields
         private int _globalTotalPlays;
         private int _globalUniqueVideosPlayed;
+        private int _globalUniquePhotosPlayed;
+        private int _globalUniqueMediaPlayed;
         private int _globalTotalVideosKnown;
-        private int _globalNeverPlayedKnown;
+        private int _globalTotalPhotosKnown;
+        private int _globalTotalMediaKnown;
+        private int _globalNeverPlayedVideosKnown;
+        private int _globalNeverPlayedPhotosKnown;
+        private int _globalNeverPlayedMediaKnown;
         private int _globalFavoritesCount;
         private int _globalBlacklistCount;
 
@@ -250,6 +290,32 @@ namespace ReelRoulette
             }
         }
 
+        public int GlobalUniquePhotosPlayed
+        {
+            get => _globalUniquePhotosPlayed;
+            private set
+            {
+                if (_globalUniquePhotosPlayed != value)
+                {
+                    _globalUniquePhotosPlayed = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public int GlobalUniqueMediaPlayed
+        {
+            get => _globalUniqueMediaPlayed;
+            private set
+            {
+                if (_globalUniqueMediaPlayed != value)
+                {
+                    _globalUniqueMediaPlayed = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
         public int GlobalTotalVideosKnown
         {
             get => _globalTotalVideosKnown;
@@ -263,14 +329,66 @@ namespace ReelRoulette
             }
         }
 
-        public int GlobalNeverPlayedKnown
+        public int GlobalTotalPhotosKnown
         {
-            get => _globalNeverPlayedKnown;
+            get => _globalTotalPhotosKnown;
             private set
             {
-                if (_globalNeverPlayedKnown != value)
+                if (_globalTotalPhotosKnown != value)
                 {
-                    _globalNeverPlayedKnown = value;
+                    _globalTotalPhotosKnown = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public int GlobalTotalMediaKnown
+        {
+            get => _globalTotalMediaKnown;
+            private set
+            {
+                if (_globalTotalMediaKnown != value)
+                {
+                    _globalTotalMediaKnown = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public int GlobalNeverPlayedVideosKnown
+        {
+            get => _globalNeverPlayedVideosKnown;
+            private set
+            {
+                if (_globalNeverPlayedVideosKnown != value)
+                {
+                    _globalNeverPlayedVideosKnown = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public int GlobalNeverPlayedPhotosKnown
+        {
+            get => _globalNeverPlayedPhotosKnown;
+            private set
+            {
+                if (_globalNeverPlayedPhotosKnown != value)
+                {
+                    _globalNeverPlayedPhotosKnown = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public int GlobalNeverPlayedMediaKnown
+        {
+            get => _globalNeverPlayedMediaKnown;
+            private set
+            {
+                if (_globalNeverPlayedMediaKnown != value)
+                {
+                    _globalNeverPlayedMediaKnown = value;
                     OnPropertyChanged();
                 }
             }
@@ -482,7 +600,7 @@ namespace ReelRoulette
             }
         }
 
-        private string _libraryInfoText = "🎞️ 0 videos · 🎯 0 selected";
+        private string _libraryInfoText = "🎞️ 0 videos · 📷 0 photos · 🎯 0 selected";
 
         public string LibraryInfoText
         {
@@ -532,6 +650,9 @@ namespace ReelRoulette
 
         // Preview cache (thumbnails disabled - LibVLC window steals focus)
         private Avalonia.Media.Imaging.Bitmap? _cachedPreviewBitmap;
+        
+        // Current photo bitmap for display
+        private Avalonia.Media.Imaging.Bitmap? _currentPhotoBitmap;
 
         public MainWindow()
         {
@@ -583,6 +704,35 @@ namespace ReelRoulette
                 {
                     PlayPauseButton.IsChecked = true;
                     UpdateAspectRatioFromTracks();
+                    
+                    // If transitioning from photo to video, hide photo and show video now that video is playing
+                    if (PhotoImageView != null && PhotoImageView.IsVisible && VideoView != null && !VideoView.IsVisible)
+                    {
+                        Log("MediaPlayer.Playing: Transitioning from photo to video - hiding photo, showing video");
+                        
+                        // Keep photo visible during delay, then hide it and show video
+                        // This prevents briefly showing the previous video's last frame
+                        Task.Delay(50).ContinueWith(_ => // ~50ms delay for first frame to render
+                        {
+                            Dispatcher.UIThread.Post(() =>
+                            {
+                                // Hide photo and dispose bitmap
+                                if (PhotoImageView != null)
+                                {
+                                    PhotoImageView.IsVisible = false;
+                                    PhotoImageView.Source = null;
+                                }
+                                _currentPhotoBitmap?.Dispose();
+                                _currentPhotoBitmap = null;
+                                
+                                // Show VideoView now that first frame should be rendered
+                                if (VideoView != null)
+                                {
+                                    VideoView.IsVisible = true;
+                                }
+                            });
+                        });
+                    }
                 });
             };
             
@@ -799,6 +949,7 @@ namespace ReelRoulette
 
             // Clean up preview resources (preview player disabled, but clean up any cached data)
             _cachedPreviewBitmap?.Dispose();
+            _currentPhotoBitmap?.Dispose();
 
             // Clean up the timer
             if (_autoPlayTimer != null)
@@ -808,14 +959,105 @@ namespace ReelRoulette
                 _autoPlayTimer = null;
             }
 
+            // Clean up photo display timer
+            if (_photoDisplayTimer != null)
+            {
+                _photoDisplayTimer.Stop();
+                _photoDisplayTimer.Elapsed -= PhotoDisplayTimer_Elapsed;
+                _photoDisplayTimer.Dispose();
+                _photoDisplayTimer = null;
+            }
+
             base.OnClosed(e);
         }
 
         private void MediaPlayer_EndReached(object? sender, EventArgs e)
         {
-            Log($"MediaPlayer_EndReached: Video playback ended - CurrentVideoPath: {_currentVideoPath ?? "null"}");
-            // Hand off end-of-media work asynchronously so UI thread stays responsive
-            _ = HandleEndReachedAsync();
+            Log($"MediaPlayer_EndReached: Media playback ended - CurrentVideoPath: {_currentVideoPath ?? "null"}, IsPhoto: {_isCurrentlyPlayingPhoto}");
+            // Only handle EndReached for videos - photos use timer
+            if (!_isCurrentlyPlayingPhoto)
+            {
+                // Hand off end-of-media work asynchronously so UI thread stays responsive
+                _ = HandleEndReachedAsync();
+            }
+            else
+            {
+                Log("MediaPlayer_EndReached: Ignoring EndReached event for photo (using timer instead)");
+            }
+        }
+
+        private void PhotoDisplayTimer_Elapsed(object? sender, System.Timers.ElapsedEventArgs e)
+        {
+            Log("PhotoDisplayTimer_Elapsed: Photo display time expired");
+            try
+            {
+                // Stop the timer on timer thread (safe, just stops it from firing again)
+                System.Timers.Timer? timerToDispose = null;
+                if (_photoDisplayTimer != null)
+                {
+                    _photoDisplayTimer.Stop();
+                    _photoDisplayTimer.Elapsed -= PhotoDisplayTimer_Elapsed;
+                    timerToDispose = _photoDisplayTimer;
+                    _photoDisplayTimer = null;
+                }
+
+                // Use InvokeAsync directly - it properly handles async operations and won't block
+                _ = Dispatcher.UIThread.InvokeAsync(async () =>
+                {
+                    try
+                    {
+                        // Dispose timer on UI thread
+                        timerToDispose?.Dispose();
+
+                        Log($"PhotoDisplayTimer_Elapsed: Loop enabled: {_isLoopEnabled}, AutoPlayNext: {_autoPlayNext}");
+                        
+                        if (_isLoopEnabled)
+                        {
+                            Log("PhotoDisplayTimer_Elapsed: Loop is enabled - restarting photo display timer");
+                            // Restart the timer to loop the photo
+                            _photoDisplayTimer = new System.Timers.Timer(_photoDisplayDurationSeconds * 1000);
+                            _photoDisplayTimer.Elapsed += PhotoDisplayTimer_Elapsed;
+                            _photoDisplayTimer.AutoReset = false;
+                            _photoDisplayTimer.Start();
+                        }
+                        else if (_autoPlayNext)
+                        {
+                            Log("PhotoDisplayTimer_Elapsed: Auto-play next enabled - playing random media");
+                            await PlayRandomVideoAsync();
+                        }
+                        else
+                        {
+                            Log("PhotoDisplayTimer_Elapsed: No auto-play action - photo display ended");
+                            PlayPauseButton.IsChecked = false;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Log($"PhotoDisplayTimer_Elapsed: ERROR in UI thread - Exception: {ex.GetType().Name}, Message: {ex.Message}");
+                        Log($"PhotoDisplayTimer_Elapsed: ERROR - Stack trace: {ex.StackTrace}");
+                        if (ex.InnerException != null)
+                        {
+                            Log($"PhotoDisplayTimer_Elapsed: ERROR - Inner exception: {ex.InnerException.GetType().Name}, Message: {ex.InnerException.Message}");
+                        }
+                    }
+                }, DispatcherPriority.Normal).ContinueWith(task =>
+                {
+                    if (task.IsFaulted && task.Exception != null)
+                    {
+                        Log($"PhotoDisplayTimer_Elapsed: ERROR in InvokeAsync task - Exception: {task.Exception.GetType().Name}");
+                        foreach (var innerEx in task.Exception.InnerExceptions)
+                        {
+                            Log($"PhotoDisplayTimer_Elapsed: ERROR - Inner exception: {innerEx.GetType().Name}, Message: {innerEx.Message}");
+                            Log($"PhotoDisplayTimer_Elapsed: ERROR - Stack trace: {innerEx.StackTrace}");
+                        }
+                    }
+                }, TaskContinuationOptions.OnlyOnFaulted);
+            }
+            catch (Exception ex)
+            {
+                Log($"PhotoDisplayTimer_Elapsed: ERROR in timer thread - Exception: {ex.GetType().Name}, Message: {ex.Message}");
+                Log($"PhotoDisplayTimer_Elapsed: ERROR - Stack trace: {ex.StackTrace}");
+            }
         }
 
         private async Task HandleEndReachedAsync()
@@ -837,9 +1079,10 @@ namespace ReelRoulette
                 }
                 else if (_autoPlayNext && !_isLoopEnabled)
                 {
-                    Log("HandleEndReachedAsync: Auto-play next enabled - playing random video");
+                    Log("HandleEndReachedAsync: Auto-play next enabled - playing random media");
                     // If loop is off, honor autoplay to move to the next random selection
-                    await Dispatcher.UIThread.InvokeAsync(() => PlayRandomVideo());
+                    // Call PlayRandomVideoAsync directly - it handles UI thread marshalling internally
+                    await PlayRandomVideoAsync();
                 }
                 else
                 {
@@ -852,7 +1095,7 @@ namespace ReelRoulette
                 Log($"HandleEndReachedAsync: ERROR - Stack trace: {ex.StackTrace}");
                 if (ex.InnerException != null)
                 {
-                    Log($"HandleEndReachedAsync: ERROR - Inner exception: {ex.InnerException.Message}");
+                    Log($"HandleEndReachedAsync: ERROR - Inner exception: {ex.InnerException.GetType().Name}, Message: {ex.InnerException.Message}");
                 }
                 
                 await Dispatcher.UIThread.InvokeAsync(() =>
@@ -1139,21 +1382,28 @@ namespace ReelRoulette
             // Calculate global stats from library items
             if (_libraryIndex != null)
             {
-                GlobalTotalVideosKnown = _libraryIndex.Items.Count;
+                var videos = _libraryIndex.Items.Where(i => i.MediaType == MediaType.Video).ToList();
+                var photos = _libraryIndex.Items.Where(i => i.MediaType == MediaType.Photo).ToList();
+                GlobalTotalVideosKnown = videos.Count;
+                GlobalTotalPhotosKnown = photos.Count;
+                GlobalTotalMediaKnown = videos.Count + photos.Count;
                 GlobalFavoritesCount = _libraryIndex.Items.Count(i => i.IsFavorite);
                 GlobalBlacklistCount = _libraryIndex.Items.Count(i => i.IsBlacklisted);
-                Log($"RecalculateGlobalStats: Library stats - Total: {GlobalTotalVideosKnown}, Favorites: {GlobalFavoritesCount}, Blacklisted: {GlobalBlacklistCount}");
+                Log($"RecalculateGlobalStats: Library stats - Videos: {GlobalTotalVideosKnown}, Photos: {GlobalTotalPhotosKnown}, Total Media: {GlobalTotalMediaKnown}, Favorites: {GlobalFavoritesCount}, Blacklisted: {GlobalBlacklistCount}");
             }
             else
             {
                 GlobalTotalVideosKnown = knownVideos.Count;
+                GlobalTotalPhotosKnown = 0;
+                GlobalTotalMediaKnown = knownVideos.Count;
                 GlobalFavoritesCount = 0;
                 GlobalBlacklistCount = 0;
                 Log($"RecalculateGlobalStats: No library index, using known videos count: {GlobalTotalVideosKnown}");
             }
 
-            // Calculate stats from library items
-            int uniquePlayed = 0;
+            // Calculate stats from library items, distinguishing videos from photos
+            int uniqueVideosPlayed = 0;
+            int uniquePhotosPlayed = 0;
             int totalPlays = 0;
             int videosWithAudio = 0;
             int videosWithoutAudio = 0;
@@ -1164,29 +1414,47 @@ namespace ReelRoulette
                 {
                     if (item.PlayCount > 0)
                     {
-                        uniquePlayed++;
                         totalPlays += item.PlayCount;
+                        
+                        // Distinguish between videos and photos
+                        if (item.MediaType == MediaType.Video)
+                        {
+                            uniqueVideosPlayed++;
+                        }
+                        else if (item.MediaType == MediaType.Photo)
+                        {
+                            uniquePhotosPlayed++;
+                        }
                     }
                     
-                    if (item.HasAudio == true)
+                    // Audio stats only apply to videos
+                    if (item.MediaType == MediaType.Video)
                     {
-                        videosWithAudio++;
+                        if (item.HasAudio == true)
+                        {
+                            videosWithAudio++;
+                        }
+                        else if (item.HasAudio == false)
+                        {
+                            videosWithoutAudio++;
+                        }
+                        // If HasAudio == null (unknown), exclude from both counts
                     }
-                    else if (item.HasAudio == false)
-                    {
-                        videosWithoutAudio++;
-                    }
-                    // If HasAudio == null (unknown), exclude from both counts
                 }
             }
 
-            GlobalUniqueVideosPlayed = uniquePlayed;
+            GlobalUniqueVideosPlayed = uniqueVideosPlayed;
+            GlobalUniquePhotosPlayed = uniquePhotosPlayed;
+            GlobalUniqueMediaPlayed = uniqueVideosPlayed + uniquePhotosPlayed;
             GlobalTotalPlays = totalPlays;
-            GlobalNeverPlayedKnown = Math.Max(0, GlobalTotalVideosKnown - GlobalUniqueVideosPlayed);
+            GlobalNeverPlayedVideosKnown = Math.Max(0, GlobalTotalVideosKnown - GlobalUniqueVideosPlayed);
+            GlobalNeverPlayedPhotosKnown = Math.Max(0, GlobalTotalPhotosKnown - GlobalUniquePhotosPlayed);
+            GlobalNeverPlayedMediaKnown = Math.Max(0, GlobalTotalMediaKnown - GlobalUniqueMediaPlayed);
             GlobalVideosWithAudio = videosWithAudio;
             GlobalVideosWithoutAudio = videosWithoutAudio;
             
-            Log($"RecalculateGlobalStats: Playback stats - Unique played: {GlobalUniqueVideosPlayed}, Total plays: {GlobalTotalPlays}, Never played: {GlobalNeverPlayedKnown}");
+            Log($"RecalculateGlobalStats: Playback stats - Unique videos played: {GlobalUniqueVideosPlayed}, Unique photos played: {GlobalUniquePhotosPlayed}, Unique media played: {GlobalUniqueMediaPlayed}, Total plays: {GlobalTotalPlays}");
+            Log($"RecalculateGlobalStats: Never played - Videos: {GlobalNeverPlayedVideosKnown}, Photos: {GlobalNeverPlayedPhotosKnown}, Media: {GlobalNeverPlayedMediaKnown}");
             Log($"RecalculateGlobalStats: Audio stats - With audio: {GlobalVideosWithAudio}, Without audio: {GlobalVideosWithoutAudio}");
             Log("RecalculateGlobalStats: Global stats recalculation complete");
             
@@ -1200,14 +1468,15 @@ namespace ReelRoulette
             // Update immediately with total count (fast)
             if (_libraryIndex == null)
             {
-                LibraryInfoText = "Library · 🎞️ 0 videos · 🎯 0 selected";
+                LibraryInfoText = "Library · 🎞️ 0 videos · 📷 0 photos · 🎯 0 selected";
                 return;
             }
 
-            int totalVideos = _libraryIndex.Items.Count;
+            int totalVideos = _libraryIndex.Items.Count(i => i.MediaType == MediaType.Video);
+            int totalPhotos = _libraryIndex.Items.Count(i => i.MediaType == MediaType.Photo);
 
             // Show total immediately, calculate selected count asynchronously
-            LibraryInfoText = $"Library · 🎞️ {totalVideos:N0} videos · 🎯 calculating...";
+            LibraryInfoText = $"Library · 🎞️ {totalVideos:N0} videos · 📷 {totalPhotos:N0} photos · 🎯 calculating...";
             
             // Update filter summary separately
             UpdateFilterSummaryText();
@@ -1220,53 +1489,25 @@ namespace ReelRoulette
                     int selectedCount = 0;
                     if (_currentFilterState != null && _libraryIndex != null)
                     {
-                        // Use a faster approximation: count without file existence check for info display
-                        var eligible = _libraryIndex.Items.AsEnumerable();
-                        
-                        // Apply filters without file existence check (much faster)
-                        var enabledSourceIds = _libraryIndex.Sources
-                            .Where(s => s.IsEnabled)
-                            .Select(s => s.Id)
-                            .ToHashSet();
-                        eligible = eligible.Where(item => enabledSourceIds.Contains(item.SourceId));
-                        
-                        if (_currentFilterState.ExcludeBlacklisted)
-                            eligible = eligible.Where(item => !item.IsBlacklisted);
-                        if (_currentFilterState.FavoritesOnly)
-                            eligible = eligible.Where(item => item.IsFavorite);
-                        if (_currentFilterState.OnlyNeverPlayed)
-                            eligible = eligible.Where(item => item.PlayCount == 0);
-                        if (_currentFilterState.AudioFilter == AudioFilterMode.WithAudioOnly)
-                            eligible = eligible.Where(item => item.HasAudio == true);
-                        else if (_currentFilterState.AudioFilter == AudioFilterMode.WithoutAudioOnly)
-                            eligible = eligible.Where(item => item.HasAudio == false);
-                        if (_currentFilterState.MinDuration.HasValue)
-                            eligible = eligible.Where(item => item.Duration.HasValue && item.Duration.Value >= _currentFilterState.MinDuration.Value);
-                        if (_currentFilterState.MaxDuration.HasValue)
-                            eligible = eligible.Where(item => item.Duration.HasValue && item.Duration.Value <= _currentFilterState.MaxDuration.Value);
-                        if (_currentFilterState.OnlyKnownDuration)
-                            eligible = eligible.Where(item => item.Duration.HasValue);
-                        if (_currentFilterState.OnlyKnownLoudness)
-                            eligible = eligible.Where(item => item.IntegratedLoudness.HasValue);
-                        if (_currentFilterState.SelectedTags != null && _currentFilterState.SelectedTags.Count > 0)
-                        {
-                            if (_currentFilterState.TagMatchMode == TagMatchMode.And)
-                                eligible = eligible.Where(item => _currentFilterState.SelectedTags.All(tag => item.Tags.Contains(tag)));
-                            else
-                                eligible = eligible.Where(item => _currentFilterState.SelectedTags.Any(tag => item.Tags.Contains(tag)));
-                        }
-                        
+                        // Use FilterService to ensure consistent filtering logic (including photo-friendly filters)
+                        var eligible = _filterService.BuildEligibleSetWithoutFileCheck(_currentFilterState, _libraryIndex);
                         selectedCount = eligible.Count();
                     }
                     else
                     {
-                        selectedCount = totalVideos;
+                        // No filters: count all enabled items
+                        var enabledSourceIds = _libraryIndex?.Sources
+                            .Where(s => s.IsEnabled)
+                            .Select(s => s.Id)
+                            .ToHashSet() ?? new HashSet<string>();
+                        selectedCount = _libraryIndex?.Items.Count(item => enabledSourceIds.Contains(item.SourceId)) ?? 0;
                     }
                     
                     // Update UI on UI thread
                     Dispatcher.UIThread.Post(() =>
                     {
-                        LibraryInfoText = $"Library · 🎞️ {totalVideos:N0} videos · 🎯 {selectedCount:N0} selected";
+                        int totalPhotos = _libraryIndex?.Items.Count(i => i.MediaType == MediaType.Photo) ?? 0;
+                        LibraryInfoText = $"Library · 🎞️ {totalVideos:N0} videos · 📷 {totalPhotos:N0} photos · 🎯 {selectedCount:N0} selected";
                     });
                 }
                 catch (Exception ex)
@@ -1275,7 +1516,9 @@ namespace ReelRoulette
                     // Fallback: show total as selected
                     Dispatcher.UIThread.Post(() =>
                     {
-                        LibraryInfoText = $"Library · 🎞️ {totalVideos:N0} videos · 🎯 {totalVideos:N0} selected";
+                        int totalPhotos = _libraryIndex?.Items.Count(i => i.MediaType == MediaType.Photo) ?? 0;
+                        int totalMedia = totalVideos + totalPhotos;
+                        LibraryInfoText = $"Library · 🎞️ {totalVideos:N0} videos · 📷 {totalPhotos:N0} photos · 🎯 {totalMedia:N0} selected";
                     });
                 }
             });
@@ -1294,6 +1537,10 @@ namespace ReelRoulette
                 filterParts.Add("Favorites");
             if (_currentFilterState.OnlyNeverPlayed)
                 filterParts.Add("Never played");
+            if (_currentFilterState.MediaTypeFilter == MediaTypeFilter.VideosOnly)
+                filterParts.Add("Videos only");
+            else if (_currentFilterState.MediaTypeFilter == MediaTypeFilter.PhotosOnly)
+                filterParts.Add("Photos only");
             if (_currentFilterState.AudioFilter == AudioFilterMode.WithAudioOnly)
                 filterParts.Add("With audio");
             else if (_currentFilterState.AudioFilter == AudioFilterMode.WithoutAudioOnly)
@@ -2937,16 +3184,16 @@ namespace ReelRoulette
             {
                 _isInitializingLibraryPanel = true; // Suppress event handlers during initialization
                 Log("InitializeLibraryPanel: Starting");
-                Log("  Setting up LibraryItemsControl...");
+                Log("  Setting up LibraryListBox...");
                 // Set up Library panel collections and initial state
-                if (LibraryItemsControl != null)
+                if (LibraryListBox != null)
                 {
-                    LibraryItemsControl.ItemsSource = _libraryItems;
-                    Log($"InitializeLibraryPanel: LibraryItemsControl.ItemsSource set, collection has {_libraryItems.Count} items");
+                    LibraryListBox.ItemsSource = _libraryItems;
+                    Log($"InitializeLibraryPanel: LibraryListBox.ItemsSource set, collection has {_libraryItems.Count} items");
                 }
                 else
                 {
-                    Log("InitializeLibraryPanel: WARNING - LibraryItemsControl is null!");
+                    Log("InitializeLibraryPanel: WARNING - LibraryListBox is null!");
                 }
                 
                 // Initialize source combo box
@@ -3332,15 +3579,15 @@ namespace ReelRoulette
                                         }
                                         _libraryItems.Add(item);
                                     }
-                                    Log($"UpdateLibraryPanel: UI thread callback completed. _libraryItems now has {_libraryItems.Count} items. LibraryItemsControl.ItemsSource is set: {LibraryItemsControl?.ItemsSource != null}, LibraryItemsControl.IsVisible: {LibraryItemsControl?.IsVisible}, LibraryPanelContainer.IsVisible: {LibraryPanelContainer?.IsVisible}");
+                                    Log($"UpdateLibraryPanel: UI thread callback completed. _libraryItems now has {_libraryItems.Count} items. LibraryListBox.ItemsSource is set: {LibraryListBox?.ItemsSource != null}, LibraryListBox.IsVisible: {LibraryListBox?.IsVisible}, LibraryPanelContainer.IsVisible: {LibraryPanelContainer?.IsVisible}");
                                     
-                                    // Force a refresh of the ItemsControl
-                                    if (LibraryItemsControl != null)
+                                    // Force a refresh of the ListBox (virtualization will handle rendering efficiently)
+                                    if (LibraryListBox != null)
                                     {
-                                        var temp = LibraryItemsControl.ItemsSource;
-                                        LibraryItemsControl.ItemsSource = null;
-                                        LibraryItemsControl.ItemsSource = temp;
-                                        Log("UpdateLibraryPanel: Forced ItemsControl refresh");
+                                        var temp = LibraryListBox.ItemsSource;
+                                        LibraryListBox.ItemsSource = null;
+                                        LibraryListBox.ItemsSource = temp;
+                                        Log("UpdateLibraryPanel: Forced ListBox refresh");
                                     }
                                 }
                                 finally
@@ -3580,6 +3827,28 @@ namespace ReelRoulette
                 if (item.IsBlacklisted)
                 {
                     RebuildPlayQueueIfNeeded();
+                }
+            }
+        }
+
+        private void LibraryListBox_DoubleTapped(object? sender, RoutedEventArgs e)
+        {
+            if (sender is ListBox listBox && listBox.SelectedItem is LibraryItem item)
+            {
+                Log($"UI ACTION: LibraryListBox double-tapped for: {System.IO.Path.GetFileName(item.FullPath)}");
+                PlayFromPath(item.FullPath);
+            }
+        }
+
+        private void LibraryListBox_KeyDown(object? sender, KeyEventArgs e)
+        {
+            if (sender is ListBox listBox && listBox.SelectedItem is LibraryItem item)
+            {
+                if (e.Key == Key.Enter)
+                {
+                    Log($"UI ACTION: LibraryListBox Enter key pressed for: {System.IO.Path.GetFileName(item.FullPath)}");
+                    PlayFromPath(item.FullPath);
+                    e.Handled = true;
                 }
             }
         }
@@ -3997,38 +4266,8 @@ namespace ReelRoulette
             {
                 Log($"PlayFromPath: ERROR - Video file not found or path is empty. Path: {videoPath ?? "null"}, Exists: {(!string.IsNullOrEmpty(videoPath) && File.Exists(videoPath))}");
                 
-                // Show missing file dialog
-                var result = await ShowMissingFileDialogAsync(videoPath);
-                
-                if (result == MissingFileDialogResult.RemoveFromLibrary)
-                {
-                    await RemoveLibraryItemAsync(videoPath);
-                    // Status message is already set by RemoveLibraryItemAsync (success or error)
-                }
-                else if (result == MissingFileDialogResult.LocateFile)
-                {
-                    var newPath = await HandleLocateFileAsync(videoPath);
-                    if (!string.IsNullOrEmpty(newPath) && File.Exists(newPath))
-                    {
-                        // Retry playback with new path
-                        Log($"PlayFromPath: File located, retrying playback with new path: {newPath}");
-                        await PlayFromPathAsync(newPath);
-                    }
-                    else
-                    {
-                        // Preserve any specific validation/error message set during locate;
-                        // only show generic text if nothing was set.
-                        if (string.IsNullOrEmpty(StatusTextBlock.Text))
-                        {
-                            SetStatusMessage("File location cancelled or invalid.");
-                        }
-                    }
-                }
-                else
-                {
-                    // Cancel - just show status
-                    SetStatusMessage("Video file not found.");
-                }
+                // Handle missing file (works for both videos and photos)
+                await HandleMissingFileAsync(videoPath, isPhoto: false);
                 return;
             }
 
@@ -4046,24 +4285,133 @@ namespace ReelRoulette
         {
             Log($"ShowMissingFileDialogAsync: Showing dialog for missing file: {missingPath ?? "null"}");
             
-            var dialog = new MissingFileDialog(missingPath ?? "");
-            var result = await dialog.ShowDialog<MissingFileDialogResult>(this);
-            
-            Log($"ShowMissingFileDialogAsync: User selected: {result}");
-            return result;
+            // Ensure dialog is shown on UI thread
+            if (Dispatcher.UIThread.CheckAccess())
+            {
+                var dialog = new MissingFileDialog(missingPath ?? "");
+                var result = await dialog.ShowDialog<MissingFileDialogResult>(this);
+                Log($"ShowMissingFileDialogAsync: User selected: {result}");
+                return result;
+            }
+            else
+            {
+                // Marshal to UI thread - use TaskCompletionSource to properly await the async dialog
+                var tcs = new TaskCompletionSource<MissingFileDialogResult>();
+                Dispatcher.UIThread.Post(async () =>
+                {
+                    try
+                    {
+                        var dialog = new MissingFileDialog(missingPath ?? "");
+                        var result = await dialog.ShowDialog<MissingFileDialogResult>(this);
+                        Log($"ShowMissingFileDialogAsync: User selected: {result}");
+                        tcs.SetResult(result);
+                    }
+                    catch (Exception ex)
+                    {
+                        Log($"ShowMissingFileDialogAsync: ERROR - Exception: {ex.GetType().Name}, Message: {ex.Message}");
+                        tcs.SetResult(MissingFileDialogResult.Cancel);
+                    }
+                });
+                return await tcs.Task;
+            }
         }
 
-        private async Task<string?> HandleLocateFileAsync(string? oldPath)
+        private async Task HandleMissingFileAsync(string? missingPath, bool isPhoto = false)
         {
-            Log($"HandleLocateFileAsync: Opening file picker for missing file: {oldPath ?? "null"}");
+            Log($"HandleMissingFileAsync: Handling missing file - Path: {missingPath ?? "null"}, IsPhoto: {isPhoto}");
+            
+            // Marshal to UI thread if needed - use Post with TaskCompletionSource to avoid deadlocks
+            if (!Dispatcher.UIThread.CheckAccess())
+            {
+                var tcs = new TaskCompletionSource<bool>();
+                Dispatcher.UIThread.Post(async () =>
+                {
+                    try
+                    {
+                        await HandleMissingFileAsync(missingPath, isPhoto);
+                        tcs.SetResult(true);
+                    }
+                    catch (Exception ex)
+                    {
+                        Log($"HandleMissingFileAsync: ERROR marshaling to UI thread - Exception: {ex.GetType().Name}, Message: {ex.Message}");
+                        tcs.SetException(ex);
+                    }
+                });
+                await tcs.Task;
+                return;
+            }
+            
+            if (string.IsNullOrEmpty(missingPath))
+            {
+                Log("HandleMissingFileAsync: Path is null or empty");
+                SetStatusMessage(isPhoto ? "Photo file not found." : "Video file not found.");
+                return;
+            }
+
+            MissingFileDialogResult result;
+            
+            // Check setting for default behavior
+            if (_missingFileBehavior == MissingFileBehavior.AlwaysRemoveFromLibrary)
+            {
+                Log("HandleMissingFileAsync: Setting is AlwaysRemoveFromLibrary - removing from library without dialog");
+                result = MissingFileDialogResult.RemoveFromLibrary;
+            }
+            else
+            {
+                // Show dialog (we're already on UI thread)
+                result = await ShowMissingFileDialogAsync(missingPath);
+            }
+
+            if (result == MissingFileDialogResult.RemoveFromLibrary)
+            {
+                // Remove from library and then continue playback with a new file
+                Log("HandleMissingFileAsync: Removing file from library, will continue playback after removal");
+                await RemoveLibraryItemAsync(missingPath);
+                // Status message is already set by RemoveLibraryItemAsync
+                
+                // Continue playback with a new random file
+                Log("HandleMissingFileAsync: File removed, continuing playback with new random file");
+                await PlayRandomVideoAsync();
+            }
+            else if (result == MissingFileDialogResult.LocateFile)
+            {
+                var newPath = await HandleLocateFileAsync(missingPath, isPhoto);
+                if (!string.IsNullOrEmpty(newPath) && File.Exists(newPath))
+                {
+                    // Retry playback with new path
+                    Log($"HandleMissingFileAsync: File located, retrying playback with new path: {newPath}");
+                    PlayVideo(newPath);
+                }
+                else
+                {
+                    SetStatusMessage(isPhoto ? "Photo file not located." : "Video file not located.");
+                }
+            }
+            else
+            {
+                // Cancel - just show status
+                SetStatusMessage(isPhoto ? "Photo file not found." : "Video file not found.");
+            }
+        }
+
+        private async Task<string?> HandleLocateFileAsync(string? oldPath, bool isPhoto = false)
+        {
+            Log($"HandleLocateFileAsync: Opening file picker for missing file: {oldPath ?? "null"}, IsPhoto: {isPhoto}");
             
             try
             {
                 var options = new FilePickerOpenOptions
                 {
-                    Title = "Locate Video File",
+                    Title = isPhoto ? "Locate Photo File" : "Locate Video File",
                     AllowMultiple = false,
-                    FileTypeFilter = new[]
+                    FileTypeFilter = isPhoto ? new[]
+                    {
+                        new FilePickerFileType("Image Files")
+                        {
+                            Patterns = new[] { "*.jpg", "*.jpeg", "*.png", "*.gif", "*.bmp", "*.webp", "*.tiff", "*.tif", "*.heic", "*.heif", "*.avif", "*.ico", "*.svg", "*.raw", "*.cr2", "*.nef", "*.orf", "*.sr2" }
+                        },
+                        new FilePickerFileType("All Files") { Patterns = new[] { "*" } }
+                    } : new[]
                     {
                         new FilePickerFileType("Video Files")
                         {
@@ -4101,13 +4449,25 @@ namespace ReelRoulette
                     var newPath = result[0].Path.LocalPath;
                     Log($"HandleLocateFileAsync: User selected file: {newPath}");
                     
-                    // Verify it's a valid video file
+                    // Verify it's a valid file
                     var extension = Path.GetExtension(newPath).ToLowerInvariant();
-                    if (!_videoExtensions.Contains(extension))
+                    if (isPhoto)
                     {
-                        Log($"HandleLocateFileAsync: Selected file is not a valid video file: {extension}");
-                        SetStatusMessage("Selected file is not a valid video file.");
-                        return null;
+                        if (!_photoExtensions.Contains(extension))
+                        {
+                            Log($"HandleLocateFileAsync: Selected file is not a valid photo file: {extension}");
+                            SetStatusMessage("Selected file is not a valid photo file.");
+                            return null;
+                        }
+                    }
+                    else
+                    {
+                        if (!_videoExtensions.Contains(extension))
+                        {
+                            Log($"HandleLocateFileAsync: Selected file is not a valid video file: {extension}");
+                            SetStatusMessage("Selected file is not a valid video file.");
+                            return null;
+                        }
                     }
                     
                     // Update library item with new path
@@ -4422,11 +4782,39 @@ namespace ReelRoulette
 
             try
             {
+                // Stop photo timer if it's running
+                if (_photoDisplayTimer != null)
+                {
+                    _photoDisplayTimer.Stop();
+                    _photoDisplayTimer.Elapsed -= PhotoDisplayTimer_Elapsed;
+                    _photoDisplayTimer.Dispose();
+                    _photoDisplayTimer = null;
+                }
+                
+                // Save previous photo state before updating (needed for smooth transition)
+                bool wasPlayingPhoto = _isCurrentlyPlayingPhoto;
+                _isCurrentlyPlayingPhoto = false;
+
                 var previousPath = _currentVideoPath;
                 _currentVideoPath = videoPath;
                 Log($"PlayVideo: Current video path set - Previous: {previousPath ?? "null"}, New: {videoPath ?? "null"}");
-                
-                StatusTextBlock.Text = $"Playing: {System.IO.Path.GetFileName(videoPath)}";
+
+                // Determine if this is a photo or video
+                var extension = Path.GetExtension(videoPath ?? "").ToLowerInvariant();
+                var isPhoto = _photoExtensions.Contains(extension);
+                _isCurrentlyPlayingPhoto = isPhoto;
+                Log($"PlayVideo: Detected media type - Extension: {extension}, IsPhoto: {isPhoto}");
+
+                if (isPhoto)
+                {
+                    StatusTextBlock.Text = $"Photo: {System.IO.Path.GetFileName(videoPath)}";
+                    Log($"PlayVideo: Setting status text for photo: {System.IO.Path.GetFileName(videoPath)}");
+                }
+                else
+                {
+                    StatusTextBlock.Text = $"Playing: {System.IO.Path.GetFileName(videoPath)}";
+                    Log($"PlayVideo: Setting status text for video: {System.IO.Path.GetFileName(videoPath)}");
+                }
 
                 // Record playback stats
                 if (videoPath != null)
@@ -4453,44 +4841,318 @@ namespace ReelRoulette
                     _userVolumePreference = (int)VolumeSlider.Value;
                     Log($"PlayVideo: User volume preference: {_userVolumePreference}");
 
-                    Log($"PlayVideo: Creating new Media object from path");
-                    _currentMedia = new Media(_libVLC, videoPath, FromType.FromPath);
-                    
-                    // Set input-repeat option for seamless looping when loop is enabled
-                    if (_isLoopEnabled)
+                    if (isPhoto)
                     {
-                        Log("PlayVideo: Loop is enabled - adding input-repeat option");
-                        _currentMedia.AddOption(":input-repeat=65535");
-                    }
-                    
-                    // Apply volume normalization (must be called before Parse/Play)
-                    Log($"PlayVideo: Applying volume normalization - Mode: {_volumeNormalizationMode}");
-                    ApplyVolumeNormalization();
-                    
-                    // Parse media to get track information (including video dimensions)
-                    Log("PlayVideo: Parsing media to get track information");
-                    _currentMedia.Parse();
-                    
-                    // Try to get video aspect ratio from tracks immediately
-                    UpdateAspectRatioFromTracks();
-                    
-                    Log("PlayVideo: Starting playback");
-                    _mediaPlayer.Play(_currentMedia);
-                    Log("PlayVideo: Playback started successfully");
-                    
-                    // Also try again after a short delay in case tracks weren't available immediately
-                    // This helps with files where Parse() doesn't immediately populate tracks
-                    Task.Delay(100).ContinueWith(_ =>
-                    {
-                        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                        // Photos: Use Avalonia Image control instead of VLC for better performance with large images
+                        Log("PlayVideo: This is a photo - loading with Avalonia Image control");
+                        
+                        // Hide VideoView and show Image control
+                        try
                         {
-                            if (!_hasValidAspectRatio && _currentMedia != null)
+                            if (VideoView != null)
                             {
-                                Log("PlayVideo: Retrying aspect ratio update after delay");
-                                UpdateAspectRatioFromTracks();
+                                VideoView.IsVisible = false;
+                                Log("PlayVideo: VideoView hidden");
+                            }
+                            if (PhotoImageView != null)
+                            {
+                                PhotoImageView.IsVisible = true;
+                                Log("PlayVideo: PhotoImageView shown");
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Log($"PlayVideo: ERROR accessing UI elements - Exception: {ex.GetType().Name}, Message: {ex.Message}");
+                        }
+                        
+                        // Stop media player and dispose media to clear VideoView content
+                        Log("PlayVideo: Stopping media player for photo");
+                        if (_mediaPlayer != null)
+                        {
+                            try
+                            {
+                                _mediaPlayer.Stop();
+                                Log("PlayVideo: Media player stopped successfully");
+                            }
+                            catch (Exception ex)
+                            {
+                                Log($"PlayVideo: ERROR stopping media player - Exception: {ex.GetType().Name}, Message: {ex.Message}");
+                            }
+                        }
+                        
+                        // Dispose previous photo bitmap and media
+                        Log("PlayVideo: Disposing previous photo resources");
+                        _currentPhotoBitmap?.Dispose();
+                        _currentPhotoBitmap = null;
+                        if (_currentMedia != null)
+                        {
+                            _currentMedia.Dispose();
+                            _currentMedia = null;
+                        }
+                        Log("PlayVideo: Previous photo resources disposed");
+                        
+                        // Check if file exists before loading
+                        // Note: File.Exists on network drives can be slow, but we'll proceed anyway
+                        // If the file doesn't exist, we'll catch it during loading
+                        Log($"PlayVideo: Checking if photo file exists: {videoPath}");
+                        bool fileExists = false;
+                        try
+                        {
+                            fileExists = File.Exists(videoPath);
+                            Log($"PlayVideo: File exists check completed: {fileExists}");
+                        }
+                        catch (Exception ex)
+                        {
+                            Log($"PlayVideo: ERROR checking file existence - Exception: {ex.GetType().Name}, Message: {ex.Message}");
+                            // Assume file exists to avoid blocking - we'll catch the error during loading if it doesn't
+                            fileExists = true;
+                        }
+                        
+                        if (!fileExists)
+                        {
+                            Log($"PlayVideo: Photo file not found: {videoPath}");
+                            _ = HandleMissingFileAsync(videoPath, isPhoto: true);
+                            return;
+                        }
+                        Log("PlayVideo: Photo file exists, proceeding with load");
+                        
+                        // Load image asynchronously with efficient decoding
+                        Log("PlayVideo: Starting Task.Run for photo loading");
+                        _ = Task.Run(async () =>
+                        {
+                            try
+                            {
+                                Log($"PlayVideo: Task.Run started - Loading photo: {videoPath}");
+                                
+                                // Calculate max dimensions based on scaling settings
+                                int maxWidth = int.MaxValue;
+                                int maxHeight = int.MaxValue;
+                                
+                                if (_imageScalingMode != ImageScalingMode.Off)
+                                {
+                                    maxWidth = _fixedImageMaxWidth;
+                                    maxHeight = _fixedImageMaxHeight;
+                                    
+                                    if (_imageScalingMode == ImageScalingMode.Auto)
+                                    {
+                                        // Calculate max dimensions based on screen size (2x for high DPI)
+                                        // Screens.All must be accessed on UI thread
+                                        try
+                                        {
+                                            var screenInfo = await Dispatcher.UIThread.InvokeAsync(() =>
+                                            {
+                                                var screens = Screens.All;
+                                                if (screens != null && screens.Count > 0)
+                                                {
+                                                    var primaryScreen = screens[0];
+                                                    return new { Width = primaryScreen.Bounds.Width, Height = primaryScreen.Bounds.Height };
+                                                }
+                                                return null;
+                                            });
+                                            
+                                            if (screenInfo != null)
+                                            {
+                                                // Use 2x screen dimensions to account for high DPI and zoom
+                                                maxWidth = Math.Max(maxWidth, (int)(screenInfo.Width * 2));
+                                                maxHeight = Math.Max(maxHeight, (int)(screenInfo.Height * 2));
+                                            }
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            Log($"PlayVideo: Could not get screen dimensions, using fixed max: {ex.Message}");
+                                        }
+                                    }
+                                    
+                                    Log($"PlayVideo: Decoding image with max dimensions: {maxWidth}x{maxHeight}");
+                                }
+                                else
+                                {
+                                    Log("PlayVideo: Image scaling is disabled - loading full resolution");
+                                }
+                                
+                                // Load and decode image efficiently
+                                Avalonia.Media.Imaging.Bitmap? bitmap = null;
+                                using (var stream = File.OpenRead(videoPath))
+                                {
+                                    if (_imageScalingMode != ImageScalingMode.Off && maxWidth < int.MaxValue && maxHeight < int.MaxValue)
+                                    {
+                                        // Decode to max width for efficient loading (maintains aspect ratio)
+                                        bitmap = Avalonia.Media.Imaging.Bitmap.DecodeToWidth(stream, maxWidth, Avalonia.Media.Imaging.BitmapInterpolationMode.HighQuality);
+                                        
+                                        // If height exceeds max, decode to height instead
+                                        if (bitmap != null && bitmap.PixelSize.Height > maxHeight)
+                                        {
+                                            bitmap.Dispose();
+                                            stream.Position = 0;
+                                            bitmap = Avalonia.Media.Imaging.Bitmap.DecodeToHeight(stream, maxHeight, Avalonia.Media.Imaging.BitmapInterpolationMode.HighQuality);
+                                        }
+                                    }
+                                    else
+                                    {
+                                        // No scaling - decode full resolution
+                                        bitmap = new Avalonia.Media.Imaging.Bitmap(stream);
+                                    }
+                                }
+                                
+                                if (bitmap != null)
+                                {
+                                    Log($"PlayVideo: Image decoded successfully - Size: {bitmap.PixelSize.Width}x{bitmap.PixelSize.Height}");
+                                    
+                                    // Update UI on UI thread
+                                    await Dispatcher.UIThread.InvokeAsync(() =>
+                                    {
+                                        try
+                                        {
+                                            // Update Image control
+                                            if (PhotoImageView != null)
+                                            {
+                                                _currentPhotoBitmap = bitmap;
+                                                PhotoImageView.Source = bitmap;
+                                                Log("PlayVideo: Photo displayed in Image control");
+                                                
+                                                // Start photo display timer
+                                                if (_photoDisplayTimer != null)
+                                                {
+                                                    _photoDisplayTimer.Stop();
+                                                    _photoDisplayTimer.Dispose();
+                                                }
+                                                
+                                                _photoDisplayTimer = new System.Timers.Timer(_photoDisplayDurationSeconds * 1000);
+                                                _photoDisplayTimer.Elapsed += PhotoDisplayTimer_Elapsed;
+                                                _photoDisplayTimer.AutoReset = false;
+                                                _photoDisplayTimer.Start();
+                                                Log($"PlayVideo: Started photo display timer for {_photoDisplayDurationSeconds} seconds");
+                                            }
+                                            else
+                                            {
+                                                bitmap.Dispose();
+                                                Log("PlayVideo: ERROR - PhotoImageView is null, disposed bitmap");
+                                            }
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            Log($"PlayVideo: ERROR updating UI with photo - Exception: {ex.GetType().Name}, Message: {ex.Message}");
+                                            bitmap?.Dispose();
+                                        }
+                                    });
+                                }
+                                else
+                                {
+                                    Log("PlayVideo: ERROR - Failed to decode image");
+                                }
+                            }
+                            catch (FileNotFoundException ex)
+                            {
+                                Log($"PlayVideo: Photo file not found: {ex.Message}");
+                                await HandleMissingFileAsync(videoPath, isPhoto: true);
+                            }
+                            catch (Exception ex)
+                            {
+                                Log($"PlayVideo: ERROR loading photo - Exception: {ex.GetType().Name}, Message: {ex.Message}");
+                                Log($"PlayVideo: ERROR - Stack trace: {ex.StackTrace}");
+                                
+                                // Update UI to show error
+                                await Dispatcher.UIThread.InvokeAsync(() =>
+                                {
+                                    if (PhotoImageView != null)
+                                    {
+                                        PhotoImageView.Source = null;
+                                    }
+                                    SetStatusMessage($"Error loading photo: {ex.Message}");
+                                });
                             }
                         });
-                    });
+                    }
+                    else
+                    {
+                        // Videos: Check if we're transitioning from photo to video
+                        // (wasPlayingPhoto was saved earlier before _isCurrentlyPlayingPhoto was set to false)
+                        
+                        if (wasPlayingPhoto)
+                        {
+                            // Transitioning from photo to video: keep photo visible until video starts playing
+                            Log("PlayVideo: Transitioning from photo to video - keeping photo visible until video loads");
+                            
+                            // Stop and clear any previous video to prevent showing old frame
+                            if (_mediaPlayer != null)
+                            {
+                                _mediaPlayer.Stop();
+                            }
+                            if (_currentMedia != null)
+                            {
+                                Log("PlayVideo: Disposing previous media before transitioning from photo to video");
+                                _currentMedia.Dispose();
+                                _currentMedia = null;
+                            }
+                            
+                            if (VideoView != null)
+                            {
+                                VideoView.IsVisible = false; // Hide VideoView until video is ready
+                            }
+                            // PhotoImageView stays visible - will be hidden in MediaPlayer.Playing event
+                        }
+                        else
+                        {
+                            // Normal video playback (not transitioning from photo)
+                            if (PhotoImageView != null)
+                            {
+                                PhotoImageView.IsVisible = false;
+                                PhotoImageView.Source = null;
+                            }
+                            if (VideoView != null)
+                            {
+                                VideoView.IsVisible = true;
+                            }
+                        }
+                        
+                        // Dispose photo bitmap if any (but keep PhotoImageView visible if transitioning)
+                        if (!wasPlayingPhoto)
+                        {
+                            _currentPhotoBitmap?.Dispose();
+                            _currentPhotoBitmap = null;
+                        }
+                        
+                        // Videos: Create Media object and use VLC
+                        Log($"PlayVideo: Creating new Media object from path");
+                        _currentMedia = new Media(_libVLC, videoPath, FromType.FromPath);
+                        
+                        // Videos: Use existing logic
+                        // Set input-repeat option for seamless looping when loop is enabled
+                        if (_isLoopEnabled)
+                        {
+                            Log("PlayVideo: Loop is enabled - adding input-repeat option");
+                            _currentMedia.AddOption(":input-repeat=65535");
+                        }
+                        
+                        // Apply volume normalization (must be called before Parse/Play)
+                        Log($"PlayVideo: Applying volume normalization - Mode: {_volumeNormalizationMode}");
+                        ApplyVolumeNormalization();
+                        
+                        // Parse media to get track information (including video dimensions)
+                        Log("PlayVideo: Parsing media to get track information");
+                        _currentMedia.Parse();
+                        
+                        // Try to get video aspect ratio from tracks immediately
+                        UpdateAspectRatioFromTracks();
+                        
+                        Log("PlayVideo: Starting playback");
+                        _mediaPlayer!.Play(_currentMedia!);
+                        Log("PlayVideo: Playback started successfully");
+                        
+                        // Also try again after a short delay in case tracks weren't available immediately
+                        // This helps with files where Parse() doesn't immediately populate tracks
+                        Task.Delay(100).ContinueWith(_ =>
+                        {
+                            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                            {
+                                if (!_hasValidAspectRatio && _currentMedia != null)
+                                {
+                                    Log("PlayVideo: Retrying aspect ratio update after delay");
+                                    UpdateAspectRatioFromTracks();
+                                }
+                            });
+                        });
+                    }
                 }
                 else
                 {
@@ -4501,13 +5163,24 @@ namespace ReelRoulette
                 // Update PlayPause button state
                 PlayPauseButton.IsChecked = true;
 
-                // Initialize seek bar (resets to 0, disabled until length known)
-                InitializeSeekBar();
+                // Initialize seek bar (resets to 0, disabled for photos or until length known for videos)
+                InitializeSeekBar(isPhoto);
 
                 // Preview player disabled - no thumbnail generation
                 // Just clear any cached preview data
                 _cachedPreviewBitmap?.Dispose();
                 _cachedPreviewBitmap = null;
+                
+                // Clear photo bitmap when playing new media (if switching from photo to video)
+                if (!isPhoto)
+                {
+                    _currentPhotoBitmap?.Dispose();
+                    _currentPhotoBitmap = null;
+                    if (PhotoImageView != null)
+                    {
+                        PhotoImageView.Source = null;
+                    }
+                }
 
                 // Add to timeline if not navigating
                 if (!_isNavigatingTimeline)
@@ -4536,7 +5209,7 @@ namespace ReelRoulette
                 Log($"PlayVideo: Previous button enabled: {PreviousButton.IsEnabled}, Next button enabled: {NextButton.IsEnabled}");
 
                 // Initialize volume slider if first video
-                if (VolumeSlider.Value == 100 && _mediaPlayer.Volume == 0)
+                if (VolumeSlider.Value == 100 && _mediaPlayer!.Volume == 0)
                 {
                     Log("PlayVideo: Initializing volume slider (first video)");
                     _mediaPlayer.Volume = 100;
@@ -4544,7 +5217,7 @@ namespace ReelRoulette
                 }
 
                 // Apply saved mute state
-                _mediaPlayer.Mute = _isMuted;
+                _mediaPlayer!.Mute = _isMuted;
                 if (MuteButton != null)
                 {
                     MuteButton.IsChecked = _isMuted;
@@ -4604,7 +5277,7 @@ namespace ReelRoulette
                     needsRebuild = true;
                     Log("PlayRandomVideoAsync: Queue is empty - rebuilding queue");
                     // Show status only when actually rebuilding queue
-                    StatusTextBlock.Text = "Finding eligible videos...";
+                    StatusTextBlock.Text = "Finding eligible media...";
 
                     // Rebuild queue asynchronously
                     await RebuildPlayQueueIfNeededAsync();
@@ -4625,7 +5298,7 @@ namespace ReelRoulette
                         return picked;
                     });
                     Log($"PlayRandomVideoAsync: Selected video from queue: {Path.GetFileName(pick)}");
-                    PlayVideo(pick);
+                    await Dispatcher.UIThread.InvokeAsync(() => PlayVideo(pick));
                     return;
                 }
 
@@ -4637,8 +5310,8 @@ namespace ReelRoulette
                     Log($"PlayRandomVideoAsync: Eligible pool size: {pool.Length}");
                     if (pool.Length == 0)
                     {
-                        Log("PlayRandomVideoAsync: No eligible videos found");
-                        StatusTextBlock.Text = "No eligible videos found. Check your filters or import a folder.";
+                        Log("PlayRandomVideoAsync: No eligible media found");
+                        StatusTextBlock.Text = "No eligible media found. Check your filters or import a folder.";
                         return;
                     }
                     // Fall through to random selection
@@ -4662,15 +5335,15 @@ namespace ReelRoulette
 
             if (pool.Length == 0)
             {
-                Log("PlayRandomVideoAsync: No eligible videos found in pool");
-                StatusTextBlock.Text = "No eligible videos found. Check your filters or import a folder.";
+                        Log("PlayRandomVideoAsync: No eligible media found in pool");
+                        StatusTextBlock.Text = "No eligible media found. Check your filters or import a folder.";
                 return;
             }
 
             var randomIndex = _rng.Next(pool.Length);
             var randomPick = pool[randomIndex];
             Log($"PlayRandomVideoAsync: Randomly selected video {randomIndex + 1} of {pool.Length}: {Path.GetFileName(randomPick)}");
-            PlayVideo(randomPick);
+            await Dispatcher.UIThread.InvokeAsync(() => PlayVideo(randomPick));
         }
 
         #endregion
@@ -4778,6 +5451,15 @@ namespace ReelRoulette
             public bool IsMuted { get; set; } = false; // Persist mute state
             public int VolumeLevel { get; set; } = 100; // Persist volume level (0-200)
             public bool NoRepeatMode { get; set; } = true;
+            public int PhotoDisplayDurationSeconds { get; set; } = 5; // Photo display duration
+            
+            // Image scaling
+            public ImageScalingMode ImageScalingMode { get; set; } = ImageScalingMode.Auto;
+            public int FixedImageMaxWidth { get; set; } = 3840;
+            public int FixedImageMaxHeight { get; set; } = 2160;
+            
+            // Missing file behavior
+            public MissingFileBehavior MissingFileBehavior { get; set; } = MissingFileBehavior.AlwaysShowDialog;
             
             // Filter state
             public FilterState? FilterState { get; set; }
@@ -4895,6 +5577,18 @@ namespace ReelRoulette
             _isMuted = settings.IsMuted;
             _userVolumePreference = settings.VolumeLevel; // Restore saved volume level
             _noRepeatMode = settings.NoRepeatMode;
+            _photoDisplayDurationSeconds = settings.PhotoDisplayDurationSeconds > 0 ? settings.PhotoDisplayDurationSeconds : 5; // Default to 5 if invalid
+            Log($"LoadSettings: Restored photo display duration: {_photoDisplayDurationSeconds} seconds");
+            
+            // Load image scaling settings
+            _imageScalingMode = settings.ImageScalingMode;
+            _fixedImageMaxWidth = settings.FixedImageMaxWidth > 0 ? settings.FixedImageMaxWidth : 3840;
+            _fixedImageMaxHeight = settings.FixedImageMaxHeight > 0 ? settings.FixedImageMaxHeight : 2160;
+            Log($"LoadSettings: Restored image scaling - Mode: {_imageScalingMode}, FixedMax: {_fixedImageMaxWidth}x{_fixedImageMaxHeight}");
+            
+            // Load missing file behavior setting
+            _missingFileBehavior = settings.MissingFileBehavior;
+            Log($"LoadSettings: Restored missing file behavior: {_missingFileBehavior}");
             
             // Bug fix: Initialize _lastNonZeroVolume with saved volume level
             // This ensures unmuting restores the correct volume, not the default (100)
@@ -5149,6 +5843,15 @@ namespace ReelRoulette
                     IsMuted = _isMuted, // Save our tracked mute state
                     VolumeLevel = _isMuted ? _lastNonZeroVolume : _userVolumePreference, // Save last non-zero volume when muted
                     NoRepeatMode = _noRepeatMode,
+                    PhotoDisplayDurationSeconds = _photoDisplayDurationSeconds,
+                    
+                    // Image scaling
+                    ImageScalingMode = _imageScalingMode,
+                    FixedImageMaxWidth = _fixedImageMaxWidth,
+                    FixedImageMaxHeight = _fixedImageMaxHeight,
+                    
+                    // Missing file behavior
+                    MissingFileBehavior = _missingFileBehavior,
                     
                     // Filter state (always save an object, never null)
                     FilterState = _currentFilterState ?? new FilterState()
@@ -5157,6 +5860,7 @@ namespace ReelRoulette
                 Log($"SaveSettings: Window position - Position.X={Position.X}, _lastKnownPosition=({_lastKnownPosition.X}, {_lastKnownPosition.Y}), saved as WindowX={settings.WindowX}, WindowY={settings.WindowY}");
                 Log($"SaveSettings: Window size - Width={Width}, Height={Height}, WindowState={(WindowState)settings.WindowState}");
                 Log($"SaveSettings: Library panel width={settings.LibraryPanelWidth}");
+                Log($"SaveSettings: Photo display duration: {_photoDisplayDurationSeconds} seconds");
                 Log($"SaveSettings: Created AppSettings object. FilterState is null: {settings.FilterState == null}");
                 if (settings.FilterState != null)
                 {
@@ -5799,7 +6503,12 @@ namespace ReelRoulette
                 (double)intervalValue,
                 _seekStep,
                 _volumeStep,
-                _volumeNormalizationMode
+                _volumeNormalizationMode,
+                _photoDisplayDurationSeconds,
+                _imageScalingMode,
+                _fixedImageMaxWidth,
+                _fixedImageMaxHeight,
+                _missingFileBehavior
             );
             
             await dialog.ShowDialog<bool?>(this);
@@ -5820,6 +6529,21 @@ namespace ReelRoulette
                     _seekStep = dialog.GetSeekStep();
                     _volumeStep = dialog.GetVolumeStep();
                     _volumeNormalizationMode = dialog.GetVolumeNormalizationMode();
+                    var oldPhotoDuration = _photoDisplayDurationSeconds;
+                    _photoDisplayDurationSeconds = dialog.PhotoDisplayDurationSeconds;
+                    Log($"Settings: Photo display duration changed from {oldPhotoDuration} to {_photoDisplayDurationSeconds} seconds");
+                    
+                    // Update image scaling settings
+                    var oldScalingMode = _imageScalingMode;
+                    _imageScalingMode = dialog.ImageScalingMode;
+                    _fixedImageMaxWidth = dialog.FixedImageMaxWidth;
+                    _fixedImageMaxHeight = dialog.FixedImageMaxHeight;
+                    Log($"Settings: Image scaling changed - Mode: {_imageScalingMode}, FixedMax: {_fixedImageMaxWidth}x{_fixedImageMaxHeight}");
+                    
+                    // Update missing file behavior setting
+                    var oldMissingFileBehavior = _missingFileBehavior;
+                    _missingFileBehavior = dialog.MissingFileBehavior;
+                    Log($"Settings: Missing file behavior changed from {oldMissingFileBehavior} to {_missingFileBehavior}");
                     
                     // Update UI controls (these will trigger change handlers, but won't save due to flag)
                     Dispatcher.UIThread.Post(() =>
@@ -6756,7 +7480,7 @@ namespace ReelRoulette
 
         #region Seek Bar
 
-        private void InitializeSeekBar()
+        private void InitializeSeekBar(bool isPhoto = false)
         {
             if (SeekSlider == null)
                 return;
@@ -6767,13 +7491,25 @@ namespace ReelRoulette
             SeekSlider.Minimum = 0;
             SeekSlider.Maximum = 1;
             SeekSlider.Value = 0;
-            SeekSlider.IsEnabled = false;
-            UpdateStatusTimeDisplay(0);
+            SeekSlider.IsEnabled = false; // Disabled for photos, or until length known for videos
+            
+            if (isPhoto)
+            {
+                UpdateStatusTimeDisplay(0, isPhoto: true);
+            }
+            else
+            {
+                UpdateStatusTimeDisplay(0);
+            }
         }
 
         private void SeekTimer_Tick(object? sender, EventArgs e)
         {
             if (_mediaPlayer == null || SeekSlider == null)
+                return;
+
+            // Skip seek bar updates for photos
+            if (_isCurrentlyPlayingPhoto)
                 return;
 
             // Update media length from MediaPlayer
@@ -6830,12 +7566,19 @@ namespace ReelRoulette
             return $"{(int)ts.TotalHours:00}:{ts.Minutes:00}:{ts.Seconds:00}.{ts.Milliseconds:000}";
         }
 
-        private void UpdateStatusTimeDisplay(long timeMs)
+        private void UpdateStatusTimeDisplay(long timeMs, bool isPhoto = false)
         {
             if (StatusTimeTextBlock == null)
                 return;
 
-            StatusTimeTextBlock.Text = FormatTime(timeMs);
+            if (isPhoto)
+            {
+                StatusTimeTextBlock.Text = "Photo";
+            }
+            else
+            {
+                StatusTimeTextBlock.Text = FormatTime(timeMs);
+            }
         }
 
         private void SeekSlider_PointerPressed(object? sender, Avalonia.Input.PointerPressedEventArgs e)

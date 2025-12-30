@@ -86,6 +86,12 @@ namespace ReelRoulette
         /// </summary>
         [JsonPropertyName("tags")]
         public List<string> Tags { get; set; } = new List<string>();
+
+        /// <summary>
+        /// Type of media (Video or Photo). Defaults to Video for backward compatibility.
+        /// </summary>
+        [JsonPropertyName("mediaType")]
+        public MediaType MediaType { get; set; } = MediaType.Video;
     }
 }
 

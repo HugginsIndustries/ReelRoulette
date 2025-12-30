@@ -2,16 +2,46 @@
 
 ## Unreleased
 
+- **Add comprehensive statistics and improve stats panel UI** (2025-12-29):
+  - Add photo and aggregate media statistics: GlobalTotalPhotosKnown, GlobalTotalMediaKnown, GlobalUniquePhotosPlayed, GlobalUniqueMediaPlayed
+  - Add never-played statistics: GlobalNeverPlayedPhotosKnown, GlobalNeverPlayedMediaKnown
+  - Rename GlobalNeverPlayedKnown to GlobalNeverPlayedVideosKnown for consistency
+  - Update RecalculateGlobalStats to distinguish videos from photos in all calculations
+  - Reorganize stats panel with logical grouping: Library Totals, Playback Statistics, Never Played, Library Management, Video Audio Stats
+  - Change main header from "Stats" to "Global Stats" and "Current video" to "Current Video"
+  - Increase header sizes (big headers 16px, section headers 14px) and make all headers bold and white
+  - Improve visual hierarchy and readability of statistics display
+
+- **Implement library panel virtualization for large libraries** (2025-12-28):
+  - Replace ItemsControl with ListBox for native virtualization support in Avalonia
+  - Only visible items are rendered, dramatically improving performance with 10,000+ item libraries
+  - Eliminates 5-10 second lag and UI freezing when loading large libraries
+  - Maintains all existing functionality: search, sort, filters, multi-column layout, selection, keyboard navigation
+  - Smooth scrolling and UI responsiveness even with 50,000+ item libraries
+  - Performance now consistent regardless of library size
+
+- **Add comprehensive photo support with mixed slideshow functionality** (2025-12-28):
+  - Add MediaType enum (Video/Photo) and MediaTypeFilter (All/VideosOnly/PhotosOnly) for media type distinction
+  - Library system now scans and categorizes both videos and photos during import
+  - Photo playback using Avalonia Image control with configurable display duration (1-3600 seconds)
+  - Image scaling options: Off, Auto (screen-based), Fixed (user-defined max dimensions) for high-resolution images
+  - Media type filtering integrated into FilterService and FilterDialog UI
+  - Statistics updated to distinguish videos from photos (separate counts and playback stats)
+  - Missing file handling for photos with configurable default behavior (show dialog or auto-remove)
+  - Auto-continue playback when missing photos are removed from library
+  - Support for extensive image formats: JPG, PNG, GIF, BMP, WebP, TIFF, HEIC, HEIF, AVIF, ICO, SVG, RAW formats
+  - Photos integrated into queue system and random playback alongside videos
+
 - **Fix audio output bug after volume persistence** (2025-12-19):
   - Fix bug where audio had no output when unmuted due to mute state not being explicitly set to false
-  - Changed PlayVideo method to always set _mediaPlayer.Mute to match saved _isMuted preference
+  - Changed PlayVideo method to always set `_mediaPlayer.Mute` to match saved `_isMuted` preference
   - Previously only set mute state when _isMuted was true, leaving player muted from previous state when unmuted
   - Now ensures mute state is always synchronized with saved preference when starting playback
 
 - **Implement centralized Settings dialog with persistence** (2025-12-19):
   - Add Settings dialog accessible from View → Settings (S) menu or 'S' keyboard shortcut
   - Settings dialog features General (placeholder) and Playback tabs
-  - **CRITICAL FIX**: Loop, Auto-play, Mute state, Volume level, and No Repeat settings now persist across app restarts
+  - **CRITICAL FIX:** Loop, Auto-play, Mute state, Volume level, and No Repeat settings now persist across app restarts
   - **Mute state and volume level persist directly** - app restores exact volume and mute state from last session
   - Volume level (0-200) now persists between sessions - any volume setting is remembered
   - Consolidate seek step, volume step, and volume normalization settings into Settings dialog

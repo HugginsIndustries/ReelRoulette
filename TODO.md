@@ -25,20 +25,6 @@ Each TODO entry follows this structure:
 
 ## P1 - High Priority
 
-### Library Panel Virtualization
-
-- **Priority**: P1
-- **Impact**: High - Critical for users with large libraries (10,000+ videos)
-- **Description**: Implement virtualization in the Library panel to handle very large libraries efficiently. Currently, loading 10,000+ videos causes 5-10 second lag, UI freezing, and scrolling stutters because all items are rendered at once.
-- **Implementation**:
-  - Replace `ItemsControl` with `VirtualizingStackPanel` or custom virtualized control
-  - Only render visible items in viewport (~20-50 items at a time)
-  - Recycle visual containers as user scrolls
-  - Maintain current functionality: search, sort, filters, multi-column layout
-  - Test with 50,000+ item libraries to ensure consistent performance
-  - Preserve item selection and keyboard navigation
-- **Notes**: This is blocking feature for users with large video collections (anime fans, content creators, archivists). A 50,000 item list should perform identically to a 50 item list.
-
 ### Background Refresh of Imported Sources
 
 - **Priority**: P1
@@ -829,6 +815,20 @@ Each TODO entry follows this structure:
 
 These features have been fully implemented and are no longer on the TODO list:
 
+- ✅ **Photo Support** - Comprehensive photo support with media type filtering, configurable display duration, and mixed video/photo slideshow functionality (Completed 2025-12-28)
+  - Added MediaType enum (Video/Photo) and MediaTypeFilter (All/VideosOnly/PhotosOnly)
+  - Library system now scans and categorizes both videos and photos
+  - Photo playback using Avalonia Image control with configurable display duration (1-3600s)
+  - Image scaling options: Off, Auto (screen-based), Fixed (user-defined max dimensions)
+  - Media type filtering integrated into FilterService and FilterDialog
+  - Statistics updated to distinguish videos from photos (GlobalTotalVideosKnown, GlobalTotalPhotosKnown, GlobalTotalMediaKnown, etc.)
+  - Missing file handling for photos with configurable default behavior
+  - Auto-continue playback when missing photos are removed from library
+- ✅ **Library Panel Virtualization** - Implemented virtualization in Library panel using ListBox with VirtualizingStackPanel for efficient rendering of large libraries (Completed 2025-12-28)
+  - Replaced ItemsControl with ListBox for native virtualization support
+  - Only visible items are rendered, dramatically improving performance with 10,000+ item libraries
+  - Maintains all existing functionality: search, sort, filters, multi-column layout
+  - Smooth scrolling and UI responsiveness even with very large libraries
 - ✅ **Centralized Settings Dialog** - Tabbed settings dialog with playback preferences, keyboard shortcuts, and persistence (Completed 2025-12-19)
   - General tab (placeholder) and Playback tab implemented
   - Loop, Auto-play, Mute state, Volume level, No Repeat settings now persist

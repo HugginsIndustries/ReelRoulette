@@ -70,6 +70,99 @@
                                            FontSize="12"/>
                             </Grid>
                         </StackPanel>
+
+                        <!-- Photo Display Duration Section -->
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="Photo Display Duration" 
+                                       FontWeight="SemiBold" 
+                                       FontSize="13"
+                                       Margin="0,0,0,4"/>
+                            <Grid ColumnDefinitions="Auto * Auto" ColumnSpacing="8">
+                                <TextBlock Grid.Column="0" 
+                                           Text="Duration (seconds):" 
+                                           VerticalAlignment="Center"/>
+                                <NumericUpDown Grid.Column="1"
+                                               x:Name="PhotoDisplayDurationNumericUpDown"
+                                               Value="{Binding PhotoDisplayDurationSeconds}"
+                                               Minimum="1"
+                                               Maximum="3600"
+                                               FormatString="0"
+                                               Increment="1"
+                                               ShowButtonSpinner="True"
+                                               HorizontalAlignment="Left"
+                                               Width="150"/>
+                                <TextBlock Grid.Column="2"
+                                           Text="(1-3600)"
+                                           VerticalAlignment="Center"
+                                           Foreground="Gray"
+                                           FontSize="12"/>
+                            </Grid>
+                        </StackPanel>
+
+                        <!-- Image Scaling Section -->
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="Image Scaling" 
+                                       FontWeight="SemiBold" 
+                                       FontSize="13"
+                                       Margin="0,0,0,4"/>
+                            <RadioButton Content="No scaling (full resolution)"
+                                         GroupName="ImageScaling"
+                                         IsChecked="{Binding ImageScalingOff}"/>
+                            <RadioButton Content="Auto (based on screen size)"
+                                         GroupName="ImageScaling"
+                                         IsChecked="{Binding ImageScalingAuto}"/>
+                            <RadioButton Content="Fixed maximum"
+                                         GroupName="ImageScaling"
+                                         IsChecked="{Binding ImageScalingFixed}"/>
+                            
+                            <!-- Fixed maximum dimensions (only enabled when Fixed is selected) -->
+                            <Grid ColumnDefinitions="Auto * Auto *" 
+                                  ColumnSpacing="8"
+                                  Margin="20,4,0,0"
+                                  IsEnabled="{Binding ImageScalingFixed}">
+                                <TextBlock Grid.Column="0" 
+                                           Text="Max width:" 
+                                           VerticalAlignment="Center"/>
+                                <NumericUpDown Grid.Column="1"
+                                               x:Name="FixedImageMaxWidthNumericUpDown"
+                                               Value="{Binding FixedImageMaxWidth}"
+                                               Minimum="100"
+                                               Maximum="16384"
+                                               FormatString="0"
+                                               Increment="100"
+                                               ShowButtonSpinner="True"
+                                               HorizontalAlignment="Left"
+                                               Width="120"/>
+                                <TextBlock Grid.Column="2" 
+                                           Text="Max height:" 
+                                           VerticalAlignment="Center"
+                                           Margin="8,0,0,0"/>
+                                <NumericUpDown Grid.Column="3"
+                                               x:Name="FixedImageMaxHeightNumericUpDown"
+                                               Value="{Binding FixedImageMaxHeight}"
+                                               Minimum="100"
+                                               Maximum="16384"
+                                               FormatString="0"
+                                               Increment="100"
+                                               ShowButtonSpinner="True"
+                                               HorizontalAlignment="Left"
+                                               Width="120"/>
+                            </Grid>
+                        </StackPanel>
+
+                        <!-- Missing File Behavior Section -->
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="Missing File Behavior" 
+                                       FontWeight="SemiBold" 
+                                       FontSize="13"
+                                       Margin="0,0,0,4"/>
+                            <RadioButton Content="Always show dialog"
+                                         GroupName="MissingFileBehavior"
+                                         IsChecked="{Binding MissingFileBehaviorAlwaysShowDialog}"/>
+                            <RadioButton Content="Always remove from library"
+                                         GroupName="MissingFileBehavior"
+                                         IsChecked="{Binding MissingFileBehaviorAlwaysRemoveFromLibrary}"/>
+                        </StackPanel>
                         
                         <!-- Seek Step Section -->
                         <StackPanel Spacing="8">

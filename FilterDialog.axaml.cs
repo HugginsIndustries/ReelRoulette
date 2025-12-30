@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
 
@@ -17,6 +18,16 @@ namespace ReelRoulette
         private FilterState _filterState;
         private LibraryIndex? _libraryIndex;
         private bool _applyClicked = false;
+
+        private static void Log(string message)
+        {
+            try
+            {
+                var logPath = Path.Combine(AppDataManager.AppDataDirectory, "last.log");
+                File.AppendAllText(logPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {message}\n");
+            }
+            catch { }
+        }
 
         public FilterDialog(FilterState filterState, LibraryIndex? libraryIndex)
         {
@@ -79,6 +90,55 @@ namespace ReelRoulette
             {
                 _filterState.OnlyKnownLoudness = value;
                 OnPropertyChanged();
+            }
+        }
+
+        // Media type filter
+        public bool MediaTypeAll
+        {
+            get => _filterState.MediaTypeFilter == MediaTypeFilter.All;
+            set
+            {
+                if (value)
+                {
+                    Log($"FilterDialog: Media type filter changed to All (Videos and Photos)");
+                    _filterState.MediaTypeFilter = MediaTypeFilter.All;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(MediaTypeVideosOnly));
+                    OnPropertyChanged(nameof(MediaTypePhotosOnly));
+                }
+            }
+        }
+
+        public bool MediaTypeVideosOnly
+        {
+            get => _filterState.MediaTypeFilter == MediaTypeFilter.VideosOnly;
+            set
+            {
+                if (value)
+                {
+                    Log($"FilterDialog: Media type filter changed to Videos Only");
+                    _filterState.MediaTypeFilter = MediaTypeFilter.VideosOnly;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(MediaTypeAll));
+                    OnPropertyChanged(nameof(MediaTypePhotosOnly));
+                }
+            }
+        }
+
+        public bool MediaTypePhotosOnly
+        {
+            get => _filterState.MediaTypeFilter == MediaTypeFilter.PhotosOnly;
+            set
+            {
+                if (value)
+                {
+                    Log($"FilterDialog: Media type filter changed to Photos Only");
+                    _filterState.MediaTypeFilter = MediaTypeFilter.PhotosOnly;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(MediaTypeAll));
+                    OnPropertyChanged(nameof(MediaTypeVideosOnly));
+                }
             }
         }
 
@@ -310,6 +370,7 @@ namespace ReelRoulette
             AudioFilterAll = true;
             NoMinDuration = true;
             NoMaxDuration = true;
+            MediaTypeAll = true;
             _filterState.SelectedTags.Clear();
             TagMatchAnd = true;
             UpdateTagSelectionState();

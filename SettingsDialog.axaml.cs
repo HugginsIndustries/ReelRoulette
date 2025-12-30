@@ -19,6 +19,9 @@ namespace ReelRoulette
         // Timer interval
         private decimal _timerIntervalSeconds;
         
+        // Photo display duration
+        private int _photoDisplayDurationSeconds = 5;
+        
         // Seek step
         private bool _seekStepFrame;
         private bool _seekStep1s;
@@ -313,6 +316,134 @@ namespace ReelRoulette
             }
         }
 
+        // Photo display duration property
+        public int PhotoDisplayDurationSeconds
+        {
+            get => _photoDisplayDurationSeconds;
+            set
+            {
+                if (_photoDisplayDurationSeconds != value)
+                {
+                    _photoDisplayDurationSeconds = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        // Image scaling
+        private ImageScalingMode _imageScalingMode = ImageScalingMode.Auto;
+        private int _fixedImageMaxWidth = 3840;
+        private int _fixedImageMaxHeight = 2160;
+        
+        // Missing file behavior
+        private MissingFileBehavior _missingFileBehavior = MissingFileBehavior.AlwaysShowDialog;
+
+        // Image scaling mode properties
+        public bool ImageScalingOff
+        {
+            get => _imageScalingMode == ImageScalingMode.Off;
+            set
+            {
+                if (value)
+                {
+                    _imageScalingMode = ImageScalingMode.Off;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(ImageScalingAuto));
+                    OnPropertyChanged(nameof(ImageScalingFixed));
+                }
+            }
+        }
+
+        public bool ImageScalingAuto
+        {
+            get => _imageScalingMode == ImageScalingMode.Auto;
+            set
+            {
+                if (value)
+                {
+                    _imageScalingMode = ImageScalingMode.Auto;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(ImageScalingOff));
+                    OnPropertyChanged(nameof(ImageScalingFixed));
+                }
+            }
+        }
+
+        public bool ImageScalingFixed
+        {
+            get => _imageScalingMode == ImageScalingMode.Fixed;
+            set
+            {
+                if (value)
+                {
+                    _imageScalingMode = ImageScalingMode.Fixed;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(ImageScalingOff));
+                    OnPropertyChanged(nameof(ImageScalingAuto));
+                }
+            }
+        }
+
+        // Fixed image max dimensions
+        public int FixedImageMaxWidth
+        {
+            get => _fixedImageMaxWidth;
+            set
+            {
+                if (_fixedImageMaxWidth != value)
+                {
+                    _fixedImageMaxWidth = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public int FixedImageMaxHeight
+        {
+            get => _fixedImageMaxHeight;
+            set
+            {
+                if (_fixedImageMaxHeight != value)
+                {
+                    _fixedImageMaxHeight = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public ImageScalingMode ImageScalingMode => _imageScalingMode;
+
+        // Missing file behavior properties
+        public bool MissingFileBehaviorAlwaysShowDialog
+        {
+            get => _missingFileBehavior == MissingFileBehavior.AlwaysShowDialog;
+            set
+            {
+                if (value)
+                {
+                    _missingFileBehavior = MissingFileBehavior.AlwaysShowDialog;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(MissingFileBehaviorAlwaysRemoveFromLibrary));
+                }
+            }
+        }
+
+        public bool MissingFileBehaviorAlwaysRemoveFromLibrary
+        {
+            get => _missingFileBehavior == MissingFileBehavior.AlwaysRemoveFromLibrary;
+            set
+            {
+                if (value)
+                {
+                    _missingFileBehavior = MissingFileBehavior.AlwaysRemoveFromLibrary;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(MissingFileBehaviorAlwaysShowDialog));
+                }
+            }
+        }
+
+        public MissingFileBehavior MissingFileBehavior => _missingFileBehavior;
+
         // Helper methods to get/set from AppSettings-like structure
         public void LoadFromSettings(
             bool loopEnabled,
@@ -321,7 +452,12 @@ namespace ReelRoulette
             double? intervalSeconds,
             string? seekStep,
             int volumeStep,
-            VolumeNormalizationMode volumeNormMode)
+            VolumeNormalizationMode volumeNormMode,
+            int photoDisplayDurationSeconds = 5,
+            ImageScalingMode imageScalingMode = ImageScalingMode.Auto,
+            int fixedImageMaxWidth = 3840,
+            int fixedImageMaxHeight = 2160,
+            MissingFileBehavior missingFileBehavior = MissingFileBehavior.AlwaysShowDialog)
         {
             // Set backing fields directly and notify
             _loopEnabled = loopEnabled;
@@ -419,6 +555,26 @@ namespace ReelRoulette
             OnPropertyChanged(nameof(VolumeNormSimple));
             OnPropertyChanged(nameof(VolumeNormLibrary));
             OnPropertyChanged(nameof(VolumeNormAdvanced));
+            
+            // Photo display duration
+            _photoDisplayDurationSeconds = photoDisplayDurationSeconds;
+            OnPropertyChanged(nameof(PhotoDisplayDurationSeconds));
+            
+            // Image scaling
+            _imageScalingMode = imageScalingMode;
+            _fixedImageMaxWidth = fixedImageMaxWidth;
+            _fixedImageMaxHeight = fixedImageMaxHeight;
+            
+            OnPropertyChanged(nameof(ImageScalingOff));
+            OnPropertyChanged(nameof(ImageScalingAuto));
+            OnPropertyChanged(nameof(ImageScalingFixed));
+            OnPropertyChanged(nameof(FixedImageMaxWidth));
+            OnPropertyChanged(nameof(FixedImageMaxHeight));
+            
+            // Missing file behavior
+            _missingFileBehavior = missingFileBehavior;
+            OnPropertyChanged(nameof(MissingFileBehaviorAlwaysShowDialog));
+            OnPropertyChanged(nameof(MissingFileBehaviorAlwaysRemoveFromLibrary));
         }
 
         public string GetSeekStep()
@@ -453,6 +609,22 @@ namespace ReelRoulette
                 // Clamp to valid range
                 _timerIntervalSeconds = Math.Max(1, Math.Min(3600, _timerIntervalSeconds));
                 OnPropertyChanged(nameof(TimerIntervalSeconds));
+                return false;
+            }
+            
+            // Validate photo display duration
+            if (_photoDisplayDurationSeconds < 1 || _photoDisplayDurationSeconds > 3600)
+            {
+                return false;
+            }
+            
+            // Validate fixed image dimensions
+            if (_fixedImageMaxWidth < 100 || _fixedImageMaxWidth > 16384)
+            {
+                return false;
+            }
+            if (_fixedImageMaxHeight < 100 || _fixedImageMaxHeight > 16384)
+            {
                 return false;
             }
             

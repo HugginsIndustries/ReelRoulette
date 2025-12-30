@@ -77,40 +77,46 @@ namespace ReelRoulette
                 eligible = eligible.Where(item => item.PlayCount == 0);
             }
 
-            // 6. Audio filter
+            // 6. Audio filter (only applies to videos, photos are always included)
             if (filterState.AudioFilter == AudioFilterMode.WithAudioOnly)
             {
-                eligible = eligible.Where(item => item.HasAudio == true);
+                eligible = eligible.Where(item => 
+                    item.MediaType == MediaType.Photo || item.HasAudio == true);
             }
             else if (filterState.AudioFilter == AudioFilterMode.WithoutAudioOnly)
             {
-                eligible = eligible.Where(item => item.HasAudio == false);
+                eligible = eligible.Where(item => 
+                    item.MediaType == MediaType.Photo || item.HasAudio == false);
             }
             // AudioFilterMode.PlayAll means no filtering
 
-            // 7. Duration filter
+            // 7. Duration filter (only applies to videos, photos are always included)
             if (filterState.MinDuration.HasValue)
             {
                 eligible = eligible.Where(item =>
-                    item.Duration.HasValue && item.Duration.Value >= filterState.MinDuration.Value);
+                    item.MediaType == MediaType.Photo ||
+                    (item.Duration.HasValue && item.Duration.Value >= filterState.MinDuration.Value));
             }
 
             if (filterState.MaxDuration.HasValue)
             {
                 eligible = eligible.Where(item =>
-                    item.Duration.HasValue && item.Duration.Value <= filterState.MaxDuration.Value);
+                    item.MediaType == MediaType.Photo ||
+                    (item.Duration.HasValue && item.Duration.Value <= filterState.MaxDuration.Value));
             }
 
-            // 8. OnlyKnownDuration check
+            // 8. OnlyKnownDuration check (only applies to videos, photos are always included)
             if (filterState.OnlyKnownDuration)
             {
-                eligible = eligible.Where(item => item.Duration.HasValue);
+                eligible = eligible.Where(item => 
+                    item.MediaType == MediaType.Photo || item.Duration.HasValue);
             }
 
-            // 9. OnlyKnownLoudness check
+            // 9. OnlyKnownLoudness check (only applies to videos, photos are always included)
             if (filterState.OnlyKnownLoudness)
             {
-                eligible = eligible.Where(item => item.IntegratedLoudness.HasValue);
+                eligible = eligible.Where(item => 
+                    item.MediaType == MediaType.Photo || item.IntegratedLoudness.HasValue);
             }
 
             // 10. Tag filter
@@ -129,6 +135,17 @@ namespace ReelRoulette
                         filterState.SelectedTags.Any(tag => item.Tags.Contains(tag)));
                 }
             }
+
+            // 11. Media type filter
+            if (filterState.MediaTypeFilter == MediaTypeFilter.VideosOnly)
+            {
+                eligible = eligible.Where(item => item.MediaType == MediaType.Video);
+            }
+            else if (filterState.MediaTypeFilter == MediaTypeFilter.PhotosOnly)
+            {
+                eligible = eligible.Where(item => item.MediaType == MediaType.Photo);
+            }
+            // MediaTypeFilter.All means no filtering
 
             // Materialize to count results (for logging)
             var eligibleList = eligible.ToList();
@@ -194,39 +211,45 @@ namespace ReelRoulette
                 eligible = eligible.Where(item => item.PlayCount == 0);
             }
 
-            // 6. Audio filter
+            // 6. Audio filter (only applies to videos, photos are always included)
             if (filterState.AudioFilter == AudioFilterMode.WithAudioOnly)
             {
-                eligible = eligible.Where(item => item.HasAudio == true);
+                eligible = eligible.Where(item => 
+                    item.MediaType == MediaType.Photo || item.HasAudio == true);
             }
             else if (filterState.AudioFilter == AudioFilterMode.WithoutAudioOnly)
             {
-                eligible = eligible.Where(item => item.HasAudio == false);
+                eligible = eligible.Where(item => 
+                    item.MediaType == MediaType.Photo || item.HasAudio == false);
             }
 
-            // 7. Duration filter
+            // 7. Duration filter (only applies to videos, photos are always included)
             if (filterState.MinDuration.HasValue)
             {
                 eligible = eligible.Where(item =>
-                    item.Duration.HasValue && item.Duration.Value >= filterState.MinDuration.Value);
+                    item.MediaType == MediaType.Photo ||
+                    (item.Duration.HasValue && item.Duration.Value >= filterState.MinDuration.Value));
             }
 
             if (filterState.MaxDuration.HasValue)
             {
                 eligible = eligible.Where(item =>
-                    item.Duration.HasValue && item.Duration.Value <= filterState.MaxDuration.Value);
+                    item.MediaType == MediaType.Photo ||
+                    (item.Duration.HasValue && item.Duration.Value <= filterState.MaxDuration.Value));
             }
 
-            // 8. OnlyKnownDuration check
+            // 8. OnlyKnownDuration check (only applies to videos, photos are always included)
             if (filterState.OnlyKnownDuration)
             {
-                eligible = eligible.Where(item => item.Duration.HasValue);
+                eligible = eligible.Where(item => 
+                    item.MediaType == MediaType.Photo || item.Duration.HasValue);
             }
 
-            // 9. OnlyKnownLoudness check
+            // 9. OnlyKnownLoudness check (only applies to videos, photos are always included)
             if (filterState.OnlyKnownLoudness)
             {
-                eligible = eligible.Where(item => item.IntegratedLoudness.HasValue);
+                eligible = eligible.Where(item => 
+                    item.MediaType == MediaType.Photo || item.IntegratedLoudness.HasValue);
             }
 
             // 10. Tag filter
@@ -243,6 +266,17 @@ namespace ReelRoulette
                         filterState.SelectedTags.Any(tag => item.Tags.Contains(tag)));
                 }
             }
+
+            // 11. Media type filter
+            if (filterState.MediaTypeFilter == MediaTypeFilter.VideosOnly)
+            {
+                eligible = eligible.Where(item => item.MediaType == MediaType.Video);
+            }
+            else if (filterState.MediaTypeFilter == MediaTypeFilter.PhotosOnly)
+            {
+                eligible = eligible.Where(item => item.MediaType == MediaType.Photo);
+            }
+            // MediaTypeFilter.All means no filtering
 
             var eligibleList = eligible.ToList();
             Log($"FilterService.BuildEligibleSetWithoutFileCheck: Completed - {eligibleList.Count} eligible items (without file check)");

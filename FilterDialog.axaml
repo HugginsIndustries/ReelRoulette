@@ -45,6 +45,26 @@
                               IsChecked="{Binding OnlyKnownLoudness}"/>
                 </StackPanel>
 
+                <!-- Media Type Section -->
+                <StackPanel Spacing="8">
+                    <TextBlock Text="Media Type" 
+                               FontWeight="SemiBold" 
+                               FontSize="13"
+                               Margin="0,0,0,4"/>
+                    <RadioButton x:Name="MediaTypeAllRadio"
+                                 Content="All (Videos and Photos)"
+                                 GroupName="MediaType"
+                                 IsChecked="{Binding MediaTypeAll}"/>
+                    <RadioButton x:Name="MediaTypeVideosOnlyRadio"
+                                 Content="Videos only"
+                                 GroupName="MediaType"
+                                 IsChecked="{Binding MediaTypeVideosOnly}"/>
+                    <RadioButton x:Name="MediaTypePhotosOnlyRadio"
+                                 Content="Photos only"
+                                 GroupName="MediaType"
+                                 IsChecked="{Binding MediaTypePhotosOnly}"/>
+                </StackPanel>
+
                 <!-- Audio Section -->
                 <StackPanel Spacing="8">
                     <TextBlock Text="Audio Filter" 

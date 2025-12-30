@@ -25,6 +25,14 @@ namespace ReelRoulette
             ".mp4", ".mkv", ".avi", ".mov", ".wmv", ".mpg", ".mpeg"
         };
 
+        private static readonly string[] PhotoExtensions = 
+        {
+            // Primary formats (VLC native)
+            ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp",
+            // Extended formats (bonus support)
+            ".tiff", ".tif", ".heic", ".heif", ".avif", ".ico", ".svg", ".raw", ".cr2", ".nef", ".orf", ".sr2"
+        };
+
         private LibraryIndex _libraryIndex = new LibraryIndex();
         private readonly object _lock = new object();
         private readonly object _saveLock = new object(); // Separate lock for file I/O operations
@@ -183,14 +191,16 @@ namespace ReelRoulette
                     }
                 }
 
-                // Scan for video files
+                // Scan for media files (videos and photos)
                 var videoFiles = GetVideoFiles(rootPath);
-                Log($"LibraryService.ImportFolder: Found {videoFiles.Length} video files");
+                var photoFiles = GetPhotoFiles(rootPath);
+                var allMediaFiles = videoFiles.Concat(photoFiles).ToArray();
+                Log($"LibraryService.ImportFolder: Found {videoFiles.Length} video files and {photoFiles.Length} photo files");
                 
                 int importedCount = 0;
                 int updatedCount = 0;
 
-                foreach (var filePath in videoFiles)
+                foreach (var filePath in allMediaFiles)
                 {
                     // Check if item already exists
                     var existingItem = _libraryIndex.Items.FirstOrDefault(i =>
@@ -212,6 +222,10 @@ namespace ReelRoulette
                     }
                     else
                     {
+                        // Determine media type by extension
+                        var extension = Path.GetExtension(filePath).ToLowerInvariant();
+                        var mediaType = VideoExtensions.Contains(extension) ? MediaType.Video : MediaType.Photo;
+
                         // Create new item
                         var newItem = new LibraryItem
                         {
@@ -219,6 +233,7 @@ namespace ReelRoulette
                             FullPath = filePath,
                             RelativePath = GetRelativePath(rootPath, filePath),
                             FileName = Path.GetFileName(filePath),
+                            MediaType = mediaType,
                             IsFavorite = false,
                             IsBlacklisted = false,
                             PlayCount = 0,
@@ -362,11 +377,13 @@ namespace ReelRoulette
                     throw new DirectoryNotFoundException($"Source directory not found: {source.RootPath}");
                 }
                 
-                Log("LibraryService.RefreshSource: Scanning for video files...");
+                Log("LibraryService.RefreshSource: Scanning for media files...");
 
-                // Get current files on disk
-                var videoFilesOnDisk = new HashSet<string>(
-                    GetVideoFiles(source.RootPath),
+                // Get current files on disk (videos and photos)
+                var videoFiles = GetVideoFiles(source.RootPath);
+                var photoFiles = GetPhotoFiles(source.RootPath);
+                var allMediaFilesOnDisk = new HashSet<string>(
+                    videoFiles.Concat(photoFiles),
                     StringComparer.OrdinalIgnoreCase);
 
                 // Get current items for this source
@@ -383,16 +400,21 @@ namespace ReelRoulette
                 int updated = 0;
 
                 // Add new files
-                foreach (var filePath in videoFilesOnDisk)
+                foreach (var filePath in allMediaFilesOnDisk)
                 {
                     if (!currentPaths.Contains(filePath))
                     {
+                        // Determine media type by extension
+                        var extension = Path.GetExtension(filePath).ToLowerInvariant();
+                        var mediaType = VideoExtensions.Contains(extension) ? MediaType.Video : MediaType.Photo;
+
                         var newItem = new LibraryItem
                         {
                             SourceId = source.Id,
                             FullPath = filePath,
                             RelativePath = GetRelativePath(source.RootPath, filePath),
                             FileName = Path.GetFileName(filePath),
+                            MediaType = mediaType,
                             IsFavorite = false,
                             IsBlacklisted = false,
                             PlayCount = 0,
@@ -405,7 +427,7 @@ namespace ReelRoulette
 
                 // Remove deleted files
                 var itemsToRemove = currentItems
-                    .Where(i => !videoFilesOnDisk.Contains(i.FullPath))
+                    .Where(i => !allMediaFilesOnDisk.Contains(i.FullPath))
                     .ToList();
 
                 foreach (var item in itemsToRemove)
@@ -415,15 +437,18 @@ namespace ReelRoulette
                 }
 
                 // Update paths for existing items (in case files moved)
-                foreach (var item in currentItems.Where(i => videoFilesOnDisk.Contains(i.FullPath)))
+                foreach (var item in currentItems.Where(i => allMediaFilesOnDisk.Contains(i.FullPath)))
                 {
-                    var newPath = videoFilesOnDisk.First(f =>
+                    var newPath = allMediaFilesOnDisk.First(f =>
                         string.Equals(f, item.FullPath, StringComparison.OrdinalIgnoreCase));
                     if (newPath != item.FullPath)
                     {
                         item.FullPath = newPath;
                         item.RelativePath = GetRelativePath(source.RootPath, newPath);
                         item.FileName = Path.GetFileName(newPath);
+                        // Update media type if extension changed
+                        var extension = Path.GetExtension(newPath).ToLowerInvariant();
+                        item.MediaType = VideoExtensions.Contains(extension) ? MediaType.Video : MediaType.Photo;
                         updated++;
                     }
                 }
@@ -436,6 +461,34 @@ namespace ReelRoulette
                     Removed = removed,
                     Updated = updated
                 };
+            }
+        }
+
+        /// <summary>
+        /// Gets all photo files recursively from a directory.
+        /// </summary>
+        private string[] GetPhotoFiles(string rootPath)
+        {
+            Log($"LibraryService.GetPhotoFiles: Starting - rootPath = {rootPath}");
+            try
+            {
+                Log($"LibraryService.GetPhotoFiles: Calling Directory.GetFiles with SearchOption.AllDirectories");
+                var allFiles = Directory.GetFiles(rootPath, "*", SearchOption.AllDirectories);
+                Log($"LibraryService.GetPhotoFiles: Found {allFiles.Length} total files, filtering for photo extensions");
+                
+                var photoFiles = allFiles
+                    .Where(f => PhotoExtensions.Contains(
+                        Path.GetExtension(f).ToLowerInvariant()))
+                    .ToArray();
+                
+                Log($"LibraryService.GetPhotoFiles: Found {photoFiles.Length} photo files after filtering");
+                return photoFiles;
+            }
+            catch (Exception ex)
+            {
+                Log($"LibraryService.GetPhotoFiles: ERROR - Exception: {ex.GetType().Name}, Message: {ex.Message}");
+                Log($"LibraryService.GetPhotoFiles: ERROR - Stack trace: {ex.StackTrace}");
+                return Array.Empty<string>();
             }
         }
 
@@ -517,16 +570,20 @@ namespace ReelRoulette
             lock (_lock)
             {
                 var items = _libraryIndex.Items.Where(i => i.SourceId == sourceId).ToList();
+                var videos = items.Where(i => i.MediaType == MediaType.Video).ToList();
+                var photos = items.Where(i => i.MediaType == MediaType.Photo).ToList();
                 
                 var stats = new SourceStatistics
                 {
-                    TotalVideos = items.Count,
-                    VideosWithAudio = items.Count(i => i.HasAudio == true),
-                    VideosWithoutAudio = items.Count(i => i.HasAudio == false)
+                    TotalVideos = videos.Count,
+                    TotalPhotos = photos.Count,
+                    TotalMedia = items.Count,
+                    VideosWithAudio = videos.Count(i => i.HasAudio == true),
+                    VideosWithoutAudio = videos.Count(i => i.HasAudio == false)
                 };
 
-                // Calculate total duration for items with known durations
-                var itemsWithDuration = items.Where(i => i.Duration.HasValue).ToList();
+                // Calculate total duration for video items with known durations
+                var itemsWithDuration = videos.Where(i => i.Duration.HasValue).ToList();
                 if (itemsWithDuration.Any())
                 {
                     stats.TotalDuration = TimeSpan.FromTicks(itemsWithDuration.Sum(i => i.Duration!.Value.Ticks));
@@ -538,7 +595,7 @@ namespace ReelRoulette
                     stats.AverageDuration = null;
                 }
 
-                Log($"LibraryService.GetSourceStatistics: Completed - TotalVideos: {stats.TotalVideos}, TotalDuration: {stats.TotalDuration}");
+                Log($"LibraryService.GetSourceStatistics: Completed - TotalVideos: {stats.TotalVideos}, TotalPhotos: {stats.TotalPhotos}, TotalMedia: {stats.TotalMedia}, TotalDuration: {stats.TotalDuration}");
                 return stats;
             }
         }
@@ -560,6 +617,8 @@ namespace ReelRoulette
     public class SourceStatistics
     {
         public int TotalVideos { get; set; }
+        public int TotalPhotos { get; set; }
+        public int TotalMedia { get; set; }
         public int VideosWithAudio { get; set; }
         public int VideosWithoutAudio { get; set; }
         public TimeSpan TotalDuration { get; set; }

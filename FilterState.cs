@@ -68,6 +68,12 @@ namespace ReelRoulette
         /// </summary>
         [JsonPropertyName("onlyKnownLoudness")]
         public bool OnlyKnownLoudness { get; set; }
+
+        /// <summary>
+        /// Media type filter (All, VideosOnly, PhotosOnly). Default is All.
+        /// </summary>
+        [JsonPropertyName("mediaTypeFilter")]
+        public MediaTypeFilter MediaTypeFilter { get; set; } = MediaTypeFilter.All;
     }
 }
 
