@@ -1530,6 +1530,7 @@ namespace ReelRoulette
                     // Update UI on UI thread
                     Dispatcher.UIThread.Post(() =>
                     {
+                        int totalVideos = _libraryIndex?.Items.Count(i => i.MediaType == MediaType.Video) ?? 0;
                         int totalPhotos = _libraryIndex?.Items.Count(i => i.MediaType == MediaType.Photo) ?? 0;
                         LibraryInfoText = $"Library · 🎞️ {totalVideos:N0} videos · 📷 {totalPhotos:N0} photos · 🎯 {selectedCount:N0} selected";
                     });
@@ -1540,6 +1541,7 @@ namespace ReelRoulette
                     // Fallback: show total as selected
                     Dispatcher.UIThread.Post(() =>
                     {
+                        int totalVideos = _libraryIndex?.Items.Count(i => i.MediaType == MediaType.Video) ?? 0;
                         int totalPhotos = _libraryIndex?.Items.Count(i => i.MediaType == MediaType.Photo) ?? 0;
                         int totalMedia = totalVideos + totalPhotos;
                         LibraryInfoText = $"Library · 🎞️ {totalVideos:N0} videos · 📷 {totalPhotos:N0} photos · 🎯 {totalMedia:N0} selected";
@@ -3282,7 +3284,7 @@ namespace ReelRoulette
                 else
                 {
                     Log("  WARNING: _libraryIndex is null, skipping UpdateLibraryPanel()");
-                    LibraryInfoText = "Library · 🎞️ 0 videos · 🎯 0 selected";
+                    LibraryInfoText = "Library · 🎞️ 0 videos · 📷 0 photos · 🎯 0 selected";
                     UpdateFilterSummaryText();
                     StatusTextBlock.Text = "Ready: No library loaded.";
                 }
@@ -3843,28 +3845,44 @@ namespace ReelRoulette
         {
             // Don't process if we're updating the library items UI
             if (_isUpdatingLibraryItems || _isInitializingLibraryPanel)
+            {
+                Log($"LibraryItemBlacklist_Changed: Ignoring - UI update in progress");
                 return;
-                
-            // Don't process if this is being set programmatically (during UI binding updates)
-            // Only process if it's a user interaction
+            }
+            
+            // Only process if it's a user interaction (the toggle button is loaded and user clicks it)
             if (sender is ToggleButton toggle && toggle.Tag is LibraryItem item)
             {
-                // Check if the toggle's IsChecked matches the item's current state
-                // If it doesn't match, this is a user action. If it matches, it's just a binding update.
                 var toggleState = toggle.IsChecked == true;
-                if (item.IsBlacklisted == toggleState)
+                
+                // CRITICAL FIX: Get the item from the library index to ensure we have the latest state
+                // The bound item might be stale due to virtualization recycling
+                var libraryItem = _libraryService.FindItemByPath(item.FullPath);
+                if (libraryItem == null)
                 {
-                    // State matches - this is likely a binding update, not a user action
+                    Log($"LibraryItemBlacklist_Changed: Item not found in library: {item.FileName}");
                     return;
                 }
                 
-                Log($"UI ACTION: LibraryItemBlacklist toggled for '{item.FileName}' to: {toggleState}");
-                item.IsBlacklisted = toggleState;
-                _libraryService.UpdateItem(item);
+                // CRITICAL FIX: Check if the item's state already matches the toggle state
+                // If it matches, this is a binding update from virtualization, not a user action
+                // This prevents blacklist state from being incorrectly changed when scrolling
+                // When virtualization recycles items, bindings update and fire events even when state matches
+                if (libraryItem.IsBlacklisted == toggleState)
+                {
+                    // State already matches - this is definitely a binding update, not a user action
+                    // This happens when virtualization recycles items and updates bindings during scrolling
+                    Log($"LibraryItemBlacklist_Changed: Ignoring binding update for '{item.FileName}' - state already matches: {toggleState}");
+                    return;
+                }
+                
+                Log($"UI ACTION: LibraryItemBlacklist toggled for '{item.FileName}' to: {toggleState} (was: {libraryItem.IsBlacklisted})");
+                libraryItem.IsBlacklisted = toggleState;
+                _libraryService.UpdateItem(libraryItem);
                 _ = Task.Run(() => _libraryService.SaveLibrary());
                 UpdateLibraryPanel();
                 // Rebuild queue if item was blacklisted
-                if (item.IsBlacklisted)
+                if (libraryItem.IsBlacklisted)
                 {
                     RebuildPlayQueueIfNeeded();
                 }
@@ -4203,7 +4221,7 @@ namespace ReelRoulette
                         Log($"STATE CHANGE: Queue filtered - Removed (no longer eligible): {removedCount}, Remaining: {_playQueue.Count}");
                     }
                     // Clear the status messages
-                    if (StatusTextBlock.Text == "Finding eligible videos..." || 
+                    if (StatusTextBlock.Text == "Finding eligible media..." || 
                         StatusTextBlock.Text == "Applying filters and rebuilding queue...")
                     {
                         StatusTextBlock.Text = "Ready";
@@ -4256,7 +4274,7 @@ namespace ReelRoulette
                     Log($"STATE CHANGE: Queue rebuilt - Previous size: {oldCount}, Removed (no longer eligible): {removedCount}, Added: {shuffled.Count}, New size: {_playQueue.Count}");
                 }
                 // Clear the status messages once queue is built
-                if (StatusTextBlock.Text == "Finding eligible videos..." || 
+                if (StatusTextBlock.Text == "Finding eligible media..." || 
                     StatusTextBlock.Text == "Applying filters and rebuilding queue...")
                 {
                     StatusTextBlock.Text = "Ready";
@@ -4304,10 +4322,18 @@ namespace ReelRoulette
             // Respects existing favorite/blacklist status (no automatic changes)
             if (string.IsNullOrEmpty(videoPath) || !File.Exists(videoPath))
             {
-                Log($"PlayFromPath: ERROR - Video file not found or path is empty. Path: {videoPath ?? "null"}, Exists: {(!string.IsNullOrEmpty(videoPath) && File.Exists(videoPath))}");
+                Log($"PlayFromPath: ERROR - File not found or path is empty. Path: {videoPath ?? "null"}, Exists: {(!string.IsNullOrEmpty(videoPath) && File.Exists(videoPath))}");
+                
+                // Determine if it's a photo or video based on file extension
+                bool isPhoto = false;
+                if (!string.IsNullOrEmpty(videoPath))
+                {
+                    var extension = Path.GetExtension(videoPath).ToLowerInvariant();
+                    isPhoto = _photoExtensions.Contains(extension);
+                }
                 
                 // Handle missing file (works for both videos and photos)
-                await HandleMissingFileAsync(videoPath, isPhoto: false);
+                await HandleMissingFileAsync(videoPath, isPhoto: isPhoto);
                 return;
             }
 
@@ -4960,6 +4986,8 @@ namespace ReelRoulette
                         Log("PlayVideo: Starting Task.Run for photo loading");
                         _ = Task.Run(async () =>
                         {
+                            // Declare bitmap at outer scope so it's accessible in catch blocks
+                            Avalonia.Media.Imaging.Bitmap? bitmap = null;
                             try
                             {
                                 Log($"PlayVideo: Task.Run started - Loading photo: {videoPath}");
@@ -5011,7 +5039,6 @@ namespace ReelRoulette
                                 }
                                 
                                 // Load and decode image efficiently
-                                Avalonia.Media.Imaging.Bitmap? bitmap = null;
                                 using (var stream = File.OpenRead(videoPath))
                                 {
                                     if (_imageScalingMode != ImageScalingMode.Off && maxWidth < int.MaxValue && maxHeight < int.MaxValue)
@@ -5039,42 +5066,62 @@ namespace ReelRoulette
                                     Log($"PlayVideo: Image decoded successfully - Size: {bitmap.PixelSize.Width}x{bitmap.PixelSize.Height}");
                                     
                                     // Update UI on UI thread
-                                    await Dispatcher.UIThread.InvokeAsync(() =>
+                                    try
                                     {
-                                        try
+                                        await Dispatcher.UIThread.InvokeAsync(() =>
                                         {
-                                            // Update Image control
-                                            if (PhotoImageView != null)
+                                            try
                                             {
-                                                _currentPhotoBitmap = bitmap;
-                                                PhotoImageView.Source = bitmap;
-                                                Log("PlayVideo: Photo displayed in Image control");
-                                                
-                                                // Start photo display timer
-                                                if (_photoDisplayTimer != null)
+                                                // Update Image control
+                                                if (PhotoImageView != null)
                                                 {
-                                                    _photoDisplayTimer.Stop();
-                                                    _photoDisplayTimer.Dispose();
+                                                    _currentPhotoBitmap = bitmap;
+                                                    PhotoImageView.Source = bitmap;
+                                                    Log("PlayVideo: Photo displayed in Image control");
+                                                    
+                                                    // Start photo display timer
+                                                    if (_photoDisplayTimer != null)
+                                                    {
+                                                        _photoDisplayTimer.Stop();
+                                                        _photoDisplayTimer.Dispose();
+                                                    }
+                                                    
+                                                    _photoDisplayTimer = new System.Timers.Timer(_photoDisplayDurationSeconds * 1000);
+                                                    _photoDisplayTimer.Elapsed += PhotoDisplayTimer_Elapsed;
+                                                    _photoDisplayTimer.AutoReset = false;
+                                                    _photoDisplayTimer.Start();
+                                                    Log($"PlayVideo: Started photo display timer for {_photoDisplayDurationSeconds} seconds");
                                                 }
-                                                
-                                                _photoDisplayTimer = new System.Timers.Timer(_photoDisplayDurationSeconds * 1000);
-                                                _photoDisplayTimer.Elapsed += PhotoDisplayTimer_Elapsed;
-                                                _photoDisplayTimer.AutoReset = false;
-                                                _photoDisplayTimer.Start();
-                                                Log($"PlayVideo: Started photo display timer for {_photoDisplayDurationSeconds} seconds");
+                                                else
+                                                {
+                                                    bitmap.Dispose();
+                                                    bitmap = null; // Prevent double-disposal in outer catch handler
+                                                    Log("PlayVideo: ERROR - PhotoImageView is null, disposed bitmap");
+                                                }
                                             }
-                                            else
+                                            catch (Exception ex)
                                             {
-                                                bitmap.Dispose();
-                                                Log("PlayVideo: ERROR - PhotoImageView is null, disposed bitmap");
+                                                Log($"PlayVideo: ERROR updating UI with photo - Exception: {ex.GetType().Name}, Message: {ex.Message}");
+                                                // Clear Image control reference before disposing bitmap
+                                                if (PhotoImageView != null)
+                                                {
+                                                    PhotoImageView.Source = null;
+                                                }
+                                                bitmap?.Dispose();
+                                                bitmap = null; // Prevent double-disposal in outer catch handler
+                                                _currentPhotoBitmap = null;
                                             }
-                                        }
-                                        catch (Exception ex)
-                                        {
-                                            Log($"PlayVideo: ERROR updating UI with photo - Exception: {ex.GetType().Name}, Message: {ex.Message}");
-                                            bitmap?.Dispose();
-                                        }
-                                    });
+                                        });
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        // Exception during InvokeAsync setup - dispose bitmap
+                                        Log($"PlayVideo: ERROR during UI thread invocation - Exception: {ex.GetType().Name}, Message: {ex.Message}");
+                                        bitmap?.Dispose();
+                                        bitmap = null; // Prevent double-disposal in outer catch handler
+                                        _currentPhotoBitmap = null;
+                                        throw; // Re-throw to be caught by outer handler
+                                    }
                                 }
                                 else
                                 {
@@ -5090,6 +5137,14 @@ namespace ReelRoulette
                             {
                                 Log($"PlayVideo: ERROR loading photo - Exception: {ex.GetType().Name}, Message: {ex.Message}");
                                 Log($"PlayVideo: ERROR - Stack trace: {ex.StackTrace}");
+                                
+                                // Dispose bitmap if it exists (in case exception occurred before InvokeAsync)
+                                // Note: bitmap variable is in scope here
+                                if (bitmap != null)
+                                {
+                                    bitmap.Dispose();
+                                    _currentPhotoBitmap = null;
+                                }
                                 
                                 // Update UI to show error
                                 await Dispatcher.UIThread.InvokeAsync(() =>
@@ -5296,7 +5351,10 @@ namespace ReelRoulette
             if (_libraryIndex == null || _libraryIndex.Items.Count == 0)
             {
                 Log("PlayRandomVideoAsync: No library available - prompting user to import folder");
-                StatusTextBlock.Text = "Please import a folder first (Library → Import Folder).";
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    StatusTextBlock.Text = "Please import a folder first (Library → Import Folder).";
+                });
                 return;
             }
 
@@ -5317,7 +5375,10 @@ namespace ReelRoulette
                     needsRebuild = true;
                     Log("PlayRandomVideoAsync: Queue is empty - rebuilding queue");
                     // Show status only when actually rebuilding queue
-                    StatusTextBlock.Text = "Finding eligible media...";
+                    await Dispatcher.UIThread.InvokeAsync(() =>
+                    {
+                        StatusTextBlock.Text = "Finding eligible media...";
+                    });
 
                     // Rebuild queue asynchronously
                     await RebuildPlayQueueIfNeededAsync();
@@ -5351,7 +5412,10 @@ namespace ReelRoulette
                     if (pool.Length == 0)
                     {
                         Log("PlayRandomVideoAsync: No eligible media found");
-                        StatusTextBlock.Text = "No eligible media found. Check your filters or import a folder.";
+                        await Dispatcher.UIThread.InvokeAsync(() =>
+                        {
+                            StatusTextBlock.Text = "No eligible media found. Check your filters or import a folder.";
+                        });
                         return;
                     }
                     // Fall through to random selection
@@ -5368,7 +5432,10 @@ namespace ReelRoulette
             {
                 Log("PlayRandomVideoAsync: No-repeat mode is disabled - getting eligible pool directly");
                 // Direct random selection (no repeat mode off) - show status since we need to get pool
-                StatusTextBlock.Text = "Finding eligible videos...";
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    StatusTextBlock.Text = "Finding eligible media...";
+                });
                 pool = await GetEligiblePoolAsync();
                 Log($"PlayRandomVideoAsync: Eligible pool size: {pool.Length}");
             }
@@ -5376,7 +5443,10 @@ namespace ReelRoulette
             if (pool.Length == 0)
             {
                         Log("PlayRandomVideoAsync: No eligible media found in pool");
-                        StatusTextBlock.Text = "No eligible media found. Check your filters or import a folder.";
+                        await Dispatcher.UIThread.InvokeAsync(() =>
+                        {
+                            StatusTextBlock.Text = "No eligible media found. Check your filters or import a folder.";
+                        });
                 return;
             }
 

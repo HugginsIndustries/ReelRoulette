@@ -2,6 +2,31 @@
 
 ## Unreleased
 
+- **Fix inconsistent UI text and data consistency issues after photo support added** (2026-01-03):
+  - Fix library info text to include photo count when library index is null (matches format used elsewhere)
+  - Update status message from "Finding eligible videos..." to "Finding eligible media..." for consistency
+  - Update status message checks to use "Finding eligible media..." instead of "Finding eligible videos..."
+  - Fix stale video count in library info text: recalculate both video and photo counts in async callback to prevent inconsistent display
+  - Fix MediaType not updated for existing items during import: update MediaType based on current file extension to correct items imported before photo support
+  - Fix blacklist toggle using stale item data with virtualization: use FindItemByPath() like favorites handler to prevent incorrect state changes when scrolling
+  - Fix missing file handler incorrectly detecting file type: detect photo/video from file extension in PlayFromPathAsync instead of hardcoding isPhoto: false
+  - Fix photo bitmap resource leak: clear _currentPhotoBitmap reference in exception handler to prevent disposing already-disposed object
+  - Fix photo bitmap resource leak during InvokeAsync setup: dispose bitmap if exception occurs during UI thread invocation setup
+  - Fix photo bitmap scope issue: move bitmap declaration before try block to ensure it's accessible in catch handlers
+  - Fix photo bitmap double-disposal: set bitmap to null after disposal when PhotoImageView is unavailable to prevent outer catch handler from disposing again
+  - Fix photo bitmap double-disposal in inner exception handler: set bitmap to null after disposal to prevent outer catch handler from disposing again
+  - Fix photo bitmap double-disposal in InvokeAsync setup exception handler: set bitmap to null after disposal before re-throwing to prevent outer catch handler from disposing again
+  - Fix Image control dangling reference: clear PhotoImageView.Source before disposing bitmap when exception occurs during photo display to prevent rendering errors
+  - Fix cross-thread UI access violations: marshal StatusTextBlock updates to UI thread after GetEligiblePoolAsync() completes on background thread
+  - Fix cross-thread UI access violations in PlayRandomVideoAsync: marshal StatusTextBlock updates to UI thread when method is called from background threads (e.g., from MediaPlayer_EndReached)
+
+- **Refactor project structure** (2026-01-03):
+  - Move all program files (.cs, .axaml, .csproj, app.manifest) into `source/` subfolder
+  - Keep markdown files (.md), .gitignore, and resource folders (licenses, runtimes) at repository root
+  - Move assets folder from root to `source/` folder for proper Windows taskbar icon embedding
+  - Update .csproj file paths to reference root-level folders (licenses, runtimes) with relative paths
+  - Improve project organization and maintainability
+
 - **Implement automatic library backup system** (2025-12-29):
   - Add automatic backup creation at program exit (before saving library)
   - Add backup settings to General tab in Settings dialog:

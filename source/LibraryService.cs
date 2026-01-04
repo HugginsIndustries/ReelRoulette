@@ -402,6 +402,9 @@ namespace ReelRoulette
                         existingItem.FullPath = filePath;
                         existingItem.RelativePath = GetRelativePath(rootPath, filePath);
                         existingItem.FileName = Path.GetFileName(filePath);
+                        // Update MediaType based on current file extension (may have changed or was incorrect before photo support)
+                        var extension = Path.GetExtension(filePath).ToLowerInvariant();
+                        existingItem.MediaType = VideoExtensions.Contains(extension) ? MediaType.Video : MediaType.Photo;
                         updatedCount++;
                     }
                     else
