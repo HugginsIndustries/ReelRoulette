@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **Fix photo loading race condition** (2026-01-03):
+  - Fix race condition where multiple photo loading tasks can complete out of order and overwrite current photo display
+  - Validate that loaded photo is still current before updating UI to prevent stale photo loads from overwriting newer photos
+  - Add validation checks in success, error, and missing file handlers to ensure only current photo updates are applied
+
 - **Fix inconsistent UI text and data consistency issues after photo support added** (2026-01-03):
   - Fix library info text to include photo count when library index is null (matches format used elsewhere)
   - Update status message from "Finding eligible videos..." to "Finding eligible media..." for consistency

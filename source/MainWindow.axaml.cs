@@ -5072,6 +5072,16 @@ namespace ReelRoulette
                                         {
                                             try
                                             {
+                                                // Validate that this photo is still the current one before updating UI
+                                                // Prevents race condition where multiple photo loads complete out of order
+                                                if (_currentVideoPath != videoPath)
+                                                {
+                                                    Log($"PlayVideo: Photo load completed but is no longer current - Current: {_currentVideoPath ?? "null"}, Loaded: {videoPath}");
+                                                    bitmap?.Dispose();
+                                                    bitmap = null;
+                                                    return;
+                                                }
+                                                
                                                 // Update Image control
                                                 if (PhotoImageView != null)
                                                 {
@@ -5131,7 +5141,15 @@ namespace ReelRoulette
                             catch (FileNotFoundException ex)
                             {
                                 Log($"PlayVideo: Photo file not found: {ex.Message}");
-                                await HandleMissingFileAsync(videoPath, isPhoto: true);
+                                // Only handle missing file if this photo is still current
+                                if (_currentVideoPath == videoPath)
+                                {
+                                    await HandleMissingFileAsync(videoPath, isPhoto: true);
+                                }
+                                else
+                                {
+                                    Log($"PlayVideo: Photo file not found but photo is no longer current - Current: {_currentVideoPath ?? "null"}, Missing: {videoPath}");
+                                }
                             }
                             catch (Exception ex)
                             {
@@ -5146,9 +5164,16 @@ namespace ReelRoulette
                                     _currentPhotoBitmap = null;
                                 }
                                 
-                                // Update UI to show error
+                                // Update UI to show error (only if this photo is still current)
                                 await Dispatcher.UIThread.InvokeAsync(() =>
                                 {
+                                    // Validate that this photo is still the current one before showing error
+                                    if (_currentVideoPath != videoPath)
+                                    {
+                                        Log($"PlayVideo: Photo error occurred but photo is no longer current - Current: {_currentVideoPath ?? "null"}, Failed: {videoPath}");
+                                        return;
+                                    }
+                                    
                                     if (PhotoImageView != null)
                                     {
                                         PhotoImageView.Source = null;
