@@ -260,27 +260,6 @@ Each TODO entry follows this structure:
   - Position should persist across app restarts
   - Consider adding "Resume without asking" option to skip dialog
 
-### Enhanced Library Statistics Panel
-
-- **Priority**: P2
-- **Impact**: Medium - Better insights into library composition and usage
-- **Description**: Enhance the existing statistics panel to show more useful metrics and context-aware information. Current stats show basic counters but could provide better insights for library management and decision-making.
-- **Implementation**:
-  - Add top tags section showing most common tags with counts (e.g., "Top Tags: Action (234), Comedy (189), Drama (156)")
-  - Rename "Current video" section to "Current File" for consistency (supports both videos and photos)
-  - Make stats context-aware based on media type:
-    - For videos: Show duration, has audio, loudness, peak (current behavior)
-    - For photos: Hide video-specific stats (duration, audio, loudness), potentially add resolution, EXIF data, etc.
-    - Only show relevant information based on current file type
-  - Consider adding additional metadata display:
-    - Resolution (width x height) for both videos and photos
-    - File size
-    - File creation/modification date
-    - Tags assigned to current file
-  - Organize stats into logical sections with clear headers
-  - Maintain existing global statistics (total videos, photos, favorites, etc.)
-- **Notes**: Focus on actionable insights that help users understand their library composition and make better filtering/selection decisions. Keep it simple and practical, not overwhelming.
-
 ### Enhanced Search and Sorting
 
 - **Priority**: P2
@@ -576,6 +555,11 @@ Each TODO entry follows this structure:
 
 These features have been fully implemented and are no longer on the TODO list:
 
+- ✅ **Enhanced Library Statistics Panel** - Context-aware stats panel with media type support (Completed 2026-01-04)
+  - Renamed "Current Video" section to "Current File" for consistency with photo support
+  - Added context-aware visibility: video-specific stats (duration, audio, loudness, peak) automatically hidden for photos
+  - Renamed UpdateCurrentVideoStatsUi() to UpdateCurrentFileStatsUi() for clarity
+  - Stats panel now adapts display based on MediaType (Video/Photo)
 - ✅ **Batch Operations in Library Panel** - Multi-select support with batch operations (Completed 2026-01-03)
   - Multi-select with Ctrl+Click, Shift+Click support
   - Context menu with batch operations: Add/Remove from Favorites, Add/Remove from Blacklist, Add/Remove Tags, Remove from Library, Clear Playback Stats

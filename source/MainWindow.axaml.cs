@@ -598,6 +598,21 @@ namespace ReelRoulette
             }
         }
 
+        private bool _isCurrentFileVideo = true;
+
+        public bool IsCurrentFileVideo
+        {
+            get => _isCurrentFileVideo;
+            private set
+            {
+                if (_isCurrentFileVideo != value)
+                {
+                    _isCurrentFileVideo = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
         private string _currentVideoTagsDisplay = "None";
 
         public string CurrentVideoTagsDisplay
@@ -839,7 +854,7 @@ namespace ReelRoulette
 
             // Initialize stats (after loading all data)
             RecalculateGlobalStats();
-            UpdateCurrentVideoStatsUi();
+            UpdateCurrentFileStatsUi();
             
             // Set DataContext for bindings (after all initialization)
             DataContext = this;
@@ -1222,7 +1237,7 @@ namespace ReelRoulette
             // Update stats when favorites change
             Log("FavoriteToggle_Changed: Recalculating global stats");
             RecalculateGlobalStats();
-            UpdateCurrentVideoStatsUi();
+            UpdateCurrentFileStatsUi();
             Log("FavoriteToggle_Changed: Favorite toggle change complete");
 
             // Queue will be rebuilt when filters change via FilterDialog
@@ -1381,9 +1396,9 @@ namespace ReelRoulette
             }
 
             // Update UI immediately (we're already on UI thread when called from PlayVideo)
-            // Call UpdateCurrentVideoStatsUi first to show current video, then recalculate globals
+            // Call UpdateCurrentFileStatsUi first to show current file, then recalculate globals
             Log("RecordPlayback: Updating UI stats");
-            UpdateCurrentVideoStatsUi();
+            UpdateCurrentFileStatsUi();
             RecalculateGlobalStats();
             Log("RecordPlayback: Completed");
         }
@@ -1560,19 +1575,19 @@ namespace ReelRoulette
             }
         }
 
-        private void UpdateCurrentVideoStatsUi()
+        private void UpdateCurrentFileStatsUi()
         {
             // Ensure we're on UI thread for property updates
             if (!Avalonia.Threading.Dispatcher.UIThread.CheckAccess())
             {
-                Avalonia.Threading.Dispatcher.UIThread.Post(() => UpdateCurrentVideoStatsUi());
+                Avalonia.Threading.Dispatcher.UIThread.Post(() => UpdateCurrentFileStatsUi());
                 return;
             }
 
             if (string.IsNullOrEmpty(_currentVideoPath))
             {
-                Log("UpdateCurrentVideoStatsUi: No current video path, clearing stats UI");
-                CurrentVideoFileName = "No video playing";
+                Log("UpdateCurrentFileStatsUi: No current file path, clearing stats UI");
+                CurrentVideoFileName = "No file playing";
                 CurrentVideoFullPath = "";
                 CurrentVideoPlayCount = 0;
                 CurrentVideoLastPlayedDisplay = "Never";
@@ -1583,21 +1598,22 @@ namespace ReelRoulette
                 CurrentVideoLoudnessDisplay = "Unknown";
                 CurrentVideoPeakDisplay = "Unknown";
                 CurrentVideoTagsDisplay = "None";
+                IsCurrentFileVideo = true; // Default to video for backward compatibility
                 return;
             }
 
             var path = _currentVideoPath;
             if (path == null)
             {
-                Log("UpdateCurrentVideoStatsUi: Current video path is null, returning");
+                Log("UpdateCurrentFileStatsUi: Current file path is null, returning");
                 return;
             }
 
-            Log($"UpdateCurrentVideoStatsUi: Updating stats UI for video: {Path.GetFileName(path)}");
+            Log($"UpdateCurrentFileStatsUi: Updating stats UI for file: {Path.GetFileName(path)}");
             CurrentVideoFileName = System.IO.Path.GetFileName(path) ?? "";
             CurrentVideoFullPath = path ?? "";
 
-            // Look up all video info from library item
+            // Look up all file info from library item
             int playCount = 0;
             DateTime? lastPlayedUtc = null;
             bool isFavorite = false;
@@ -1621,11 +1637,16 @@ namespace ReelRoulette
                     hasAudio = item.HasAudio;
                     integratedLoudness = item.IntegratedLoudness;
                     peakDb = item.PeakDb;
-                    Log($"UpdateCurrentVideoStatsUi: Found library item - PlayCount: {playCount}, Favorite: {isFavorite}, Blacklisted: {isBlacklisted}, HasAudio: {hasAudio}, Duration: {duration?.TotalSeconds ?? -1}s");
+                    
+                    // Set media type for visibility binding
+                    IsCurrentFileVideo = item.MediaType == MediaType.Video;
+                    
+                    Log($"UpdateCurrentFileStatsUi: Found library item - MediaType: {item.MediaType}, PlayCount: {playCount}, Favorite: {isFavorite}, Blacklisted: {isBlacklisted}, HasAudio: {hasAudio}, Duration: {duration?.TotalSeconds ?? -1}s");
                 }
                 else
                 {
-                    Log($"UpdateCurrentVideoStatsUi: Library item not found for path: {path}");
+                    Log($"UpdateCurrentFileStatsUi: Library item not found for path: {path}");
+                    IsCurrentFileVideo = true; // Default to video for backward compatibility
                 }
             }
 
@@ -1647,57 +1668,68 @@ namespace ReelRoulette
             CurrentVideoIsFavoriteDisplay = isFavorite ? "Yes" : "No";
             CurrentVideoIsBlacklistedDisplay = isBlacklisted ? "Yes" : "No";
 
-            // Display duration
-            if (duration.HasValue)
+            // Display duration (only for videos)
+            if (IsCurrentFileVideo)
             {
-                if (duration.Value.TotalHours >= 1)
+                if (duration.HasValue)
                 {
-                    CurrentVideoDurationDisplay = duration.Value.ToString(@"hh\:mm\:ss");
+                    if (duration.Value.TotalHours >= 1)
+                    {
+                        CurrentVideoDurationDisplay = duration.Value.ToString(@"hh\:mm\:ss");
+                    }
+                    else
+                    {
+                        CurrentVideoDurationDisplay = duration.Value.ToString(@"mm\:ss");
+                    }
                 }
                 else
                 {
-                    CurrentVideoDurationDisplay = duration.Value.ToString(@"mm\:ss");
+                    CurrentVideoDurationDisplay = "Unknown";
                 }
-            }
-            else
-            {
-                CurrentVideoDurationDisplay = "Unknown";
-            }
 
-            // Display loudness info from library item
-            if (hasAudio == true)
-            {
-                CurrentVideoHasAudioDisplay = "Yes";
-                if (integratedLoudness.HasValue)
+                // Display loudness info from library item (only for videos)
+                if (hasAudio == true)
                 {
-                    CurrentVideoLoudnessDisplay = $"{integratedLoudness.Value:F1} dB";
+                    CurrentVideoHasAudioDisplay = "Yes";
+                    if (integratedLoudness.HasValue)
+                    {
+                        CurrentVideoLoudnessDisplay = $"{integratedLoudness.Value:F1} dB";
+                    }
+                    else
+                    {
+                        CurrentVideoLoudnessDisplay = "Unknown";
+                    }
+                    
+                    // Display PeakDb if available
+                    if (peakDb.HasValue && peakDb.Value != 0.0)
+                    {
+                        CurrentVideoPeakDisplay = $"{peakDb.Value:F1} dB";
+                    }
+                    else
+                    {
+                        CurrentVideoPeakDisplay = "N/A";
+                    }
                 }
-                else
+                else if (hasAudio == false)
                 {
-                    CurrentVideoLoudnessDisplay = "Unknown";
-                }
-                
-                // Display PeakDb if available
-                if (peakDb.HasValue && peakDb.Value != 0.0)
-                {
-                    CurrentVideoPeakDisplay = $"{peakDb.Value:F1} dB";
-                }
-                else
-                {
+                    CurrentVideoHasAudioDisplay = "No";
+                    CurrentVideoLoudnessDisplay = "N/A";
                     CurrentVideoPeakDisplay = "N/A";
                 }
-            }
-            else if (hasAudio == false)
-            {
-                CurrentVideoHasAudioDisplay = "No";
-                CurrentVideoLoudnessDisplay = "N/A";
-                CurrentVideoPeakDisplay = "N/A";
+                else
+                {
+                    CurrentVideoHasAudioDisplay = "Unknown";
+                    CurrentVideoLoudnessDisplay = "Unknown";
+                    CurrentVideoPeakDisplay = "Unknown";
+                }
             }
             else
             {
-                CurrentVideoHasAudioDisplay = "Unknown";
-                CurrentVideoLoudnessDisplay = "Unknown";
-                CurrentVideoPeakDisplay = "Unknown";
+                // For photos, clear video-specific stats (they'll be hidden via IsVisible binding)
+                CurrentVideoDurationDisplay = "";
+                CurrentVideoHasAudioDisplay = "";
+                CurrentVideoLoudnessDisplay = "";
+                CurrentVideoPeakDisplay = "";
             }
 
             // Display tags
@@ -1714,7 +1746,7 @@ namespace ReelRoulette
             FavoriteToggle.IsChecked = isFavorite;
             BlacklistToggle.IsChecked = isBlacklisted;
             
-            Log($"UpdateCurrentVideoStatsUi: Stats UI updated - Favorite: {CurrentVideoIsFavoriteDisplay}, Blacklisted: {CurrentVideoIsBlacklistedDisplay}, Duration: {CurrentVideoDurationDisplay}, Audio: {CurrentVideoHasAudioDisplay}, Tags: {CurrentVideoTagsDisplay}");
+            Log($"UpdateCurrentFileStatsUi: Stats UI updated - MediaType: {(IsCurrentFileVideo ? "Video" : "Photo")}, Favorite: {CurrentVideoIsFavoriteDisplay}, Blacklisted: {CurrentVideoIsBlacklistedDisplay}, Duration: {CurrentVideoDurationDisplay}, Audio: {CurrentVideoHasAudioDisplay}, Tags: {CurrentVideoTagsDisplay}");
         }
 
         #endregion
@@ -2184,7 +2216,7 @@ namespace ReelRoulette
             Avalonia.Threading.Dispatcher.UIThread.Post(() =>
             {
                 RecalculateGlobalStats();
-                UpdateCurrentVideoStatsUi();
+                UpdateCurrentFileStatsUi();
                 // Always show scan completion message
                 SetStatusMessage($"Duration scan complete ({total} files)");
             });
@@ -4154,7 +4186,7 @@ namespace ReelRoulette
                     // Update stats if this is the current video
                     if (_currentVideoPath == item.FullPath)
                     {
-                        UpdateCurrentVideoStatsUi();
+                        UpdateCurrentFileStatsUi();
                     }
                 }
             }
@@ -4274,7 +4306,7 @@ namespace ReelRoulette
             UpdateLibraryPanel();
             if (_currentVideoPath != null && selectedItems.Any(item => item.FullPath == _currentVideoPath))
             {
-                UpdateCurrentVideoStatsUi();
+                UpdateCurrentFileStatsUi();
             }
         }
 
@@ -4345,7 +4377,7 @@ namespace ReelRoulette
                 
                 if (_currentVideoPath != null && selectedItems.Any(item => item.FullPath == _currentVideoPath))
                 {
-                    UpdateCurrentVideoStatsUi();
+                    UpdateCurrentFileStatsUi();
                 }
             }
         }
@@ -4392,7 +4424,7 @@ namespace ReelRoulette
             UpdateLibraryPanel();
             if (_currentVideoPath != null && selectedItems.Any(item => item.FullPath == _currentVideoPath))
             {
-                UpdateCurrentVideoStatsUi();
+                UpdateCurrentFileStatsUi();
             }
         }
 
@@ -5775,6 +5807,7 @@ namespace ReelRoulette
                     _playbackTimeline.Add(videoPath);
                     _timelineIndex = _playbackTimeline.Count - 1;
                     Log($"PlayVideo: Added video to timeline - Index: {_timelineIndex}, Timeline count: {_playbackTimeline.Count}");
+                    // Note: UpdateCurrentFileStatsUi() is already called by RecordPlayback()
                 }
                 else
                 {
@@ -5805,7 +5838,7 @@ namespace ReelRoulette
 
                 // History is now tracked via LibraryItem.LastPlayedUtc (updated in RecordPlayback)
 
-                // Note: UpdateCurrentVideoStatsUi() is already called by RecordPlayback()
+                // Note: UpdateCurrentFileStatsUi() is already called by RecordPlayback()
                 // No need to call it again here
                 
                 Log("PlayVideo: Completed successfully");
@@ -7026,7 +7059,7 @@ namespace ReelRoulette
                     StatusTextBlock.Text = $"Playback stats cleared for {cleared} items.";
                 }
                 RecalculateGlobalStats();
-                UpdateCurrentVideoStatsUi();
+                UpdateCurrentFileStatsUi();
             }
             else
             {
@@ -7622,7 +7655,7 @@ namespace ReelRoulette
                     UpdateLibraryPanel();
                 }
                 // Update stats for current video
-                UpdateCurrentVideoStatsUi();
+                UpdateCurrentFileStatsUi();
                 StatusTextBlock.Text = $"Tags updated for {Path.GetFileName(_currentVideoPath)}";
             }
         }
@@ -7715,7 +7748,7 @@ namespace ReelRoulette
             // Update stats when blacklist changes
             Log("BlacklistToggle_Changed: Recalculating global stats");
             RecalculateGlobalStats();
-            UpdateCurrentVideoStatsUi();
+            UpdateCurrentFileStatsUi();
             Log("BlacklistToggle_Changed: Blacklist toggle change complete");
         }
 

@@ -875,8 +875,8 @@
                             <TextBlock Text="{Binding GlobalVideosWithAudio, StringFormat='Videos with audio: {0}'}"/>
                             <TextBlock Text="{Binding GlobalVideosWithoutAudio, StringFormat='Videos without audio: {0}'}"/>
                             
-                            <!-- Current Video Stats Section -->
-                            <TextBlock Text="Current Video"
+                            <!-- Current File Stats Section -->
+                            <TextBlock Text="Current File"
                                        FontWeight="Bold"
                                        FontSize="16"
                                        Margin="0,16,0,8"/>
@@ -890,10 +890,14 @@
                             <TextBlock Text="{Binding CurrentVideoLastPlayedDisplay, StringFormat='Last played: {0}'}"/>
                             <TextBlock Text="{Binding CurrentVideoIsFavoriteDisplay, StringFormat='Favorite: {0}'}"/>
                             <TextBlock Text="{Binding CurrentVideoIsBlacklistedDisplay, StringFormat='Blacklisted: {0}'}"/>
-                            <TextBlock Text="{Binding CurrentVideoDurationDisplay, StringFormat='Duration: {0}'}"/>
-                            <TextBlock Text="{Binding CurrentVideoHasAudioDisplay, StringFormat='Has audio: {0}'}"/>
-                            <TextBlock Text="{Binding CurrentVideoLoudnessDisplay, StringFormat='Loudness: {0}'}"/>
-                            <TextBlock Text="{Binding CurrentVideoPeakDisplay, StringFormat='Peak: {0}'}"/>
+                            <TextBlock Text="{Binding CurrentVideoDurationDisplay, StringFormat='Duration: {0}'}"
+                                       IsVisible="{Binding IsCurrentFileVideo}"/>
+                            <TextBlock Text="{Binding CurrentVideoHasAudioDisplay, StringFormat='Has audio: {0}'}"
+                                       IsVisible="{Binding IsCurrentFileVideo}"/>
+                            <TextBlock Text="{Binding CurrentVideoLoudnessDisplay, StringFormat='Loudness: {0}'}"
+                                       IsVisible="{Binding IsCurrentFileVideo}"/>
+                            <TextBlock Text="{Binding CurrentVideoPeakDisplay, StringFormat='Peak: {0}'}"
+                                       IsVisible="{Binding IsCurrentFileVideo}"/>
                             <TextBlock Text="{Binding CurrentVideoTagsDisplay, StringFormat='Tags: {0}'}"
                                        TextWrapping="Wrap"/>
                         </StackPanel>

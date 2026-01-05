@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **Enhance Statistics Panel with context-aware display** (2026-01-04):
+  - Renamed "Current Video" section header to "Current File" for consistency with photo support
+  - Added context-aware visibility: video-specific stats (duration, has audio, loudness, peak) automatically hidden when displaying photos
+  - Renamed UpdateCurrentVideoStatsUi() method to UpdateCurrentFileStatsUi() throughout codebase
+  - Stats panel now adapts display based on MediaType (Video/Photo), showing only relevant information for each media type
+
 - **Enhance Filter Dialog with tabbed interface and tag inclusion/exclusion** (2026-01-04):
   - Split filter dialog into two tabs: General (all filters except tags) and Tags (tag-specific filtering)
   - Enhanced tag filtering UI: 3-column grid layout with color-coded tag boxes (green = included, orange = excluded, violet = neither)
