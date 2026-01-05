@@ -459,6 +459,7 @@ namespace ReelRoulette
 
         /// <summary>
         /// Updates a single library item.
+        /// Updates properties in place to preserve data integrity and prevent reference disconnection issues.
         /// </summary>
         public void UpdateItem(LibraryItem item)
         {
@@ -475,7 +476,26 @@ namespace ReelRoulette
 
                 if (existingIndex >= 0)
                 {
-                    _libraryIndex.Items[existingIndex] = item;
+                    // Update properties in place instead of replacing the reference
+                    // This ensures data integrity and prevents reference disconnection issues
+                    var existingItem = _libraryIndex.Items[existingIndex];
+                    existingItem.SourceId = item.SourceId;
+                    existingItem.FullPath = item.FullPath;
+                    existingItem.RelativePath = item.RelativePath;
+                    existingItem.FileName = item.FileName;
+                    existingItem.MediaType = item.MediaType;
+                    existingItem.Duration = item.Duration;
+                    existingItem.HasAudio = item.HasAudio;
+                    existingItem.IntegratedLoudness = item.IntegratedLoudness;
+                    existingItem.PeakDb = item.PeakDb;
+                    existingItem.IsFavorite = item.IsFavorite;
+                    existingItem.IsBlacklisted = item.IsBlacklisted;
+                    existingItem.PlayCount = item.PlayCount;
+                    existingItem.LastPlayedUtc = item.LastPlayedUtc;
+                    if (item.Tags != null)
+                    {
+                        existingItem.Tags = item.Tags;
+                    }
                     Log($"LibraryService.UpdateItem: Updated existing item - {Path.GetFileName(item.FullPath)}");
                 }
                 else

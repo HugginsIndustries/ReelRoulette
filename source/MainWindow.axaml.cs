@@ -1183,6 +1183,16 @@ namespace ReelRoulette
                     }
                     
                     item.IsFavorite = isFavorite;
+                    
+                    // EXCLUSIVE: If adding to favorites, remove from blacklist
+                    if (isFavorite && item.IsBlacklisted)
+                    {
+                        Log($"FavoriteToggle_Changed: Removing from blacklist (exclusive with favorites)");
+                        item.IsBlacklisted = false;
+                        // Update blacklist toggle UI to reflect change
+                        BlacklistToggle.IsChecked = false;
+                    }
+                    
                     _libraryService.UpdateItem(item);
                     Log($"FavoriteToggle_Changed: Updated library item - IsFavorite: {oldFavorite} -> {isFavorite}");
                     
@@ -4033,6 +4043,18 @@ namespace ReelRoulette
                     return;
                 }
                 
+                // CRITICAL FIX: Check if the item reference in Tag matches the library item
+                // If they're different objects, this is virtualization recycling the UI element
+                // and we should ignore the event to prevent data loss
+                if (!ReferenceEquals(item, libraryItem))
+                {
+                    // The Tag has a stale item reference from virtualization recycling
+                    // The binding has updated the toggle based on the new item, but Tag still has the old item
+                    // This is NOT a user action - ignore it to prevent incorrect updates
+                    Log($"LibraryItemFavorite_Changed: Ignoring virtualization recycling for '{item.FileName}' - Tag item reference doesn't match library item (Tag item IsFavorite={item.IsFavorite}, Library item IsFavorite={libraryItem.IsFavorite}, Toggle={toggleState})");
+                    return;
+                }
+                
                 // CRITICAL FIX: Check if the item's state already matches the toggle state
                 // If it matches, this is a binding update from virtualization, not a user action
                 // This prevents favorites from being incorrectly removed when scrolling
@@ -4073,6 +4095,18 @@ namespace ReelRoulette
                 if (libraryItem == null)
                 {
                     Log($"LibraryItemBlacklist_Changed: Item not found in library: {item.FileName}");
+                    return;
+                }
+                
+                // CRITICAL FIX: Check if the item reference in Tag matches the library item
+                // If they're different objects, this is virtualization recycling the UI element
+                // and we should ignore the event to prevent data loss
+                if (!ReferenceEquals(item, libraryItem))
+                {
+                    // The Tag has a stale item reference from virtualization recycling
+                    // The binding has updated the toggle based on the new item, but Tag still has the old item
+                    // This is NOT a user action - ignore it to prevent incorrect updates
+                    Log($"LibraryItemBlacklist_Changed: Ignoring virtualization recycling for '{item.FileName}' - Tag item reference doesn't match library item (Tag item IsBlacklisted={item.IsBlacklisted}, Library item IsBlacklisted={libraryItem.IsBlacklisted}, Toggle={toggleState})");
                     return;
                 }
                 
@@ -7689,6 +7723,16 @@ namespace ReelRoulette
                     }
                     
                     item.IsBlacklisted = isBlacklisted;
+                    
+                    // EXCLUSIVE: If adding to blacklist, remove from favorites
+                    if (isBlacklisted && item.IsFavorite)
+                    {
+                        Log($"BlacklistToggle_Changed: Removing from favorites (exclusive with blacklist)");
+                        item.IsFavorite = false;
+                        // Update favorite toggle UI to reflect change
+                        FavoriteToggle.IsChecked = false;
+                    }
+                    
                     _libraryService.UpdateItem(item);
                     Log($"BlacklistToggle_Changed: Updated library item - IsBlacklisted: {oldBlacklisted} -> {isBlacklisted}");
                     
@@ -8552,14 +8596,7 @@ namespace ReelRoulette
                     break;
 
                 case Key.T:
-                    // Always on top toggle
-                    _alwaysOnTop = !_alwaysOnTop;
-                    this.Topmost = _alwaysOnTop;
-                    if (AlwaysOnTopMenuItem != null)
-                    {
-                        AlwaysOnTopMenuItem.IsChecked = _alwaysOnTop;
-                    }
-                    SaveSettings();
+                    HandleManageTagsShortcut(); // same as 🏷️ button
                     e.Handled = true;
                     break;
 
@@ -8693,6 +8730,14 @@ namespace ReelRoulette
         private void HandleMuteShortcut()
         {
             MuteButton.IsChecked = !MuteButton.IsChecked;
+        }
+
+        private void HandleManageTagsShortcut()
+        {
+            if (!string.IsNullOrEmpty(_currentVideoPath))
+            {
+                ManageTagsForCurrentVideo_Click(this, new RoutedEventArgs());
+            }
         }
 
         private void HandleBlacklistShortcut()

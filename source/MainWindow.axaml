@@ -257,7 +257,7 @@
                           IsChecked="False"
                           Click="FullscreenMenuItem_Click"/>
                 <MenuItem x:Name="AlwaysOnTopMenuItem"
-                          Header="Always On Top (T)"
+                          Header="Always On Top"
                           ToggleType="CheckBox"
                           IsChecked="False"
                           Click="AlwaysOnTopMenuItem_Click"/>
@@ -319,7 +319,7 @@
             <Button x:Name="PreviousButton"
                     Grid.Column="0"
                     Classes="IconMomentaryLarge"
-                    ToolTip.Tip="Previous video"
+                    ToolTip.Tip="Previous video (←)"
                     Margin="0,0,8,0"
                     Click="PreviousButton_Click">
                 <TextBlock Text="⏮"
@@ -331,7 +331,7 @@
             <ToggleButton x:Name="PlayPauseButton"
                           Grid.Column="1"
                           Classes="IconToggleLarge"
-                          ToolTip.Tip="Play / Pause"
+                          ToolTip.Tip="Play / Pause (K or Space)"
                           Margin="0,0,8,0"
                           Click="PlayPauseButton_Click">
                 <TextBlock Text="⏯"
@@ -343,7 +343,7 @@
             <Button x:Name="NextButton"
                     Grid.Column="2"
                     Classes="IconMomentaryLarge"
-                    ToolTip.Tip="Next video"
+                    ToolTip.Tip="Next video (→)"
                     Margin="0,0,8,0"
                     Click="NextButton_Click">
                 <TextBlock Text="⏭"
@@ -355,7 +355,7 @@
             <Button x:Name="PlayRandomButton"
                     Grid.Column="3"
                     Classes="IconMomentaryLarge"
-                    ToolTip.Tip="Play random video"
+                    ToolTip.Tip="Play random video (R)"
                     Margin="0,0,8,0"
                     Click="PlayRandom_Click">
                 <TextBlock Text="🎲"
@@ -379,7 +379,7 @@
             <Button x:Name="ManageTagsButton"
                     Grid.Column="5"
                     Classes="IconMomentaryLarge"
-                    ToolTip.Tip="Manage tags for current video"
+                    ToolTip.Tip="Manage tags for current video (T)"
                     Margin="0,0,8,0"
                     Click="ManageTagsForCurrentVideo_Click">
                 <TextBlock Text="🏷️"
@@ -417,7 +417,7 @@
             <ToggleButton x:Name="AutoPlayNextCheckBox"
                           Grid.Column="8"
                           Classes="IconToggleLarge"
-                          ToolTip.Tip="Auto-play next on end"
+                          ToolTip.Tip="Auto-play next on end (A)"
                           IsChecked="True"
                           Margin="0,0,8,0"
                           Checked="AutoPlayNext_Changed"
@@ -460,7 +460,7 @@
             <ToggleButton x:Name="FavoriteToggle"
                           Grid.Column="11"
                           Classes="IconToggleLarge"
-                          ToolTip.Tip="Mark as favorite"
+                          ToolTip.Tip="Mark as favorite (F)"
                           Margin="0,0,8,0"
                           Checked="FavoriteToggle_Changed"
                           Unchecked="FavoriteToggle_Changed">
@@ -473,7 +473,7 @@
             <ToggleButton x:Name="BlacklistToggle"
                           Grid.Column="12"
                           Classes="IconToggleLarge"
-                          ToolTip.Tip="Never show again / blacklist current video"
+                          ToolTip.Tip="Never show again / blacklist current video (B)"
                           Margin="0,0,8,0"
                           Checked="BlacklistToggle_Changed"
                           Unchecked="BlacklistToggle_Changed">
@@ -497,7 +497,7 @@
             <ToggleButton x:Name="MuteButton"
                           Grid.Column="14"
                           Classes="IconToggleLarge"
-                          ToolTip.Tip="Mute / Unmute"
+                          ToolTip.Tip="Mute / Unmute (M)"
                           Checked="MuteButton_Checked"
                           Unchecked="MuteButton_Unchecked">
                 <TextBlock Text="🔇"
@@ -700,11 +700,35 @@
                         </ListBox.ItemsPanel>
                         <ListBox.ItemTemplate>
                             <DataTemplate DataType="local:LibraryItem">
-                                <Grid ColumnDefinitions="* Auto Auto Auto Auto Auto" Margin="0,4,16,4">
+                                <Grid ColumnDefinitions="* Auto Auto" Margin="0,4,16,4">
                                     <StackPanel Grid.Column="0" Orientation="Vertical">
-                                        <TextBlock Text="{Binding FileName}"
-                                                   FontWeight="SemiBold"
-                                                   TextTrimming="CharacterEllipsis"/>
+                                        <Grid VerticalAlignment="Center">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <!-- Blacklist indicator (shown if blacklisted) -->
+                                            <TextBlock Grid.Column="0"
+                                                       Text="👎"
+                                                       FontSize="14"
+                                                       Margin="0,0,4,0"
+                                                       VerticalAlignment="Center"
+                                                       IsVisible="{Binding IsBlacklisted}"/>
+                                            <!-- Favorite indicator (shown if favorite) -->
+                                            <TextBlock Grid.Column="1"
+                                                       Text="⭐"
+                                                       FontSize="14"
+                                                       Margin="0,0,4,0"
+                                                       VerticalAlignment="Center"
+                                                       IsVisible="{Binding IsFavorite}"/>
+                                            <!-- File name -->
+                                            <TextBlock Grid.Column="2"
+                                                       Text="{Binding FileName}"
+                                                       FontWeight="SemiBold"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       VerticalAlignment="Center"/>
+                                        </Grid>
                                         <TextBlock Text="{Binding FullPath}"
                                                    FontSize="10"
                                                    Foreground="Gray"
@@ -728,43 +752,6 @@
                                             Tag="{Binding FullPath}"
                                             Click="LibraryItemShowInFileManager_Click">
                                         <TextBlock Text="📁"
-                                                   TextAlignment="Center"
-                                                   HorizontalAlignment="Center"
-                                                   VerticalAlignment="Center"/>
-                                    </Button>
-                                    <ToggleButton Grid.Column="3"
-                                                 Classes="IconToggleSmall"
-                                                 Margin="2,0,2,0"
-                                                 ToolTip.Tip="Toggle favorite"
-                                                 IsChecked="{Binding IsFavorite}"
-                                                 Tag="{Binding}"
-                                                 Checked="LibraryItemFavorite_Changed"
-                                                 Unchecked="LibraryItemFavorite_Changed">
-                                        <TextBlock Text="★"
-                                                   TextAlignment="Center"
-                                                   HorizontalAlignment="Center"
-                                                   VerticalAlignment="Center"/>
-                                    </ToggleButton>
-                                    <ToggleButton Grid.Column="4"
-                                                 Classes="IconToggleSmall"
-                                                 Margin="2,0,2,0"
-                                                 ToolTip.Tip="Toggle blacklist"
-                                                 IsChecked="{Binding IsBlacklisted}"
-                                                 Tag="{Binding}"
-                                                 Checked="LibraryItemBlacklist_Changed"
-                                                 Unchecked="LibraryItemBlacklist_Changed">
-                                        <TextBlock Text="👎"
-                                                   TextAlignment="Center"
-                                                   HorizontalAlignment="Center"
-                                                   VerticalAlignment="Center"/>
-                                    </ToggleButton>
-                                    <Button Grid.Column="5"
-                                            Classes="IconMomentarySmall"
-                                            Margin="2,0,2,0"
-                                            ToolTip.Tip="Manage tags"
-                                            Tag="{Binding}"
-                                            Click="LibraryItemTags_Click">
-                                        <TextBlock Text="🏷"
                                                    TextAlignment="Center"
                                                    HorizontalAlignment="Center"
                                                    VerticalAlignment="Center"/>

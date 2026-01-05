@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+- **Improve library list UX and keyboard shortcuts** (2026-01-05):
+  - Removed tag button from library list items (only play and show in file manager buttons remain)
+  - Added keyboard shortcut T for managing tags/metadata dialog
+  - Added keyboard shortcuts to all control bar button tooltips for better discoverability
+  - Removed keyboard shortcut hint from "Always On Top" menu item (no longer has a shortcut)
+  - Tooltips now show format: "Action description (keyboard shortcut)" for consistency
+
+- **CRITICAL FIX: Remove favorite/blacklist toggles from library list to prevent data loss** (2026-01-04):
+  - Removed favorite and blacklist toggle buttons from library list items to prevent virtualization recycling bugs
+  - ListBox virtualization was recycling UI elements and causing bindings to incorrectly toggle favorites/blacklist
+  - Favorites and blacklist can still be managed via:
+    - Keyboard shortcuts (F for favorites, B for blacklist - for the currently playing video/photo)
+    - Control bar toggle buttons (for the currently playing video/photo)
+    - Right-click context menu batch operations (for multiple selected items)
+  - Added visual indicators in library list: ⭐ for favorites and 👎 for blacklisted items (shown before file name)
+  - Made favorites and blacklist mutually exclusive: adding to favorites removes from blacklist and vice versa
+  - This eliminates the root cause of data loss while maintaining all functionality
+  - Also fixed critical data integrity bug in LibraryService.UpdateItem() that could cause metadata to disappear
+  - Changed UpdateItem to update properties in place instead of replacing the item reference
+  - All item properties are now preserved when updating: SourceId, FullPath, RelativePath, FileName, MediaType, Duration, HasAudio, IntegratedLoudness, PeakDb, IsFavorite, IsBlacklisted, PlayCount, LastPlayedUtc, Tags
+
 - **Enhance Statistics Panel with context-aware display** (2026-01-04):
   - Renamed "Current Video" section header to "Current File" for consistency with photo support
   - Added context-aware visibility: video-specific stats (duration, has audio, loudness, peak) automatically hidden when displaying photos
