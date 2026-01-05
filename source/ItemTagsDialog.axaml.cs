@@ -253,6 +253,60 @@ namespace ReelRoulette
         {
             Log($"ItemTagsDialog: Saving tags for {_items.Count} item(s)");
             
+            // CRITICAL: Verify library service is available before attempting to save
+            if (_libraryService == null)
+            {
+                Log($"ItemTagsDialog: ERROR - Library service is null, cannot save tags. Tags will be lost!");
+                // Show error to user - don't close dialog, let them cancel
+                var errorDialog = new Window
+                {
+                    Title = "Error: Cannot Save Tags",
+                    Width = 450,
+                    Height = 180,
+                    WindowStartupLocation = WindowStartupLocation.CenterOwner
+                };
+                
+                var grid = new Grid();
+                grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+                grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                grid.Margin = new Thickness(16);
+                
+                var titleText = new TextBlock
+                {
+                    Text = "Error: Cannot save tags",
+                    FontWeight = FontWeight.Bold,
+                    FontSize = 14,
+                    Margin = new Thickness(0, 0, 0, 12)
+                };
+                Grid.SetRow(titleText, 0);
+                grid.Children.Add(titleText);
+                
+                var messageText = new TextBlock
+                {
+                    Text = "Library service is not available. Tag changes cannot be saved and will be lost when the application closes.\n\nPlease cancel and try again later.",
+                    TextWrapping = TextWrapping.Wrap,
+                    Margin = new Thickness(0, 0, 0, 12)
+                };
+                Grid.SetRow(messageText, 1);
+                grid.Children.Add(messageText);
+                
+                var okButton = new Button
+                {
+                    Content = "OK",
+                    HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
+                    Width = 80
+                };
+                okButton.Click += (s, args) => errorDialog.Close();
+                Grid.SetRow(okButton, 2);
+                grid.Children.Add(okButton);
+                
+                errorDialog.Content = grid;
+                errorDialog.ShowDialog(this);
+                // Don't close the dialog - let user cancel or try again
+                return;
+            }
+            
             // Apply tag changes to all items
             foreach (var item in _items)
             {
@@ -287,12 +341,12 @@ namespace ReelRoulette
 
                 Log($"ItemTagsDialog: Tags updated for {item.FileName} - Old: [{string.Join(", ", oldTags)}], New: [{string.Join(", ", item.Tags)}]");
 
-                // Update library item
-                _libraryService?.UpdateItem(item);
+                // Update library item (service is guaranteed to be non-null here)
+                _libraryService.UpdateItem(item);
             }
 
-            // Save library once for all items
-            _libraryService?.SaveLibrary();
+            // Save library once for all items (service is guaranteed to be non-null here)
+            _libraryService.SaveLibrary();
 
             Log($"ItemTagsDialog: Tags saved successfully for {_items.Count} item(s)");
             Close(true);

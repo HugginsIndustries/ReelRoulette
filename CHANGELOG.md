@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **Fix: Prevent silent data loss in tags dialog when library service is unavailable** (2026-01-05):
+  - Fixed critical bug where ItemTagsDialog would silently fail to save tags if _libraryService was null
+  - Dialog now checks for null library service before attempting to save
+  - Shows error message to user if library service is unavailable instead of silently closing with success
+  - Prevents tag modifications from being lost when app restarts due to failed persistence
+
 - **Improve library list UX and keyboard shortcuts** (2026-01-05):
   - Removed tag button from library list items (only play and show in file manager buttons remain)
   - Added keyboard shortcut T for managing tags/metadata dialog
