@@ -1,0 +1,43 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:ReelRoulette"
+        x:Class="ReelRoulette.RemoveItemsDialog"
+        x:DataType="local:RemoveItemsDialog"
+        Title="Remove from Library"
+        Width="500"
+        Height="200"
+        WindowStartupLocation="CenterOwner"
+        MinWidth="400"
+        MinHeight="150">
+    <Grid RowDefinitions="Auto * Auto" Margin="16">
+        <!-- Header -->
+        <TextBlock Grid.Row="0" 
+                   Text="Remove from Library"
+                   FontWeight="Bold"
+                   FontSize="16"
+                   Margin="0,0,0,12"/>
+        
+        <!-- Content -->
+        <StackPanel Grid.Row="1" 
+                    Spacing="12"
+                    Margin="0,0,0,16">
+            <TextBlock x:Name="MessageTextBlock"
+                       TextWrapping="Wrap"
+                       Text="Are you sure you want to remove 0 item(s) from the library?"/>
+        </StackPanel>
+        
+        <!-- Buttons -->
+        <StackPanel Grid.Row="2" 
+                    Orientation="Horizontal" 
+                    HorizontalAlignment="Right"
+                    Spacing="8">
+            <Button Content="Cancel"
+                    Click="CancelButton_Click"
+                    MinWidth="100"/>
+            <Button Content="Remove"
+                    Click="RemoveButton_Click"
+                    MinWidth="100"
+                    IsDefault="True"/>
+        </StackPanel>
+    </Grid>
+</Window>

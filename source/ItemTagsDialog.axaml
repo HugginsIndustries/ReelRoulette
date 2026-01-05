@@ -4,44 +4,54 @@
         x:Class="ReelRoulette.ItemTagsDialog"
         x:DataType="local:ItemTagsDialog"
         Title="Tags"
-        Width="500"
-        Height="500"
+        Width="750"
+        Height="750"
         WindowStartupLocation="CenterOwner"
         MinWidth="400"
         MinHeight="300">
-    <Grid RowDefinitions="Auto * Auto Auto" Margin="12">
-        <!-- Header -->
-        <TextBlock Grid.Row="0" 
-                   x:Name="TitleTextBlock"
-                   Text="Tags"
-                   FontWeight="Bold"
-                   FontSize="16"
-                   Margin="0,0,0,16"/>
-
+    <Grid RowDefinitions="* Auto Auto" Margin="12">
         <!-- Tags Grid -->
-        <ScrollViewer Grid.Row="1"
+        <ScrollViewer Grid.Row="0"
                      VerticalScrollBarVisibility="Auto"
                      Margin="0,0,0,16">
             <ItemsControl x:Name="TagsItemsControl">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>
-                        <UniformGrid Columns="4" Rows="0"/>
+                        <UniformGrid Columns="3" Rows="0"/>
                     </ItemsPanelTemplate>
                 </ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
-                    <DataTemplate x:DataType="local:TagViewModel">
-                        <ToggleButton Content="{Binding Tag}"
-                                      IsChecked="{Binding IsSelected}"
-                                      Classes="IconToggle"
-                                      Margin="4"
-                                      Click="TagToggleButton_Click"/>
+                    <DataTemplate x:DataType="local:BatchTagViewModel">
+                        <Border Background="{Binding BackgroundBrush}"
+                                CornerRadius="4"
+                                Padding="8,6"
+                                Margin="4">
+                            <Grid ColumnDefinitions="* Auto Auto" ColumnSpacing="8">
+                                <TextBlock Grid.Column="0"
+                                          Text="{Binding Tag}"
+                                          VerticalAlignment="Center"
+                                          FontWeight="SemiBold"/>
+                                <ToggleButton Grid.Column="1"
+                                             Content="➕"
+                                             IsChecked="{Binding IsPlusSelected}"
+                                             Classes="IconToggleSmall"
+                                             ToolTip.Tip="Add tag to all items"
+                                             Click="PlusButton_Click"/>
+                                <ToggleButton Grid.Column="2"
+                                             Content="➖"
+                                             IsChecked="{Binding IsMinusSelected}"
+                                             Classes="IconToggleSmall"
+                                             ToolTip.Tip="Remove tag from all items"
+                                             Click="MinusButton_Click"/>
+                            </Grid>
+                        </Border>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
         </ScrollViewer>
 
         <!-- Add Tag Section -->
-        <Grid Grid.Row="2"
+        <Grid Grid.Row="1"
               ColumnDefinitions="* Auto"
               ColumnSpacing="8"
               Margin="0,0,0,16">
@@ -56,7 +66,7 @@
         </Grid>
 
         <!-- Buttons -->
-        <StackPanel Grid.Row="3" 
+        <StackPanel Grid.Row="2" 
                     Orientation="Horizontal" 
                     HorizontalAlignment="Right"
                     Spacing="8">

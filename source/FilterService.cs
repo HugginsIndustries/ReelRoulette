@@ -119,21 +119,31 @@ namespace ReelRoulette
                     item.MediaType == MediaType.Photo || item.IntegratedLoudness.HasValue);
             }
 
-            // 10. Tag filter
+            // 10. Tag filter (inclusion)
             if (filterState.SelectedTags != null && filterState.SelectedTags.Count > 0)
             {
                 if (filterState.TagMatchMode == TagMatchMode.And)
                 {
-                    // Item must have ALL selected tags
+                    // Item must have ALL selected tags (case-insensitive comparison)
                     eligible = eligible.Where(item =>
-                        filterState.SelectedTags.All(tag => item.Tags.Contains(tag)));
+                        item.Tags != null &&
+                        filterState.SelectedTags.All(tag => item.Tags.Any(itemTag => string.Equals(itemTag, tag, StringComparison.OrdinalIgnoreCase))));
                 }
                 else // TagMatchMode.Or
                 {
-                    // Item must have ANY of the selected tags
+                    // Item must have ANY of the selected tags (case-insensitive comparison)
                     eligible = eligible.Where(item =>
-                        filterState.SelectedTags.Any(tag => item.Tags.Contains(tag)));
+                        item.Tags != null &&
+                        filterState.SelectedTags.Any(tag => item.Tags.Any(itemTag => string.Equals(itemTag, tag, StringComparison.OrdinalIgnoreCase))));
                 }
+            }
+
+            // 10b. Tag filter (exclusion) - exclude items with any excluded tag (case-insensitive comparison)
+            if (filterState.ExcludedTags != null && filterState.ExcludedTags.Count > 0)
+            {
+                eligible = eligible.Where(item =>
+                    item.Tags == null ||
+                    !filterState.ExcludedTags.Any(tag => item.Tags.Any(itemTag => string.Equals(itemTag, tag, StringComparison.OrdinalIgnoreCase))));
             }
 
             // 11. Media type filter
@@ -252,19 +262,31 @@ namespace ReelRoulette
                     item.MediaType == MediaType.Photo || item.IntegratedLoudness.HasValue);
             }
 
-            // 10. Tag filter
+            // 10. Tag filter (inclusion)
             if (filterState.SelectedTags != null && filterState.SelectedTags.Count > 0)
             {
                 if (filterState.TagMatchMode == TagMatchMode.And)
                 {
+                    // Item must have ALL selected tags (case-insensitive comparison)
                     eligible = eligible.Where(item =>
-                        filterState.SelectedTags.All(tag => item.Tags.Contains(tag)));
+                        item.Tags != null &&
+                        filterState.SelectedTags.All(tag => item.Tags.Any(itemTag => string.Equals(itemTag, tag, StringComparison.OrdinalIgnoreCase))));
                 }
                 else // TagMatchMode.Or
                 {
+                    // Item must have ANY of the selected tags (case-insensitive comparison)
                     eligible = eligible.Where(item =>
-                        filterState.SelectedTags.Any(tag => item.Tags.Contains(tag)));
+                        item.Tags != null &&
+                        filterState.SelectedTags.Any(tag => item.Tags.Any(itemTag => string.Equals(itemTag, tag, StringComparison.OrdinalIgnoreCase))));
                 }
+            }
+
+            // 10b. Tag filter (exclusion) - exclude items with any excluded tag (case-insensitive comparison)
+            if (filterState.ExcludedTags != null && filterState.ExcludedTags.Count > 0)
+            {
+                eligible = eligible.Where(item =>
+                    item.Tags == null ||
+                    !filterState.ExcludedTags.Any(tag => item.Tags.Any(itemTag => string.Equals(itemTag, tag, StringComparison.OrdinalIgnoreCase))));
             }
 
             // 11. Media type filter

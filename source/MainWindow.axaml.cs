@@ -177,6 +177,14 @@ namespace ReelRoulette
         private string _librarySearchText = "";
         private string _librarySortMode = "Name"; // "Name", "LastPlayed", "PlayCount", "Duration"
         
+        // Selection tracking for batch operations
+        private HashSet<string> _selectedItemPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private int _lastSelectedIndex = -1;
+        private bool _isHandlingSelectionChange = false; // Prevent recursive selection change handling
+        
+        // Scroll position tracking for library panel
+        private string? _scrollAnchorPath = null; // First visible item path to restore scroll position
+        
         // Debouncing for UpdateLibraryPanel
         private CancellationTokenSource? _updateLibraryPanelCancellationSource;
         private DispatcherTimer? _updateLibraryPanelDebounceTimer;
@@ -605,7 +613,7 @@ namespace ReelRoulette
             }
         }
 
-        private string _libraryInfoText = "🎞️ 0 videos · 📷 0 photos · 🎯 0 selected";
+        private string _libraryInfoText = "🎞️ 0 videos • 📷 0 photos";
 
         public string LibraryInfoText
         {
@@ -1492,62 +1500,18 @@ namespace ReelRoulette
             // Update immediately with total count (fast)
             if (_libraryIndex == null)
             {
-                LibraryInfoText = "Library · 🎞️ 0 videos · 📷 0 photos · 🎯 0 selected";
+                LibraryInfoText = "Library • 🎞️ 0 videos • 📷 0 photos";
                 return;
             }
 
             int totalVideos = _libraryIndex.Items.Count(i => i.MediaType == MediaType.Video);
             int totalPhotos = _libraryIndex.Items.Count(i => i.MediaType == MediaType.Photo);
 
-            // Show total immediately, calculate selected count asynchronously
-            LibraryInfoText = $"Library · 🎞️ {totalVideos:N0} videos · 📷 {totalPhotos:N0} photos · 🎯 calculating...";
+            // Show total
+            LibraryInfoText = $"Library • 🎞️ {totalVideos:N0} videos • 📷 {totalPhotos:N0} photos";
             
             // Update filter summary separately
             UpdateFilterSummaryText();
-            
-            // Calculate selected count asynchronously to avoid blocking UI
-            _ = Task.Run(() =>
-            {
-                try
-                {
-                    int selectedCount = 0;
-                    if (_currentFilterState != null && _libraryIndex != null)
-                    {
-                        // Use FilterService to ensure consistent filtering logic (including photo-friendly filters)
-                        var eligible = _filterService.BuildEligibleSetWithoutFileCheck(_currentFilterState, _libraryIndex);
-                        selectedCount = eligible.Count();
-                    }
-                    else
-                    {
-                        // No filters: count all enabled items
-                        var enabledSourceIds = _libraryIndex?.Sources
-                            .Where(s => s.IsEnabled)
-                            .Select(s => s.Id)
-                            .ToHashSet() ?? new HashSet<string>();
-                        selectedCount = _libraryIndex?.Items.Count(item => enabledSourceIds.Contains(item.SourceId)) ?? 0;
-                    }
-                    
-                    // Update UI on UI thread
-                    Dispatcher.UIThread.Post(() =>
-                    {
-                        int totalVideos = _libraryIndex?.Items.Count(i => i.MediaType == MediaType.Video) ?? 0;
-                        int totalPhotos = _libraryIndex?.Items.Count(i => i.MediaType == MediaType.Photo) ?? 0;
-                        LibraryInfoText = $"Library · 🎞️ {totalVideos:N0} videos · 📷 {totalPhotos:N0} photos · 🎯 {selectedCount:N0} selected";
-                    });
-                }
-                catch (Exception ex)
-                {
-                    Log($"UpdateLibraryInfoText: ERROR calculating selected count - Exception: {ex.GetType().Name}, Message: {ex.Message}");
-                    // Fallback: show total as selected
-                    Dispatcher.UIThread.Post(() =>
-                    {
-                        int totalVideos = _libraryIndex?.Items.Count(i => i.MediaType == MediaType.Video) ?? 0;
-                        int totalPhotos = _libraryIndex?.Items.Count(i => i.MediaType == MediaType.Photo) ?? 0;
-                        int totalMedia = totalVideos + totalPhotos;
-                        LibraryInfoText = $"Library · 🎞️ {totalVideos:N0} videos · 📷 {totalPhotos:N0} photos · 🎯 {totalMedia:N0} selected";
-                    });
-                }
-            });
         }
 
         private void UpdateFilterSummaryText()
@@ -1573,8 +1537,18 @@ namespace ReelRoulette
                 filterParts.Add("Without audio");
             if (_currentFilterState.MinDuration.HasValue || _currentFilterState.MaxDuration.HasValue)
                 filterParts.Add("Duration");
+            // Tag inclusion filters
             if (_currentFilterState.SelectedTags != null && _currentFilterState.SelectedTags.Count > 0)
-                filterParts.Add($"{_currentFilterState.SelectedTags.Count} tag(s)");
+            {
+                var matchMode = _currentFilterState.TagMatchMode == TagMatchMode.And ? "all" : "any";
+                filterParts.Add($"{_currentFilterState.SelectedTags.Count} tag(s) included ({matchMode})");
+            }
+            
+            // Tag exclusion filters
+            if (_currentFilterState.ExcludedTags != null && _currentFilterState.ExcludedTags.Count > 0)
+            {
+                filterParts.Add($"{_currentFilterState.ExcludedTags.Count} tag(s) excluded");
+            }
 
             if (filterParts.Count > 0)
             {
@@ -3284,7 +3258,7 @@ namespace ReelRoulette
                 else
                 {
                     Log("  WARNING: _libraryIndex is null, skipping UpdateLibraryPanel()");
-                    LibraryInfoText = "Library · 🎞️ 0 videos · 📷 0 photos · 🎯 0 selected";
+                    LibraryInfoText = "Library • 🎞️ 0 videos • 📷 0 photos";
                     UpdateFilterSummaryText();
                     StatusTextBlock.Text = "Ready: No library loaded.";
                 }
@@ -3590,6 +3564,74 @@ namespace ReelRoulette
                             {
                                 Log($"UpdateLibraryPanel: UI thread callback started, about to add {items.Count} items");
                                 
+                                // Save scroll position anchor before clearing (first visible item)
+                                if (LibraryListBox != null && _libraryItems.Count > 0)
+                                {
+                                    int anchorIndex = -1;
+                                    string? strategy = null;
+                                    
+                                    // Strategy 1: Use SelectedIndex if something is selected (fastest, most reliable when available)
+                                    if (LibraryListBox.SelectedIndex >= 0 && LibraryListBox.SelectedIndex < _libraryItems.Count)
+                                    {
+                                        anchorIndex = LibraryListBox.SelectedIndex;
+                                        strategy = "SelectedIndex";
+                                        Log($"UpdateLibraryPanel: Saving scroll anchor using SelectedIndex={anchorIndex}, item={_libraryItems[anchorIndex].FileName}");
+                                    }
+                                    else
+                                    {
+                                        // Strategy 2: Try to preserve previous anchor (works when scrolling without selection)
+                                        // This is the most reliable fallback when SelectedIndex is -1
+                                        if (_scrollAnchorPath != null)
+                                        {
+                                            var existingAnchor = _libraryItems
+                                                .Select((item, idx) => new { item, idx })
+                                                .FirstOrDefault(x => x.item.FullPath == _scrollAnchorPath);
+                                            if (existingAnchor != null)
+                                            {
+                                                anchorIndex = existingAnchor.idx;
+                                                strategy = "PreviousAnchor";
+                                                Log($"UpdateLibraryPanel: Saving scroll anchor using previous anchor at index={anchorIndex}, path={_scrollAnchorPath}, item={existingAnchor.item.FileName}");
+                                            }
+                                            else
+                                            {
+                                                Log($"UpdateLibraryPanel: Previous scroll anchor path '{_scrollAnchorPath}' not found in current list (item may have been filtered out)");
+                                            }
+                                        }
+                                        else
+                                        {
+                                            Log($"UpdateLibraryPanel: No scroll anchor to preserve (SelectedIndex={LibraryListBox.SelectedIndex}, _scrollAnchorPath=null) - will start at top");
+                                        }
+                                    }
+                                    
+                                    // Save anchor if we found a valid one
+                                    if (anchorIndex >= 0 && anchorIndex < _libraryItems.Count)
+                                    {
+                                        var oldAnchorPath = _scrollAnchorPath;
+                                        _scrollAnchorPath = _libraryItems[anchorIndex].FullPath;
+                                        Log($"UpdateLibraryPanel: Saved scroll anchor: index={anchorIndex}, path={_scrollAnchorPath}, strategy={strategy}, oldPath={oldAnchorPath ?? "null"}");
+                                    }
+                                    else
+                                    {
+                                        // Clear anchor if we couldn't find a valid one
+                                        if (_scrollAnchorPath != null)
+                                        {
+                                            Log($"UpdateLibraryPanel: Clearing scroll anchor (no valid index found, anchorIndex={anchorIndex}, itemCount={_libraryItems.Count})");
+                                            _scrollAnchorPath = null;
+                                        }
+                                    }
+                                }
+                                else
+                                {
+                                    if (LibraryListBox == null)
+                                    {
+                                        Log($"UpdateLibraryPanel: Cannot save scroll anchor - LibraryListBox is null");
+                                    }
+                                    else if (_libraryItems.Count == 0)
+                                    {
+                                        Log($"UpdateLibraryPanel: Cannot save scroll anchor - _libraryItems is empty");
+                                    }
+                                }
+                                
                                 // Suppress Favorite/Blacklist event handlers during UI update
                                 _isUpdatingLibraryItems = true;
                                 try
@@ -3600,20 +3642,84 @@ namespace ReelRoulette
                                     {
                                         if (cancellationToken.IsCancellationRequested)
                                         {
-                                            Log("UpdateLibraryPanel: Cancelled during item addition");
+                                            Log($"UpdateLibraryPanel: Cancelled during item addition (scroll anchor preserved: {_scrollAnchorPath ?? "null"})");
                                             return;
                                         }
                                         _libraryItems.Add(item);
                                     }
                                     Log($"UpdateLibraryPanel: UI thread callback completed. _libraryItems now has {_libraryItems.Count} items. LibraryListBox.ItemsSource is set: {LibraryListBox?.ItemsSource != null}, LibraryListBox.IsVisible: {LibraryListBox?.IsVisible}, LibraryPanelContainer.IsVisible: {LibraryPanelContainer?.IsVisible}");
                                     
-                                    // Force a refresh of the ListBox (virtualization will handle rendering efficiently)
-                                    if (LibraryListBox != null)
+                                    // Update filter count display
+                                    UpdateFilterCountDisplay(_libraryItems.Count);
+                                    
+                                    // Restore selection state (only for items that are still in the filtered list)
+                                    if (LibraryListBox != null && LibraryListBox.SelectedItems != null && _selectedItemPaths.Count > 0)
                                     {
-                                        var temp = LibraryListBox.ItemsSource;
-                                        LibraryListBox.ItemsSource = null;
-                                        LibraryListBox.ItemsSource = temp;
-                                        Log("UpdateLibraryPanel: Forced ListBox refresh");
+                                        _isHandlingSelectionChange = true;
+                                        try
+                                        {
+                                            LibraryListBox.SelectedItems.Clear();
+                                            foreach (var item in _libraryItems)
+                                            {
+                                                if (_selectedItemPaths.Contains(item.FullPath))
+                                                {
+                                                    LibraryListBox.SelectedItems.Add(item);
+                                                }
+                                            }
+                                            // Remove paths that are no longer in the filtered list
+                                            var visiblePaths = new HashSet<string>(_libraryItems.Select(i => i.FullPath), StringComparer.OrdinalIgnoreCase);
+                                            _selectedItemPaths.RemoveWhere(path => !visiblePaths.Contains(path));
+                                        }
+                                        finally
+                                        {
+                                            _isHandlingSelectionChange = false;
+                                        }
+                                        // Update selection count display after restoration (since SelectionChanged was suppressed)
+                                        UpdateSelectionCountDisplay();
+                                    }
+                                    
+                                    // Restore scroll position using anchor item
+                                    if (_scrollAnchorPath != null && LibraryListBox != null)
+                                    {
+                                        var anchorIndex = _libraryItems
+                                            .Select((item, index) => new { item, index })
+                                            .FirstOrDefault(x => x.item.FullPath == _scrollAnchorPath)?.index ?? -1;
+                                        
+                                        if (anchorIndex >= 0)
+                                        {
+                                            Log($"UpdateLibraryPanel: Restoring scroll position to anchor index={anchorIndex}, path={_scrollAnchorPath}, item={_libraryItems[anchorIndex].FileName}");
+                                            // Restore scroll position on next render cycle
+                                            Dispatcher.UIThread.Post(() =>
+                                            {
+                                                if (LibraryListBox != null && anchorIndex < _libraryItems.Count)
+                                                {
+                                                    Log($"UpdateLibraryPanel: Calling ScrollIntoView for index={anchorIndex}, itemCount={_libraryItems.Count}");
+                                                    LibraryListBox.ScrollIntoView(anchorIndex);
+                                                    Log($"UpdateLibraryPanel: ScrollIntoView completed for index={anchorIndex}");
+                                                }
+                                                else
+                                                {
+                                                    Log($"UpdateLibraryPanel: ScrollIntoView skipped - LibraryListBox={LibraryListBox != null}, anchorIndex={anchorIndex}, itemCount={_libraryItems.Count}");
+                                                }
+                                                _scrollAnchorPath = null; // Reset after restoration
+                                            }, DispatcherPriority.Loaded);
+                                        }
+                                        else
+                                        {
+                                            Log($"UpdateLibraryPanel: Scroll anchor '{_scrollAnchorPath}' not found in new filtered list (item was filtered out) - resetting to top");
+                                            _scrollAnchorPath = null; // Anchor not found, reset
+                                        }
+                                    }
+                                    else
+                                    {
+                                        if (_scrollAnchorPath != null && LibraryListBox == null)
+                                        {
+                                            Log($"UpdateLibraryPanel: Scroll anchor exists but LibraryListBox is null - cannot restore scroll position");
+                                        }
+                                        else if (_scrollAnchorPath == null)
+                                        {
+                                            Log($"UpdateLibraryPanel: No scroll anchor to restore (_scrollAnchorPath=null)");
+                                        }
                                     }
                                 }
                                 finally
@@ -3714,6 +3820,77 @@ namespace ReelRoulette
             }
         }
 
+        private List<LibraryItem> GetSelectedLibraryItems()
+        {
+            var selectedItems = new List<LibraryItem>();
+            foreach (var path in _selectedItemPaths)
+            {
+                var item = _libraryService.FindItemByPath(path);
+                if (item != null)
+                {
+                    selectedItems.Add(item);
+                }
+            }
+            return selectedItems;
+        }
+
+        private void UpdateSelectionCountDisplay()
+        {
+            if (LibraryCountTextBlock != null)
+            {
+                var selectedCount = _selectedItemPaths.Count;
+                var filteredCount = _libraryItems.Count;
+                LibraryCountTextBlock.Text = $"🎯 {filteredCount} filtered • 📝 {selectedCount} selected";
+            }
+        }
+
+
+        private void UpdateFilterCountDisplay(int count)
+        {
+            if (LibraryCountTextBlock != null)
+            {
+                var selectedCount = _selectedItemPaths.Count;
+                LibraryCountTextBlock.Text = $"🎯 {count} filtered • 📝 {selectedCount} selected";
+            }
+        }
+
+        private void UpdateContextMenuState()
+        {
+            if (LibraryListBox == null)
+                return;
+
+            var selectedItems = GetSelectedLibraryItems();
+            var hasSelection = selectedItems.Count > 0;
+            var hasAnyFavorites = selectedItems.Any(item => item.IsFavorite);
+            var hasAnyBlacklisted = selectedItems.Any(item => item.IsBlacklisted);
+
+            // Get common tags across all selected items
+            var commonTags = new HashSet<string>();
+            if (selectedItems.Count > 0)
+            {
+                commonTags = new HashSet<string>(selectedItems[0].Tags ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
+                foreach (var item in selectedItems.Skip(1))
+                {
+                    var itemTags = new HashSet<string>(item.Tags ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
+                    commonTags.IntersectWith(itemTags);
+                }
+            }
+
+            // Update menu item enabled states
+            if (ContextMenu_RemoveFromFavoritesMenuItem != null)
+            {
+                ContextMenu_RemoveFromFavoritesMenuItem.IsEnabled = hasSelection && hasAnyFavorites;
+            }
+            if (ContextMenu_RemoveFromBlacklistMenuItem != null)
+            {
+                ContextMenu_RemoveFromBlacklistMenuItem.IsEnabled = hasSelection && hasAnyBlacklisted;
+            }
+            if (ContextMenu_RemoveTagsMenuItem != null)
+            {
+                ContextMenu_RemoveTagsMenuItem.IsEnabled = hasSelection && commonTags.Count > 0;
+            }
+        }
+
         private void LibraryViewPresetComboBox_SelectionChanged(object? sender, SelectionChangedEventArgs e)
         {
             if (_isInitializingLibraryPanel) return; // Suppress during initialization
@@ -3740,6 +3917,9 @@ namespace ReelRoulette
                 var sourceId = item.Tag as string;
                 Log($"UI ACTION: LibrarySourceComboBox changed to: {sourceId ?? "All sources"} (display: {item.Content})");
                 _selectedSourceId = sourceId;
+                // Clear selection when source changes
+                _selectedItemPaths.Clear();
+                _lastSelectedIndex = -1;
                 UpdateLibraryPanel();
             }
         }
@@ -3911,13 +4091,57 @@ namespace ReelRoulette
             }
         }
 
+        private void LibraryListBox_SelectionChanged(object? sender, SelectionChangedEventArgs e)
+        {
+            if (_isHandlingSelectionChange || sender is not ListBox listBox)
+                return;
+
+            try
+            {
+                _isHandlingSelectionChange = true;
+
+                // Update selected paths from current selection
+                _selectedItemPaths.Clear();
+                if (listBox.SelectedItems != null)
+                {
+                    foreach (var item in listBox.SelectedItems.Cast<LibraryItem>())
+                    {
+                        _selectedItemPaths.Add(item.FullPath);
+                    }
+                }
+
+                // Update last selected index
+                if (listBox.SelectedIndex >= 0)
+                {
+                    _lastSelectedIndex = listBox.SelectedIndex;
+                }
+
+                UpdateSelectionCountDisplay();
+                UpdateContextMenuState();
+            }
+            finally
+            {
+                _isHandlingSelectionChange = false;
+            }
+        }
+
+        private void LibraryListBox_PointerPressed(object? sender, PointerPressedEventArgs e)
+        {
+            // Note: Avalonia's ListBox with SelectionMode="Multiple" handles Ctrl+Click and Shift+Click automatically
+            // This handler is kept for potential future custom behavior, but currently relies on default behavior
+            if (sender is ListBox listBox && listBox.SelectedIndex >= 0)
+            {
+                _lastSelectedIndex = listBox.SelectedIndex;
+            }
+        }
+
         private async void LibraryItemTags_Click(object? sender, RoutedEventArgs e)
         {
             Log("UI ACTION: LibraryItemTags clicked");
             if (sender is Button button && button.Tag is LibraryItem item)
             {
                 Log($"LibraryItemTags_Click: Opening tags dialog for: {item.FileName}");
-                var dialog = new ItemTagsDialog(item, _libraryIndex, _libraryService);
+                var dialog = new ItemTagsDialog(new List<LibraryItem> { item }, _libraryIndex, _libraryService);
                 var result = await dialog.ShowDialog<bool?>(this);
                 if (result == true)
                 {
@@ -3936,6 +4160,241 @@ namespace ReelRoulette
             }
         }
 
+        private async void ContextMenu_AddToFavorites_Click(object? sender, RoutedEventArgs e)
+        {
+            var selectedItems = GetSelectedLibraryItems();
+            if (selectedItems.Count == 0)
+                return;
+
+            Log($"ContextMenu_AddToFavorites_Click: Adding {selectedItems.Count} items to favorites");
+            
+            foreach (var item in selectedItems)
+            {
+                if (!item.IsFavorite)
+                {
+                    item.IsFavorite = true;
+                    _libraryService.UpdateItem(item);
+                }
+            }
+            
+            await Task.Run(() => _libraryService.SaveLibrary());
+            StatusTextBlock.Text = $"Added {selectedItems.Count} item(s) to favorites";
+            UpdateLibraryPanel();
+            UpdateContextMenuState();
+        }
+
+        private async void ContextMenu_RemoveFromFavorites_Click(object? sender, RoutedEventArgs e)
+        {
+            var selectedItems = GetSelectedLibraryItems();
+            if (selectedItems.Count == 0)
+                return;
+
+            Log($"ContextMenu_RemoveFromFavorites_Click: Removing {selectedItems.Count} items from favorites");
+            
+            foreach (var item in selectedItems)
+            {
+                if (item.IsFavorite)
+                {
+                    item.IsFavorite = false;
+                    _libraryService.UpdateItem(item);
+                }
+            }
+            
+            await Task.Run(() => _libraryService.SaveLibrary());
+            StatusTextBlock.Text = $"Removed {selectedItems.Count} item(s) from favorites";
+            UpdateLibraryPanel();
+            UpdateContextMenuState();
+        }
+
+        private async void ContextMenu_AddToBlacklist_Click(object? sender, RoutedEventArgs e)
+        {
+            var selectedItems = GetSelectedLibraryItems();
+            if (selectedItems.Count == 0)
+                return;
+
+            Log($"ContextMenu_AddToBlacklist_Click: Adding {selectedItems.Count} items to blacklist");
+            
+            foreach (var item in selectedItems)
+            {
+                if (!item.IsBlacklisted)
+                {
+                    item.IsBlacklisted = true;
+                    _libraryService.UpdateItem(item);
+                }
+            }
+            
+            await Task.Run(() => _libraryService.SaveLibrary());
+            StatusTextBlock.Text = $"Added {selectedItems.Count} item(s) to blacklist";
+            RebuildPlayQueueIfNeeded();
+            UpdateLibraryPanel();
+            UpdateContextMenuState();
+        }
+
+        private async void ContextMenu_RemoveFromBlacklist_Click(object? sender, RoutedEventArgs e)
+        {
+            var selectedItems = GetSelectedLibraryItems();
+            if (selectedItems.Count == 0)
+                return;
+
+            Log($"ContextMenu_RemoveFromBlacklist_Click: Removing {selectedItems.Count} items from blacklist");
+            
+            foreach (var item in selectedItems)
+            {
+                if (item.IsBlacklisted)
+                {
+                    item.IsBlacklisted = false;
+                    _libraryService.UpdateItem(item);
+                }
+            }
+            
+            await Task.Run(() => _libraryService.SaveLibrary());
+            StatusTextBlock.Text = $"Removed {selectedItems.Count} item(s) from blacklist";
+            RebuildPlayQueueIfNeeded();
+            UpdateLibraryPanel();
+            UpdateContextMenuState();
+        }
+
+        private async void ContextMenu_ClearStats_Click(object? sender, RoutedEventArgs e)
+        {
+            var selectedItems = GetSelectedLibraryItems();
+            if (selectedItems.Count == 0)
+                return;
+
+            Log($"ContextMenu_ClearStats_Click: Clearing stats for {selectedItems.Count} items");
+            
+            foreach (var item in selectedItems)
+            {
+                item.PlayCount = 0;
+                item.LastPlayedUtc = null;
+                _libraryService.UpdateItem(item);
+            }
+            
+            await Task.Run(() => _libraryService.SaveLibrary());
+            StatusTextBlock.Text = $"Cleared playback stats for {selectedItems.Count} item(s)";
+            UpdateLibraryPanel();
+            if (_currentVideoPath != null && selectedItems.Any(item => item.FullPath == _currentVideoPath))
+            {
+                UpdateCurrentVideoStatsUi();
+            }
+        }
+
+        private async void ContextMenu_RemoveFromLibrary_Click(object? sender, RoutedEventArgs e)
+        {
+            var selectedItems = GetSelectedLibraryItems();
+            if (selectedItems.Count == 0)
+                return;
+
+            // Show confirmation dialog
+            var confirmDialog = new RemoveItemsDialog(selectedItems.Count);
+            var confirmResult = await confirmDialog.ShowDialog<bool?>(this);
+            if (confirmResult != true)
+            {
+                Log($"ContextMenu_RemoveFromLibrary_Click: User cancelled removal of {selectedItems.Count} items");
+                return;
+            }
+
+            Log($"ContextMenu_RemoveFromLibrary_Click: Removing {selectedItems.Count} items from library");
+            
+            foreach (var item in selectedItems)
+            {
+                _libraryService.RemoveItem(item.FullPath);
+            }
+            
+            await Task.Run(() => _libraryService.SaveLibrary());
+            
+            // Clear selection
+            _selectedItemPaths.Clear();
+            if (LibraryListBox != null && LibraryListBox.SelectedItems != null)
+            {
+                LibraryListBox.SelectedItems.Clear();
+            }
+            
+            // Update library index reference
+            _libraryIndex = _libraryService.LibraryIndex;
+            
+            StatusTextBlock.Text = $"Removed {selectedItems.Count} item(s) from library";
+            UpdateLibraryPanel();
+            RebuildPlayQueueIfNeeded();
+        }
+
+        private async void ContextMenu_AddTags_Click(object? sender, RoutedEventArgs e)
+        {
+            var selectedItems = GetSelectedLibraryItems();
+            if (selectedItems.Count == 0)
+                return;
+
+            Log($"ContextMenu_AddTags_Click: Opening tags dialog for {selectedItems.Count} items");
+            
+            var dialog = new ItemTagsDialog(selectedItems, _libraryIndex, _libraryService);
+            var result = await dialog.ShowDialog<bool?>(this);
+            if (result == true)
+            {
+                Log($"ContextMenu_AddTags_Click: Tags updated for {selectedItems.Count} items");
+                
+                // Only rebuild library panel if tag filters are active that might affect visibility
+                // Tag-only changes don't affect which items are visible unless filters are applied
+                bool hasTagFilters = (LibraryRespectFiltersToggle?.IsChecked == true) 
+                    && ((_currentFilterState?.SelectedTags?.Count ?? 0) > 0 
+                        || (_currentFilterState?.ExcludedTags?.Count ?? 0) > 0);
+                
+                if (hasTagFilters)
+                {
+                    UpdateLibraryPanel(); // Rebuild only if tag filters might hide/show items
+                }
+                // Otherwise, tags are updated in place, no UI rebuild needed
+                
+                if (_currentVideoPath != null && selectedItems.Any(item => item.FullPath == _currentVideoPath))
+                {
+                    UpdateCurrentVideoStatsUi();
+                }
+            }
+        }
+
+        private async void ContextMenu_RemoveTags_Click(object? sender, RoutedEventArgs e)
+        {
+            var selectedItems = GetSelectedLibraryItems();
+            if (selectedItems.Count == 0)
+                return;
+
+            // Get common tags
+            var commonTags = new HashSet<string>();
+            if (selectedItems.Count > 0)
+            {
+                commonTags = new HashSet<string>(selectedItems[0].Tags ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
+                foreach (var item in selectedItems.Skip(1))
+                {
+                    var itemTags = new HashSet<string>(item.Tags ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
+                    commonTags.IntersectWith(itemTags);
+                }
+            }
+
+            if (commonTags.Count == 0)
+            {
+                StatusTextBlock.Text = "No common tags to remove";
+                return;
+            }
+
+            Log($"ContextMenu_RemoveTags_Click: Removing tags from {selectedItems.Count} items");
+            
+            // For now, we'll remove all common tags from all selected items
+            // A more sophisticated UI could be added later to select which tags to remove
+            foreach (var item in selectedItems)
+            {
+                if (item.Tags != null)
+                {
+                    item.Tags.RemoveAll(tag => commonTags.Contains(tag, StringComparer.OrdinalIgnoreCase));
+                    _libraryService.UpdateItem(item);
+                }
+            }
+            
+            await Task.Run(() => _libraryService.SaveLibrary());
+            StatusTextBlock.Text = $"Removed {commonTags.Count} tag(s) from {selectedItems.Count} item(s)";
+            UpdateLibraryPanel();
+            if (_currentVideoPath != null && selectedItems.Any(item => item.FullPath == _currentVideoPath))
+            {
+                UpdateCurrentVideoStatsUi();
+            }
+        }
 
         private void ShowLibraryPanelMenuItem_Click(object? sender, RoutedEventArgs e)
         {
@@ -7151,7 +7610,7 @@ namespace ReelRoulette
             }
 
             Log($"ManageTagsForCurrentVideo_Click: Opening tags dialog for current video: {item.FileName}");
-            var dialog = new ItemTagsDialog(item, _libraryIndex, _libraryService);
+            var dialog = new ItemTagsDialog(new List<LibraryItem> { item }, _libraryIndex, _libraryService);
             var result = await dialog.ShowDialog<bool?>(this);
             
             if (result == true)

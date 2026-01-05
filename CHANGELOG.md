@@ -2,6 +2,40 @@
 
 ## Unreleased
 
+- **Enhance Filter Dialog with tabbed interface and tag inclusion/exclusion** (2026-01-04):
+  - Split filter dialog into two tabs: General (all filters except tags) and Tags (tag-specific filtering)
+  - Enhanced tag filtering UI: 3-column grid layout with color-coded tag boxes (green = included, orange = excluded, violet = neither)
+  - Add tag exclusion support: tags can be explicitly excluded from results using minus button
+  - Tag inclusion (plus button) and exclusion (minus button) are mutually exclusive per tag
+  - Match mode options (All selected AND / Any selected OR) moved to top of Tags tab
+  - Filter state persistence includes both included and excluded tags
+  - Filter dialog now uses working copy pattern: changes are only applied when OK/Apply is clicked, Cancel properly discards modifications
+  - Filter summary text now displays both tag inclusion and exclusion counts (e.g., "3 tag(s) included (any), 2 tag(s) excluded")
+  - Fixed case-insensitive tag comparison bugs: FilterService and FilterDialog now use StringComparison.OrdinalIgnoreCase for all tag operations to ensure consistent filtering behavior regardless of tag case
+
+- **Implement batch operations in Library panel** (2026-01-03):
+  - Add multi-select support to Library panel ListBox with standard desktop selection patterns (Ctrl+Click, Shift+Click)
+  - Add context menu with batch operations: Add/Remove from Favorites, Add/Remove from Blacklist, Add/Remove Tags, Remove from Library, Clear Playback Stats
+  - Add filter/selection count display showing "🎯 n filtered • 📝 n selected"
+  - Implement selection tracking that persists across filter changes
+  - Context menu items dynamically enabled/disabled based on selection state
+  - Batch operations show status messages and update library panel after completion
+  - Selection cleared when source changes
+  - Enhanced ItemTagsDialog for batch operations:
+    - Modified to accept `List<LibraryItem>` for consistent UX (works with single or multiple items)
+    - New UI: rounded boxes with color-coded backgrounds (lime green = all items have tag, Huggins orange = some items, violet = none)
+    - Plus/minus toggle buttons side-by-side for adding/removing tags from all selected items
+    - New tags automatically select plus button for adding to all items
+  - Added RemoveItemsDialog confirmation dialog showing item count before removal
+  - Tags dialog UI improvements: 3-column layout, increased default size, removed title line
+  - Fixed TagState calculation bug: zero items edge case incorrectly marked tags as "AllItemsHaveTag" (now correctly shows "NoItemsHaveTag")
+  - Fixed selection count display: now properly updates after filter changes when selection is restored
+  - Optimized library panel updates: removed unnecessary forced refresh that caused list to disappear/reload
+  - Added scroll position preservation: library panel maintains scroll position during filter/search updates using anchor item (SelectedIndex or previous anchor path)
+  - Fixed scrollbar drag reset issue: improved scroll anchor detection to use SelectedIndex when available, fallback to previous anchor path when scrolling without selection
+  - Optimized batch tag operations: skip full library panel rebuild for tag-only changes when tag filters aren't active
+  - Library panel header UI improvements: removed "n selected" from header line, centered header and filter/selection count lines, unified text styling (white text, larger font), unified bullet separator (•) across both lines
+
 - **Fix photo loading race condition** (2026-01-03):
   - Fix race condition where multiple photo loading tasks can complete out of order and overwrite current photo display
   - Validate that loaded photo is still current before updating UI to prevent stale photo loads from overwriting newer photos

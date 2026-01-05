@@ -51,80 +51,26 @@ Each TODO entry follows this structure:
 
 ## P2 - Medium Priority
 
-### Customizable Keyboard Shortcuts
-
-- **Priority**: P2
-- **Impact**: Medium - Respects user muscle memory and preferences
-- **Description**: Allow users to customize existing keyboard shortcuts. The app has comprehensive hardcoded shortcuts (K=play/pause, J/L=seek, F=favorite, B=blacklist, etc.) but users cannot rebind them to match their preferred workflow or other apps (e.g., Space for play/pause like VLC).
-- **Implementation**:
-  - Add "Keyboard Shortcuts..." menu item in View or Edit menu
-  - Create `KeyboardShortcutsDialog` with scrollable list of all actions
-  - Display current key binding next to each action
-  - Click to rebind: Show "Press new key..." and capture next keypress
-  - Conflict detection: Warn if key is already bound to another action
-  - "Reset to Defaults" button to restore original bindings
-  - Store custom bindings in `settings.json` under `KeyboardShortcuts` property
-  - Refactor `OnGlobalKeyDown` to lookup action from keybinding dictionary
-  - Add "Show Keyboard Shortcuts" in Help menu (read-only reference)
-  - Support modifier keys: Ctrl, Shift, Alt combinations
-- **Notes**:
-  - Current shortcuts: F11=fullscreen, K=play/pause, J=seek back, L=seek forward, R=random, Left/Right=prev/next, F=favorite, A=auto-play, M=mute, B=blacklist, T=always-on-top, P=player-view, 1-5=toggle panels, comma/period=volume, O=browse, Q=quit
-  - Some keys should remain system-reserved (Alt+F4, etc.)
-  - Consider conflicts with menu accelerators
-
-### Batch Operations in Library Panel
-
-- **Priority**: P2
-- **Impact**: Medium - Saves significant time when managing multiple videos
-- **Description**: Add multi-select support for batch operations in Library panel. Currently, favoriting 20 videos requires clicking each one individually and pressing F 20 times.
-- **Implementation**:
-  - Multi-select support:
-    - Ctrl+Click: Add/remove individual item from selection
-    - Shift+Click: Select range between last selected and clicked item
-    - Ctrl+A: Select all visible items (respects current filter)
-  - Visual indication of selected items (light highlight color, checkbox column optional)
-  - Show selection count in status: "15 items selected" or in Library panel header
-  - Batch action context menu (right-click on selection):
-    - Add to Favorites
-    - Remove from Favorites
-    - Add to Blacklist
-    - Remove from Blacklist
-    - Add Tags... (opens tag dialog, applies to all)
-    - Remove Tags... (shows tags common to selection)
-    - Remove from Library (confirmation: "Remove 15 videos?")
-    - Clear Playback Stats
-  - Keyboard shortcuts work on selection or current item if nothing selected
-  - Selection persists across search/filter/sort changes (track by item ID)
-  - Clear selection when closing Library panel or changing sources
-- **Notes**: Example workflows: Select videos 1-50 → Add tag "Season 1", Select all under 30s → Blacklist, Select all favorites → Clear stats
-
-### Smart Playlists (Saved Filter Configurations)
+### Filter Presets (Saved Filter Configurations)
 
 - **Priority**: P2
 - **Impact**: Medium - Quick access to commonly used filter combinations
-- **Description**: Allow users to save current filter configurations as named playlists for instant recall. Currently, applying a complex filter combination (favorites + never played + under 5 min + with audio) requires manually setting 4-5 checkboxes every time.
+- **Description**: Allow users to save current filter configurations as named presets for instant recall. Currently, applying a complex filter combination (favorites + never played + under 5 min + with audio) requires manually setting 4-5 checkboxes every time. Filter presets provide quick access to frequently used filter combinations, eliminating repetitive filter setup.
 - **Implementation**:
-  - Add `Playlist` data model: Name, FilterState, SortOrder (optional), Icon (optional)
-  - Store playlists in `playlists.json` in AppData
+  - Add `FilterPreset` data model: Name, FilterState, SortOrder (optional)
+  - Store presets in `settings.json` under `FilterPresets` property
   - UI additions:
-    - "Save Current Filters as Playlist..." button in FilterDialog
-    - Playlist dropdown in Library panel (above or beside view preset dropdown)
-    - "Manage Playlists..." menu item opens `ManagePlaylistsDialog`
-  - ManagePlaylistsDialog features:
-    - List saved playlists with preview of filter settings
-    - Rename, duplicate, delete playlists
+    - "Add Preset" button in FilterDialog that saves current filter state with user-provided name
+    - Preset dropdown in FilterDialog (above filter controls)
+    - "Manage Presets..." menu item opens `ManagePresetsDialog`
+  - ManagePresetsDialog features:
+    - List saved presets with preview of filter settings
+    - Rename, duplicate, delete presets
     - Reorder (drag-drop or up/down buttons)
-    - Edit playlist filters (opens FilterDialog in edit mode)
-  - Built-in/default playlists (shown if user has none):
-    - "Never Played" - Videos with play count = 0
-    - "Favorites" - IsFavorite = true
-    - "Recent Additions" - Added within last 7 days
-    - "Long Form" - Duration > 10 minutes
-    - "Quick Clips" - Duration < 1 minute
-    - "No Audio" - HasAudio = false
-  - Quick-apply: Select playlist from dropdown → FilterState loads instantly
-  - Show active playlist name in Library panel header
-- **Notes**: Playlists are essentially named FilterState snapshots. Consider adding "Auto-load playlist on startup" option.
+    - Edit preset filters (opens FilterDialog in edit mode)
+  - Quick-apply: Select preset from dropdown → FilterState loads instantly
+  - Show active preset name in FilterDialog header
+- **Notes**: Filter presets are essentially named FilterState snapshots. No built-in presets - users create their own based on their specific filtering needs.
 
 ### Video Thumbnail Generation and Display
 
@@ -139,7 +85,7 @@ Each TODO entry follows this structure:
     - Generate asynchronously during import or on-demand
   - UI integration:
     - Add thumbnail column to Library panel ItemTemplate (left of filename)
-    - Lazy load thumbnails as user scrolls (with virtualization)
+    - Lazy load thumbnails as user scrolls (with virtualization - ✅ Library panel virtualization complete)
     - Show placeholder/loading icon while generating
     - Optional: Grid view mode toggle (list vs grid like YouTube/Netflix)
   - Settings:
@@ -208,7 +154,8 @@ Each TODO entry follows this structure:
     - Filter by category: Type "genre:" to see only genre tags
     - Smart suggestions based on video filename/path
   - Tag filtering in FilterDialog:
-    - Group tags by category for easier browsing
+    - Currently supports flat tags with inclusion/exclusion (✅ Enhanced with tag inclusion/exclusion UI)
+    - Group tags by category for easier browsing (enhancement on top of current UI)
     - "All Tags in Category" checkbox (select all Genre tags at once)
   - Maintain backward compatibility:
     - Read old flat tags as "Uncategorized" category
@@ -257,7 +204,7 @@ Each TODO entry follows this structure:
       - **Album/Series filter**: Multi-select buttons identical to Tag filter (AND/OR logic toggle)
       - **Year filter**: Min/Max year inputs identical to Duration filter ("no min", "no max" options)
     - Expand ItemTagsDialog (rename to "Manage Tags & Metadata") to edit all metadata fields
-    - Support batch metadata editing via P2 "Batch Operations in Library Panel":
+    - Support batch metadata editing via P2 "Batch Operations in Library Panel" (✅ Completed - batch operations now available):
       - Select multiple videos → Edit Metadata → Apply to all selected
       - Batch-editable fields: Tags, Genre, Year, Artist, Album/Series, Comment, Rating
       - Title is NOT batch-editable (typically unique per video)
@@ -282,39 +229,12 @@ Each TODO entry follows this structure:
   - Performance consideration: Batch operations could be slow (50-100ms per file)
   - Should provide "Backup" warning before first export operation
   - Cross-feature integration:
-    - Requires P2 "Centralized Settings Dialog": Dialog must exist first, this feature adds Metadata Sync tab
-    - Requires P2 "Batch Operations in Library Panel": Batch metadata editing for multiple videos
+    - Requires P2 "Centralized Settings Dialog": Dialog must exist first, this feature adds Metadata Sync tab (✅ Completed)
+    - Requires P2 "Batch Operations in Library Panel": Batch metadata editing for multiple videos (✅ Completed - batch operations now available)
     - Works with P1 "Background Refresh": Auto-import tags when new files detected
     - Complements P2 "Tag Categories": Could map file genres to tag categories
   - Makes P3 "Video Metadata Editor" redundant: This syncs with actual file, that was for library-only metadata
-  - ItemTagsDialog should be renamed to ItemMetadataDialog or similar to reflect expanded scope
-
-### Playback History Analytics and Visualization
-
-- **Priority**: P2
-- **Impact**: Medium - Interesting insights for engaged users
-- **Description**: Add visual analytics for playback history and library statistics. Current stats are basic text counters. Users who engage heavily with the app would appreciate trends and patterns.
-- **Implementation**:
-  - Create new "Statistics" window (Library → View Statistics)
-  - Charts to implement (using ScottPlot or LiveCharts library):
-    - **Line chart**: Videos played per day/week/month over time
-    - **Bar chart**: Top 20 most-played videos
-    - **Pie chart**: Favorites vs non-favorites play ratio
-    - **Histogram**: Video duration distribution in library
-    - **Tag cloud**: Most common tags, weighted by usage/play count
-    - **Heatmap**: Play times by hour of day and day of week
-    - **Source distribution**: Videos per source (bar chart)
-    - **Completion rate**: Videos played once vs multiple times
-  - Date range selector: Last 7 days, 30 days, 90 days, 1 year, All time
-  - Export functionality:
-    - Export chart as PNG/SVG image
-    - Export data as CSV or JSON for external analysis
-  - Summary statistics panel:
-    - Total watch time (sum of all play durations)
-    - Average videos per day
-    - Longest play streak (consecutive days with plays)
-    - Most active day/time
-- **Notes**: Power user feature. Consider making this extensible (plugin architecture) for custom charts. Most useful with 6+ months of playback history.
+  - ItemTagsDialog now supports batch operations (single or multiple items), but still focuses on tags only. Rename to ItemMetadataDialog when extended metadata support is added.
 
 ### Remember Playback Position
 
@@ -340,129 +260,112 @@ Each TODO entry follows this structure:
   - Position should persist across app restarts
   - Consider adding "Resume without asking" option to skip dialog
 
-### Installation and First-Run Setup Wizard
+### Enhanced Library Statistics Panel
 
 - **Priority**: P2
-- **Impact**: Medium - Significantly improves first-run experience and onboarding
-- **Description**: Create a guided setup wizard that runs on first launch to help users configure ReelRoulette. Currently, new users must manually discover and configure settings, import library sources, and learn features through trial and error. A setup wizard provides a smooth onboarding experience and ensures proper initial configuration.
+- **Impact**: Medium - Better insights into library composition and usage
+- **Description**: Enhance the existing statistics panel to show more useful metrics and context-aware information. Current stats show basic counters but could provide better insights for library management and decision-making.
 - **Implementation**:
-  - Detect first run (check for existence of `settings.json` or add `IsFirstRun` flag)
-  - Create `SetupWizardWindow.axaml` and `SetupWizardWindow.axaml.cs`
-  - Wizard pages (sequential navigation with Next/Back/Skip buttons):
-    - **Welcome Page**:
-      - App logo and title
-      - Brief description of ReelRoulette
-      - "Get Started" button to begin setup
-      - "Skip Setup" option (uses all defaults)
-    - **Library Setup Page**:
-      - "Add your first video folder" prompt
-      - Folder browser button
-      - List of added folders (can add multiple)
-      - Option to scan for duration/loudness immediately or later
-      - Estimated scan time based on folder size
-    - **Playback Preferences Page**:
-      - Volume normalization mode selection (simple explanation of each)
-      - Loop current video (checkbox, default: enabled)
-      - Auto-play next video (checkbox, default: enabled)
-      - Start muted (checkbox, default: disabled)
-      - No repeats until all played (checkbox, default: enabled)
-      - Seek/volume step sizes
-    - **Optional Features Page**:
-      - Start with Windows (checkbox, default: disabled)
-      - Start minimized to taskbar (checkbox, default: disabled)
-      - Start minimized to tray (checkbox, default: disabled, grayed out if System Tray not implemented)
-      - Minimize to system tray (checkbox, default: disabled, grayed out if System Tray not implemented)
-      - Show tray notifications (checkbox, default: enabled, grayed out if System Tray not implemented)
-      - Create desktop shortcut (checkbox, default: enabled)
-    - **Complete Page**:
-      - "Setup complete!" message
-      - Summary of configured settings
-      - Quick tips: Keyboard shortcuts cheat sheet, filter button location, etc.
-      - "Open ReelRoulette" button
-  - Store wizard completion flag in `settings.json` (`IsFirstRun = false`)
-  - Option to re-run wizard: Help → "Run Setup Wizard Again"
-  - During wizard, show progress indicator (Page X of Y)
-  - All wizard settings should integrate with existing Settings Dialog
-  - Validation rules:
-    - **Quick Setup mode**: At least one library source is required (show error if user tries to finish without adding a folder)
-    - **Custom Setup mode**: Library source is optional, but show warning if skipped: "You can add library sources later in Settings"
-    - **"Skip Setup" button**: Bypasses all validation, uses defaults, marks wizard as complete
-    - Path validation: Ensure all added folder paths are valid and accessible
-  - Two setup modes:
-    - **Quick Setup**: Use sensible defaults, only ask for library folder (1 page, source required)
-    - **Custom Setup**: Show all wizard pages (full walkthrough, all pages can be skipped)
-  - Wizard window should be modal (blocks main window) and centered on screen
-  - Users can close wizard at any time via X button or Cancel (wizard can be re-run later)
-- **Notes**:
-  - Should feel lightweight and quick (under 2 minutes to complete)
-  - Wizard is modal (blocks main window) but can be closed/cancelled at any time
-  - Incomplete wizard can be re-run from Help menu - users aren't forced to complete it on first run
-  - In Custom Setup, individual pages can be skipped (uses defaults for that page)
-  - In Quick Setup, the library folder selection is mandatory (core requirement)
-  - Add tooltip help icons on each page explaining options
-  - Consider "Import from another video manager" option if feasible
-  - After completion, mark `IsFirstRun = false` in settings
-  - Desktop shortcut creation may require elevated permissions on some systems
-  - Quick Setup mode is recommended for most users (simplicity and speed)
-  - Custom Setup mode for power users who want full control over configuration
-  - **Settings consistency**: All Optional Features Page settings use identical terminology and defaults as their corresponding Settings Dialog entries:
-    - "Start with Windows" → P3 "Start with Windows" feature (default: disabled)
-    - "Start minimized to taskbar" → P3 "Start with Windows" feature (default: disabled)
-    - "Start minimized to tray" → P3 "Start with Windows" feature (default: disabled, requires System Tray)
-    - "Minimize to system tray" → P3 "System Tray Integration" feature (default: disabled)
-    - "Show tray notifications" → P3 "System Tray Integration" feature (default: enabled)
-  - Group System Tray settings together in wizard UI with explanatory text: "System Tray features (optional)"
+  - Add top tags section showing most common tags with counts (e.g., "Top Tags: Action (234), Comedy (189), Drama (156)")
+  - Rename "Current video" section to "Current File" for consistency (supports both videos and photos)
+  - Make stats context-aware based on media type:
+    - For videos: Show duration, has audio, loudness, peak (current behavior)
+    - For photos: Hide video-specific stats (duration, audio, loudness), potentially add resolution, EXIF data, etc.
+    - Only show relevant information based on current file type
+  - Consider adding additional metadata display:
+    - Resolution (width x height) for both videos and photos
+    - File size
+    - File creation/modification date
+    - Tags assigned to current file
+  - Organize stats into logical sections with clear headers
+  - Maintain existing global statistics (total videos, photos, favorites, etc.)
+- **Notes**: Focus on actionable insights that help users understand their library composition and make better filtering/selection decisions. Keep it simple and practical, not overwhelming.
+
+### Enhanced Search and Sorting
+
+- **Priority**: P2
+- **Impact**: Medium - Improves library navigation and discovery
+- **Description**: Enhance the existing search and sorting capabilities to make it easier to find and organize media in large libraries. Current search is basic filename/path matching, and sorting supports limited criteria.
+- **Implementation**:
+  - **Search enhancements**:
+    - Add tag autocomplete in search box: Type "#" or "@" to trigger tag suggestions
+    - Show matching tags as user types (dropdown list of available tags)
+    - Support tag search syntax: `tag:Action` or `#Action` to filter by tag
+    - Filter search results in real-time as user types
+  - **Sorting enhancements**:
+    - Add multi-criteria sorting: Primary sort + secondary sort (e.g., Sort by Date Added, then by Duration)
+    - Add sort criteria options:
+      - Tag count (number of tags assigned)
+      - Last played (most recent first or oldest first)
+      - File size
+      - Resolution (for videos/photos with metadata)
+    - Visual indicator showing active sort criteria
+    - Remember sort preferences per view preset
+- **Notes**: Enhance existing single search box and single sorting system - do not create separate search/sort interfaces. Tag autocomplete helps users quickly find items with specific tags in large libraries.
 
 ---
 
 ## P3 - Low Priority
 
-### System Tray Integration
+### Customizable Keyboard Shortcuts
 
 - **Priority**: P3
-- **Impact**: Low - Convenience for users who want minimal taskbar presence
-- **Description**: Add system tray icon and minimize-to-tray functionality. Allows app to run in background without taking up taskbar space.
+- **Impact**: Medium - Respects user muscle memory and preferences
+- **Description**: Allow users to customize existing keyboard shortcuts. The app has comprehensive hardcoded shortcuts (K=play/pause, J/L=seek, F=favorite, B=blacklist, etc.) but users cannot rebind them to match their preferred workflow or other apps (e.g., Space for play/pause like VLC).
 - **Implementation**:
-  - Add system tray icon (use existing app icon or create smaller 16x16 variant)
-  - When enabled: Minimize button sends app to tray instead of taskbar
-  - Tray icon context menu:
-    - "Show/Hide Window" (default double-click action)
-    - "Play Random Video" (quick action)
-    - "Exit" (closes application)
-  - Notification on first minimize: "ReelRoulette is still running in system tray"
-  - Optional: Show toast notifications for certain events (video ended, timer expired)
-  - **Add to Settings Dialog** (requires P2 "Centralized Settings Dialog"):
-    - Add to General tab:
-      - Minimize to system tray (checkbox, default: disabled)
-      - Show tray notifications (checkbox, default: enabled)
+  - Add "Keyboard Shortcuts..." menu item in View or Edit menu
+  - Create `KeyboardShortcutsDialog` with scrollable list of all actions
+  - Display current key binding next to each action
+  - Click to rebind: Show "Press new key..." and capture next keypress
+  - Conflict detection: Warn if key is already bound to another action
+  - "Reset to Defaults" button to restore original bindings
+  - Store custom bindings in `settings.json` under `KeyboardShortcuts` property
+  - Refactor `OnGlobalKeyDown` to lookup action from keybinding dictionary
+  - Add "Show Keyboard Shortcuts" in Help menu (read-only reference)
+  - Support modifier keys: Ctrl, Shift, Alt combinations
 - **Notes**:
-  - Windows-specific feature (may need platform detection for cross-platform builds)
-  - Tray icon should update if video is playing (optional visual indicator)
-  - "Start minimized to tray" setting is part of P3 "Start with Windows" feature
+  - Current shortcuts: F11=fullscreen, K=play/pause, J=seek back, L=seek forward, R=random, Left/Right=prev/next, F=favorite, A=auto-play, M=mute, B=blacklist, T=always-on-top, P=player-view, 1-5=toggle panels, comma/period=volume, O=browse, Q=quit
+  - Some keys should remain system-reserved (Alt+F4, etc.)
+  - Consider conflicts with menu accelerators
 
-### Start with Windows
+### Playback History Analytics and Visualization
 
 - **Priority**: P3
-- **Impact**: Low - Convenience for dedicated users
-- **Description**: Add option to automatically launch ReelRoulette when Windows starts. Useful for users who use the app daily or want timer-based playback on startup.
+- **Impact**: Medium - Interesting insights for engaged users
+- **Description**: Add visual analytics for playback history and library statistics. Current stats are basic text counters. Users who engage heavily with the app would appreciate trends and patterns.
 - **Implementation**:
-  - When enabled: Create registry entry or shortcut in Windows Startup folder
-  - Registry path: `HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run`
-  - Key name: "ReelRoulette"
-  - Value: Path to ReelRoulette.exe
-  - Detect if already enabled on settings load (sync checkbox with actual registry state)
-  - Admin permissions may be required for registry write
-  - **Add to Settings Dialog** (requires P2 "Centralized Settings Dialog"):
-    - Add to General tab:
-      - Start with Windows (checkbox, default: disabled)
-      - Start minimized to taskbar (checkbox, default: disabled)
-      - Start minimized to tray (checkbox, default: disabled, requires P3 "System Tray Integration")
-- **Notes**:
-  - Windows-specific feature
-  - Should handle uninstall scenario (remove registry entry)
-  - "Start minimized to taskbar" is a basic OS feature (no dependencies)
-  - "Start minimized to tray" requires System Tray Integration to be implemented first
-  - May need UAC elevation on first enable
+  - Create new "Statistics" window (Library → View Statistics)
+  - Charts to implement (using ScottPlot or LiveCharts library):
+    - **Line chart**: Videos played per day/week/month over time
+    - **Bar chart**: Top 20 most-played videos
+    - **Pie chart**: Favorites vs non-favorites play ratio
+    - **Histogram**: Video duration distribution in library
+    - **Tag cloud**: Most common tags, weighted by usage/play count
+    - **Heatmap**: Play times by hour of day and day of week
+    - **Source distribution**: Videos per source (bar chart)
+    - **Completion rate**: Videos played once vs multiple times
+  - Date range selector: Last 7 days, 30 days, 90 days, 1 year, All time
+  - Export functionality:
+    - Export chart as PNG/SVG image
+    - Export data as CSV or JSON for external analysis
+  - Summary statistics panel:
+    - Total watch time (sum of all play durations)
+    - Average videos per day
+    - Longest play streak (consecutive days with plays)
+    - Most active day/time
+- **Notes**: Power user feature. Consider making this extensible (plugin architecture) for custom charts. Most useful with 6+ months of playback history.
+
+### Generic Confirmation Dialog Refactoring
+
+- **Priority**: P3
+- **Impact**: Low - Code quality and maintainability improvement
+- **Description**: Create a generic confirmation dialog class for reuse across the codebase. Currently, confirmation dialogs (like RemoveItemsDialog, MissingFileDialog, etc.) are created separately, leading to code duplication.
+- **Implementation**:
+  - Create generic `ConfirmDialog` class with configurable title, message, button labels
+  - Support for different button combinations (OK/Cancel, Yes/No, Remove/Cancel, etc.)
+  - Refactor existing confirmation dialogs to use the generic dialog
+  - Maintain backward compatibility during refactoring
+- **Notes**: Low priority enhancement for code maintainability. Consider after more urgent features are complete.
 
 ### Playback Speed Control
 
@@ -486,140 +389,65 @@ Each TODO entry follows this structure:
   - Audio quality may degrade at extreme speeds (< 0.5x or > 2x)
   - May interact with volume normalization features
 
-### Custom FFmpeg/FFprobe Paths
+### Advanced Settings (Cache and Performance Controls)
 
 - **Priority**: P3
-- **Impact**: Low - Advanced users with custom builds only
-- **Description**: Allow users to specify custom paths for FFmpeg and FFprobe executables. Useful for advanced users who want to use newer versions, custom builds, or system-installed binaries instead of bundled versions.
+- **Impact**: Low - Fine-tuning for specific hardware/usage scenarios and disk space management
+- **Description**: Combined advanced settings for cache management and performance controls. Allows users to fine-tune how the app uses system resources (CPU, memory, network, disk) and manage cached data. Useful for users with slower hardware, network drives, limited disk space, or who want to optimize resource usage.
 - **Implementation**:
-  - Validation: Check if specified files exist and are executable
-  - Test button: Run `ffmpeg -version` to verify working binary
-  - Fall back to bundled version if custom path is invalid
-  - Update `NativeBinaryHelper.cs` to check settings before using bundled paths
+  - **Cache Management**:
+    - Thumbnail cache cleanup (requires P2 "Video Thumbnail Generation"):
+      - Limit (dropdown: 100MB, 500MB, 1GB, 2GB, 5GB, Unlimited - default: 1GB)
+      - Cleanup strategy (dropdown: LRU, Oldest first, By source)
+      - Clear Thumbnail Cache button (shows size freed)
+    - Metadata cache:
+      - Limit (dropdown: 10MB, 50MB, 100MB, Unlimited - default: 50MB)
+      - Auto-clear older than (dropdown: 30 days, 90 days, 1 year, Never - default: 90 days)
+      - Clear Metadata Cache button
+    - Preview cache (future feature):
+      - Limit (dropdown: 500MB, 1GB, 2GB, 5GB, Unlimited - default: 1GB)
+      - Clear Preview Cache button
+    - Library backups:
+      - Keep last N backups (numeric input: 5-50, default: 10)
+      - Manage Backups button (opens dialog with backup list)
+    - Cache statistics (read-only displays):
+      - Current thumbnail cache size / items
+      - Current metadata cache size / items
+      - Current preview cache size / items
+      - Last cleanup date
+    - Auto-cleanup when limit reached (checkbox, default: enabled)
+    - Clear All Caches button (master cleanup with confirmation)
+  - **Performance Controls**:
+    - Performance preset (dropdown: Low-end PC, Balanced, High-performance, Custom - default: Balanced)
+    - Concurrent Operations:
+      - Max FFmpeg/FFprobe processes (dropdown: 1, 2, 4, 8 - default: 4)
+      - Max thumbnail tasks (dropdown: 1, 2, 4, 8 - default: 2, requires P2 "Video Thumbnail Generation")
+    - Background Operations (requires P1 "Background Refresh"):
+      - Scan interval when minimized (dropdown: Immediate, 5min, 30min, Hourly, Disabled - default: 30min)
+      - CPU priority (dropdown: Low, Normal, High - default: Low)
+      - Pause on low battery (checkbox, default: enabled)
+      - Pause when apps fullscreen (checkbox, default: disabled)
+    - Network Drives:
+      - Operation timeout (dropdown: 5s, 10s, 30s, 60s - default: 10s)
+      - Retry attempts (dropdown: 0, 1, 3, 5 - default: 3)
+      - Skip thumbnails on network (checkbox, default: enabled)
+      - Cache file checks (dropdown: 30s, 1min, 5min, Never - default: 1min)
+    - Library Panel (requires P1 "Library Panel Virtualization" - ✅ Completed):
+      - Pre-render items (dropdown: 10, 20, 50, 100 - default: 20)
+      - Render batch size (dropdown: 5, 10, 20, 50 - default: 10)
+      - Scroll buffer (dropdown: 250px, 500px, 1000px - default: 500px)
+    - Memory:
+      - Cache strategy (dropdown: Keep all, Unload inactive - default: Keep all)
+      - Force GC after operations (checkbox, default: enabled)
+      - Video buffer size (dropdown: Auto, 512KB, 1MB, 2MB, 4MB - default: Auto)
+    - UI Rendering:
+      - Hardware acceleration (dropdown: Auto, Enabled, Disabled - default: Auto)
+      - Frame rate limit (dropdown: 30, 60, 120 FPS, Unlimited - default: 60 FPS)
+      - Smooth scrolling (checkbox, default: enabled)
+      - Reduce animations on battery (checkbox, default: enabled)
   - **Add to Settings Dialog** (requires P2 "Centralized Settings Dialog"):
-    - Add to Advanced tab → FFmpeg/FFprobe section:
-      - Use bundled binaries (checkbox, default: enabled)
-      - FFmpeg path (text input with Browse button, disabled if using bundled)
-      - FFprobe path (text input with Browse button, disabled if using bundled)
-      - Test binaries button (shows version info or error)
-- **Notes**:
-  - Most users should use bundled binaries (simpler, tested)
-  - Useful for testing new FFmpeg features or performance
-  - Should validate version compatibility (minimum FFmpeg 4.0 or similar)
-  - Clear warning: "Custom binaries may cause instability"
-
-### Advanced Logging Controls
-
-- **Priority**: P3
-- **Impact**: Low - Primarily for debugging and development
-- **Description**: Add user-configurable logging levels and log management. Helps with troubleshooting and reduces log file size for normal users.
-- **Implementation**:
-  - Log levels:
-    - Error: Only log errors and exceptions
-    - Warning: Errors + warnings
-    - Info: Errors + warnings + informational messages (current behavior)
-    - Debug: Everything including detailed operation traces
-  - Update logging calls to respect level (filter before writing)
-  - Implement log rotation when file size limit reached
-  - **Add to Settings Dialog** (requires P2 "Centralized Settings Dialog"):
-    - Add to Advanced tab → Logging section:
-      - Log level (dropdown: Error, Warning, Info, Debug - default: Info)
-      - Log rotation (dropdown: 1MB, 5MB, 10MB, Unlimited - default: 5MB)
-      - Open log file button (opens last.log in default text editor)
-      - Clear log file button (truncates last.log with confirmation)
-- **Notes**:
-  - Debug level may impact performance with very verbose logging
-  - Consider timestamped log archives (last.log.1, last.log.2, etc.)
-  - Useful for troubleshooting scan failures or playback issues
-  - Default Info level is good balance for most users
-
-### Cache Management and Limits
-
-- **Priority**: P3
-- **Impact**: Low - Disk space management for users with large libraries
-- **Description**: Add user-configurable cache size limits and management for various cached data (thumbnails, metadata, preview frames). Helps users control disk space usage and clean up old cached data.
-- **Implementation**:
-  - Implement cache size tracking and cleanup logic
-  - Thumbnail cache cleanup (requires P2 "Video Thumbnail Generation")
-  - Metadata cache for raw FFprobe JSON output
-  - Preview frames cache (future feature)
-  - Library index auto-backup before major operations
-  - Cache statistics calculation
-  - Low disk space warning system (< 1GB free)
-  - **Add to Settings Dialog** (requires P2 "Centralized Settings Dialog"):
-    - Add to Advanced tab → Cache section:
-      - **Thumbnail cache** (requires P2 "Video Thumbnail Generation"):
-        - Limit (dropdown: 100MB, 500MB, 1GB, 2GB, 5GB, Unlimited - default: 1GB)
-        - Cleanup strategy (dropdown: LRU, Oldest first, By source)
-        - Clear Thumbnail Cache button (shows size freed)
-      - **Metadata cache**:
-        - Limit (dropdown: 10MB, 50MB, 100MB, Unlimited - default: 50MB)
-        - Auto-clear older than (dropdown: 30 days, 90 days, 1 year, Never - default: 90 days)
-        - Clear Metadata Cache button
-      - **Preview cache** (future feature):
-        - Limit (dropdown: 500MB, 1GB, 2GB, 5GB, Unlimited - default: 1GB)
-        - Clear Preview Cache button
-      - **Library backups**:
-        - Keep last N backups (numeric input: 5-50, default: 10)
-        - Manage Backups button (opens dialog with backup list)
-      - **Cache statistics** (read-only displays):
-        - Current thumbnail cache size / items
-        - Current metadata cache size / items
-        - Current preview cache size / items
-        - Last cleanup date
-      - Auto-cleanup when limit reached (checkbox, default: enabled)
-      - Clear All Caches button (master cleanup with confirmation)
-- **Notes**:
-  - Thumbnail cache: ~20-50KB per thumbnail at 128x128, so 10,000 thumbnails ≈ 200-500MB
-  - Metadata cache: Very small, mostly text, rarely exceeds 100MB even for huge libraries
-  - Preview frames: Much larger, 1-5MB per video depending on frame count
-  - Each library.json backup: 1-10MB depending on library size
-  - Most features are placeholders for future thumbnail/preview features
-  - Useful for users with limited disk space or very large libraries
-
-### Performance and Resource Controls
-
-- **Priority**: P3
-- **Impact**: Low - Fine-tuning for specific hardware/usage scenarios
-- **Description**: Add user-configurable performance options to control how the app uses system resources (CPU, memory, network). Useful for users with slower hardware, network drives, or who want to minimize resource usage.
-- **Implementation**:
-  - Implement concurrent operation limits for FFmpeg/thumbnails
-  - Background throttling logic (requires P1 "Background Refresh")
-  - Network timeout and retry handling
-  - Library panel virtualization tuning (requires P1 "Library Panel Virtualization")
-  - Memory management strategies
-  - Hardware acceleration controls
-  - Performance monitoring (optional)
-  - **Add to Settings Dialog** (requires P2 "Centralized Settings Dialog"):
-    - Add to Advanced tab → Performance section:
-      - **Performance preset** (dropdown: Low-end PC, Balanced, High-performance, Custom - default: Balanced)
-      - **Concurrent Operations**:
-        - Max FFmpeg/FFprobe processes (dropdown: 1, 2, 4, 8 - default: 4)
-        - Max thumbnail tasks (dropdown: 1, 2, 4, 8 - default: 2, requires P2 "Video Thumbnail Generation")
-      - **Background Operations** (requires P1 "Background Refresh"):
-        - Scan interval when minimized (dropdown: Immediate, 5min, 30min, Hourly, Disabled - default: 30min)
-        - CPU priority (dropdown: Low, Normal, High - default: Low)
-        - Pause on low battery (checkbox, default: enabled)
-        - Pause when apps fullscreen (checkbox, default: disabled)
-      - **Network Drives**:
-        - Operation timeout (dropdown: 5s, 10s, 30s, 60s - default: 10s)
-        - Retry attempts (dropdown: 0, 1, 3, 5 - default: 3)
-        - Skip thumbnails on network (checkbox, default: enabled)
-        - Cache file checks (dropdown: 30s, 1min, 5min, Never - default: 1min)
-      - **Library Panel** (requires P1 "Library Panel Virtualization"):
-        - Pre-render items (dropdown: 10, 20, 50, 100 - default: 20)
-        - Render batch size (dropdown: 5, 10, 20, 50 - default: 10)
-        - Scroll buffer (dropdown: 250px, 500px, 1000px - default: 500px)
-      - **Memory**:
-        - Cache strategy (dropdown: Keep all, Unload inactive - default: Keep all)
-        - Force GC after operations (checkbox, default: enabled)
-        - Video buffer size (dropdown: Auto, 512KB, 1MB, 2MB, 4MB - default: Auto)
-      - **UI Rendering**:
-        - Hardware acceleration (dropdown: Auto, Enabled, Disabled - default: Auto)
-        - Frame rate limit (dropdown: 30, 60, 120 FPS, Unlimited - default: 60 FPS)
-        - Smooth scrolling (checkbox, default: enabled)
-        - Reduce animations on battery (checkbox, default: enabled)
-      - Reset to Defaults button (for performance section only)
+    - Add to Advanced tab → Advanced Settings section (combines cache and performance)
+    - Reset to Defaults button (for entire Advanced Settings section)
 - **Notes**:
   - Most users should use default settings (balanced performance)
   - Performance presets auto-configure all settings (Custom allows manual tuning)
@@ -628,6 +456,7 @@ Each TODO entry follows this structure:
   - Background throttling: Prevents app from hogging resources when not in focus
   - Memory settings: Useful for users with 8GB RAM or less
   - UI rendering: Hardware acceleration issues rare but possible on older GPUs
+  - Cache management helps users control disk space usage
   - Most features depend on other TODOs (virtualization, thumbnails, background refresh)
 
 ### Export/Import Library Index
@@ -657,68 +486,28 @@ Each TODO entry follows this structure:
     - If source name conflicts: Rename imported source or skip?
 - **Notes**: Consider cloud backup integration (auto-export to Dropbox folder). Most users won't need this unless reinstalling OS or migrating machines.
 
-### Undo/Redo System
+### Enhanced Random Selection Modes
 
-- **Priority**: P3
-- **Impact**: Low-Medium - Safety net for accidental actions
-- **Description**: Add undo/redo support for destructive operations. Provides safety net for mistakes like accidentally removing videos from library or mass-blacklisting.
+- **Priority**: P2
+- **Impact**: Medium - Fixes semi-random behavior and provides better distribution
+- **Description**: Enhance random selection algorithm and add multiple randomization modes to address current "semi-random" behavior where multiple items from the same folder are frequently selected consecutively. Provides better distribution across the library and multiple modes for different preferences.
 - **Implementation**:
-  - Track operations in undo stack (limited to last 20 actions):
-    - Remove from library (store LibraryItem)
-    - Blacklist/unblacklist (store path and state)
-    - Clear playback stats (store old counts)
-    - Tag changes (store old tags)
-    - Favorite toggle (store old state)
-  - Add Edit menu (if not exists) with:
-    - "Undo {ActionName}" (Ctrl+Z) - grayed out if nothing to undo
-    - "Redo {ActionName}" (Ctrl+Y) - grayed out if nothing to redo
-  - Undo stack management:
-    - Clear redo stack when new action performed
-    - Clear entire stack on app restart (or persist to `undo.json`)
-    - Memory limit: Drop oldest operations if stack exceeds limit
-  - Visual feedback: Toast notification "Undone: Remove from Library" (2sec)
-- **Notes**: Most destructive operations already have confirmation dialogs. Implementation complexity is high relative to benefit. Start with high-value operations (Remove from Library) first.
-
-### Custom Themes and Dark Mode
-
-- **Priority**: P3
-- **Impact**: Low - Aesthetic preference, some accessibility benefit
-- **Description**: Add theme support with light/dark/custom color schemes. Current UI appears to be light themed with fixed colors.
-- **Implementation**:
-  - Define theme resource dictionaries in XAML:
-    - `LightTheme.axaml` - Current colors
-    - `DarkTheme.axaml` - Dark background, light text
-    - `HighContrast.axaml` - Accessibility (high contrast colors)
-  - Add View → Theme menu with options:
-    - Light
-    - Dark
-    - Auto (follow system theme)
-    - High Contrast (accessibility)
-  - Store preference in settings.json
-  - Apply theme on startup and when changed
-  - Ensure all custom controls respect theme colors (buttons, panels, etc.)
-  - Test with Windows dark mode and light mode
-- **Notes**: Avalonia has built-in theme support (FluentTheme), should be straightforward. Consider this alongside accessibility improvements (font size scaling, screen reader support).
-
-### Advanced Shuffle/Random Modes
-
-- **Priority**: P3
-- **Impact**: Low - Niche feature for specific preferences
-- **Description**: Add alternative random/shuffle algorithms beyond pure random. Helps users discover less-played videos or create specific viewing patterns.
-- **Implementation**:
-  - Add "Shuffle Mode" dropdown in playback controls or settings
-  - Modes to implement:
-    - **Pure Random** (current): Equal probability for all eligible videos
-    - **Weighted Random**: Favor less-played videos (probability inversely proportional to play count)
-    - **Smart Shuffle**: Play all eligible videos once before repeating (like Spotify)
-    - **Chronological**: Oldest added first (FIFO)
-    - **Reverse Chronological**: Newest added first
-    - **Longest First**: Sort by duration descending
-    - **Shortest First**: Sort by duration ascending
+  - **Fix current random algorithm**: Improve random seed/algorithm to ensure true randomization and better distribution
+  - Add "Randomization Mode" setting (single dropdown in Settings or playback controls):
+    - **Pure Random** (fixed): True random selection with improved distribution algorithm to avoid folder clustering
+    - **Weighted Random**: Favor less-played videos (probability inversely proportional to play count) - helps discover forgotten content
+    - **Smart Shuffle**: Play all eligible videos once before repeating (like Spotify) - ensures all content is seen before repeats
+    - **Spread Mode**: Prefer items from different folders/paths - actively avoids consecutive items from same directory
+    - **Weighted with Spread**: Combine weighted random with folder-aware distribution
+  - Fix folder clustering issue in current algorithm:
+    - Track recently selected folders/paths
+    - Bias selection away from recently selected folders
+    - Implement proper shuffle algorithm that distributes across directory structure
   - Store mode preference in settings
   - Update queue building logic in `BuildQueue()` based on selected mode
   - Show current mode in status or tooltip
-- **Notes**: Most users are satisfied with pure random. Weighted random might be most valuable (surfaces forgotten gems). Consider user feedback before implementing all modes.
+  - All modes respect current filters (favorites, tags, duration, etc.)
+- **Notes**: The current random selection appears to be "semi-random" due to folder clustering. This enhancement addresses the root cause while providing multiple modes for different use cases. Spread Mode is particularly important for large libraries organized in folders to ensure better variety in selections.
 
 ### Duplicate Video Detection
 
@@ -741,53 +530,25 @@ Each TODO entry follows this structure:
   - Report: "Found 15 potential duplicates, removed 8 files"
 - **Notes**: Perceptual hashing is complex (would need library like ImageHash ported to video). Start with Level 1 and 2 only. Most users won't need this.
 
-### Video Metadata Editor
+### Face Detection for Photos
 
 - **Priority**: P3
-- **Impact**: Low - Edge case, most metadata is auto-detected
-- **Description**: Allow manual editing of video metadata stored in library. Useful for correcting scan errors or adding custom information.
+- **Impact**: Low - Useful for photo library organization
+- **Description**: Add face detection capabilities for photo libraries. Could enable tagging photos by detected faces or filtering/searching by faces. Useful for users with large photo collections organized by people.
 - **Implementation**:
-  - Add "Edit Metadata..." context menu item in Library panel
-  - `EditMetadataDialog` with fields:
-    - Title override (default: filename without extension)
-    - Custom notes/description (multiline text)
-    - Duration override (if scan failed or incorrect)
-    - Custom thumbnail upload (override auto-generated)
-    - External URL (link to source: YouTube, Vimeo, etc.)
-  - Store custom metadata in `LibraryItem.CustomMetadata` property
-  - Display custom title in Library panel if set (show override indicator)
-  - Use custom duration for filters if set
-  - Export/import custom metadata with library export
-- **Notes**: Keep it simple - don't try to edit actual video file metadata (too complex, risk of corruption). Focus on library-level annotations only.
-
-### Cloud Sync and Multi-Device Support
-
-- **Priority**: P3
-- **Impact**: Low - Complex implementation, narrow use case
-- **Description**: Sync library data and playback stats across multiple machines. Useful for users who use ReelRoulette on multiple PCs and want consistent favorites/stats.
-- **Implementation**:
-  - Cloud storage options:
-    - Dropbox/Google Drive/OneDrive (use their APIs)
-    - Custom server (self-hosted sync server)
-    - WebDAV (generic protocol)
-  - Sync data:
-    - `library.json` - Full library index
-    - `settings.json` - User preferences (optional)
-    - Playback stats, favorites, tags, blacklist
-  - Conflict resolution:
-    - Timestamp-based: Most recent change wins
-    - Manual merge: Show conflicts, let user choose
-    - Per-field merge: Combine favorites, max play count, etc.
-  - Settings:
-    - Enable/disable sync
-    - Sync provider selection
-    - Sync frequency: Manual, every 5 min, on app start/close
-    - Exclude certain sources from sync (local-only folders)
-  - UI indicators:
-    - Sync status in status bar
-    - "Sync Now" button
-    - Last sync timestamp
-- **Notes**: Very complex feature. Requires cloud provider SDKs, authentication, conflict resolution. Consider if user demand warrants the effort. Alternative: Document how to manually sync using cloud folders.
+  - Research and select face detection library (OpenCV, ML.NET, or other .NET-compatible solution)
+  - Add face detection during photo import or on-demand
+  - Store face data in `LibraryItem` (coordinates, confidence scores)
+  - Optional: Face recognition (identify specific people) - more complex
+  - UI integration:
+    - Show detected faces in photo preview (bounding boxes overlay)
+    - Filter/search by detected faces (if face recognition implemented)
+    - Tag photos with detected face tags
+  - Performance considerations:
+    - Face detection is CPU-intensive, should be async/background operation
+    - Consider caching detection results
+    - Option to enable/disable face detection (default: disabled)
+- **Notes**: Low priority enhancement. Face detection libraries may require additional dependencies and could significantly impact import performance. Start with basic detection before considering recognition. Most useful for users with large photo collections focused on people/events.
 
 ### Grid View for Library Panel
 
@@ -815,6 +576,13 @@ Each TODO entry follows this structure:
 
 These features have been fully implemented and are no longer on the TODO list:
 
+- ✅ **Batch Operations in Library Panel** - Multi-select support with batch operations (Completed 2026-01-03)
+  - Multi-select with Ctrl+Click, Shift+Click support
+  - Context menu with batch operations: Add/Remove from Favorites, Add/Remove from Blacklist, Add/Remove Tags, Remove from Library, Clear Playback Stats
+  - Selection tracking that persists across filter changes
+  - Filter/selection count display
+  - Enhanced ItemTagsDialog for batch tagging with color-coded UI
+  - RemoveItemsDialog confirmation dialog
 - ✅ **Library Backup System** - Automatic library backup system with configurable settings to prevent data loss during testing and development (Completed 2025-12-29)
   - Backups created automatically at program exit (before saving library)
   - Configurable settings: Enable/disable backups, minimum backup gap (1-60 minutes), number of backups to keep (1-30)

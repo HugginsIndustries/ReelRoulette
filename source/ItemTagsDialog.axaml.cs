@@ -3,20 +3,109 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Media;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.IO;
 using System.Linq;
+using System.Runtime.CompilerServices;
 
 namespace ReelRoulette
 {
+    public enum TagState
+    {
+        AllItemsHaveTag,
+        SomeItemsHaveTag,
+        NoItemsHaveTag
+    }
+
+    public class BatchTagViewModel : INotifyPropertyChanged
+    {
+        private bool _isPlusSelected;
+        private bool _isMinusSelected;
+        private string _tag = string.Empty;
+        private TagState _tagState = TagState.NoItemsHaveTag;
+
+        public string Tag
+        {
+            get => _tag;
+            set
+            {
+                _tag = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public TagState TagState
+        {
+            get => _tagState;
+            set
+            {
+                if (_tagState != value)
+                {
+                    _tagState = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(BackgroundBrush));
+                }
+            }
+        }
+
+        public IBrush BackgroundBrush
+        {
+            get
+            {
+                return TagState switch
+                {
+                    TagState.AllItemsHaveTag => (IBrush)Application.Current!.Resources["LimeGreenBrush"]!,
+                    TagState.SomeItemsHaveTag => (IBrush)Application.Current!.Resources["HugginsOrangeBrush"]!,
+                    TagState.NoItemsHaveTag => (IBrush)Application.Current!.Resources["VioletBrush"]!,
+                    _ => (IBrush)Application.Current!.Resources["VioletBrush"]!
+                };
+            }
+        }
+
+        public bool IsPlusSelected
+        {
+            get => _isPlusSelected;
+            set
+            {
+                if (_isPlusSelected != value)
+                {
+                    _isPlusSelected = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public bool IsMinusSelected
+        {
+            get => _isMinusSelected;
+            set
+            {
+                if (_isMinusSelected != value)
+                {
+                    _isMinusSelected = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+
+        protected virtual void OnPropertyChanged([CallerMemberName] string? propertyName = null)
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
+    }
+
     public partial class ItemTagsDialog : Window
     {
-        private LibraryItem _item;
+        private List<LibraryItem> _items;
         private LibraryIndex? _libraryIndex;
         private LibraryService? _libraryService;
-        private ObservableCollection<TagViewModel> _tagViewModels = new ObservableCollection<TagViewModel>();
+        private ObservableCollection<BatchTagViewModel> _tagViewModels = new ObservableCollection<BatchTagViewModel>();
 
         private static void Log(string message)
         {
@@ -28,39 +117,70 @@ namespace ReelRoulette
             catch { }
         }
 
-        public ItemTagsDialog(LibraryItem item, LibraryIndex? libraryIndex, LibraryService? libraryService)
+        public ItemTagsDialog(List<LibraryItem> items, LibraryIndex? libraryIndex, LibraryService? libraryService)
         {
             InitializeComponent();
-            _item = item;
+            _items = items;
             _libraryIndex = libraryIndex;
             _libraryService = libraryService;
 
-            Log($"ItemTagsDialog: Opening tags dialog for: {item.FileName}");
+            Log($"ItemTagsDialog: Opening tags dialog for {items.Count} item(s)");
+
+            // Get all unique tags from all items
+            var allItemTags = items.SelectMany(item => item.Tags ?? new List<string>()).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
             
-            // Set title
-            TitleTextBlock!.Text = $"Tags for {item.FileName}";
-
-            // Load available tags and create view models
+            // Get available tags from library index
             var availableTags = _libraryIndex?.AvailableTags ?? new List<string>();
-            var itemTags = _item.Tags ?? new List<string>();
+            var allTags = availableTags.Concat(allItemTags).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(t => t).ToList();
 
-            foreach (var tag in availableTags.OrderBy(t => t))
+            // Create view models for each tag
+            foreach (var tag in allTags)
             {
-                _tagViewModels.Add(new TagViewModel
+                // Count how many items have this tag
+                var itemsWithTag = items.Count(item => 
+                    (item.Tags ?? new List<string>()).Any(t => string.Equals(t, tag, StringComparison.OrdinalIgnoreCase)));
+                
+                var tagState = items.Count > 0 && itemsWithTag == items.Count 
+                    ? TagState.AllItemsHaveTag 
+                    : itemsWithTag > 0 
+                        ? TagState.SomeItemsHaveTag 
+                        : TagState.NoItemsHaveTag;
+
+                _tagViewModels.Add(new BatchTagViewModel
                 {
                     Tag = tag,
-                    IsSelected = itemTags.Any(it => string.Equals(it, tag, StringComparison.OrdinalIgnoreCase))
+                    TagState = tagState,
+                    IsPlusSelected = false,
+                    IsMinusSelected = false
                 });
             }
 
             TagsItemsControl!.ItemsSource = _tagViewModels;
         }
 
-        private void TagToggleButton_Click(object? sender, RoutedEventArgs e)
+        private void PlusButton_Click(object? sender, RoutedEventArgs e)
         {
-            if (sender is ToggleButton toggleButton && toggleButton.DataContext is TagViewModel viewModel)
+            if (sender is ToggleButton toggleButton && toggleButton.DataContext is BatchTagViewModel viewModel)
             {
-                viewModel.IsSelected = toggleButton.IsChecked == true;
+                viewModel.IsPlusSelected = toggleButton.IsChecked == true;
+                // If plus is selected, unselect minus
+                if (viewModel.IsPlusSelected)
+                {
+                    viewModel.IsMinusSelected = false;
+                }
+            }
+        }
+
+        private void MinusButton_Click(object? sender, RoutedEventArgs e)
+        {
+            if (sender is ToggleButton toggleButton && toggleButton.DataContext is BatchTagViewModel viewModel)
+            {
+                viewModel.IsMinusSelected = toggleButton.IsChecked == true;
+                // If minus is selected, unselect plus
+                if (viewModel.IsMinusSelected)
+                {
+                    viewModel.IsPlusSelected = false;
+                }
             }
         }
 
@@ -90,8 +210,9 @@ namespace ReelRoulette
             var existing = _tagViewModels.FirstOrDefault(vm => string.Equals(vm.Tag, tagName, StringComparison.OrdinalIgnoreCase));
             if (existing != null)
             {
-                // Tag exists, just toggle it on
-                existing.IsSelected = true;
+                // Tag exists, just select plus button
+                existing.IsPlusSelected = true;
+                existing.IsMinusSelected = false;
                 NewTagTextBox!.Text = "";
                 return;
             }
@@ -106,10 +227,12 @@ namespace ReelRoulette
             }
 
             // Add to view models (insert in sorted position)
-            var newViewModel = new TagViewModel
+            var newViewModel = new BatchTagViewModel
             {
                 Tag = tagName,
-                IsSelected = true
+                TagState = TagState.NoItemsHaveTag,
+                IsPlusSelected = true, // Automatically select plus for new tags
+                IsMinusSelected = false
             };
 
             var sorted = _tagViewModels.Concat(new[] { newViewModel })
@@ -128,35 +251,56 @@ namespace ReelRoulette
 
         private void OkButton_Click(object? sender, RoutedEventArgs e)
         {
-            Log($"ItemTagsDialog: Saving tags for: {_item.FileName}");
+            Log($"ItemTagsDialog: Saving tags for {_items.Count} item(s)");
             
-            // Ensure Tags list exists
-            if (_item.Tags == null)
+            // Apply tag changes to all items
+            foreach (var item in _items)
             {
-                _item.Tags = new List<string>();
+                // Ensure Tags list exists
+                if (item.Tags == null)
+                {
+                    item.Tags = new List<string>();
+                }
+
+                var oldTags = item.Tags.ToList();
+                var currentTags = new HashSet<string>(item.Tags, StringComparer.OrdinalIgnoreCase);
+
+                // Process each tag view model
+                foreach (var vm in _tagViewModels)
+                {
+                    var tagName = vm.Tag;
+                    var hasTag = currentTags.Contains(tagName);
+
+                    if (vm.IsPlusSelected && !hasTag)
+                    {
+                        // Add tag
+                        item.Tags.Add(tagName);
+                        currentTags.Add(tagName);
+                    }
+                    else if (vm.IsMinusSelected && hasTag)
+                    {
+                        // Remove tag
+                        item.Tags.RemoveAll(t => string.Equals(t, tagName, StringComparison.OrdinalIgnoreCase));
+                        currentTags.Remove(tagName);
+                    }
+                }
+
+                Log($"ItemTagsDialog: Tags updated for {item.FileName} - Old: [{string.Join(", ", oldTags)}], New: [{string.Join(", ", item.Tags)}]");
+
+                // Update library item
+                _libraryService?.UpdateItem(item);
             }
 
-            // Update item tags from selected view models
-            var oldTags = _item.Tags.ToList();
-            _item.Tags.Clear();
-            foreach (var vm in _tagViewModels.Where(vm => vm.IsSelected))
-            {
-                _item.Tags.Add(vm.Tag);
-            }
-
-            Log($"ItemTagsDialog: Tags updated - Old: [{string.Join(", ", oldTags)}], New: [{string.Join(", ", _item.Tags)}]");
-
-            // Update library item
-            _libraryService?.UpdateItem(_item);
+            // Save library once for all items
             _libraryService?.SaveLibrary();
 
-            Log($"ItemTagsDialog: Tags saved successfully for: {_item.FileName}");
+            Log($"ItemTagsDialog: Tags saved successfully for {_items.Count} item(s)");
             Close(true);
         }
 
         private void CancelButton_Click(object? sender, RoutedEventArgs e)
         {
-            Log($"ItemTagsDialog: Cancelled tags dialog for: {_item.FileName}");
+            Log($"ItemTagsDialog: Cancelled tags dialog for {_items.Count} item(s)");
             Close(false);
         }
     }

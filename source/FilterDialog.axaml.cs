@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Interactivity;
+using Avalonia.Media;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -10,11 +11,13 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Text.Json;
 
 namespace ReelRoulette
 {
     public partial class FilterDialog : Window, INotifyPropertyChanged
     {
+        private FilterState _originalFilterState;
         private FilterState _filterState;
         private LibraryIndex? _libraryIndex;
         private bool _applyClicked = false;
@@ -32,7 +35,12 @@ namespace ReelRoulette
         public FilterDialog(FilterState filterState, LibraryIndex? libraryIndex)
         {
             InitializeComponent();
-            _filterState = filterState ?? new FilterState();
+            _originalFilterState = filterState ?? new FilterState();
+            
+            // Create a working copy to avoid modifying the original until Apply is clicked
+            var json = JsonSerializer.Serialize(_originalFilterState);
+            _filterState = JsonSerializer.Deserialize<FilterState>(json) ?? new FilterState();
+            
             _libraryIndex = libraryIndex;
             DataContext = this;
             
@@ -280,7 +288,7 @@ namespace ReelRoulette
         }
 
         // Tags
-        public ObservableCollection<TagViewModel> AvailableTags { get; } = new ObservableCollection<TagViewModel>();
+        public ObservableCollection<FilterTagViewModel> AvailableTags { get; } = new ObservableCollection<FilterTagViewModel>();
 
         public bool HasTags => AvailableTags.Count > 0;
         public bool HasNoTags => !HasTags;
@@ -320,28 +328,11 @@ namespace ReelRoulette
             {
                 foreach (var tag in _libraryIndex.AvailableTags.OrderBy(t => t))
                 {
-                    var tagVm = new TagViewModel
+                    var tagVm = new FilterTagViewModel
                     {
                         Tag = tag,
-                        IsSelected = _filterState.SelectedTags.Contains(tag)
-                    };
-                    tagVm.PropertyChanged += (s, e) =>
-                    {
-                        if (e.PropertyName == nameof(TagViewModel.IsSelected))
-                        {
-                            var vm = (TagViewModel)s!;
-                            if (vm.IsSelected)
-                            {
-                                if (!_filterState.SelectedTags.Contains(vm.Tag))
-                                {
-                                    _filterState.SelectedTags.Add(vm.Tag);
-                                }
-                            }
-                            else
-                            {
-                                _filterState.SelectedTags.Remove(vm.Tag);
-                            }
-                        }
+                        IsPlusSelected = _filterState.SelectedTags.Any(t => string.Equals(t, tag, StringComparison.OrdinalIgnoreCase)),
+                        IsMinusSelected = _filterState.ExcludedTags.Any(t => string.Equals(t, tag, StringComparison.OrdinalIgnoreCase))
                     };
                     AvailableTags.Add(tagVm);
                 }
@@ -351,11 +342,63 @@ namespace ReelRoulette
             OnPropertyChanged(nameof(HasNoTags));
         }
 
-        private void TagToggleButton_Click(object? sender, RoutedEventArgs e)
+        private void RemoveTagCaseInsensitive(List<string> list, string tagToRemove)
         {
-            if (sender is ToggleButton toggle && toggle.DataContext is TagViewModel tagVm)
+            var itemToRemove = list.FirstOrDefault(t => string.Equals(t, tagToRemove, StringComparison.OrdinalIgnoreCase));
+            if (itemToRemove != null)
             {
-                tagVm.IsSelected = toggle.IsChecked == true;
+                list.Remove(itemToRemove);
+            }
+        }
+
+        private bool ContainsTagCaseInsensitive(List<string> list, string tag)
+        {
+            return list.Any(t => string.Equals(t, tag, StringComparison.OrdinalIgnoreCase));
+        }
+
+        private void PlusButton_Click(object? sender, RoutedEventArgs e)
+        {
+            if (sender is ToggleButton toggleButton && toggleButton.DataContext is FilterTagViewModel viewModel)
+            {
+                viewModel.IsPlusSelected = toggleButton.IsChecked == true;
+                if (viewModel.IsPlusSelected)
+                {
+                    // Add to SelectedTags, remove from ExcludedTags (case-insensitive)
+                    if (!ContainsTagCaseInsensitive(_filterState.SelectedTags, viewModel.Tag))
+                    {
+                        _filterState.SelectedTags.Add(viewModel.Tag);
+                    }
+                    RemoveTagCaseInsensitive(_filterState.ExcludedTags, viewModel.Tag);
+                    viewModel.IsMinusSelected = false;
+                }
+                else
+                {
+                    // Remove from SelectedTags (case-insensitive)
+                    RemoveTagCaseInsensitive(_filterState.SelectedTags, viewModel.Tag);
+                }
+            }
+        }
+
+        private void MinusButton_Click(object? sender, RoutedEventArgs e)
+        {
+            if (sender is ToggleButton toggleButton && toggleButton.DataContext is FilterTagViewModel viewModel)
+            {
+                viewModel.IsMinusSelected = toggleButton.IsChecked == true;
+                if (viewModel.IsMinusSelected)
+                {
+                    // Add to ExcludedTags, remove from SelectedTags (case-insensitive)
+                    if (!ContainsTagCaseInsensitive(_filterState.ExcludedTags, viewModel.Tag))
+                    {
+                        _filterState.ExcludedTags.Add(viewModel.Tag);
+                    }
+                    RemoveTagCaseInsensitive(_filterState.SelectedTags, viewModel.Tag);
+                    viewModel.IsPlusSelected = false;
+                }
+                else
+                {
+                    // Remove from ExcludedTags (case-insensitive)
+                    RemoveTagCaseInsensitive(_filterState.ExcludedTags, viewModel.Tag);
+                }
             }
         }
 
@@ -372,6 +415,7 @@ namespace ReelRoulette
             NoMaxDuration = true;
             MediaTypeAll = true;
             _filterState.SelectedTags.Clear();
+            _filterState.ExcludedTags.Clear();
             TagMatchAnd = true;
             UpdateTagSelectionState();
         }
@@ -384,6 +428,24 @@ namespace ReelRoulette
 
         private void ApplyButton_Click(object? sender, RoutedEventArgs e)
         {
+            // Copy all properties from working copy back to original
+            _originalFilterState.FavoritesOnly = _filterState.FavoritesOnly;
+            _originalFilterState.ExcludeBlacklisted = _filterState.ExcludeBlacklisted;
+            _originalFilterState.OnlyNeverPlayed = _filterState.OnlyNeverPlayed;
+            _originalFilterState.OnlyKnownDuration = _filterState.OnlyKnownDuration;
+            _originalFilterState.OnlyKnownLoudness = _filterState.OnlyKnownLoudness;
+            _originalFilterState.AudioFilter = _filterState.AudioFilter;
+            _originalFilterState.MediaTypeFilter = _filterState.MediaTypeFilter;
+            _originalFilterState.MinDuration = _filterState.MinDuration;
+            _originalFilterState.MaxDuration = _filterState.MaxDuration;
+            _originalFilterState.TagMatchMode = _filterState.TagMatchMode;
+            
+            // Copy tag lists
+            _originalFilterState.SelectedTags.Clear();
+            _originalFilterState.SelectedTags.AddRange(_filterState.SelectedTags);
+            _originalFilterState.ExcludedTags.Clear();
+            _originalFilterState.ExcludedTags.AddRange(_filterState.ExcludedTags);
+            
             _applyClicked = true;
             Close();
         }
@@ -443,7 +505,7 @@ namespace ReelRoulette
     }
 
     /// <summary>
-    /// View model for a tag in the filter dialog.
+    /// View model for a tag in the filter dialog (legacy, used by other parts of the codebase).
     /// </summary>
     public class TagViewModel : INotifyPropertyChanged
     {
@@ -470,6 +532,73 @@ namespace ReelRoulette
                     _isSelected = value;
                     OnPropertyChanged();
                 }
+            }
+        }
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+
+        protected virtual void OnPropertyChanged([CallerMemberName] string? propertyName = null)
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
+    }
+
+    /// <summary>
+    /// View model for a tag in the enhanced filter dialog tags tab.
+    /// </summary>
+    public class FilterTagViewModel : INotifyPropertyChanged
+    {
+        private bool _isPlusSelected;
+        private bool _isMinusSelected;
+        private string _tag = string.Empty;
+
+        public string Tag
+        {
+            get => _tag;
+            set
+            {
+                _tag = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public bool IsPlusSelected
+        {
+            get => _isPlusSelected;
+            set
+            {
+                if (_isPlusSelected != value)
+                {
+                    _isPlusSelected = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(BackgroundBrush));
+                }
+            }
+        }
+
+        public bool IsMinusSelected
+        {
+            get => _isMinusSelected;
+            set
+            {
+                if (_isMinusSelected != value)
+                {
+                    _isMinusSelected = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(BackgroundBrush));
+                }
+            }
+        }
+
+        public IBrush BackgroundBrush
+        {
+            get
+            {
+                if (IsPlusSelected)
+                    return (IBrush)Application.Current!.Resources["LimeGreenBrush"]!;
+                if (IsMinusSelected)
+                    return (IBrush)Application.Current!.Resources["HugginsOrangeBrush"]!;
+                return (IBrush)Application.Current!.Resources["VioletBrush"]!;
             }
         }
 

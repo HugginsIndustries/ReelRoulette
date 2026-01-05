@@ -46,10 +46,16 @@ namespace ReelRoulette
         public TimeSpan? MaxDuration { get; set; }
 
         /// <summary>
-        /// List of selected tags to filter by.
+        /// List of selected tags to filter by (inclusion).
         /// </summary>
         [JsonPropertyName("selectedTags")]
         public List<string> SelectedTags { get; set; } = new List<string>();
+
+        /// <summary>
+        /// List of tags to exclude from results (exclusion).
+        /// </summary>
+        [JsonPropertyName("excludedTags")]
+        public List<string> ExcludedTags { get; set; } = new List<string>();
 
         /// <summary>
         /// How to match multiple selected tags (AND vs OR).

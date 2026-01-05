@@ -541,16 +541,25 @@
                     HorizontalAlignment="Stretch"
                     VerticalAlignment="Stretch"
                     IsVisible="False">
-                <Grid RowDefinitions="Auto Auto Auto Auto *" VerticalAlignment="Stretch" x:DataType="local:MainWindow">
+                <Grid RowDefinitions="Auto Auto Auto Auto Auto *" VerticalAlignment="Stretch" x:DataType="local:MainWindow">
                     <!-- Row 0: Library info header -->
                     <TextBlock x:Name="LibraryInfoTextBlock"
-                               Grid.Row="0"
-                               VerticalAlignment="Center"
-                               Margin="0,0,0,8"
-                               Text="{Binding LibraryInfoText}"/>
+                              Grid.Row="0"
+                              HorizontalAlignment="Center"
+                              VerticalAlignment="Center"
+                              Margin="0,0,0,8"
+                              Text="{Binding LibraryInfoText}"/>
                     
-                    <!-- Row 1: Filters row -->
-                    <Grid Grid.Row="1" ColumnDefinitions="* Auto Auto" ColumnSpacing="4" Margin="0,0,0,8">
+                    <!-- Row 1: Filter/Selection count display -->
+                    <TextBlock x:Name="LibraryCountTextBlock"
+                              Grid.Row="1"
+                              HorizontalAlignment="Center"
+                              VerticalAlignment="Center"
+                              Margin="0,0,0,8"
+                              Text="🎯 0 filtered • 📝 0 selected"/>
+                    
+                    <!-- Row 2: Filters row -->
+                    <Grid Grid.Row="2" ColumnDefinitions="* Auto Auto" ColumnSpacing="4" Margin="0,0,0,8">
                         <TextBlock x:Name="LibraryFilterSummaryTextBlock"
                                  Grid.Column="0"
                                  VerticalAlignment="Center"
@@ -580,8 +589,8 @@
                         </ToggleButton>
                     </Grid>
                     
-                    <!-- Row 2: Controls row (view preset, source, sort) -->
-                    <Grid Grid.Row="2" ColumnDefinitions="* * *" ColumnSpacing="8" Margin="0,0,0,8">
+                    <!-- Row 3: Controls row (view preset, source, sort) -->
+                    <Grid Grid.Row="3" ColumnDefinitions="* * *" ColumnSpacing="8" Margin="0,0,0,8">
                         <ComboBox x:Name="LibraryViewPresetComboBox"
                                  Grid.Column="0"
                                  HorizontalAlignment="Stretch"
@@ -607,22 +616,83 @@
                         </ComboBox>
                     </Grid>
                     
-                    <!-- Row 3: Search box -->
+                    <!-- Row 4: Search box -->
                     <TextBox x:Name="LibrarySearchTextBox"
-                            Grid.Row="3"
+                            Grid.Row="4"
                             Watermark="Search..."
                             Margin="0,0,0,8"
                             TextChanged="LibrarySearchTextBox_TextChanged"/>
                     
-                    <!-- Row 4: Items list (virtualized) -->
+                    <!-- Row 5: Items list (virtualized) -->
                     <ListBox x:Name="LibraryListBox"
-                             Grid.Row="4"
+                             Grid.Row="5"
                              VerticalAlignment="Stretch"
-                             SelectionMode="Single"
+                             SelectionMode="Multiple"
                              Background="Transparent"
                              BorderThickness="0"
                              DoubleTapped="LibraryListBox_DoubleTapped"
-                             KeyDown="LibraryListBox_KeyDown">
+                             KeyDown="LibraryListBox_KeyDown"
+                             SelectionChanged="LibraryListBox_SelectionChanged"
+                             PointerPressed="LibraryListBox_PointerPressed">
+                        <ListBox.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="Add to Favorites"
+                                         Click="ContextMenu_AddToFavorites_Click">
+                                    <MenuItem.Icon>
+                                        <TextBlock Text="★"/>
+                                    </MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem x:Name="ContextMenu_RemoveFromFavoritesMenuItem"
+                                         Header="Remove from Favorites"
+                                         Click="ContextMenu_RemoveFromFavorites_Click">
+                                    <MenuItem.Icon>
+                                        <TextBlock Text="★"/>
+                                    </MenuItem.Icon>
+                                </MenuItem>
+                                <Separator/>
+                                <MenuItem Header="Add to Blacklist"
+                                         Click="ContextMenu_AddToBlacklist_Click">
+                                    <MenuItem.Icon>
+                                        <TextBlock Text="👎"/>
+                                    </MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem x:Name="ContextMenu_RemoveFromBlacklistMenuItem"
+                                         Header="Remove from Blacklist"
+                                         Click="ContextMenu_RemoveFromBlacklist_Click">
+                                    <MenuItem.Icon>
+                                        <TextBlock Text="👎"/>
+                                    </MenuItem.Icon>
+                                </MenuItem>
+                                <Separator/>
+                                <MenuItem Header="Add Tags..."
+                                         Click="ContextMenu_AddTags_Click">
+                                    <MenuItem.Icon>
+                                        <TextBlock Text="🏷️"/>
+                                    </MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem x:Name="ContextMenu_RemoveTagsMenuItem"
+                                         Header="Remove Tags..."
+                                         Click="ContextMenu_RemoveTags_Click">
+                                    <MenuItem.Icon>
+                                        <TextBlock Text="🏷️"/>
+                                    </MenuItem.Icon>
+                                </MenuItem>
+                                <Separator/>
+                                <MenuItem Header="Remove from Library"
+                                         Click="ContextMenu_RemoveFromLibrary_Click">
+                                    <MenuItem.Icon>
+                                        <TextBlock Text="🗑️"/>
+                                    </MenuItem.Icon>
+                                </MenuItem>
+                                <Separator/>
+                                <MenuItem Header="Clear Playback Stats"
+                                         Click="ContextMenu_ClearStats_Click">
+                                    <MenuItem.Icon>
+                                        <TextBlock Text="📊"/>
+                                    </MenuItem.Icon>
+                                </MenuItem>
+                            </ContextMenu>
+                        </ListBox.ContextMenu>
                         <ListBox.ItemsPanel>
                             <ItemsPanelTemplate>
                                 <VirtualizingStackPanel />

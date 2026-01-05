@@ -14,5 +14,7 @@
         <SolidColorBrush x:Key="HugginsOrangePressedBrush" Color="#D96F1E" />
         <SolidColorBrush x:Key="IconDarkGreyBrush" Color="#333333" />
         <SolidColorBrush x:Key="IconDarkGreyHoverBrush" Color="#444444" />
+        <SolidColorBrush x:Key="LimeGreenBrush" Color="#22EF7F" />
+        <SolidColorBrush x:Key="VioletBrush" Color="#7F22EF" />
     </Application.Resources>
 </Application>
