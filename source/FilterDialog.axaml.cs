@@ -740,12 +740,15 @@ namespace ReelRoulette
             LoadPresets();
             
             // Select the newly created preset
-            // Note: Setting SelectedPresetName will trigger PresetComboBox_SelectionChanged,
-            // which will set _originalPresetState correctly, so we don't need to set it here
             SelectedPresetName = presetName;
             _activePresetName = presetName;
             _presetModified = false;
-            // Don't set _originalPresetState = null here - PresetComboBox_SelectionChanged will set it correctly
+            
+            // Explicitly set _originalPresetState to the new preset's FilterState
+            // We can't rely on PresetComboBox_SelectionChanged firing when programmatically setting SelectedPresetName
+            var presetStateJson = JsonSerializer.Serialize(newPreset.FilterState);
+            _originalPresetState = JsonSerializer.Deserialize<FilterState>(presetStateJson) ?? new FilterState();
+            
             OnPropertyChanged(nameof(HeaderText));
             OnPropertyChanged(nameof(CanUpdatePreset));
             

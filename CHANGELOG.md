@@ -2,9 +2,11 @@
 
 ## Unreleased
 
+- **Fix: Explicitly set _originalPresetState when creating new preset** (2026-01-06):
+  - Explicitly set _originalPresetState when creating new preset instead of relying on SelectionChanged event (fixes Apply button logic when event doesn't fire)
+
 - **Fix: Filter Preset State Tracking Bugs** (2026-01-06):
   - Set _originalPresetState during FilterDialog initialization when active preset is provided (fixes Apply button logic when preset is active on dialog open)
-  - Preserve _originalPresetState when creating new preset (fixes Apply button logic after creating preset)
 
 - **Implement Filter Presets (Saved Filter Configurations)** (2026-01-06):
   - Add filter presets feature allowing users to save and quickly apply commonly used filter configurations
