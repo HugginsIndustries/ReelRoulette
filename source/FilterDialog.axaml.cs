@@ -90,6 +90,18 @@ namespace ReelRoulette
                 _isInitializing = false;
             }
             
+            // If we have an active preset name, set _originalPresetState manually since SelectionChanged was suppressed
+            if (!string.IsNullOrEmpty(_activePresetName))
+            {
+                var preset = _presets.FirstOrDefault(p => p.Name == _activePresetName);
+                if (preset != null)
+                {
+                    var presetJson = JsonSerializer.Serialize(preset.FilterState);
+                    _originalPresetState = JsonSerializer.Deserialize<FilterState>(presetJson) ?? new FilterState();
+                    Log($"FilterDialog: Set _originalPresetState for active preset '{_activePresetName}' during initialization");
+                }
+            }
+            
             Log($"FilterDialog: Initialized with {_presets.Count} presets, active preset: {_activePresetName ?? "None"}");
         }
 
@@ -728,10 +740,12 @@ namespace ReelRoulette
             LoadPresets();
             
             // Select the newly created preset
+            // Note: Setting SelectedPresetName will trigger PresetComboBox_SelectionChanged,
+            // which will set _originalPresetState correctly, so we don't need to set it here
             SelectedPresetName = presetName;
             _activePresetName = presetName;
             _presetModified = false;
-            _originalPresetState = null;
+            // Don't set _originalPresetState = null here - PresetComboBox_SelectionChanged will set it correctly
             OnPropertyChanged(nameof(HeaderText));
             OnPropertyChanged(nameof(CanUpdatePreset));
             
