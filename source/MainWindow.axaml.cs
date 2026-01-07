@@ -168,6 +168,9 @@ namespace ReelRoulette
         private readonly FilterService _filterService = new FilterService();
         private LibraryIndex? _libraryIndex;
         private FilterState? _currentFilterState;
+        private string? _activePresetName; // Track which preset is currently active for display in library panel
+        private List<FilterPreset>? _filterPresets; // Store filter presets
+        private bool _isUpdatingPresetComboBox = false; // Flag to suppress SelectionChanged event during programmatic updates
 
         // Library panel state
         private ObservableCollection<LibraryItem> _libraryItems = new ObservableCollection<LibraryItem>();
@@ -1541,6 +1544,7 @@ namespace ReelRoulette
 
         private void UpdateFilterSummaryText()
         {
+            // Always show normal filter summary (preset selection is now in separate dropdown)
             if (_currentFilterState == null)
             {
                 FilterSummaryText = "Filters: None";
@@ -3272,6 +3276,10 @@ namespace ReelRoulette
                     Log($"  WARNING: LibrarySortComboBox is null or empty (null: {LibrarySortComboBox == null}, count: {LibrarySortComboBox?.Items.Count ?? -1})");
                 }
                 
+                // Initialize preset combo box
+                Log("  Updating preset combo box...");
+                UpdateLibraryPresetComboBox();
+                
                 // Update the panel (only if library is loaded)
                 Log($"  Checking library index (null: {_libraryIndex == null})...");
                 if (_libraryIndex != null)
@@ -3965,6 +3973,130 @@ namespace ReelRoulette
                 UpdateLibraryPanel();
             }
         }
+
+        /// <summary>
+        /// Populates and updates the filter preset dropdown in the library panel.
+        /// </summary>
+        private void UpdateLibraryPresetComboBox()
+        {
+            if (LibraryPresetComboBox == null) return;
+            
+            // Suppress SelectionChanged event during programmatic update to prevent double execution
+            _isUpdatingPresetComboBox = true;
+            
+            try
+            {
+                LibraryPresetComboBox.Items.Clear();
+                
+                // Always add "None" as first option
+                var noneItem = new ComboBoxItem { Content = "None", Tag = "None" };
+                LibraryPresetComboBox.Items.Add(noneItem);
+                
+                // Add all presets
+                if (_filterPresets != null)
+                {
+                    foreach (var preset in _filterPresets)
+                    {
+                        var item = new ComboBoxItem { Content = preset.Name, Tag = preset.Name };
+                        LibraryPresetComboBox.Items.Add(item);
+                    }
+                }
+                
+                // Select active preset or "None"
+                string selectedTag = _activePresetName ?? "None";
+                bool foundMatch = false;
+                if (LibraryPresetComboBox.Items != null)
+                {
+                    foreach (var itemObj in LibraryPresetComboBox.Items)
+                    {
+                        if (itemObj is ComboBoxItem item && item.Tag?.ToString() == selectedTag)
+                        {
+                            LibraryPresetComboBox.SelectedItem = item;
+                            foundMatch = true;
+                            break;
+                        }
+                    }
+                }
+                
+                // Fallback: If no match found (e.g., preset was deleted or settings corrupted), select "None"
+                if (!foundMatch && LibraryPresetComboBox.Items != null && LibraryPresetComboBox.Items.Count > 0)
+                {
+                    var missingPresetName = _activePresetName; // Capture for logging before clearing
+                    LibraryPresetComboBox.SelectedItem = LibraryPresetComboBox.Items[0]; // "None" is always first
+                    selectedTag = "None";
+                    _activePresetName = null; // Clear active preset name since it no longer exists
+                    Log($"UpdateLibraryPresetComboBox: Active preset '{missingPresetName}' not found, selected 'None' as fallback and cleared active preset name");
+                }
+                
+                Log($"UpdateLibraryPresetComboBox: Populated {LibraryPresetComboBox.Items?.Count ?? 0} items, selected: {selectedTag}");
+            }
+            finally
+            {
+                _isUpdatingPresetComboBox = false;
+            }
+        }
+
+        /// <summary>
+        /// Event handler for preset selection - loads preset immediately.
+        /// </summary>
+        private void LibraryPresetComboBox_SelectionChanged(object? sender, SelectionChangedEventArgs e)
+        {
+            // Suppress event handling during programmatic updates to prevent double execution
+            if (_isUpdatingPresetComboBox) return;
+            
+            if (LibraryPresetComboBox?.SelectedItem is not ComboBoxItem selectedItem)
+                return;
+            
+            var selectedPresetName = selectedItem.Tag?.ToString();
+            
+            // Handle "None" selection
+            if (selectedPresetName == "None" || string.IsNullOrEmpty(selectedPresetName))
+            {
+                Log("LibraryPresetComboBox: Selected 'None' - clearing active preset");
+                _activePresetName = null;
+                UpdateFilterSummaryText();
+                
+                // Rebuild queue and update library panel
+                if (_showLibraryPanel)
+                {
+                    UpdateLibraryPanel();
+                }
+                StatusTextBlock.Text = "Cleared filter preset";
+                _ = Task.Run(async () => await RebuildPlayQueueIfNeededAsync());
+                SaveSettings();
+                return;
+            }
+            
+            // Find and load the preset
+            var preset = _filterPresets?.FirstOrDefault(p => p.Name == selectedPresetName);
+            if (preset == null)
+            {
+                Log($"LibraryPresetComboBox: Preset '{selectedPresetName}' not found");
+                return;
+            }
+            
+            Log($"LibraryPresetComboBox: Loading preset '{selectedPresetName}' immediately");
+            
+            // Deep copy preset's FilterState
+            var json = JsonSerializer.Serialize(preset.FilterState);
+            _currentFilterState = JsonSerializer.Deserialize<FilterState>(json) ?? new FilterState();
+            _activePresetName = selectedPresetName;
+            
+            // Update filter summary
+            UpdateFilterSummaryText();
+            
+            // Save settings
+            SaveSettings();
+            
+            // Update library panel and rebuild queue
+            if (_showLibraryPanel)
+            {
+                UpdateLibraryPanel();
+            }
+            StatusTextBlock.Text = $"Applied filter preset: {selectedPresetName}";
+            _ = Task.Run(async () => await RebuildPlayQueueIfNeededAsync());
+        }
+
 
         private void LibrarySearchTextBox_TextChanged(object? sender, TextChangedEventArgs e)
         {
@@ -6129,6 +6261,10 @@ namespace ReelRoulette
             
             // Filter state
             public FilterState? FilterState { get; set; }
+            
+            // Filter presets
+            public List<FilterPreset>? FilterPresets { get; set; }
+            public string? ActivePresetName { get; set; } // Track which preset is currently active
         }
 
         private void LoadSettings()
@@ -6302,6 +6438,14 @@ namespace ReelRoulette
             {
                 Log($"STATE CHANGE: Filter state loaded from settings - FavoritesOnly={_currentFilterState.FavoritesOnly}, ExcludeBlacklisted={_currentFilterState.ExcludeBlacklisted}, AudioFilter={_currentFilterState.AudioFilter}");
             }
+            
+            // Load filter presets and active preset name
+            _filterPresets = settings.FilterPresets;
+            _activePresetName = settings.ActivePresetName;
+            Log($"LoadSettings: Loaded {_filterPresets?.Count ?? 0} filter presets, active preset name: {_activePresetName ?? "None"}");
+            
+            // Update filter summary after loading (to show preset name if active)
+            UpdateFilterSummaryText();
             
             // Apply always on top after loading
             this.Topmost = _alwaysOnTop;
@@ -6531,7 +6675,11 @@ namespace ReelRoulette
                     NumberOfBackups = _numberOfBackups,
                     
                     // Filter state (always save an object, never null)
-                    FilterState = _currentFilterState ?? new FilterState()
+                    FilterState = _currentFilterState ?? new FilterState(),
+                    
+                    // Filter presets
+                    FilterPresets = _filterPresets,
+                    ActivePresetName = _activePresetName
                 };
                 
                 Log($"SaveSettings: Window position - Position.X={Position.X}, _lastKnownPosition=({_lastKnownPosition.X}, {_lastKnownPosition.Y}), saved as WindowX={settings.WindowX}, WindowY={settings.WindowY}");
@@ -7582,12 +7730,23 @@ namespace ReelRoulette
                 Log("  Created new FilterState");
             }
 
-            var dialog = new FilterDialog(_currentFilterState, _libraryIndex);
+            var dialog = new FilterDialog(_currentFilterState, _libraryIndex, 
+                                         _filterPresets ?? new List<FilterPreset>(),
+                                         _activePresetName);
             await dialog.ShowDialog<bool?>(this);
 
             if (dialog.WasApplied)
             {
                 Log("UI ACTION: FilterDialog was applied - saving filter state and updating panel");
+                
+                // Save presets and active preset name to local fields
+                _filterPresets = dialog.GetPresets();
+                _activePresetName = dialog.GetActivePresetName();
+                
+                Log($"FilterMenuItem: Saved {_filterPresets?.Count ?? 0} presets, active preset: {_activePresetName ?? "None"}");
+                
+                // Update preset dropdown in library panel
+                UpdateLibraryPresetComboBox();
                 var oldFavoritesOnly = _currentFilterState?.FavoritesOnly ?? false;
                 var oldExcludeBlacklisted = _currentFilterState?.ExcludeBlacklisted ?? false;
                 var oldAudioFilter = _currentFilterState?.AudioFilter ?? AudioFilterMode.PlayAll;

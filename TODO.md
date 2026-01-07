@@ -51,27 +51,6 @@ Each TODO entry follows this structure:
 
 ## P2 - Medium Priority
 
-### Filter Presets (Saved Filter Configurations)
-
-- **Priority**: P2
-- **Impact**: Medium - Quick access to commonly used filter combinations
-- **Description**: Allow users to save current filter configurations as named presets for instant recall. Currently, applying a complex filter combination (favorites + never played + under 5 min + with audio) requires manually setting 4-5 checkboxes every time. Filter presets provide quick access to frequently used filter combinations, eliminating repetitive filter setup.
-- **Implementation**:
-  - Add `FilterPreset` data model: Name, FilterState, SortOrder (optional)
-  - Store presets in `settings.json` under `FilterPresets` property
-  - UI additions:
-    - "Add Preset" button in FilterDialog that saves current filter state with user-provided name
-    - Preset dropdown in FilterDialog (above filter controls)
-    - "Manage Presets..." menu item opens `ManagePresetsDialog`
-  - ManagePresetsDialog features:
-    - List saved presets with preview of filter settings
-    - Rename, duplicate, delete presets
-    - Reorder (drag-drop or up/down buttons)
-    - Edit preset filters (opens FilterDialog in edit mode)
-  - Quick-apply: Select preset from dropdown → FilterState loads instantly
-  - Show active preset name in FilterDialog header
-- **Notes**: Filter presets are essentially named FilterState snapshots. No built-in presets - users create their own based on their specific filtering needs.
-
 ### Video Thumbnail Generation and Display
 
 - **Priority**: P2
@@ -555,6 +534,18 @@ Each TODO entry follows this structure:
 
 These features have been fully implemented and are no longer on the TODO list:
 
+- ✅ **Filter Presets (Saved Filter Configurations)** - Filter presets feature with library panel integration (Completed 2026-01-06)
+  - Filter presets allow users to save and quickly apply commonly used filter configurations
+  - New "Presets" tab in FilterDialog with three sections: Choose Preset, Create New Preset, and Manage Presets
+  - Manage Presets list fills available space in Presets tab
+  - Preset dropdown in library panel (below filter summary, above view/source/sort controls) for immediate preset loading
+  - Preset selection in library panel loads and applies filters immediately (no Apply button needed)
+  - Preset selection in FilterDialog loads filters into dialog (requires Apply to save)
+  - Filter summary always displays current filter configuration (not preset name)
+  - Active preset name shown in FilterDialog header
+  - Presets stored in settings.json and persist across app restarts
+  - Preset management: add, delete, rename (via dialog), and reorder (up/down)
+  - Preset UX improvement: show "*" next to active preset name when modified; "Update Preset" button overwrites selected preset and clears the "*" (button enabled only when changes exist)
 - ✅ **Enhanced Library Statistics Panel** - Context-aware stats panel with media type support (Completed 2026-01-04)
   - Renamed "Current Video" section to "Current File" for consistency with photo support
   - Added context-aware visibility: video-specific stats (duration, audio, loudness, peak) automatically hidden for photos

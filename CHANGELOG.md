@@ -2,6 +2,35 @@
 
 ## Unreleased
 
+- **Implement Filter Presets (Saved Filter Configurations)** (2026-01-06):
+  - Add filter presets feature allowing users to save and quickly apply commonly used filter configurations
+  - New "Presets" tab in FilterDialog with three sections:
+    - Choose Preset dropdown (includes "None" as default option)
+    - Create New Preset from current filter settings
+    - Manage Presets list with rename (via dialog), delete, and reorder (up/down) operations that fills available space
+  - Presets stored in settings.json alongside other app settings
+  - Active preset name displayed in FilterDialog header: "Configure Filters - Active Preset: {name}"
+  - Filter preset dropdown added to library panel (below filter summary row, above view/source/sort controls)
+  - Preset selection in library panel loads immediately and applies filters automatically (no Apply button needed)
+  - Selecting "None" in library panel clears active preset but preserves current filter settings
+  - Filter summary always displays current filter configuration (not preset name)
+  - Preset selection in FilterDialog instantly loads filter configuration into dialog (still requires Apply to save)
+  - Preset reordering changes dropdown display order in both FilterDialog and library panel
+  - All preset operations logged for debugging
+  - Changed FilterDialog title from "Filter Videos" to "Filter Media" for consistency
+  - Filter presets persist across app restarts
+  - Show an asterisk appended to the active preset name in FilterDialog header when current filters differ from the selected preset (e.g., "MyPreset*")
+  - Add "Update Preset" button next to the Choose Preset dropdown to overwrite the selected preset with current filter settings and clear the asterisk
+  - Track modified state across all filter changes (booleans, media type, audio, duration, tag match, tag selections); button enabled only when changes exist
+  - Added logging for preset modification and update actions
+  - Clear active preset name when Apply is clicked with modified filters (prevents mismatch between displayed preset and actual filter state)
+  - Create deep copy of presets list in FilterDialog to prevent cancelled changes from persisting
+  - Fallback to select "None" in library panel preset dropdown if active preset name doesn't match any existing preset
+  - Suppress preset loading during FilterDialog initialization to prevent overwriting passed-in filter state
+  - Clear active preset name when fallback to "None" occurs in library panel (prevents UI mismatch when preset is deleted)
+  - Compare actual filter states instead of modification flag when applying filters (prevents clearing active preset when filters are reverted to match preset)
+  - Auto-detect and auto-select matching presets when filters are manually configured to match a preset (removes asterisk and selects preset automatically)
+
 - **Fix: Prevent silent data loss in tags dialog when library service is unavailable** (2026-01-05):
   - Fixed critical bug where ItemTagsDialog would silently fail to save tags if _libraryService was null
   - Dialog now checks for null library service before attempting to save

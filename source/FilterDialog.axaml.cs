@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
+using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media;
 using System;
@@ -21,6 +22,14 @@ namespace ReelRoulette
         private FilterState _filterState;
         private LibraryIndex? _libraryIndex;
         private bool _applyClicked = false;
+        
+        // Filter presets
+        private List<FilterPreset> _presets = new List<FilterPreset>();
+        private string? _activePresetName;
+        private const string NonePresetName = "None";
+        private bool _presetModified = false; // Track if current preset has been modified
+        private FilterState? _originalPresetState = null; // Store original preset state when loaded
+        private bool _isInitializing = false; // Flag to suppress SelectionChanged during initialization
 
         private static void Log(string message)
         {
@@ -32,7 +41,8 @@ namespace ReelRoulette
             catch { }
         }
 
-        public FilterDialog(FilterState filterState, LibraryIndex? libraryIndex)
+        public FilterDialog(FilterState filterState, LibraryIndex? libraryIndex, 
+                           List<FilterPreset>? presets = null, string? activePresetName = null)
         {
             InitializeComponent();
             _originalFilterState = filterState ?? new FilterState();
@@ -42,13 +52,84 @@ namespace ReelRoulette
             _filterState = JsonSerializer.Deserialize<FilterState>(json) ?? new FilterState();
             
             _libraryIndex = libraryIndex;
+            
+            // Create deep copy of presets list to prevent modifications from persisting on Cancel
+            if (presets != null && presets.Count > 0)
+            {
+                _presets = new List<FilterPreset>();
+                foreach (var preset in presets)
+                {
+                    var presetJson = JsonSerializer.Serialize(preset);
+                    var presetCopy = JsonSerializer.Deserialize<FilterPreset>(presetJson);
+                    if (presetCopy != null)
+                    {
+                        _presets.Add(presetCopy);
+                    }
+                }
+            }
+            else
+            {
+                _presets = new List<FilterPreset>();
+            }
+            
+            _activePresetName = activePresetName;
+            
             DataContext = this;
             
-            // Initialize tag selection state
-            UpdateTagSelectionState();
+            // Suppress SelectionChanged event during initialization to prevent overwriting passed-in filter state
+            _isInitializing = true;
+            try
+            {
+                // Load presets into UI (this may trigger SelectionChanged, but we suppress it)
+                LoadPresets();
+                UpdateTagSelectionState();
+                OnPropertyChanged(nameof(HeaderText));
+            }
+            finally
+            {
+                _isInitializing = false;
+            }
+            
+            Log($"FilterDialog: Initialized with {_presets.Count} presets, active preset: {_activePresetName ?? "None"}");
         }
 
         public FilterState FilterState => _filterState;
+
+        // Preset-related properties
+        public ObservableCollection<string> PresetNames { get; } = new ObservableCollection<string>();
+        public ObservableCollection<FilterPreset> Presets { get; } = new ObservableCollection<FilterPreset>();
+
+        private string? _selectedPresetName;
+        public string? SelectedPresetName
+        {
+            get => _selectedPresetName;
+            set
+            {
+                _selectedPresetName = value;
+                OnPropertyChanged();
+            }
+        }
+
+        /// <summary>
+        /// Header text that shows active preset name if one is selected, with "*" if modified.
+        /// </summary>
+        public string HeaderText
+        {
+            get
+            {
+                if (!string.IsNullOrEmpty(_activePresetName))
+                {
+                    var modifiedMarker = _presetModified ? "*" : "";
+                    return $"Configure Filters - Active Preset: {_activePresetName}{modifiedMarker}";
+                }
+                return "Configure Filters";
+            }
+        }
+
+        /// <summary>
+        /// Returns true if a preset is selected and has been modified, enabling the Update Preset button.
+        /// </summary>
+        public bool CanUpdatePreset => !string.IsNullOrEmpty(_activePresetName) && _presetModified;
 
         // Basic flags
         public bool FavoritesOnly
@@ -58,6 +139,7 @@ namespace ReelRoulette
             {
                 _filterState.FavoritesOnly = value;
                 OnPropertyChanged();
+                MarkPresetModified();
             }
         }
 
@@ -68,6 +150,7 @@ namespace ReelRoulette
             {
                 _filterState.ExcludeBlacklisted = value;
                 OnPropertyChanged();
+                MarkPresetModified();
             }
         }
 
@@ -78,6 +161,7 @@ namespace ReelRoulette
             {
                 _filterState.OnlyNeverPlayed = value;
                 OnPropertyChanged();
+                MarkPresetModified();
             }
         }
 
@@ -88,6 +172,7 @@ namespace ReelRoulette
             {
                 _filterState.OnlyKnownDuration = value;
                 OnPropertyChanged();
+                MarkPresetModified();
             }
         }
 
@@ -98,6 +183,7 @@ namespace ReelRoulette
             {
                 _filterState.OnlyKnownLoudness = value;
                 OnPropertyChanged();
+                MarkPresetModified();
             }
         }
 
@@ -114,6 +200,7 @@ namespace ReelRoulette
                     OnPropertyChanged();
                     OnPropertyChanged(nameof(MediaTypeVideosOnly));
                     OnPropertyChanged(nameof(MediaTypePhotosOnly));
+                    MarkPresetModified();
                 }
             }
         }
@@ -130,6 +217,7 @@ namespace ReelRoulette
                     OnPropertyChanged();
                     OnPropertyChanged(nameof(MediaTypeAll));
                     OnPropertyChanged(nameof(MediaTypePhotosOnly));
+                    MarkPresetModified();
                 }
             }
         }
@@ -146,6 +234,7 @@ namespace ReelRoulette
                     OnPropertyChanged();
                     OnPropertyChanged(nameof(MediaTypeAll));
                     OnPropertyChanged(nameof(MediaTypeVideosOnly));
+                    MarkPresetModified();
                 }
             }
         }
@@ -162,6 +251,7 @@ namespace ReelRoulette
                     OnPropertyChanged();
                     OnPropertyChanged(nameof(AudioFilterWithAudio));
                     OnPropertyChanged(nameof(AudioFilterWithoutAudio));
+                    MarkPresetModified();
                 }
             }
         }
@@ -177,6 +267,7 @@ namespace ReelRoulette
                     OnPropertyChanged();
                     OnPropertyChanged(nameof(AudioFilterAll));
                     OnPropertyChanged(nameof(AudioFilterWithoutAudio));
+                    MarkPresetModified();
                 }
             }
         }
@@ -192,6 +283,7 @@ namespace ReelRoulette
                     OnPropertyChanged();
                     OnPropertyChanged(nameof(AudioFilterAll));
                     OnPropertyChanged(nameof(AudioFilterWithAudio));
+                    MarkPresetModified();
                 }
             }
         }
@@ -208,6 +300,7 @@ namespace ReelRoulette
                     MinDurationText = string.Empty;
                 }
                 OnPropertyChanged();
+                MarkPresetModified();
             }
         }
 
@@ -222,6 +315,7 @@ namespace ReelRoulette
                     MaxDurationText = string.Empty;
                 }
                 OnPropertyChanged();
+                MarkPresetModified();
             }
         }
 
@@ -253,6 +347,7 @@ namespace ReelRoulette
                 }
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(NoMinDuration));
+                MarkPresetModified();
             }
         }
 
@@ -284,6 +379,7 @@ namespace ReelRoulette
                 }
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(NoMaxDuration));
+                MarkPresetModified();
             }
         }
 
@@ -303,6 +399,7 @@ namespace ReelRoulette
                     _filterState.TagMatchMode = TagMatchMode.And;
                     OnPropertyChanged();
                     OnPropertyChanged(nameof(TagMatchOr));
+                    MarkPresetModified();
                 }
             }
         }
@@ -317,8 +414,117 @@ namespace ReelRoulette
                     _filterState.TagMatchMode = TagMatchMode.Or;
                     OnPropertyChanged();
                     OnPropertyChanged(nameof(TagMatchAnd));
+                    MarkPresetModified();
                 }
             }
+        }
+
+        /// <summary>
+        /// Marks the current preset as modified and updates the header text.
+        /// </summary>
+        private void MarkPresetModified()
+        {
+            if (!string.IsNullOrEmpty(_activePresetName) && !_presetModified)
+            {
+                _presetModified = true;
+                OnPropertyChanged(nameof(HeaderText));
+                OnPropertyChanged(nameof(CanUpdatePreset));
+                Log($"FilterDialog: Preset '{_activePresetName}' marked as modified");
+            }
+            
+            // Check if current filters match any preset (including the active one)
+            // This will auto-select matching presets and remove asterisk if filters match
+            CheckAndSelectMatchingPreset();
+        }
+
+        /// <summary>
+        /// Checks if the current filter state matches any preset and auto-selects it if found.
+        /// This removes the asterisk when filters match a preset and auto-selects matching presets.
+        /// </summary>
+        private void CheckAndSelectMatchingPreset()
+        {
+            if (_filterState == null) return;
+            
+            var currentJson = JsonSerializer.Serialize(_filterState);
+            
+            // Check if current state matches any preset
+            foreach (var preset in _presets)
+            {
+                var presetJson = JsonSerializer.Serialize(preset.FilterState);
+                
+                if (currentJson == presetJson)
+                {
+                    // Found a match
+                    if (preset.Name == _activePresetName)
+                    {
+                        // Matches the currently active preset - just clear modified flag
+                        if (_presetModified)
+                        {
+                            Log($"FilterDialog: Current filters match active preset '{_activePresetName}', clearing modified flag");
+                            _presetModified = false;
+                            _originalPresetState = JsonSerializer.Deserialize<FilterState>(presetJson) ?? new FilterState();
+                            OnPropertyChanged(nameof(HeaderText));
+                            OnPropertyChanged(nameof(CanUpdatePreset));
+                        }
+                    }
+                    else
+                    {
+                        // Matches a different preset - switch to it
+                        Log($"FilterDialog: Current filters match preset '{preset.Name}', auto-selecting it");
+                        
+                        // Suppress SelectionChanged to prevent reloading filters
+                        _isInitializing = true;
+                        try
+                        {
+                            SelectedPresetName = preset.Name;
+                            _activePresetName = preset.Name;
+                            _presetModified = false;
+                            _originalPresetState = JsonSerializer.Deserialize<FilterState>(presetJson) ?? new FilterState();
+                        }
+                        finally
+                        {
+                            _isInitializing = false;
+                        }
+                        
+                        OnPropertyChanged(nameof(HeaderText));
+                        OnPropertyChanged(nameof(CanUpdatePreset));
+                    }
+                    return; // Found a match, no need to check further
+                }
+            }
+            
+            // No match found - if we have an active preset, keep it modified
+            // (This maintains the existing behavior when filters don't match any preset)
+        }
+
+        /// <summary>
+        /// Loads presets into the UI collections, always including "None" as the first option.
+        /// </summary>
+        private void LoadPresets()
+        {
+            PresetNames.Clear();
+            Presets.Clear();
+            
+            // Always add "None" as the first option
+            PresetNames.Add(NonePresetName);
+            
+            foreach (var preset in _presets)
+            {
+                PresetNames.Add(preset.Name);
+                Presets.Add(preset);
+            }
+            
+            // Select active preset if it exists, otherwise select "None"
+            if (!string.IsNullOrEmpty(_activePresetName) && PresetNames.Contains(_activePresetName))
+            {
+                SelectedPresetName = _activePresetName;
+            }
+            else
+            {
+                SelectedPresetName = NonePresetName;
+            }
+            
+            Log($"FilterDialog: Loaded {_presets.Count} presets into UI, selected: {SelectedPresetName}");
         }
 
         private void UpdateTagSelectionState()
@@ -376,6 +582,7 @@ namespace ReelRoulette
                     // Remove from SelectedTags (case-insensitive)
                     RemoveTagCaseInsensitive(_filterState.SelectedTags, viewModel.Tag);
                 }
+                MarkPresetModified();
             }
         }
 
@@ -399,11 +606,289 @@ namespace ReelRoulette
                     // Remove from ExcludedTags (case-insensitive)
                     RemoveTagCaseInsensitive(_filterState.ExcludedTags, viewModel.Tag);
                 }
+                MarkPresetModified();
             }
+        }
+
+        /// <summary>
+        /// Handles preset selection from dropdown. If "None" is selected, clears active preset but preserves filters.
+        /// </summary>
+        private void PresetComboBox_SelectionChanged(object? sender, SelectionChangedEventArgs e)
+        {
+            // Suppress event during initialization to prevent overwriting passed-in filter state
+            if (_isInitializing) return;
+            
+            if (SelectedPresetName == null) return;
+            
+            // Handle "None" selection - clear active preset but don't reset filters
+            if (SelectedPresetName == NonePresetName)
+            {
+                Log("FilterDialog: Clearing active preset (switching to None)");
+                _activePresetName = null;
+                _presetModified = false;
+                _originalPresetState = null;
+                OnPropertyChanged(nameof(HeaderText));
+                OnPropertyChanged(nameof(CanUpdatePreset));
+                return;
+            }
+            
+            var preset = _presets.FirstOrDefault(p => p.Name == SelectedPresetName);
+            if (preset == null)
+            {
+                Log($"FilterDialog: Preset '{SelectedPresetName}' not found in presets list");
+                return;
+            }
+            
+            Log($"FilterDialog: Loading preset '{SelectedPresetName}'");
+            
+            // Deep copy the preset's FilterState into our working copy
+            var json = JsonSerializer.Serialize(preset.FilterState);
+            _filterState = JsonSerializer.Deserialize<FilterState>(json) ?? new FilterState();
+            
+            // Store original state for comparison
+            _originalPresetState = JsonSerializer.Deserialize<FilterState>(json) ?? new FilterState();
+            _presetModified = false;
+            
+            // Update all UI bindings
+            OnPropertyChanged(nameof(FavoritesOnly));
+            OnPropertyChanged(nameof(ExcludeBlacklisted));
+            OnPropertyChanged(nameof(OnlyNeverPlayed));
+            OnPropertyChanged(nameof(OnlyKnownDuration));
+            OnPropertyChanged(nameof(OnlyKnownLoudness));
+            OnPropertyChanged(nameof(MediaTypeAll));
+            OnPropertyChanged(nameof(MediaTypeVideosOnly));
+            OnPropertyChanged(nameof(MediaTypePhotosOnly));
+            OnPropertyChanged(nameof(AudioFilterAll));
+            OnPropertyChanged(nameof(AudioFilterWithAudio));
+            OnPropertyChanged(nameof(AudioFilterWithoutAudio));
+            OnPropertyChanged(nameof(MinDurationText));
+            OnPropertyChanged(nameof(MaxDurationText));
+            OnPropertyChanged(nameof(NoMinDuration));
+            OnPropertyChanged(nameof(NoMaxDuration));
+            OnPropertyChanged(nameof(TagMatchAnd));
+            OnPropertyChanged(nameof(TagMatchOr));
+            
+            UpdateTagSelectionState();
+            
+            // Update active preset name
+            _activePresetName = SelectedPresetName;
+            OnPropertyChanged(nameof(HeaderText));
+            OnPropertyChanged(nameof(CanUpdatePreset));
+            
+            Log($"FilterDialog: Preset '{SelectedPresetName}' loaded successfully");
+        }
+
+        /// <summary>
+        /// Adds a new preset from the current filter settings.
+        /// </summary>
+        private void AddPresetButton_Click(object? sender, RoutedEventArgs e)
+        {
+            AddPreset();
+        }
+
+        private void NewPresetNameTextBox_KeyDown(object? sender, KeyEventArgs e)
+        {
+            if (e.Key == Avalonia.Input.Key.Enter)
+            {
+                AddPreset();
+                e.Handled = true;
+            }
+        }
+
+        private void AddPreset()
+        {
+            var presetName = NewPresetNameTextBox?.Text?.Trim();
+            if (string.IsNullOrWhiteSpace(presetName))
+            {
+                Log("FilterDialog: Cannot add preset - name is empty");
+                return;
+            }
+            
+            // Check if preset name already exists (case-insensitive)
+            if (_presets.Any(p => string.Equals(p.Name, presetName, StringComparison.OrdinalIgnoreCase)))
+            {
+                Log($"FilterDialog: Preset '{presetName}' already exists (case-insensitive)");
+                // TODO: Show error message to user
+                return;
+            }
+            
+            Log($"FilterDialog: Adding new preset '{presetName}'");
+            
+            // Create deep copy of current filter state
+            var json = JsonSerializer.Serialize(_filterState);
+            var filterStateCopy = JsonSerializer.Deserialize<FilterState>(json) ?? new FilterState();
+            
+            var newPreset = new FilterPreset
+            {
+                Name = presetName,
+                FilterState = filterStateCopy
+            };
+            
+            _presets.Add(newPreset);
+            LoadPresets();
+            
+            // Select the newly created preset
+            SelectedPresetName = presetName;
+            _activePresetName = presetName;
+            _presetModified = false;
+            _originalPresetState = null;
+            OnPropertyChanged(nameof(HeaderText));
+            OnPropertyChanged(nameof(CanUpdatePreset));
+            
+            // Clear text box
+            NewPresetNameTextBox!.Text = "";
+            
+            Log($"FilterDialog: Preset '{presetName}' added successfully");
+        }
+
+        /// <summary>
+        /// Renames a preset. Shows input dialog for new name.
+        /// </summary>
+        private async void RenamePresetButton_Click(object? sender, RoutedEventArgs e)
+        {
+            if (sender is Button button && button.Tag is FilterPreset preset)
+            {
+                Log($"FilterDialog: Rename preset '{preset.Name}' requested");
+                
+                var dialog = new RenamePresetDialog(preset.Name);
+                var newName = await dialog.ShowDialog<string?>(this);
+                
+                if (string.IsNullOrWhiteSpace(newName))
+                {
+                    Log($"FilterDialog: Rename cancelled or empty name provided");
+                    return;
+                }
+                
+                // Check if new name already exists (case-insensitive)
+                if (_presets.Any(p => p != preset && string.Equals(p.Name, newName, StringComparison.OrdinalIgnoreCase)))
+                {
+                    Log($"FilterDialog: Preset '{newName}' already exists (case-insensitive)");
+                    // TODO: Show error message to user
+                    return;
+                }
+                
+                var oldName = preset.Name;
+                preset.Name = newName;
+                
+                // Update active preset name if this was the active preset
+                if (_activePresetName == oldName)
+                {
+                    _activePresetName = newName;
+                    OnPropertyChanged(nameof(HeaderText));
+                }
+                
+                // Update selected preset name if this was selected
+                if (SelectedPresetName == oldName)
+                {
+                    SelectedPresetName = newName;
+                }
+                
+                LoadPresets();
+                Log($"FilterDialog: Preset renamed from '{oldName}' to '{newName}'");
+            }
+        }
+
+        /// <summary>
+        /// Deletes a preset from the list.
+        /// </summary>
+        private void DeletePresetButton_Click(object? sender, RoutedEventArgs e)
+        {
+            if (sender is Button button && button.Tag is FilterPreset preset)
+            {
+                Log($"FilterDialog: Deleting preset '{preset.Name}'");
+                
+                _presets.Remove(preset);
+                LoadPresets();
+                
+                // Clear active preset if we deleted it
+                if (_activePresetName == preset.Name)
+                {
+                    _activePresetName = null;
+                    SelectedPresetName = NonePresetName;
+                    OnPropertyChanged(nameof(HeaderText));
+                    Log($"FilterDialog: Cleared active preset after deletion");
+                }
+                
+                Log($"FilterDialog: Preset '{preset.Name}' deleted successfully");
+            }
+        }
+
+        /// <summary>
+        /// Moves a preset up in the list (changes dropdown order).
+        /// </summary>
+        private void MovePresetUpButton_Click(object? sender, RoutedEventArgs e)
+        {
+            if (sender is Button button && button.Tag is FilterPreset preset)
+            {
+                var index = _presets.IndexOf(preset);
+                if (index > 0)
+                {
+                    Log($"FilterDialog: Moving preset '{preset.Name}' up from position {index} to {index - 1}");
+                    _presets.RemoveAt(index);
+                    _presets.Insert(index - 1, preset);
+                    LoadPresets();
+                    SelectedPresetName = preset.Name;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Moves a preset down in the list (changes dropdown order).
+        /// </summary>
+        private void MovePresetDownButton_Click(object? sender, RoutedEventArgs e)
+        {
+            if (sender is Button button && button.Tag is FilterPreset preset)
+            {
+                var index = _presets.IndexOf(preset);
+                if (index < _presets.Count - 1)
+                {
+                    Log($"FilterDialog: Moving preset '{preset.Name}' down from position {index} to {index + 1}");
+                    _presets.RemoveAt(index);
+                    _presets.Insert(index + 1, preset);
+                    LoadPresets();
+                    SelectedPresetName = preset.Name;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Updates the selected preset with the current filter state and removes the modification marker.
+        /// </summary>
+        private void UpdatePresetButton_Click(object? sender, RoutedEventArgs e)
+        {
+            if (string.IsNullOrEmpty(_activePresetName) || _activePresetName == NonePresetName)
+            {
+                Log("FilterDialog: Cannot update preset - no preset selected");
+                return;
+            }
+            
+            var preset = _presets.FirstOrDefault(p => p.Name == _activePresetName);
+            if (preset == null)
+            {
+                Log($"FilterDialog: Preset '{_activePresetName}' not found in presets list");
+                return;
+            }
+            
+            Log($"FilterDialog: Updating preset '{_activePresetName}' with current filter state");
+            
+            // Deep copy current filter state into preset
+            var json = JsonSerializer.Serialize(_filterState);
+            preset.FilterState = JsonSerializer.Deserialize<FilterState>(json) ?? new FilterState();
+            
+            // Store updated state as original
+            _originalPresetState = JsonSerializer.Deserialize<FilterState>(json) ?? new FilterState();
+            
+            // Clear modification flag
+            _presetModified = false;
+            OnPropertyChanged(nameof(HeaderText));
+            OnPropertyChanged(nameof(CanUpdatePreset));
+            
+            Log($"FilterDialog: Preset '{_activePresetName}' updated successfully");
         }
 
         private void ClearAllButton_Click(object? sender, RoutedEventArgs e)
         {
+            Log("FilterDialog: Clearing all filters");
             _filterState = new FilterState();
             FavoritesOnly = false;
             ExcludeBlacklisted = true;
@@ -417,7 +902,17 @@ namespace ReelRoulette
             _filterState.SelectedTags.Clear();
             _filterState.ExcludedTags.Clear();
             TagMatchAnd = true;
+            
+            // Clear active preset when all filters are cleared
+            _activePresetName = null;
+            _presetModified = false;
+            _originalPresetState = null;
+            SelectedPresetName = NonePresetName;
+            OnPropertyChanged(nameof(HeaderText));
+            OnPropertyChanged(nameof(CanUpdatePreset));
+            
             UpdateTagSelectionState();
+            Log("FilterDialog: Cleared all filters and active preset");
         }
 
         private void CancelButton_Click(object? sender, RoutedEventArgs e)
@@ -446,11 +941,69 @@ namespace ReelRoulette
             _originalFilterState.ExcludedTags.Clear();
             _originalFilterState.ExcludedTags.AddRange(_filterState.ExcludedTags);
             
+            // Check if filters match any preset - if they match the active preset, keep it; 
+            // if they match a different preset, switch to it; otherwise clear if they differ
+            if (!string.IsNullOrEmpty(_activePresetName) && _originalPresetState != null)
+            {
+                var currentJson = JsonSerializer.Serialize(_filterState);
+                var originalJson = JsonSerializer.Serialize(_originalPresetState);
+                
+                if (currentJson != originalJson)
+                {
+                    // Filters differ from active preset - check if they match a different preset
+                    var matchedPreset = _presets.FirstOrDefault(p => 
+                    {
+                        var presetJson = JsonSerializer.Serialize(p.FilterState);
+                        return presetJson == currentJson;
+                    });
+                    
+                    if (matchedPreset != null)
+                    {
+                        // Matches a different preset - switch to it
+                        Log($"FilterDialog: Filters match preset '{matchedPreset.Name}', switching to it");
+                        _activePresetName = matchedPreset.Name;
+                    }
+                    else
+                    {
+                        // Doesn't match any preset - clear active preset name
+                        Log($"FilterDialog: Clearing active preset '{_activePresetName}' because filters differ and don't match any preset");
+                        _activePresetName = null;
+                    }
+                }
+                // If currentJson == originalJson, filters match active preset - keep it (no change needed)
+            }
+            else if (string.IsNullOrEmpty(_activePresetName))
+            {
+                // No active preset - check if filters match any preset and auto-select it
+                var currentJson = JsonSerializer.Serialize(_filterState);
+                var matchedPreset = _presets.FirstOrDefault(p => 
+                {
+                    var presetJson = JsonSerializer.Serialize(p.FilterState);
+                    return presetJson == currentJson;
+                });
+                
+                if (matchedPreset != null)
+                {
+                    Log($"FilterDialog: Filters match preset '{matchedPreset.Name}', auto-selecting it");
+                    _activePresetName = matchedPreset.Name;
+                }
+            }
+            
             _applyClicked = true;
             Close();
         }
 
         public bool WasApplied => _applyClicked;
+
+        /// <summary>
+        /// Returns the current list of presets (for saving to settings).
+        /// </summary>
+        public List<FilterPreset> GetPresets() => _presets;
+
+        /// <summary>
+        /// Returns the active preset name (null if "None" is selected).
+        /// </summary>
+        public string? GetActivePresetName() => _activePresetName;
 
         private string FormatTimeSpan(TimeSpan ts)
         {
@@ -607,6 +1160,83 @@ namespace ReelRoulette
         protected virtual void OnPropertyChanged([CallerMemberName] string? propertyName = null)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
+    }
+
+    /// <summary>
+    /// Simple dialog for renaming a filter preset.
+    /// </summary>
+    public partial class RenamePresetDialog : Window
+    {
+        private readonly TextBox _nameTextBox;
+
+        public RenamePresetDialog(string currentName)
+        {
+            Title = "Rename Preset";
+            Width = 400;
+            Height = 150;
+            WindowStartupLocation = WindowStartupLocation.CenterOwner;
+
+            _nameTextBox = new TextBox
+            {
+                Text = currentName,
+                Watermark = "Enter preset name"
+            };
+            
+            // Select all text for easy editing
+            _nameTextBox.AttachedToVisualTree += (s, e) =>
+            {
+                _nameTextBox.Focus();
+                _nameTextBox.SelectAll();
+            };
+
+            var okButton = new Button
+            {
+                Content = "OK",
+                MinWidth = 80,
+                IsDefault = true
+            };
+            okButton.Click += (s, e) => Close(_nameTextBox.Text);
+
+            var cancelButton = new Button
+            {
+                Content = "Cancel",
+                MinWidth = 80
+            };
+            cancelButton.Click += (s, e) => Close(null);
+            
+            // Handle Enter key in textbox
+            _nameTextBox.KeyDown += (s, e) =>
+            {
+                if (e.Key == Key.Enter)
+                {
+                    Close(_nameTextBox.Text);
+                    e.Handled = true;
+                }
+                else if (e.Key == Key.Escape)
+                {
+                    Close(null);
+                    e.Handled = true;
+                }
+            };
+
+            Content = new StackPanel
+            {
+                Margin = new Thickness(20),
+                Spacing = 12,
+                Children =
+                {
+                    new TextBlock { Text = "Preset Name:" },
+                    _nameTextBox,
+                    new StackPanel
+                    {
+                        Orientation = Avalonia.Layout.Orientation.Horizontal,
+                        HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+                        Spacing = 8,
+                        Children = { okButton, cancelButton }
+                    }
+                }
+            };
         }
     }
 }

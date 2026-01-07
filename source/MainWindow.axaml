@@ -541,7 +541,7 @@
                     HorizontalAlignment="Stretch"
                     VerticalAlignment="Stretch"
                     IsVisible="False">
-                <Grid RowDefinitions="Auto Auto Auto Auto Auto *" VerticalAlignment="Stretch" x:DataType="local:MainWindow">
+                <Grid RowDefinitions="Auto Auto Auto Auto Auto Auto *" VerticalAlignment="Stretch" x:DataType="local:MainWindow">
                     <!-- Row 0: Library info header -->
                     <TextBlock x:Name="LibraryInfoTextBlock"
                               Grid.Row="0"
@@ -589,8 +589,17 @@
                         </ToggleButton>
                     </Grid>
                     
-                    <!-- Row 3: Controls row (view preset, source, sort) -->
-                    <Grid Grid.Row="3" ColumnDefinitions="* * *" ColumnSpacing="8" Margin="0,0,0,8">
+                    <!-- Row 3: Filter Preset selection -->
+                    <ComboBox x:Name="LibraryPresetComboBox"
+                             Grid.Row="3"
+                             HorizontalAlignment="Stretch"
+                             Margin="0,0,0,8"
+                             SelectionChanged="LibraryPresetComboBox_SelectionChanged">
+                        <!-- Items will be populated in code-behind -->
+                    </ComboBox>
+                    
+                    <!-- Row 4: Controls row (view preset, source, sort) -->
+                    <Grid Grid.Row="4" ColumnDefinitions="* * *" ColumnSpacing="8" Margin="0,0,0,8">
                         <ComboBox x:Name="LibraryViewPresetComboBox"
                                  Grid.Column="0"
                                  HorizontalAlignment="Stretch"
@@ -616,16 +625,16 @@
                         </ComboBox>
                     </Grid>
                     
-                    <!-- Row 4: Search box -->
+                    <!-- Row 5: Search box -->
                     <TextBox x:Name="LibrarySearchTextBox"
-                            Grid.Row="4"
+                            Grid.Row="5"
                             Watermark="Search..."
                             Margin="0,0,0,8"
                             TextChanged="LibrarySearchTextBox_TextChanged"/>
                     
-                    <!-- Row 5: Items list (virtualized) -->
+                    <!-- Row 6: Items list (virtualized) -->
                     <ListBox x:Name="LibraryListBox"
-                             Grid.Row="5"
+                             Grid.Row="6"
                              VerticalAlignment="Stretch"
                              SelectionMode="Multiple"
                              Background="Transparent"

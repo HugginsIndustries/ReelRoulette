@@ -3,7 +3,7 @@
         xmlns:local="clr-namespace:ReelRoulette"
         x:Class="ReelRoulette.FilterDialog"
         x:DataType="local:FilterDialog"
-        Title="Filter Videos"
+        Title="Filter Media"
         Width="600"
         Height="700"
         WindowStartupLocation="CenterOwner"
@@ -12,7 +12,8 @@
     <Grid RowDefinitions="Auto * Auto" Margin="12">
         <!-- Header -->
         <TextBlock Grid.Row="0" 
-                   Text="Configure Filters"
+                   x:Name="HeaderTextBlock"
+                   Text="{Binding HeaderText}"
                    FontWeight="Bold"
                    FontSize="16"
                    Margin="0,0,0,16"/>
@@ -202,6 +203,106 @@
                         </StackPanel>
                     </StackPanel>
                 </ScrollViewer>
+            </TabItem>
+
+            <!-- Presets Tab -->
+            <TabItem Header="Presets">
+                <Grid RowDefinitions="Auto Auto *" Margin="12">
+                    <!-- Choose Preset Section -->
+                    <StackPanel Grid.Row="0" Spacing="8" Margin="0,0,0,16">
+                        <TextBlock Text="Choose Preset" 
+                                   FontWeight="SemiBold" 
+                                   FontSize="13"
+                                   Margin="0,0,0,4"/>
+                        <Grid ColumnDefinitions="* Auto" ColumnSpacing="8">
+                            <ComboBox x:Name="PresetComboBox"
+                                      Grid.Column="0"
+                                      ItemsSource="{Binding PresetNames}"
+                                      SelectedItem="{Binding SelectedPresetName}"
+                                      SelectionChanged="PresetComboBox_SelectionChanged"/>
+                            <Button Grid.Column="1"
+                                    Content="Update Preset"
+                                    Click="UpdatePresetButton_Click"
+                                    IsEnabled="{Binding CanUpdatePreset}"
+                                    MinWidth="100"
+                                    ToolTip.Tip="Save current filter settings to the selected preset"/>
+                        </Grid>
+                    </StackPanel>
+
+                    <!-- Create New Preset Section -->
+                    <StackPanel Grid.Row="1" Spacing="8" Margin="0,0,0,16">
+                        <TextBlock Text="Create New Preset From Current Filter Settings" 
+                                   FontWeight="SemiBold" 
+                                   FontSize="13"
+                                   Margin="0,0,0,4"/>
+                        <Grid ColumnDefinitions="* Auto" ColumnSpacing="8">
+                            <TextBox x:Name="NewPresetNameTextBox"
+                                     Grid.Column="0"
+                                     Watermark="Enter preset name"
+                                     KeyDown="NewPresetNameTextBox_KeyDown"/>
+                            <Button Grid.Column="1"
+                                    Content="Add Preset"
+                                    Click="AddPresetButton_Click"
+                                    MinWidth="100"/>
+                        </Grid>
+                    </StackPanel>
+
+                    <!-- Manage Presets Section -->
+                    <StackPanel Grid.Row="2" Spacing="8" VerticalAlignment="Stretch">
+                        <TextBlock Text="Manage Presets" 
+                                   FontWeight="SemiBold" 
+                                   FontSize="13"
+                                   Margin="0,0,0,4"/>
+                        <Border BorderBrush="{DynamicResource ThemeBorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="4"
+                                Padding="8"
+                                VerticalAlignment="Stretch">
+                            <ListBox x:Name="PresetsListBox"
+                                     ItemsSource="{Binding Presets}"
+                                     VerticalAlignment="Stretch">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate x:DataType="local:FilterPreset">
+                                        <Grid ColumnDefinitions="* Auto Auto Auto Auto" 
+                                              ColumnSpacing="4" 
+                                              Margin="0,2">
+                                            <TextBlock Grid.Column="0"
+                                                       Text="{Binding Name}"
+                                                       VerticalAlignment="Center"
+                                                       Margin="4,0"/>
+                                            <Button Grid.Column="1"
+                                                    Content="↑"
+                                                    Click="MovePresetUpButton_Click"
+                                                    Tag="{Binding}"
+                                                    ToolTip.Tip="Move up"
+                                                    Width="30"
+                                                    Margin="2,0"/>
+                                            <Button Grid.Column="2"
+                                                    Content="↓"
+                                                    Click="MovePresetDownButton_Click"
+                                                    Tag="{Binding}"
+                                                    ToolTip.Tip="Move down"
+                                                    Width="30"
+                                                    Margin="2,0"/>
+                                            <Button Grid.Column="3"
+                                                    Content="Rename"
+                                                    Click="RenamePresetButton_Click"
+                                                    Tag="{Binding}"
+                                                    MinWidth="60"
+                                                    Margin="2,0"/>
+                                            <Button Grid.Column="4"
+                                                    Content="Delete"
+                                                    Click="DeletePresetButton_Click"
+                                                    Tag="{Binding}"
+                                                    MinWidth="60"
+                                                    Margin="2,0"/>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </Border>
+                    </StackPanel>
+                </Grid>
             </TabItem>
         </TabControl>
 
