@@ -1,0 +1,61 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:ReelRoulette"
+        x:Class="ReelRoulette.EditTagDialog"
+        x:DataType="local:EditTagDialog"
+        Title="Edit Tag"
+        Width="450"
+        Height="250"
+        WindowStartupLocation="CenterOwner"
+        MinWidth="400"
+        MinHeight="200">
+    <Grid RowDefinitions="Auto Auto Auto Auto * Auto" Margin="16">
+        <!-- Tag Name -->
+        <TextBlock Grid.Row="0" 
+                  Text="Tag Name:" 
+                  FontWeight="SemiBold"
+                  Margin="0,0,0,8"/>
+        <TextBox Grid.Row="1"
+                x:Name="TagNameTextBox"
+                Watermark="Enter tag name"
+                Margin="0,0,0,16"/>
+
+        <!-- Category -->
+        <TextBlock Grid.Row="2" 
+                  Text="Category:" 
+                  FontWeight="SemiBold"
+                  Margin="0,0,0,8"/>
+        <ComboBox Grid.Row="3"
+                 x:Name="CategoryComboBox"
+                 HorizontalAlignment="Stretch"
+                 SelectionChanged="CategoryComboBox_SelectionChanged"
+                 Margin="0,0,0,16"/>
+
+        <!-- New Category Input (Initially Hidden) -->
+        <StackPanel Grid.Row="4" 
+                   x:Name="NewCategoryPanel"
+                   IsVisible="False"
+                   Margin="0,0,0,16">
+            <TextBlock Text="New Category Name:" 
+                      FontWeight="SemiBold"
+                      Margin="0,0,0,8"/>
+            <TextBox x:Name="NewCategoryNameTextBox"
+                    Watermark="Enter category name"/>
+        </StackPanel>
+
+        <!-- Buttons -->
+        <StackPanel Grid.Row="5" 
+                   Orientation="Horizontal" 
+                   HorizontalAlignment="Right"
+                   VerticalAlignment="Bottom"
+                   Spacing="8">
+            <Button Content="Cancel" 
+                   Width="100" 
+                   Click="CancelButton_Click"/>
+            <Button Content="OK" 
+                   Width="100" 
+                   Click="OkButton_Click"
+                   Classes="accent"/>
+        </StackPanel>
+    </Grid>
+</Window>

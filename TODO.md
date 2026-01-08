@@ -114,33 +114,6 @@ Each TODO entry follows this structure:
   - Update status line during scan: "Scanning 234/1000 (15 warnings)"
 - **Notes**: Helps users understand why some videos aren't playing or being included in filters. Particularly useful for large imports.
 
-### Tag Categories or Hierarchical Tags
-
-- **Priority**: P2
-- **Impact**: Medium - Better organization for users with many tags
-- **Description**: Extend tag system to support categories or hierarchical organization. Currently, all tags are flat, which becomes unwieldy with 50+ tags.
-- **Implementation**:
-  - Data model options:
-    - **Option A**: Notation-based: "Genre:Action", "Mood:Relaxing", "Source:YouTube"
-    - **Option B**: Separate category field in `Tag` object
-  - Update `ManageTagsDialog`:
-    - Group tags by category in TreeView or grouped list
-    - "Add Category" button to create new category
-    - Drag-drop tags between categories
-    - Category-level operations: Rename category, delete category (keep tags)
-  - Tag autocomplete improvements:
-    - Show category in dropdown: "Genre: Action" or "Action (Genre)"
-    - Filter by category: Type "genre:" to see only genre tags
-    - Smart suggestions based on video filename/path
-  - Tag filtering in FilterDialog:
-    - Currently supports flat tags with inclusion/exclusion (✅ Enhanced with tag inclusion/exclusion UI)
-    - Group tags by category for easier browsing (enhancement on top of current UI)
-    - "All Tags in Category" checkbox (select all Genre tags at once)
-  - Maintain backward compatibility:
-    - Read old flat tags as "Uncategorized" category
-    - Allow mixing flat and categorized tags
-- **Notes**: Example categories: Genre, Mood, Creator, Series, Quality, Language, Year. Consider exporting category structure as JSON for backup.
-
 ### File Metadata Sync (Import/Export Tags and Metadata)
 
 - **Priority**: P2
@@ -534,6 +507,18 @@ Each TODO entry follows this structure:
 
 These features have been fully implemented and are no longer on the TODO list:
 
+- ✅ **Tag Categories and Tag Renaming System** - Complete hierarchical tag system with categories and advanced filtering (Completed 2026-01-08)
+  - TagCategory and Tag classes with category-based organization
+  - Automatic migration dialog for existing flat tags (mandatory on first run)
+  - ManageTagsDialog redesign with category grouping, reordering, edit/delete buttons, orphaned tag handling, default category selection
+  - ItemTagsDialog with category-grouped tags, edit functionality, multi-tag addition preserving selection states, default category selection
+  - FilterDialog with per-category local match modes (ANY/ALL within category) and single global match mode (AND/OR between all categories)
+  - Advanced filtering logic supporting "ANY Genre AND ALL People" style filters with correct category ID tracking
+  - Tag renaming across library items with filter preset update utilities
+  - Tag deletion with filter preset cleanup utilities
+  - Orphaned tags appear in "Uncategorized" category and are properly included in filtering
+  - Full backward compatibility with legacy flat tag format
+  - Example filtering: "(Action OR Comedy in Genre: ANY) AND (Tom Hanks in People: ALL)" with global AND
 - ✅ **Filter Presets (Saved Filter Configurations)** - Filter presets feature with library panel integration (Completed 2026-01-06)
   - Filter presets allow users to save and quickly apply commonly used filter configurations
   - New "Presets" tab in FilterDialog with three sections: Choose Preset, Create New Preset, and Manage Presets

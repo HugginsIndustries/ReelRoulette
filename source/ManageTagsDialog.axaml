@@ -3,73 +3,159 @@
         xmlns:local="clr-namespace:ReelRoulette"
         x:Class="ReelRoulette.ManageTagsDialog"
         x:DataType="local:ManageTagsDialog"
-        Title="Manage Tags"
-        Width="500"
-        Height="600"
+        Title="Manage Tags &amp; Categories"
+        Width="700"
+        Height="700"
         WindowStartupLocation="CenterOwner"
-        MinWidth="400"
-        MinHeight="400">
-    <Grid RowDefinitions="Auto * Auto Auto" Margin="12">
+        MinWidth="600"
+        MinHeight="500">
+    <Grid RowDefinitions="Auto * Auto Auto Auto" Margin="16">
         <!-- Header -->
         <TextBlock Grid.Row="0" 
-                   Text="Manage Tags"
+                   Text="Categories &amp; Tags"
                    FontWeight="Bold"
                    FontSize="16"
-                   Margin="0,0,0,16"/>
+                   Margin="0,0,0,12"/>
 
-        <!-- Tags List -->
+        <!-- Categories and Tags List -->
         <Border Grid.Row="1"
                 BorderBrush="{DynamicResource ThemeBorderBrush}"
                 BorderThickness="1"
                 CornerRadius="4"
-                Padding="8"
+                Padding="0"
                 Margin="0,0,0,16">
-            <Grid RowDefinitions="Auto *">
-                <TextBlock Grid.Row="0"
-                           Text="Available Tags"
-                           FontWeight="SemiBold"
-                           FontSize="13"
-                           Margin="0,0,0,8"/>
-                <ListBox x:Name="TagsListBox"
-                         Grid.Row="1"
-                         ItemsSource="{Binding Tags}">
-                    <ListBox.ItemTemplate>
-                        <DataTemplate>
-                            <Grid ColumnDefinitions="* Auto" Margin="0,2">
-                                <TextBlock Grid.Column="0"
-                                           Text="{Binding}"
-                                           VerticalAlignment="Center"
-                                           Margin="4,0"/>
-                                <Button Grid.Column="1"
-                                        Content="Delete"
-                                        Click="DeleteTagButton_Click"
-                                        Tag="{Binding}"
-                                        MinWidth="60"
-                                        Margin="4,0"/>
-                            </Grid>
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <ItemsControl x:Name="CategoriesItemsControl" Margin="0">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="local:CategoryViewModel">
+                            <Border BorderBrush="{DynamicResource ThemeBorderBrush}"
+                                   BorderThickness="0,0,0,1"
+                                   Padding="0">
+                                <StackPanel>
+                                    <!-- Category Header -->
+                                    <Border Background="#2D2D30" Padding="12,8">
+                                    <Grid ColumnDefinitions="Auto * Auto Auto Auto Auto">
+                                        <Button Grid.Column="0"
+                                               Content="{Binding ExpandIcon}"
+                                               Click="ToggleExpandButton_Click"
+                                               CommandParameter="{Binding}"
+                                               Background="Transparent"
+                                               BorderThickness="0"
+                                               Padding="0"
+                                               Width="24"
+                                               Height="24"
+                                               Margin="0,0,8,0"
+                                               FontSize="14"/>
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding Category.Name}"
+                                                      FontWeight="SemiBold"
+                                                      FontSize="14"/>
+                                            <TextBlock Text="{Binding TagCountDisplay}"
+                                                      FontSize="12"
+                                                      Opacity="0.7"
+                                                      Margin="8,0,0,0"/>
+                                        </StackPanel>
+                                        <Button Grid.Column="2"
+                                               Content="↑"
+                                               Classes="IconMomentarySmall"
+                                               ToolTip.Tip="Move up"
+                                               Click="MoveCategoryUpButton_Click"
+                                               CommandParameter="{Binding}"
+                                               IsVisible="{Binding IsReorderable}"
+                                               Margin="4,0"/>
+                                        <Button Grid.Column="3"
+                                               Content="↓"
+                                               Classes="IconMomentarySmall"
+                                               ToolTip.Tip="Move down"
+                                               Click="MoveCategoryDownButton_Click"
+                                               CommandParameter="{Binding}"
+                                               IsVisible="{Binding IsReorderable}"
+                                               Margin="4,0"/>
+                                        <Button Grid.Column="4"
+                                               Content="✏️"
+                                               Classes="IconMomentarySmall"
+                                               ToolTip.Tip="Rename category"
+                                               Click="EditCategoryButton_Click"
+                                               CommandParameter="{Binding}"
+                                               IsVisible="{Binding IsReorderable}"
+                                               Margin="4,0"/>
+                                        <Button Grid.Column="5"
+                                               Content="❌"
+                                               Classes="IconMomentarySmall"
+                                               ToolTip.Tip="Delete category"
+                                               Click="DeleteCategoryButton_Click"
+                                               CommandParameter="{Binding}"
+                                               IsVisible="{Binding IsReorderable}"
+                                               Margin="4,0,0,0"/>
+                                    </Grid>
+                                    </Border>
+
+                                    <!-- Tags under this category -->
+                                    <ItemsControl ItemsSource="{Binding Tags}" IsVisible="{Binding IsExpanded}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="local:ManageTagViewModel">
+                                                <Border Background="#1E1E1E" Padding="12,6,12,6" Margin="32,0,0,0">
+                                                <Grid ColumnDefinitions="* Auto Auto">
+                                                    <TextBlock Grid.Column="0"
+                                                              Text="{Binding Tag.Name}"
+                                                              VerticalAlignment="Center"
+                                                              Margin="4,0"/>
+                                                    <Button Grid.Column="1"
+                                                           Content="✏️"
+                                                           Classes="IconMomentarySmall"
+                                                           ToolTip.Tip="Edit tag"
+                                                           Click="EditTagButton_Click"
+                                                           CommandParameter="{Binding}"
+                                                           Margin="4,0"/>
+                                                    <Button Grid.Column="2"
+                                                           Content="❌"
+                                                           Classes="IconMomentarySmall"
+                                                           ToolTip.Tip="Delete tag"
+                                                           Click="DeleteTagButton_Click"
+                                                           CommandParameter="{Binding}"
+                                                           Margin="4,0,0,0"/>
+                                                </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </Border>
                         </DataTemplate>
-                    </ListBox.ItemTemplate>
-                </ListBox>
-            </Grid>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
         </Border>
 
-        <!-- Add Tag Section -->
+        <!-- Add New Tag Section -->
         <Grid Grid.Row="2"
-              ColumnDefinitions="* Auto"
+              ColumnDefinitions="* Auto Auto"
               ColumnSpacing="8"
-              Margin="0,0,0,16">
+              Margin="0,0,0,12">
             <TextBox x:Name="NewTagTextBox"
                      Grid.Column="0"
-                     Watermark="Enter new tag name"
+                     Watermark="Tag name"
                      KeyDown="NewTagTextBox_KeyDown"/>
-            <Button Grid.Column="1"
+            <ComboBox x:Name="TagCategoryComboBox"
+                     Grid.Column="1"
+                     MinWidth="150"
+                     PlaceholderText="Select category"/>
+            <Button Grid.Column="2"
                     Content="Add Tag"
                     Click="AddTagButton_Click"
-                    MinWidth="100"/>
+                    MinWidth="90"/>
         </Grid>
 
+        <!-- Add New Category Button -->
+        <Button Grid.Row="3"
+               Content="+ Add Category"
+               Click="AddCategoryButton_Click"
+               HorizontalAlignment="Left"
+               MinWidth="150"
+               Margin="0,0,0,16"/>
+
         <!-- Buttons -->
-        <StackPanel Grid.Row="3" 
+        <StackPanel Grid.Row="4" 
                     Orientation="Horizontal" 
                     HorizontalAlignment="Right"
                     Spacing="8">

@@ -21,6 +21,35 @@ namespace ReelRoulette
         NoItemsHaveTag
     }
 
+    public class ItemTagsCategoryViewModel : INotifyPropertyChanged
+    {
+        private bool _isExpanded = true;
+
+        public string CategoryId { get; set; } = string.Empty;
+        public string CategoryName { get; set; } = string.Empty;
+        public ObservableCollection<BatchTagViewModel> Tags { get; set; } = new ObservableCollection<BatchTagViewModel>();
+
+        public bool IsExpanded
+        {
+            get => _isExpanded;
+            set
+            {
+                _isExpanded = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(ExpandIcon));
+            }
+        }
+
+        public string ExpandIcon => IsExpanded ? "▼" : "▶";
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+
+        protected virtual void OnPropertyChanged([CallerMemberName] string? propertyName = null)
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
+    }
+
     public class BatchTagViewModel : INotifyPropertyChanged
     {
         private bool _isPlusSelected;
@@ -37,6 +66,8 @@ namespace ReelRoulette
                 OnPropertyChanged();
             }
         }
+
+        public string CategoryId { get; set; } = string.Empty;
 
         public TagState TagState
         {
@@ -105,7 +136,9 @@ namespace ReelRoulette
         private List<LibraryItem> _items;
         private LibraryIndex? _libraryIndex;
         private LibraryService? _libraryService;
-        private ObservableCollection<BatchTagViewModel> _tagViewModels = new ObservableCollection<BatchTagViewModel>();
+        private System.Collections.Generic.List<FilterPreset>? _filterPresets;
+        private ObservableCollection<ItemTagsCategoryViewModel> _categoryViewModels = new ObservableCollection<ItemTagsCategoryViewModel>();
+        private PixelPoint? _savedPosition; // Store position to set after window opens
 
         private static void Log(string message)
         {
@@ -117,45 +150,264 @@ namespace ReelRoulette
             catch { }
         }
 
-        public ItemTagsDialog(List<LibraryItem> items, LibraryIndex? libraryIndex, LibraryService? libraryService)
+        public ItemTagsDialog(List<LibraryItem> items, LibraryIndex? libraryIndex, LibraryService? libraryService, System.Collections.Generic.List<FilterPreset>? filterPresets = null)
         {
             InitializeComponent();
             _items = items;
             _libraryIndex = libraryIndex;
             _libraryService = libraryService;
+            _filterPresets = filterPresets;
 
             Log($"ItemTagsDialog: Opening tags dialog for {items.Count} item(s)");
 
-            // Get all unique tags from all items
-            var allItemTags = items.SelectMany(item => item.Tags ?? new List<string>()).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            // Load saved dialog bounds
+            var (x, y, width, height) = MainWindow.LoadDialogBounds("ItemTagsDialog");
             
-            // Get available tags from library index
-            var availableTags = _libraryIndex?.AvailableTags ?? new List<string>();
-            var allTags = availableTags.Concat(allItemTags).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(t => t).ToList();
-
-            // Create view models for each tag
-            foreach (var tag in allTags)
+            if (x.HasValue && y.HasValue)
             {
-                // Count how many items have this tag
-                var itemsWithTag = items.Count(item => 
-                    (item.Tags ?? new List<string>()).Any(t => string.Equals(t, tag, StringComparison.OrdinalIgnoreCase)));
-                
-                var tagState = items.Count > 0 && itemsWithTag == items.Count 
-                    ? TagState.AllItemsHaveTag 
-                    : itemsWithTag > 0 
-                        ? TagState.SomeItemsHaveTag 
-                        : TagState.NoItemsHaveTag;
-
-                _tagViewModels.Add(new BatchTagViewModel
-                {
-                    Tag = tag,
-                    TagState = tagState,
-                    IsPlusSelected = false,
-                    IsMinusSelected = false
-                });
+                // Store position to set after window opens (Avalonia best practice)
+                _savedPosition = new PixelPoint((int)x.Value, (int)y.Value);
+                Log($"ItemTagsDialog: Will restore position to ({x.Value}, {y.Value}) after window opens");
+            }
+            else
+            {
+                // No saved position - center on owner window
+                WindowStartupLocation = WindowStartupLocation.CenterOwner;
+                Log("ItemTagsDialog: No saved position, centering on owner");
+            }
+            
+            if (width.HasValue && width.Value > 0)
+            {
+                Width = width.Value;
+                Log($"ItemTagsDialog: Restored width to {width.Value}");
+            }
+            
+            if (height.HasValue && height.Value > 0)
+            {
+                Height = height.Value;
+                Log($"ItemTagsDialog: Restored height to {height.Value}");
             }
 
-            TagsItemsControl!.ItemsSource = _tagViewModels;
+            // Subscribe to window events
+            Opened += OnOpened;
+            Closing += OnClosing;
+
+            LoadTagsByCategory();
+            UpdateCategoryComboBox();
+        }
+
+        private void OnOpened(object? sender, EventArgs e)
+        {
+            // Set position after window is fully opened and laid out (Avalonia best practice)
+            if (_savedPosition.HasValue)
+            {
+                Position = _savedPosition.Value;
+                Log($"ItemTagsDialog: Position set to ({_savedPosition.Value.X}, {_savedPosition.Value.Y}) after window opened");
+            }
+        }
+
+        private void OnClosing(object? sender, WindowClosingEventArgs e)
+        {
+            // Save dialog bounds
+            MainWindow.SaveDialogBounds("ItemTagsDialog", Position.X, Position.Y, Width, Height);
+            Log($"ItemTagsDialog: Saved bounds on close - Position=({Position.X}, {Position.Y}), Size=({Width}, {Height})");
+        }
+
+        private void LoadTagsByCategory()
+        {
+            _categoryViewModels.Clear();
+
+            var categories = _libraryIndex?.Categories ?? new List<TagCategory>();
+            var availableTags = _libraryIndex?.Tags ?? new List<Tag>();
+
+            // Get all unique tags from all items
+            var allItemTags = _items.SelectMany(item => item.Tags ?? new List<string>())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            // Combine with available tags
+            var allTagNames = availableTags.Select(t => t.Name)
+                .Concat(allItemTags)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            Log($"ItemTagsDialog.LoadTagsByCategory: {categories.Count} categories, {availableTags.Count} available tags, {allTagNames.Count} total unique tags");
+
+            // Track which tags have been processed
+            var processedTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            // Group tags by category
+            foreach (var category in categories.OrderBy(c => c.SortOrder))
+            {
+                var categoryVm = new ItemTagsCategoryViewModel
+                {
+                    CategoryId = category.Id,
+                    CategoryName = category.Name
+                };
+
+                // Process all tags that belong to this category OR that should belong to it (sorted alphabetically)
+                foreach (var tagName in allTagNames.OrderBy(t => t, StringComparer.OrdinalIgnoreCase))
+                {
+                    // Find if this tag exists in available tags
+                    var availableTag = availableTags.FirstOrDefault(t => 
+                        string.Equals(t.Name, tagName, StringComparison.OrdinalIgnoreCase));
+
+                    // Include tag if it belongs to this category
+                    if (availableTag != null && availableTag.CategoryId == category.Id)
+                    {
+                        // Count how many items have this tag
+                        var itemsWithTag = _items.Count(item =>
+                            (item.Tags ?? new List<string>()).Any(t =>
+                                string.Equals(t, tagName, StringComparison.OrdinalIgnoreCase)));
+
+                        var tagState = _items.Count > 0 && itemsWithTag == _items.Count
+                            ? TagState.AllItemsHaveTag
+                            : itemsWithTag > 0
+                                ? TagState.SomeItemsHaveTag
+                                : TagState.NoItemsHaveTag;
+
+                        categoryVm.Tags.Add(new BatchTagViewModel
+                        {
+                            Tag = tagName,
+                            CategoryId = category.Id,
+                            TagState = tagState,
+                            IsPlusSelected = false,
+                            IsMinusSelected = false
+                        });
+
+                        processedTags.Add(tagName);
+                    }
+                }
+
+                if (categoryVm.Tags.Count > 0)
+                {
+                    _categoryViewModels.Add(categoryVm);
+                }
+            }
+
+            // Handle orphaned tags (tags on items but not defined in any category)
+            var orphanedTags = allTagNames.Where(t => !processedTags.Contains(t)).ToList();
+            if (orphanedTags.Count > 0)
+            {
+                Log($"ItemTagsDialog.LoadTagsByCategory: Found {orphanedTags.Count} orphaned tags");
+
+                var orphanedCategoryVm = new ItemTagsCategoryViewModel
+                {
+                    CategoryId = string.Empty,
+                    CategoryName = "Uncategorized"
+                };
+
+                foreach (var tagName in orphanedTags.OrderBy(t => t))
+                {
+                    var itemsWithTag = _items.Count(item =>
+                        (item.Tags ?? new List<string>()).Any(t =>
+                            string.Equals(t, tagName, StringComparison.OrdinalIgnoreCase)));
+
+                    var tagState = _items.Count > 0 && itemsWithTag == _items.Count
+                        ? TagState.AllItemsHaveTag
+                        : itemsWithTag > 0
+                            ? TagState.SomeItemsHaveTag
+                            : TagState.NoItemsHaveTag;
+
+                    orphanedCategoryVm.Tags.Add(new BatchTagViewModel
+                    {
+                        Tag = tagName,
+                        CategoryId = string.Empty,
+                        TagState = tagState,
+                        IsPlusSelected = false,
+                        IsMinusSelected = false
+                    });
+                }
+
+                _categoryViewModels.Add(orphanedCategoryVm);
+            }
+
+            CategoriesItemsControl.ItemsSource = _categoryViewModels;
+        }
+
+        private void UpdateCategoryComboBox()
+        {
+            TagCategoryComboBox.Items.Clear();
+            var categories = _libraryIndex?.Categories ?? new List<TagCategory>();
+            foreach (var category in categories.OrderBy(c => c.SortOrder))
+            {
+                TagCategoryComboBox.Items.Add(new ComboBoxItem
+                {
+                    Content = category.Name,
+                    Tag = category.Id
+                });
+            }
+            
+            // Set default selection to first category if available
+            if (TagCategoryComboBox.Items.Count > 0)
+            {
+                TagCategoryComboBox.SelectedIndex = 0;
+            }
+        }
+
+        private void ToggleCategoryButton_Click(object? sender, RoutedEventArgs e)
+        {
+            if (sender is Button button && button.CommandParameter is ItemTagsCategoryViewModel categoryVm)
+            {
+                categoryVm.IsExpanded = !categoryVm.IsExpanded;
+                Log($"ItemTagsDialog.ToggleCategoryButton_Click: Category '{categoryVm.CategoryName}' IsExpanded={categoryVm.IsExpanded}");
+            }
+        }
+
+        private async void EditTagButton_Click(object? sender, RoutedEventArgs e)
+        {
+            if (sender is Button button && button.CommandParameter is BatchTagViewModel tagVm)
+            {
+                Log($"ItemTagsDialog.EditTagButton_Click: Editing tag '{tagVm.Tag}'");
+
+                // Check if library service is available
+                if (_libraryService == null)
+                {
+                    ShowLibraryServiceError();
+                    return;
+                }
+
+                var dialog = new EditTagDialog();
+                var categories = _libraryIndex?.Categories ?? new List<TagCategory>();
+                dialog.Initialize(categories, tagVm.Tag, tagVm.CategoryId);
+
+                await dialog.ShowDialog(this);
+
+                if (dialog.WasOk && !string.IsNullOrEmpty(dialog.TagName) && !string.IsNullOrEmpty(dialog.CategoryId))
+                {
+                    // Check if category is new
+                    if (!string.IsNullOrEmpty(dialog.CategoryName) &&
+                        !categories.Any(c => c.Id == dialog.CategoryId))
+                    {
+                        var newCategory = new TagCategory
+                        {
+                            Id = dialog.CategoryId,
+                            Name = dialog.CategoryName,
+                            SortOrder = categories.Count
+                        };
+                        _libraryService.AddOrUpdateCategory(newCategory);
+                        Log($"ItemTagsDialog.EditTagButton_Click: Created new category '{newCategory.Name}'");
+                    }
+
+                    // Rename tag
+                    string oldTagName = tagVm.Tag;
+                    string? newCategoryId = dialog.CategoryId != tagVm.CategoryId ? dialog.CategoryId : null;
+                    _libraryService.RenameTag(oldTagName, dialog.TagName, newCategoryId);
+                    Log($"ItemTagsDialog.EditTagButton_Click: Renamed tag to '{dialog.TagName}'");
+
+                    // Update filter presets if tag name changed
+                    if (!string.Equals(oldTagName, dialog.TagName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        int presetsUpdated = LibraryService.UpdateFilterPresetsForRenamedTag(_filterPresets, oldTagName, dialog.TagName);
+                        Log($"ItemTagsDialog.EditTagButton_Click: Updated {presetsUpdated} filter presets");
+                    }
+
+                    // Reload the UI
+                    _libraryIndex = _libraryService.LibraryIndex;
+                    LoadTagsByCategory();
+                    UpdateCategoryComboBox();
+                }
+            }
         }
 
         private void PlusButton_Click(object? sender, RoutedEventArgs e)
@@ -206,47 +458,143 @@ namespace ReelRoulette
                 return;
             }
 
-            // Check if tag already exists in view models
-            var existing = _tagViewModels.FirstOrDefault(vm => string.Equals(vm.Tag, tagName, StringComparison.OrdinalIgnoreCase));
-            if (existing != null)
+            var selectedItem = TagCategoryComboBox.SelectedItem as ComboBoxItem;
+            if (selectedItem == null)
             {
-                // Tag exists, just select plus button
-                existing.IsPlusSelected = true;
-                existing.IsMinusSelected = false;
-                NewTagTextBox!.Text = "";
+                Log("ItemTagsDialog.AddNewTag: No category selected");
                 return;
             }
 
-            // Add to available tags if not already there
-            if (_libraryIndex != null)
+            var categoryId = selectedItem.Tag as string;
+            if (string.IsNullOrEmpty(categoryId))
             {
-                if (!_libraryIndex.AvailableTags.Any(t => string.Equals(t, tagName, StringComparison.OrdinalIgnoreCase)))
+                return;
+            }
+
+            // Check if tag already exists
+            var availableTags = _libraryIndex?.Tags ?? new List<Tag>();
+            var existingTag = availableTags.FirstOrDefault(t =>
+                string.Equals(t.Name, tagName, StringComparison.OrdinalIgnoreCase));
+
+            if (existingTag != null)
+            {
+                // Tag exists, find it in view models and select plus button
+                foreach (var categoryVm in _categoryViewModels)
                 {
-                    _libraryIndex.AvailableTags.Add(tagName);
+                    var tagVm = categoryVm.Tags.FirstOrDefault(t =>
+                        string.Equals(t.Tag, tagName, StringComparison.OrdinalIgnoreCase));
+                    if (tagVm != null)
+                    {
+                        tagVm.IsPlusSelected = true;
+                        tagVm.IsMinusSelected = false;
+                        NewTagTextBox!.Text = "";
+                        return;
+                    }
                 }
             }
 
-            // Add to view models (insert in sorted position)
-            var newViewModel = new BatchTagViewModel
+            // Check if library service is available
+            if (_libraryService == null)
             {
-                Tag = tagName,
-                TagState = TagState.NoItemsHaveTag,
-                IsPlusSelected = true, // Automatically select plus for new tags
-                IsMinusSelected = false
-            };
-
-            var sorted = _tagViewModels.Concat(new[] { newViewModel })
-                .OrderBy(vm => vm.Tag)
-                .ToList();
-            
-            _tagViewModels.Clear();
-            foreach (var vm in sorted)
-            {
-                _tagViewModels.Add(vm);
+                ShowLibraryServiceError();
+                return;
             }
 
-            // Clear text box
+            // Save current selection states before reloading
+            var plusSelectedTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var minusSelectedTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var categoryVm in _categoryViewModels)
+            {
+                foreach (var tagVm in categoryVm.Tags)
+                {
+                    if (tagVm.IsPlusSelected)
+                        plusSelectedTags.Add(tagVm.Tag);
+                    if (tagVm.IsMinusSelected)
+                        minusSelectedTags.Add(tagVm.Tag);
+                }
+            }
+
+            // Add new tag
+            var newTag = new Tag { Name = tagName, CategoryId = categoryId };
+            _libraryService.AddOrUpdateTag(newTag);
+            Log($"ItemTagsDialog.AddNewTag: Added tag '{tagName}' to category '{categoryId}'");
+
+            // Add newly added tag to plus selection
+            plusSelectedTags.Add(tagName);
+
+            // Reload UI
+            _libraryIndex = _libraryService.LibraryIndex;
+            LoadTagsByCategory();
+
+            // Restore selection states after reload
+            foreach (var categoryVm in _categoryViewModels)
+            {
+                foreach (var tagVm in categoryVm.Tags)
+                {
+                    if (plusSelectedTags.Contains(tagVm.Tag))
+                    {
+                        tagVm.IsPlusSelected = true;
+                        tagVm.IsMinusSelected = false;
+                    }
+                    else if (minusSelectedTags.Contains(tagVm.Tag))
+                    {
+                        tagVm.IsMinusSelected = true;
+                        tagVm.IsPlusSelected = false;
+                    }
+                }
+            }
+
             NewTagTextBox!.Text = "";
+        }
+
+        private void ShowLibraryServiceError()
+        {
+            Log($"ItemTagsDialog: ERROR - Library service is null, operation cannot proceed!");
+            var errorDialog = new Window
+            {
+                Title = "Error: Cannot Save",
+                Width = 450,
+                Height = 180,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner
+            };
+            
+            var grid = new Grid();
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            grid.Margin = new Thickness(16);
+            
+            var titleText = new TextBlock
+            {
+                Text = "Error: Cannot save changes",
+                FontWeight = FontWeight.Bold,
+                FontSize = 14,
+                Margin = new Thickness(0, 0, 0, 12)
+            };
+            Grid.SetRow(titleText, 0);
+            grid.Children.Add(titleText);
+            
+            var messageText = new TextBlock
+            {
+                Text = "Library service is not available. Changes cannot be saved and will be lost when the application closes.\n\nPlease cancel and try again later.",
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 0, 0, 12)
+            };
+            Grid.SetRow(messageText, 1);
+            grid.Children.Add(messageText);
+            
+            var okButton = new Button
+            {
+                Content = "OK",
+                HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
+                Width = 80
+            };
+            okButton.Click += (s, args) => errorDialog.Close();
+            Grid.SetRow(okButton, 2);
+            grid.Children.Add(okButton);
+            
+            errorDialog.Content = grid;
+            errorDialog.ShowDialog(this);
         }
 
         private void OkButton_Click(object? sender, RoutedEventArgs e)
@@ -256,54 +604,7 @@ namespace ReelRoulette
             // CRITICAL: Verify library service is available before attempting to save
             if (_libraryService == null)
             {
-                Log($"ItemTagsDialog: ERROR - Library service is null, cannot save tags. Tags will be lost!");
-                // Show error to user - don't close dialog, let them cancel
-                var errorDialog = new Window
-                {
-                    Title = "Error: Cannot Save Tags",
-                    Width = 450,
-                    Height = 180,
-                    WindowStartupLocation = WindowStartupLocation.CenterOwner
-                };
-                
-                var grid = new Grid();
-                grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-                grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-                grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-                grid.Margin = new Thickness(16);
-                
-                var titleText = new TextBlock
-                {
-                    Text = "Error: Cannot save tags",
-                    FontWeight = FontWeight.Bold,
-                    FontSize = 14,
-                    Margin = new Thickness(0, 0, 0, 12)
-                };
-                Grid.SetRow(titleText, 0);
-                grid.Children.Add(titleText);
-                
-                var messageText = new TextBlock
-                {
-                    Text = "Library service is not available. Tag changes cannot be saved and will be lost when the application closes.\n\nPlease cancel and try again later.",
-                    TextWrapping = TextWrapping.Wrap,
-                    Margin = new Thickness(0, 0, 0, 12)
-                };
-                Grid.SetRow(messageText, 1);
-                grid.Children.Add(messageText);
-                
-                var okButton = new Button
-                {
-                    Content = "OK",
-                    HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
-                    Width = 80
-                };
-                okButton.Click += (s, args) => errorDialog.Close();
-                Grid.SetRow(okButton, 2);
-                grid.Children.Add(okButton);
-                
-                errorDialog.Content = grid;
-                errorDialog.ShowDialog(this);
-                // Don't close the dialog - let user cancel or try again
+                ShowLibraryServiceError();
                 return;
             }
             
@@ -319,23 +620,26 @@ namespace ReelRoulette
                 var oldTags = item.Tags.ToList();
                 var currentTags = new HashSet<string>(item.Tags, StringComparer.OrdinalIgnoreCase);
 
-                // Process each tag view model
-                foreach (var vm in _tagViewModels)
+                // Process each tag view model in all categories
+                foreach (var categoryVm in _categoryViewModels)
                 {
-                    var tagName = vm.Tag;
-                    var hasTag = currentTags.Contains(tagName);
+                    foreach (var vm in categoryVm.Tags)
+                    {
+                        var tagName = vm.Tag;
+                        var hasTag = currentTags.Contains(tagName);
 
-                    if (vm.IsPlusSelected && !hasTag)
-                    {
-                        // Add tag
-                        item.Tags.Add(tagName);
-                        currentTags.Add(tagName);
-                    }
-                    else if (vm.IsMinusSelected && hasTag)
-                    {
-                        // Remove tag
-                        item.Tags.RemoveAll(t => string.Equals(t, tagName, StringComparison.OrdinalIgnoreCase));
-                        currentTags.Remove(tagName);
+                        if (vm.IsPlusSelected && !hasTag)
+                        {
+                            // Add tag
+                            item.Tags.Add(tagName);
+                            currentTags.Add(tagName);
+                        }
+                        else if (vm.IsMinusSelected && hasTag)
+                        {
+                            // Remove tag
+                            item.Tags.RemoveAll(t => string.Equals(t, tagName, StringComparison.OrdinalIgnoreCase));
+                            currentTags.Remove(tagName);
+                        }
                     }
                 }
 

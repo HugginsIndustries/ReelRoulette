@@ -119,23 +119,10 @@ namespace ReelRoulette
                     item.MediaType == MediaType.Photo || item.IntegratedLoudness.HasValue);
             }
 
-            // 10. Tag filter (inclusion)
+            // 10. Tag filter (inclusion) - with per-category match modes
             if (filterState.SelectedTags != null && filterState.SelectedTags.Count > 0)
             {
-                if (filterState.TagMatchMode == TagMatchMode.And)
-                {
-                    // Item must have ALL selected tags (case-insensitive comparison)
-                    eligible = eligible.Where(item =>
-                        item.Tags != null &&
-                        filterState.SelectedTags.All(tag => item.Tags.Any(itemTag => string.Equals(itemTag, tag, StringComparison.OrdinalIgnoreCase))));
-                }
-                else // TagMatchMode.Or
-                {
-                    // Item must have ANY of the selected tags (case-insensitive comparison)
-                    eligible = eligible.Where(item =>
-                        item.Tags != null &&
-                        filterState.SelectedTags.Any(tag => item.Tags.Any(itemTag => string.Equals(itemTag, tag, StringComparison.OrdinalIgnoreCase))));
-                }
+                eligible = ApplyTagFilterWithCategoryMatchModes(eligible, filterState, libraryIndex);
             }
 
             // 10b. Tag filter (exclusion) - exclude items with any excluded tag (case-insensitive comparison)
@@ -262,23 +249,10 @@ namespace ReelRoulette
                     item.MediaType == MediaType.Photo || item.IntegratedLoudness.HasValue);
             }
 
-            // 10. Tag filter (inclusion)
+            // 10. Tag filter (inclusion) - with per-category match modes
             if (filterState.SelectedTags != null && filterState.SelectedTags.Count > 0)
             {
-                if (filterState.TagMatchMode == TagMatchMode.And)
-                {
-                    // Item must have ALL selected tags (case-insensitive comparison)
-                    eligible = eligible.Where(item =>
-                        item.Tags != null &&
-                        filterState.SelectedTags.All(tag => item.Tags.Any(itemTag => string.Equals(itemTag, tag, StringComparison.OrdinalIgnoreCase))));
-                }
-                else // TagMatchMode.Or
-                {
-                    // Item must have ANY of the selected tags (case-insensitive comparison)
-                    eligible = eligible.Where(item =>
-                        item.Tags != null &&
-                        filterState.SelectedTags.Any(tag => item.Tags.Any(itemTag => string.Equals(itemTag, tag, StringComparison.OrdinalIgnoreCase))));
-                }
+                eligible = ApplyTagFilterWithCategoryMatchModes(eligible, filterState, libraryIndex);
             }
 
             // 10b. Tag filter (exclusion) - exclude items with any excluded tag (case-insensitive comparison)
@@ -304,6 +278,159 @@ namespace ReelRoulette
             Log($"FilterService.BuildEligibleSetWithoutFileCheck: Completed - {eligibleList.Count} eligible items (without file check)");
             
             return eligibleList;
+        }
+
+        /// <summary>
+        /// Applies tag filtering with per-category match modes.
+        /// Supports both new category-based match modes and legacy flat tag matching.
+        /// </summary>
+        private IEnumerable<LibraryItem> ApplyTagFilterWithCategoryMatchModes(
+            IEnumerable<LibraryItem> items, 
+            FilterState filterState, 
+            LibraryIndex libraryIndex)
+        {
+            // Check if we have categories in the library (new system)
+            var hasCategories = libraryIndex.Categories != null && libraryIndex.Categories.Count > 0;
+            
+            if (!hasCategories)
+            {
+                // Fall back to legacy tag matching if library hasn't been migrated to category system
+                Log("FilterService.ApplyTagFilterWithCategoryMatchModes: No categories in library, using legacy tag match mode");
+                return ApplyLegacyTagFilter(items, filterState);
+            }
+
+            Log("FilterService.ApplyTagFilterWithCategoryMatchModes: Using per-category match modes");
+
+            // Group selected tags by category
+            var categories = libraryIndex.Categories ?? new List<TagCategory>();
+            var tags = libraryIndex.Tags ?? new List<Tag>();
+
+            var tagsByCategory = new Dictionary<string, List<string>>();
+            foreach (var selectedTag in filterState.SelectedTags)
+            {
+                var tag = tags.FirstOrDefault(t => string.Equals(t.Name, selectedTag, StringComparison.OrdinalIgnoreCase));
+                if (tag != null)
+                {
+                    if (!tagsByCategory.ContainsKey(tag.CategoryId))
+                    {
+                        tagsByCategory[tag.CategoryId] = new List<string>();
+                    }
+                    tagsByCategory[tag.CategoryId].Add(selectedTag);
+                }
+                else
+                {
+                    // Orphaned tag - add to "Uncategorized" category
+                    const string uncategorizedId = "";
+                    if (!tagsByCategory.ContainsKey(uncategorizedId))
+                    {
+                        tagsByCategory[uncategorizedId] = new List<string>();
+                    }
+                    tagsByCategory[uncategorizedId].Add(selectedTag);
+                    Log($"FilterService.ApplyTagFilterWithCategoryMatchModes: Orphaned tag '{selectedTag}' added to Uncategorized");
+                }
+            }
+
+            if (tagsByCategory.Count == 0)
+            {
+                Log("FilterService.ApplyTagFilterWithCategoryMatchModes: No tags with valid categories, returning all items");
+                return items;
+            }
+
+            // Apply filtering per category
+            var categoryResults = new List<(string CategoryId, HashSet<LibraryItem> Items)>();
+
+            foreach (var kvp in tagsByCategory)
+            {
+                var categoryId = kvp.Key;
+                var categoryTags = kvp.Value;
+
+                // Get local match mode for this category (default to AND if not set)
+                var localMatchMode = (filterState.CategoryLocalMatchModes?.TryGetValue(categoryId, out var mode) == true)
+                    ? mode 
+                    : TagMatchMode.And;
+
+                Log($"FilterService.ApplyTagFilterWithCategoryMatchModes: Category {categoryId} has {categoryTags.Count} tags, local mode: {localMatchMode}");
+
+                // Filter items based on local match mode
+                IEnumerable<LibraryItem> categoryItems;
+                if (localMatchMode == TagMatchMode.And)
+                {
+                    // Items must have ALL tags in this category
+                    categoryItems = items.Where(item =>
+                        item.Tags != null &&
+                        categoryTags.All(tag => item.Tags.Any(itemTag => 
+                            string.Equals(itemTag, tag, StringComparison.OrdinalIgnoreCase))));
+                }
+                else // TagMatchMode.Or
+                {
+                    // Items must have ANY tag in this category
+                    categoryItems = items.Where(item =>
+                        item.Tags != null &&
+                        categoryTags.Any(tag => item.Tags.Any(itemTag => 
+                            string.Equals(itemTag, tag, StringComparison.OrdinalIgnoreCase))));
+                }
+
+                categoryResults.Add((categoryId, new HashSet<LibraryItem>(categoryItems)));
+            }
+
+            // Combine category results using global match modes
+            if (categoryResults.Count == 0)
+            {
+                return Enumerable.Empty<LibraryItem>();
+            }
+
+            if (categoryResults.Count == 1)
+            {
+                return categoryResults[0].Items;
+            }
+
+            // Start with first category's results
+            var result = new HashSet<LibraryItem>(categoryResults[0].Items);
+
+            // Get the global match mode (default to AND if not set)
+            var useAndBetweenCategories = filterState.GlobalMatchMode ?? true;
+            Log($"FilterService.ApplyTagFilterWithCategoryMatchModes: Using global mode: {(useAndBetweenCategories ? "AND" : "OR")}");
+
+            // Combine remaining categories using the global match mode
+            for (int i = 1; i < categoryResults.Count; i++)
+            {
+                if (useAndBetweenCategories) // AND
+                {
+                    result.IntersectWith(categoryResults[i].Items);
+                    Log($"FilterService.ApplyTagFilterWithCategoryMatchModes: Applied AND with category {categoryResults[i].CategoryId}, {result.Count} items remain");
+                }
+                else // OR
+                {
+                    result.UnionWith(categoryResults[i].Items);
+                    Log($"FilterService.ApplyTagFilterWithCategoryMatchModes: Applied OR with category {categoryResults[i].CategoryId}, {result.Count} items total");
+                }
+            }
+
+            Log($"FilterService.ApplyTagFilterWithCategoryMatchModes: Final result: {result.Count} items");
+            return result;
+        }
+
+        /// <summary>
+        /// Legacy tag filter using flat TagMatchMode (for backward compatibility).
+        /// </summary>
+        private IEnumerable<LibraryItem> ApplyLegacyTagFilter(IEnumerable<LibraryItem> items, FilterState filterState)
+        {
+            if (filterState.TagMatchMode == TagMatchMode.And)
+            {
+                // Item must have ALL selected tags (case-insensitive comparison)
+                return items.Where(item =>
+                    item.Tags != null &&
+                    filterState.SelectedTags.All(tag => item.Tags.Any(itemTag => 
+                        string.Equals(itemTag, tag, StringComparison.OrdinalIgnoreCase))));
+            }
+            else // TagMatchMode.Or
+            {
+                // Item must have ANY of the selected tags (case-insensitive comparison)
+                return items.Where(item =>
+                    item.Tags != null &&
+                    filterState.SelectedTags.Any(tag => item.Tags.Any(itemTag => 
+                        string.Equals(itemTag, tag, StringComparison.OrdinalIgnoreCase))));
+            }
         }
     }
 }

@@ -803,14 +803,23 @@ namespace ReelRoulette
 
             // Initialize Library panel after window is loaded (defer to ensure controls are initialized)
             Log("MainWindow constructor: Setting up Loaded event handler...");
-            this.Loaded += (s, e) =>
+            this.Loaded += async (s, e) =>
             {
                 try
                 {
                     Log("MainWindow Loaded event: Fired!");
+                    
+                    // Initialize library panel first so controls are ready
                     Log("MainWindow Loaded event: Initializing Library panel...");
                     InitializeLibraryPanel();
                     Log("MainWindow Loaded event: Library panel initialized successfully.");
+                    
+                    // Check if tag migration is required and show migration dialog
+                    if (_libraryService.RequiresTagMigration)
+                    {
+                        Log("MainWindow Loaded event: Tag migration required, showing migration dialog...");
+                        await ShowTagMigrationDialog();
+                    }
                     
                     // Apply saved library panel width if panel is visible on startup
                     // This ensures the width is applied after the Grid is fully initialized
@@ -1746,10 +1755,60 @@ namespace ReelRoulette
                 CurrentVideoPeakDisplay = "";
             }
 
-            // Display tags
+            // Display tags grouped by category
             if (item != null && item.Tags != null && item.Tags.Count > 0)
             {
-                CurrentVideoTagsDisplay = string.Join(", ", item.Tags);
+                var categories = _libraryIndex?.Categories ?? new List<TagCategory>();
+                var availableTags = _libraryIndex?.Tags ?? new List<Tag>();
+                
+                // Group item's tags by category
+                var tagsByCategory = new List<(int SortOrder, string CategoryName, List<string> Tags)>();
+                
+                foreach (var category in categories.OrderBy(c => c.SortOrder))
+                {
+                    var tagsInCategory = item.Tags
+                        .Where(tagName => availableTags.Any(t => 
+                            string.Equals(t.Name, tagName, StringComparison.OrdinalIgnoreCase) && 
+                            t.CategoryId == category.Id))
+                        .OrderBy(t => t, StringComparer.OrdinalIgnoreCase)
+                        .ToList();
+                    
+                    if (tagsInCategory.Count > 0)
+                    {
+                        tagsByCategory.Add((category.SortOrder, category.Name, tagsInCategory));
+                    }
+                }
+                
+                // Handle orphaned tags (tags not in any category)
+                var processedTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var (_, _, tags) in tagsByCategory)
+                {
+                    foreach (var tag in tags)
+                    {
+                        processedTags.Add(tag);
+                    }
+                }
+                
+                var orphanedTags = item.Tags
+                    .Where(t => !processedTags.Contains(t))
+                    .OrderBy(t => t, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                
+                if (orphanedTags.Count > 0)
+                {
+                    tagsByCategory.Add((int.MaxValue, "Uncategorized", orphanedTags));
+                }
+                
+                // Format output with each category on its own line
+                if (tagsByCategory.Count > 0)
+                {
+                    CurrentVideoTagsDisplay = string.Join("\n", 
+                        tagsByCategory.Select(t => $"{t.CategoryName}: {string.Join(", ", t.Tags)}"));
+                }
+                else
+                {
+                    CurrentVideoTagsDisplay = "None";
+                }
             }
             else
             {
@@ -4339,11 +4398,15 @@ namespace ReelRoulette
             if (sender is Button button && button.Tag is LibraryItem item)
             {
                 Log($"LibraryItemTags_Click: Opening tags dialog for: {item.FileName}");
-                var dialog = new ItemTagsDialog(new List<LibraryItem> { item }, _libraryIndex, _libraryService);
+                var dialog = new ItemTagsDialog(new List<LibraryItem> { item }, _libraryIndex, _libraryService, _filterPresets);
                 var result = await dialog.ShowDialog<bool?>(this);
                 if (result == true)
                 {
                     Log($"LibraryItemTags_Click: Tags updated for: {item.FileName}");
+                    // Save filter presets (in case tags were renamed/deleted)
+                    SaveSettings();
+                    // Refresh library index reference
+                    _libraryIndex = _libraryService.LibraryIndex;
                     // Update library panel if visible
                     if (_showLibraryPanel)
                     {
@@ -4523,11 +4586,16 @@ namespace ReelRoulette
 
             Log($"ContextMenu_AddTags_Click: Opening tags dialog for {selectedItems.Count} items");
             
-            var dialog = new ItemTagsDialog(selectedItems, _libraryIndex, _libraryService);
+            var dialog = new ItemTagsDialog(selectedItems, _libraryIndex, _libraryService, _filterPresets);
             var result = await dialog.ShowDialog<bool?>(this);
             if (result == true)
             {
                 Log($"ContextMenu_AddTags_Click: Tags updated for {selectedItems.Count} items");
+                
+                // Save filter presets (in case tags were renamed/deleted)
+                SaveSettings();
+                // Refresh library index reference
+                _libraryIndex = _libraryService.LibraryIndex;
                 
                 // Only rebuild library panel if tag filters are active that might affect visibility
                 // Tag-only changes don't affect which items are visible unless filters are applied
@@ -6231,6 +6299,18 @@ namespace ReelRoulette
             public int WindowState { get; set; } = 0; // 0=Normal, 1=Minimized, 2=Maximized, 3=FullScreen
             public double? LibraryPanelWidth { get; set; }
             
+            // ItemTagsDialog state
+            public double? ItemTagsDialogX { get; set; }
+            public double? ItemTagsDialogY { get; set; }
+            public double? ItemTagsDialogWidth { get; set; }
+            public double? ItemTagsDialogHeight { get; set; }
+            
+            // FilterDialog state
+            public double? FilterDialogX { get; set; }
+            public double? FilterDialogY { get; set; }
+            public double? FilterDialogWidth { get; set; }
+            public double? FilterDialogHeight { get; set; }
+            
             // Playback settings
             public string? SeekStep { get; set; }
             public int VolumeStep { get; set; } = 5;
@@ -6265,6 +6345,90 @@ namespace ReelRoulette
             // Filter presets
             public List<FilterPreset>? FilterPresets { get; set; }
             public string? ActivePresetName { get; set; } // Track which preset is currently active
+        }
+
+        // Static methods for dialog persistence (can be called from dialogs)
+        public static void SaveDialogBounds(string dialogName, double x, double y, double width, double height)
+        {
+            try
+            {
+                var path = AppDataManager.GetSettingsPath();
+                AppSettings settings;
+                string? json;
+                
+                if (!File.Exists(path))
+                {
+                    Log($"SaveDialogBounds: Settings file not found at {path}, creating new settings");
+                    settings = new AppSettings();
+                }
+                else
+                {
+                    json = File.ReadAllText(path);
+                    settings = JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
+                }
+
+                if (dialogName == "ItemTagsDialog")
+                {
+                    settings.ItemTagsDialogX = x;
+                    settings.ItemTagsDialogY = y;
+                    settings.ItemTagsDialogWidth = width;
+                    settings.ItemTagsDialogHeight = height;
+                }
+                else if (dialogName == "FilterDialog")
+                {
+                    settings.FilterDialogX = x;
+                    settings.FilterDialogY = y;
+                    settings.FilterDialogWidth = width;
+                    settings.FilterDialogHeight = height;
+                }
+
+                json = JsonSerializer.Serialize(settings, new JsonSerializerOptions { WriteIndented = true });
+                File.WriteAllText(path, json);
+                Log($"SaveDialogBounds: Saved bounds for {dialogName} - X={x}, Y={y}, W={width}, H={height}");
+            }
+            catch (Exception ex)
+            {
+                Log($"SaveDialogBounds: ERROR - {ex.Message}");
+            }
+        }
+
+        public static (double? x, double? y, double? width, double? height) LoadDialogBounds(string dialogName)
+        {
+            try
+            {
+                var path = AppDataManager.GetSettingsPath();
+                if (!File.Exists(path))
+                {
+                    Log($"LoadDialogBounds: Settings file not found at {path}");
+                    return (null, null, null, null);
+                }
+
+                var json = File.ReadAllText(path);
+                var settings = JsonSerializer.Deserialize<AppSettings>(json);
+                
+                if (settings == null)
+                {
+                    Log($"LoadDialogBounds: Failed to deserialize settings");
+                    return (null, null, null, null);
+                }
+
+                if (dialogName == "ItemTagsDialog")
+                {
+                    Log($"LoadDialogBounds: Loaded ItemTagsDialog bounds - X={settings.ItemTagsDialogX}, Y={settings.ItemTagsDialogY}, W={settings.ItemTagsDialogWidth}, H={settings.ItemTagsDialogHeight}");
+                    return (settings.ItemTagsDialogX, settings.ItemTagsDialogY, settings.ItemTagsDialogWidth, settings.ItemTagsDialogHeight);
+                }
+                else if (dialogName == "FilterDialog")
+                {
+                    Log($"LoadDialogBounds: Loaded FilterDialog bounds - X={settings.FilterDialogX}, Y={settings.FilterDialogY}, W={settings.FilterDialogWidth}, H={settings.FilterDialogHeight}");
+                    return (settings.FilterDialogX, settings.FilterDialogY, settings.FilterDialogWidth, settings.FilterDialogHeight);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log($"LoadDialogBounds: ERROR - {ex.Message}");
+            }
+            
+            return (null, null, null, null);
         }
 
         private void LoadSettings()
@@ -6623,64 +6787,84 @@ namespace ReelRoulette
                     }
                 }
                 
-                // When in player view mode, save the saved state (what user wants when NOT in player view mode)
-                // Otherwise, save the current state
-                var settings = new AppSettings
+                // Load existing settings to preserve dialog bounds and other fields
+                AppSettings settings;
+                if (File.Exists(path))
                 {
-                    // View preferences
-                    ShowMenu = _showMenu,
-                    ShowStatusLine = _isPlayerViewMode ? _savedShowStatusLine : _showStatusLine,
-                    ShowControls = _isPlayerViewMode ? _savedShowControls : _showControls,
-                    ShowLibraryPanel = _isPlayerViewMode ? _savedShowLibraryPanel : _showLibraryPanel,
-                    ShowStatsPanel = _isPlayerViewMode ? _savedShowStatsPanel : _showStatsPanel,
-                    AlwaysOnTop = _alwaysOnTop,
-                    IsPlayerViewMode = _isPlayerViewMode,
-                    RememberLastFolder = _rememberLastFolder,
-                    LastFolderPath = _lastFolderPath,
-                    
-                    // Window state (use _lastKnownPosition since Position property doesn't always update)
-                    WindowX = (double)_lastKnownPosition.X,
-                    WindowY = (double)_lastKnownPosition.Y,
-                    WindowWidth = Width,
-                    WindowHeight = Height,
-                    WindowState = (int)WindowState, // 0=Normal, 1=Minimized, 2=Maximized, 3=FullScreen
-                    LibraryPanelWidth = _libraryPanelWidth,
-                    
-                    // Playback settings
-                    SeekStep = _seekStep,
-                    VolumeStep = _volumeStep,
-                    IntervalSeconds = intervalValue.HasValue ? (double?)intervalValue.Value : null,
-                    VolumeNormalizationMode = _volumeNormalizationMode,
-                    AudioFilterMode = _audioFilterMode,
-                    
-                    // Playback preferences (now persisted)
-                    LoopEnabled = _isLoopEnabled,
-                    AutoPlayNext = _autoPlayNext,
-                    IsMuted = _isMuted, // Save our tracked mute state
-                    VolumeLevel = _isMuted ? _lastNonZeroVolume : _userVolumePreference, // Save last non-zero volume when muted
-                    NoRepeatMode = _noRepeatMode,
-                    PhotoDisplayDurationSeconds = _photoDisplayDurationSeconds,
-                    
-                    // Image scaling
-                    ImageScalingMode = _imageScalingMode,
-                    FixedImageMaxWidth = _fixedImageMaxWidth,
-                    FixedImageMaxHeight = _fixedImageMaxHeight,
-                    
-                    // Missing file behavior
-                    MissingFileBehavior = _missingFileBehavior,
-                    
-                    // Backup settings
-                    BackupLibraryEnabled = _backupLibraryEnabled,
-                    MinimumBackupGapMinutes = _minimumBackupGapMinutes,
-                    NumberOfBackups = _numberOfBackups,
-                    
-                    // Filter state (always save an object, never null)
-                    FilterState = _currentFilterState ?? new FilterState(),
-                    
-                    // Filter presets
-                    FilterPresets = _filterPresets,
-                    ActivePresetName = _activePresetName
-                };
+                    try
+                    {
+                        var existingJson = File.ReadAllText(path);
+                        settings = JsonSerializer.Deserialize<AppSettings>(existingJson) ?? new AppSettings();
+                        Log("SaveSettings: Loaded existing settings file to preserve dialog bounds");
+                    }
+                    catch (Exception ex)
+                    {
+                        Log($"SaveSettings: Failed to load existing settings ({ex.Message}), creating new");
+                        settings = new AppSettings();
+                    }
+                }
+                else
+                {
+                    settings = new AppSettings();
+                    Log("SaveSettings: No existing settings file, creating new");
+                }
+                
+                // Update MainWindow-managed fields (preserve dialog bounds from existing settings)
+                // View preferences
+                settings.ShowMenu = _showMenu;
+                settings.ShowStatusLine = _isPlayerViewMode ? _savedShowStatusLine : _showStatusLine;
+                settings.ShowControls = _isPlayerViewMode ? _savedShowControls : _showControls;
+                settings.ShowLibraryPanel = _isPlayerViewMode ? _savedShowLibraryPanel : _showLibraryPanel;
+                settings.ShowStatsPanel = _isPlayerViewMode ? _savedShowStatsPanel : _showStatsPanel;
+                settings.AlwaysOnTop = _alwaysOnTop;
+                settings.IsPlayerViewMode = _isPlayerViewMode;
+                settings.RememberLastFolder = _rememberLastFolder;
+                settings.LastFolderPath = _lastFolderPath;
+                
+                // Window state (use _lastKnownPosition since Position property doesn't always update)
+                settings.WindowX = (double)_lastKnownPosition.X;
+                settings.WindowY = (double)_lastKnownPosition.Y;
+                settings.WindowWidth = Width;
+                settings.WindowHeight = Height;
+                settings.WindowState = (int)WindowState; // 0=Normal, 1=Minimized, 2=Maximized, 3=FullScreen
+                settings.LibraryPanelWidth = _libraryPanelWidth;
+                
+                // Playback settings
+                settings.SeekStep = _seekStep;
+                settings.VolumeStep = _volumeStep;
+                settings.IntervalSeconds = intervalValue.HasValue ? (double?)intervalValue.Value : null;
+                settings.VolumeNormalizationMode = _volumeNormalizationMode;
+                settings.AudioFilterMode = _audioFilterMode;
+                
+                // Playback preferences (now persisted)
+                settings.LoopEnabled = _isLoopEnabled;
+                settings.AutoPlayNext = _autoPlayNext;
+                settings.IsMuted = _isMuted; // Save our tracked mute state
+                settings.VolumeLevel = _isMuted ? _lastNonZeroVolume : _userVolumePreference; // Save last non-zero volume when muted
+                settings.NoRepeatMode = _noRepeatMode;
+                settings.PhotoDisplayDurationSeconds = _photoDisplayDurationSeconds;
+                
+                // Image scaling
+                settings.ImageScalingMode = _imageScalingMode;
+                settings.FixedImageMaxWidth = _fixedImageMaxWidth;
+                settings.FixedImageMaxHeight = _fixedImageMaxHeight;
+                
+                // Missing file behavior
+                settings.MissingFileBehavior = _missingFileBehavior;
+                
+                // Backup settings
+                settings.BackupLibraryEnabled = _backupLibraryEnabled;
+                settings.MinimumBackupGapMinutes = _minimumBackupGapMinutes;
+                settings.NumberOfBackups = _numberOfBackups;
+                
+                // Filter state (always save an object, never null)
+                settings.FilterState = _currentFilterState ?? new FilterState();
+                
+                // Filter presets
+                settings.FilterPresets = _filterPresets;
+                settings.ActivePresetName = _activePresetName;
+                
+                // Dialog bounds are preserved from existing settings (not updated here)
                 
                 Log($"SaveSettings: Window position - Position.X={Position.X}, _lastKnownPosition=({_lastKnownPosition.X}, {_lastKnownPosition.Y}), saved as WindowX={settings.WindowX}, WindowY={settings.WindowY}");
                 Log($"SaveSettings: Window size - Width={Width}, Height={Height}, WindowState={(WindowState)settings.WindowState}");
@@ -7259,11 +7443,21 @@ namespace ReelRoulette
         private async void ManageTagsMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
             Log("UI ACTION: ManageTagsMenuItem clicked");
-            var dialog = new ManageTagsDialog(_libraryIndex, _libraryService);
+            var dialog = new ManageTagsDialog(_libraryService, _filterPresets);
             var result = await dialog.ShowDialog<bool?>(this);
             if (result == true)
             {
-                Log("ManageTagsMenuItem_Click: Tags updated, refreshing library panel and filter dialog");
+                Log("ManageTagsMenuItem_Click: Tags updated, saving library and refreshing UI");
+                
+                // Save library to persist tag changes
+                _libraryService.SaveLibrary();
+                
+                // Save filter presets (in case tags were renamed/deleted)
+                SaveSettings();
+                
+                // Refresh library index reference
+                _libraryIndex = _libraryService.LibraryIndex;
+                
                 // Update library panel if visible
                 if (_showLibraryPanel)
                 {
@@ -7290,6 +7484,61 @@ namespace ReelRoulette
             
             // Rebuild queue to respect any source enable/disable changes
             RebuildPlayQueueIfNeeded();
+        }
+
+        private async System.Threading.Tasks.Task ShowTagMigrationDialog()
+        {
+            Log("ShowTagMigrationDialog: Starting migration process");
+            
+            // Get the flat tags from the old format
+            var flatTags = _libraryIndex?.AvailableTags?.ToList() ?? new List<string>();
+            
+            if (flatTags.Count == 0)
+            {
+                Log("ShowTagMigrationDialog: No tags to migrate");
+                return;
+            }
+
+            Log($"ShowTagMigrationDialog: Found {flatTags.Count} tags to migrate");
+
+            var dialog = new MigrationDialog();
+            dialog.Initialize(flatTags);
+            
+            await dialog.ShowDialog(this);
+
+            if (dialog.WasCompleted)
+            {
+                Log($"ShowTagMigrationDialog: Migration completed - {dialog.Categories.Count} categories, {dialog.MigratedTags.Count} tags");
+                
+                // Complete the migration in LibraryService
+                _libraryService.CompleteMigration(dialog.Categories, dialog.MigratedTags);
+                
+                // Refresh the library index reference
+                _libraryIndex = _libraryService.LibraryIndex;
+                
+                // Save the migrated library
+                try
+                {
+                    _libraryService.SaveLibrary();
+                    Log("ShowTagMigrationDialog: Migrated library saved successfully");
+                }
+                catch (Exception ex)
+                {
+                    Log($"ShowTagMigrationDialog: ERROR saving library - {ex.Message}");
+                }
+                
+                // Refresh UI
+                UpdateLibraryPanel();
+                RecalculateGlobalStats();
+                UpdateLibraryInfoText();
+            }
+            else
+            {
+                Log("ShowTagMigrationDialog: Migration cancelled by user - closing application");
+                // If user cancels migration, close the application
+                // We can't continue with the old format
+                Close();
+            }
         }
 
         private void AlwaysOnTopMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -7836,12 +8085,16 @@ namespace ReelRoulette
             }
 
             Log($"ManageTagsForCurrentVideo_Click: Opening tags dialog for current video: {item.FileName}");
-            var dialog = new ItemTagsDialog(new List<LibraryItem> { item }, _libraryIndex, _libraryService);
+            var dialog = new ItemTagsDialog(new List<LibraryItem> { item }, _libraryIndex, _libraryService, _filterPresets);
             var result = await dialog.ShowDialog<bool?>(this);
             
             if (result == true)
             {
                 Log($"ManageTagsForCurrentVideo_Click: Tags updated for: {item.FileName}");
+                // Save filter presets (in case tags were renamed/deleted)
+                SaveSettings();
+                // Refresh library index reference
+                _libraryIndex = _libraryService.LibraryIndex;
                 // Update library panel if visible
                 if (_showLibraryPanel)
                 {

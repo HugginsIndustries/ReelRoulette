@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+- **Implement Tag Categories and Tag Renaming System** (2026-01-08):
+  - Complete hierarchical tag system with categories and advanced filtering
+  - **Data Model**: TagCategory and Tag classes with category-based organization
+  - **Migration System**: Automatic detection and mandatory migration dialog for flat tags
+  - **ManageTagsDialog**: Complete redesign with category grouping, reordering, edit buttons, orphaned tag handling, default category selection, alphabetically sorted tags within categories
+  - **ItemTagsDialog**: Category-grouped tags with edit functionality, orphaned tag handling, multi-tag addition preserving selection states, default category selection, alphabetically sorted tags within categories, 1200x800 default size with persistent bounds
+  - **FilterDialog**: Per-category local match modes (ANY/ALL within category) and single global match mode (AND/OR between categories), orphaned tag handling, preset loading prevented from marking presets as modified, alphabetically sorted tags within categories, 1200x800 default size with persistent bounds, local match mode dropdown width 150px
+  - **FilterService**: Advanced filtering logic supporting "ANY Genre AND ALL People" style filters, single global match mode (defaults to AND) for combining categories, orphaned tags properly filtered, category-aware filtering used when categories exist
+  - **Tag Renaming**: Comprehensive rename across library items (includes static utility methods for updating filter presets)
+  - **Tag Deletion**: Removes tags from all items (includes static utility methods for updating filter presets)
+  - **Orphaned Tags**: Tags on items but not in LibraryIndex.Tags appear in "Uncategorized" category (prevents invisible tags after failed migrations, properly included in filtering)
+  - **Backward Compatibility**: Supports both new category-based and legacy flat tag formats
+  - **UI Enhancements**: Tags alphabetically sorted within categories across all dialogs; info panel displays tags grouped by category on separate lines; dialogs persist size/position across sessions including multi-monitor setups
+  - **Dialog Persistence**: ItemTagsDialog and FilterDialog remember window size and position across sessions including multi-monitor support (stored in AppSettings with ItemTagsDialogX/Y/Width/Height and FilterDialogX/Y/Width/Height properties)
+  - All existing features (batch operations, filter presets, search) continue to work
+  - Mandatory migration on first run with old format (app closes if user cancels)
+  - Example filtering: "(Action OR Comedy in Genre: ANY) AND (Tom Hanks in People: ALL)" with global AND between categories
+
 - **Fix: Explicitly set _originalPresetState when creating new preset** (2026-01-06):
   - Explicitly set _originalPresetState when creating new preset instead of relying on SelectionChanged event (fixes Apply button logic when event doesn't fire)
 

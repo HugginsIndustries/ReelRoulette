@@ -4,9 +4,9 @@
         x:Class="ReelRoulette.FilterDialog"
         x:DataType="local:FilterDialog"
         Title="Filter Media"
-        Width="600"
-        Height="700"
-        WindowStartupLocation="CenterOwner"
+        Width="1200"
+        Height="800"
+        WindowStartupLocation="Manual"
         MinWidth="500"
         MinHeight="500">
     <Grid RowDefinitions="Auto * Auto" Margin="12">
@@ -133,8 +133,8 @@
             <TabItem Header="Tags">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel Spacing="16" Margin="12">
-                        <!-- Match Mode Section -->
-                        <StackPanel Spacing="8">
+                        <!-- Legacy Match Mode (hidden, kept for old presets) -->
+                        <StackPanel Spacing="8" IsVisible="False">
                             <StackPanel Orientation="Horizontal" 
                                         Spacing="8">
                                 <TextBlock Text="Match mode:" 
@@ -150,7 +150,30 @@
                             </StackPanel>
                         </StackPanel>
 
-                        <!-- Tags Section -->
+                        <!-- Global Match Mode -->
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="Category Combination" 
+                                       FontWeight="SemiBold" 
+                                       FontSize="13"
+                                       Margin="0,0,0,4"/>
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBlock Text="Combine categories using:" 
+                                           VerticalAlignment="Center"/>
+                                <ComboBox x:Name="GlobalMatchModeComboBox"
+                                          Width="120"
+                                          SelectionChanged="GlobalMatchMode_SelectionChanged">
+                                    <ComboBoxItem Content="AND" Tag="True"/>
+                                    <ComboBoxItem Content="OR" Tag="False"/>
+                                </ComboBox>
+                            </StackPanel>
+                            <TextBlock Text="AND = must match all categories. OR = match any category."
+                                      FontSize="11"
+                                      Opacity="0.7"
+                                      TextWrapping="Wrap"
+                                      Margin="0,0,0,8"/>
+                        </StackPanel>
+
+                        <!-- Tags by Category -->
                         <StackPanel Spacing="8">
                             <TextBlock Text="Tags Filter" 
                                        FontWeight="SemiBold" 
@@ -162,44 +185,83 @@
                                        TextWrapping="Wrap"
                                        Margin="0,0,0,8"
                                        IsVisible="{Binding HasNoTags}"/>
-                            <ScrollViewer VerticalScrollBarVisibility="Auto"
-                                          IsVisible="{Binding HasTags}">
-                                <ItemsControl x:Name="TagsItemsControl"
-                                              ItemsSource="{Binding AvailableTags}">
-                                    <ItemsControl.ItemsPanel>
-                                        <ItemsPanelTemplate>
-                                            <UniformGrid Columns="3" Rows="0"/>
-                                        </ItemsPanelTemplate>
-                                    </ItemsControl.ItemsPanel>
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate x:DataType="local:FilterTagViewModel">
-                                            <Border Background="{Binding BackgroundBrush}"
-                                                    CornerRadius="4"
-                                                    Padding="8,6"
-                                                    Margin="4">
-                                                <Grid ColumnDefinitions="* Auto Auto" ColumnSpacing="8">
-                                                    <TextBlock Grid.Column="0"
-                                                              Text="{Binding Tag}"
-                                                              VerticalAlignment="Center"
-                                                              FontWeight="SemiBold"/>
-                                                    <ToggleButton Grid.Column="1"
-                                                                 Content="➕"
-                                                                 IsChecked="{Binding IsPlusSelected}"
-                                                                 Classes="IconToggleSmall"
-                                                                 ToolTip.Tip="Include items with this tag"
-                                                                 Click="PlusButton_Click"/>
-                                                    <ToggleButton Grid.Column="2"
-                                                                 Content="➖"
-                                                                 IsChecked="{Binding IsMinusSelected}"
-                                                                 Classes="IconToggleSmall"
-                                                                 ToolTip.Tip="Exclude items with this tag"
-                                                                 Click="MinusButton_Click"/>
-                                                </Grid>
+                            <ItemsControl x:Name="CategoriesItemsControl"
+                                         ItemsSource="{Binding CategoryViewModels}"
+                                         IsVisible="{Binding HasTags}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="local:FilterCategoryViewModel">
+                                        <StackPanel Margin="0,0,0,16">
+                                            <!-- Category Header with Local Match Mode -->
+                                            <Border Background="#2D2D30" Padding="8,6" Margin="0,0,0,8">
+                                            <Grid ColumnDefinitions="Auto * Auto">
+                                                <Button Grid.Column="0"
+                                                       Content="{Binding ExpandIcon}"
+                                                       Click="ToggleCategoryButton_Click"
+                                                       CommandParameter="{Binding}"
+                                                       Background="Transparent"
+                                                       BorderThickness="0"
+                                                       Padding="0"
+                                                       Width="24"
+                                                       Height="24"
+                                                       Margin="0,0,8,0"
+                                                       FontSize="14"/>
+                                                <TextBlock Grid.Column="1"
+                                                          Text="{Binding CategoryName}"
+                                                          FontWeight="SemiBold"
+                                                          FontSize="14"
+                                                          VerticalAlignment="Center"/>
+                                                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" Margin="8,0,0,0">
+                                                    <TextBlock Text="Local:" VerticalAlignment="Center" FontSize="12"/>
+                                                    <ComboBox Width="150" 
+                                                             SelectedIndex="{Binding LocalMatchModeIndex}"
+                                                             SelectionChanged="LocalMatchModeChanged"
+                                                             Tag="{Binding}">
+                                                        <ComboBoxItem Content="ALL (AND)"/>
+                                                        <ComboBoxItem Content="ANY (OR)"/>
+                                                    </ComboBox>
+                                                </StackPanel>
+                                            </Grid>
                                             </Border>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </ScrollViewer>
+
+                                            <!-- Tags in this category -->
+                                            <ItemsControl ItemsSource="{Binding Tags}" IsVisible="{Binding IsExpanded}">
+                                                <ItemsControl.ItemsPanel>
+                                                    <ItemsPanelTemplate>
+                                                        <UniformGrid Columns="3" Rows="0"/>
+                                                    </ItemsPanelTemplate>
+                                                </ItemsControl.ItemsPanel>
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="local:FilterTagViewModel">
+                                                        <Border Background="{Binding BackgroundBrush}"
+                                                                CornerRadius="4"
+                                                                Padding="8,6"
+                                                                Margin="4">
+                                                            <Grid ColumnDefinitions="* Auto Auto" ColumnSpacing="8">
+                                                                <TextBlock Grid.Column="0"
+                                                                          Text="{Binding Tag}"
+                                                                          VerticalAlignment="Center"
+                                                                          FontWeight="SemiBold"/>
+                                                                <ToggleButton Grid.Column="1"
+                                                                             Content="➕"
+                                                                             IsChecked="{Binding IsPlusSelected}"
+                                                                             Classes="IconToggleSmall"
+                                                                             ToolTip.Tip="Include items with this tag"
+                                                                             Click="PlusButton_Click"/>
+                                                                <ToggleButton Grid.Column="2"
+                                                                             Content="➖"
+                                                                             IsChecked="{Binding IsMinusSelected}"
+                                                                             Classes="IconToggleSmall"
+                                                                             ToolTip.Tip="Exclude items with this tag"
+                                                                             Click="MinusButton_Click"/>
+                                                            </Grid>
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
                         </StackPanel>
                     </StackPanel>
                 </ScrollViewer>

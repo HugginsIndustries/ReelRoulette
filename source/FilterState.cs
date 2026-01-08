@@ -59,9 +59,25 @@ namespace ReelRoulette
 
         /// <summary>
         /// How to match multiple selected tags (AND vs OR).
+        /// Legacy property - kept for backward compatibility with old filter presets.
         /// </summary>
         [JsonPropertyName("tagMatchMode")]
         public TagMatchMode TagMatchMode { get; set; } = TagMatchMode.And;
+
+        /// <summary>
+        /// Per-category local match modes (how tags within each category combine).
+        /// Key: CategoryId, Value: AND or OR mode for tags within that category.
+        /// </summary>
+        [JsonPropertyName("categoryLocalMatchModes")]
+        public Dictionary<string, TagMatchMode>? CategoryLocalMatchModes { get; set; }
+
+        /// <summary>
+        /// Global match mode: how categories combine with each other.
+        /// true = AND (all categories must match), false = OR (any category can match).
+        /// Defaults to AND (true) if not set.
+        /// </summary>
+        [JsonPropertyName("globalMatchMode")]
+        public bool? GlobalMatchMode { get; set; }
 
         /// <summary>
         /// Show only items with known duration (Duration != null).

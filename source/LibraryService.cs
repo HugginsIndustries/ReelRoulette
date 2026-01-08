@@ -36,6 +36,7 @@ namespace ReelRoulette
         private LibraryIndex _libraryIndex = new LibraryIndex();
         private readonly object _lock = new object();
         private readonly object _saveLock = new object(); // Separate lock for file I/O operations
+        private bool _requiresTagMigration = false;
 
         /// <summary>
         /// Gets the current library index.
@@ -47,6 +48,20 @@ namespace ReelRoulette
                 lock (_lock)
                 {
                     return _libraryIndex;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Gets whether the library requires tag migration from old flat tag format to new category-based format.
+        /// </summary>
+        public bool RequiresTagMigration
+        {
+            get
+            {
+                lock (_lock)
+                {
+                    return _requiresTagMigration;
                 }
             }
         }
@@ -73,6 +88,24 @@ namespace ReelRoulette
                         lock (_lock)
                         {
                             _libraryIndex = index;
+                            
+                            // Check if migration is needed: old format has AvailableTags but not Categories/Tags
+                            _requiresTagMigration = (index.AvailableTags != null && index.AvailableTags.Count > 0) &&
+                                                    (index.Categories == null || index.Categories.Count == 0) &&
+                                                    (index.Tags == null || index.Tags.Count == 0);
+                            
+                            if (_requiresTagMigration)
+                            {
+                                Log($"LibraryService.LoadLibrary: Migration required - Found {index.AvailableTags?.Count ?? 0} flat tags that need to be categorized");
+                            }
+                            else if (index.Categories != null && index.Tags != null)
+                            {
+                                Log($"LibraryService.LoadLibrary: Using new tag format - {index.Categories.Count} categories, {index.Tags.Count} tags");
+                            }
+                            else
+                            {
+                                Log("LibraryService.LoadLibrary: No tags found in library");
+                            }
                         }
                         Log($"LibraryService.LoadLibrary: Successfully loaded library - {index.Items.Count} items, {index.Sources.Count} sources");
                     }
@@ -805,6 +838,319 @@ namespace ReelRoulette
                 Log($"LibraryService.GetSourceStatistics: Completed - TotalVideos: {stats.TotalVideos}, TotalPhotos: {stats.TotalPhotos}, TotalMedia: {stats.TotalMedia}, TotalDuration: {stats.TotalDuration}");
                 return stats;
             }
+        }
+
+        /// <summary>
+        /// Completes the tag migration by converting from old flat format to new category-based format.
+        /// Call this after all tags have been assigned categories.
+        /// </summary>
+        public void CompleteMigration(List<TagCategory> categories, List<Tag> tags)
+        {
+            Log($"LibraryService.CompleteMigration: Starting - {categories.Count} categories, {tags.Count} tags");
+            lock (_lock)
+            {
+                _libraryIndex.Categories = categories;
+                _libraryIndex.Tags = tags;
+                _libraryIndex.AvailableTags = null; // Clear old format
+                _requiresTagMigration = false;
+                Log("LibraryService.CompleteMigration: Migration completed successfully");
+            }
+        }
+
+        /// <summary>
+        /// Adds or updates a tag category.
+        /// </summary>
+        public void AddOrUpdateCategory(TagCategory category)
+        {
+            Log($"LibraryService.AddOrUpdateCategory: {category.Name} (Id: {category.Id})");
+            lock (_lock)
+            {
+                if (_libraryIndex.Categories == null)
+                {
+                    _libraryIndex.Categories = new List<TagCategory>();
+                }
+
+                var existingIndex = _libraryIndex.Categories.FindIndex(c => c.Id == category.Id);
+                if (existingIndex >= 0)
+                {
+                    _libraryIndex.Categories[existingIndex] = category;
+                    Log($"LibraryService.AddOrUpdateCategory: Updated category {category.Name}");
+                }
+                else
+                {
+                    _libraryIndex.Categories.Add(category);
+                    Log($"LibraryService.AddOrUpdateCategory: Added category {category.Name}");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Adds or updates a tag.
+        /// </summary>
+        public void AddOrUpdateTag(Tag tag)
+        {
+            Log($"LibraryService.AddOrUpdateTag: {tag.Name} (Category: {tag.CategoryId})");
+            lock (_lock)
+            {
+                if (_libraryIndex.Tags == null)
+                {
+                    _libraryIndex.Tags = new List<Tag>();
+                }
+
+                var existingIndex = _libraryIndex.Tags.FindIndex(t => 
+                    string.Equals(t.Name, tag.Name, StringComparison.OrdinalIgnoreCase));
+                
+                if (existingIndex >= 0)
+                {
+                    _libraryIndex.Tags[existingIndex] = tag;
+                    Log($"LibraryService.AddOrUpdateTag: Updated tag {tag.Name}");
+                }
+                else
+                {
+                    _libraryIndex.Tags.Add(tag);
+                    Log($"LibraryService.AddOrUpdateTag: Added tag {tag.Name}");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Renames a tag across the entire library (updates all items, filter states, and presets).
+        /// </summary>
+        /// <param name="oldName">Old tag name (case-insensitive)</param>
+        /// <param name="newName">New tag name</param>
+        /// <param name="newCategoryId">Optional new category ID (null to keep existing category)</param>
+        public void RenameTag(string oldName, string newName, string? newCategoryId = null)
+        {
+            Log($"LibraryService.RenameTag: Renaming '{oldName}' to '{newName}' (new category: {newCategoryId ?? "unchanged"})");
+            
+            lock (_lock)
+            {
+                // Update tag in Tags list
+                if (_libraryIndex.Tags != null)
+                {
+                    var tag = _libraryIndex.Tags.FirstOrDefault(t =>
+                        string.Equals(t.Name, oldName, StringComparison.OrdinalIgnoreCase));
+                    
+                    if (tag != null)
+                    {
+                        tag.Name = newName;
+                        if (newCategoryId != null)
+                        {
+                            tag.CategoryId = newCategoryId;
+                        }
+                        Log($"LibraryService.RenameTag: Updated tag in Tags list");
+                    }
+                }
+
+                // Update all library items that have this tag
+                int itemsUpdated = 0;
+                foreach (var item in _libraryIndex.Items)
+                {
+                    if (item.Tags != null)
+                    {
+                        var tagIndex = item.Tags.FindIndex(t =>
+                            string.Equals(t, oldName, StringComparison.OrdinalIgnoreCase));
+                        
+                        if (tagIndex >= 0)
+                        {
+                            item.Tags[tagIndex] = newName;
+                            itemsUpdated++;
+                        }
+                    }
+                }
+                Log($"LibraryService.RenameTag: Updated {itemsUpdated} library items");
+                
+                // Note: Filter presets should be updated separately by the caller if needed
+                // using UpdateFilterPresetsForRenamedTag() static method
+            }
+        }
+
+        /// <summary>
+        /// Deletes a tag category and optionally reassigns or deletes its tags.
+        /// </summary>
+        public void DeleteCategory(string categoryId, string? newCategoryId = null)
+        {
+            Log($"LibraryService.DeleteCategory: Deleting category {categoryId} (reassign to: {newCategoryId ?? "none"})");
+            
+            lock (_lock)
+            {
+                if (_libraryIndex.Categories != null)
+                {
+                    _libraryIndex.Categories.RemoveAll(c => c.Id == categoryId);
+                }
+
+                if (_libraryIndex.Tags != null)
+                {
+                    if (newCategoryId != null)
+                    {
+                        // Reassign tags to new category
+                        var tagsToReassign = _libraryIndex.Tags.Where(t => t.CategoryId == categoryId).ToList();
+                        foreach (var tag in tagsToReassign)
+                        {
+                            tag.CategoryId = newCategoryId;
+                        }
+                        Log($"LibraryService.DeleteCategory: Reassigned {tagsToReassign.Count} tags to category {newCategoryId}");
+                    }
+                    else
+                    {
+                        // Delete all tags in this category
+                        var tagsToDelete = _libraryIndex.Tags.Where(t => t.CategoryId == categoryId).ToList();
+                        var tagNamesSet = new HashSet<string>(
+                            tagsToDelete.Select(t => t.Name),
+                            StringComparer.OrdinalIgnoreCase);
+                        
+                        _libraryIndex.Tags.RemoveAll(t => t.CategoryId == categoryId);
+                        
+                        // Remove these tags from all items (case-insensitive)
+                        foreach (var item in _libraryIndex.Items)
+                        {
+                            if (item.Tags != null)
+                            {
+                                item.Tags.RemoveAll(t => tagNamesSet.Contains(t));
+                            }
+                        }
+                        Log($"LibraryService.DeleteCategory: Deleted {tagsToDelete.Count} tags from category");
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Deletes a tag and removes it from all items.
+        /// </summary>
+        public void DeleteTag(string tagName)
+        {
+            Log($"LibraryService.DeleteTag: Deleting tag '{tagName}'");
+            
+            lock (_lock)
+            {
+                if (_libraryIndex.Tags != null)
+                {
+                    _libraryIndex.Tags.RemoveAll(t =>
+                        string.Equals(t.Name, tagName, StringComparison.OrdinalIgnoreCase));
+                }
+
+                // Remove from all items
+                int itemsUpdated = 0;
+                foreach (var item in _libraryIndex.Items)
+                {
+                    if (item.Tags != null)
+                    {
+                        var removed = item.Tags.RemoveAll(t =>
+                            string.Equals(t, tagName, StringComparison.OrdinalIgnoreCase));
+                        if (removed > 0) itemsUpdated++;
+                    }
+                }
+                Log($"LibraryService.DeleteTag: Removed tag from {itemsUpdated} items");
+                
+                // Note: Filter presets should be updated separately by the caller if needed
+                // using UpdateFilterPresetsForDeletedTag() static method
+            }
+        }
+
+        /// <summary>
+        /// Updates filter presets to rename a tag (case-insensitive).
+        /// Call this after RenameTag to ensure filter presets are also updated.
+        /// </summary>
+        /// <param name="presets">List of filter presets to update</param>
+        /// <param name="oldName">Old tag name</param>
+        /// <param name="newName">New tag name</param>
+        /// <returns>Number of presets that were updated</returns>
+        public static int UpdateFilterPresetsForRenamedTag(List<FilterPreset>? presets, string oldName, string newName)
+        {
+            if (presets == null || presets.Count == 0)
+            {
+                return 0;
+            }
+
+            int presetsUpdated = 0;
+
+            foreach (var preset in presets)
+            {
+                bool presetModified = false;
+
+                // Update SelectedTags
+                if (preset.FilterState.SelectedTags != null)
+                {
+                    for (int i = 0; i < preset.FilterState.SelectedTags.Count; i++)
+                    {
+                        if (string.Equals(preset.FilterState.SelectedTags[i], oldName, StringComparison.OrdinalIgnoreCase))
+                        {
+                            preset.FilterState.SelectedTags[i] = newName;
+                            presetModified = true;
+                        }
+                    }
+                }
+
+                // Update ExcludedTags
+                if (preset.FilterState.ExcludedTags != null)
+                {
+                    for (int i = 0; i < preset.FilterState.ExcludedTags.Count; i++)
+                    {
+                        if (string.Equals(preset.FilterState.ExcludedTags[i], oldName, StringComparison.OrdinalIgnoreCase))
+                        {
+                            preset.FilterState.ExcludedTags[i] = newName;
+                            presetModified = true;
+                        }
+                    }
+                }
+
+                if (presetModified)
+                {
+                    presetsUpdated++;
+                    Log($"LibraryService.UpdateFilterPresetsForRenamedTag: Updated preset '{preset.Name}'");
+                }
+            }
+
+            Log($"LibraryService.UpdateFilterPresetsForRenamedTag: Updated {presetsUpdated} presets for tag '{oldName}' -> '{newName}'");
+            return presetsUpdated;
+        }
+
+        /// <summary>
+        /// Updates filter presets to remove a deleted tag (case-insensitive).
+        /// Call this after DeleteTag to ensure filter presets are also updated.
+        /// </summary>
+        /// <param name="presets">List of filter presets to update</param>
+        /// <param name="tagName">Tag name to remove</param>
+        /// <returns>Number of presets that were updated</returns>
+        public static int UpdateFilterPresetsForDeletedTag(List<FilterPreset>? presets, string tagName)
+        {
+            if (presets == null || presets.Count == 0)
+            {
+                return 0;
+            }
+
+            int presetsUpdated = 0;
+
+            foreach (var preset in presets)
+            {
+                bool presetModified = false;
+
+                // Remove from SelectedTags
+                if (preset.FilterState.SelectedTags != null)
+                {
+                    var removed = preset.FilterState.SelectedTags.RemoveAll(t =>
+                        string.Equals(t, tagName, StringComparison.OrdinalIgnoreCase));
+                    if (removed > 0) presetModified = true;
+                }
+
+                // Remove from ExcludedTags
+                if (preset.FilterState.ExcludedTags != null)
+                {
+                    var removed = preset.FilterState.ExcludedTags.RemoveAll(t =>
+                        string.Equals(t, tagName, StringComparison.OrdinalIgnoreCase));
+                    if (removed > 0) presetModified = true;
+                }
+
+                if (presetModified)
+                {
+                    presetsUpdated++;
+                    Log($"LibraryService.UpdateFilterPresetsForDeletedTag: Updated preset '{preset.Name}'");
+                }
+            }
+
+            Log($"LibraryService.UpdateFilterPresetsForDeletedTag: Updated {presetsUpdated} presets for deleted tag '{tagName}'");
+            return presetsUpdated;
         }
     }
 

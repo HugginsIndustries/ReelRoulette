@@ -894,7 +894,7 @@
                                        IsVisible="{Binding IsCurrentFileVideo}"/>
                             <TextBlock Text="{Binding CurrentVideoPeakDisplay, StringFormat='Peak: {0}'}"
                                        IsVisible="{Binding IsCurrentFileVideo}"/>
-                            <TextBlock Text="{Binding CurrentVideoTagsDisplay, StringFormat='Tags: {0}'}"
+                            <TextBlock Text="{Binding CurrentVideoTagsDisplay}"
                                        TextWrapping="Wrap"/>
                         </StackPanel>
                     </ScrollViewer>

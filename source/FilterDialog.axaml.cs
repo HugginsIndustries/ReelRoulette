@@ -28,6 +28,7 @@ namespace ReelRoulette
         private string? _activePresetName;
         private const string NonePresetName = "None";
         private bool _presetModified = false; // Track if current preset has been modified
+        private PixelPoint? _savedPosition; // Store position to set after window opens
         private FilterState? _originalPresetState = null; // Store original preset state when loaded
         private bool _isInitializing = false; // Flag to suppress SelectionChanged during initialization
 
@@ -73,6 +74,38 @@ namespace ReelRoulette
             }
             
             _activePresetName = activePresetName;
+            
+            // Load saved dialog bounds
+            var (x, y, width, height) = MainWindow.LoadDialogBounds("FilterDialog");
+            
+            if (x.HasValue && y.HasValue)
+            {
+                // Store position to set after window opens (Avalonia best practice)
+                _savedPosition = new PixelPoint((int)x.Value, (int)y.Value);
+                Log($"FilterDialog: Will restore position to ({x.Value}, {y.Value}) after window opens");
+            }
+            else
+            {
+                // No saved position - center on owner window
+                WindowStartupLocation = WindowStartupLocation.CenterOwner;
+                Log("FilterDialog: No saved position, centering on owner");
+            }
+            
+            if (width.HasValue && width.Value > 0)
+            {
+                Width = width.Value;
+                Log($"FilterDialog: Restored width to {width.Value}");
+            }
+            
+            if (height.HasValue && height.Value > 0)
+            {
+                Height = height.Value;
+                Log($"FilterDialog: Restored height to {height.Value}");
+            }
+
+            // Subscribe to window events
+            Opened += OnDialogOpened;
+            Closing += OnDialogClosing;
             
             DataContext = this;
             
@@ -395,10 +428,13 @@ namespace ReelRoulette
             }
         }
 
-        // Tags
+        // Tags (legacy - kept for compatibility)
         public ObservableCollection<FilterTagViewModel> AvailableTags { get; } = new ObservableCollection<FilterTagViewModel>();
 
-        public bool HasTags => AvailableTags.Count > 0;
+        // Tags by Category (new)
+        public ObservableCollection<FilterCategoryViewModel> CategoryViewModels { get; } = new ObservableCollection<FilterCategoryViewModel>();
+
+        public bool HasTags => CategoryViewModels.Count > 0 || AvailableTags.Count > 0;
         public bool HasNoTags => !HasTags;
 
         public bool TagMatchAnd
@@ -542,18 +578,116 @@ namespace ReelRoulette
         private void UpdateTagSelectionState()
         {
             AvailableTags.Clear();
+            CategoryViewModels.Clear();
+
             if (_libraryIndex != null)
             {
-                foreach (var tag in _libraryIndex.AvailableTags.OrderBy(t => t))
+                var categories = _libraryIndex.Categories ?? new List<TagCategory>();
+                var tags = _libraryIndex.Tags ?? new List<Tag>();
+
+                // Get all tags that are selected or excluded in filter state
+                var allFilterTags = _filterState.SelectedTags
+                    .Concat(_filterState.ExcludedTags)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+
+                // If using new format (categories exist)
+                if (categories.Count > 0)
                 {
-                    var tagVm = new FilterTagViewModel
+                    // Track which tags have been processed
+                    var processedTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+                    foreach (var category in categories.OrderBy(c => c.SortOrder))
                     {
-                        Tag = tag,
-                        IsPlusSelected = _filterState.SelectedTags.Any(t => string.Equals(t, tag, StringComparison.OrdinalIgnoreCase)),
-                        IsMinusSelected = _filterState.ExcludedTags.Any(t => string.Equals(t, tag, StringComparison.OrdinalIgnoreCase))
-                    };
-                    AvailableTags.Add(tagVm);
+                        var categoryVm = new FilterCategoryViewModel
+                        {
+                            CategoryId = category.Id,
+                            CategoryName = category.Name
+                        };
+
+                        // Get tags for this category
+                        var categoryTags = tags.Where(t => t.CategoryId == category.Id).OrderBy(t => t.Name);
+
+                        foreach (var tag in categoryTags)
+                        {
+                            var tagVm = new FilterTagViewModel
+                            {
+                                Tag = tag.Name,
+                                CategoryId = category.Id,
+                                IsPlusSelected = _filterState.SelectedTags.Any(t => string.Equals(t, tag.Name, StringComparison.OrdinalIgnoreCase)),
+                                IsMinusSelected = _filterState.ExcludedTags.Any(t => string.Equals(t, tag.Name, StringComparison.OrdinalIgnoreCase))
+                            };
+                            categoryVm.Tags.Add(tagVm);
+                            processedTags.Add(tag.Name);
+                        }
+
+                        // Load local match mode from filter state if it exists
+                        if (_filterState.CategoryLocalMatchModes != null && 
+                            _filterState.CategoryLocalMatchModes.TryGetValue(category.Id, out var localMode))
+                        {
+                            categoryVm.LocalMatchModeIndex = localMode == TagMatchMode.And ? 0 : 1;
+                        }
+
+                        if (categoryVm.Tags.Count > 0)
+                        {
+                            CategoryViewModels.Add(categoryVm);
+                        }
+                    }
+
+                    // Handle orphaned tags (tags in filter state but not defined in categories)
+                    var orphanedTags = allFilterTags.Where(t => !processedTags.Contains(t)).ToList();
+                    if (orphanedTags.Count > 0)
+                    {
+                        Log($"FilterDialog.UpdateTagSelectionState: Found {orphanedTags.Count} orphaned tags in filter state");
+
+                        var orphanedCategoryVm = new FilterCategoryViewModel
+                        {
+                            CategoryId = string.Empty,
+                            CategoryName = "Uncategorized"
+                        };
+
+                        foreach (var tagName in orphanedTags.OrderBy(t => t))
+                        {
+                            var tagVm = new FilterTagViewModel
+                            {
+                                Tag = tagName,
+                                CategoryId = string.Empty,
+                                IsPlusSelected = _filterState.SelectedTags.Any(t => string.Equals(t, tagName, StringComparison.OrdinalIgnoreCase)),
+                                IsMinusSelected = _filterState.ExcludedTags.Any(t => string.Equals(t, tagName, StringComparison.OrdinalIgnoreCase))
+                            };
+                            orphanedCategoryVm.Tags.Add(tagVm);
+                        }
+
+                        // Load local match mode from filter state if it exists (same as regular categories)
+                        if (_filterState.CategoryLocalMatchModes != null && 
+                            _filterState.CategoryLocalMatchModes.TryGetValue(string.Empty, out var orphanedMode))
+                        {
+                            orphanedCategoryVm.LocalMatchModeIndex = orphanedMode == TagMatchMode.And ? 0 : 1;
+                        }
+
+                        CategoryViewModels.Add(orphanedCategoryVm);
+                    }
                 }
+                else if (_libraryIndex.AvailableTags != null && _libraryIndex.AvailableTags.Count > 0)
+                {
+                    // Legacy format: flat tags (for backward compatibility)
+                    foreach (var tag in _libraryIndex.AvailableTags.OrderBy(t => t))
+                    {
+                        var tagVm = new FilterTagViewModel
+                        {
+                            Tag = tag,
+                            IsPlusSelected = _filterState.SelectedTags.Any(t => string.Equals(t, tag, StringComparison.OrdinalIgnoreCase)),
+                            IsMinusSelected = _filterState.ExcludedTags.Any(t => string.Equals(t, tag, StringComparison.OrdinalIgnoreCase))
+                        };
+                        AvailableTags.Add(tagVm);
+                    }
+                }
+            }
+
+            // Set global match mode dropdown (default to AND = index 0)
+            if (GlobalMatchModeComboBox != null)
+            {
+                GlobalMatchModeComboBox.SelectedIndex = _filterState.GlobalMatchMode == false ? 1 : 0;
             }
 
             OnPropertyChanged(nameof(HasTags));
@@ -622,6 +756,52 @@ namespace ReelRoulette
             }
         }
 
+        private void ToggleCategoryButton_Click(object? sender, RoutedEventArgs e)
+        {
+            if (sender is Button button && button.CommandParameter is FilterCategoryViewModel categoryVm)
+            {
+                categoryVm.IsExpanded = !categoryVm.IsExpanded;
+                Log($"FilterDialog.ToggleCategoryButton_Click: Category '{categoryVm.CategoryName}' IsExpanded={categoryVm.IsExpanded}");
+            }
+        }
+
+        private void LocalMatchModeChanged(object? sender, SelectionChangedEventArgs e)
+        {
+            // Suppress event during initialization to prevent spurious preset modifications
+            if (_isInitializing) return;
+            
+            if (sender is ComboBox comboBox && comboBox.Tag is FilterCategoryViewModel categoryVm)
+            {
+                // Initialize dictionaries if needed
+                if (_filterState.CategoryLocalMatchModes == null)
+                {
+                    _filterState.CategoryLocalMatchModes = new Dictionary<string, TagMatchMode>();
+                }
+
+                // 0 = AND, 1 = OR - read directly from ComboBox to get current selection
+                var matchMode = comboBox.SelectedIndex == 0 ? TagMatchMode.And : TagMatchMode.Or;
+                _filterState.CategoryLocalMatchModes[categoryVm.CategoryId] = matchMode;
+                
+                Log($"FilterDialog.LocalMatchModeChanged: Category '{categoryVm.CategoryName}' local match mode = {matchMode}");
+                MarkPresetModified();
+            }
+        }
+
+        private void GlobalMatchMode_SelectionChanged(object? sender, SelectionChangedEventArgs e)
+        {
+            // Suppress event during initialization to prevent spurious preset modifications
+            if (_isInitializing) return;
+            
+            if (GlobalMatchModeComboBox?.SelectedItem is ComboBoxItem item &&
+                item.Tag is string tagStr &&
+                bool.TryParse(tagStr, out var isAnd))
+            {
+                _filterState.GlobalMatchMode = isAnd;
+                Log($"FilterDialog.GlobalMatchMode_SelectionChanged: Set to {(isAnd ? "AND" : "OR")}");
+                MarkPresetModified();
+            }
+        }
+
         /// <summary>
         /// Handles preset selection from dropdown. If "None" is selected, clears active preset but preserves filters.
         /// </summary>
@@ -680,10 +860,21 @@ namespace ReelRoulette
             OnPropertyChanged(nameof(TagMatchAnd));
             OnPropertyChanged(nameof(TagMatchOr));
             
-            UpdateTagSelectionState();
-            
-            // Update active preset name
+            // Update active preset name BEFORE calling UpdateTagSelectionState
+            // to prevent spurious preset modifications
             _activePresetName = SelectedPresetName;
+            
+            // Temporarily set _isInitializing to prevent event handlers from marking preset as modified
+            try
+            {
+                _isInitializing = true;
+                UpdateTagSelectionState();
+            }
+            finally
+            {
+                _isInitializing = false;
+            }
+            
             OnPropertyChanged(nameof(HeaderText));
             OnPropertyChanged(nameof(CanUpdatePreset));
             
@@ -951,12 +1142,23 @@ namespace ReelRoulette
             _originalFilterState.MinDuration = _filterState.MinDuration;
             _originalFilterState.MaxDuration = _filterState.MaxDuration;
             _originalFilterState.TagMatchMode = _filterState.TagMatchMode;
+            _originalFilterState.GlobalMatchMode = _filterState.GlobalMatchMode;
             
             // Copy tag lists
             _originalFilterState.SelectedTags.Clear();
             _originalFilterState.SelectedTags.AddRange(_filterState.SelectedTags);
             _originalFilterState.ExcludedTags.Clear();
             _originalFilterState.ExcludedTags.AddRange(_filterState.ExcludedTags);
+            
+            // Copy category local match modes
+            if (_filterState.CategoryLocalMatchModes != null)
+            {
+                _originalFilterState.CategoryLocalMatchModes = new Dictionary<string, TagMatchMode>(_filterState.CategoryLocalMatchModes);
+            }
+            else
+            {
+                _originalFilterState.CategoryLocalMatchModes = null;
+            }
             
             // Check if filters match any preset - if they match the active preset, keep it; 
             // if they match a different preset, switch to it; otherwise clear if they differ
@@ -1021,6 +1223,23 @@ namespace ReelRoulette
         /// Returns the active preset name (null if "None" is selected).
         /// </summary>
         public string? GetActivePresetName() => _activePresetName;
+
+        private void OnDialogOpened(object? sender, EventArgs e)
+        {
+            // Set position after window is fully opened and laid out (Avalonia best practice)
+            if (_savedPosition.HasValue)
+            {
+                Position = _savedPosition.Value;
+                Log($"FilterDialog: Position set to ({_savedPosition.Value.X}, {_savedPosition.Value.Y}) after window opened");
+            }
+        }
+
+        private void OnDialogClosing(object? sender, WindowClosingEventArgs e)
+        {
+            // Save dialog bounds
+            MainWindow.SaveDialogBounds("FilterDialog", Position.X, Position.Y, Width, Height);
+            Log($"FilterDialog: Saved bounds on close - Position=({Position.X}, {Position.Y}), Size=({Width}, {Height})");
+        }
 
         private string FormatTimeSpan(TimeSpan ts)
         {
@@ -1114,6 +1333,50 @@ namespace ReelRoulette
     }
 
     /// <summary>
+    /// View model for a category in the filter dialog tags tab.
+    /// </summary>
+    public class FilterCategoryViewModel : INotifyPropertyChanged
+    {
+        private bool _isExpanded = true;
+        private int _localMatchModeIndex = 0; // Default to AND (index 0)
+
+        public string CategoryId { get; set; } = string.Empty;
+        public string CategoryName { get; set; } = string.Empty;
+        public ObservableCollection<FilterTagViewModel> Tags { get; set; } = new ObservableCollection<FilterTagViewModel>();
+
+        public bool IsExpanded
+        {
+            get => _isExpanded;
+            set
+            {
+                _isExpanded = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(ExpandIcon));
+            }
+        }
+
+        public string ExpandIcon => IsExpanded ? "▼" : "▶";
+
+        // 0 = AND (ALL), 1 = OR (ANY)
+        public int LocalMatchModeIndex
+        {
+            get => _localMatchModeIndex;
+            set
+            {
+                _localMatchModeIndex = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+
+        protected virtual void OnPropertyChanged([CallerMemberName] string? propertyName = null)
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
+    }
+
+    /// <summary>
     /// View model for a tag in the enhanced filter dialog tags tab.
     /// </summary>
     public class FilterTagViewModel : INotifyPropertyChanged
@@ -1131,6 +1394,8 @@ namespace ReelRoulette
                 OnPropertyChanged();
             }
         }
+
+        public string CategoryId { get; set; } = string.Empty;
 
         public bool IsPlusSelected
         {

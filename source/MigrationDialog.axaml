@@ -1,0 +1,97 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:ReelRoulette"
+        x:Class="ReelRoulette.MigrationDialog"
+        x:DataType="local:MigrationDialog"
+        Title="Tag System Update Required"
+        Width="700"
+        Height="600"
+        WindowStartupLocation="CenterOwner"
+        MinWidth="600"
+        MinHeight="400"
+        CanResize="True">
+    <Grid RowDefinitions="Auto Auto * Auto" Margin="16">
+        <!-- Header Message -->
+        <TextBlock Grid.Row="0" 
+                  TextWrapping="Wrap"
+                  FontSize="14"
+                  Margin="0,0,0,16">
+            <Run Text="All tags must now belong to categories. Please assign a category to each tag below."/>
+            <LineBreak/>
+            <LineBreak/>
+            <Run Text="You can create new categories while editing tags, or use the same category for multiple tags."/>
+        </TextBlock>
+
+        <!-- Progress -->
+        <TextBlock Grid.Row="1"
+                  x:Name="ProgressTextBlock"
+                  FontWeight="SemiBold"
+                  FontSize="14"
+                  Margin="0,0,0,12">
+            0 of 0 tags categorized
+        </TextBlock>
+
+        <!-- Tags List -->
+        <Border Grid.Row="2"
+               BorderBrush="{DynamicResource SystemBaseMediumColor}"
+               BorderThickness="1"
+               CornerRadius="4"
+               Margin="0,0,0,16">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <ItemsControl x:Name="TagsItemsControl" Margin="8">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="local:MigrationTagViewModel">
+                            <Border Background="{Binding BackgroundBrush}"
+                                   CornerRadius="4"
+                                   Padding="12,8"
+                                   Margin="0,0,0,8">
+                                <Grid ColumnDefinitions="* Auto Auto">
+                                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding TagName}" 
+                                                  FontWeight="SemiBold"
+                                                  FontSize="14"/>
+                                        <TextBlock Text="{Binding CategoryDisplay}" 
+                                                  FontSize="12"
+                                                  Opacity="0.8"
+                                                  Margin="0,4,0,0"/>
+                                    </StackPanel>
+                                    
+                                    <TextBlock Grid.Column="1"
+                                              Text="✓"
+                                              FontSize="24"
+                                              Foreground="LimeGreen"
+                                              VerticalAlignment="Center"
+                                              Margin="0,0,12,0"
+                                              IsVisible="{Binding IsCategorized}"/>
+                                    
+                                    <Button Grid.Column="2"
+                                           Content="Edit"
+                                           Width="80"
+                                           VerticalAlignment="Center"
+                                           Click="EditButton_Click"
+                                           CommandParameter="{Binding}"/>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </Border>
+
+        <!-- Buttons -->
+        <StackPanel Grid.Row="3" 
+                   Orientation="Horizontal" 
+                   HorizontalAlignment="Right"
+                   Spacing="8">
+            <Button Content="Cancel" 
+                   Width="100" 
+                   Click="CancelButton_Click"/>
+            <Button Content="Continue" 
+                   Width="100"
+                   x:Name="ContinueButton"
+                   IsEnabled="False"
+                   Click="ContinueButton_Click"
+                   Classes="accent"/>
+        </StackPanel>
+    </Grid>
+</Window>

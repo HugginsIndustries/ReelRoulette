@@ -4,47 +4,84 @@
         x:Class="ReelRoulette.ItemTagsDialog"
         x:DataType="local:ItemTagsDialog"
         Title="Tags"
-        Width="750"
-        Height="750"
-        WindowStartupLocation="CenterOwner"
+        Width="1200"
+        Height="800"
+        WindowStartupLocation="Manual"
         MinWidth="400"
         MinHeight="300">
     <Grid RowDefinitions="* Auto Auto" Margin="12">
-        <!-- Tags Grid -->
+        <!-- Tags by Category -->
         <ScrollViewer Grid.Row="0"
                      VerticalScrollBarVisibility="Auto"
                      Margin="0,0,0,16">
-            <ItemsControl x:Name="TagsItemsControl">
-                <ItemsControl.ItemsPanel>
-                    <ItemsPanelTemplate>
-                        <UniformGrid Columns="3" Rows="0"/>
-                    </ItemsPanelTemplate>
-                </ItemsControl.ItemsPanel>
+            <ItemsControl x:Name="CategoriesItemsControl">
                 <ItemsControl.ItemTemplate>
-                    <DataTemplate x:DataType="local:BatchTagViewModel">
-                        <Border Background="{Binding BackgroundBrush}"
-                                CornerRadius="4"
-                                Padding="8,6"
-                                Margin="4">
-                            <Grid ColumnDefinitions="* Auto Auto" ColumnSpacing="8">
-                                <TextBlock Grid.Column="0"
-                                          Text="{Binding Tag}"
-                                          VerticalAlignment="Center"
-                                          FontWeight="SemiBold"/>
-                                <ToggleButton Grid.Column="1"
-                                             Content="➕"
-                                             IsChecked="{Binding IsPlusSelected}"
-                                             Classes="IconToggleSmall"
-                                             ToolTip.Tip="Add tag to all items"
-                                             Click="PlusButton_Click"/>
-                                <ToggleButton Grid.Column="2"
-                                             Content="➖"
-                                             IsChecked="{Binding IsMinusSelected}"
-                                             Classes="IconToggleSmall"
-                                             ToolTip.Tip="Remove tag from all items"
-                                             Click="MinusButton_Click"/>
+                    <DataTemplate x:DataType="local:ItemTagsCategoryViewModel">
+                        <StackPanel Margin="0,0,0,16">
+                            <!-- Category Header -->
+                            <Border Background="#2D2D30" Padding="8,6" Margin="0,0,0,8">
+                            <Grid ColumnDefinitions="Auto *">
+                                <Button Grid.Column="0"
+                                       Content="{Binding ExpandIcon}"
+                                       Click="ToggleCategoryButton_Click"
+                                       CommandParameter="{Binding}"
+                                       Background="Transparent"
+                                       BorderThickness="0"
+                                       Padding="0"
+                                       Width="24"
+                                       Height="24"
+                                       Margin="0,0,8,0"
+                                       FontSize="14"/>
+                                <TextBlock Grid.Column="1"
+                                          Text="{Binding CategoryName}"
+                                          FontWeight="SemiBold"
+                                          FontSize="14"
+                                          VerticalAlignment="Center"/>
                             </Grid>
-                        </Border>
+                            </Border>
+
+                            <!-- Tags in this category -->
+                            <ItemsControl ItemsSource="{Binding Tags}" IsVisible="{Binding IsExpanded}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <UniformGrid Columns="3" Rows="0"/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="local:BatchTagViewModel">
+                                        <Border Background="{Binding BackgroundBrush}"
+                                                CornerRadius="4"
+                                                Padding="8,6"
+                                                Margin="4">
+                                            <Grid ColumnDefinitions="* Auto Auto Auto" ColumnSpacing="6">
+                                                <TextBlock Grid.Column="0"
+                                                          Text="{Binding Tag}"
+                                                          VerticalAlignment="Center"
+                                                          FontWeight="SemiBold"/>
+                                                <Button Grid.Column="1"
+                                                       Content="✏️"
+                                                       Classes="IconMomentarySmall"
+                                                       ToolTip.Tip="Edit tag"
+                                                       Click="EditTagButton_Click"
+                                                       CommandParameter="{Binding}"/>
+                                                <ToggleButton Grid.Column="2"
+                                                             Content="➕"
+                                                             IsChecked="{Binding IsPlusSelected}"
+                                                             Classes="IconToggleSmall"
+                                                             ToolTip.Tip="Add tag to all items"
+                                                             Click="PlusButton_Click"/>
+                                                <ToggleButton Grid.Column="3"
+                                                             Content="➖"
+                                                             IsChecked="{Binding IsMinusSelected}"
+                                                             Classes="IconToggleSmall"
+                                                             ToolTip.Tip="Remove tag from all items"
+                                                             Click="MinusButton_Click"/>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
@@ -52,14 +89,18 @@
 
         <!-- Add Tag Section -->
         <Grid Grid.Row="1"
-              ColumnDefinitions="* Auto"
+              ColumnDefinitions="* Auto Auto"
               ColumnSpacing="8"
               Margin="0,0,0,16">
             <TextBox x:Name="NewTagTextBox"
                      Grid.Column="0"
-                     Watermark="Add new tag..."
+                     Watermark="Tag name"
                      KeyDown="NewTagTextBox_KeyDown"/>
-            <Button Grid.Column="1"
+            <ComboBox x:Name="TagCategoryComboBox"
+                     Grid.Column="1"
+                     MinWidth="150"
+                     PlaceholderText="Category"/>
+            <Button Grid.Column="2"
                     Content="Add"
                     Click="AddTagButton_Click"
                     MinWidth="80"/>

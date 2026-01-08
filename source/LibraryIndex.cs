@@ -22,10 +22,23 @@ namespace ReelRoulette
         public List<LibraryItem> Items { get; set; } = new List<LibraryItem>();
 
         /// <summary>
-        /// All available tags that can be assigned to items.
+        /// All available tag categories (e.g., Genre, People, Mood).
+        /// </summary>
+        [JsonPropertyName("categories")]
+        public List<TagCategory>? Categories { get; set; }
+
+        /// <summary>
+        /// All available tags that can be assigned to items (new format with categories).
+        /// </summary>
+        [JsonPropertyName("tags")]
+        public List<Tag>? Tags { get; set; }
+
+        /// <summary>
+        /// Legacy: All available tags as strings (deprecated, kept for backward compatibility).
+        /// Will be null after migration to new tag system.
         /// </summary>
         [JsonPropertyName("availableTags")]
-        public List<string> AvailableTags { get; set; } = new List<string>();
+        public List<string>? AvailableTags { get; set; }
     }
 }
 
