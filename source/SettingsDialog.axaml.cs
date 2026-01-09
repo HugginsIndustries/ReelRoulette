@@ -34,10 +34,11 @@ namespace ReelRoulette
         private bool _volumeStep5;
         
         // Volume normalization
-        private bool _volumeNormOff;
-        private bool _volumeNormSimple;
-        private bool _volumeNormLibrary;
-        private bool _volumeNormAdvanced;
+        private bool _volumeNormalizationEnabled;
+        private double _maxReductionDb;
+        private double _maxBoostDb;
+        private bool _baselineAutoMode;
+        private double _baselineOverrideLUFS;
 
         public SettingsDialog()
         {
@@ -51,7 +52,11 @@ namespace ReelRoulette
             _timerIntervalSeconds = 300;
             _seekStep5s = true;
             _volumeStep5 = true;
-            _volumeNormOff = true;
+            _volumeNormalizationEnabled = false;
+            _maxReductionDb = 15.0;
+            _maxBoostDb = 5.0;
+            _baselineAutoMode = true;
+            _baselineOverrideLUFS = -23.0;
         }
 
         public bool WasApplied => _wasApplied;
@@ -239,79 +244,83 @@ namespace ReelRoulette
             }
         }
 
-        // Volume normalization properties
-        public bool VolumeNormOff
+        // Volume normalization property
+        public bool VolumeNormalizationEnabled
         {
-            get => _volumeNormOff;
+            get => _volumeNormalizationEnabled;
             set
             {
-                if (value)
+                if (_volumeNormalizationEnabled != value)
                 {
-                    _volumeNormOff = true;
-                    _volumeNormSimple = false;
-                    _volumeNormLibrary = false;
-                    _volumeNormAdvanced = false;
+                    _volumeNormalizationEnabled = value;
                     OnPropertyChanged();
-                    OnPropertyChanged(nameof(VolumeNormSimple));
-                    OnPropertyChanged(nameof(VolumeNormLibrary));
-                    OnPropertyChanged(nameof(VolumeNormAdvanced));
                 }
             }
         }
 
-        public bool VolumeNormSimple
+        public double MaxReductionDb
         {
-            get => _volumeNormSimple;
+            get => _maxReductionDb;
             set
             {
-                if (value)
+                if (Math.Abs(_maxReductionDb - value) > 0.01)
                 {
-                    _volumeNormOff = false;
-                    _volumeNormSimple = true;
-                    _volumeNormLibrary = false;
-                    _volumeNormAdvanced = false;
+                    _maxReductionDb = value;
                     OnPropertyChanged();
-                    OnPropertyChanged(nameof(VolumeNormOff));
-                    OnPropertyChanged(nameof(VolumeNormLibrary));
-                    OnPropertyChanged(nameof(VolumeNormAdvanced));
                 }
             }
         }
 
-        public bool VolumeNormLibrary
+        public double MaxBoostDb
         {
-            get => _volumeNormLibrary;
+            get => _maxBoostDb;
             set
             {
-                if (value)
+                if (Math.Abs(_maxBoostDb - value) > 0.01)
                 {
-                    _volumeNormOff = false;
-                    _volumeNormSimple = false;
-                    _volumeNormLibrary = true;
-                    _volumeNormAdvanced = false;
+                    _maxBoostDb = value;
                     OnPropertyChanged();
-                    OnPropertyChanged(nameof(VolumeNormOff));
-                    OnPropertyChanged(nameof(VolumeNormSimple));
-                    OnPropertyChanged(nameof(VolumeNormAdvanced));
                 }
             }
         }
 
-        public bool VolumeNormAdvanced
+        public bool BaselineAutoMode
         {
-            get => _volumeNormAdvanced;
+            get => _baselineAutoMode;
             set
             {
-                if (value)
+                if (_baselineAutoMode != value)
                 {
-                    _volumeNormOff = false;
-                    _volumeNormSimple = false;
-                    _volumeNormLibrary = false;
-                    _volumeNormAdvanced = true;
+                    _baselineAutoMode = value;
                     OnPropertyChanged();
-                    OnPropertyChanged(nameof(VolumeNormOff));
-                    OnPropertyChanged(nameof(VolumeNormSimple));
-                    OnPropertyChanged(nameof(VolumeNormLibrary));
+                    OnPropertyChanged(nameof(BaselineManualMode));
+                }
+            }
+        }
+
+        public bool BaselineManualMode
+        {
+            get => !_baselineAutoMode;
+            set
+            {
+                if (_baselineAutoMode == value) // inverted logic
+                {
+                    _baselineAutoMode = !value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(BaselineAutoMode));
+                }
+            }
+        }
+
+        public double BaselineOverrideLUFS
+        {
+            get => _baselineOverrideLUFS;
+            set
+            {
+                if (Math.Abs(_baselineOverrideLUFS - value) > 0.01)
+                {
+                    _baselineOverrideLUFS = value;
+                    OnPropertyChanged();
                 }
             }
         }
@@ -497,7 +506,11 @@ namespace ReelRoulette
             double? intervalSeconds,
             string? seekStep,
             int volumeStep,
-            VolumeNormalizationMode volumeNormMode,
+            bool volumeNormalizationEnabled,
+            double maxReductionDb = 15.0,
+            double maxBoostDb = 5.0,
+            bool baselineAutoMode = true,
+            double baselineOverrideLUFS = -23.0,
             int photoDisplayDurationSeconds = 5,
             ImageScalingMode imageScalingMode = ImageScalingMode.Auto,
             int fixedImageMaxWidth = 3840,
@@ -578,31 +591,21 @@ namespace ReelRoulette
             OnPropertyChanged(nameof(VolumeStep5));
             
             // Volume normalization
-            _volumeNormOff = false;
-            _volumeNormSimple = false;
-            _volumeNormLibrary = false;
-            _volumeNormAdvanced = false;
+            _volumeNormalizationEnabled = volumeNormalizationEnabled;
+            OnPropertyChanged(nameof(VolumeNormalizationEnabled));
             
-            switch (volumeNormMode)
-            {
-                case VolumeNormalizationMode.Off:
-                    _volumeNormOff = true;
-                    break;
-                case VolumeNormalizationMode.Simple:
-                    _volumeNormSimple = true;
-                    break;
-                case VolumeNormalizationMode.LibraryAware:
-                    _volumeNormLibrary = true;
-                    break;
-                case VolumeNormalizationMode.Advanced:
-                    _volumeNormAdvanced = true;
-                    break;
-            }
+            _maxReductionDb = maxReductionDb;
+            OnPropertyChanged(nameof(MaxReductionDb));
             
-            OnPropertyChanged(nameof(VolumeNormOff));
-            OnPropertyChanged(nameof(VolumeNormSimple));
-            OnPropertyChanged(nameof(VolumeNormLibrary));
-            OnPropertyChanged(nameof(VolumeNormAdvanced));
+            _maxBoostDb = maxBoostDb;
+            OnPropertyChanged(nameof(MaxBoostDb));
+            
+            _baselineAutoMode = baselineAutoMode;
+            OnPropertyChanged(nameof(BaselineAutoMode));
+            OnPropertyChanged(nameof(BaselineManualMode));
+            
+            _baselineOverrideLUFS = baselineOverrideLUFS;
+            OnPropertyChanged(nameof(BaselineOverrideLUFS));
             
             // Photo display duration
             _photoDisplayDurationSeconds = photoDisplayDurationSeconds;
@@ -648,14 +651,15 @@ namespace ReelRoulette
             return 5;
         }
 
-        public VolumeNormalizationMode GetVolumeNormalizationMode()
+        public bool GetVolumeNormalizationEnabled()
         {
-            if (_volumeNormOff) return VolumeNormalizationMode.Off;
-            if (_volumeNormSimple) return VolumeNormalizationMode.Simple;
-            if (_volumeNormLibrary) return VolumeNormalizationMode.LibraryAware;
-            if (_volumeNormAdvanced) return VolumeNormalizationMode.Advanced;
-            return VolumeNormalizationMode.Off;
+            return _volumeNormalizationEnabled;
         }
+
+        public double GetMaxReductionDb() => _maxReductionDb;
+        public double GetMaxBoostDb() => _maxBoostDb;
+        public bool GetBaselineAutoMode() => _baselineAutoMode;
+        public double GetBaselineOverrideLUFS() => _baselineOverrideLUFS;
 
         public bool GetBackupLibraryEnabled() => _backupLibraryEnabled;
         public int GetMinimumBackupGapMinutes() => _minimumBackupGapMinutes;

@@ -492,7 +492,9 @@
                     VerticalAlignment="Center"
                     Margin="0,0,8,0"
                     ValueChanged="VolumeSlider_ValueChanged"
-                    PointerWheelChanged="VolumeSlider_PointerWheelChanged"/>
+                    PointerWheelChanged="VolumeSlider_PointerWheelChanged"
+                    PointerReleased="VolumeSlider_PointerReleased"
+                    PointerCaptureLost="VolumeSlider_PointerCaptureLost"/>
             <!-- Mute button -->
             <ToggleButton x:Name="MuteButton"
                           Grid.Column="14"
@@ -870,6 +872,7 @@
                                        Margin="0,8,0,2"/>
                             <TextBlock Text="{Binding GlobalVideosWithAudio, StringFormat='Videos with audio: {0}'}"/>
                             <TextBlock Text="{Binding GlobalVideosWithoutAudio, StringFormat='Videos without audio: {0}'}"/>
+                            <TextBlock Text="{Binding GlobalBaselineLoudnessDisplay, StringFormat='Baseline loudness: {0}'}"/>
                             
                             <!-- Current File Stats Section -->
                             <TextBlock Text="Current File"
@@ -891,6 +894,8 @@
                             <TextBlock Text="{Binding CurrentVideoHasAudioDisplay, StringFormat='Has audio: {0}'}"
                                        IsVisible="{Binding IsCurrentFileVideo}"/>
                             <TextBlock Text="{Binding CurrentVideoLoudnessDisplay, StringFormat='Loudness: {0}'}"
+                                       IsVisible="{Binding IsCurrentFileVideo}"/>
+                            <TextBlock Text="{Binding CurrentVideoLoudnessAdjustmentDisplay, StringFormat='Adjustment: {0}'}"
                                        IsVisible="{Binding IsCurrentFileVideo}"/>
                             <TextBlock Text="{Binding CurrentVideoPeakDisplay, StringFormat='Peak: {0}'}"
                                        IsVisible="{Binding IsCurrentFileVideo}"/>

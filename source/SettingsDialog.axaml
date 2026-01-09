@@ -251,18 +251,109 @@
                                        FontWeight="SemiBold" 
                                        FontSize="13"
                                        Margin="0,0,0,4"/>
-                            <RadioButton Content="Off"
-                                         GroupName="VolumeNormalization"
-                                         IsChecked="{Binding VolumeNormOff}"/>
-                            <RadioButton Content="Simple (per-video)"
-                                         GroupName="VolumeNormalization"
-                                         IsChecked="{Binding VolumeNormSimple}"/>
-                            <RadioButton Content="Library-aware"
-                                         GroupName="VolumeNormalization"
-                                         IsChecked="{Binding VolumeNormLibrary}"/>
-                            <RadioButton Content="Advanced (FFmpeg)"
-                                         GroupName="VolumeNormalization"
-                                         IsChecked="{Binding VolumeNormAdvanced}"/>
+                            <CheckBox x:Name="NormalizationEnabledCheckBox"
+                                      Content="Enable volume normalization"
+                                      IsChecked="{Binding VolumeNormalizationEnabled}"/>
+                            <TextBlock Text="Reduces loud videos to match quieter ones in your library. Run 'Library > Scan Loudness' first for best results."
+                                       FontSize="11"
+                                       Foreground="Gray"
+                                       TextWrapping="Wrap"
+                                       Margin="20,4,0,0"/>
+                            
+                            <!-- Advanced normalization settings -->
+                            <StackPanel Margin="20,8,0,0"
+                                        IsEnabled="{Binding VolumeNormalizationEnabled}">
+                                <TextBlock Text="Advanced Settings"
+                                           FontWeight="SemiBold"
+                                           FontSize="12"
+                                           Margin="0,0,0,4"/>
+                                
+                                <!-- Max Reduction -->
+                                <Grid Margin="0,4,0,4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="180"/>
+                                        <ColumnDefinition Width="120"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="Max Reduction (dB):"
+                                               VerticalAlignment="Center"/>
+                                    <NumericUpDown Grid.Column="1"
+                                                   Value="{Binding MaxReductionDb, Mode=TwoWay}"
+                                                   Minimum="1"
+                                                   Maximum="30"
+                                                   Increment="1"
+                                                   FormatString="0"
+                                                   ShowButtonSpinner="True"/>
+                                    <TextBlock Grid.Column="2"
+                                               Text="Maximum volume reduction for loud videos"
+                                               FontSize="11"
+                                               Foreground="Gray"
+                                               VerticalAlignment="Center"
+                                               Margin="8,0,0,0"/>
+                                </Grid>
+                                
+                                <!-- Max Boost -->
+                                <Grid Margin="0,4,0,4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="180"/>
+                                        <ColumnDefinition Width="120"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="Max Boost (dB):"
+                                               VerticalAlignment="Center"/>
+                                    <NumericUpDown Grid.Column="1"
+                                                   Value="{Binding MaxBoostDb, Mode=TwoWay}"
+                                                   Minimum="0"
+                                                   Maximum="10"
+                                                   Increment="1"
+                                                   FormatString="0"
+                                                   ShowButtonSpinner="True"/>
+                                    <TextBlock Grid.Column="2"
+                                               Text="Maximum volume boost for quiet videos"
+                                               FontSize="11"
+                                               Foreground="Gray"
+                                               VerticalAlignment="Center"
+                                               Margin="8,0,0,0"/>
+                                </Grid>
+                                
+                                <!-- Baseline Mode -->
+                                <TextBlock Text="Baseline Loudness:"
+                                           FontWeight="SemiBold"
+                                           FontSize="11"
+                                           Margin="0,8,0,4"/>
+                                <RadioButton Content="Automatic (75th percentile of library)"
+                                             GroupName="BaselineMode"
+                                             IsChecked="{Binding BaselineAutoMode}"/>
+                                <RadioButton Content="Manual override"
+                                             GroupName="BaselineMode"
+                                             IsChecked="{Binding BaselineManualMode}"
+                                             Margin="0,4,0,0"/>
+                                
+                                <!-- Baseline Override Value -->
+                                <Grid Margin="20,4,0,0"
+                                      IsEnabled="{Binding BaselineManualMode}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="160"/>
+                                        <ColumnDefinition Width="120"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="Target Baseline (LUFS):"
+                                               VerticalAlignment="Center"/>
+                                    <NumericUpDown Grid.Column="1"
+                                                   Value="{Binding BaselineOverrideLUFS, Mode=TwoWay}"
+                                                   Minimum="-50"
+                                                   Maximum="-10"
+                                                   Increment="0.5"
+                                                   FormatString="0.0"
+                                                   ShowButtonSpinner="True"/>
+                                    <TextBlock Grid.Column="2"
+                                               Text="EBU R128 recommends -23 LUFS"
+                                               FontSize="11"
+                                               Foreground="Gray"
+                                               VerticalAlignment="Center"
+                                               Margin="8,0,0,0"/>
+                                </Grid>
+                            </StackPanel>
                         </StackPanel>
                     </StackPanel>
                 </ScrollViewer>

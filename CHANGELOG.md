@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **Fix Volume Control Issues** (2026-01-08):
+  - **Volume Slider**: Fixed lag when dragging by adding debounce; applies immediately on release
+  - **Mute Bug**: Fixed inability to unmute videos during playback
+  - **Normalization**: Simplified from 4-mode system to single On/Off checkbox; new algorithm reduces loud videos while minimally boosting quiet videos; uses library baseline (75th percentile) or manual override; advanced settings exposed (Max Reduction 1-30 dB, Max Boost 0-10 dB, baseline mode Auto/Manual); defaults: 15 dB reduction, 5 dB boost; settings persist and apply immediately; cache resets after scanning or settings change
+  - **Loudness Scanning**: Replaced volumedetect with EBU R128 ebur128 filter for accurate perceptual loudness (LUFS); scan dialog offers "Only new files" or "Rescan all" options; backward compatible with old scan data; fixed detection of -91.0 dB "no audio" placeholder
+  - **Stats Panel**: Current file shows loudness adjustment (boost/reduction applied); global stats show baseline loudness with mode indicator (Auto/Manual); loudness values now shown in LUFS (EBU R128 standard)
+  - **Settings**: Volume normalization migrated to boolean, defaults off; shows warning when enabled without loudness data
+  - **Additional**: Fixed audio spike during video transitions; all volume controls respect mute state; fixed volume slider drag from muted state to preserve user's position; fixed missing loudness warning flag reset
+
 - **Implement Tag Categories and Tag Renaming System** (2026-01-08):
   - Complete hierarchical tag system with categories and advanced filtering
   - **Data Model**: TagCategory and Tag classes with category-based organization

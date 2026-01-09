@@ -24,14 +24,6 @@ using System.Timers;
 
 namespace ReelRoulette
 {
-    public enum VolumeNormalizationMode
-    {
-        Off = 0,
-        Simple = 1,
-        LibraryAware = 2,
-        Advanced = 3
-    }
-
     public enum AudioFilterMode
     {
         PlayAll = 0,           // Default: no audio filtering
@@ -77,15 +69,20 @@ namespace ReelRoulette
         private Media? _currentMedia;
 
 
-        // Volume normalization constants
-        private const double TargetLoudnessDb = -16.0;  // Target mean volume in dB (improved from -18.0)
-        private const double MaxGainDb = 20.0;          // Maximum gain adjustment in dB (improved from 12.0)
-        private const double MaxOutputPeakDb = -3.0;    // Limiter: prevent peak output from exceeding this (prevents clipping)
+        // Volume normalization settings - New approach: reduce loud, not boost quiet (now configurable)
+        private double _maxReductionDb = 15.0;     // Maximum reduction for loud videos
+        private double _maxBoostDb = 5.0;          // Maximum boost for quiet videos (conservative to avoid noise)
+        private bool _baselineAutoMode = true;     // Auto-calculate baseline or use manual override
+        private double _baselineOverrideLUFS = -23.0;  // Manual baseline override value
 
         // Volume normalization
-        private VolumeNormalizationMode _volumeNormalizationMode = VolumeNormalizationMode.Off;
+        private bool _volumeNormalizationEnabled = false;
         private int _userVolumePreference = 100; // User's slider preference (0-200)
         private AudioFilterMode _audioFilterMode = AudioFilterMode.PlayAll;
+        
+        // Cached baseline loudness for normalization (75th percentile of library)
+        private double? _cachedBaselineLoudnessDb = null;
+        private bool _hasShownMissingLoudnessWarning = false;
 
         // Queue system
         private Queue<string> _playQueue = new();
@@ -194,6 +191,10 @@ namespace ReelRoulette
         private readonly object _updateLibraryPanelLock = new object();
         private bool _isInitializingLibraryPanel = false; // Flag to suppress events during initialization
         private bool _isUpdatingLibraryItems = false; // Flag to suppress Favorite/Blacklist events during UI updates
+        
+        // Volume slider debouncing
+        private DispatcherTimer? _volumeSliderDebounceTimer;
+        private int? _pendingVolumeValue;
 
         // Aspect ratio tracking
         private double _currentVideoAspectRatio = 16.0 / 9.0; // Default 16:9
@@ -439,6 +440,21 @@ namespace ReelRoulette
             }
         }
 
+        private string _globalBaselineLoudnessDisplay = "N/A";
+
+        public string GlobalBaselineLoudnessDisplay
+        {
+            get => _globalBaselineLoudnessDisplay;
+            private set
+            {
+                if (_globalBaselineLoudnessDisplay != value)
+                {
+                    _globalBaselineLoudnessDisplay = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
         public int GlobalFavoritesCount
         {
             get => _globalFavoritesCount;
@@ -581,6 +597,21 @@ namespace ReelRoulette
                 if (_currentVideoLoudnessDisplay != value)
                 {
                     _currentVideoLoudnessDisplay = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private string _currentVideoLoudnessAdjustmentDisplay = "N/A";
+
+        public string CurrentVideoLoudnessAdjustmentDisplay
+        {
+            get => _currentVideoLoudnessAdjustmentDisplay;
+            private set
+            {
+                if (_currentVideoLoudnessAdjustmentDisplay != value)
+                {
+                    _currentVideoLoudnessAdjustmentDisplay = value;
                     OnPropertyChanged();
                 }
             }
@@ -1522,6 +1553,22 @@ namespace ReelRoulette
             GlobalVideosWithAudio = videosWithAudio;
             GlobalVideosWithoutAudio = videosWithoutAudio;
             
+            // Update baseline loudness display
+            if (_volumeNormalizationEnabled && videosWithAudio > 0)
+            {
+                double baseline = GetLibraryBaselineLoudness();
+                string mode = _baselineAutoMode ? " (Auto)" : " (Manual)";
+                GlobalBaselineLoudnessDisplay = $"{baseline:F1} LUFS{mode}";
+            }
+            else if (_volumeNormalizationEnabled)
+            {
+                GlobalBaselineLoudnessDisplay = "No audio data";
+            }
+            else
+            {
+                GlobalBaselineLoudnessDisplay = "Normalization off";
+            }
+            
             Log($"RecalculateGlobalStats: Playback stats - Unique videos played: {GlobalUniqueVideosPlayed}, Unique photos played: {GlobalUniquePhotosPlayed}, Unique media played: {GlobalUniqueMediaPlayed}, Total plays: {GlobalTotalPlays}");
             Log($"RecalculateGlobalStats: Never played - Videos: {GlobalNeverPlayedVideosKnown}, Photos: {GlobalNeverPlayedPhotosKnown}, Media: {GlobalNeverPlayedMediaKnown}");
             Log($"RecalculateGlobalStats: Audio stats - With audio: {GlobalVideosWithAudio}, Without audio: {GlobalVideosWithoutAudio}");
@@ -1619,6 +1666,7 @@ namespace ReelRoulette
                 CurrentVideoDurationDisplay = "Unknown";
                 CurrentVideoHasAudioDisplay = "Unknown";
                 CurrentVideoLoudnessDisplay = "Unknown";
+                CurrentVideoLoudnessAdjustmentDisplay = "N/A";
                 CurrentVideoPeakDisplay = "Unknown";
                 CurrentVideoTagsDisplay = "None";
                 IsCurrentFileVideo = true; // Default to video for backward compatibility
@@ -1716,11 +1764,32 @@ namespace ReelRoulette
                     CurrentVideoHasAudioDisplay = "Yes";
                     if (integratedLoudness.HasValue)
                     {
-                        CurrentVideoLoudnessDisplay = $"{integratedLoudness.Value:F1} dB";
+                        CurrentVideoLoudnessDisplay = $"{integratedLoudness.Value:F1} LUFS";
+                        
+                        // Calculate and display normalization adjustment if enabled
+                        if (_volumeNormalizationEnabled)
+                        {
+                            double baseline = GetLibraryBaselineLoudness();
+                            double adjustment = baseline - integratedLoudness.Value;
+                            
+                            // Clamp to actual applied limits
+                            if (adjustment > 0)
+                                adjustment = Math.Min(adjustment, _maxBoostDb);
+                            else
+                                adjustment = Math.Max(adjustment, -_maxReductionDb);
+                            
+                            string sign = adjustment >= 0 ? "+" : "";
+                            CurrentVideoLoudnessAdjustmentDisplay = $"{sign}{adjustment:F1} dB";
+                        }
+                        else
+                        {
+                            CurrentVideoLoudnessAdjustmentDisplay = "Off";
+                        }
                     }
                     else
                     {
                         CurrentVideoLoudnessDisplay = "Unknown";
+                        CurrentVideoLoudnessAdjustmentDisplay = "N/A";
                     }
                     
                     // Display PeakDb if available
@@ -1737,12 +1806,14 @@ namespace ReelRoulette
                 {
                     CurrentVideoHasAudioDisplay = "No";
                     CurrentVideoLoudnessDisplay = "N/A";
+                    CurrentVideoLoudnessAdjustmentDisplay = "N/A";
                     CurrentVideoPeakDisplay = "N/A";
                 }
                 else
                 {
                     CurrentVideoHasAudioDisplay = "Unknown";
                     CurrentVideoLoudnessDisplay = "Unknown";
+                    CurrentVideoLoudnessAdjustmentDisplay = "N/A";
                     CurrentVideoPeakDisplay = "Unknown";
                 }
             }
@@ -1752,6 +1823,7 @@ namespace ReelRoulette
                 CurrentVideoDurationDisplay = "";
                 CurrentVideoHasAudioDisplay = "";
                 CurrentVideoLoudnessDisplay = "";
+                CurrentVideoLoudnessAdjustmentDisplay = "";
                 CurrentVideoPeakDisplay = "";
             }
 
@@ -2296,9 +2368,9 @@ namespace ReelRoulette
             Log("ScanDurationsAsync: Duration scan complete");
         }
 
-        private void StartLoudnessScan(string rootFolder)
+        private void StartLoudnessScan(string rootFolder, bool rescanAll = false)
         {
-            Log($"StartLoudnessScan: Starting loudness scan for folder: {rootFolder}");
+            Log($"StartLoudnessScan: Starting loudness scan for folder: {rootFolder}, RescanAll: {rescanAll}");
             // Cancel any existing scan
             if (_scanCancellationSource != null)
             {
@@ -2319,7 +2391,7 @@ namespace ReelRoulette
                 try
                 {
                     Log("StartLoudnessScan: Async scan task started");
-                    await ScanLoudnessAsync(rootFolder, token);
+                    await ScanLoudnessAsync(rootFolder, token, rescanAll);
                     Log("StartLoudnessScan: Async scan task completed successfully");
                 }
                 catch (Exception ex)
@@ -2353,9 +2425,9 @@ namespace ReelRoulette
             }, token, TaskCreationOptions.LongRunning, TaskScheduler.Default);
         }
 
-        private async Task ScanLoudnessAsync(string rootFolder, CancellationToken cancellationToken)
+        private async Task ScanLoudnessAsync(string rootFolder, CancellationToken cancellationToken, bool rescanAll = false)
         {
-            Log($"ScanLoudnessAsync: Starting loudness scan for folder: {rootFolder}");
+            Log($"ScanLoudnessAsync: Starting loudness scan for folder: {rootFolder}, RescanAll: {rescanAll}");
             // FFmpeg presence check: verify that ffmpeg is available
             var ffmpegPath = NativeBinaryHelper.GetFFmpegPath();
             if (string.IsNullOrEmpty(ffmpegPath))
@@ -2437,23 +2509,35 @@ namespace ReelRoulette
                 return;
             }
 
-            // Filter out already-scanned files (optional: allow rescan)
-            // Check library items for existing loudness data
-            HashSet<string> filesWithLoudness = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            if (_libraryIndex != null)
+            // Filter files based on scan mode
+            string[] filesToScan;
+            int alreadyScannedCount = 0;
+            
+            if (!rescanAll)
             {
-                foreach (var item in _libraryIndex.Items)
+                // Only scan files that don't have loudness data yet
+                HashSet<string> filesWithLoudness = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                if (_libraryIndex != null)
                 {
-                    if (item.HasAudio.HasValue || item.IntegratedLoudness.HasValue)
+                    foreach (var item in _libraryIndex.Items)
                     {
-                        filesWithLoudness.Add(item.FullPath);
+                        if (item.HasAudio.HasValue || item.IntegratedLoudness.HasValue)
+                        {
+                            filesWithLoudness.Add(item.FullPath);
+                        }
                     }
                 }
+                
+                filesToScan = allFiles.Where(f => !filesWithLoudness.Contains(f)).ToArray();
+                alreadyScannedCount = allFiles.Length - filesToScan.Length;
+                Log($"ScanLoudnessAsync: Mode: Only New Files - {alreadyScannedCount} files already have loudness data, {filesToScan.Length} files need scanning");
             }
-            
-            string[] filesToScan = allFiles.Where(f => !filesWithLoudness.Contains(f)).ToArray();
-            int alreadyScannedCount = allFiles.Length - filesToScan.Length;
-            Log($"ScanLoudnessAsync: {alreadyScannedCount} files already have loudness data, {filesToScan.Length} files need scanning");
+            else
+            {
+                // Rescan all files (update all loudness data with new filter)
+                filesToScan = allFiles;
+                Log($"ScanLoudnessAsync: Mode: Rescan All - Scanning all {filesToScan.Length} files with EBU R128");
+            }
 
             int total = allFiles.Length;
             int processed = alreadyScannedCount;
@@ -2464,7 +2548,7 @@ namespace ReelRoulette
             // Update UI to show scan started
             Avalonia.Threading.Dispatcher.UIThread.Post(() =>
             {
-                if (alreadyScannedCount > 0)
+                if (!rescanAll && alreadyScannedCount > 0)
                 {
                     SetStatusMessage($"Scanning loudness… ({alreadyScannedCount} already scanned, {filesToScan.Length} to scan)");
                 }
@@ -2474,8 +2558,8 @@ namespace ReelRoulette
                 }
             });
 
-            // If all files are already scanned, we're done
-            if (filesToScan.Length == 0)
+            // If all files are already scanned (and not rescanning), we're done
+            if (!rescanAll && filesToScan.Length == 0)
             {
                 Log($"ScanLoudnessAsync: All {total} files already have loudness data, skipping scan");
                 Avalonia.Threading.Dispatcher.UIThread.Post(() =>
@@ -2542,8 +2626,8 @@ namespace ReelRoulette
                         startInfo.ArgumentList.Add("-sn");
                         startInfo.ArgumentList.Add("-i");
                         startInfo.ArgumentList.Add(file);
-                        startInfo.ArgumentList.Add("-af");
-                        startInfo.ArgumentList.Add("volumedetect");
+                        startInfo.ArgumentList.Add("-filter:a");
+                        startInfo.ArgumentList.Add("ebur128=framelog=verbose");
                         startInfo.ArgumentList.Add("-f");
                         startInfo.ArgumentList.Add("null");
                         startInfo.ArgumentList.Add("-");
@@ -2560,7 +2644,7 @@ namespace ReelRoulette
                             try
                             {
                                 process.Start();
-                                // Read stderr (ffmpeg outputs volumedetect info to stderr)
+                                // Read stderr (ffmpeg outputs ebur128 info to stderr)
                                 var stderrTask = process.StandardError.ReadToEndAsync(linkedCts.Token);
                                 await process.WaitForExitAsync(linkedCts.Token);
                                 var exitCodeLocal = process.ExitCode;
@@ -2814,6 +2898,15 @@ namespace ReelRoulette
             }
             Log("ScanLoudnessAsync: Recalculating global stats");
             RecalculateGlobalStats(); // Recalculate stats after scan completes
+            
+            // Reset cached baseline so next normalization recalculates with new data
+            _cachedBaselineLoudnessDb = null;
+            Log("ScanLoudnessAsync: Reset cached baseline loudness - will recalculate on next use");
+            
+            // Reset warning flag so it can be shown again if needed for newly added files
+            _hasShownMissingLoudnessWarning = false;
+            Log("ScanLoudnessAsync: Reset missing loudness warning flag");
+            
             Log("ScanLoudnessAsync: Updating UI");
             Avalonia.Threading.Dispatcher.UIThread.Post(() =>
             {
@@ -2827,15 +2920,67 @@ namespace ReelRoulette
 
         private FileLoudnessInfo? ParseLoudnessFromFFmpegOutput(string output, int exitCode = 0)
         {
-            // Parse mean_volume and max_volume from ffmpeg stderr output
-            // Example output:
-            // [Parsed_volumedetect_0 @ 0x...] mean_volume: -20.5 dB
-            // [Parsed_volumedetect_0 @ 0x...] max_volume: -12.3 dB
-
-            double? meanVolumeDb = null;
+            // Parse loudness from ffmpeg stderr output
+            // Supports both new ebur128 format and legacy volumedetect format for backward compatibility
+            
+            double? integratedLoudness = null;
             double? peakDb = null;
+            bool hasAudio = false;
 
             var lines = output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+            
+            // Try to parse ebur128 format first (new, more accurate)
+            foreach (var line in lines)
+            {
+                // Look for integrated loudness: "I:         -23.0 LUFS"
+                if (line.Contains("I:") && line.Contains("LUFS"))
+                {
+                    var parts = line.Split(new[] { ':' }, StringSplitOptions.RemoveEmptyEntries);
+                    if (parts.Length >= 2)
+                    {
+                        var valueStr = parts[1].Replace("LUFS", "").Trim();
+                        if (double.TryParse(valueStr, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var loudness))
+                        {
+                            integratedLoudness = loudness;
+                            hasAudio = true;
+                            Log($"ParseLoudnessFromFFmpegOutput: Parsed EBU R128 integrated loudness: {loudness:F2} LUFS");
+                        }
+                    }
+                }
+                
+                // Look for true peak: "Peak:       -5.2 dBFS" or "True peak:    -5.2 dBFS"
+                if ((line.Contains("Peak:") || line.Contains("True peak:")) && line.Contains("dBFS"))
+                {
+                    var parts = line.Split(new[] { ':' }, StringSplitOptions.RemoveEmptyEntries);
+                    if (parts.Length >= 2)
+                    {
+                        var valueStr = parts[1].Replace("dBFS", "").Trim();
+                        if (double.TryParse(valueStr, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var peak))
+                        {
+                            peakDb = peak;
+                            Log($"ParseLoudnessFromFFmpegOutput: Parsed EBU R128 true peak: {peak:F2} dBFS");
+                        }
+                    }
+                }
+            }
+            
+            // If ebur128 parsing found data, use it
+            if (integratedLoudness.HasValue)
+            {
+                Log($"ParseLoudnessFromFFmpegOutput: Using EBU R128 data - Integrated: {integratedLoudness:F2} LUFS, Peak: {peakDb?.ToString("F2") ?? "N/A"} dBFS");
+                return new FileLoudnessInfo
+                {
+                    HasAudio = true,
+                    MeanVolumeDb = integratedLoudness.Value,
+                    PeakDb = peakDb ?? -5.0 // Default peak if not found
+                };
+            }
+            
+            // Fall back to legacy volumedetect format for backward compatibility
+            Log("ParseLoudnessFromFFmpegOutput: EBU R128 data not found, trying legacy volumedetect format");
+            
+            double? meanVolumeDb = null;
+            
             foreach (var line in lines)
             {
                 // Look for mean_volume
@@ -2849,6 +2994,7 @@ namespace ReelRoulette
                         if (double.TryParse(valueStr, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var meanValue))
                         {
                             meanVolumeDb = meanValue;
+                            hasAudio = true;
                         }
                     }
                 }
@@ -2869,14 +3015,14 @@ namespace ReelRoulette
                 }
             }
 
-            // Return info only if we got both values (success with audio)
-            // Special case: -91.0 dB is often a placeholder/default value ffmpeg outputs
-            // when there's no actual audio stream, so treat it as no audio
-            if (meanVolumeDb.HasValue && peakDb.HasValue)
+            if (meanVolumeDb.HasValue)
             {
-                // Check if this is the -91.0 dB placeholder (indicating no real audio)
-                if (Math.Abs(meanVolumeDb.Value - (-91.0)) < 0.1 && Math.Abs(peakDb.Value - (-91.0)) < 0.1)
+                Log($"ParseLoudnessFromFFmpegOutput: Using legacy volumedetect data - Mean: {meanVolumeDb:F2} dB, Peak: {peakDb?.ToString("F2") ?? "N/A"} dB");
+                // Check for -91.0 dB placeholder (no real audio)
+                // Mean of -91.0 indicates no audio regardless of whether peak data is available
+                if (Math.Abs(meanVolumeDb.Value - (-91.0)) < 0.1 && (!peakDb.HasValue || Math.Abs(peakDb.Value - (-91.0)) < 0.1))
                 {
+                    Log("ParseLoudnessFromFFmpegOutput: Detected -91.0 dB placeholder - no audio");
                     return new FileLoudnessInfo
                     {
                         MeanVolumeDb = 0.0,
@@ -2887,9 +3033,9 @@ namespace ReelRoulette
                 
                 return new FileLoudnessInfo
                 {
+                    HasAudio = hasAudio,
                     MeanVolumeDb = meanVolumeDb.Value,
-                    PeakDb = peakDb.Value,
-                    HasAudio = true
+                    PeakDb = peakDb ?? -5.0
                 };
             }
 
@@ -5621,7 +5767,8 @@ namespace ReelRoulette
                 // Dispose previous media
                 if (_currentMedia != null)
                 {
-                    Log("PlayVideo: Disposing previous media");
+                    Log("PlayVideo: Stopping player and disposing previous media");
+                    _mediaPlayer.Stop(); // Stop playback cleanly before disposing to prevent audio spikes
                     _currentMedia.Dispose();
                 }
 
@@ -5970,7 +6117,7 @@ namespace ReelRoulette
                         }
                         
                         // Apply volume normalization (must be called before Parse/Play)
-                        Log($"PlayVideo: Applying volume normalization - Mode: {_volumeNormalizationMode}");
+                        Log($"PlayVideo: Applying volume normalization - Enabled: {_volumeNormalizationEnabled}");
                         ApplyVolumeNormalization();
                         
                         // Parse media to get track information (including video dimensions)
@@ -6315,7 +6462,11 @@ namespace ReelRoulette
             public string? SeekStep { get; set; }
             public int VolumeStep { get; set; } = 5;
             public double? IntervalSeconds { get; set; }
-            public VolumeNormalizationMode VolumeNormalizationMode { get; set; } = VolumeNormalizationMode.Off;
+            public bool VolumeNormalizationEnabled { get; set; } = false;
+            public double MaxReductionDb { get; set; } = 15.0;
+            public double MaxBoostDb { get; set; } = 5.0;
+            public bool BaselineAutoMode { get; set; } = true;
+            public double BaselineOverrideLUFS { get; set; } = -23.0;
             public AudioFilterMode AudioFilterMode { get; set; } = AudioFilterMode.PlayAll;
             
             // Playback preferences (now persisted)
@@ -6534,7 +6685,11 @@ namespace ReelRoulette
                     IntervalNumericUpDown.Value = (int)interval;
                 }
             }
-            _volumeNormalizationMode = settings.VolumeNormalizationMode;
+            _volumeNormalizationEnabled = settings.VolumeNormalizationEnabled;
+            _maxReductionDb = settings.MaxReductionDb;
+            _maxBoostDb = settings.MaxBoostDb;
+            _baselineAutoMode = settings.BaselineAutoMode;
+            _baselineOverrideLUFS = settings.BaselineOverrideLUFS;
             _audioFilterMode = settings.AudioFilterMode;
             
             // Apply playback preferences (now persisted)
@@ -6542,6 +6697,13 @@ namespace ReelRoulette
             _autoPlayNext = settings.AutoPlayNext;
             _isMuted = settings.IsMuted;
             _userVolumePreference = settings.VolumeLevel; // Restore saved volume level
+            
+            // Initialize _lastNonZeroVolume from saved volume for proper unmute behavior
+            if (settings.VolumeLevel > 0)
+            {
+                _lastNonZeroVolume = settings.VolumeLevel;
+            }
+            
             _noRepeatMode = settings.NoRepeatMode;
             _photoDisplayDurationSeconds = settings.PhotoDisplayDurationSeconds > 0 ? settings.PhotoDisplayDurationSeconds : 5; // Default to 5 if invalid
             Log($"LoadSettings: Restored photo display duration: {_photoDisplayDurationSeconds} seconds");
@@ -6717,7 +6879,7 @@ namespace ReelRoulette
                             settings.VolumeStep = playbackSettings.VolumeStep;
                         if (playbackSettings.IntervalSeconds.HasValue)
                             settings.IntervalSeconds = playbackSettings.IntervalSeconds;
-                        settings.VolumeNormalizationMode = playbackSettings.VolumeNormalizationMode;
+                        settings.VolumeNormalizationEnabled = playbackSettings.VolumeNormalizationEnabled;
                         settings.AudioFilterMode = playbackSettings.AudioFilterMode;
                     }
                 }
@@ -6833,7 +6995,11 @@ namespace ReelRoulette
                 settings.SeekStep = _seekStep;
                 settings.VolumeStep = _volumeStep;
                 settings.IntervalSeconds = intervalValue.HasValue ? (double?)intervalValue.Value : null;
-                settings.VolumeNormalizationMode = _volumeNormalizationMode;
+                settings.VolumeNormalizationEnabled = _volumeNormalizationEnabled;
+                settings.MaxReductionDb = _maxReductionDb;
+                settings.MaxBoostDb = _maxBoostDb;
+                settings.BaselineAutoMode = _baselineAutoMode;
+                settings.BaselineOverrideLUFS = _baselineOverrideLUFS;
                 settings.AudioFilterMode = _audioFilterMode;
                 
                 // Playback preferences (now persisted)
@@ -7577,7 +7743,11 @@ namespace ReelRoulette
                 (double)intervalValue,
                 _seekStep,
                 _volumeStep,
-                _volumeNormalizationMode,
+                _volumeNormalizationEnabled,
+                _maxReductionDb,
+                _maxBoostDb,
+                _baselineAutoMode,
+                _baselineOverrideLUFS,
                 _photoDisplayDurationSeconds,
                 _imageScalingMode,
                 _fixedImageMaxWidth,
@@ -7605,7 +7775,16 @@ namespace ReelRoulette
                     _noRepeatMode = dialog.NoRepeatMode;
                     _seekStep = dialog.GetSeekStep();
                     _volumeStep = dialog.GetVolumeStep();
-                    _volumeNormalizationMode = dialog.GetVolumeNormalizationMode();
+                    _volumeNormalizationEnabled = dialog.GetVolumeNormalizationEnabled();
+                    _maxReductionDb = dialog.GetMaxReductionDb();
+                    _maxBoostDb = dialog.GetMaxBoostDb();
+                    _baselineAutoMode = dialog.GetBaselineAutoMode();
+                    _baselineOverrideLUFS = dialog.GetBaselineOverrideLUFS();
+                    // Reset baseline cache when settings change
+                    _cachedBaselineLoudnessDb = null;
+                    // Reset warning flag when settings change so it can be shown again if needed
+                    _hasShownMissingLoudnessWarning = false;
+                    Log($"Settings: Normalization settings updated - MaxReduction: {_maxReductionDb} dB, MaxBoost: {_maxBoostDb} dB, BaselineMode: {(_baselineAutoMode ? "Auto" : $"Manual ({_baselineOverrideLUFS} LUFS)")}");
                     var oldPhotoDuration = _photoDisplayDurationSeconds;
                     _photoDisplayDurationSeconds = dialog.PhotoDisplayDurationSeconds;
                     Log($"Settings: Photo display duration changed from {oldPhotoDuration} to {_photoDisplayDurationSeconds} seconds");
@@ -7696,7 +7875,7 @@ namespace ReelRoulette
                     // Save settings to disk (now that all fields are updated)
                     SaveSettings();
                     
-                    Log($"Settings: Applied and saved - Loop={_isLoopEnabled}, AutoPlay={_autoPlayNext}, NoRepeat={_noRepeatMode}, SeekStep={_seekStep}, VolumeStep={_volumeStep}, VolumeNorm={_volumeNormalizationMode}");
+                    Log($"Settings: Applied and saved - Loop={_isLoopEnabled}, AutoPlay={_autoPlayNext}, NoRepeat={_noRepeatMode}, SeekStep={_seekStep}, VolumeStep={_volumeStep}, VolumeNorm={_volumeNormalizationEnabled}");
                 }
                 finally
                 {
@@ -7790,7 +7969,7 @@ namespace ReelRoulette
             StartDurationScan(sourceRoots[0]);
         }
 
-        private void ScanLoudness_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        private async void ScanLoudness_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
             Log("UI ACTION: ScanLoudness button clicked");
             // Scan entire library
@@ -7815,11 +7994,106 @@ namespace ReelRoulette
                 return;
             }
             
-            Log($"  Starting loudness scan for {sourceRoots.Count} source(s) in library");
-            StatusTextBlock.Text = $"Starting loudness scan for {sourceRoots.Count} source(s)...";
+            // Show dialog to choose scan mode
+            var dialog = new Window
+            {
+                Title = "Scan Loudness",
+                Width = 450,
+                Height = 250,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                CanResize = false
+            };
+
+            var panel = new StackPanel { Margin = new Thickness(20), Spacing = 15 };
             
-            // Start scan for first source (could be enhanced to scan all sources)
-            StartLoudnessScan(sourceRoots[0]);
+            panel.Children.Add(new TextBlock 
+            { 
+                Text = "Choose scan mode:",
+                FontSize = 14,
+                FontWeight = Avalonia.Media.FontWeight.SemiBold
+            });
+            
+            var onlyNewRadio = new RadioButton 
+            { 
+                Content = "Only scan new files (files without loudness data)",
+                IsChecked = true,
+                GroupName = "ScanMode"
+            };
+            panel.Children.Add(onlyNewRadio);
+            
+            var rescanAllRadio = new RadioButton 
+            { 
+                Content = "Rescan all files (update all loudness data with improved accuracy)",
+                GroupName = "ScanMode"
+            };
+            panel.Children.Add(rescanAllRadio);
+            
+            panel.Children.Add(new TextBlock
+            {
+                Text = "Note: Rescanning uses the new EBU R128 standard for more accurate loudness measurement.",
+                FontSize = 11,
+                Foreground = Avalonia.Media.Brushes.Gray,
+                TextWrapping = Avalonia.Media.TextWrapping.Wrap,
+                Margin = new Thickness(20, 5, 0, 0)
+            });
+            
+            var buttonPanel = new StackPanel 
+            { 
+                Orientation = Avalonia.Layout.Orientation.Horizontal,
+                HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
+                Spacing = 10,
+                Margin = new Thickness(0, 20, 0, 0)
+            };
+            
+            var okButton = new Button { Content = "Start Scan", MinWidth = 100 };
+            var cancelButton = new Button { Content = "Cancel", MinWidth = 100 };
+            
+            buttonPanel.Children.Add(okButton);
+            buttonPanel.Children.Add(cancelButton);
+            panel.Children.Add(buttonPanel);
+            
+            dialog.Content = panel;
+            
+            bool? result = null;
+            bool rescanAll = false;
+            
+            EventHandler<Avalonia.Interactivity.RoutedEventArgs>? okHandler = null;
+            EventHandler<Avalonia.Interactivity.RoutedEventArgs>? cancelHandler = null;
+            
+            okHandler = (s, args) => 
+            { 
+                result = true;
+                rescanAll = rescanAllRadio.IsChecked == true;
+                dialog.Close();
+                // Unsubscribe to allow garbage collection
+                if (okHandler != null) okButton.Click -= okHandler;
+                if (cancelHandler != null) cancelButton.Click -= cancelHandler;
+            };
+            cancelHandler = (s, args) => 
+            { 
+                result = false;
+                dialog.Close();
+                // Unsubscribe to allow garbage collection
+                if (okHandler != null) okButton.Click -= okHandler;
+                if (cancelHandler != null) cancelButton.Click -= cancelHandler;
+            };
+            
+            okButton.Click += okHandler;
+            cancelButton.Click += cancelHandler;
+            
+            await dialog.ShowDialog(this);
+            
+            if (result != true)
+            {
+                Log("  User cancelled loudness scan");
+                return;
+            }
+            
+            Log($"  Starting loudness scan for {sourceRoots.Count} source(s) in library - Mode: {(rescanAll ? "Rescan All" : "Only New Files")}");
+            StatusTextBlock.Text = $"Starting loudness scan ({(rescanAll ? "all files" : "new files only")})...";
+            
+            // Start scan for first source with rescan flag
+            StartLoudnessScan(sourceRoots[0], rescanAll);
         }
 
         // DurationFilter_Changed handler removed - now using FilterDialog
@@ -8328,48 +8602,88 @@ namespace ReelRoulette
         /// <summary>
         /// Calculates normalized volume with improved algorithm including limiter
         /// </summary>
-        private int CalculateNormalizedVolume(FileLoudnessInfo info, int userVolumePreference)
+        private double GetLibraryBaselineLoudness()
         {
-            Log($"CalculateNormalizedVolume: Starting - MeanVolumeDb: {info.MeanVolumeDb:F2}, PeakDb: {info.PeakDb:F2}, UserPreference: {userVolumePreference}, TargetLoudnessDb: {TargetLoudnessDb:F2}");
-            
-            // Calculate desired gain to reach target loudness
-            var diffDb = TargetLoudnessDb - info.MeanVolumeDb;
-            Log($"CalculateNormalizedVolume: Initial gain calculation: {diffDb:F2} dB");
-            
-            // Apply max gain limit (prevent excessive boost/cut)
-            var gainBeforeLimiter = diffDb;
-            diffDb = Math.Clamp(diffDb, -MaxGainDb, MaxGainDb);
-            if (gainBeforeLimiter != diffDb)
+            // If manual baseline mode is enabled, return the override value
+            if (!_baselineAutoMode)
             {
-                Log($"CalculateNormalizedVolume: Gain clamped by MaxGainDb limit ({MaxGainDb} dB): {gainBeforeLimiter:F2} -> {diffDb:F2}");
+                Log($"GetLibraryBaselineLoudness: Manual mode - using override baseline: {_baselineOverrideLUFS:F2} LUFS");
+                return _baselineOverrideLUFS;
             }
             
-            // Limiter: Check if peak volume would exceed safe maximum
-            // Calculate what the peak would be after gain adjustment
-            var estimatedPeakDb = info.PeakDb + diffDb;
-            Log($"CalculateNormalizedVolume: Estimated peak after gain: {estimatedPeakDb:F2} dB (limit: {MaxOutputPeakDb:F2} dB)");
-            
-            // If peak would exceed limit, reduce gain to prevent clipping/distortion
-            if (estimatedPeakDb > MaxOutputPeakDb)
+            // Return cached value if available
+            if (_cachedBaselineLoudnessDb.HasValue)
             {
-                // Calculate maximum allowed gain to keep peak under limit
-                var maxAllowedGain = MaxOutputPeakDb - info.PeakDb;
-                Log($"CalculateNormalizedVolume: Peak would exceed limit - maxAllowedGain: {maxAllowedGain:F2} dB");
-                
-                // Use the more restrictive: target gain or peak-limited gain
-                // For cuts (negative), always allow (making loud videos quieter is safe)
-                if (diffDb > 0)
-                {
-                    var gainBeforePeakLimit = diffDb;
-                    // If peak is already above limit (maxAllowedGain < 0), cap boost at 0
-                    // This prevents applying an unintended cut when a boost was desired
-                    // Otherwise, use the more restrictive of target gain or peak-limited gain
-                    diffDb = maxAllowedGain < 0 ? 0 : Math.Min(diffDb, maxAllowedGain);
-                    if (gainBeforePeakLimit != diffDb)
-                    {
-                        Log($"CalculateNormalizedVolume: Gain limited by peak protection: {gainBeforePeakLimit:F2} -> {diffDb:F2} dB");
-                    }
-                }
+                return _cachedBaselineLoudnessDb.Value;
+            }
+
+            Log("GetLibraryBaselineLoudness: Calculating baseline loudness from library");
+
+            // Check if library index is available
+            if (_libraryIndex == null)
+            {
+                Log("GetLibraryBaselineLoudness: Library index is null - using default baseline of -18 dB");
+                _cachedBaselineLoudnessDb = -18.0;
+                return _cachedBaselineLoudnessDb.Value;
+            }
+
+            // Get all videos with loudness data
+            var videosWithLoudness = _libraryIndex.Items
+                .Where(item => item.MediaType == MediaType.Video && 
+                              item.HasAudio == true && 
+                              item.IntegratedLoudness.HasValue)
+                .Select(item => item.IntegratedLoudness!.Value)
+                .OrderBy(loudness => loudness)
+                .ToList();
+
+            if (videosWithLoudness.Count == 0)
+            {
+                Log("GetLibraryBaselineLoudness: No videos with loudness data - using default baseline of -18 dB");
+                _cachedBaselineLoudnessDb = -18.0; // Default if no data
+                return _cachedBaselineLoudnessDb.Value;
+            }
+
+            // Use 75th percentile as baseline (avoids being skewed by very quiet outliers)
+            int percentile75Index = (int)Math.Ceiling(videosWithLoudness.Count * 0.75) - 1;
+            percentile75Index = Math.Clamp(percentile75Index, 0, videosWithLoudness.Count - 1);
+            double baselineLoudness = videosWithLoudness[percentile75Index];
+
+            _cachedBaselineLoudnessDb = baselineLoudness;
+            Log($"GetLibraryBaselineLoudness: Baseline calculated - 75th percentile: {baselineLoudness:F2} dB from {videosWithLoudness.Count} videos");
+            
+            return baselineLoudness;
+        }
+
+        private int CalculateNormalizedVolume(FileLoudnessInfo info, int userVolumePreference)
+        {
+            Log($"CalculateNormalizedVolume: Starting - MeanVolumeDb: {info.MeanVolumeDb:F2}, PeakDb: {info.PeakDb:F2}, UserPreference: {userVolumePreference}");
+            
+            // Get library baseline
+            double baselineLoudness = GetLibraryBaselineLoudness();
+            Log($"CalculateNormalizedVolume: Baseline loudness: {baselineLoudness:F2} dB");
+            
+            // Calculate gain needed relative to baseline
+            // Positive diffDb means video is quieter than baseline (needs boost)
+            // Negative diffDb means video is louder than baseline (needs reduction)
+            var diffDb = baselineLoudness - info.MeanVolumeDb;
+            Log($"CalculateNormalizedVolume: Initial gain calculation: {diffDb:F2} dB");
+            
+            // Apply asymmetric limits: allow more reduction than boost
+            var gainBeforeLimits = diffDb;
+            if (diffDb > 0)
+            {
+                // Video is quieter than baseline - apply minimal boost to avoid noise
+                diffDb = Math.Min(diffDb, _maxBoostDb);
+            }
+            else
+            {
+                // Video is louder than baseline - apply reduction
+                diffDb = Math.Max(diffDb, -_maxReductionDb);
+            }
+            
+            if (gainBeforeLimits != diffDb)
+            {
+                Log($"CalculateNormalizedVolume: Gain clamped by limits: {gainBeforeLimits:F2} -> {diffDb:F2} dB");
             }
             
             // Convert dB gain to linear multiplier
@@ -8394,7 +8708,7 @@ namespace ReelRoulette
 
         private void ApplyVolumeNormalization()
         {
-            Log($"ApplyVolumeNormalization: Starting - Mode: {_volumeNormalizationMode}, UserPreference: {_userVolumePreference}, CurrentVideoPath: {_currentVideoPath ?? "null"}");
+            Log($"ApplyVolumeNormalization: Starting - Enabled: {_volumeNormalizationEnabled}, UserPreference: {_userVolumePreference}, CurrentVideoPath: {_currentVideoPath ?? "null"}, Muted: {_isMuted}");
             
             if (_currentMedia == null || _mediaPlayer == null || string.IsNullOrEmpty(_currentVideoPath))
             {
@@ -8402,58 +8716,53 @@ namespace ReelRoulette
                 return;
             }
 
-            // If mode is Off: do NOT add audio filter, use slider value directly
-            if (_volumeNormalizationMode == VolumeNormalizationMode.Off)
+            // Check if muted - if so, set volume to 0 and mute MediaPlayer
+            if (_isMuted || MuteButton?.IsChecked == true)
             {
-                Log($"ApplyVolumeNormalization: Mode is Off - using direct volume: {_userVolumePreference}");
+                Log("ApplyVolumeNormalization: Currently muted - setting volume to 0 and muting MediaPlayer");
+                _mediaPlayer.Volume = 0;
+                _mediaPlayer.Mute = true;
+                return;
+            }
+            
+            // Ensure MediaPlayer is unmuted if we're not in muted state
+            if (_mediaPlayer.Mute)
+            {
+                Log("ApplyVolumeNormalization: Unmuting MediaPlayer");
+                _mediaPlayer.Mute = false;
+            }
+
+            // If normalization is Off: use slider value directly
+            if (!_volumeNormalizationEnabled)
+            {
+                Log($"ApplyVolumeNormalization: Normalization disabled - using direct volume: {_userVolumePreference}");
                 _mediaPlayer.Volume = _userVolumePreference;
                 return;
             }
 
-            // If mode is Simple or Advanced: add audio filter (only once per media creation)
-            if (_volumeNormalizationMode == VolumeNormalizationMode.Simple || _volumeNormalizationMode == VolumeNormalizationMode.Advanced)
-            {
-                Log($"ApplyVolumeNormalization: Adding normvol audio filter for real-time normalization");
-                // Add the audio filter only one time per media creation
-                // Use normvol filter for gentle real-time normalization
-                _currentMedia.AddOption(":audio-filter=normvol");
-                // Optional: conservative preamp (0.0 = no additional boost)
-                _currentMedia.AddOption(":normvol-preamp=0.0");
-            }
+            // Normalization is On: apply per-file gain adjustment based on loudness data
+            Log($"ApplyVolumeNormalization: Normalization enabled - getting loudness info from library");
+            var info = GetLoudnessInfoFromLibrary(_currentVideoPath);
 
-            // If mode is LibraryAware or Advanced: apply per-file gain adjustment
-            if (_volumeNormalizationMode == VolumeNormalizationMode.LibraryAware || _volumeNormalizationMode == VolumeNormalizationMode.Advanced)
+            if (info != null && info.HasAudio == true)
             {
-                Log($"ApplyVolumeNormalization: Getting loudness info from library for per-file normalization");
-                var info = GetLoudnessInfoFromLibrary(_currentVideoPath);
-
-                if (info != null)
-                {
-                    Log($"ApplyVolumeNormalization: Loudness info found - HasAudio: {info.HasAudio}, MeanVolumeDb: {info.MeanVolumeDb:F2}, PeakDb: {info.PeakDb:F2}");
-                    var finalVolume = CalculateNormalizedVolume(info, _userVolumePreference);
-                    Log($"ApplyVolumeNormalization: Setting normalized volume: {finalVolume}");
-                    _mediaPlayer.Volume = finalVolume;
-                }
-                else
-                {
-                    Log($"ApplyVolumeNormalization: No loudness info found - using direct volume: {_userVolumePreference}");
-                    // Fall back: if Library-aware mode but no stats, use direct volume
-                    // If Advanced mode but no stats, still use real-time filter (already added above)
-                    if (_volumeNormalizationMode == VolumeNormalizationMode.LibraryAware)
-                    {
-                        _mediaPlayer.Volume = _userVolumePreference;
-                    }
-                    else
-                    {
-                        // Advanced mode: real-time filter already added, use slider value
-                        _mediaPlayer.Volume = _userVolumePreference;
-                    }
-                }
+                Log($"ApplyVolumeNormalization: Loudness info found - HasAudio: {info.HasAudio}, MeanVolumeDb: {info.MeanVolumeDb:F2}, PeakDb: {info.PeakDb:F2}");
+                var finalVolume = CalculateNormalizedVolume(info, _userVolumePreference);
+                Log($"ApplyVolumeNormalization: Setting normalized volume: {finalVolume}");
+                _mediaPlayer.Volume = finalVolume;
             }
             else
             {
-                // Simple mode: use slider value with real-time filter
-                Log($"ApplyVolumeNormalization: Simple mode - using direct volume with real-time filter: {_userVolumePreference}");
+                Log($"ApplyVolumeNormalization: No loudness info found - using direct volume: {_userVolumePreference}");
+                
+                // Show warning once if normalization is enabled but video lacks loudness data
+                if (!_hasShownMissingLoudnessWarning)
+                {
+                    _hasShownMissingLoudnessWarning = true;
+                    SetStatusMessage("Volume normalization enabled, but some videos lack loudness data. Run 'Library > Scan Loudness' for best results.");
+                }
+                
+                // Fall back to direct volume if no loudness data
                 _mediaPlayer.Volume = _userVolumePreference;
             }
             
@@ -8463,7 +8772,7 @@ namespace ReelRoulette
         private void VolumeSlider_ValueChanged(object? sender, Avalonia.Controls.Primitives.RangeBaseValueChangedEventArgs e)
         {
             var newVolume = (int)VolumeSlider.Value;
-            Log($"UI ACTION: VolumeSlider value changed - New value: {newVolume}, Old value: {e.OldValue}, Mode: {_volumeNormalizationMode}");
+            Log($"UI ACTION: VolumeSlider value changed - New value: {newVolume}, Old value: {e.OldValue}");
             
             if (_mediaPlayer == null)
             {
@@ -8471,56 +8780,162 @@ namespace ReelRoulette
                 return;
             }
 
+            // Update user preference immediately for responsiveness
             var oldPreference = _userVolumePreference;
+            
+            // Save old non-zero preference before transitioning to zero
+            if (newVolume == 0 && oldPreference > 0)
+            {
+                _lastNonZeroVolume = oldPreference;
+                Log($"VolumeSlider_ValueChanged: Saving last non-zero volume before muting: {oldPreference}");
+            }
+            
             _userVolumePreference = newVolume;
+            _pendingVolumeValue = newVolume;
             Log($"VolumeSlider_ValueChanged: User volume preference updated: {oldPreference} -> {newVolume}");
 
-            // If mode is LibraryAware or Advanced and current video exists, recalculate normalized volume
-            if ((_volumeNormalizationMode == VolumeNormalizationMode.LibraryAware || _volumeNormalizationMode == VolumeNormalizationMode.Advanced) && !string.IsNullOrEmpty(_currentVideoPath))
-            {
-                Log($"VolumeSlider_ValueChanged: Library-aware mode - getting loudness info for normalization");
-                var info = GetLoudnessInfoFromLibrary(_currentVideoPath);
-
-                if (info != null)
-                {
-                    // Recalculate normalized volume using current loudness data
-                    var finalVolume = CalculateNormalizedVolume(info, _userVolumePreference);
-                    Log($"VolumeSlider_ValueChanged: Setting normalized volume: {finalVolume}");
-                    _mediaPlayer.Volume = finalVolume;
-                }
-                else
-                {
-                    Log($"VolumeSlider_ValueChanged: No loudness info - using direct volume: {newVolume}");
-                    // Fall back to direct volume
-                    _mediaPlayer.Volume = newVolume;
-                }
-            }
-            else
-            {
-                Log($"VolumeSlider_ValueChanged: Direct volume mode - setting volume: {newVolume}");
-                // Off or Simple mode: set volume directly
-                _mediaPlayer.Volume = newVolume;
-            }
-
-            // Update mute button state
+            // Update mute button state immediately
             if (newVolume == 0)
             {
                 Log("VolumeSlider_ValueChanged: Volume is 0 - muting");
                 MuteButton.IsChecked = true;
+                _isMuted = true;
+                // Set MediaPlayer mute state
+                if (_mediaPlayer.Mute != true)
+                {
+                    _mediaPlayer.Mute = true;
+                    Log("VolumeSlider_ValueChanged: Set MediaPlayer.Mute = true");
+                }
             }
             else
             {
                 Log($"VolumeSlider_ValueChanged: Volume is non-zero - unmuting, saving lastNonZeroVolume: {newVolume}");
                 MuteButton.IsChecked = false;
+                _isMuted = false;
                 _lastNonZeroVolume = newVolume;
+                // Unmute MediaPlayer
+                if (_mediaPlayer.Mute != false)
+                {
+                    _mediaPlayer.Mute = false;
+                    Log("VolumeSlider_ValueChanged: Set MediaPlayer.Mute = false");
+                }
             }
             
             UpdateVolumeTooltip();
+
+            // Debounce the actual volume application to avoid lag during dragging
+            // Initialize debounce timer if needed
+            if (_volumeSliderDebounceTimer == null)
+            {
+                _volumeSliderDebounceTimer = new DispatcherTimer
+                {
+                    Interval = TimeSpan.FromMilliseconds(150)
+                };
+                _volumeSliderDebounceTimer.Tick += VolumeSliderDebounceTimer_Tick;
+            }
+
+            // Restart the timer - this cancels any pending application
+            _volumeSliderDebounceTimer.Stop();
+            _volumeSliderDebounceTimer.Start();
+        }
+
+        private void VolumeSliderDebounceTimer_Tick(object? sender, EventArgs e)
+        {
+            // Stop timer
+            _volumeSliderDebounceTimer?.Stop();
+
+            // Apply the pending volume change if there is one
+            if (_pendingVolumeValue.HasValue)
+            {
+                ApplyVolumeChange(_pendingVolumeValue.Value);
+                _pendingVolumeValue = null; // Clear to prevent duplicate application
+            }
+        }
+
+        private void ApplyVolumeChange(int newVolume)
+        {
+            if (_mediaPlayer == null)
+            {
+                Log("ApplyVolumeChange: ERROR - MediaPlayer is null");
+                return;
+            }
+
+            Log($"ApplyVolumeChange: Applying volume: {newVolume}");
+
+            // If normalization is enabled and current video exists, recalculate normalized volume
+            if (_volumeNormalizationEnabled && !string.IsNullOrEmpty(_currentVideoPath))
+            {
+                Log($"ApplyVolumeChange: Normalization enabled - getting loudness info");
+                var info = GetLoudnessInfoFromLibrary(_currentVideoPath);
+
+                if (info != null && info.HasAudio == true)
+                {
+                    // Recalculate normalized volume using current loudness data
+                    var finalVolume = CalculateNormalizedVolume(info, newVolume);
+                    Log($"ApplyVolumeChange: Setting normalized volume: {finalVolume}");
+                    
+                    // Check mute state before applying
+                    if (!_isMuted && MuteButton?.IsChecked != true)
+                    {
+                        _mediaPlayer.Volume = finalVolume;
+                    }
+                    else
+                    {
+                        Log("ApplyVolumeChange: Muted - not applying volume change");
+                    }
+                }
+                else
+                {
+                    Log($"ApplyVolumeChange: No loudness info - using direct volume: {newVolume}");
+                    // Fall back to direct volume
+                    if (!_isMuted && MuteButton?.IsChecked != true)
+                    {
+                        _mediaPlayer.Volume = newVolume;
+                    }
+                }
+            }
+            else
+            {
+                Log($"ApplyVolumeChange: Direct volume mode - setting volume: {newVolume}");
+                // Normalization disabled: set volume directly
+                if (!_isMuted && MuteButton?.IsChecked != true)
+                {
+                    _mediaPlayer.Volume = newVolume;
+                }
+                else
+                {
+                    Log("ApplyVolumeChange: Muted - not applying volume change");
+                }
+            }
             
             // Persist volume level (unless we're applying settings from dialog)
             if (!_isApplyingSettings)
             {
                 SaveSettings();
+            }
+        }
+
+        private void VolumeSlider_PointerReleased(object? sender, Avalonia.Input.PointerReleasedEventArgs e)
+        {
+            Log("VolumeSlider_PointerReleased: User released slider - applying volume immediately");
+            // Stop debounce timer and apply immediately if there's a pending change
+            _volumeSliderDebounceTimer?.Stop();
+            if (_pendingVolumeValue.HasValue)
+            {
+                ApplyVolumeChange(_pendingVolumeValue.Value);
+                _pendingVolumeValue = null; // Clear to prevent duplicate application
+            }
+        }
+
+        private void VolumeSlider_PointerCaptureLost(object? sender, Avalonia.Input.PointerCaptureLostEventArgs e)
+        {
+            Log("VolumeSlider_PointerCaptureLost: Pointer capture lost - applying volume immediately");
+            // Stop debounce timer and apply immediately if there's a pending change
+            _volumeSliderDebounceTimer?.Stop();
+            if (_pendingVolumeValue.HasValue)
+            {
+                ApplyVolumeChange(_pendingVolumeValue.Value);
+                _pendingVolumeValue = null; // Clear to prevent duplicate application
             }
         }
 
@@ -8536,6 +8951,7 @@ namespace ReelRoulette
                 _lastNonZeroVolume = _userVolumePreference;
             }
             _mediaPlayer.Volume = 0;
+            _mediaPlayer.Mute = true; // Set MediaPlayer mute state
             VolumeSlider.Value = 0;
             // Preserve user volume preference when muting
             // _userVolumePreference remains unchanged
@@ -8555,16 +8971,28 @@ namespace ReelRoulette
                 return;
 
             // Unmute: restore last non-zero volume
-            // Restore user preference and apply normalization if needed
-            _userVolumePreference = _lastNonZeroVolume;
-            VolumeSlider.Value = _lastNonZeroVolume;
+            // Only restore slider value if it's still at 0 (not already changed by user dragging)
+            if (VolumeSlider.Value == 0)
+            {
+                _userVolumePreference = _lastNonZeroVolume;
+                VolumeSlider.Value = _lastNonZeroVolume;
+            }
+            else
+            {
+                // User already dragged slider to non-zero - use that value
+                _userVolumePreference = (int)VolumeSlider.Value;
+                _lastNonZeroVolume = (int)VolumeSlider.Value;
+            }
             
-            // Reapply normalization if in Library-aware or Advanced mode
-            if ((_volumeNormalizationMode == VolumeNormalizationMode.LibraryAware || _volumeNormalizationMode == VolumeNormalizationMode.Advanced) && !string.IsNullOrEmpty(_currentVideoPath))
+            // Unmute MediaPlayer first
+            _mediaPlayer.Mute = false;
+            
+            // Reapply normalization if enabled
+            if (_volumeNormalizationEnabled && !string.IsNullOrEmpty(_currentVideoPath))
             {
                 var info = GetLoudnessInfoFromLibrary(_currentVideoPath);
 
-                if (info != null)
+                if (info != null && info.HasAudio == true)
                 {
                     var finalVolume = CalculateNormalizedVolume(info, _userVolumePreference);
                     _mediaPlayer.Volume = finalVolume;
@@ -8831,13 +9259,13 @@ namespace ReelRoulette
             _userVolumePreference = newPreference;
             VolumeSlider.Value = newPreference;
 
-            // Apply normalization if in Library-aware mode
-            if ((_volumeNormalizationMode == VolumeNormalizationMode.LibraryAware || _volumeNormalizationMode == VolumeNormalizationMode.Advanced) && !string.IsNullOrEmpty(_currentVideoPath))
+            // Apply normalization if enabled
+            if (_volumeNormalizationEnabled && !string.IsNullOrEmpty(_currentVideoPath))
             {
-                Log($"AdjustVolumeFromWheel: Library-aware mode - getting loudness info");
+                Log($"AdjustVolumeFromWheel: Normalization enabled - getting loudness info");
                 var info = GetLoudnessInfoFromLibrary(_currentVideoPath);
 
-                if (info != null)
+                if (info != null && info.HasAudio == true)
                 {
                     var finalVolume = CalculateNormalizedVolume(info, _userVolumePreference);
                     Log($"AdjustVolumeFromWheel: Setting normalized volume: {finalVolume}");
@@ -9191,12 +9619,12 @@ namespace ReelRoulette
             _userVolumePreference = newPreference;
             VolumeSlider.Value = newPreference;
 
-            // Apply normalization if in Library-aware mode
-            if ((_volumeNormalizationMode == VolumeNormalizationMode.LibraryAware || _volumeNormalizationMode == VolumeNormalizationMode.Advanced) && !string.IsNullOrEmpty(_currentVideoPath))
+            // Apply normalization if enabled
+            if (_volumeNormalizationEnabled && !string.IsNullOrEmpty(_currentVideoPath))
             {
                 var info = GetLoudnessInfoFromLibrary(_currentVideoPath);
 
-                if (info != null)
+                if (info != null && info.HasAudio == true)
                 {
                     var finalVolume = CalculateNormalizedVolume(info, _userVolumePreference);
                     _mediaPlayer.Volume = finalVolume;
@@ -9235,12 +9663,12 @@ namespace ReelRoulette
             _userVolumePreference = newPreference;
             VolumeSlider.Value = newPreference;
 
-            // Apply normalization if in Library-aware mode
-            if ((_volumeNormalizationMode == VolumeNormalizationMode.LibraryAware || _volumeNormalizationMode == VolumeNormalizationMode.Advanced) && !string.IsNullOrEmpty(_currentVideoPath))
+            // Apply normalization if enabled
+            if (_volumeNormalizationEnabled && !string.IsNullOrEmpty(_currentVideoPath))
             {
                 var info = GetLoudnessInfoFromLibrary(_currentVideoPath);
 
-                if (info != null)
+                if (info != null && info.HasAudio == true)
                 {
                     var finalVolume = CalculateNormalizedVolume(info, _userVolumePreference);
                     _mediaPlayer.Volume = finalVolume;
@@ -9443,7 +9871,7 @@ namespace ReelRoulette
         public string? MinDuration { get; set; }
         public string? MaxDuration { get; set; }
         public double? IntervalSeconds { get; set; }
-        public VolumeNormalizationMode VolumeNormalizationMode { get; set; } = VolumeNormalizationMode.Off;
+        public bool VolumeNormalizationEnabled { get; set; } = false;
         public AudioFilterMode AudioFilterMode { get; set; } = AudioFilterMode.PlayAll;
     }
 
