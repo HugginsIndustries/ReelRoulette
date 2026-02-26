@@ -1,5 +1,31 @@
 # ReelRoulette
+
 random video player that mostly works
+
+## Building and Running
+
+You need the .NET SDK installed (version compatible with the `TargetFramework` in `source/ReelRoulette.csproj`).
+
+From the repository root:
+
+```bash
+cd ReelRoulette
+dotnet run --project .\source\ReelRoulette.csproj
+```
+
+Or directly from the project folder:
+
+```bash
+cd ReelRoulette\source
+dotnet run
+```
+
+To build without running:
+
+```bash
+cd ReelRoulette\source
+dotnet build
+```
 
 ## Third-Party Components
 

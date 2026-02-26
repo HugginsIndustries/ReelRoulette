@@ -47,6 +47,36 @@ Each TODO entry follows this structure:
   - Pause monitoring when app is minimized (battery/resource consideration)
 - **Notes**: Consider reliability on network drives. FileSystemWatcher can be flaky over SMB/network shares. May need periodic manual scan as backup.
 
+### Local Web Remote UI (Preset-Based Streaming Webapp)
+
+- **Priority**: P1
+- **Impact**: High - Makes ReelRoulette playable from any device with a browser on the local network
+- **Description**: Add a local web UI served by the desktop app that acts as a thin remote player. The desktop remains the authoritative media server and library manager (sources, tags, filters, presets, random selection). The web UI runs in a browser on phones, tablets, laptops, or TVs and allows selecting from existing filter presets and playing media randomly according to those presets, with basic playback controls (play/pause, next, seek) and simple options like Loop and Autoplay.
+- **Implementation**:
+  - HTTP API on desktop:
+    - Host a lightweight HTTP server inside the existing desktop app (e.g., Kestrel or HttpListener) listening on a configurable port, local network only.
+    - Core endpoints (shared contract future-native apps can also use):
+      - `GET /api/presets` → returns list of filter presets (ID, name, summary/description).
+      - `POST /api/random` → body: selected preset ID + options (e.g., include photos/videos); server uses existing filter/preset logic to pick next random `LibraryItem`; response includes item ID, display name, media type, duration, and a streaming URL/token.
+      - `GET /api/media/{idOrToken}` → streams the media file over HTTP with range support for seeking; desktop reads from disk and sends bytes without transcoding.
+    - Reuse existing `LibraryService`, `FilterService`, and filter presets to avoid duplicating random selection and filtering logic.
+    - Add simple LAN-focused auth (shared token/API key) and a Settings toggle to enable/disable web access.
+  - Web UI:
+    - Serve static HTML/CSS/JS from the same HTTP server (e.g., `GET /` delivers the app shell).
+    - Minimal SPA or vanilla JS UI with:
+      - Connection/status indicator (show current server, preset, and playback state).
+      - Preset picker backed by `/api/presets`.
+      - Now Playing view showing current item (title/file name, source, duration, media type icon).
+      - Controls: Play/Pause, Next Random (calls `/api/random`), optional Previous (local history only), seek slider tied to `<video>`/`<audio>`.
+      - Toggles: Loop current item, Autoplay next random on end.
+    - Use standard `<video>` / `<audio>` elements pointing to `GET /api/media/{idOrToken}` URLs for playback; support photos by rendering `<img>` or background image when `MediaType` is Photo.
+    - Ensure UI is responsive and touch-friendly for mobile browsers (large tap targets, avoid hover-only interactions).
+  - Networking/constraints:
+    - Assume all clients are on the same LAN and can reach `http://desktop-ip:port/`.
+    - Document firewall configuration on desktop to allow inbound traffic on the chosen port.
+    - No library/tag management from the web UI; all editing remains desktop-only to keep MVP small.
+- **Notes**: This feature establishes a general-purpose HTTP + JSON + streaming contract that can later be reused by native mobile apps or smart TV clients. Starting with a web UI keeps distribution simple (no app install) while still solving the “play from couch/phone” use case.
+
 ---
 
 ## P2 - Medium Priority
@@ -237,6 +267,29 @@ Each TODO entry follows this structure:
 ---
 
 ## P3 - Low Priority
+
+### Mobile Companion App (Preset-Based Remote Player)
+
+- **Priority**: P3
+- **Impact**: Medium - Native experience for Android users, reusing web/HTTP infrastructure
+- **Description**: Native Android app that connects to the desktop HTTP API and acts as a thin remote player. Desktop remains the authoritative media server and library manager (sources, tags, filters, presets, random selection). The mobile app only selects from existing filter presets and plays media randomly according to those presets, with basic playback controls (play/pause, next, seek) and simple options like Loop and Autoplay.
+- **Implementation**:
+  - Desktop HTTP API (reuse from P1 Local Web Remote UI):
+    - Use the same endpoints (`/api/presets`, `/api/random`, `/api/media/{idOrToken}`) and auth model as the web UI.
+  - Android app (thin client):
+    - Connection screen to enter desktop IP/hostname, port, and shared token; store in app preferences.
+    - Fetch list of presets from `/api/presets` and present as a simple preset picker.
+    - Main "Now Playing" screen:
+      - Shows current item (title/file name, source, duration, media type icon).
+      - Controls: Play/Pause, Next Random (calls `/api/random`), optional Previous (local history only), Seek slider.
+      - Toggles: Loop current item, Autoplay next random on end.
+    - Use platform-native video player (e.g., ExoPlayer) or .NET MAUI/Avalonia Android player to play `GET /api/media/{idOrToken}` URLs.
+    - Handle basic error cases: desktop offline, bad token, network drop; show reconnect UI.
+  - Networking/constraints:
+    - Assume desktop and phone are on the same LAN; no Internet or NAT traversal required.
+    - Document firewall considerations (allow inbound on chosen port on desktop).
+    - No library/tag management on mobile; all editing remains desktop-only for simplicity.
+- **Notes**: Depends on the P1 Local Web Remote UI’s HTTP API contract. Adds nicer OS-level integration (notifications, lock screen controls, potential casting) but is optional if the browser-based remote works well enough.
 
 ### Customizable Keyboard Shortcuts
 
