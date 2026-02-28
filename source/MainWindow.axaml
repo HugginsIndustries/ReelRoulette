@@ -211,6 +211,8 @@
                 <MenuItem x:Name="ImportFolderMenuItem"
                           Header="Import Folder"
                           Click="ImportFolderMenuItem_Click"/>
+                <MenuItem Header="Auto Tag"
+                          Click="AutoTagMenuItem_Click"/>
                 <MenuItem x:Name="ManageTagsMenuItem"
                           Header="Manage Tags"
                           Click="ManageTagsMenuItem_Click"/>

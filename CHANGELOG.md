@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- **Add Auto Tag workflow for Library items** (2026-02-27):
+  - Add `Library -> Auto Tag` entry that opens a dedicated scan/apply dialog.
+  - Add `AutoTagDialog` with explicit `Scan Files` action, `Scan Full Library` toggle, `View All Matches` toggle (default off), and per-tag counts for both `Total matched` and `To be changed`.
+  - Add global `Select All` / `Deselect All`, default unselected file matches, and tag-level toggles that select/deselect all visible files under each tag.
+  - Add expandable per-tag file lists with individual file-level selection for precise apply behavior.
+  - Implement case-insensitive substring matching against filename (without extension), relative-path segments, and path text, supporting multi-tag matches per item.
+  - When `View All Matches` is off, show only files that would change and hide tags with zero `To be changed` while preserving true `Total matched` counts.
+  - Update scan status messaging to show selected-vs-total pending changes (`selected/total`) so selection impact is explicit.
+  - Add add-only tag application behavior (never removes existing tags), batch-save after apply, and refresh library/current-file UI state after changes.
+  - Persist `Scan Full Library` preference in app settings (default `true`), saving only on `OK` and not on `Cancel`.
+
 - **Implement Local Web Remote UI (Preset-Based Streaming Webapp)** (2026-02-27):
   - Add Web Remote settings (Settings > Web Remote tab): enable/disable, port, bind on LAN, auth mode (off/token), shared token, and configurable LAN hostname (default `reel`).
   - Self-host Kestrel HTTP server with minimal APIs; start when enabled, stop on disable or app exit.

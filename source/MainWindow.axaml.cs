@@ -185,6 +185,7 @@ namespace ReelRoulette
         private double _libraryPanelWidth = 400; // Track panel width independently from Bounds (default matches XAML MinWidth)
         private string _librarySearchText = "";
         private string _librarySortMode = "Name"; // "Name", "LastPlayed", "PlayCount", "Duration"
+        private bool _autoTagScanFullLibrary = true;
         
         // Selection tracking for batch operations
         private HashSet<string> _selectedItemPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -4167,6 +4168,80 @@ namespace ReelRoulette
             return selectedItems;
         }
 
+        private List<LibraryItem> GetAutoTagScopeItems(bool scanFullLibrary)
+        {
+            if (_libraryIndex == null)
+            {
+                return new List<LibraryItem>();
+            }
+
+            if (scanFullLibrary)
+            {
+                return _libraryIndex.Items.ToList();
+            }
+
+            return GetCurrentFilteredLibraryItems();
+        }
+
+        private List<LibraryItem> GetCurrentFilteredLibraryItems()
+        {
+            if (_libraryIndex == null)
+            {
+                return new List<LibraryItem>();
+            }
+
+            var items = _libraryIndex.Items.ToList();
+
+            // Match library panel behavior for "current filtered/visible items".
+            var enabledSourceIds = _libraryIndex.Sources
+                .Where(s => s.IsEnabled)
+                .Select(s => s.Id)
+                .ToHashSet();
+            items = items.Where(item => enabledSourceIds.Contains(item.SourceId)).ToList();
+
+            items = ApplyViewPresetFilter(items);
+
+            if (_selectedSourceId != null)
+            {
+                items = items.Where(item => item.SourceId == _selectedSourceId).ToList();
+            }
+
+            if (!string.IsNullOrWhiteSpace(_librarySearchText))
+            {
+                var searchLower = _librarySearchText.ToLowerInvariant();
+                items = items.Where(item =>
+                    item.FileName.ToLowerInvariant().Contains(searchLower) ||
+                    item.RelativePath.ToLowerInvariant().Contains(searchLower)
+                ).ToList();
+            }
+
+            bool respectFilters = LibraryRespectFiltersToggle?.IsChecked == true;
+            bool shouldApplyFilterState = respectFilters
+                && _currentFilterState != null
+                && _currentViewPreset != "Blacklisted";
+
+            if (shouldApplyFilterState && _currentFilterState != null)
+            {
+                var eligibleItems = _filterService.BuildEligibleSetWithoutFileCheck(_currentFilterState, _libraryIndex);
+                var eligiblePaths = new HashSet<string>(
+                    eligibleItems.Select(i => i.FullPath),
+                    StringComparer.OrdinalIgnoreCase);
+                items = items.Where(item => eligiblePaths.Contains(item.FullPath)).ToList();
+            }
+
+            return ApplySort(items);
+        }
+
+        private static bool ContainsTagCaseInsensitive(List<string>? tags, string tagName)
+        {
+            if (tags == null)
+            {
+                return false;
+            }
+
+            return tags.Any(tag => string.Equals(tag, tagName, StringComparison.OrdinalIgnoreCase));
+        }
+
         private void UpdateSelectionCountDisplay()
         {
             if (LibraryCountTextBlock != null)
@@ -6698,6 +6773,7 @@ namespace ReelRoulette
             // Filter presets
             public List<FilterPreset>? FilterPresets { get; set; }
             public string? ActivePresetName { get; set; } // Track which preset is currently active
+            public bool AutoTagScanFullLibrary { get; set; } = true;
 
             // Web Remote settings
             public WebRemote.WebRemoteSettings? WebRemote { get; set; }
@@ -6988,6 +7064,7 @@ namespace ReelRoulette
             // Load filter presets and active preset name
             _filterPresets = settings.FilterPresets;
             _activePresetName = settings.ActivePresetName;
+            _autoTagScanFullLibrary = settings.AutoTagScanFullLibrary;
             Log($"LoadSettings: Loaded {_filterPresets?.Count ?? 0} filter presets, active preset name: {_activePresetName ?? "None"}");
             
             // Update filter summary after loading (to show preset name if active)
@@ -7260,6 +7337,7 @@ namespace ReelRoulette
                 // Filter presets
                 settings.FilterPresets = _filterPresets;
                 settings.ActivePresetName = _activePresetName;
+                settings.AutoTagScanFullLibrary = _autoTagScanFullLibrary;
                 
                 // Dialog bounds are preserved from existing settings (not updated here)
                 
@@ -7861,6 +7939,93 @@ namespace ReelRoulette
                     UpdateLibraryPanel();
                 }
             }
+        }
+
+        private async void AutoTagMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            Log("UI ACTION: AutoTagMenuItem clicked");
+
+            if (_libraryIndex == null)
+            {
+                Log("AutoTagMenuItem_Click: Library index is not available");
+                StatusTextBlock.Text = "Library is not available.";
+                return;
+            }
+
+            var dialog = new AutoTagDialog(_libraryIndex, _autoTagScanFullLibrary, GetAutoTagScopeItems);
+            var result = await dialog.ShowDialog<bool?>(this);
+            if (result != true)
+            {
+                Log("AutoTagMenuItem_Click: Cancelled by user");
+                return;
+            }
+
+            _autoTagScanFullLibrary = dialog.ScanFullLibrary;
+            SaveSettings();
+
+            if (!dialog.ScanHasRun)
+            {
+                Log("AutoTagMenuItem_Click: OK without scan; setting saved only");
+                StatusTextBlock.Text = "Auto Tag setting saved.";
+                return;
+            }
+
+            var acceptedRows = dialog.GetAcceptedResults();
+            if (acceptedRows.Count == 0)
+            {
+                Log("AutoTagMenuItem_Click: Scan completed but no rows selected; setting saved only");
+                StatusTextBlock.Text = "No auto-tag matches selected.";
+                return;
+            }
+
+            int assignmentsAdded = 0;
+            var changedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var row in acceptedRows)
+            {
+                foreach (var path in row.SelectedItemPaths)
+                {
+                    var item = _libraryService.FindItemByPath(path);
+                    if (item == null)
+                    {
+                        continue;
+                    }
+
+                    item.Tags ??= new List<string>();
+                    if (ContainsTagCaseInsensitive(item.Tags, row.TagName))
+                    {
+                        continue;
+                    }
+
+                    item.Tags.Add(row.TagName);
+                    _libraryService.UpdateItem(item);
+                    assignmentsAdded++;
+                    changedPaths.Add(item.FullPath);
+                }
+            }
+
+            if (assignmentsAdded == 0)
+            {
+                Log("AutoTagMenuItem_Click: No new tag assignments were needed");
+                StatusTextBlock.Text = "No new tags to apply.";
+                return;
+            }
+
+            await Task.Run(() => _libraryService.SaveLibrary());
+            _libraryIndex = _libraryService.LibraryIndex;
+
+            if (_showLibraryPanel)
+            {
+                UpdateLibraryPanel();
+            }
+
+            if (_currentVideoPath != null && changedPaths.Contains(_currentVideoPath))
+            {
+                UpdateCurrentFileStatsUi();
+            }
+
+            Log($"AutoTagMenuItem_Click: Applied {assignmentsAdded} tag assignments to {changedPaths.Count} item(s) across {acceptedRows.Count} selected tag row(s)");
+            StatusTextBlock.Text = $"Applied {assignmentsAdded} tags to {changedPaths.Count} item(s).";
         }
 
         private async void ManageSourcesMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
