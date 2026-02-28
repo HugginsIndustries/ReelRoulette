@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>ReelRoulette Remote</title>
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <div id="app">
+    <header class="top-bar">
+      <div class="top-bar-title">
+        <h1>ReelRoulette</h1>
+        <div id="pair-section" class="pair-section" style="display:none">
+          <label>Pairing token: <input type="text" id="pair-token" placeholder="Enter token"></label>
+          <button id="pair-btn">Pair</button>
+        </div>
+      </div>
+      <select id="preset-select" aria-label="Choose preset">
+        <option value="">Loading...</option>
+      </select>
+      <div class="photo-duration-wrap">
+        <label>Photo Duration: <input type="number" id="photo-duration" min="1" max="300" step="1" value="15" aria-label="Photo duration in seconds"><span class="unit">s</span></label>
+      </div>
+      <div id="now-playing" class="now-playing" style="display:none">
+        <span id="now-playing-name"></span>
+        <span id="now-playing-duration" class="muted"></span>
+      </div>
+    </header>
+    <main>
+      <div id="media-container" class="media-container">
+        <video id="video" playsinline preload="auto" style="display:none"></video>
+        <img id="photo" alt="Photo" style="display:none">
+        <div id="empty-state" class="empty-state">Select a preset and click here</div>
+        <div id="overlay-controls" class="overlay-controls">
+          <button id="favorite-btn" class="overlay-btn overlay-toggle overlay-corner-btn" aria-label="Favorite" title="Favorite">★</button>
+          <button id="blacklist-btn" class="overlay-btn overlay-toggle overlay-corner-btn" aria-label="Blacklist" title="Blacklist">👎</button>
+          <div class="overlay-controls-row">
+            <button id="prev-btn" class="overlay-btn" aria-label="Previous" title="Previous">⏮</button>
+            <button id="play-btn" class="overlay-btn overlay-btn-play" aria-label="Play/Pause" title="Play/Pause">⏯</button>
+            <button id="next-btn" class="overlay-btn" aria-label="Next" title="Next">⏭</button>
+            <button id="loop-btn" class="overlay-btn overlay-toggle" aria-label="Loop" title="Loop">🔂</button>
+            <button id="autoplay-btn" class="overlay-btn overlay-toggle" aria-label="Autoplay" title="Autoplay">➡️</button>
+            <button id="fullscreen-btn" class="overlay-btn" aria-label="Fullscreen" title="Fullscreen">⛶</button>
+          </div>
+          <div id="seek-row" class="overlay-seek-row" style="display:none">
+            <input type="range" id="seek-slider" min="0" max="100" value="0" aria-label="Seek">
+            <span id="time-display">0:00 / 0:00</span>
+          </div>
+        </div>
+      </div>
+    </main>
+    <div id="status" class="status status-bottom"></div>
+  </div>
+  <script src="/app.js"></script>
+</body>
+</html>

@@ -44,7 +44,7 @@ namespace ReelRoulette
         AlwaysRemoveFromLibrary = 1 // Always remove from library without showing dialog
     }
 
-    public partial class MainWindow : Window, INotifyPropertyChanged
+    public partial class MainWindow : Window, INotifyPropertyChanged, WebRemote.IWebRemoteApiServices
     {
         private readonly string[] _videoExtensions =
         {
@@ -113,6 +113,15 @@ namespace ReelRoulette
         private bool _backupLibraryEnabled = true;
         private int _minimumBackupGapMinutes = 15;
         private int _numberOfBackups = 10;
+
+        // Web Remote settings
+        private bool _webRemoteEnabled = false;
+        private int _webRemotePort = 51234;
+        private bool _webRemoteBindOnLan = false;
+        private string _webRemoteLanHostname = "reel";
+        private WebRemote.WebRemoteAuthMode _webRemoteAuthMode = WebRemote.WebRemoteAuthMode.TokenRequired;
+        private string? _webRemoteSharedToken;
+        private WebRemote.WebRemoteServer? _webRemoteServer;
 
         // Duration scanning
         private CancellationTokenSource? _scanCancellationSource;
@@ -878,6 +887,26 @@ namespace ReelRoulette
                         };
                         Log("MainWindow Loaded event: GridSplitter event handler set up.");
                     }
+
+                    // Start Web Remote server if enabled
+                    if (_webRemoteEnabled)
+                    {
+                        EnsureWebRemoteToken();
+                        _webRemoteServer ??= new WebRemote.WebRemoteServer();
+                        var wrSettings = new WebRemote.WebRemoteSettings
+                        {
+                            Enabled = _webRemoteEnabled,
+                            Port = _webRemotePort,
+                            BindOnLan = _webRemoteBindOnLan,
+                            LanHostname = _webRemoteLanHostname,
+                            AuthMode = _webRemoteAuthMode,
+                            SharedToken = _webRemoteSharedToken
+                        };
+#pragma warning disable CS4014
+                        _webRemoteServer.StartAsync(wrSettings, this, Log);
+#pragma warning restore CS4014
+                        Log("MainWindow Loaded event: Web Remote server start requested.");
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -1058,6 +1087,22 @@ namespace ReelRoulette
                 _photoDisplayTimer = null;
             }
 
+            // Stop Web Remote server
+            if (_webRemoteServer != null)
+            {
+                try
+                {
+                    _webRemoteServer.StopAsync().GetAwaiter().GetResult();
+                    _webRemoteServer.Dispose();
+                    Log("OnClosed: Web Remote server stopped.");
+                }
+                catch (Exception ex)
+                {
+                    Log($"OnClosed: ERROR stopping Web Remote server - {ex.Message}");
+                }
+                _webRemoteServer = null;
+            }
+
             base.OnClosed(e);
         }
 
@@ -1112,8 +1157,25 @@ namespace ReelRoulette
                         }
                         else if (_autoPlayNext)
                         {
-                            Log("PhotoDisplayTimer_Elapsed: Auto-play next enabled - playing random media");
-                            await PlayRandomVideoAsync();
+                            bool advanced = false;
+                            await Dispatcher.UIThread.InvokeAsync(() =>
+                            {
+                                if (_timelineIndex < _playbackTimeline.Count - 1)
+                                {
+                                    advanced = true;
+                                    _isNavigatingTimeline = true;
+                                    _timelineIndex++;
+                                    var nextVideo = _playbackTimeline[_timelineIndex];
+                                    PlayVideo(nextVideo, addToHistory: false);
+                                    PreviousButton.IsEnabled = _timelineIndex > 0;
+                                    NextButton.IsEnabled = _playbackTimeline.Count > 0;
+                                }
+                            });
+                            if (!advanced)
+                            {
+                                Log("PhotoDisplayTimer_Elapsed: Auto-play next enabled - playing random media");
+                                await PlayRandomVideoAsync();
+                            }
                         }
                         else
                         {
@@ -1169,10 +1231,25 @@ namespace ReelRoulette
                 }
                 else if (_autoPlayNext && !_isLoopEnabled)
                 {
-                    Log("HandleEndReachedAsync: Auto-play next enabled - playing random media");
-                    // If loop is off, honor autoplay to move to the next random selection
-                    // Call PlayRandomVideoAsync directly - it handles UI thread marshalling internally
-                    await PlayRandomVideoAsync();
+                    bool advanced = false;
+                    await Dispatcher.UIThread.InvokeAsync(() =>
+                    {
+                        if (_timelineIndex < _playbackTimeline.Count - 1)
+                        {
+                            advanced = true;
+                            _isNavigatingTimeline = true;
+                            _timelineIndex++;
+                            var nextVideo = _playbackTimeline[_timelineIndex];
+                            PlayVideo(nextVideo, addToHistory: false);
+                            PreviousButton.IsEnabled = _timelineIndex > 0;
+                            NextButton.IsEnabled = _playbackTimeline.Count > 0;
+                        }
+                    });
+                    if (!advanced)
+                    {
+                        Log("HandleEndReachedAsync: Auto-play next enabled - playing random media");
+                        await PlayRandomVideoAsync();
+                    }
                 }
                 else
                 {
@@ -1238,7 +1315,8 @@ namespace ReelRoulette
                     
                     _libraryService.UpdateItem(item);
                     Log($"FavoriteToggle_Changed: Updated library item - IsFavorite: {oldFavorite} -> {isFavorite}");
-                    
+                    _webRemoteServer?.BroadcastLibraryItemChanged(_currentVideoPath, isFavorite, item.IsBlacklisted);
+
                     if (isFavorite)
                     {
                         StatusTextBlock.Text = $"Added to favorites: {System.IO.Path.GetFileName(_currentVideoPath)}";
@@ -4407,6 +4485,7 @@ namespace ReelRoulette
                 Log($"UI ACTION: LibraryItemFavorite toggled for '{item.FileName}' to: {toggleState} (was: {libraryItem.IsFavorite})");
                 libraryItem.IsFavorite = toggleState;
                 _libraryService.UpdateItem(libraryItem);
+                _webRemoteServer?.BroadcastLibraryItemChanged(libraryItem.FullPath, libraryItem.IsFavorite, libraryItem.IsBlacklisted);
                 _ = Task.Run(() => _libraryService.SaveLibrary());
                 UpdateLibraryPanel();
             }
@@ -4462,6 +4541,7 @@ namespace ReelRoulette
                 Log($"UI ACTION: LibraryItemBlacklist toggled for '{item.FileName}' to: {toggleState} (was: {libraryItem.IsBlacklisted})");
                 libraryItem.IsBlacklisted = toggleState;
                 _libraryService.UpdateItem(libraryItem);
+                _webRemoteServer?.BroadcastLibraryItemChanged(libraryItem.FullPath, libraryItem.IsFavorite, libraryItem.IsBlacklisted);
                 _ = Task.Run(() => _libraryService.SaveLibrary());
                 UpdateLibraryPanel();
                 // Rebuild queue if item was blacklisted
@@ -4581,6 +4661,7 @@ namespace ReelRoulette
                 {
                     item.IsFavorite = true;
                     _libraryService.UpdateItem(item);
+                    _webRemoteServer?.BroadcastLibraryItemChanged(item.FullPath, item.IsFavorite, item.IsBlacklisted);
                 }
             }
             
@@ -4604,6 +4685,7 @@ namespace ReelRoulette
                 {
                     item.IsFavorite = false;
                     _libraryService.UpdateItem(item);
+                    _webRemoteServer?.BroadcastLibraryItemChanged(item.FullPath, item.IsFavorite, item.IsBlacklisted);
                 }
             }
             
@@ -4627,6 +4709,7 @@ namespace ReelRoulette
                 {
                     item.IsBlacklisted = true;
                     _libraryService.UpdateItem(item);
+                    _webRemoteServer?.BroadcastLibraryItemChanged(item.FullPath, item.IsFavorite, item.IsBlacklisted);
                 }
             }
             
@@ -4651,6 +4734,7 @@ namespace ReelRoulette
                 {
                     item.IsBlacklisted = false;
                     _libraryService.UpdateItem(item);
+                    _webRemoteServer?.BroadcastLibraryItemChanged(item.FullPath, item.IsFavorite, item.IsBlacklisted);
                 }
             }
             
@@ -4929,6 +5013,7 @@ namespace ReelRoulette
                     {
                         item.IsFavorite = false;
                         _libraryService.UpdateItem(item);
+                        _webRemoteServer?.BroadcastLibraryItemChanged(item.FullPath, item.IsFavorite, item.IsBlacklisted);
                         
                         // Save library asynchronously
                         _ = Task.Run(() =>
@@ -6198,7 +6283,7 @@ namespace ReelRoulette
 
                 // Update Previous/Next button states
                 PreviousButton.IsEnabled = _timelineIndex > 0;
-                NextButton.IsEnabled = _timelineIndex < _playbackTimeline.Count - 1;
+                NextButton.IsEnabled = _playbackTimeline.Count > 0;
                 Log($"PlayVideo: Previous button enabled: {PreviousButton.IsEnabled}, Next button enabled: {NextButton.IsEnabled}");
 
                 // Initialize volume slider if first video
@@ -6423,6 +6508,123 @@ namespace ReelRoulette
 
         #endregion
 
+        #region IWebRemoteApiServices
+
+        LibraryIndex? WebRemote.IWebRemoteApiServices.GetLibraryIndex() => _libraryIndex;
+
+        FilterService WebRemote.IWebRemoteApiServices.GetFilterService() => _filterService;
+
+        IReadOnlyList<FilterPreset> WebRemote.IWebRemoteApiServices.GetFilterPresets()
+            => (IReadOnlyList<FilterPreset>?)_filterPresets ?? Array.Empty<FilterPreset>();
+
+        FilterPreset? WebRemote.IWebRemoteApiServices.GetPresetByName(string presetName)
+        {
+            if (string.IsNullOrEmpty(presetName) || _filterPresets == null)
+                return null;
+            return _filterPresets.FirstOrDefault(p =>
+                string.Equals(p.Name, presetName, StringComparison.OrdinalIgnoreCase));
+        }
+
+        LibraryItem? WebRemote.IWebRemoteApiServices.GetItemByPath(string fullPath)
+        {
+            if (string.IsNullOrEmpty(fullPath) || _libraryIndex == null)
+                return null;
+            return _libraryIndex.Items.FirstOrDefault(i =>
+                string.Equals(i.FullPath, fullPath, StringComparison.OrdinalIgnoreCase));
+        }
+
+        bool WebRemote.IWebRemoteApiServices.SetItemFavorite(string fullPath, bool isFavorite)
+        {
+            if (string.IsNullOrEmpty(fullPath) || _libraryIndex == null) return false;
+            var item = _libraryService.FindItemByPath(fullPath);
+            if (item == null || item.IsFavorite == isFavorite) return false;
+            item.IsFavorite = isFavorite;
+            if (isFavorite && item.IsBlacklisted) item.IsBlacklisted = false;
+            _libraryService.UpdateItem(item);
+            Log($"SetItemFavorite (Web): {Path.GetFileName(fullPath)} -> {isFavorite}");
+            _ = Task.Run(() => { try { _libraryService.SaveLibrary(); } catch { } });
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                var fileName = Path.GetFileName(fullPath);
+                var isCurrentItem = string.Equals(_currentVideoPath, fullPath, StringComparison.OrdinalIgnoreCase);
+                if (isCurrentItem)
+                {
+                    StatusTextBlock.Text = isFavorite ? $"Added to favorites: {fileName}" : $"Removed from favorites: {fileName}";
+                    FavoriteToggle.IsChecked = isFavorite;
+                    if (isFavorite) BlacklistToggle.IsChecked = false;
+                    UpdateCurrentFileStatsUi();
+                }
+                else
+                {
+                    StatusTextBlock.Text = isFavorite ? $"Synced favorite: {fileName}" : $"Synced unfavorite: {fileName}";
+                }
+
+                if (_showLibraryPanel) UpdateLibraryPanel();
+                RecalculateGlobalStats();
+            });
+            return true;
+        }
+
+        bool WebRemote.IWebRemoteApiServices.SetItemBlacklist(string fullPath, bool isBlacklisted)
+        {
+            if (string.IsNullOrEmpty(fullPath) || _libraryIndex == null) return false;
+            var item = _libraryService.FindItemByPath(fullPath);
+            if (item == null || item.IsBlacklisted == isBlacklisted) return false;
+            item.IsBlacklisted = isBlacklisted;
+            if (isBlacklisted && item.IsFavorite) item.IsFavorite = false;
+            _libraryService.UpdateItem(item);
+            Log($"SetItemBlacklist (Web): {Path.GetFileName(fullPath)} -> {isBlacklisted}");
+            _ = Task.Run(() => { try { _libraryService.SaveLibrary(); } catch { } });
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                var fileName = Path.GetFileName(fullPath);
+                var isCurrentItem = string.Equals(_currentVideoPath, fullPath, StringComparison.OrdinalIgnoreCase);
+                if (isCurrentItem)
+                {
+                    StatusTextBlock.Text = isBlacklisted ? $"Blacklisted: {fileName}" : $"Removed from blacklist: {fileName}";
+                    BlacklistToggle.IsChecked = isBlacklisted;
+                    if (isBlacklisted) FavoriteToggle.IsChecked = false;
+                    UpdateCurrentFileStatsUi();
+                }
+                else
+                {
+                    StatusTextBlock.Text = isBlacklisted ? $"Synced blacklist: {fileName}" : $"Synced unblacklist: {fileName}";
+                }
+
+                if (isBlacklisted)
+                {
+                    var q = _playQueue.ToList();
+                    q.Remove(fullPath);
+                    _playQueue = new Queue<string>(q);
+                    RebuildPlayQueueIfNeeded();
+                }
+                else
+                {
+                    RebuildPlayQueueIfNeeded();
+                }
+
+                if (_showLibraryPanel) UpdateLibraryPanel();
+                RecalculateGlobalStats();
+            });
+            return true;
+        }
+
+        /// <summary>
+        /// Ensures a shared token exists when auth is enabled. Generates and persists if blank.
+        /// </summary>
+        private void EnsureWebRemoteToken()
+        {
+            if (!_webRemoteEnabled || _webRemoteAuthMode != WebRemote.WebRemoteAuthMode.TokenRequired)
+                return;
+            if (!string.IsNullOrEmpty(_webRemoteSharedToken))
+                return;
+            _webRemoteSharedToken = Guid.NewGuid().ToString("N");
+            SaveSettings();
+            Log($"WebRemote: Auto-generated shared token (Settings > Web Remote to view/copy)");
+        }
+
+        #endregion
+
         #region View Preferences
 
         private class AppSettings
@@ -6496,6 +6698,9 @@ namespace ReelRoulette
             // Filter presets
             public List<FilterPreset>? FilterPresets { get; set; }
             public string? ActivePresetName { get; set; } // Track which preset is currently active
+
+            // Web Remote settings
+            public WebRemote.WebRemoteSettings? WebRemote { get; set; }
         }
 
         // Static methods for dialog persistence (can be called from dialogs)
@@ -6723,6 +6928,21 @@ namespace ReelRoulette
             _minimumBackupGapMinutes = settings.MinimumBackupGapMinutes > 0 ? settings.MinimumBackupGapMinutes : 15;
             _numberOfBackups = settings.NumberOfBackups > 0 ? settings.NumberOfBackups : 10;
             Log($"LoadSettings: Restored backup settings - Enabled: {_backupLibraryEnabled}, MinGap: {_minimumBackupGapMinutes} minutes, Count: {_numberOfBackups}");
+
+            // Load Web Remote settings
+            var wr = settings.WebRemote;
+            if (wr != null)
+            {
+                _webRemoteEnabled = wr.Enabled;
+                _webRemotePort = wr.Port > 0 ? wr.Port : 51234;
+                _webRemoteBindOnLan = wr.BindOnLan;
+                _webRemoteLanHostname = NormalizeWebRemoteLanHostname(wr.LanHostname);
+                _webRemoteAuthMode = wr.AuthMode;
+                _webRemoteSharedToken = wr.SharedToken;
+                Log($"LoadSettings: Restored Web Remote settings - Enabled: {_webRemoteEnabled}, Port: {_webRemotePort}, BindOnLan: {_webRemoteBindOnLan}, LanHostname: {_webRemoteLanHostname}, AuthMode: {_webRemoteAuthMode}");
+            }
+            if (OpenWebRemoteMenuItem != null)
+                OpenWebRemoteMenuItem.IsEnabled = _webRemoteEnabled;
             
             // Bug fix: Initialize _lastNonZeroVolume with saved volume level
             // This ensures unmuting restores the correct volume, not the default (100)
@@ -7022,7 +7242,18 @@ namespace ReelRoulette
                 settings.BackupLibraryEnabled = _backupLibraryEnabled;
                 settings.MinimumBackupGapMinutes = _minimumBackupGapMinutes;
                 settings.NumberOfBackups = _numberOfBackups;
-                
+
+                // Web Remote settings
+                settings.WebRemote = new WebRemote.WebRemoteSettings
+                {
+                    Enabled = _webRemoteEnabled,
+                    Port = _webRemotePort,
+                    BindOnLan = _webRemoteBindOnLan,
+                    LanHostname = NormalizeWebRemoteLanHostname(_webRemoteLanHostname),
+                    AuthMode = _webRemoteAuthMode,
+                    SharedToken = _webRemoteSharedToken
+                };
+
                 // Filter state (always save an object, never null)
                 settings.FilterState = _currentFilterState ?? new FilterState();
                 
@@ -7755,7 +7986,13 @@ namespace ReelRoulette
                 _missingFileBehavior,
                 _backupLibraryEnabled,
                 _minimumBackupGapMinutes,
-                _numberOfBackups
+                _numberOfBackups,
+                _webRemoteEnabled,
+                _webRemotePort,
+                _webRemoteBindOnLan,
+                _webRemoteLanHostname,
+                _webRemoteAuthMode,
+                _webRemoteSharedToken
             );
             
             await dialog.ShowDialog<bool?>(this);
@@ -7809,7 +8046,44 @@ namespace ReelRoulette
                     _minimumBackupGapMinutes = dialog.GetMinimumBackupGapMinutes();
                     _numberOfBackups = dialog.GetNumberOfBackups();
                     Log($"Settings: Backup settings changed - Enabled: {oldBackupEnabled} -> {_backupLibraryEnabled}, MinGap: {oldMinGap} -> {_minimumBackupGapMinutes} minutes, Count: {oldBackupCount} -> {_numberOfBackups}");
-                    
+
+                    // Update Web Remote settings
+                    _webRemoteEnabled = dialog.GetWebRemoteEnabled();
+                    _webRemotePort = dialog.GetWebRemotePort();
+                    _webRemoteBindOnLan = dialog.GetWebRemoteBindOnLan();
+                    _webRemoteLanHostname = NormalizeWebRemoteLanHostname(dialog.GetWebRemoteLanHostname());
+                    _webRemoteAuthMode = dialog.GetWebRemoteAuthMode();
+                    _webRemoteSharedToken = dialog.GetWebRemoteSharedToken();
+                    Log($"Settings: Web Remote settings changed - Enabled: {_webRemoteEnabled}, Port: {_webRemotePort}, BindOnLan: {_webRemoteBindOnLan}, LanHostname: {_webRemoteLanHostname}, AuthMode: {_webRemoteAuthMode}");
+
+                    // Restart Web Remote server with new settings
+                    if (_webRemoteServer != null)
+                    {
+                        _webRemoteServer.StopAsync().ConfigureAwait(false).GetAwaiter().GetResult();
+                        _webRemoteServer.Dispose();
+                        _webRemoteServer = null;
+                    }
+                    if (_webRemoteEnabled)
+                    {
+                        EnsureWebRemoteToken();
+                        _webRemoteServer = new WebRemote.WebRemoteServer();
+                        var wrSettings = new WebRemote.WebRemoteSettings
+                        {
+                            Enabled = true,
+                            Port = _webRemotePort,
+                            BindOnLan = _webRemoteBindOnLan,
+                            LanHostname = _webRemoteLanHostname,
+                            AuthMode = _webRemoteAuthMode,
+                            SharedToken = _webRemoteSharedToken
+                        };
+#pragma warning disable CS4014
+                        _webRemoteServer.StartAsync(wrSettings, this, Log);
+#pragma warning restore CS4014
+                        Log("Settings: Web Remote server restarted with new settings.");
+                    }
+                    if (OpenWebRemoteMenuItem != null)
+                        OpenWebRemoteMenuItem.IsEnabled = _webRemoteEnabled;
+
                     // Update UI controls (these will trigger change handlers, but won't save due to flag)
                     Dispatcher.UIThread.Post(() =>
                     {
@@ -7888,6 +8162,49 @@ namespace ReelRoulette
                 Log("Settings: User cancelled, no changes applied");
             }
         }
+
+        private void OpenWebRemoteMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            if (!_webRemoteEnabled)
+            {
+                StatusTextBlock.Text = "Enable Web Remote in Settings first.";
+                return;
+            }
+            var url = $"http://localhost:{_webRemotePort}/";
+            try
+            {
+                var processInfo = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = url,
+                    UseShellExecute = true
+                };
+                System.Diagnostics.Process.Start(processInfo);
+                Log($"OpenWebRemote: Opened {url}");
+                if (_webRemoteBindOnLan)
+                {
+                    var host = NormalizeWebRemoteLanHostname(_webRemoteLanHostname);
+                    Log($"OpenWebRemote: LAN hostname hint http://{host}.local:{_webRemotePort}/ (network mDNS/DNS support required)");
+                }
+            }
+            catch (Exception ex)
+            {
+                Log($"OpenWebRemote: ERROR - {ex.Message}");
+                StatusTextBlock.Text = $"Could not open browser: {ex.Message}";
+            }
+        }
+
+        private static string NormalizeWebRemoteLanHostname(string? value)
+        {
+            var raw = string.IsNullOrWhiteSpace(value) ? "reel" : value.Trim().ToLowerInvariant();
+            var chars = raw.Where(c => (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-').ToArray();
+            var normalized = new string(chars).Trim('-');
+            if (string.IsNullOrWhiteSpace(normalized))
+                return "reel";
+            if (normalized.Length > 63)
+                normalized = normalized.Substring(0, 63).Trim('-');
+            return string.IsNullOrWhiteSpace(normalized) ? "reel" : normalized;
+        }
+
 
         private bool IsFullScreen
         {
@@ -8421,7 +8738,8 @@ namespace ReelRoulette
                     
                     _libraryService.UpdateItem(item);
                     Log($"BlacklistToggle_Changed: Updated library item - IsBlacklisted: {oldBlacklisted} -> {isBlacklisted}");
-                    
+                    _webRemoteServer?.BroadcastLibraryItemChanged(path, item.IsFavorite, isBlacklisted);
+
                     // Save library asynchronously
                     _ = Task.Run(() =>
                     {
@@ -8543,21 +8861,22 @@ namespace ReelRoulette
         {
             if (_playbackTimeline.Count == 0)
             {
-                // No timeline, do nothing (button should be disabled)
                 return;
             }
 
             if (_timelineIndex < _playbackTimeline.Count - 1)
             {
-                // Navigate forward in timeline
                 _isNavigatingTimeline = true;
                 _timelineIndex++;
                 var nextVideo = _playbackTimeline[_timelineIndex];
                 PlayVideo(nextVideo, addToHistory: false);
-                PreviousButton.IsEnabled = true;
-                NextButton.IsEnabled = _timelineIndex < _playbackTimeline.Count - 1;
+                PreviousButton.IsEnabled = _timelineIndex > 0;
+                NextButton.IsEnabled = _playbackTimeline.Count > 0;
             }
-            // At end of timeline - do nothing (button is disabled, user can use "R" for random)
+            else
+            {
+                PlayRandomVideo();
+            }
         }
 
         private void PlayPauseButton_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -9541,10 +9860,9 @@ namespace ReelRoulette
 
         private void HandleNextShortcut()
         {
-            // Only proceed if there's a next video in the timeline (same check as button enabled state)
-            if (_playbackTimeline.Count == 0 || _timelineIndex >= _playbackTimeline.Count - 1)
+            if (_playbackTimeline.Count == 0)
             {
-                return; // No next video, do nothing (user can use "R" for random)
+                return;
             }
             NextButton_Click(this, new RoutedEventArgs());
         }

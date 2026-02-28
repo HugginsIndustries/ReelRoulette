@@ -2,6 +2,81 @@
 
 ## Unreleased
 
+- **Implement Local Web Remote UI (Preset-Based Streaming Webapp)** (2026-02-27):
+  - Add Web Remote settings (Settings > Web Remote tab): enable/disable, port, bind on LAN, auth mode (off/token), shared token, and configurable LAN hostname (default `reel`).
+  - Self-host Kestrel HTTP server with minimal APIs; start when enabled, stop on disable or app exit.
+  - Provide Web Remote API endpoints:
+    - `GET /api/version`
+    - `GET /api/presets`
+    - `POST /api/random`
+    - `GET /api/media/{token}`
+    - `GET/POST /api/pair`
+    - `POST /api/favorite`
+    - `POST /api/blacklist`
+    - `POST /api/library-states`
+    - `POST /api/events/ack`
+    - `POST /api/events/client-log`
+    - `GET /api/events` (SSE)
+  - Add media streaming with HTTP Range support for seeking in video/audio.
+  - Add optional shared-token auth with pairing flow (cookie-based), auto-generate token when auth is enabled and token is blank, allow static UI assets without auth, and show pairing form when API returns 401.
+  - Add per-client session store for history (Previous, repeat avoidance).
+
+  - **Embedded static Web UI (`web-remote-dev` override supported)**:
+    - **Top bar and metadata**:
+      - responsive top bar with title/status, preset selector, photo duration, and now-playing metadata.
+      - move status text from header to below media container; remove footer version text.
+      - rename `Photo` label to `Photo Duration`, add spacing before `s`, and hide desktop number-input spinners.
+      - truncate long now-playing filenames to 45 chars with ellipsis and show full filename via hover tooltip.
+    - **Media layout and rendering**:
+      - serve from embedded resources with optional disk override (`web-remote-dev` folder).
+      - fullscreen via media container; preload/playsinline support.
+      - stop video when switching to photo (fix audio bleed).
+      - evolve layout from initial wider design to full-width viewport behavior:
+        - remove `#app` max-width cap.
+        - replace fixed 16:9 with flexible media sizing.
+        - lock page to viewport height (`100dvh` + `overflow: hidden` + flex `min-height: 0`) so media fits available space with `object-fit: contain`.
+    - **Playback controls and behavior**:
+      - custom overlay controls: prev/play/next/favorite/blacklist/loop/autoplay/fullscreen + seek bar.
+      - place favorite (★) and blacklist (👎) controls together in the top-right media overlay corner, ordered as ★ then 👎 to match desktop.
+      - no native video controls.
+      - loop/autoplay as toggle buttons (🔂➡️).
+      - photo duration range: 1–300s.
+      - history navigation (prev/next) separate from random; next/autoplay play through history before random fallback.
+      - touch gestures: swipe left/right prev/next (next loads random at end); fix tap/click double-fire on mobile.
+      - update interaction model so tap/click toggles overlay visibility (persistent across media changes), remove tap/click play-pause on media, remove auto-hide/hover auto-show, and reduce overlay opacity.
+      - prevent seek/overlay touches from triggering swipe previous/next by excluding overlay-origin touches and stopping overlay touch propagation (`touchstart`/`touchmove`/`touchend`), while letting non-control overlay space click through to media-container tap/click handlers (overlay toggle and initial empty-state click).
+    - **Sync UX and error/status feedback**:
+      - favorite/blacklist buttons (★👎) sync to desktop library via API.
+      - show synced status text on web for desktop-driven favorite/blacklist changes regardless of currently loaded media.
+      - show explicit status on favorite/blacklist API failures.
+      - empty-state copy updated to: `Select a preset and click here`.
+
+  - Add real-time desktop↔web sync hardening:
+    - SSE `/api/events` for desktop→web live sync (`LibraryItemChanged`).
+    - normalize SSE path matching (case/slash-insensitive) to prevent toggle desync.
+    - cache synced favorite/blacklist state per media path so updates apply even when different media is currently playing.
+    - apply cached state when loading random/history media to keep toggles consistent across devices.
+    - add `/api/library-states` reconcile endpoint and client resync on SSE open/pair for missed updates.
+    - add periodic reconcile polling fallback (reduced to 5s) and lifecycle reconnect triggers (`visibility`/`focus`/`pageshow`/`online`).
+    - add SSE event IDs + Last-Event-ID replay buffer.
+    - include `clientId` in SSE and add `/api/events/ack` lag tracking.
+    - add ACK heartbeat from web clients and prune stale ACK clients to keep telemetry accurate.
+    - force anti-buffering SSE behavior (`no-transform`, `X-Accel-Buffering: no`, `DisableBuffering`).
+    - auto-reconnect SSE (including after pairing), add SSE ping events, client watchdog stale reconnect, and `retry: 1000`.
+    - fix client revision ordering by preventing local optimistic updates from using timestamp revisions that outrank server SSE revisions.
+    - add detailed Web Remote sync logging to `last.log` (connect/disconnect/replay/reconcile/API mutations/broadcast recipients/ack lag/heartbeat-lifecycle reconnect/SSE stale reconnect/client errors via `/api/events/client-log`).
+
+  - Make favorite/blacklist API behavior idempotent so stale web state self-recovers.
+  - Broadcast desktop-side library/context-menu/favorites-panel favorite/blacklist mutations to SSE clients.
+  - Refresh desktop library/global stats and show synced status for web-originated favorite/blacklist changes even when a different media file is currently loaded.
+  - Add `Open Web Remote` menu item (View) to launch browser when enabled.
+  - Keep desktop playback alignment updates: Next loads random at end of timeline; autoplay plays through history before new random.
+  - Add LAN discoverability and convenience:
+    - true mDNS/DNS-SD advertisement (`_http._tcp`) using configured hostname (`<hostname>.local`) with host/path TXT hints.
+    - proper unadvertise/cleanup on server stop/restart.
+    - optional LAN port-80 redirect listener (when available) forwarding `http://<hostname>.local` to configured Web Remote port; fallback to explicit `:<port>` when port 80 is unavailable.
+  - Default remains: disabled, localhost-only, port `51234`.
+
 - **Fix Volume Control Issues** (2026-01-08):
   - **Volume Slider**: Fixed lag when dragging by adding debounce; applies immediately on release
   - **Mute Bug**: Fixed inability to unmute videos during playback

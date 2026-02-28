@@ -269,6 +269,9 @@
                 <Separator/>
                 <MenuItem Header="Settings (S)"
                           Click="SettingsMenuItem_Click"/>
+                <MenuItem x:Name="OpenWebRemoteMenuItem"
+                          Header="Open Web Remote"
+                          Click="OpenWebRemoteMenuItem_Click"/>
             </MenuItem>
         </Menu>
 

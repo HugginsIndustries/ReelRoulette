@@ -352,6 +352,14 @@ namespace ReelRoulette
         private int _minimumBackupGapMinutes = 15;
         private int _numberOfBackups = 10;
 
+        // Web Remote settings
+        private bool _webRemoteEnabled = false;
+        private int _webRemotePort = 51234;
+        private bool _webRemoteBindOnLan = false;
+        private string _webRemoteLanHostname = "reel";
+        private WebRemote.WebRemoteAuthMode _webRemoteAuthMode = WebRemote.WebRemoteAuthMode.TokenRequired;
+        private string? _webRemoteSharedToken;
+
         // Image scaling mode properties
         public bool ImageScalingOff
         {
@@ -498,6 +506,103 @@ namespace ReelRoulette
             }
         }
 
+        // Web Remote settings properties
+        public bool WebRemoteEnabled
+        {
+            get => _webRemoteEnabled;
+            set
+            {
+                if (_webRemoteEnabled != value)
+                {
+                    _webRemoteEnabled = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public int WebRemotePort
+        {
+            get => _webRemotePort;
+            set
+            {
+                if (_webRemotePort != value)
+                {
+                    _webRemotePort = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public bool WebRemoteBindOnLan
+        {
+            get => _webRemoteBindOnLan;
+            set
+            {
+                if (_webRemoteBindOnLan != value)
+                {
+                    _webRemoteBindOnLan = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public string WebRemoteLanHostname
+        {
+            get => _webRemoteLanHostname;
+            set
+            {
+                var next = string.IsNullOrWhiteSpace(value) ? "reel" : value.Trim();
+                if (_webRemoteLanHostname != next)
+                {
+                    _webRemoteLanHostname = next;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public bool WebRemoteAuthOff
+        {
+            get => _webRemoteAuthMode == WebRemote.WebRemoteAuthMode.Off;
+            set
+            {
+                if (value)
+                {
+                    _webRemoteAuthMode = WebRemote.WebRemoteAuthMode.Off;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(WebRemoteAuthTokenRequired));
+                }
+            }
+        }
+
+        public bool WebRemoteAuthTokenRequired
+        {
+            get => _webRemoteAuthMode == WebRemote.WebRemoteAuthMode.TokenRequired;
+            set
+            {
+                if (value)
+                {
+                    _webRemoteAuthMode = WebRemote.WebRemoteAuthMode.TokenRequired;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(WebRemoteAuthOff));
+                }
+            }
+        }
+
+        public string? WebRemoteSharedToken
+        {
+            get => _webRemoteSharedToken;
+            set
+            {
+                if (_webRemoteSharedToken != value)
+                {
+                    _webRemoteSharedToken = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public WebRemote.WebRemoteAuthMode WebRemoteAuthMode => _webRemoteAuthMode;
+
         // Helper methods to get/set from AppSettings-like structure
         public void LoadFromSettings(
             bool loopEnabled,
@@ -518,7 +623,13 @@ namespace ReelRoulette
             MissingFileBehavior missingFileBehavior = MissingFileBehavior.AlwaysShowDialog,
             bool backupLibraryEnabled = true,
             int minimumBackupGapMinutes = 15,
-            int numberOfBackups = 10)
+            int numberOfBackups = 10,
+            bool webRemoteEnabled = false,
+            int webRemotePort = 51234,
+            bool webRemoteBindOnLan = false,
+            string? webRemoteLanHostname = "reel",
+            WebRemote.WebRemoteAuthMode webRemoteAuthMode = WebRemote.WebRemoteAuthMode.TokenRequired,
+            string? webRemoteSharedToken = null)
         {
             // Set backing fields directly and notify
             _loopEnabled = loopEnabled;
@@ -634,6 +745,21 @@ namespace ReelRoulette
             OnPropertyChanged(nameof(BackupLibraryEnabled));
             OnPropertyChanged(nameof(MinimumBackupGapMinutes));
             OnPropertyChanged(nameof(NumberOfBackups));
+
+            // Web Remote settings
+            _webRemoteEnabled = webRemoteEnabled;
+            _webRemotePort = webRemotePort > 0 ? webRemotePort : 51234;
+            _webRemoteBindOnLan = webRemoteBindOnLan;
+            _webRemoteLanHostname = string.IsNullOrWhiteSpace(webRemoteLanHostname) ? "reel" : webRemoteLanHostname.Trim();
+            _webRemoteAuthMode = webRemoteAuthMode;
+            _webRemoteSharedToken = webRemoteSharedToken;
+            OnPropertyChanged(nameof(WebRemoteEnabled));
+            OnPropertyChanged(nameof(WebRemotePort));
+            OnPropertyChanged(nameof(WebRemoteBindOnLan));
+            OnPropertyChanged(nameof(WebRemoteLanHostname));
+            OnPropertyChanged(nameof(WebRemoteAuthOff));
+            OnPropertyChanged(nameof(WebRemoteAuthTokenRequired));
+            OnPropertyChanged(nameof(WebRemoteSharedToken));
         }
 
         public string GetSeekStep()
@@ -664,6 +790,13 @@ namespace ReelRoulette
         public bool GetBackupLibraryEnabled() => _backupLibraryEnabled;
         public int GetMinimumBackupGapMinutes() => _minimumBackupGapMinutes;
         public int GetNumberOfBackups() => _numberOfBackups;
+
+        public bool GetWebRemoteEnabled() => _webRemoteEnabled;
+        public int GetWebRemotePort() => _webRemotePort;
+        public bool GetWebRemoteBindOnLan() => _webRemoteBindOnLan;
+        public string GetWebRemoteLanHostname() => string.IsNullOrWhiteSpace(_webRemoteLanHostname) ? "reel" : _webRemoteLanHostname.Trim();
+        public WebRemote.WebRemoteAuthMode GetWebRemoteAuthMode() => _webRemoteAuthMode;
+        public string? GetWebRemoteSharedToken() => _webRemoteSharedToken;
 
         private bool ValidateSettings()
         {
@@ -698,6 +831,12 @@ namespace ReelRoulette
                 return false;
             }
             if (_numberOfBackups < 1 || _numberOfBackups > 30)
+            {
+                return false;
+            }
+
+            // Validate Web Remote settings
+            if (_webRemotePort < 1024 || _webRemotePort > 65535)
             {
                 return false;
             }
