@@ -140,6 +140,7 @@ namespace ReelRoulette
         private DateTime _lastStatusMessageTime = DateTime.MinValue;
         private CancellationTokenSource? _statusMessageCancellation;
         private readonly object _statusMessageLock = new object();
+        private DateTime _lastFingerprintStatusUiUtc = DateTime.MinValue;
         
         // Prevent recursive SaveSettings calls when updating UI from settings
         private bool _isApplyingSettings = false;
@@ -826,6 +827,7 @@ namespace ReelRoulette
             };
 
             // Initialize library system
+            _libraryService.FingerprintProgressUpdated += OnFingerprintProgressUpdated;
             _libraryService.LoadLibrary();
             _libraryIndex = _libraryService.LibraryIndex;
 
@@ -908,6 +910,21 @@ namespace ReelRoulette
 #pragma warning restore CS4014
                         Log("MainWindow Loaded event: Web Remote server start requested.");
                     }
+
+                    // Run non-essential startup work in background so first paint is fast.
+#pragma warning disable CS4014
+                    Task.Run(() =>
+                    {
+                        try
+                        {
+                            _libraryService.StartPostLoadBackgroundWork();
+                        }
+                        catch (Exception ex)
+                        {
+                            Log($"MainWindow Loaded event: ERROR in post-load background work - {ex.GetType().Name}: {ex.Message}");
+                        }
+                    });
+#pragma warning restore CS4014
                 }
                 catch (Exception ex)
                 {
@@ -5801,6 +5818,38 @@ namespace ReelRoulette
                 catch (Exception ex)
                 {
                     Log($"SetStatusMessage: ERROR scheduling status update - Exception: {ex.GetType().Name}, Message: {ex.Message}");
+                }
+            });
+        }
+
+        private void OnFingerprintProgressUpdated(FingerprintProgressSnapshot snapshot)
+        {
+            var now = DateTime.UtcNow;
+            if ((now - _lastFingerprintStatusUiUtc).TotalMilliseconds < 300)
+            {
+                return;
+            }
+            _lastFingerprintStatusUiUtc = now;
+
+            Dispatcher.UIThread.Post(() =>
+            {
+                // Keep high-priority active scan messages visible.
+                var current = StatusTextBlock?.Text ?? string.Empty;
+                if (current.StartsWith("Scanning / indexing", StringComparison.OrdinalIgnoreCase) ||
+                    current.StartsWith("Scanning loudness", StringComparison.OrdinalIgnoreCase) ||
+                    current.StartsWith("Applying filters and rebuilding queue", StringComparison.OrdinalIgnoreCase))
+                {
+                    return;
+                }
+
+                if (snapshot.TotalEligible <= 0)
+                {
+                    return;
+                }
+
+                if (StatusTextBlock != null)
+                {
+                    StatusTextBlock.Text = $"Fingerprinting: {snapshot.Completed:N0}/{snapshot.TotalEligible:N0} complete";
                 }
             });
         }

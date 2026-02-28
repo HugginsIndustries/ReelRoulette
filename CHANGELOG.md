@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- **Add GUID identity, fingerprinting, and duplicate management foundation** (2026-02-27):
+  - `LibraryItem` carries stable `Id` plus fingerprint metadata (`Fingerprint`, algorithm/version, file size, last-write, status, timestamp), and `LibraryIndex` carries a global fingerprint index map.
+  - Load path performs in-memory ID/fingerprint migration and index rebuild first; non-essential migration save and fingerprint queue warmup run after UI is shown.
+  - `FileFingerprintService` computes full-file SHA-256, and `FingerprintCoordinator` handles background queueing, progress snapshots, checkpoint saves, and throttled `last.log` diagnostics.
+  - Source refresh runs as a blocking accurate pass with progress phases (`scan`, `analyze`, `fingerprinting x/y`, `reconcile`) and finalizes `Added/Removed/Renamed/Moved/Updated/Unresolved` only after candidate fingerprint comparison.
+  - Refresh reconciliation is changed-set scoped (missing/new paths) so small reorganizations avoid whole-library metadata sweeps.
+  - Path-change classification is explicit: same-folder name change counts as `Renamed`; directory/source change counts as `Moved` (including move+rename).
+  - Deferred post-fingerprinting reconciliation resolves remaining unresolved path changes when exact hash evidence becomes available.
+  - Main status line shows fingerprint progress (`Fingerprinting: completed/total complete`) with responsive throttling.
+  - Manage Sources refresh summary includes added/removed/renamed/moved/updated/unresolved counters.
+  - Duplicate workflow supports per-run scope selection, exact SHA-256 grouping, manual keep choice per group, type-to-confirm permanent delete (`DELETE`), and failure-safe retention when disk delete fails.
+
 - **Add Auto Tag workflow for Library items** (2026-02-27):
   - Add `Library -> Auto Tag` entry that opens a dedicated scan/apply dialog.
   - Add `AutoTagDialog` with explicit `Scan Files` action, `Scan Full Library` toggle, `View All Matches` toggle (default off), and per-tag counts for both `Total matched` and `To be changed`.

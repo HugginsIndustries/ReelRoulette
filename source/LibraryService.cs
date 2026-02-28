@@ -37,6 +37,50 @@ namespace ReelRoulette
         private readonly object _lock = new object();
         private readonly object _saveLock = new object(); // Separate lock for file I/O operations
         private bool _requiresTagMigration = false;
+        private readonly FileFingerprintService _fingerprintService = new FileFingerprintService();
+        private readonly FingerprintCoordinator _fingerprintCoordinator;
+        private DateTime _lastFingerprintProgressStatusUtc = DateTime.MinValue;
+        private bool _isDeferredReconcileRunning;
+        private bool _needsPostLoadSave;
+        private bool _postLoadWorkStarted;
+
+        public event Action<FingerprintProgressSnapshot>? FingerprintProgressUpdated;
+
+        public LibraryService()
+        {
+            _fingerprintCoordinator = new FingerprintCoordinator(
+                _fingerprintService,
+                Log,
+                ApplyFingerprintResultForPath,
+                SaveLibrary);
+            _fingerprintCoordinator.ProgressUpdated += snapshot =>
+            {
+                var now = DateTime.UtcNow;
+                if ((now - _lastFingerprintProgressStatusUtc).TotalMilliseconds >= 250)
+                {
+                    _lastFingerprintProgressStatusUtc = now;
+                    FingerprintProgressUpdated?.Invoke(snapshot);
+                }
+
+                if (!snapshot.IsRunning && snapshot.Pending == 0 && !_isDeferredReconcileRunning)
+                {
+                    _isDeferredReconcileRunning = true;
+                    try
+                    {
+                        var result = DeferredReconcileAllSources();
+                        if (result > 0)
+                        {
+                            Log($"LibraryService: Deferred reconciliation applied {result} path update(s) after fingerprint queue completion");
+                            SaveLibrary();
+                        }
+                    }
+                    finally
+                    {
+                        _isDeferredReconcileRunning = false;
+                    }
+                }
+            };
+        }
 
         /// <summary>
         /// Gets the current library index.
@@ -66,6 +110,234 @@ namespace ReelRoulette
             }
         }
 
+        public FingerprintProgressSnapshot GetFingerprintProgressSnapshot()
+        {
+            return _fingerprintCoordinator.GetSnapshot();
+        }
+
+        private void EnsureIdentityAndFingerprintDefaults(LibraryItem item)
+        {
+            if (string.IsNullOrWhiteSpace(item.Id))
+            {
+                item.Id = Guid.NewGuid().ToString();
+            }
+
+            if (string.IsNullOrWhiteSpace(item.FingerprintAlgorithm))
+            {
+                item.FingerprintAlgorithm = "SHA-256";
+            }
+
+            if (item.FingerprintVersion <= 0)
+            {
+                item.FingerprintVersion = 1;
+            }
+
+            if (string.IsNullOrWhiteSpace(item.Fingerprint))
+            {
+                item.FingerprintStatus = FingerprintStatus.Pending;
+            }
+        }
+
+        private void UpdateFileMetadataCache(LibraryItem item)
+        {
+            try
+            {
+                if (!File.Exists(item.FullPath))
+                {
+                    return;
+                }
+
+                var info = new FileInfo(item.FullPath);
+                var oldSize = item.FileSizeBytes;
+                var oldWrite = item.LastWriteTimeUtc;
+                item.FileSizeBytes = info.Length;
+                item.LastWriteTimeUtc = info.LastWriteTimeUtc;
+
+                if (!string.IsNullOrWhiteSpace(item.Fingerprint) &&
+                    (oldSize.HasValue && oldSize.Value != info.Length ||
+                     oldWrite.HasValue && oldWrite.Value != info.LastWriteTimeUtc))
+                {
+                    item.FingerprintStatus = FingerprintStatus.Stale;
+                }
+            }
+            catch
+            {
+                // Keep stale metadata untouched on failures.
+            }
+        }
+
+        private string GetFingerprintIndexKey(LibraryItem item)
+        {
+            var algorithm = string.IsNullOrWhiteSpace(item.FingerprintAlgorithm) ? "SHA-256" : item.FingerprintAlgorithm;
+            var version = item.FingerprintVersion <= 0 ? 1 : item.FingerprintVersion;
+            return $"{algorithm}:{version}";
+        }
+
+        private void RebuildFingerprintIndex()
+        {
+            var rebuilt = new Dictionary<string, Dictionary<string, List<string>>>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var item in _libraryIndex.Items)
+            {
+                if (string.IsNullOrWhiteSpace(item.Fingerprint) || string.IsNullOrWhiteSpace(item.Id))
+                {
+                    continue;
+                }
+
+                var key = GetFingerprintIndexKey(item);
+                if (!rebuilt.TryGetValue(key, out var fpMap))
+                {
+                    fpMap = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+                    rebuilt[key] = fpMap;
+                }
+
+                if (!fpMap.TryGetValue(item.Fingerprint!, out var ids))
+                {
+                    ids = new List<string>();
+                    fpMap[item.Fingerprint!] = ids;
+                }
+
+                if (!ids.Any(id => string.Equals(id, item.Id, StringComparison.OrdinalIgnoreCase)))
+                {
+                    ids.Add(item.Id);
+                }
+            }
+
+            _libraryIndex.FingerprintIndex = rebuilt;
+            _libraryIndex.FingerprintIndexVersion = 1;
+        }
+
+        private void ApplyFingerprintResultForPath(string fullPath, FileFingerprintResult result)
+        {
+            lock (_lock)
+            {
+                var item = _libraryIndex.Items.FirstOrDefault(i =>
+                    string.Equals(i.FullPath, fullPath, StringComparison.OrdinalIgnoreCase));
+                if (item == null)
+                {
+                    return;
+                }
+
+                item.FingerprintLastUtc = DateTime.UtcNow;
+
+                if (!string.IsNullOrWhiteSpace(result.Error))
+                {
+                    item.FingerprintStatus = FingerprintStatus.Failed;
+                    return;
+                }
+
+                item.FileSizeBytes = result.FileSizeBytes;
+                item.LastWriteTimeUtc = result.LastWriteTimeUtc;
+                if (result.IsStableRead && !string.IsNullOrWhiteSpace(result.Fingerprint))
+                {
+                    item.Fingerprint = result.Fingerprint;
+                    item.FingerprintAlgorithm = "SHA-256";
+                    item.FingerprintVersion = 1;
+                    item.FingerprintStatus = FingerprintStatus.Ready;
+                }
+                else
+                {
+                    item.FingerprintStatus = FingerprintStatus.Pending;
+                }
+
+                RebuildFingerprintIndex();
+            }
+        }
+
+        private void EnqueueFingerprintWorkForStatuses(params FingerprintStatus[] statuses)
+        {
+            List<string> pathsToQueue;
+            lock (_lock)
+            {
+                var statusSet = new HashSet<FingerprintStatus>(statuses);
+                pathsToQueue = _libraryIndex.Items
+                    .Where(i => !string.IsNullOrWhiteSpace(i.FullPath) && statusSet.Contains(i.FingerprintStatus))
+                    .Select(i => i.FullPath)
+                    .ToList();
+            }
+
+            if (pathsToQueue.Count > 0)
+            {
+                _fingerprintCoordinator.EnqueueMany(pathsToQueue);
+                Log($"LibraryService: Queued {pathsToQueue.Count} item(s) for background fingerprinting");
+            }
+        }
+
+        public void StartPostLoadBackgroundWork()
+        {
+            lock (_lock)
+            {
+                if (_postLoadWorkStarted)
+                {
+                    return;
+                }
+                _postLoadWorkStarted = true;
+            }
+
+            Log("LibraryService.StartPostLoadBackgroundWork: Starting...");
+            if (_needsPostLoadSave)
+            {
+                Log("LibraryService.StartPostLoadBackgroundWork: Saving post-load migration updates");
+                SaveLibrary();
+                _needsPostLoadSave = false;
+            }
+
+            EnqueueFingerprintWorkForStatuses(FingerprintStatus.Pending, FingerprintStatus.Stale, FingerprintStatus.Failed);
+            Log("LibraryService.StartPostLoadBackgroundWork: Completed");
+        }
+
+        private int DeferredReconcileAllSources()
+        {
+            lock (_lock)
+            {
+                int reconciled = 0;
+                foreach (var source in _libraryIndex.Sources)
+                {
+                    if (!Directory.Exists(source.RootPath))
+                    {
+                        continue;
+                    }
+
+                    var onDisk = new HashSet<string>(
+                        GetVideoFiles(source.RootPath).Concat(GetPhotoFiles(source.RootPath)),
+                        StringComparer.OrdinalIgnoreCase);
+                    var sourceItems = _libraryIndex.Items.Where(i => i.SourceId == source.Id).ToList();
+                    var missing = sourceItems.Where(i => !onDisk.Contains(i.FullPath) && i.FingerprintStatus == FingerprintStatus.Ready && !string.IsNullOrWhiteSpace(i.Fingerprint)).ToList();
+                    var presentReady = sourceItems
+                        .Where(i => onDisk.Contains(i.FullPath) && i.FingerprintStatus == FingerprintStatus.Ready && !string.IsNullOrWhiteSpace(i.Fingerprint))
+                        .ToList();
+                    var consumedPresentIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+                    foreach (var missingItem in missing)
+                    {
+                        var matchItem = presentReady.FirstOrDefault(candidate =>
+                            !consumedPresentIds.Contains(candidate.Id) &&
+                            !string.Equals(candidate.Id, missingItem.Id, StringComparison.OrdinalIgnoreCase) &&
+                            string.Equals(candidate.Fingerprint, missingItem.Fingerprint, StringComparison.OrdinalIgnoreCase));
+                        if (matchItem == null)
+                        {
+                            continue;
+                        }
+
+                        missingItem.FullPath = matchItem.FullPath;
+                        missingItem.RelativePath = GetRelativePath(source.RootPath, matchItem.FullPath);
+                        missingItem.FileName = Path.GetFileName(matchItem.FullPath);
+                        UpdateFileMetadataCache(missingItem);
+                        _libraryIndex.Items.Remove(matchItem);
+                        consumedPresentIds.Add(matchItem.Id);
+                        reconciled++;
+                    }
+                }
+
+                if (reconciled > 0)
+                {
+                    RebuildFingerprintIndex();
+                }
+
+                return reconciled;
+            }
+        }
+
         /// <summary>
         /// Loads the library index from disk.
         /// </summary>
@@ -85,9 +357,24 @@ namespace ReelRoulette
                     var index = JsonSerializer.Deserialize<LibraryIndex>(json);
                     if (index != null)
                     {
+                        bool needsSaveAfterMigration = false;
                         lock (_lock)
                         {
                             _libraryIndex = index;
+
+                            foreach (var item in _libraryIndex.Items)
+                            {
+                                var hadId = !string.IsNullOrWhiteSpace(item.Id);
+                                var oldStatus = item.FingerprintStatus;
+                                EnsureIdentityAndFingerprintDefaults(item);
+
+                                if (!hadId || oldStatus != item.FingerprintStatus)
+                                {
+                                    needsSaveAfterMigration = true;
+                                }
+                            }
+
+                            RebuildFingerprintIndex();
                             
                             // Check if migration is needed: old format has AvailableTags but not Categories/Tags
                             _requiresTagMigration = (index.AvailableTags != null && index.AvailableTags.Count > 0) &&
@@ -108,6 +395,12 @@ namespace ReelRoulette
                             }
                         }
                         Log($"LibraryService.LoadLibrary: Successfully loaded library - {index.Items.Count} items, {index.Sources.Count} sources");
+
+                        if (needsSaveAfterMigration)
+                        {
+                            Log("LibraryService.LoadLibrary: Migration updates detected; scheduling save for post-load background work");
+                            _needsPostLoadSave = true;
+                        }
                     }
                     else
                     {
@@ -425,6 +718,7 @@ namespace ReelRoulette
 
                     if (existingItem != null)
                     {
+                        EnsureIdentityAndFingerprintDefaults(existingItem);
                         // Update source reference if it changed
                         if (existingItem.SourceId != source.Id)
                         {
@@ -438,6 +732,7 @@ namespace ReelRoulette
                         // Update MediaType based on current file extension (may have changed or was incorrect before photo support)
                         var extension = Path.GetExtension(filePath).ToLowerInvariant();
                         existingItem.MediaType = VideoExtensions.Contains(extension) ? MediaType.Video : MediaType.Photo;
+                        UpdateFileMetadataCache(existingItem);
                         updatedCount++;
                     }
                     else
@@ -449,6 +744,7 @@ namespace ReelRoulette
                         // Create new item
                         var newItem = new LibraryItem
                         {
+                            Id = Guid.NewGuid().ToString(),
                             SourceId = source.Id,
                             FullPath = filePath,
                             RelativePath = GetRelativePath(rootPath, filePath),
@@ -457,13 +753,19 @@ namespace ReelRoulette
                             IsFavorite = false,
                             IsBlacklisted = false,
                             PlayCount = 0,
-                            Tags = new List<string>()
+                            Tags = new List<string>(),
+                            FingerprintAlgorithm = "SHA-256",
+                            FingerprintVersion = 1,
+                            FingerprintStatus = FingerprintStatus.Pending
                         };
+                        UpdateFileMetadataCache(newItem);
                         _libraryIndex.Items.Add(newItem);
                         importedCount++;
                     }
                 }
 
+                RebuildFingerprintIndex();
+                EnqueueFingerprintWorkForStatuses(FingerprintStatus.Pending, FingerprintStatus.Stale, FingerprintStatus.Failed);
                 Log($"LibraryService.ImportFolder: Completed - {importedCount} new items imported, {updatedCount} existing items updated");
                 return importedCount;
             }
@@ -504,7 +806,10 @@ namespace ReelRoulette
 
             lock (_lock)
             {
+                EnsureIdentityAndFingerprintDefaults(item);
+
                 var existingIndex = _libraryIndex.Items.FindIndex(i =>
+                    (!string.IsNullOrWhiteSpace(item.Id) && string.Equals(i.Id, item.Id, StringComparison.OrdinalIgnoreCase)) ||
                     string.Equals(i.FullPath, item.FullPath, StringComparison.OrdinalIgnoreCase));
 
                 if (existingIndex >= 0)
@@ -525,6 +830,14 @@ namespace ReelRoulette
                     existingItem.IsBlacklisted = item.IsBlacklisted;
                     existingItem.PlayCount = item.PlayCount;
                     existingItem.LastPlayedUtc = item.LastPlayedUtc;
+                    existingItem.Id = item.Id;
+                    existingItem.Fingerprint = item.Fingerprint;
+                    existingItem.FingerprintAlgorithm = item.FingerprintAlgorithm;
+                    existingItem.FingerprintVersion = item.FingerprintVersion;
+                    existingItem.FileSizeBytes = item.FileSizeBytes;
+                    existingItem.LastWriteTimeUtc = item.LastWriteTimeUtc;
+                    existingItem.FingerprintLastUtc = item.FingerprintLastUtc;
+                    existingItem.FingerprintStatus = item.FingerprintStatus;
                     if (item.Tags != null)
                     {
                         existingItem.Tags = item.Tags;
@@ -536,6 +849,8 @@ namespace ReelRoulette
                     _libraryIndex.Items.Add(item);
                     Log($"LibraryService.UpdateItem: Added new item - {Path.GetFileName(item.FullPath)}");
                 }
+
+                RebuildFingerprintIndex();
             }
         }
 
@@ -597,9 +912,20 @@ namespace ReelRoulette
         /// <summary>
         /// Refreshes a source by re-scanning its folder for new/deleted files.
         /// </summary>
-        public RefreshResult RefreshSource(string sourceId)
+        public RefreshResult RefreshSource(string sourceId, IProgress<RefreshProgress>? progress = null)
         {
             Log($"LibraryService.RefreshSource: Starting - sourceId = {sourceId}");
+            void Report(string phase, string message, int current = 0, int total = 0)
+            {
+                progress?.Report(new RefreshProgress
+                {
+                    Phase = phase,
+                    Message = message,
+                    Current = current,
+                    Total = total
+                });
+            }
+
             lock (_lock)
             {
                 var source = _libraryIndex.Sources.FirstOrDefault(s => s.Id == sourceId);
@@ -618,6 +944,7 @@ namespace ReelRoulette
                 }
                 
                 Log("LibraryService.RefreshSource: Scanning for media files...");
+                Report("Scan", "Scanning source files...");
 
                 // Get current files on disk (videos and photos)
                 var videoFiles = GetVideoFiles(source.RootPath);
@@ -638,68 +965,254 @@ namespace ReelRoulette
                 int added = 0;
                 int removed = 0;
                 int updated = 0;
+                int renamed = 0;
+                int moved = 0;
+                int unresolvedQueued = 0;
 
-                // Add new files
-                foreach (var filePath in allMediaFilesOnDisk)
+                Report("Analyze", "Analyzing path changes...");
+
+                // 1) Build missing/new sets from path diffs only (fast path, no full-library metadata pass)
+                var missingItems = currentItems.Where(i => !allMediaFilesOnDisk.Contains(i.FullPath)).ToList();
+                var newPaths = allMediaFilesOnDisk.Where(path => !currentPaths.Contains(path)).ToList();
+                Report("Analyze", $"Found {missingItems.Count + newPaths.Count} path changes ({missingItems.Count} missing, {newPaths.Count} new)");
+
+                if (missingItems.Count == 0 && newPaths.Count == 0)
                 {
-                    if (!currentPaths.Contains(filePath))
-                    {
-                        // Determine media type by extension
-                        var extension = Path.GetExtension(filePath).ToLowerInvariant();
-                        var mediaType = VideoExtensions.Contains(extension) ? MediaType.Video : MediaType.Photo;
+                    Report("Done", "Refresh done: no changes detected");
+                    return new RefreshResult();
+                }
 
-                        var newItem = new LibraryItem
-                        {
-                            SourceId = source.Id,
-                            FullPath = filePath,
-                            RelativePath = GetRelativePath(source.RootPath, filePath),
-                            FileName = Path.GetFileName(filePath),
-                            MediaType = mediaType,
-                            IsFavorite = false,
-                            IsBlacklisted = false,
-                            PlayCount = 0,
-                            Tags = new List<string>()
-                        };
-                        _libraryIndex.Items.Add(newItem);
-                        added++;
+                // 2) Prepare metadata for new paths
+                var newPathMediaType = new Dictionary<string, MediaType>(StringComparer.OrdinalIgnoreCase);
+                var newPathFileName = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                var newPathSize = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+                var newPathWrite = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
+                foreach (var path in newPaths)
+                {
+                    var extension = Path.GetExtension(path).ToLowerInvariant();
+                    var mediaType = VideoExtensions.Contains(extension) ? MediaType.Video : MediaType.Photo;
+                    newPathMediaType[path] = mediaType;
+                    newPathFileName[path] = Path.GetFileName(path);
+                    try
+                    {
+                        var info = new FileInfo(path);
+                        newPathSize[path] = info.Length;
+                        newPathWrite[path] = info.LastWriteTimeUtc;
+                    }
+                    catch
+                    {
                     }
                 }
 
-                // Remove deleted files
-                var itemsToRemove = currentItems
-                    .Where(i => !allMediaFilesOnDisk.Contains(i.FullPath))
-                    .ToList();
+                // 4) Candidate matching by exact fingerprint (foreground fingerprinting for accurate refresh)
+                var unresolvedMissingItems = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var unresolvedNewPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var candidateNewPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var candidateNewFingerprints = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                var consumedNewPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var matchedMissingIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-                foreach (var item in itemsToRemove)
+                var missingReady = new List<LibraryItem>();
+                foreach (var missing in missingItems)
                 {
+                    EnsureIdentityAndFingerprintDefaults(missing);
+                    if (string.IsNullOrWhiteSpace(missing.Fingerprint) || missing.FingerprintStatus != FingerprintStatus.Ready)
+                    {
+                        continue;
+                    }
+                    missingReady.Add(missing);
+                }
+
+                foreach (var missing in missingReady)
+                {
+                    var candidates = newPaths.Where(path =>
+                            !consumedNewPaths.Contains(path) &&
+                            newPathMediaType.TryGetValue(path, out var mediaType) &&
+                            mediaType == missing.MediaType &&
+                            (!missing.FileSizeBytes.HasValue || (newPathSize.TryGetValue(path, out var sz) && sz == missing.FileSizeBytes.Value)))
+                        .ToList();
+
+                    if (candidates.Count == 0)
+                    {
+                        continue;
+                    }
+
+                    foreach (var candidatePath in candidates)
+                    {
+                        candidateNewPaths.Add(candidatePath);
+                    }
+                }
+
+                if (candidateNewPaths.Count > 0)
+                {
+                    int processed = 0;
+                    int totalToFingerprint = candidateNewPaths.Count;
+                    foreach (var path in candidateNewPaths)
+                    {
+                        processed++;
+                        Report("Fingerprint", $"Fingerprinting {processed:N0}/{totalToFingerprint:N0}...", processed, totalToFingerprint);
+
+                        var fp = _fingerprintService.ComputeFingerprint(path);
+                        if (string.IsNullOrWhiteSpace(fp.Error) && fp.IsStableRead && !string.IsNullOrWhiteSpace(fp.Fingerprint))
+                        {
+                            candidateNewFingerprints[path] = fp.Fingerprint!;
+                        }
+                        else
+                        {
+                            unresolvedNewPaths.Add(path);
+                        }
+                    }
+                }
+
+                Report("Reconcile", "Reconciling moves and renames...");
+                var newPathsByFingerprint = candidateNewFingerprints
+                    .GroupBy(kvp => kvp.Value, StringComparer.OrdinalIgnoreCase)
+                    .ToDictionary(g => g.Key, g => g.Select(kvp => kvp.Key).ToList(), StringComparer.OrdinalIgnoreCase);
+
+                foreach (var missing in missingReady)
+                {
+                    var matchPath = string.Empty;
+                    if (newPathsByFingerprint.TryGetValue(missing.Fingerprint!, out var fingerprintMatches))
+                    {
+                        foreach (var path in fingerprintMatches)
+                        {
+                            if (consumedNewPaths.Contains(path))
+                            {
+                                continue;
+                            }
+
+                            if (!newPathMediaType.TryGetValue(path, out var mediaType) || mediaType != missing.MediaType)
+                            {
+                                continue;
+                            }
+
+                            matchPath = path;
+                            break;
+                        }
+                    }
+
+                    if (string.IsNullOrWhiteSpace(matchPath))
+                    {
+                        var hadCandidates = candidateNewPaths.Any(path =>
+                            !consumedNewPaths.Contains(path) &&
+                            newPathMediaType.TryGetValue(path, out var mt) &&
+                            mt == missing.MediaType &&
+                            (!missing.FileSizeBytes.HasValue || (newPathSize.TryGetValue(path, out var sz) && sz == missing.FileSizeBytes.Value)));
+
+                        if (hadCandidates)
+                        {
+                            unresolvedQueued++;
+                            unresolvedMissingItems.Add(missing.FullPath);
+                        }
+                        continue;
+                    }
+
+                    var oldDir = Path.GetDirectoryName(missing.FullPath) ?? string.Empty;
+                    var newDir = Path.GetDirectoryName(matchPath) ?? string.Empty;
+                    var oldName = Path.GetFileName(missing.FullPath);
+                    var newName = Path.GetFileName(matchPath);
+
+                    missing.FullPath = matchPath;
+                    missing.RelativePath = GetRelativePath(source.RootPath, matchPath);
+                    missing.FileName = newName;
+                    missing.SourceId = source.Id;
+                    UpdateFileMetadataCache(missing);
+
+                    if (!oldDir.Equals(newDir, StringComparison.OrdinalIgnoreCase))
+                    {
+                        moved++;
+                    }
+                    else if (!string.Equals(oldName, newName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        renamed++;
+                    }
+                    else
+                    {
+                        updated++;
+                    }
+
+                    matchedMissingIds.Add(missing.Id);
+                    consumedNewPaths.Add(matchPath);
+                }
+
+                // 5) Apply true add/remove deltas after reconciliation
+                foreach (var path in newPaths.Where(path => !consumedNewPaths.Contains(path)))
+                {
+                    if (unresolvedNewPaths.Contains(path))
+                    {
+                        unresolvedQueued++;
+                        continue;
+                    }
+
+                    var mediaType = newPathMediaType[path];
+                    var newItem = new LibraryItem
+                    {
+                        Id = Guid.NewGuid().ToString(),
+                        SourceId = source.Id,
+                        FullPath = path,
+                        RelativePath = GetRelativePath(source.RootPath, path),
+                        FileName = newPathFileName[path],
+                        MediaType = mediaType,
+                        IsFavorite = false,
+                        IsBlacklisted = false,
+                        PlayCount = 0,
+                        Tags = new List<string>(),
+                        FingerprintAlgorithm = "SHA-256",
+                        FingerprintVersion = 1,
+                        FingerprintStatus = FingerprintStatus.Pending
+                    };
+                    UpdateFileMetadataCache(newItem);
+                    if (candidateNewFingerprints.TryGetValue(path, out var fingerprint))
+                    {
+                        newItem.Fingerprint = fingerprint;
+                        newItem.FingerprintStatus = FingerprintStatus.Ready;
+                        if (newPathWrite.TryGetValue(path, out var writeUtc))
+                        {
+                            newItem.LastWriteTimeUtc = writeUtc;
+                        }
+                        if (newPathSize.TryGetValue(path, out var sizeBytes))
+                        {
+                            newItem.FileSizeBytes = sizeBytes;
+                        }
+                        newItem.FingerprintLastUtc = DateTime.UtcNow;
+                    }
+                    _libraryIndex.Items.Add(newItem);
+                    if (newItem.FingerprintStatus != FingerprintStatus.Ready)
+                    {
+                        _fingerprintCoordinator.Enqueue(path);
+                    }
+                    added++;
+                }
+
+                foreach (var item in missingItems)
+                {
+                    if (File.Exists(item.FullPath))
+                    {
+                        continue;
+                    }
+
+                    // if unresolved, keep old entry until future refresh/reconcile
+                    if (unresolvedMissingItems.Contains(item.FullPath))
+                    {
+                        continue;
+                    }
+
                     _libraryIndex.Items.Remove(item);
                     removed++;
                 }
 
-                // Update paths for existing items (in case files moved)
-                foreach (var item in currentItems.Where(i => allMediaFilesOnDisk.Contains(i.FullPath)))
-                {
-                    var newPath = allMediaFilesOnDisk.First(f =>
-                        string.Equals(f, item.FullPath, StringComparison.OrdinalIgnoreCase));
-                    if (newPath != item.FullPath)
-                    {
-                        item.FullPath = newPath;
-                        item.RelativePath = GetRelativePath(source.RootPath, newPath);
-                        item.FileName = Path.GetFileName(newPath);
-                        // Update media type if extension changed
-                        var extension = Path.GetExtension(newPath).ToLowerInvariant();
-                        item.MediaType = VideoExtensions.Contains(extension) ? MediaType.Video : MediaType.Photo;
-                        updated++;
-                    }
-                }
-
-                Log($"LibraryService.RefreshSource: Completed - Added: {added}, Removed: {removed}, Updated: {updated}");
+                RebuildFingerprintIndex();
+                Log($"LibraryService.RefreshSource: Completed - Added: {added}, Removed: {removed}, Renamed: {renamed}, Moved: {moved}, Updated: {updated}, UnresolvedQueued: {unresolvedQueued}");
+                Report("Done", $"Refresh done: {added} added, {removed} removed, {renamed} renamed, {moved} moved, {updated} updated, {unresolvedQueued} unresolved");
                 
                 return new RefreshResult
                 {
                     Added = added,
                     Removed = removed,
-                    Updated = updated
+                    Updated = updated,
+                    Renamed = renamed,
+                    Moved = moved,
+                    UnresolvedQueued = unresolvedQueued
                 };
             }
         }
@@ -1152,6 +1665,125 @@ namespace ReelRoulette
             Log($"LibraryService.UpdateFilterPresetsForDeletedTag: Updated {presetsUpdated} presets for deleted tag '{tagName}'");
             return presetsUpdated;
         }
+
+        public DuplicateScanResult ScanDuplicates(DuplicateScanScope scope, string? sourceId = null)
+        {
+            lock (_lock)
+            {
+                IEnumerable<LibraryItem> items = _libraryIndex.Items;
+                if (scope == DuplicateScanScope.CurrentSource && !string.IsNullOrWhiteSpace(sourceId))
+                {
+                    items = items.Where(i => i.SourceId == sourceId);
+                }
+                else if (scope == DuplicateScanScope.AllEnabledSources)
+                {
+                    var enabledIds = _libraryIndex.Sources.Where(s => s.IsEnabled).Select(s => s.Id).ToHashSet();
+                    items = items.Where(i => enabledIds.Contains(i.SourceId));
+                }
+
+                var list = items.ToList();
+                var excludedPending = list.Count(i => i.FingerprintStatus == FingerprintStatus.Pending);
+                var excludedFailed = list.Count(i => i.FingerprintStatus == FingerprintStatus.Failed);
+                var excludedStale = list.Count(i => i.FingerprintStatus == FingerprintStatus.Stale);
+
+                var ready = list
+                    .Where(i => i.FingerprintStatus == FingerprintStatus.Ready &&
+                                !string.IsNullOrWhiteSpace(i.Fingerprint) &&
+                                i.FingerprintAlgorithm == "SHA-256" &&
+                                i.FingerprintVersion == 1)
+                    .ToList();
+
+                var groups = ready
+                    .GroupBy(i => i.Fingerprint!, StringComparer.OrdinalIgnoreCase)
+                    .Where(g => g.Count() > 1)
+                    .Select(g => new DuplicateGroup
+                    {
+                        Fingerprint = g.Key,
+                        Items = g.Select(item => new DuplicateGroupItem
+                        {
+                            ItemId = item.Id,
+                            FullPath = item.FullPath,
+                            SourceId = item.SourceId,
+                            IsFavorite = item.IsFavorite,
+                            IsBlacklisted = item.IsBlacklisted,
+                            PlayCount = item.PlayCount,
+                            LastPlayedUtc = item.LastPlayedUtc,
+                            FileSizeBytes = item.FileSizeBytes,
+                            LastWriteTimeUtc = item.LastWriteTimeUtc
+                        }).ToList()
+                    })
+                    .OrderBy(g => g.Items.Count)
+                    .ToList();
+
+                return new DuplicateScanResult
+                {
+                    Groups = groups,
+                    ExcludedPending = excludedPending,
+                    ExcludedFailed = excludedFailed,
+                    ExcludedStale = excludedStale
+                };
+            }
+        }
+
+        public DuplicateDeletionResult DeleteDuplicateFiles(List<DuplicateDeletionSelection> selections)
+        {
+            var result = new DuplicateDeletionResult();
+            lock (_lock)
+            {
+                foreach (var selection in selections)
+                {
+                    var items = _libraryIndex.Items
+                        .Where(i => selection.ItemIds.Any(id => string.Equals(id, i.Id, StringComparison.OrdinalIgnoreCase)))
+                        .ToList();
+                    var keep = items.FirstOrDefault(i => string.Equals(i.Id, selection.KeepItemId, StringComparison.OrdinalIgnoreCase));
+                    if (keep == null)
+                    {
+                        continue;
+                    }
+
+                    foreach (var item in items)
+                    {
+                        if (string.Equals(item.Id, keep.Id, StringComparison.OrdinalIgnoreCase))
+                        {
+                            continue;
+                        }
+
+                        try
+                        {
+                            if (File.Exists(item.FullPath))
+                            {
+                                File.Delete(item.FullPath);
+                                result.DeletedOnDisk++;
+                            }
+                            else
+                            {
+                                result.Failed.Add(new DuplicateDeletionFailure
+                                {
+                                    FullPath = item.FullPath,
+                                    Reason = "File not found"
+                                });
+                                continue;
+                            }
+
+                            _libraryIndex.Items.Remove(item);
+                            result.RemovedFromLibrary++;
+                        }
+                        catch (Exception ex)
+                        {
+                            result.Failed.Add(new DuplicateDeletionFailure
+                            {
+                                FullPath = item.FullPath,
+                                Reason = ex.Message
+                            });
+                        }
+                    }
+                }
+
+                RebuildFingerprintIndex();
+            }
+
+            return result;
+        }
     }
 
     /// <summary>
@@ -1162,6 +1794,70 @@ namespace ReelRoulette
         public int Added { get; set; }
         public int Removed { get; set; }
         public int Updated { get; set; }
+        public int Renamed { get; set; }
+        public int Moved { get; set; }
+        public int UnresolvedQueued { get; set; }
+    }
+
+    public class RefreshProgress
+    {
+        public string Phase { get; set; } = string.Empty;
+        public string Message { get; set; } = string.Empty;
+        public int Current { get; set; }
+        public int Total { get; set; }
+    }
+
+    public enum DuplicateScanScope
+    {
+        CurrentSource = 0,
+        AllEnabledSources = 1,
+        AllSources = 2
+    }
+
+    public class DuplicateScanResult
+    {
+        public List<DuplicateGroup> Groups { get; set; } = new List<DuplicateGroup>();
+        public int ExcludedPending { get; set; }
+        public int ExcludedFailed { get; set; }
+        public int ExcludedStale { get; set; }
+    }
+
+    public class DuplicateGroup
+    {
+        public string Fingerprint { get; set; } = string.Empty;
+        public List<DuplicateGroupItem> Items { get; set; } = new List<DuplicateGroupItem>();
+    }
+
+    public class DuplicateGroupItem
+    {
+        public string ItemId { get; set; } = string.Empty;
+        public string FullPath { get; set; } = string.Empty;
+        public string SourceId { get; set; } = string.Empty;
+        public bool IsFavorite { get; set; }
+        public bool IsBlacklisted { get; set; }
+        public int PlayCount { get; set; }
+        public DateTime? LastPlayedUtc { get; set; }
+        public long? FileSizeBytes { get; set; }
+        public DateTime? LastWriteTimeUtc { get; set; }
+    }
+
+    public class DuplicateDeletionSelection
+    {
+        public string KeepItemId { get; set; } = string.Empty;
+        public List<string> ItemIds { get; set; } = new List<string>();
+    }
+
+    public class DuplicateDeletionFailure
+    {
+        public string FullPath { get; set; } = string.Empty;
+        public string Reason { get; set; } = string.Empty;
+    }
+
+    public class DuplicateDeletionResult
+    {
+        public int DeletedOnDisk { get; set; }
+        public int RemovedFromLibrary { get; set; }
+        public List<DuplicateDeletionFailure> Failed { get; set; } = new List<DuplicateDeletionFailure>();
     }
 
     /// <summary>

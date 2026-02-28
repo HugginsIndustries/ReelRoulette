@@ -1,0 +1,45 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:ReelRoulette"
+        x:Class="ReelRoulette.DuplicatesDialog"
+        x:DataType="local:DuplicatesDialog"
+        Title="Duplicate Files"
+        Width="980"
+        Height="720"
+        WindowStartupLocation="CenterOwner"
+        MinWidth="760"
+        MinHeight="520">
+    <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="16">
+        <TextBlock Grid.Row="0" Text="{Binding HeaderText}" FontWeight="SemiBold" Margin="0,0,0,8"/>
+        <TextBlock Grid.Row="1" Text="{Binding ExcludedText}" Foreground="Gray" Margin="0,0,0,8"/>
+        <Border Grid.Row="2" BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="1" CornerRadius="4">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <ItemsControl ItemsSource="{Binding Groups}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="local:DuplicateGroupViewModel">
+                            <Border BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="0,0,0,1" Padding="8">
+                                <StackPanel>
+                                    <TextBlock Text="{Binding Title}" FontWeight="SemiBold"/>
+                                    <ComboBox ItemsSource="{Binding KeepOptions}"
+                                              SelectedItem="{Binding SelectedKeepOption}"
+                                              Margin="0,6,0,6"/>
+                                    <ItemsControl ItemsSource="{Binding KeepOptions}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="local:DuplicateItemOption">
+                                                <TextBlock Text="{Binding DisplayText}" FontSize="11" Foreground="Gray"/>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </Border>
+        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,10,0,0">
+            <Button Content="Delete Duplicates..." Click="DeleteButton_Click" MinWidth="140"/>
+            <Button Content="Close" Click="CloseButton_Click" MinWidth="100"/>
+        </StackPanel>
+    </Grid>
+</Window>

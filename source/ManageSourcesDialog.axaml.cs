@@ -130,16 +130,24 @@ namespace ReelRoulette
                 {
                     button.IsEnabled = false;
                     button.Content = "Refreshing...";
-                    
-                    var result = await Task.Run(() => _libraryService.RefreshSource(sourceId));
+
+                    var refreshProgress = new Progress<RefreshProgress>(p =>
+                    {
+                        button.Content = string.IsNullOrWhiteSpace(p.Message)
+                            ? "Refreshing..."
+                            : p.Message;
+                    });
+
+                    var result = await Task.Run(() => _libraryService.RefreshSource(sourceId, refreshProgress));
                     _libraryService.SaveLibrary();
                     
-                    var message = $"Refresh complete:\n{result.Added} added, {result.Removed} removed, {result.Updated} updated";
+                    var message = $"Refresh complete:\n" +
+                                  $"{result.Added} added, {result.Removed} removed, {result.Renamed} renamed, {result.Moved} moved, {result.Updated} updated, {result.UnresolvedQueued} unresolved";
                     var msgBox = new Window
                     {
                         Title = "Refresh Complete",
-                        Width = 300,
-                        Height = 150,
+                        Width = 520,
+                        Height = 190,
                         WindowStartupLocation = WindowStartupLocation.CenterOwner,
                         Content = new StackPanel
                         {
@@ -197,6 +205,82 @@ namespace ReelRoulette
                     button.Content = "Refresh";
                 }
             }
+        }
+
+        private async void FindDuplicatesButton_Click(object? sender, RoutedEventArgs e)
+        {
+            if (sender is not Button button || button.Tag is not string sourceId)
+            {
+                return;
+            }
+
+            var scope = await ShowDuplicateScopeDialog();
+            if (!scope.HasValue)
+            {
+                return;
+            }
+
+            var scan = _libraryService.ScanDuplicates(scope.Value, sourceId);
+            var dialog = new DuplicatesDialog(_libraryService, scan, scope.Value, sourceId);
+            await dialog.ShowDialog(this);
+            LoadSources();
+        }
+
+        private async Task<DuplicateScanScope?> ShowDuplicateScopeDialog()
+        {
+            var dialog = new Window
+            {
+                Title = "Duplicate Scan Scope",
+                Width = 420,
+                Height = 180,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner
+            };
+
+            var combo = new ComboBox
+            {
+                Margin = new Avalonia.Thickness(16, 8, 16, 8)
+            };
+            combo.Items.Add(new ComboBoxItem { Content = "Current source only", Tag = DuplicateScanScope.CurrentSource });
+            combo.Items.Add(new ComboBoxItem { Content = "All enabled sources", Tag = DuplicateScanScope.AllEnabledSources });
+            combo.Items.Add(new ComboBoxItem { Content = "All sources", Tag = DuplicateScanScope.AllSources });
+            combo.SelectedIndex = 0;
+
+            DuplicateScanScope? selected = null;
+            var ok = new Button { Content = "Scan", MinWidth = 80 };
+            var cancel = new Button { Content = "Cancel", MinWidth = 80 };
+            ok.Click += (s, e) =>
+            {
+                if (combo.SelectedItem is ComboBoxItem item && item.Tag is DuplicateScanScope tag)
+                {
+                    selected = tag;
+                }
+                dialog.Close();
+            };
+            cancel.Click += (s, e) => dialog.Close();
+
+            dialog.Content = new StackPanel
+            {
+                Children =
+                {
+                    new TextBlock
+                    {
+                        Text = "Choose duplicate scan scope:",
+                        Margin = new Avalonia.Thickness(16, 16, 16, 0)
+                    },
+                    combo,
+                    new StackPanel
+                    {
+                        Orientation = Avalonia.Layout.Orientation.Horizontal,
+                        HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
+                        Spacing = 8,
+                        Margin = new Avalonia.Thickness(16),
+                        Children = { cancel, ok }
+                    }
+                }
+            };
+
+            await dialog.ShowDialog(this);
+            return selected;
         }
 
         private async void RemoveButton_Click(object? sender, RoutedEventArgs e)

@@ -98,6 +98,10 @@
                                                     MinWidth="80"
                                                     Tag="{Binding Id}"
                                                     Click="RefreshButton_Click"/>
+                                            <Button Content="Find Duplicates..."
+                                                    MinWidth="120"
+                                                    Tag="{Binding Id}"
+                                                    Click="FindDuplicatesButton_Click"/>
                                             <Button Content="Remove"
                                                     MinWidth="80"
                                                     Tag="{Binding Id}"

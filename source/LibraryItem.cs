@@ -10,6 +10,12 @@ namespace ReelRoulette
     public class LibraryItem
     {
         /// <summary>
+        /// Stable item identity for path changes (rename/move).
+        /// </summary>
+        [JsonPropertyName("id")]
+        public string Id { get; set; } = string.Empty;
+
+        /// <summary>
         /// Reference to the LibrarySource that contains this item.
         /// </summary>
         [JsonPropertyName("sourceId")]
@@ -92,6 +98,48 @@ namespace ReelRoulette
         /// </summary>
         [JsonPropertyName("mediaType")]
         public MediaType MediaType { get; set; } = MediaType.Video;
+
+        /// <summary>
+        /// Full-file fingerprint hash (SHA-256).
+        /// </summary>
+        [JsonPropertyName("fingerprint")]
+        public string? Fingerprint { get; set; }
+
+        /// <summary>
+        /// Fingerprint algorithm name (e.g. SHA-256).
+        /// </summary>
+        [JsonPropertyName("fingerprintAlgorithm")]
+        public string FingerprintAlgorithm { get; set; } = "SHA-256";
+
+        /// <summary>
+        /// Fingerprint format/schema version.
+        /// </summary>
+        [JsonPropertyName("fingerprintVersion")]
+        public int FingerprintVersion { get; set; } = 1;
+
+        /// <summary>
+        /// Cached file size in bytes.
+        /// </summary>
+        [JsonPropertyName("fileSizeBytes")]
+        public long? FileSizeBytes { get; set; }
+
+        /// <summary>
+        /// Cached file last-write timestamp in UTC.
+        /// </summary>
+        [JsonPropertyName("lastWriteTimeUtc")]
+        public DateTime? LastWriteTimeUtc { get; set; }
+
+        /// <summary>
+        /// Last time fingerprinting was attempted/completed.
+        /// </summary>
+        [JsonPropertyName("fingerprintLastUtc")]
+        public DateTime? FingerprintLastUtc { get; set; }
+
+        /// <summary>
+        /// Fingerprint state for background processing and UI.
+        /// </summary>
+        [JsonPropertyName("fingerprintStatus")]
+        public FingerprintStatus FingerprintStatus { get; set; } = FingerprintStatus.Pending;
     }
 }
 

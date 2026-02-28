@@ -39,6 +39,20 @@ namespace ReelRoulette
         /// </summary>
         [JsonPropertyName("availableTags")]
         public List<string>? AvailableTags { get; set; }
+
+        /// <summary>
+        /// Fingerprint index schema version.
+        /// </summary>
+        [JsonPropertyName("fingerprintIndexVersion")]
+        public int FingerprintIndexVersion { get; set; } = 1;
+
+        /// <summary>
+        /// Derived index for quick fingerprint lookups:
+        /// key = "Algorithm:Version", value = map of fingerprint -> item IDs.
+        /// </summary>
+        [JsonPropertyName("fingerprintIndex")]
+        public Dictionary<string, Dictionary<string, List<string>>> FingerprintIndex { get; set; } =
+            new Dictionary<string, Dictionary<string, List<string>>>();
     }
 }
 
