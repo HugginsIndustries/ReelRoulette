@@ -28,25 +28,40 @@ Each TODO entry follows this structure:
 ### Enhanced Random Selection Modes
 
 - **Priority**: P1
-- **Impact**: Medium - Fixes semi-random behavior and provides better distribution
-- **Description**: Enhance random selection algorithm and add multiple randomization modes to address current "semi-random" behavior where multiple items from the same folder are frequently selected consecutively. Provides better distribution across the library and multiple modes for different preferences.
+- **Impact**: High - Removes duplicate-heavy behavior and unifies desktop/web randomization
+- **Description**: Replace the legacy no-repeat toggle with a single randomization mode system shared across desktop and web remote. Fix duplicate-heavy behavior (especially on web), improve distribution, and make mode behavior explicit and predictable.
 - **Implementation**:
-  - **Fix current random algorithm**: Improve random seed/algorithm to ensure true randomization and better distribution
-  - Add "Randomization Mode" setting (single dropdown in Settings or playback controls):
-    - **Pure Random** (fixed): True random selection with improved distribution algorithm to avoid folder clustering
-    - **Weighted Random**: Favor less-played videos (probability inversely proportional to play count) - helps discover forgotten content
-    - **Smart Shuffle**: Play all eligible videos once before repeating (like Spotify) - ensures all content is seen before repeats
-    - **Spread Mode**: Prefer items from different folders/paths - actively avoids consecutive items from same directory
-    - **Weighted with Spread**: Combine weighted random with folder-aware distribution
-  - Fix folder clustering issue in current algorithm:
-    - Track recently selected folders/paths
-    - Bias selection away from recently selected folders
-    - Implement proper shuffle algorithm that distributes across directory structure
-  - Store mode preference in settings
-  - Update queue building logic in `BuildQueue()` based on selected mode
-  - Show current mode in status or tooltip
-  - All modes respect current filters (favorites, tags, duration, etc.)
-- **Notes**: The current random selection appears to be "semi-random" due to folder clustering. This enhancement addresses the root cause while providing multiple modes for different use cases. Spread Mode is particularly important for large libraries organized in folders to ensure better variety in selections.
+  - **Deprecate legacy setting**:
+    - Remove/deprecate `NoRepeatMode` and related UI.
+    - Add new enum setting: `RandomizationMode` with default `SmartShuffle`.
+    - Migration rule: on first run after update, force all existing users to `SmartShuffle` regardless of prior no-repeat state.
+  - **Mode definitions** (all modes respect current eligible set/filters):
+    - **Pure Random**: Uniform random pick from the current eligible pool. Repeats are allowed.
+    - **Weighted Random**: Weighted pick using both `PlayCount` and `LastPlayedUtc` (favor less-played and less-recently-played items).
+    - **Smart Shuffle (default)**: Shuffle-bag behavior (play all eligible items once before repeats).
+    - **Spread Mode**: Apply a weighted penalty for recently used folders (folder = immediate containing directory of media file).
+    - **Weighted with Spread**: Combine weighted scoring (play count + recency) with folder spread penalty.
+  - **State and rebuild behavior**:
+    - No randomization history/bag persistence across app restarts.
+    - Rebuild mode state immediately when eligible set changes (filters, source enable/disable, library changes).
+  - **Desktop + web consistency**:
+    - Desktop uses selected `RandomizationMode` from app settings.
+    - Web mode is per web client (client-local selection, default `SmartShuffle`).
+    - Web `/api/random` must always use the mode selected by that web client.
+  - **UI changes**:
+    - Desktop: add randomization mode dropdown in Library panel.
+    - Web: add randomization mode dropdown in header.
+    - Remove no-repeat controls from desktop/web UI.
+  - **Code paths to update**:
+    - Desktop random selection flow: `PlayRandomVideoAsync()`.
+    - Desktop queue/bag management flow: `RebuildPlayQueueIfNeededAsync()`.
+    - Web random endpoint flow: `/api/random` request/selection handling.
+  - **Validation/acceptance**:
+    - Web no longer shows frequent immediate duplicates under normal use.
+    - Smart Shuffle completes one full eligible cycle before repeats.
+    - Spread modes visibly reduce back-to-back same-folder picks.
+    - Mode behavior is consistent with definitions across desktop and web.
+- **Notes**: Primary goal is predictable, selectable random behavior with a single unified model and no legacy no-repeat ambiguity.
 
 ---
 
