@@ -25,74 +25,82 @@ Each TODO entry follows this structure:
 
 ## P1 - High Priority
 
-(None.)
+### Web Remote Tag Editing (API-First, Desktop-Parity)
+
+- **Priority**: P1
+- **Impact**: High - Delivers desktop-equivalent tag editing from web remote and establishes reusable API/core seams for multi-client architecture.
+- **Description**: Implement full-screen web tag editing with strict functional parity to desktop `ItemTagsDialog`, while moving tag logic and mutation flows into Core + Server APIs so desktop and web both act as clients.
+- **Implementation**:
+  - **Core-first extraction**:
+    - Move shared tag/preset/category mutation logic into `ReelRoulette.Core` services (no Avalonia/UI dependencies).
+    - Keep desktop `ItemTagsDialog` as source-of-truth behavior while replacing direct mutation paths with calls into shared core services.
+  - **API contract (batch-ready from day 1)**:
+    - Define OpenAPI-backed tag endpoints that accept `itemIds: string[]` (initial web caller can still send current item only).
+    - Add endpoints for:
+      - editable tag model query (categories/tags/current item state),
+      - apply add/remove tag deltas to items,
+      - create/rename/move tag and category assignment flows,
+      - preset update behavior when tag names change.
+    - Concurrency policy: last write wins.
+  - **Web UI behavior**:
+    - Add tag edit button in media bottom controls between Next and Loop, using desktop-style tag icon/emoji.
+    - Open a full-screen editor.
+    - Match desktop icon ordering and state colors (`✏️`, `➕`, `➖`; green/orange/violet semantics).
+    - Keep responsive chip wrapping while preserving desktop spacing/padding/interaction patterns.
+  - **Playback behavior while editing (web only)**:
+    - Pause web video playback while editor is open.
+    - Suspend photo autoplay progression while editor is open.
+    - On close, resume only if media was playing before open; for photos, restart timer only if autoplay was active before open.
+  - **Realtime sync**:
+    - Emit immediate SSE events for tag/category/item-tag mutations so desktop/web remain in sync without polling delay.
+    - Use revisioned events compatible with shared server event model.
+  - **Forward compatibility**:
+    - Keep API and client state batch-capable to support future web library-view parity.
+- **Notes**:
+  - Tag editing is always available in web remote (no feature gate).
+  - Slight responsive layout differences are acceptable; functional behavior must match desktop exactly.
+
+### Grid View for Library Panel with Thumbnail Generation (Unified Refresh Pipeline)
+
+- **Priority**: P1
+- **Impact**: High - Adds modern visual browsing and consolidates heavy media processing into one background pipeline suitable for headless worker/server architecture.
+- **Description**: Add List/Grid view modes and thumbnail generation for all media, then unify source refresh, duration scan, loudness scan, and thumbnail generation into a single sequential background refresh workflow shared by manual and auto refresh.
+- **Implementation**:
+  - **View modes**:
+    - Add global persisted view mode setting (List/Grid).
+    - Place view toggle immediately left of `Select filters...` (fader icon) using existing toggle style.
+    - Use `🖼️` icon for Grid mode; default remains List (toggle off).
+    - Keep List behavior intact and add responsive, virtualized, infinite-scroll-style Grid behavior.
+  - **Thumbnail generation (all media)**:
+    - Videos: generate thumbnails from midpoint (with midpoint-adjacent fallback), avoiding intro-biased frames.
+    - Photos: generate thumbnails via image decode path (no FFmpeg).
+    - Cache in app data with size limits + eviction support.
+    - Invalidate/regenerate based on content/fingerprint changes; reuse when unchanged.
+  - **Unified refresh pipeline**:
+    - Sequential stage order:
+      1. source refresh
+      2. duration scan
+      3. loudness scan
+      4. thumbnail generation
+    - Auto refresh loudness mode: only new/unscanned.
+    - Manual refresh runs the same background pipeline as auto refresh.
+    - Manual refresh prompts loudness mode (`Only New/Unscanned` vs `Rescan All`) before starting.
+    - Manage Sources dialog may be closed while refresh continues.
+    - Keep status-line/log progress updates consistent with existing background behavior.
+  - **UX simplification**:
+    - Remove standalone duration/loudness scan actions after pipeline integration.
+    - Keep manual/auto mutual exclusion (skip overlapping runs).
+  - **Performance/reliability**:
+    - One stage at a time (no overlap between duration/loudness/thumbnail stages).
+    - Preserve virtualization/lazy materialization for large libraries in both List and Grid.
+    - Keep cancellation/progress throttling aligned with current background architecture.
+- **Notes**:
+  - This supersedes standalone legacy thumbnail/grid scan TODO scopes.
+  - Advanced settings for thumbnail cache/task limits remain relevant and should point to this unified feature.
 
 ---
 
 ## P2 - Medium Priority
-
-### Video Thumbnail Generation and Display
-
-- **Priority**: P2
-- **Impact**: Medium - Enables visual browsing and identification
-- **Description**: Generate and display thumbnail images for videos in Library panel. Currently, only filename and path are shown, making visual identification difficult for large libraries.
-- **Implementation**:
-  - Thumbnail generation:
-    - Use FFmpeg to extract frame at 10% of video duration (or first non-black frame)
-    - Store as JPEG in `AppData/ReelRoulette/thumbnails/{sourceId}/{hash}.jpg`
-    - Filename: MD5 hash of full video path
-    - Generate asynchronously during import or on-demand
-  - UI integration:
-    - Add thumbnail column to Library panel ItemTemplate (left of filename)
-    - Lazy load thumbnails as user scrolls (with virtualization - ✅ Library panel virtualization complete)
-    - Show placeholder/loading icon while generating
-    - Optional: Grid view mode toggle (list vs grid like YouTube/Netflix)
-  - Settings:
-    - Thumbnail size: Small (64x64), Medium (128x128), Large (256x256)
-    - Generation timing: On import, on first view, manual batch only
-    - Cache limit: 500MB, 1GB, 2GB, unlimited
-    - LRU eviction when cache limit reached
-  - Menu items:
-    - "Generate Thumbnails for Library" - Batch generate with progress bar
-    - "Clear Thumbnail Cache" - Free up disk space
-  - Performance considerations:
-    - Generate max 5 thumbnails concurrently (FFmpeg is CPU-intensive)
-    - Skip generation if file is on slow network drive (detect and warn)
-    - Cache metadata (video dimensions, frame count) to pick better extraction point
-- **Notes**: 1000 thumbnails at 128x128 ≈ 50-100MB. Priority increases with virtualization (easy to add thumbnail column).
-
-### Enhanced Logging for Loudness/Duration Scanning
-
-- **Priority**: P2
-- **Impact**: Medium - Better troubleshooting and user awareness
-- **Description**: Add comprehensive logging and reporting for duration/loudness scan operations. Currently, scan results don't distinguish between successful scans of silent videos vs actual errors.
-- **Implementation**:
-  - Classify scan results:
-    - **Success**: Video scanned successfully, metadata retrieved
-    - **No Audio**: Successful scan but video has no audio stream (informational, not an error)
-    - **Warning**: Failed to scan file (I/O error, timeout, format not supported) - non-fatal
-    - **Error**: Critical failure (FFmpeg crash, corrupted file beyond recovery)
-  - Maintain separate counters for each category during scan
-  - Show scan summary dialog after completion:
-
-    ```text
-    Scan Complete
-    ✓ 950 videos scanned successfully
-    ℹ 30 videos have no audio
-    ⚠ 15 files failed to scan
-    ✗ 5 files had critical errors
-    
-    [View Details] [Export Report] [OK]
-    ```
-
-  - Detailed view shows:
-    - List of files in each category
-    - Error messages for failed scans
-    - Option to retry failed scans
-  - Export report as text file for support/troubleshooting
-  - Add logging to `last.log` with categories clearly marked
-  - Update status line during scan: "Scanning 234/1000 (15 warnings)"
-- **Notes**: Helps users understand why some videos aren't playing or being included in filters. Particularly useful for large imports.
 
 ### File Metadata Sync (Import/Export Tags and Metadata)
 
@@ -311,7 +319,7 @@ Each TODO entry follows this structure:
     - Performance preset (dropdown: Low-end PC, Balanced, High-performance, Custom - default: Balanced)
     - Concurrent Operations:
       - Max FFmpeg/FFprobe processes (dropdown: 1, 2, 4, 8 - default: 4)
-      - Max thumbnail tasks (dropdown: 1, 2, 4, 8 - default: 2, requires P2 "Video Thumbnail Generation")
+      - Max thumbnail tasks (dropdown: 1, 2, 4, 8 - default: 2, requires P1 "Grid View for Library Panel with Thumbnail Generation")
     - Background Operations (requires P1 "Background Refresh"):
       - Scan interval when minimized (dropdown: Immediate, 5min, 30min, Hourly, Disabled - default: 30min)
       - CPU priority (dropdown: Low, Normal, High - default: Low)
@@ -368,23 +376,3 @@ Each TODO entry follows this structure:
     - Consider caching detection results
     - Option to enable/disable face detection (default: disabled)
 - **Notes**: Low priority enhancement. Face detection libraries may require additional dependencies and could significantly impact import performance. Start with basic detection before considering recognition. Most useful for users with large photo collections focused on people/events.
-
-### Grid View for Library Panel
-
-- **Priority**: P3
-- **Impact**: Low - Alternative view mode, list view is sufficient
-- **Description**: Add thumbnail grid view option for Library panel (like YouTube/Netflix). Provides alternative visual browsing mode.
-- **Implementation**:
-  - Requires thumbnail generation feature (P2) to be implemented first
-  - Add view mode toggle button in Library panel: List/Grid
-  - Grid view:
-    - Show thumbnails in responsive grid (auto-adjust columns based on panel width)
-    - Filename overlay on thumbnail (bottom, semi-transparent background)
-    - Play count, favorite star, blacklist indicator as icons on thumbnail
-    - Grid item size slider (small/medium/large)
-    - Same filtering, sorting, search applies to grid
-    - Right-click context menu same as list view
-    - Double-click or Enter key plays video
-  - Maintain view mode preference in settings
-  - Virtualization required for performance with large libraries
-- **Notes**: Thumbnail grid is familiar UI pattern but adds complexity. List view with small thumbnails may be sufficient. Consider user feedback before implementing.
