@@ -2,7 +2,16 @@
 
 ## Unreleased
 
-- **Add GUID identity, fingerprinting, and duplicate management foundation** (2026-02-27):
+- **Add scheduled auto-refresh for enabled sources** (2026-02-28):
+  - Settings include `Auto-refresh sources`, `Refresh interval (minutes)`, `Run only when idle`, and `Idle threshold (minutes)` with persisted defaults.
+  - Auto-refresh runs in the background after UI load, targets enabled sources only, and uses accurate per-source refresh with no fast mode.
+  - Soft-idle gating defers runs during recent user activity or active library jobs while allowing playback to continue.
+  - Progress/status updates are shown during auto-refresh (`source x/y`, phase, fingerprint progress) and remain until replaced by a newer status.
+  - Refresh jobs run sequentially, aggregate counters, save once per run, and refresh library UI/statistics after completion.
+  - Concurrency guards prevent overlap with manual source refresh and duration/loudness scans.
+  - Lifecycle/defer/progress/final summaries are logged to `last.log` with throttled progress logging.
+
+- **Add GUID identity, fingerprinting, and duplicate management foundation** (2026-02-28):
   - `LibraryItem` carries stable `Id` plus fingerprint metadata (`Fingerprint`, algorithm/version, file size, last-write, status, timestamp), and `LibraryIndex` carries a global fingerprint index map.
   - Load path performs in-memory ID/fingerprint migration and index rebuild first; non-essential migration save and fingerprint queue warmup run after UI is shown.
   - `FileFingerprintService` computes full-file SHA-256, and `FingerprintCoordinator` handles background queueing, progress snapshots, checkpoint saves, and throttled `last.log` diagnostics.

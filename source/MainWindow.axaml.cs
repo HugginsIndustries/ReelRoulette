@@ -113,6 +113,12 @@ namespace ReelRoulette
         private bool _backupLibraryEnabled = true;
         private int _minimumBackupGapMinutes = 15;
         private int _numberOfBackups = 10;
+        
+        // Auto-refresh settings
+        private bool _autoRefreshSourcesEnabled = true;
+        private int _autoRefreshIntervalMinutes = 60;
+        private bool _autoRefreshOnlyWhenIdle = true;
+        private int _autoRefreshIdleThresholdMinutes = 3;
 
         // Web Remote settings
         private bool _webRemoteEnabled = false;
@@ -129,12 +135,21 @@ namespace ReelRoulette
         private static readonly object _ffprobeSemaphoreLock = new object();
         private DateTime _lastDurationStatusUpdate = DateTime.MinValue;
         private readonly object _durationStatusUpdateLock = new object();
+        private bool _isDurationScanRunning = false;
 
         // Loudness scanning
         private static SemaphoreSlim? _ffmpegSemaphore;
         private static readonly object _ffmpegSemaphoreLock = new object();
         private DateTime _lastLoudnessStatusUpdate = DateTime.MinValue;
         private readonly object _loudnessStatusUpdateLock = new object();
+        private bool _isLoudnessScanRunning = false;
+
+        // Auto-refresh sources
+        private System.Timers.Timer? _autoRefreshSourcesTimer;
+        private bool _isAutoRefreshRunning = false;
+        private DateTime _lastUserInteractionUtc = DateTime.UtcNow;
+        private DateTime _lastAutoRefreshProgressLogUtc = DateTime.MinValue;
+        private readonly object _autoRefreshLock = new object();
 
         // Status message throttling (minimum display window + coalescing)
         private DateTime _lastStatusMessageTime = DateTime.MinValue;
@@ -925,6 +940,8 @@ namespace ReelRoulette
                         }
                     });
 #pragma warning restore CS4014
+
+                    StartOrRestartAutoRefreshTimer();
                 }
                 catch (Exception ex)
                 {
@@ -977,6 +994,7 @@ namespace ReelRoulette
             this.AddHandler(KeyDownEvent, OnGlobalKeyDown, 
                 RoutingStrategies.Tunnel, 
                 handledEventsToo: true);
+            InitializeUserActivityTracking();
 
             // Listen to WindowState changes to keep fullscreen state in sync
             // Note: This subscribes to Avalonia's PropertyChanged (from AvaloniaObject), not INotifyPropertyChanged
@@ -1095,6 +1113,9 @@ namespace ReelRoulette
                 _autoPlayTimer.Dispose();
                 _autoPlayTimer = null;
             }
+            
+            // Clean up auto-refresh timer
+            StopAutoRefreshTimer();
 
             // Clean up photo display timer
             if (_photoDisplayTimer != null)
@@ -1997,6 +2018,13 @@ namespace ReelRoulette
         private void StartDurationScan(string rootFolder)
         {
             Log($"StartDurationScan: Starting duration scan for folder: {rootFolder}");
+            if (_isAutoRefreshRunning || _libraryService.IsRefreshRunning)
+            {
+                Log("StartDurationScan: Auto/manual refresh is running, skipping duration scan request");
+                SetStatusMessage("Duration scan deferred: source refresh is running.", 0);
+                return;
+            }
+
             // Cancel any existing scan
             if (_scanCancellationSource != null)
             {
@@ -2007,6 +2035,7 @@ namespace ReelRoulette
             _scanCancellationSource?.Cancel();
             _scanCancellationSource?.Dispose();
             _scanCancellationSource = new CancellationTokenSource();
+            _isDurationScanRunning = true;
 
             var token = _scanCancellationSource.Token;
             Log("StartDurationScan: Cancellation token created, starting async scan task");
@@ -2047,6 +2076,7 @@ namespace ReelRoulette
                     Log("StartDurationScan: Cleaning up cancellation token source");
                     _scanCancellationSource?.Dispose();
                     _scanCancellationSource = null;
+                    _isDurationScanRunning = false;
                 }
             }, token, TaskCreationOptions.LongRunning, TaskScheduler.Default);
         }
@@ -2467,6 +2497,13 @@ namespace ReelRoulette
         private void StartLoudnessScan(string rootFolder, bool rescanAll = false)
         {
             Log($"StartLoudnessScan: Starting loudness scan for folder: {rootFolder}, RescanAll: {rescanAll}");
+            if (_isAutoRefreshRunning || _libraryService.IsRefreshRunning)
+            {
+                Log("StartLoudnessScan: Auto/manual refresh is running, skipping loudness scan request");
+                SetStatusMessage("Loudness scan deferred: source refresh is running.", 0);
+                return;
+            }
+
             // Cancel any existing scan
             if (_scanCancellationSource != null)
             {
@@ -2477,6 +2514,7 @@ namespace ReelRoulette
             _scanCancellationSource?.Cancel();
             _scanCancellationSource?.Dispose();
             _scanCancellationSource = new CancellationTokenSource();
+            _isLoudnessScanRunning = true;
 
             var token = _scanCancellationSource.Token;
             Log("StartLoudnessScan: Cancellation token created, starting async scan task");
@@ -2517,6 +2555,7 @@ namespace ReelRoulette
                     Log("StartLoudnessScan: Cleaning up cancellation token source");
                     _scanCancellationSource?.Dispose();
                     _scanCancellationSource = null;
+                    _isLoudnessScanRunning = false;
                 }
             }, token, TaskCreationOptions.LongRunning, TaskScheduler.Default);
         }
@@ -5837,7 +5876,8 @@ namespace ReelRoulette
                 var current = StatusTextBlock?.Text ?? string.Empty;
                 if (current.StartsWith("Scanning / indexing", StringComparison.OrdinalIgnoreCase) ||
                     current.StartsWith("Scanning loudness", StringComparison.OrdinalIgnoreCase) ||
-                    current.StartsWith("Applying filters and rebuilding queue", StringComparison.OrdinalIgnoreCase))
+                    current.StartsWith("Applying filters and rebuilding queue", StringComparison.OrdinalIgnoreCase) ||
+                    current.StartsWith("Auto refresh:", StringComparison.OrdinalIgnoreCase))
                 {
                     return;
                 }
@@ -5852,6 +5892,183 @@ namespace ReelRoulette
                     StatusTextBlock.Text = $"Fingerprinting: {snapshot.Completed:N0}/{snapshot.TotalEligible:N0} complete";
                 }
             });
+        }
+
+        private void InitializeUserActivityTracking()
+        {
+            _lastUserInteractionUtc = DateTime.UtcNow;
+
+            this.AddHandler(PointerPressedEvent, (_, __) => { _lastUserInteractionUtc = DateTime.UtcNow; }, RoutingStrategies.Tunnel, true);
+            this.AddHandler(PointerMovedEvent, (_, __) => { _lastUserInteractionUtc = DateTime.UtcNow; }, RoutingStrategies.Tunnel, true);
+            this.AddHandler(PointerWheelChangedEvent, (_, __) => { _lastUserInteractionUtc = DateTime.UtcNow; }, RoutingStrategies.Tunnel, true);
+        }
+
+        private bool IsAutoRefreshAllowedNow(out string reason)
+        {
+            if (!_autoRefreshSourcesEnabled)
+            {
+                reason = "disabled";
+                return false;
+            }
+
+            if (_libraryService.IsRefreshRunning || _isDurationScanRunning || _isLoudnessScanRunning)
+            {
+                reason = "another library job is running";
+                return false;
+            }
+
+            if (_autoRefreshOnlyWhenIdle)
+            {
+                var idleThreshold = TimeSpan.FromMinutes(Math.Max(1, _autoRefreshIdleThresholdMinutes));
+                if (DateTime.UtcNow - _lastUserInteractionUtc < idleThreshold)
+                {
+                    reason = $"idle threshold not met ({_autoRefreshIdleThresholdMinutes}m)";
+                    return false;
+                }
+            }
+
+            reason = "allowed";
+            return true;
+        }
+
+        private void StartOrRestartAutoRefreshTimer()
+        {
+            StopAutoRefreshTimer();
+
+            if (!_autoRefreshSourcesEnabled)
+            {
+                Log("AutoRefresh: Timer not started (disabled)");
+                return;
+            }
+
+            var minutes = Math.Clamp(_autoRefreshIntervalMinutes, 5, 1440);
+            _autoRefreshIntervalMinutes = minutes;
+
+            _autoRefreshSourcesTimer = new System.Timers.Timer(TimeSpan.FromMinutes(minutes).TotalMilliseconds);
+            _autoRefreshSourcesTimer.AutoReset = true;
+            _autoRefreshSourcesTimer.Elapsed += AutoRefreshSourcesTimer_Elapsed;
+            _autoRefreshSourcesTimer.Start();
+            Log($"AutoRefresh: Timer started (interval={minutes}m, idleOnly={_autoRefreshOnlyWhenIdle}, idleThreshold={_autoRefreshIdleThresholdMinutes}m)");
+        }
+
+        private void StopAutoRefreshTimer()
+        {
+            if (_autoRefreshSourcesTimer != null)
+            {
+                _autoRefreshSourcesTimer.Stop();
+                _autoRefreshSourcesTimer.Elapsed -= AutoRefreshSourcesTimer_Elapsed;
+                _autoRefreshSourcesTimer.Dispose();
+                _autoRefreshSourcesTimer = null;
+                Log("AutoRefresh: Timer stopped");
+            }
+        }
+
+        private void AutoRefreshSourcesTimer_Elapsed(object? sender, ElapsedEventArgs e)
+        {
+            _ = Task.Run(async () => await RunAutoRefreshAsync());
+        }
+
+        private async Task RunAutoRefreshAsync()
+        {
+            lock (_autoRefreshLock)
+            {
+                if (_isAutoRefreshRunning)
+                {
+                    return;
+                }
+                _isAutoRefreshRunning = true;
+            }
+
+            try
+            {
+                if (!IsAutoRefreshAllowedNow(out var skipReason))
+                {
+                    Log($"AutoRefresh: Deferred - {skipReason}");
+                    return;
+                }
+
+                var enabledSources = _libraryService.LibraryIndex.Sources
+                    .Where(s => s.IsEnabled && !string.IsNullOrWhiteSpace(s.RootPath) && Directory.Exists(s.RootPath))
+                    .ToList();
+                if (enabledSources.Count == 0)
+                {
+                    Log("AutoRefresh: Deferred - no enabled sources with valid paths");
+                    return;
+                }
+
+                Log($"AutoRefresh: Tick started for {enabledSources.Count} source(s)");
+                int totalAdded = 0;
+                int totalRemoved = 0;
+                int totalRenamed = 0;
+                int totalMoved = 0;
+                int totalUpdated = 0;
+                int totalUnresolved = 0;
+
+                for (int index = 0; index < enabledSources.Count; index++)
+                {
+                    var source = enabledSources[index];
+                    var sourceLabel = string.IsNullOrWhiteSpace(source.DisplayName)
+                        ? Path.GetFileName(source.RootPath)
+                        : source.DisplayName;
+
+                    SetStatusMessage($"Auto refresh: source {index + 1}/{enabledSources.Count} scanning ({sourceLabel})...", 0);
+                    var sourceIdx = index + 1;
+                    var sourceCount = enabledSources.Count;
+                    var progress = new Progress<RefreshProgress>(p =>
+                    {
+                        var phaseText = string.IsNullOrWhiteSpace(p.Message)
+                            ? p.Phase
+                            : p.Message;
+                        SetStatusMessage($"Auto refresh: source {sourceIdx}/{sourceCount} {phaseText}", 0);
+
+                        var now = DateTime.UtcNow;
+                        if ((now - _lastAutoRefreshProgressLogUtc).TotalSeconds >= 5)
+                        {
+                            _lastAutoRefreshProgressLogUtc = now;
+                            Log($"AutoRefresh: Progress source {sourceIdx}/{sourceCount} - {phaseText}");
+                        }
+                    });
+
+                    var result = await Task.Run(() => _libraryService.RefreshSource(source.Id, progress));
+                    totalAdded += result.Added;
+                    totalRemoved += result.Removed;
+                    totalRenamed += result.Renamed;
+                    totalMoved += result.Moved;
+                    totalUpdated += result.Updated;
+                    totalUnresolved += result.UnresolvedQueued;
+                    Log($"AutoRefresh: Source complete ({sourceLabel}) - Added={result.Added}, Removed={result.Removed}, Renamed={result.Renamed}, Moved={result.Moved}, Updated={result.Updated}, Unresolved={result.UnresolvedQueued}");
+                }
+
+                _libraryService.SaveLibrary();
+                _libraryIndex = _libraryService.LibraryIndex;
+
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    if (_showLibraryPanel)
+                    {
+                        UpdateLibraryPanel();
+                    }
+                    RecalculateGlobalStats();
+                    UpdateLibraryInfoText();
+                    _ = RebuildPlayQueueIfNeededAsync();
+                });
+
+                SetStatusMessage($"Auto refresh: complete ({totalAdded} added, {totalRemoved} removed, {totalRenamed} renamed, {totalMoved} moved, {totalUpdated} updated, {totalUnresolved} unresolved)", 0);
+                Log($"AutoRefresh: Completed - Added={totalAdded}, Removed={totalRemoved}, Renamed={totalRenamed}, Moved={totalMoved}, Updated={totalUpdated}, Unresolved={totalUnresolved}");
+            }
+            catch (Exception ex)
+            {
+                SetStatusMessage($"Auto refresh: error - {ex.Message}", 0);
+                Log($"AutoRefresh: ERROR - {ex.GetType().Name}: {ex.Message}");
+                Log($"AutoRefresh: ERROR - Stack trace: {ex.StackTrace}");
+            }
+            finally
+            {
+                lock (_autoRefreshLock)
+                {
+                    _isAutoRefreshRunning = false;
+                }
+            }
         }
 
         private void OpenFileLocation(string? path)
@@ -6816,6 +7033,12 @@ namespace ReelRoulette
             public int MinimumBackupGapMinutes { get; set; } = 15;
             public int NumberOfBackups { get; set; } = 10;
             
+            // Auto-refresh settings
+            public bool AutoRefreshSourcesEnabled { get; set; } = true;
+            public int AutoRefreshIntervalMinutes { get; set; } = 60;
+            public bool AutoRefreshOnlyWhenIdle { get; set; } = true;
+            public int AutoRefreshIdleThresholdMinutes { get; set; } = 3;
+            
             // Filter state
             public FilterState? FilterState { get; set; }
             
@@ -7053,6 +7276,13 @@ namespace ReelRoulette
             _minimumBackupGapMinutes = settings.MinimumBackupGapMinutes > 0 ? settings.MinimumBackupGapMinutes : 15;
             _numberOfBackups = settings.NumberOfBackups > 0 ? settings.NumberOfBackups : 10;
             Log($"LoadSettings: Restored backup settings - Enabled: {_backupLibraryEnabled}, MinGap: {_minimumBackupGapMinutes} minutes, Count: {_numberOfBackups}");
+            
+            // Load auto-refresh settings
+            _autoRefreshSourcesEnabled = settings.AutoRefreshSourcesEnabled;
+            _autoRefreshIntervalMinutes = settings.AutoRefreshIntervalMinutes >= 5 ? settings.AutoRefreshIntervalMinutes : 60;
+            _autoRefreshOnlyWhenIdle = settings.AutoRefreshOnlyWhenIdle;
+            _autoRefreshIdleThresholdMinutes = settings.AutoRefreshIdleThresholdMinutes >= 1 ? settings.AutoRefreshIdleThresholdMinutes : 3;
+            Log($"LoadSettings: Restored auto-refresh settings - Enabled: {_autoRefreshSourcesEnabled}, Interval: {_autoRefreshIntervalMinutes}m, IdleOnly: {_autoRefreshOnlyWhenIdle}, IdleThreshold: {_autoRefreshIdleThresholdMinutes}m");
 
             // Load Web Remote settings
             var wr = settings.WebRemote;
@@ -7368,6 +7598,12 @@ namespace ReelRoulette
                 settings.BackupLibraryEnabled = _backupLibraryEnabled;
                 settings.MinimumBackupGapMinutes = _minimumBackupGapMinutes;
                 settings.NumberOfBackups = _numberOfBackups;
+                
+                // Auto-refresh settings
+                settings.AutoRefreshSourcesEnabled = _autoRefreshSourcesEnabled;
+                settings.AutoRefreshIntervalMinutes = _autoRefreshIntervalMinutes;
+                settings.AutoRefreshOnlyWhenIdle = _autoRefreshOnlyWhenIdle;
+                settings.AutoRefreshIdleThresholdMinutes = _autoRefreshIdleThresholdMinutes;
 
                 // Web Remote settings
                 settings.WebRemote = new WebRemote.WebRemoteSettings
@@ -8201,6 +8437,10 @@ namespace ReelRoulette
                 _backupLibraryEnabled,
                 _minimumBackupGapMinutes,
                 _numberOfBackups,
+                _autoRefreshSourcesEnabled,
+                _autoRefreshIntervalMinutes,
+                _autoRefreshOnlyWhenIdle,
+                _autoRefreshIdleThresholdMinutes,
                 _webRemoteEnabled,
                 _webRemotePort,
                 _webRemoteBindOnLan,
@@ -8260,6 +8500,17 @@ namespace ReelRoulette
                     _minimumBackupGapMinutes = dialog.GetMinimumBackupGapMinutes();
                     _numberOfBackups = dialog.GetNumberOfBackups();
                     Log($"Settings: Backup settings changed - Enabled: {oldBackupEnabled} -> {_backupLibraryEnabled}, MinGap: {oldMinGap} -> {_minimumBackupGapMinutes} minutes, Count: {oldBackupCount} -> {_numberOfBackups}");
+                    
+                    var oldAutoRefreshEnabled = _autoRefreshSourcesEnabled;
+                    var oldAutoRefreshInterval = _autoRefreshIntervalMinutes;
+                    var oldAutoRefreshIdleOnly = _autoRefreshOnlyWhenIdle;
+                    var oldAutoRefreshIdleThreshold = _autoRefreshIdleThresholdMinutes;
+                    _autoRefreshSourcesEnabled = dialog.GetAutoRefreshSourcesEnabled();
+                    _autoRefreshIntervalMinutes = dialog.GetAutoRefreshIntervalMinutes();
+                    _autoRefreshOnlyWhenIdle = dialog.GetAutoRefreshOnlyWhenIdle();
+                    _autoRefreshIdleThresholdMinutes = dialog.GetAutoRefreshIdleThresholdMinutes();
+                    Log($"Settings: Auto-refresh settings changed - Enabled: {oldAutoRefreshEnabled} -> {_autoRefreshSourcesEnabled}, Interval: {oldAutoRefreshInterval} -> {_autoRefreshIntervalMinutes} minutes, IdleOnly: {oldAutoRefreshIdleOnly} -> {_autoRefreshOnlyWhenIdle}, IdleThreshold: {oldAutoRefreshIdleThreshold} -> {_autoRefreshIdleThresholdMinutes} minutes");
+                    StartOrRestartAutoRefreshTimer();
 
                     // Update Web Remote settings
                     _webRemoteEnabled = dialog.GetWebRemoteEnabled();

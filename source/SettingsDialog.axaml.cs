@@ -351,6 +351,12 @@ namespace ReelRoulette
         private bool _backupLibraryEnabled = true;
         private int _minimumBackupGapMinutes = 15;
         private int _numberOfBackups = 10;
+        
+        // Auto-refresh settings
+        private bool _autoRefreshSourcesEnabled = true;
+        private int _autoRefreshIntervalMinutes = 60;
+        private bool _autoRefreshOnlyWhenIdle = true;
+        private int _autoRefreshIdleThresholdMinutes = 3;
 
         // Web Remote settings
         private bool _webRemoteEnabled = false;
@@ -505,6 +511,61 @@ namespace ReelRoulette
                 }
             }
         }
+        
+        public bool AutoRefreshSourcesEnabled
+        {
+            get => _autoRefreshSourcesEnabled;
+            set
+            {
+                if (_autoRefreshSourcesEnabled != value)
+                {
+                    _autoRefreshSourcesEnabled = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public int AutoRefreshIntervalMinutes
+        {
+            get => _autoRefreshIntervalMinutes;
+            set
+            {
+                if (_autoRefreshIntervalMinutes != value)
+                {
+                    _autoRefreshIntervalMinutes = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public bool AutoRefreshOnlyWhenIdle
+        {
+            get => _autoRefreshOnlyWhenIdle;
+            set
+            {
+                if (_autoRefreshOnlyWhenIdle != value)
+                {
+                    _autoRefreshOnlyWhenIdle = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(AutoRefreshIdleThresholdEnabled));
+                }
+            }
+        }
+
+        public int AutoRefreshIdleThresholdMinutes
+        {
+            get => _autoRefreshIdleThresholdMinutes;
+            set
+            {
+                if (_autoRefreshIdleThresholdMinutes != value)
+                {
+                    _autoRefreshIdleThresholdMinutes = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public bool AutoRefreshIdleThresholdEnabled => _autoRefreshOnlyWhenIdle;
 
         // Web Remote settings properties
         public bool WebRemoteEnabled
@@ -624,6 +685,10 @@ namespace ReelRoulette
             bool backupLibraryEnabled = true,
             int minimumBackupGapMinutes = 15,
             int numberOfBackups = 10,
+            bool autoRefreshSourcesEnabled = true,
+            int autoRefreshIntervalMinutes = 60,
+            bool autoRefreshOnlyWhenIdle = true,
+            int autoRefreshIdleThresholdMinutes = 3,
             bool webRemoteEnabled = false,
             int webRemotePort = 51234,
             bool webRemoteBindOnLan = false,
@@ -745,6 +810,17 @@ namespace ReelRoulette
             OnPropertyChanged(nameof(BackupLibraryEnabled));
             OnPropertyChanged(nameof(MinimumBackupGapMinutes));
             OnPropertyChanged(nameof(NumberOfBackups));
+            
+            // Auto-refresh settings
+            _autoRefreshSourcesEnabled = autoRefreshSourcesEnabled;
+            _autoRefreshIntervalMinutes = autoRefreshIntervalMinutes;
+            _autoRefreshOnlyWhenIdle = autoRefreshOnlyWhenIdle;
+            _autoRefreshIdleThresholdMinutes = autoRefreshIdleThresholdMinutes;
+            OnPropertyChanged(nameof(AutoRefreshSourcesEnabled));
+            OnPropertyChanged(nameof(AutoRefreshIntervalMinutes));
+            OnPropertyChanged(nameof(AutoRefreshOnlyWhenIdle));
+            OnPropertyChanged(nameof(AutoRefreshIdleThresholdMinutes));
+            OnPropertyChanged(nameof(AutoRefreshIdleThresholdEnabled));
 
             // Web Remote settings
             _webRemoteEnabled = webRemoteEnabled;
@@ -790,6 +866,10 @@ namespace ReelRoulette
         public bool GetBackupLibraryEnabled() => _backupLibraryEnabled;
         public int GetMinimumBackupGapMinutes() => _minimumBackupGapMinutes;
         public int GetNumberOfBackups() => _numberOfBackups;
+        public bool GetAutoRefreshSourcesEnabled() => _autoRefreshSourcesEnabled;
+        public int GetAutoRefreshIntervalMinutes() => _autoRefreshIntervalMinutes;
+        public bool GetAutoRefreshOnlyWhenIdle() => _autoRefreshOnlyWhenIdle;
+        public int GetAutoRefreshIdleThresholdMinutes() => _autoRefreshIdleThresholdMinutes;
 
         public bool GetWebRemoteEnabled() => _webRemoteEnabled;
         public int GetWebRemotePort() => _webRemotePort;
@@ -831,6 +911,16 @@ namespace ReelRoulette
                 return false;
             }
             if (_numberOfBackups < 1 || _numberOfBackups > 30)
+            {
+                return false;
+            }
+            
+            // Validate auto-refresh settings
+            if (_autoRefreshIntervalMinutes < 5 || _autoRefreshIntervalMinutes > 1440)
+            {
+                return false;
+            }
+            if (_autoRefreshIdleThresholdMinutes < 1 || _autoRefreshIdleThresholdMinutes > 60)
             {
                 return false;
             }

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Threading;
 
 namespace ReelRoulette
 {
@@ -43,8 +44,10 @@ namespace ReelRoulette
         private bool _isDeferredReconcileRunning;
         private bool _needsPostLoadSave;
         private bool _postLoadWorkStarted;
+        private int _activeRefreshCount;
 
         public event Action<FingerprintProgressSnapshot>? FingerprintProgressUpdated;
+        public bool IsRefreshRunning => Volatile.Read(ref _activeRefreshCount) > 0;
 
         public LibraryService()
         {
@@ -926,25 +929,28 @@ namespace ReelRoulette
                 });
             }
 
-            lock (_lock)
+            Interlocked.Increment(ref _activeRefreshCount);
+            try
             {
-                var source = _libraryIndex.Sources.FirstOrDefault(s => s.Id == sourceId);
-                if (source == null)
+                lock (_lock)
                 {
-                    Log($"LibraryService.RefreshSource: ERROR - Source not found: {sourceId}");
-                    throw new ArgumentException($"Source not found: {sourceId}", nameof(sourceId));
-                }
+                    var source = _libraryIndex.Sources.FirstOrDefault(s => s.Id == sourceId);
+                    if (source == null)
+                    {
+                        Log($"LibraryService.RefreshSource: ERROR - Source not found: {sourceId}");
+                        throw new ArgumentException($"Source not found: {sourceId}", nameof(sourceId));
+                    }
 
-                Log($"LibraryService.RefreshSource: Source found - {source.RootPath}");
-                
-                if (!Directory.Exists(source.RootPath))
-                {
-                    Log($"LibraryService.RefreshSource: ERROR - Source directory not found: {source.RootPath}");
-                    throw new DirectoryNotFoundException($"Source directory not found: {source.RootPath}");
-                }
-                
-                Log("LibraryService.RefreshSource: Scanning for media files...");
-                Report("Scan", "Scanning source files...");
+                    Log($"LibraryService.RefreshSource: Source found - {source.RootPath}");
+                    
+                    if (!Directory.Exists(source.RootPath))
+                    {
+                        Log($"LibraryService.RefreshSource: ERROR - Source directory not found: {source.RootPath}");
+                        throw new DirectoryNotFoundException($"Source directory not found: {source.RootPath}");
+                    }
+                    
+                    Log("LibraryService.RefreshSource: Scanning for media files...");
+                    Report("Scan", "Scanning source files...");
 
                 // Get current files on disk (videos and photos)
                 var videoFiles = GetVideoFiles(source.RootPath);
@@ -1205,15 +1211,20 @@ namespace ReelRoulette
                 Log($"LibraryService.RefreshSource: Completed - Added: {added}, Removed: {removed}, Renamed: {renamed}, Moved: {moved}, Updated: {updated}, UnresolvedQueued: {unresolvedQueued}");
                 Report("Done", $"Refresh done: {added} added, {removed} removed, {renamed} renamed, {moved} moved, {updated} updated, {unresolvedQueued} unresolved");
                 
-                return new RefreshResult
-                {
-                    Added = added,
-                    Removed = removed,
-                    Updated = updated,
-                    Renamed = renamed,
-                    Moved = moved,
-                    UnresolvedQueued = unresolvedQueued
-                };
+                    return new RefreshResult
+                    {
+                        Added = added,
+                        Removed = removed,
+                        Updated = updated,
+                        Renamed = renamed,
+                        Moved = moved,
+                        UnresolvedQueued = unresolvedQueued
+                    };
+                }
+            }
+            finally
+            {
+                Interlocked.Decrement(ref _activeRefreshCount);
             }
         }
 
