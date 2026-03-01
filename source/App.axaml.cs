@@ -23,7 +23,8 @@ public partial class App : Application
                 Directory.CreateDirectory(appDataDir);
             }
             var logPath = Path.Combine(appDataDir, "last.log");
-            File.AppendAllText(logPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {message}\n");
+            var sanitized = LogSanitizer.Sanitize(message);
+            File.AppendAllText(logPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {sanitized}\n");
         }
         catch { }
     }

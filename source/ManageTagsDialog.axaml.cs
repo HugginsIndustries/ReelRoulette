@@ -67,7 +67,8 @@ namespace ReelRoulette
             try
             {
                 var logPath = Path.Combine(AppDataManager.AppDataDirectory, "last.log");
-                File.AppendAllText(logPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {message}\n");
+                var sanitized = LogSanitizer.Sanitize(message);
+                File.AppendAllText(logPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {sanitized}\n");
             }
             catch { }
         }

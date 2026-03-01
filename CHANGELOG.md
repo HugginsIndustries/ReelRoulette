@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+- **Harden settings reliability and privacy-safe diagnostics** (2026-03-01):
+  - Web Remote port input in Settings is widened so full 5-digit ports are fully visible while editing.
+  - Settings open is now re-entrancy guarded so repeated open requests do not create overlapping dialog flows.
+  - Applying settings avoids unnecessary side effects when values are unchanged (no-op apply path).
+  - Auto-refresh timer restart runs only when auto-refresh settings actually change.
+  - Web Remote server restart runs only when Web Remote settings change, and stop/start uses async await flow instead of UI-thread blocking waits.
+  - Loop media reinitialization now runs only when loop mode actually changes.
+  - Settings logs now clearly distinguish cancel, no-op apply, and effective apply paths.
+  - Add timing diagnostics for settings operations (`dialog lifecycle`, `apply flow`, `auto-refresh timer restart`, `web remote stop/start/restart`, `SaveSettings`) to speed up freeze/hang triage.
+  - Add settings open-path diagnostics (`create`, `load`, `ShowDialog` call/return, dialog opened/closed events, 5s watchdog) plus exception stack logging to isolate modal open hangs.
+  - Distinguish true user-driven control changes from programmatic state sync during startup/apply (`UI ACTION` vs `STATE SYNC`) so diagnostics remain trustworthy.
+  - Prevent `settings.json` writes while settings are loading and preserve existing preset data if in-memory presets are not initialized.
+  - Add dedicated Settings Backup options (enable, minimum gap, count) with defaults matching library backups.
+  - Add settings backup retention in the shared `backups` folder using timestamped files (`settings.json.backup.*`) with keep/replace behavior aligned to library backup policy.
+  - Write `settings.json` via temp-file replacement flow to reduce partial-write/corruption risk.
+  - Add preset-count guardrail diagnostics at settings load to compare persisted and in-memory preset counts before normal runtime saves.
+  - Route app logs through a centralized sanitizer that redacts file paths, filename-like tokens, and tag payloads to avoid personal data leakage in bug reports.
+
 - **Add scheduled auto-refresh for enabled sources** (2026-02-28):
   - Settings include `Auto-refresh sources`, `Refresh interval (minutes)`, `Run only when idle`, and `Idle threshold (minutes)` with persisted defaults.
   - Auto-refresh runs in the background after UI load, targets enabled sources only, and uses accurate per-source refresh with no fast mode.

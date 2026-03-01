@@ -12,6 +12,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -113,6 +114,9 @@ namespace ReelRoulette
         private bool _backupLibraryEnabled = true;
         private int _minimumBackupGapMinutes = 15;
         private int _numberOfBackups = 10;
+        private bool _backupSettingsEnabled = true;
+        private int _minimumSettingsBackupGapMinutes = 15;
+        private int _numberOfSettingsBackups = 10;
         
         // Auto-refresh settings
         private bool _autoRefreshSourcesEnabled = true;
@@ -159,6 +163,9 @@ namespace ReelRoulette
         
         // Prevent recursive SaveSettings calls when updating UI from settings
         private bool _isApplyingSettings = false;
+        private bool _isSettingsDialogOpen = false;
+        private bool _isLoadingSettings = false;
+        private bool _isProgrammaticUiSync = false;
         
         // FFmpeg logging
         private readonly List<FFmpegLogEntry> _ffmpegLogs = new();
@@ -3546,7 +3553,8 @@ namespace ReelRoulette
             try
             {
                 var logPath = GetLogPath();
-                File.AppendAllText(logPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {message}\n");
+                var sanitized = LogSanitizer.Sanitize(message);
+                File.AppendAllText(logPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {sanitized}\n");
             }
             catch { }
         }
@@ -5373,7 +5381,8 @@ namespace ReelRoulette
         private void NoRepeatToggle_Changed(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
             _noRepeatMode = NoRepeatToggle.IsChecked == true;
-            Log($"UI ACTION: NoRepeatToggle changed to: {_noRepeatMode}");
+            var isUserInitiated = !_isApplyingSettings && !_isLoadingSettings && !_isProgrammaticUiSync;
+            Log($"{(isUserInitiated ? "UI ACTION" : "STATE SYNC")}: NoRepeatToggle changed to: {_noRepeatMode}");
             NoRepeatMenuItem.IsChecked = _noRepeatMode;
             if (_noRepeatMode)
             {
@@ -5387,7 +5396,7 @@ namespace ReelRoulette
             }
             
             // Persist the setting (unless we're applying settings from dialog)
-            if (!_isApplyingSettings)
+            if (!_isApplyingSettings && !_isLoadingSettings && !_isProgrammaticUiSync)
             {
                 SaveSettings();
             }
@@ -6788,10 +6797,11 @@ namespace ReelRoulette
         {
             // Update the loop flag
             _isLoopEnabled = LoopToggle.IsChecked == true;
-            Log($"UI ACTION: LoopToggle changed to: {_isLoopEnabled}");
+            var isUserInitiated = !_isApplyingSettings && !_isLoadingSettings && !_isProgrammaticUiSync;
+            Log($"{(isUserInitiated ? "UI ACTION" : "STATE SYNC")}: LoopToggle changed to: {_isLoopEnabled}");
             
             // Persist the setting (unless we're applying settings from dialog)
-            if (!_isApplyingSettings)
+            if (!_isApplyingSettings && !_isLoadingSettings && !_isProgrammaticUiSync)
             {
                 SaveSettings();
             }
@@ -7032,6 +7042,9 @@ namespace ReelRoulette
             public bool BackupLibraryEnabled { get; set; } = true;
             public int MinimumBackupGapMinutes { get; set; } = 15;
             public int NumberOfBackups { get; set; } = 10;
+            public bool BackupSettingsEnabled { get; set; } = true;
+            public int MinimumSettingsBackupGapMinutes { get; set; } = 15;
+            public int NumberOfSettingsBackups { get; set; } = 10;
             
             // Auto-refresh settings
             public bool AutoRefreshSourcesEnabled { get; set; } = true;
@@ -7137,6 +7150,9 @@ namespace ReelRoulette
 
         private void LoadSettings()
         {
+            _isLoadingSettings = true;
+            try
+            {
             AppSettings? settings = null;
             
             // Try to load unified settings.json first
@@ -7275,7 +7291,10 @@ namespace ReelRoulette
             _backupLibraryEnabled = settings.BackupLibraryEnabled;
             _minimumBackupGapMinutes = settings.MinimumBackupGapMinutes > 0 ? settings.MinimumBackupGapMinutes : 15;
             _numberOfBackups = settings.NumberOfBackups > 0 ? settings.NumberOfBackups : 10;
-            Log($"LoadSettings: Restored backup settings - Enabled: {_backupLibraryEnabled}, MinGap: {_minimumBackupGapMinutes} minutes, Count: {_numberOfBackups}");
+            _backupSettingsEnabled = settings.BackupSettingsEnabled;
+            _minimumSettingsBackupGapMinutes = settings.MinimumSettingsBackupGapMinutes > 0 ? settings.MinimumSettingsBackupGapMinutes : 15;
+            _numberOfSettingsBackups = settings.NumberOfSettingsBackups > 0 ? settings.NumberOfSettingsBackups : 10;
+            Log($"LoadSettings: Restored backup settings - LibraryEnabled: {_backupLibraryEnabled}, LibraryMinGap: {_minimumBackupGapMinutes} minutes, LibraryCount: {_numberOfBackups}, SettingsEnabled: {_backupSettingsEnabled}, SettingsMinGap: {_minimumSettingsBackupGapMinutes} minutes, SettingsCount: {_numberOfSettingsBackups}");
             
             // Load auto-refresh settings
             _autoRefreshSourcesEnabled = settings.AutoRefreshSourcesEnabled;
@@ -7307,17 +7326,25 @@ namespace ReelRoulette
             }
             
             // Sync UI controls with loaded settings
-            if (LoopToggle != null)
+            _isProgrammaticUiSync = true;
+            try
             {
-                LoopToggle.IsChecked = _isLoopEnabled;
+                if (LoopToggle != null)
+                {
+                    LoopToggle.IsChecked = _isLoopEnabled;
+                }
+                if (AutoPlayNextCheckBox != null)
+                {
+                    AutoPlayNextCheckBox.IsChecked = _autoPlayNext;
+                }
+                if (NoRepeatMenuItem != null)
+                {
+                    NoRepeatMenuItem.IsChecked = _noRepeatMode;
+                }
             }
-            if (AutoPlayNextCheckBox != null)
+            finally
             {
-                AutoPlayNextCheckBox.IsChecked = _autoPlayNext;
-            }
-            if (NoRepeatMenuItem != null)
-            {
-                NoRepeatMenuItem.IsChecked = _noRepeatMode;
+                _isProgrammaticUiSync = false;
             }
             
             // Apply muted state when media player is ready
@@ -7341,10 +7368,12 @@ namespace ReelRoulette
             }
             
             // Load filter presets and active preset name
+            var persistedPresetCount = settings.FilterPresets?.Count ?? 0;
             _filterPresets = settings.FilterPresets;
             _activePresetName = settings.ActivePresetName;
             _autoTagScanFullLibrary = settings.AutoTagScanFullLibrary;
             Log($"LoadSettings: Loaded {_filterPresets?.Count ?? 0} filter presets, active preset name: {_activePresetName ?? "None"}");
+            Log($"LoadSettings: Preset guardrail - persistedCount={persistedPresetCount}, inMemoryCount={_filterPresets?.Count ?? 0}, loadingInProgress={_isLoadingSettings}");
             
             // Update filter summary after loading (to show preset name if active)
             UpdateFilterSummaryText();
@@ -7378,6 +7407,11 @@ namespace ReelRoulette
                 _savedShowStatsPanel = _showStatsPanel;
                 // Now ApplyPlayerViewMode will set _show* to false and hide everything
                 ApplyPlayerViewMode();
+            }
+            }
+            finally
+            {
+                _isLoadingSettings = false;
             }
         }
         
@@ -7499,6 +7533,12 @@ namespace ReelRoulette
 
         private void SaveSettings()
         {
+            if (_isLoadingSettings)
+            {
+                Log("SaveSettings: Skipped while loading settings");
+                return;
+            }
+
             // Capture UI value on UI thread
             var intervalValue = IntervalNumericUpDown?.Value;
             SaveSettingsInternal(intervalValue);
@@ -7598,6 +7638,9 @@ namespace ReelRoulette
                 settings.BackupLibraryEnabled = _backupLibraryEnabled;
                 settings.MinimumBackupGapMinutes = _minimumBackupGapMinutes;
                 settings.NumberOfBackups = _numberOfBackups;
+                settings.BackupSettingsEnabled = _backupSettingsEnabled;
+                settings.MinimumSettingsBackupGapMinutes = _minimumSettingsBackupGapMinutes;
+                settings.NumberOfSettingsBackups = _numberOfSettingsBackups;
                 
                 // Auto-refresh settings
                 settings.AutoRefreshSourcesEnabled = _autoRefreshSourcesEnabled;
@@ -7620,7 +7663,14 @@ namespace ReelRoulette
                 settings.FilterState = _currentFilterState ?? new FilterState();
                 
                 // Filter presets
-                settings.FilterPresets = _filterPresets;
+                if (_filterPresets != null)
+                {
+                    settings.FilterPresets = _filterPresets;
+                }
+                else
+                {
+                    Log("SaveSettings: Preserving existing filter presets because in-memory presets are not initialized");
+                }
                 settings.ActivePresetName = _activePresetName;
                 settings.AutoTagScanFullLibrary = _autoTagScanFullLibrary;
                 
@@ -7635,13 +7685,33 @@ namespace ReelRoulette
                 {
                     Log($"SaveSettings: FilterState details - FavoritesOnly: {settings.FilterState.FavoritesOnly}, ExcludeBlacklisted: {settings.FilterState.ExcludeBlacklisted}, AudioFilter: {settings.FilterState.AudioFilter}");
                 }
+
+                // Settings backup safety net (separate policy from library backups).
+                CreateSettingsBackupIfNeeded(path);
                 
                 Log("SaveSettings: Serializing to JSON...");
                 var json = JsonSerializer.Serialize(settings, new JsonSerializerOptions { WriteIndented = true });
                 Log($"SaveSettings: JSON length = {json.Length} characters");
                 
                 Log("SaveSettings: Writing to file...");
-                File.WriteAllText(path, json);
+                var tempPath = path + ".tmp";
+                File.WriteAllText(tempPath, json);
+                if (File.Exists(path))
+                {
+                    try
+                    {
+                        File.Replace(tempPath, path, null);
+                    }
+                    catch
+                    {
+                        File.Copy(tempPath, path, true);
+                        File.Delete(tempPath);
+                    }
+                }
+                else
+                {
+                    File.Move(tempPath, path);
+                }
                 Log($"SaveSettings: Successfully saved settings to {path}");
             }
             catch (Exception ex)
@@ -7652,6 +7722,63 @@ namespace ReelRoulette
                 {
                     Log($"SaveSettings: ERROR - Inner exception: {ex.InnerException.Message}");
                 }
+            }
+        }
+
+        private void CreateSettingsBackupIfNeeded(string settingsPath)
+        {
+            if (!_backupSettingsEnabled)
+            {
+                return;
+            }
+
+            try
+            {
+                if (!File.Exists(settingsPath))
+                {
+                    // No settings file yet, so nothing to back up.
+                    return;
+                }
+
+                var backupDir = AppDataManager.GetBackupDirectoryPath();
+                var backupFiles = Directory.GetFiles(backupDir, "settings.json.backup.*")
+                    .Select(f => new FileInfo(f))
+                    .OrderBy(f => f.CreationTime)
+                    .ToList();
+
+                var maxBackups = Math.Max(1, _numberOfSettingsBackups);
+                var minGapMinutes = Math.Max(1, _minimumSettingsBackupGapMinutes);
+                var now = DateTime.Now;
+                var lastBackupTime = backupFiles.Count > 0 ? backupFiles[^1].CreationTime : DateTime.MinValue;
+                var hasLastBackup = backupFiles.Count > 0;
+                var timeSinceLastBackup = hasLastBackup ? now - lastBackupTime : TimeSpan.MaxValue;
+
+                if (backupFiles.Count >= maxBackups)
+                {
+                    if (hasLastBackup && timeSinceLastBackup.TotalMinutes < minGapMinutes)
+                    {
+                        var newest = backupFiles[^1];
+                        newest.Delete();
+                        backupFiles.RemoveAt(backupFiles.Count - 1);
+                        Log($"SaveSettings: Deleted most recent settings backup (min gap {minGapMinutes}m): {newest.Name}");
+                    }
+                    else
+                    {
+                        var oldest = backupFiles[0];
+                        oldest.Delete();
+                        backupFiles.RemoveAt(0);
+                        Log($"SaveSettings: Deleted oldest settings backup (max {maxBackups}): {oldest.Name}");
+                    }
+                }
+
+                var timestamp = now.ToString("yyyy-MM-dd_HH-mm-ss");
+                var backupPath = Path.Combine(backupDir, $"settings.json.backup.{timestamp}");
+                File.Copy(settingsPath, backupPath, true);
+                Log($"SaveSettings: Created settings backup: {Path.GetFileName(backupPath)}");
+            }
+            catch (Exception ex)
+            {
+                Log($"SaveSettings: WARNING - Settings backup failed: {ex.Message}");
             }
         }
 
@@ -8411,55 +8538,131 @@ namespace ReelRoulette
 
         private async void SettingsMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
-            Log("Settings: Opening Settings dialog");
-            
-            var dialog = new SettingsDialog();
-            
-            // Load current settings into dialog
-            var intervalValue = IntervalNumericUpDown?.Value ?? 300;
-            dialog.LoadFromSettings(
-                _isLoopEnabled,
-                _autoPlayNext,
-                _noRepeatMode,
-                (double)intervalValue,
-                _seekStep,
-                _volumeStep,
-                _volumeNormalizationEnabled,
-                _maxReductionDb,
-                _maxBoostDb,
-                _baselineAutoMode,
-                _baselineOverrideLUFS,
-                _photoDisplayDurationSeconds,
-                _imageScalingMode,
-                _fixedImageMaxWidth,
-                _fixedImageMaxHeight,
-                _missingFileBehavior,
-                _backupLibraryEnabled,
-                _minimumBackupGapMinutes,
-                _numberOfBackups,
-                _autoRefreshSourcesEnabled,
-                _autoRefreshIntervalMinutes,
-                _autoRefreshOnlyWhenIdle,
-                _autoRefreshIdleThresholdMinutes,
-                _webRemoteEnabled,
-                _webRemotePort,
-                _webRemoteBindOnLan,
-                _webRemoteLanHostname,
-                _webRemoteAuthMode,
-                _webRemoteSharedToken
-            );
-            
-            await dialog.ShowDialog<bool?>(this);
-            
-            if (dialog.WasApplied)
+            if (_isSettingsDialogOpen)
             {
-                Log("Settings: User clicked Apply/OK, applying settings");
+                Log("Settings: Open request ignored (dialog already open)");
+                return;
+            }
+
+            _isSettingsDialogOpen = true;
+            Log("Settings: Opening Settings dialog");
+            var dialogStopwatch = Stopwatch.StartNew();
+            CancellationTokenSource? settingsOpenWatchdogCts = null;
+
+            try
+            {
+                Log("Settings: Creating dialog instance...");
+                var dialog = new SettingsDialog();
+                Log("Settings: Dialog instance created.");
+
+                dialog.WindowStartupLocation = WindowStartupLocation.CenterOwner;
+                dialog.Topmost = this.Topmost;
+                dialog.Opened += (_, __) => Log("Settings: Dialog Opened event fired");
+                dialog.Closed += (_, __) => Log($"Settings: Dialog Closed event fired after {dialogStopwatch.ElapsedMilliseconds}ms");
                 
-                // Set flag to prevent recursive SaveSettings calls
-                _isApplyingSettings = true;
+                // Load current settings into dialog
+                var intervalValue = IntervalNumericUpDown?.Value ?? 300;
+                Log("Settings: Loading current values into dialog...");
+                dialog.LoadFromSettings(
+                    _isLoopEnabled,
+                    _autoPlayNext,
+                    _noRepeatMode,
+                    (double)intervalValue,
+                    _seekStep,
+                    _volumeStep,
+                    _volumeNormalizationEnabled,
+                    _maxReductionDb,
+                    _maxBoostDb,
+                    _baselineAutoMode,
+                    _baselineOverrideLUFS,
+                    _photoDisplayDurationSeconds,
+                    _imageScalingMode,
+                    _fixedImageMaxWidth,
+                    _fixedImageMaxHeight,
+                    _missingFileBehavior,
+                    _backupLibraryEnabled,
+                    _minimumBackupGapMinutes,
+                    _numberOfBackups,
+                    _backupSettingsEnabled,
+                    _minimumSettingsBackupGapMinutes,
+                    _numberOfSettingsBackups,
+                    _autoRefreshSourcesEnabled,
+                    _autoRefreshIntervalMinutes,
+                    _autoRefreshOnlyWhenIdle,
+                    _autoRefreshIdleThresholdMinutes,
+                    _webRemoteEnabled,
+                    _webRemotePort,
+                    _webRemoteBindOnLan,
+                    _webRemoteLanHostname,
+                    _webRemoteAuthMode,
+                    _webRemoteSharedToken
+                );
+                Log("Settings: Dialog values loaded.");
                 
-                try
+                settingsOpenWatchdogCts = new CancellationTokenSource();
+                _ = Task.Run(async () =>
                 {
+                    try
+                    {
+                        await Task.Delay(5000, settingsOpenWatchdogCts.Token);
+                        if (!settingsOpenWatchdogCts.IsCancellationRequested)
+                        {
+                            Log("Settings: ShowDialog is still waiting after 5000ms");
+                        }
+                    }
+                    catch (TaskCanceledException)
+                    {
+                    }
+                });
+
+                Log("Settings: Calling ShowDialog...");
+                await dialog.ShowDialog<bool?>(this);
+                settingsOpenWatchdogCts.Cancel();
+                Log("Settings: ShowDialog returned.");
+                Log($"Settings: Dialog closed after {dialogStopwatch.ElapsedMilliseconds}ms (WasApplied={dialog.WasApplied})");
+                
+                if (dialog.WasApplied)
+                {
+                    Log("Settings: User clicked Apply/OK, applying settings");
+                    var applyStopwatch = Stopwatch.StartNew();
+                    
+                    // Set flag to prevent recursive SaveSettings calls
+                    _isApplyingSettings = true;
+                    
+                    try
+                    {
+                        var oldLoopEnabled = _isLoopEnabled;
+                        var oldAutoPlayNext = _autoPlayNext;
+                        var oldNoRepeatMode = _noRepeatMode;
+                        var oldSeekStep = _seekStep;
+                        var oldVolumeStep = _volumeStep;
+                        var oldVolumeNormalizationEnabled = _volumeNormalizationEnabled;
+                        var oldMaxReductionDb = _maxReductionDb;
+                        var oldMaxBoostDb = _maxBoostDb;
+                        var oldBaselineAutoMode = _baselineAutoMode;
+                        var oldBaselineOverrideLufs = _baselineOverrideLUFS;
+                        var oldPhotoDuration = _photoDisplayDurationSeconds;
+                        var oldScalingMode = _imageScalingMode;
+                        var oldFixedWidth = _fixedImageMaxWidth;
+                        var oldFixedHeight = _fixedImageMaxHeight;
+                        var oldMissingFileBehavior = _missingFileBehavior;
+                        var oldBackupEnabled = _backupLibraryEnabled;
+                        var oldMinGap = _minimumBackupGapMinutes;
+                        var oldBackupCount = _numberOfBackups;
+                        var oldSettingsBackupEnabled = _backupSettingsEnabled;
+                        var oldSettingsMinGap = _minimumSettingsBackupGapMinutes;
+                        var oldSettingsBackupCount = _numberOfSettingsBackups;
+                        var oldAutoRefreshEnabled = _autoRefreshSourcesEnabled;
+                        var oldAutoRefreshInterval = _autoRefreshIntervalMinutes;
+                        var oldAutoRefreshIdleOnly = _autoRefreshOnlyWhenIdle;
+                        var oldAutoRefreshIdleThreshold = _autoRefreshIdleThresholdMinutes;
+                        var oldWebRemoteEnabled = _webRemoteEnabled;
+                        var oldWebRemotePort = _webRemotePort;
+                        var oldWebRemoteBindOnLan = _webRemoteBindOnLan;
+                        var oldWebRemoteLanHostname = _webRemoteLanHostname;
+                        var oldWebRemoteAuthMode = _webRemoteAuthMode;
+                        var oldWebRemoteSharedToken = _webRemoteSharedToken;
+
                     // Apply settings from dialog
                     _isLoopEnabled = dialog.LoopEnabled;
                     _autoPlayNext = dialog.AutoPlayNext;
@@ -8476,41 +8679,33 @@ namespace ReelRoulette
                     // Reset warning flag when settings change so it can be shown again if needed
                     _hasShownMissingLoudnessWarning = false;
                     Log($"Settings: Normalization settings updated - MaxReduction: {_maxReductionDb} dB, MaxBoost: {_maxBoostDb} dB, BaselineMode: {(_baselineAutoMode ? "Auto" : $"Manual ({_baselineOverrideLUFS} LUFS)")}");
-                    var oldPhotoDuration = _photoDisplayDurationSeconds;
                     _photoDisplayDurationSeconds = dialog.PhotoDisplayDurationSeconds;
                     Log($"Settings: Photo display duration changed from {oldPhotoDuration} to {_photoDisplayDurationSeconds} seconds");
                     
                     // Update image scaling settings
-                    var oldScalingMode = _imageScalingMode;
                     _imageScalingMode = dialog.ImageScalingMode;
                     _fixedImageMaxWidth = dialog.FixedImageMaxWidth;
                     _fixedImageMaxHeight = dialog.FixedImageMaxHeight;
                     Log($"Settings: Image scaling changed - Mode: {_imageScalingMode}, FixedMax: {_fixedImageMaxWidth}x{_fixedImageMaxHeight}");
                     
                     // Update missing file behavior setting
-                    var oldMissingFileBehavior = _missingFileBehavior;
                     _missingFileBehavior = dialog.MissingFileBehavior;
                     Log($"Settings: Missing file behavior changed from {oldMissingFileBehavior} to {_missingFileBehavior}");
                     
                     // Update backup settings
-                    var oldBackupEnabled = _backupLibraryEnabled;
-                    var oldMinGap = _minimumBackupGapMinutes;
-                    var oldBackupCount = _numberOfBackups;
                     _backupLibraryEnabled = dialog.GetBackupLibraryEnabled();
                     _minimumBackupGapMinutes = dialog.GetMinimumBackupGapMinutes();
                     _numberOfBackups = dialog.GetNumberOfBackups();
-                    Log($"Settings: Backup settings changed - Enabled: {oldBackupEnabled} -> {_backupLibraryEnabled}, MinGap: {oldMinGap} -> {_minimumBackupGapMinutes} minutes, Count: {oldBackupCount} -> {_numberOfBackups}");
+                    _backupSettingsEnabled = dialog.GetBackupSettingsEnabled();
+                    _minimumSettingsBackupGapMinutes = dialog.GetMinimumSettingsBackupGapMinutes();
+                    _numberOfSettingsBackups = dialog.GetNumberOfSettingsBackups();
+                    Log($"Settings: Backup settings changed - LibraryEnabled: {oldBackupEnabled} -> {_backupLibraryEnabled}, LibraryMinGap: {oldMinGap} -> {_minimumBackupGapMinutes} minutes, LibraryCount: {oldBackupCount} -> {_numberOfBackups}, SettingsEnabled: {oldSettingsBackupEnabled} -> {_backupSettingsEnabled}, SettingsMinGap: {oldSettingsMinGap} -> {_minimumSettingsBackupGapMinutes} minutes, SettingsCount: {oldSettingsBackupCount} -> {_numberOfSettingsBackups}");
                     
-                    var oldAutoRefreshEnabled = _autoRefreshSourcesEnabled;
-                    var oldAutoRefreshInterval = _autoRefreshIntervalMinutes;
-                    var oldAutoRefreshIdleOnly = _autoRefreshOnlyWhenIdle;
-                    var oldAutoRefreshIdleThreshold = _autoRefreshIdleThresholdMinutes;
                     _autoRefreshSourcesEnabled = dialog.GetAutoRefreshSourcesEnabled();
                     _autoRefreshIntervalMinutes = dialog.GetAutoRefreshIntervalMinutes();
                     _autoRefreshOnlyWhenIdle = dialog.GetAutoRefreshOnlyWhenIdle();
                     _autoRefreshIdleThresholdMinutes = dialog.GetAutoRefreshIdleThresholdMinutes();
                     Log($"Settings: Auto-refresh settings changed - Enabled: {oldAutoRefreshEnabled} -> {_autoRefreshSourcesEnabled}, Interval: {oldAutoRefreshInterval} -> {_autoRefreshIntervalMinutes} minutes, IdleOnly: {oldAutoRefreshIdleOnly} -> {_autoRefreshOnlyWhenIdle}, IdleThreshold: {oldAutoRefreshIdleThreshold} -> {_autoRefreshIdleThresholdMinutes} minutes");
-                    StartOrRestartAutoRefreshTimer();
 
                     // Update Web Remote settings
                     _webRemoteEnabled = dialog.GetWebRemoteEnabled();
@@ -8521,111 +8716,215 @@ namespace ReelRoulette
                     _webRemoteSharedToken = dialog.GetWebRemoteSharedToken();
                     Log($"Settings: Web Remote settings changed - Enabled: {_webRemoteEnabled}, Port: {_webRemotePort}, BindOnLan: {_webRemoteBindOnLan}, LanHostname: {_webRemoteLanHostname}, AuthMode: {_webRemoteAuthMode}");
 
-                    // Restart Web Remote server with new settings
-                    if (_webRemoteServer != null)
-                    {
-                        _webRemoteServer.StopAsync().ConfigureAwait(false).GetAwaiter().GetResult();
-                        _webRemoteServer.Dispose();
-                        _webRemoteServer = null;
-                    }
-                    if (_webRemoteEnabled)
-                    {
-                        EnsureWebRemoteToken();
-                        _webRemoteServer = new WebRemote.WebRemoteServer();
-                        var wrSettings = new WebRemote.WebRemoteSettings
-                        {
-                            Enabled = true,
-                            Port = _webRemotePort,
-                            BindOnLan = _webRemoteBindOnLan,
-                            LanHostname = _webRemoteLanHostname,
-                            AuthMode = _webRemoteAuthMode,
-                            SharedToken = _webRemoteSharedToken
-                        };
-#pragma warning disable CS4014
-                        _webRemoteServer.StartAsync(wrSettings, this, Log);
-#pragma warning restore CS4014
-                        Log("Settings: Web Remote server restarted with new settings.");
-                    }
-                    if (OpenWebRemoteMenuItem != null)
-                        OpenWebRemoteMenuItem.IsEnabled = _webRemoteEnabled;
+                        var settingsChanged =
+                            oldLoopEnabled != _isLoopEnabled ||
+                            oldAutoPlayNext != _autoPlayNext ||
+                            oldNoRepeatMode != _noRepeatMode ||
+                            !string.Equals(oldSeekStep, _seekStep, StringComparison.OrdinalIgnoreCase) ||
+                            oldVolumeStep != _volumeStep ||
+                            oldVolumeNormalizationEnabled != _volumeNormalizationEnabled ||
+                            Math.Abs(oldMaxReductionDb - _maxReductionDb) > 0.001 ||
+                            Math.Abs(oldMaxBoostDb - _maxBoostDb) > 0.001 ||
+                            oldBaselineAutoMode != _baselineAutoMode ||
+                            Math.Abs(oldBaselineOverrideLufs - _baselineOverrideLUFS) > 0.001 ||
+                            oldPhotoDuration != _photoDisplayDurationSeconds ||
+                            oldScalingMode != _imageScalingMode ||
+                            oldFixedWidth != _fixedImageMaxWidth ||
+                            oldFixedHeight != _fixedImageMaxHeight ||
+                            oldMissingFileBehavior != _missingFileBehavior ||
+                            oldBackupEnabled != _backupLibraryEnabled ||
+                            oldMinGap != _minimumBackupGapMinutes ||
+                            oldBackupCount != _numberOfBackups ||
+                            oldSettingsBackupEnabled != _backupSettingsEnabled ||
+                            oldSettingsMinGap != _minimumSettingsBackupGapMinutes ||
+                            oldSettingsBackupCount != _numberOfSettingsBackups ||
+                            oldAutoRefreshEnabled != _autoRefreshSourcesEnabled ||
+                            oldAutoRefreshInterval != _autoRefreshIntervalMinutes ||
+                            oldAutoRefreshIdleOnly != _autoRefreshOnlyWhenIdle ||
+                            oldAutoRefreshIdleThreshold != _autoRefreshIdleThresholdMinutes ||
+                            oldWebRemoteEnabled != _webRemoteEnabled ||
+                            oldWebRemotePort != _webRemotePort ||
+                            oldWebRemoteBindOnLan != _webRemoteBindOnLan ||
+                            !string.Equals(oldWebRemoteLanHostname, _webRemoteLanHostname, StringComparison.OrdinalIgnoreCase) ||
+                            oldWebRemoteAuthMode != _webRemoteAuthMode ||
+                            !string.Equals(oldWebRemoteSharedToken ?? string.Empty, _webRemoteSharedToken ?? string.Empty, StringComparison.Ordinal);
 
-                    // Update UI controls (these will trigger change handlers, but won't save due to flag)
-                    Dispatcher.UIThread.Post(() =>
-                    {
-                        if (LoopToggle != null) LoopToggle.IsChecked = _isLoopEnabled;
-                        if (AutoPlayNextCheckBox != null) AutoPlayNextCheckBox.IsChecked = _autoPlayNext;
-                        if (NoRepeatMenuItem != null) NoRepeatMenuItem.IsChecked = _noRepeatMode;
-                        if (NoRepeatToggle != null) NoRepeatToggle.IsChecked = _noRepeatMode;
-                        if (IntervalNumericUpDown != null) IntervalNumericUpDown.Value = dialog.TimerIntervalSeconds;
-                    });
-                    
-                    // Apply loop setting to current media if playing
-                    // Loop setting requires recreating the media, handled by LoopToggle_Changed logic
-                    if (!string.IsNullOrEmpty(_currentVideoPath) && _currentMedia != null && _mediaPlayer != null && _libVLC != null)
-                    {
-                        try
+                        var autoRefreshChanged =
+                            oldAutoRefreshEnabled != _autoRefreshSourcesEnabled ||
+                            oldAutoRefreshInterval != _autoRefreshIntervalMinutes ||
+                            oldAutoRefreshIdleOnly != _autoRefreshOnlyWhenIdle ||
+                            oldAutoRefreshIdleThreshold != _autoRefreshIdleThresholdMinutes;
+
+                        var webRemoteChanged =
+                            oldWebRemoteEnabled != _webRemoteEnabled ||
+                            oldWebRemotePort != _webRemotePort ||
+                            oldWebRemoteBindOnLan != _webRemoteBindOnLan ||
+                            !string.Equals(oldWebRemoteLanHostname, _webRemoteLanHostname, StringComparison.OrdinalIgnoreCase) ||
+                            oldWebRemoteAuthMode != _webRemoteAuthMode ||
+                            !string.Equals(oldWebRemoteSharedToken ?? string.Empty, _webRemoteSharedToken ?? string.Empty, StringComparison.Ordinal);
+
+                        if (autoRefreshChanged)
                         {
-                            var wasPlaying = _mediaPlayer.IsPlaying;
-                            var currentTime = _mediaPlayer.Time;
-                            
-                            // Stop current playback
-                            _mediaPlayer.Stop();
-                            
-                            // Dispose current media
-                            var mediaToDispose = _currentMedia;
-                            _currentMedia = null;
-                            mediaToDispose?.Dispose();
-                            
-                            // Create new media with updated loop option
-                            _currentMedia = new Media(_libVLC, _currentVideoPath, FromType.FromPath);
-                            
-                            if (_isLoopEnabled)
+                            var timerRestartStopwatch = Stopwatch.StartNew();
+                            StartOrRestartAutoRefreshTimer();
+                            Log($"Settings: Auto-refresh timer restart completed in {timerRestartStopwatch.ElapsedMilliseconds}ms");
+                        }
+
+                        if (webRemoteChanged)
+                        {
+                            var webRemoteRestartStopwatch = Stopwatch.StartNew();
+                            await RestartWebRemoteServerAsync();
+                            Log($"Settings: Web Remote restart flow completed in {webRemoteRestartStopwatch.ElapsedMilliseconds}ms");
+                        }
+
+                        if (OpenWebRemoteMenuItem != null)
+                            OpenWebRemoteMenuItem.IsEnabled = _webRemoteEnabled;
+
+                        // Update UI controls (these will trigger change handlers, but won't save due to flag)
+                        Dispatcher.UIThread.Post(() =>
+                        {
+                            if (LoopToggle != null) LoopToggle.IsChecked = _isLoopEnabled;
+                            if (AutoPlayNextCheckBox != null) AutoPlayNextCheckBox.IsChecked = _autoPlayNext;
+                            if (NoRepeatMenuItem != null) NoRepeatMenuItem.IsChecked = _noRepeatMode;
+                            if (NoRepeatToggle != null) NoRepeatToggle.IsChecked = _noRepeatMode;
+                            if (IntervalNumericUpDown != null) IntervalNumericUpDown.Value = dialog.TimerIntervalSeconds;
+                        });
+                        
+                        // Apply loop setting to current media only when loop changed.
+                        if (oldLoopEnabled != _isLoopEnabled &&
+                            !string.IsNullOrEmpty(_currentVideoPath) &&
+                            _currentMedia != null &&
+                            _mediaPlayer != null &&
+                            _libVLC != null)
+                        {
+                            try
                             {
-                                _currentMedia.AddOption(":input-repeat=65535");
-                            }
-                            
-                            // Parse and set media (fire and forget, same pattern used elsewhere)
+                                var wasPlaying = _mediaPlayer.IsPlaying;
+                                var currentTime = _mediaPlayer.Time;
+                                
+                                // Stop current playback
+                                _mediaPlayer.Stop();
+                                
+                                // Dispose current media
+                                var mediaToDispose = _currentMedia;
+                                _currentMedia = null;
+                                mediaToDispose?.Dispose();
+                                
+                                // Create new media with updated loop option
+                                _currentMedia = new Media(_libVLC, _currentVideoPath, FromType.FromPath);
+                                
+                                if (_isLoopEnabled)
+                                {
+                                    _currentMedia.AddOption(":input-repeat=65535");
+                                }
+                                
+                                // Parse and set media (fire and forget, same pattern used elsewhere)
 #pragma warning disable CS4014
-                            _currentMedia.Parse();
+                                _currentMedia.Parse();
 #pragma warning restore CS4014
-                            UpdateAspectRatioFromTracks();
-                            
-                            // Set media and restore playback position
-                            _mediaPlayer.Play(_currentMedia);
-                            _mediaPlayer.Time = currentTime;
-                            
-                            // Restore playback state
-                            if (wasPlaying)
-                            {
-                                PlayPauseButton.IsChecked = true;
+                                UpdateAspectRatioFromTracks();
+                                
+                                // Set media and restore playback position
+                                _mediaPlayer.Play(_currentMedia);
+                                _mediaPlayer.Time = currentTime;
+                                
+                                // Restore playback state
+                                if (wasPlaying)
+                                {
+                                    PlayPauseButton.IsChecked = true;
+                                }
+                                else
+                                {
+                                    _mediaPlayer.Pause();
+                                    PlayPauseButton.IsChecked = false;
+                                }
                             }
-                            else
+                            catch (Exception ex)
                             {
-                                _mediaPlayer.Pause();
-                                PlayPauseButton.IsChecked = false;
+                                Log($"Settings: ERROR updating loop setting - {ex.Message}");
                             }
                         }
-                        catch (Exception ex)
+                        
+                        if (settingsChanged)
                         {
-                            Log($"Settings: ERROR updating loop setting - {ex.Message}");
+                            // Save settings to disk (now that all fields are updated)
+                            var saveSettingsStopwatch = Stopwatch.StartNew();
+                            SaveSettings();
+                            Log($"Settings: SaveSettings completed in {saveSettingsStopwatch.ElapsedMilliseconds}ms");
+                            Log($"Settings: Applied and saved - Loop={_isLoopEnabled}, AutoPlay={_autoPlayNext}, NoRepeat={_noRepeatMode}, SeekStep={_seekStep}, VolumeStep={_volumeStep}, VolumeNorm={_volumeNormalizationEnabled}");
                         }
+                        else
+                        {
+                            Log("Settings: Apply completed with no effective setting changes");
+                        }
+
+                        Log($"Settings: Apply flow completed in {applyStopwatch.ElapsedMilliseconds}ms");
                     }
-                    
-                    // Save settings to disk (now that all fields are updated)
-                    SaveSettings();
-                    
-                    Log($"Settings: Applied and saved - Loop={_isLoopEnabled}, AutoPlay={_autoPlayNext}, NoRepeat={_noRepeatMode}, SeekStep={_seekStep}, VolumeStep={_volumeStep}, VolumeNorm={_volumeNormalizationEnabled}");
+                    finally
+                    {
+                        // Always clear the flag
+                        _isApplyingSettings = false;
+                    }
                 }
-                finally
+                else
                 {
-                    // Always clear the flag
-                    _isApplyingSettings = false;
+                    Log("Settings: User cancelled, no changes applied");
                 }
             }
-            else
+            catch (Exception ex)
             {
-                Log("Settings: User cancelled, no changes applied");
+                Log($"Settings: ERROR in dialog flow - {ex.GetType().Name}: {ex.Message}");
+                Log($"Settings: ERROR stack - {ex.StackTrace}");
             }
+            finally
+            {
+                if (settingsOpenWatchdogCts != null)
+                {
+                    settingsOpenWatchdogCts.Cancel();
+                    settingsOpenWatchdogCts.Dispose();
+                }
+
+                _isSettingsDialogOpen = false;
+                Log($"Settings: Handler finished in {dialogStopwatch.ElapsedMilliseconds}ms");
+            }
+        }
+
+        private async Task RestartWebRemoteServerAsync()
+        {
+            var restartStopwatch = Stopwatch.StartNew();
+
+            // Stop existing instance first (if running) before applying new settings.
+            if (_webRemoteServer != null)
+            {
+                var stopStopwatch = Stopwatch.StartNew();
+                await _webRemoteServer.StopAsync();
+                Log($"Settings: Web Remote stop completed in {stopStopwatch.ElapsedMilliseconds}ms");
+                _webRemoteServer.Dispose();
+                _webRemoteServer = null;
+            }
+
+            if (!_webRemoteEnabled)
+            {
+                Log("Settings: Web Remote disabled; server remains stopped.");
+                Log($"Settings: Web Remote restart flow completed in {restartStopwatch.ElapsedMilliseconds}ms");
+                return;
+            }
+
+            EnsureWebRemoteToken();
+            _webRemoteServer = new WebRemote.WebRemoteServer();
+            var wrSettings = new WebRemote.WebRemoteSettings
+            {
+                Enabled = true,
+                Port = _webRemotePort,
+                BindOnLan = _webRemoteBindOnLan,
+                LanHostname = _webRemoteLanHostname,
+                AuthMode = _webRemoteAuthMode,
+                SharedToken = _webRemoteSharedToken
+            };
+            var startStopwatch = Stopwatch.StartNew();
+            await _webRemoteServer.StartAsync(wrSettings, this, Log);
+            Log($"Settings: Web Remote start completed in {startStopwatch.ElapsedMilliseconds}ms");
+            Log($"Settings: Web Remote server restarted with new settings (total {restartStopwatch.ElapsedMilliseconds}ms).");
         }
 
         private void OpenWebRemoteMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -8710,10 +9009,11 @@ namespace ReelRoulette
         private void AutoPlayNext_Changed(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
             _autoPlayNext = AutoPlayNextCheckBox.IsChecked == true;
-            Log($"UI ACTION: AutoPlayNext changed to: {_autoPlayNext}");
+            var isUserInitiated = !_isApplyingSettings && !_isLoadingSettings && !_isProgrammaticUiSync;
+            Log($"{(isUserInitiated ? "UI ACTION" : "STATE SYNC")}: AutoPlayNext changed to: {_autoPlayNext}");
             
             // Persist the setting (unless we're applying settings from dialog)
-            if (!_isApplyingSettings)
+            if (!_isApplyingSettings && !_isLoadingSettings && !_isProgrammaticUiSync)
             {
                 SaveSettings();
             }
@@ -8955,10 +9255,11 @@ namespace ReelRoulette
                 NoRepeatToggle.IsChecked = _noRepeatMode;
             }
             
-            Log($"UI ACTION: NoRepeatMenuItem changed to: {_noRepeatMode}");
+            var isUserInitiated = !_isApplyingSettings && !_isLoadingSettings && !_isProgrammaticUiSync;
+            Log($"{(isUserInitiated ? "UI ACTION" : "STATE SYNC")}: NoRepeatMenuItem changed to: {_noRepeatMode}");
             
             // Persist the setting (unless we're applying settings from dialog)
-            if (!_isApplyingSettings)
+            if (!_isApplyingSettings && !_isLoadingSettings && !_isProgrammaticUiSync)
             {
                 SaveSettings();
             }

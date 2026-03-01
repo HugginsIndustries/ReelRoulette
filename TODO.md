@@ -25,57 +25,28 @@ Each TODO entry follows this structure:
 
 ## P1 - High Priority
 
-### Background Refresh of Imported Sources
+### Enhanced Random Selection Modes
 
 - **Priority**: P1
-- **Impact**: High - Automates frequent manual workflow
-- **Description**: Automatically detect and add new files in imported source folders without requiring manual re-import. Currently, users must manually refresh sources in the Manage Sources dialog to pick up new videos, which is easy to forget.
+- **Impact**: Medium - Fixes semi-random behavior and provides better distribution
+- **Description**: Enhance random selection algorithm and add multiple randomization modes to address current "semi-random" behavior where multiple items from the same folder are frequently selected consecutively. Provides better distribution across the library and multiple modes for different preferences.
 - **Implementation**:
-  - Add `FileSystemWatcher` for each enabled library source
-  - Monitor for new video files (.mp4, .mkv, .avi, etc.)
-  - Debounce file changes (wait 2 seconds after last change before processing)
-  - Automatically create `LibraryItem` for new files and scan metadata
-  - Show toast/status notification: "Found 3 new videos in Movies"
-  - Add settings:
-    - Enable/disable auto-refresh globally or per-source
-    - Scan frequency: Immediate, 5 min, hourly, on app start only
-    - Notification preferences (show/hide, sound)
-  - Handle missing files:
-    - Option to auto-remove from library
-    - Option to flag/mark missing (show in separate view)
-    - Manual "Refresh All Sources" button as fallback
-  - Pause monitoring when app is minimized (battery/resource consideration)
-- **Notes**: Consider reliability on network drives. FileSystemWatcher can be flaky over SMB/network shares. May need periodic manual scan as backup.
-
-### Local Web Remote UI (Preset-Based Streaming Webapp)
-
-- **Priority**: P1
-- **Impact**: High - Makes ReelRoulette playable from any device with a browser on the local network
-- **Description**: Add a local web UI served by the desktop app that acts as a thin remote player. The desktop remains the authoritative media server and library manager (sources, tags, filters, presets, random selection). The web UI runs in a browser on phones, tablets, laptops, or TVs and allows selecting from existing filter presets and playing media randomly according to those presets, with basic playback controls (play/pause, next, seek) and simple options like Loop and Autoplay.
-- **Implementation**:
-  - HTTP API on desktop:
-    - Host a lightweight HTTP server inside the existing desktop app (e.g., Kestrel or HttpListener) listening on a configurable port, local network only.
-    - Core endpoints (shared contract future-native apps can also use):
-      - `GET /api/presets` → returns list of filter presets (ID, name, summary/description).
-      - `POST /api/random` → body: selected preset ID + options (e.g., include photos/videos); server uses existing filter/preset logic to pick next random `LibraryItem`; response includes item ID, display name, media type, duration, and a streaming URL/token.
-      - `GET /api/media/{idOrToken}` → streams the media file over HTTP with range support for seeking; desktop reads from disk and sends bytes without transcoding.
-    - Reuse existing `LibraryService`, `FilterService`, and filter presets to avoid duplicating random selection and filtering logic.
-    - Add simple LAN-focused auth (shared token/API key) and a Settings toggle to enable/disable web access.
-  - Web UI:
-    - Serve static HTML/CSS/JS from the same HTTP server (e.g., `GET /` delivers the app shell).
-    - Minimal SPA or vanilla JS UI with:
-      - Connection/status indicator (show current server, preset, and playback state).
-      - Preset picker backed by `/api/presets`.
-      - Now Playing view showing current item (title/file name, source, duration, media type icon).
-      - Controls: Play/Pause, Next Random (calls `/api/random`), optional Previous (local history only), seek slider tied to `<video>`/`<audio>`.
-      - Toggles: Loop current item, Autoplay next random on end.
-    - Use standard `<video>` / `<audio>` elements pointing to `GET /api/media/{idOrToken}` URLs for playback; support photos by rendering `<img>` or background image when `MediaType` is Photo.
-    - Ensure UI is responsive and touch-friendly for mobile browsers (large tap targets, avoid hover-only interactions).
-  - Networking/constraints:
-    - Assume all clients are on the same LAN and can reach `http://desktop-ip:port/`.
-    - Document firewall configuration on desktop to allow inbound traffic on the chosen port.
-    - No library/tag management from the web UI; all editing remains desktop-only to keep MVP small.
-- **Notes**: This feature establishes a general-purpose HTTP + JSON + streaming contract that can later be reused by native mobile apps or smart TV clients. Starting with a web UI keeps distribution simple (no app install) while still solving the “play from couch/phone” use case.
+  - **Fix current random algorithm**: Improve random seed/algorithm to ensure true randomization and better distribution
+  - Add "Randomization Mode" setting (single dropdown in Settings or playback controls):
+    - **Pure Random** (fixed): True random selection with improved distribution algorithm to avoid folder clustering
+    - **Weighted Random**: Favor less-played videos (probability inversely proportional to play count) - helps discover forgotten content
+    - **Smart Shuffle**: Play all eligible videos once before repeating (like Spotify) - ensures all content is seen before repeats
+    - **Spread Mode**: Prefer items from different folders/paths - actively avoids consecutive items from same directory
+    - **Weighted with Spread**: Combine weighted random with folder-aware distribution
+  - Fix folder clustering issue in current algorithm:
+    - Track recently selected folders/paths
+    - Bias selection away from recently selected folders
+    - Implement proper shuffle algorithm that distributes across directory structure
+  - Store mode preference in settings
+  - Update queue building logic in `BuildQueue()` based on selected mode
+  - Show current mode in status or tooltip
+  - All modes respect current filters (favorites, tags, duration, etc.)
+- **Notes**: The current random selection appears to be "semi-random" due to folder clustering. This enhancement addresses the root cause while providing multiple modes for different use cases. Spread Mode is particularly important for large libraries organized in folders to ensure better variety in selections.
 
 ---
 
@@ -242,28 +213,6 @@ Each TODO entry follows this structure:
   - Position should persist across app restarts
   - Consider adding "Resume without asking" option to skip dialog
 
-### Enhanced Search and Sorting
-
-- **Priority**: P2
-- **Impact**: Medium - Improves library navigation and discovery
-- **Description**: Enhance the existing search and sorting capabilities to make it easier to find and organize media in large libraries. Current search is basic filename/path matching, and sorting supports limited criteria.
-- **Implementation**:
-  - **Search enhancements**:
-    - Add tag autocomplete in search box: Type "#" or "@" to trigger tag suggestions
-    - Show matching tags as user types (dropdown list of available tags)
-    - Support tag search syntax: `tag:Action` or `#Action` to filter by tag
-    - Filter search results in real-time as user types
-  - **Sorting enhancements**:
-    - Add multi-criteria sorting: Primary sort + secondary sort (e.g., Sort by Date Added, then by Duration)
-    - Add sort criteria options:
-      - Tag count (number of tags assigned)
-      - Last played (most recent first or oldest first)
-      - File size
-      - Resolution (for videos/photos with metadata)
-    - Visual indicator showing active sort criteria
-    - Remember sort preferences per view preset
-- **Notes**: Enhance existing single search box and single sorting system - do not create separate search/sort interfaces. Tag autocomplete helps users quickly find items with specific tags in large libraries.
-
 ---
 
 ## P3 - Low Priority
@@ -351,28 +300,6 @@ Each TODO entry follows this structure:
   - Maintain backward compatibility during refactoring
 - **Notes**: Low priority enhancement for code maintainability. Consider after more urgent features are complete.
 
-### Playback Speed Control
-
-- **Priority**: P3
-- **Impact**: Low - Niche use case for speed watching or slow motion
-- **Description**: Add default playback speed setting and runtime speed control. Allows users to watch videos faster (tutorials, lectures) or slower (detailed observation).
-- **Implementation**:
-  - Apply default speed when video loads
-  - Add runtime controls:
-    - Keyboard shortcuts: [ = slower, ] = faster, \ = reset to 1x
-    - Menu item: Playback → Speed submenu with options: 0.25x, 0.5x, 0.75x, 1x, 1.25x, 1.5x, 1.75x, 2x
-    - Optional: Show current speed in status bar
-  - LibVLC integration: Use `MediaPlayer.SetRate()` method
-  - Speed affects video but not audio pitch (use time-stretching)
-  - **Add to Settings Dialog** (requires P2 "Centralized Settings Dialog"):
-    - Add to Playback tab:
-      - Default playback speed (dropdown: 0.25x, 0.5x, 0.75x, 1x, 1.25x, 1.5x, 1.75x, 2x - default: 1x)
-      - Remember speed per video (checkbox, default: disabled)
-- **Notes**:
-  - Most useful for educational content or tutorials
-  - Audio quality may degrade at extreme speeds (< 0.5x or > 2x)
-  - May interact with volume normalization features
-
 ### Advanced Settings (Cache and Performance Controls)
 
 - **Priority**: P3
@@ -443,77 +370,6 @@ Each TODO entry follows this structure:
   - Cache management helps users control disk space usage
   - Most features depend on other TODOs (virtualization, thumbnails, background refresh)
 
-### Export/Import Library Index
-
-- **Priority**: P3
-- **Impact**: Low-Medium - Useful for backup and migration
-- **Description**: Allow users to export library index to a file and import it on another machine or as backup. Useful for migrating to new PC or recovering from data loss.
-- **Implementation**:
-  - Add menu items: Library → "Export Library..." and "Import Library..."
-  - Export dialog:
-    - Save location picker
-    - Filename with timestamp: `ReelRoulette_Library_2025-12-15.json`
-    - Options:
-      - Include settings.json (filters, preferences)
-      - Include thumbnails (creates .zip bundle)
-      - Include playback stats and tags
-  - Import dialog:
-    - File picker for exported .json or .zip
-    - Import mode selection:
-      - **Replace**: Clear existing library, use imported data
-      - **Merge**: Combine with existing, update if path matches
-      - **Selective**: Show sources in import file, let user choose which to import
-    - Path validation: Check if imported paths exist on current system
-    - Warning for missing paths: "35 of 100 videos not found on this system"
-  - Conflict resolution for merge:
-    - If video path exists in both: Keep local stats or overwrite with imported?
-    - If source name conflicts: Rename imported source or skip?
-- **Notes**: Consider cloud backup integration (auto-export to Dropbox folder). Most users won't need this unless reinstalling OS or migrating machines.
-
-### Enhanced Random Selection Modes
-
-- **Priority**: P2
-- **Impact**: Medium - Fixes semi-random behavior and provides better distribution
-- **Description**: Enhance random selection algorithm and add multiple randomization modes to address current "semi-random" behavior where multiple items from the same folder are frequently selected consecutively. Provides better distribution across the library and multiple modes for different preferences.
-- **Implementation**:
-  - **Fix current random algorithm**: Improve random seed/algorithm to ensure true randomization and better distribution
-  - Add "Randomization Mode" setting (single dropdown in Settings or playback controls):
-    - **Pure Random** (fixed): True random selection with improved distribution algorithm to avoid folder clustering
-    - **Weighted Random**: Favor less-played videos (probability inversely proportional to play count) - helps discover forgotten content
-    - **Smart Shuffle**: Play all eligible videos once before repeating (like Spotify) - ensures all content is seen before repeats
-    - **Spread Mode**: Prefer items from different folders/paths - actively avoids consecutive items from same directory
-    - **Weighted with Spread**: Combine weighted random with folder-aware distribution
-  - Fix folder clustering issue in current algorithm:
-    - Track recently selected folders/paths
-    - Bias selection away from recently selected folders
-    - Implement proper shuffle algorithm that distributes across directory structure
-  - Store mode preference in settings
-  - Update queue building logic in `BuildQueue()` based on selected mode
-  - Show current mode in status or tooltip
-  - All modes respect current filters (favorites, tags, duration, etc.)
-- **Notes**: The current random selection appears to be "semi-random" due to folder clustering. This enhancement addresses the root cause while providing multiple modes for different use cases. Spread Mode is particularly important for large libraries organized in folders to ensure better variety in selections.
-
-### Duplicate Video Detection
-
-- **Priority**: P3
-- **Impact**: Low - Useful for one-time library cleanup
-- **Description**: Detect and help remove duplicate videos in library. Useful for users who have collected videos over years and suspect duplicates from re-downloads or file moves.
-- **Implementation**:
-  - Add Library → "Find Duplicates..." menu item
-  - Detection methods (progressively more accurate but slower):
-    - **Level 1**: Exact filename match (fast, 100% precision)
-    - **Level 2**: File size + duration match (fast, high precision)
-    - **Level 3**: Perceptual hash comparison (slow, catches re-encodes)
-  - Show results in dialog:
-    - Group suspected duplicates together
-    - Show filename, path, size, duration for each
-    - Preview thumbnails side-by-side (if thumbnail feature implemented)
-    - Checkboxes to mark which files to keep vs remove
-    - "Keep Highest Quality" auto-select (largest file size)
-  - Batch remove marked duplicates with confirmation
-  - Report: "Found 15 potential duplicates, removed 8 files"
-- **Notes**: Perceptual hashing is complex (would need library like ImageHash ported to video). Start with Level 1 and 2 only. Most users won't need this.
-
 ### Face Detection for Photos
 
 - **Priority**: P3
@@ -553,121 +409,3 @@ Each TODO entry follows this structure:
   - Maintain view mode preference in settings
   - Virtualization required for performance with large libraries
 - **Notes**: Thumbnail grid is familiar UI pattern but adds complexity. List view with small thumbnails may be sufficient. Consider user feedback before implementing.
-
----
-
-## Completed Features (Archive)
-
-These features have been fully implemented and are no longer on the TODO list:
-
-- ✅ **Tag Categories and Tag Renaming System** - Complete hierarchical tag system with categories and advanced filtering (Completed 2026-01-08)
-  - TagCategory and Tag classes with category-based organization
-  - Automatic migration dialog for existing flat tags (mandatory on first run)
-  - ManageTagsDialog redesign with category grouping, reordering, edit/delete buttons, orphaned tag handling, default category selection
-  - ItemTagsDialog with category-grouped tags, edit functionality, multi-tag addition preserving selection states, default category selection
-  - FilterDialog with per-category local match modes (ANY/ALL within category) and single global match mode (AND/OR between all categories)
-  - Advanced filtering logic supporting "ANY Genre AND ALL People" style filters with correct category ID tracking
-  - Tag renaming across library items with filter preset update utilities
-  - Tag deletion with filter preset cleanup utilities
-  - Orphaned tags appear in "Uncategorized" category and are properly included in filtering
-  - Full backward compatibility with legacy flat tag format
-  - Example filtering: "(Action OR Comedy in Genre: ANY) AND (Tom Hanks in People: ALL)" with global AND
-- ✅ **Filter Presets (Saved Filter Configurations)** - Filter presets feature with library panel integration (Completed 2026-01-06)
-  - Filter presets allow users to save and quickly apply commonly used filter configurations
-  - New "Presets" tab in FilterDialog with three sections: Choose Preset, Create New Preset, and Manage Presets
-  - Manage Presets list fills available space in Presets tab
-  - Preset dropdown in library panel (below filter summary, above view/source/sort controls) for immediate preset loading
-  - Preset selection in library panel loads and applies filters immediately (no Apply button needed)
-  - Preset selection in FilterDialog loads filters into dialog (requires Apply to save)
-  - Filter summary always displays current filter configuration (not preset name)
-  - Active preset name shown in FilterDialog header
-  - Presets stored in settings.json and persist across app restarts
-  - Preset management: add, delete, rename (via dialog), and reorder (up/down)
-  - Preset UX improvement: show "*" next to active preset name when modified; "Update Preset" button overwrites selected preset and clears the "*" (button enabled only when changes exist)
-- ✅ **Enhanced Library Statistics Panel** - Context-aware stats panel with media type support (Completed 2026-01-04)
-  - Renamed "Current Video" section to "Current File" for consistency with photo support
-  - Added context-aware visibility: video-specific stats (duration, audio, loudness, peak) automatically hidden for photos
-  - Renamed UpdateCurrentVideoStatsUi() to UpdateCurrentFileStatsUi() for clarity
-  - Stats panel now adapts display based on MediaType (Video/Photo)
-- ✅ **Batch Operations in Library Panel** - Multi-select support with batch operations (Completed 2026-01-03)
-  - Multi-select with Ctrl+Click, Shift+Click support
-  - Context menu with batch operations: Add/Remove from Favorites, Add/Remove from Blacklist, Add/Remove Tags, Remove from Library, Clear Playback Stats
-  - Selection tracking that persists across filter changes
-  - Filter/selection count display
-  - Enhanced ItemTagsDialog for batch tagging with color-coded UI
-  - RemoveItemsDialog confirmation dialog
-- ✅ **Library Backup System** - Automatic library backup system with configurable settings to prevent data loss during testing and development (Completed 2025-12-29)
-  - Backups created automatically at program exit (before saving library)
-  - Configurable settings: Enable/disable backups, minimum backup gap (1-60 minutes), number of backups to keep (1-30)
-  - Smart backup retention: During testing (frequent restarts < min gap), replaces most recent backup; during normal use (>= min gap), rotates oldest backup
-  - Backup files stored in {AppData}/ReelRoulette/backups/ with timestamp naming: library.json.backup.YYYY-MM-DD_HH-MM-SS
-  - Settings available in General tab of Settings dialog
-  - All backup operations logged; failures don't prevent library save
-  - Prevents data loss during frequent testing by preserving older backups when creating backups too soon
-- ✅ **Photo Support** - Comprehensive photo support with media type filtering, configurable display duration, and mixed video/photo slideshow functionality (Completed 2025-12-28)
-  - Added MediaType enum (Video/Photo) and MediaTypeFilter (All/VideosOnly/PhotosOnly)
-  - Library system now scans and categorizes both videos and photos
-  - Photo playback using Avalonia Image control with configurable display duration (1-3600s)
-  - Image scaling options: Off, Auto (screen-based), Fixed (user-defined max dimensions)
-  - Media type filtering integrated into FilterService and FilterDialog
-  - Statistics updated to distinguish videos from photos (GlobalTotalVideosKnown, GlobalTotalPhotosKnown, GlobalTotalMediaKnown, etc.)
-  - Missing file handling for photos with configurable default behavior
-  - Auto-continue playback when missing photos are removed from library
-- ✅ **Library Panel Virtualization** - Implemented virtualization in Library panel using ListBox with VirtualizingStackPanel for efficient rendering of large libraries (Completed 2025-12-28)
-  - Replaced ItemsControl with ListBox for native virtualization support
-  - Only visible items are rendered, dramatically improving performance with 10,000+ item libraries
-  - Maintains all existing functionality: search, sort, filters, multi-column layout
-  - Smooth scrolling and UI responsiveness even with very large libraries
-- ✅ **Centralized Settings Dialog** - Tabbed settings dialog with playback preferences, keyboard shortcuts, and persistence (Completed 2025-12-19)
-  - General tab (placeholder) and Playback tab implemented
-  - Loop, Auto-play, Mute state, Volume level, No Repeat settings now persist
-  - Seek step, Volume step, Volume normalization consolidated into dialog
-  - Removed redundant submenus from Playback menu
-  - Keyboard shortcut 'S' opens Settings dialog
-  - Fixed keyboard shortcuts reliability (window focusable, improved event handling)
-  - Fixed recursive settings saves with `_isApplyingSettings` flag
-  - Volume level (0-200) persists between sessions
-  - Mute state and volume restore correctly after app restart
-- ✅ **Source Management UI** - Comprehensive dialog for managing library sources with enable/disable, rename, remove, refresh (Completed 2025-12-15)
-- ✅ **Window State Persistence** - Save/restore window position, size, maximized state, panel widths (Completed 2025-12-15)
-- ✅ **Tag Management System** - Create, rename, delete tags with usage counts and bulk operations (Completed 2025-12)
-- ✅ **Missing File Dialog** - Handle missing videos with locate/remove options (Completed 2025-12)
-- ✅ **Playback Statistics** - Track play count, last played, unique videos, total plays (Completed 2025-12)
-- ✅ **Volume Normalization** - Multiple modes including library-aware normalization (Completed 2025-12)
-- ✅ **Audio Filtering** - Filter by with audio, without audio, or all videos (Completed 2025-12)
-- ✅ **Duration and Loudness Scanning** - Async metadata scanning with progress tracking (Completed 2025-12)
-
----
-
-## Notes and Guidelines
-
-### Implementation Priority
-
-When selecting which TODO to implement next, consider:
-
-1. **User impact**: How many users benefit? How much time does it save?
-2. **Frequency of use**: Daily feature vs one-time setup?
-3. **Dependencies**: Does it enable other features (e.g., virtualization enables thumbnails)?
-4. **Complexity**: Quick wins vs long-term projects
-5. **User requests**: What are people asking for?
-
-### Contributing
-
-If implementing a TODO:
-
-1. Update status to "In Progress" with date
-2. Create feature branch: `feature/library-virtualization`
-3. Update CHANGELOG.md with progress
-4. Move to "Completed Features" when done
-5. Update documentation and help text
-
-### Feedback
-
-Priorities can shift based on:
-
-- User feedback and feature requests
-- Usage analytics (if implemented)
-- Pain points discovered during actual use
-- Technical discoveries (some features easier/harder than expected)
-
-Have suggestions or want to discuss priorities? Open an issue or discussion on the project repository.

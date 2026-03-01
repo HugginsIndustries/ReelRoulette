@@ -1,4 +1,4 @@
-﻿using Avalonia;
+using Avalonia;
 using LibVLCSharp.Shared;
 using System;
 using System.IO;
@@ -25,7 +25,8 @@ class Program
         try
         {
             var logPath = GetLogPath();
-            File.AppendAllText(logPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {message}\n");
+            var sanitized = LogSanitizer.Sanitize(message);
+            File.AppendAllText(logPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {sanitized}\n");
         }
         catch { }
     }

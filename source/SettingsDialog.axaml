@@ -66,6 +66,54 @@
                             </Grid>
                         </StackPanel>
 
+                        <!-- Settings Backup Section -->
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="Settings Backup"
+                                       FontWeight="SemiBold"
+                                       FontSize="13"
+                                       Margin="0,0,0,4"/>
+                            <CheckBox Content="Backup Settings?"
+                                      IsChecked="{Binding BackupSettingsEnabled}"/>
+                            <Grid ColumnDefinitions="Auto * Auto" ColumnSpacing="8" Margin="20,4,0,4">
+                                <TextBlock Grid.Column="0"
+                                           Text="Minimum Backup Gap (minutes):"
+                                           VerticalAlignment="Center"/>
+                                <NumericUpDown Grid.Column="1"
+                                               Value="{Binding MinimumSettingsBackupGapMinutes}"
+                                               Minimum="1"
+                                               Maximum="60"
+                                               FormatString="0"
+                                               Increment="1"
+                                               ShowButtonSpinner="True"
+                                               HorizontalAlignment="Left"
+                                               Width="150"/>
+                                <TextBlock Grid.Column="2"
+                                           Text="(1-60)"
+                                           VerticalAlignment="Center"
+                                           Foreground="Gray"
+                                           FontSize="12"/>
+                            </Grid>
+                            <Grid ColumnDefinitions="Auto * Auto" ColumnSpacing="8" Margin="20,4,0,4">
+                                <TextBlock Grid.Column="0"
+                                           Text="Number of Backups:"
+                                           VerticalAlignment="Center"/>
+                                <NumericUpDown Grid.Column="1"
+                                               Value="{Binding NumberOfSettingsBackups}"
+                                               Minimum="1"
+                                               Maximum="30"
+                                               FormatString="0"
+                                               Increment="1"
+                                               ShowButtonSpinner="True"
+                                               HorizontalAlignment="Left"
+                                               Width="150"/>
+                                <TextBlock Grid.Column="2"
+                                           Text="(1-30)"
+                                           VerticalAlignment="Center"
+                                           Foreground="Gray"
+                                           FontSize="12"/>
+                            </Grid>
+                        </StackPanel>
+
                         <!-- Auto Refresh Section -->
                         <StackPanel Spacing="8">
                             <TextBlock Text="Auto Refresh Sources"
@@ -449,7 +497,7 @@
                                                Increment="1"
                                                ShowButtonSpinner="True"
                                                HorizontalAlignment="Left"
-                                               Width="120"/>
+                                               Width="160"/>
                                 <TextBlock Grid.Column="2"
                                            Text="(1024-65535)"
                                            VerticalAlignment="Center"

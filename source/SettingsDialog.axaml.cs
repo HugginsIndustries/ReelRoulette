@@ -351,6 +351,9 @@ namespace ReelRoulette
         private bool _backupLibraryEnabled = true;
         private int _minimumBackupGapMinutes = 15;
         private int _numberOfBackups = 10;
+        private bool _backupSettingsEnabled = true;
+        private int _minimumSettingsBackupGapMinutes = 15;
+        private int _numberOfSettingsBackups = 10;
         
         // Auto-refresh settings
         private bool _autoRefreshSourcesEnabled = true;
@@ -507,6 +510,45 @@ namespace ReelRoulette
                 if (_numberOfBackups != value)
                 {
                     _numberOfBackups = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public bool BackupSettingsEnabled
+        {
+            get => _backupSettingsEnabled;
+            set
+            {
+                if (_backupSettingsEnabled != value)
+                {
+                    _backupSettingsEnabled = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public int MinimumSettingsBackupGapMinutes
+        {
+            get => _minimumSettingsBackupGapMinutes;
+            set
+            {
+                if (_minimumSettingsBackupGapMinutes != value)
+                {
+                    _minimumSettingsBackupGapMinutes = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public int NumberOfSettingsBackups
+        {
+            get => _numberOfSettingsBackups;
+            set
+            {
+                if (_numberOfSettingsBackups != value)
+                {
+                    _numberOfSettingsBackups = value;
                     OnPropertyChanged();
                 }
             }
@@ -685,6 +727,9 @@ namespace ReelRoulette
             bool backupLibraryEnabled = true,
             int minimumBackupGapMinutes = 15,
             int numberOfBackups = 10,
+            bool backupSettingsEnabled = true,
+            int minimumSettingsBackupGapMinutes = 15,
+            int numberOfSettingsBackups = 10,
             bool autoRefreshSourcesEnabled = true,
             int autoRefreshIntervalMinutes = 60,
             bool autoRefreshOnlyWhenIdle = true,
@@ -810,6 +855,12 @@ namespace ReelRoulette
             OnPropertyChanged(nameof(BackupLibraryEnabled));
             OnPropertyChanged(nameof(MinimumBackupGapMinutes));
             OnPropertyChanged(nameof(NumberOfBackups));
+            _backupSettingsEnabled = backupSettingsEnabled;
+            _minimumSettingsBackupGapMinutes = minimumSettingsBackupGapMinutes;
+            _numberOfSettingsBackups = numberOfSettingsBackups;
+            OnPropertyChanged(nameof(BackupSettingsEnabled));
+            OnPropertyChanged(nameof(MinimumSettingsBackupGapMinutes));
+            OnPropertyChanged(nameof(NumberOfSettingsBackups));
             
             // Auto-refresh settings
             _autoRefreshSourcesEnabled = autoRefreshSourcesEnabled;
@@ -866,6 +917,9 @@ namespace ReelRoulette
         public bool GetBackupLibraryEnabled() => _backupLibraryEnabled;
         public int GetMinimumBackupGapMinutes() => _minimumBackupGapMinutes;
         public int GetNumberOfBackups() => _numberOfBackups;
+        public bool GetBackupSettingsEnabled() => _backupSettingsEnabled;
+        public int GetMinimumSettingsBackupGapMinutes() => _minimumSettingsBackupGapMinutes;
+        public int GetNumberOfSettingsBackups() => _numberOfSettingsBackups;
         public bool GetAutoRefreshSourcesEnabled() => _autoRefreshSourcesEnabled;
         public int GetAutoRefreshIntervalMinutes() => _autoRefreshIntervalMinutes;
         public bool GetAutoRefreshOnlyWhenIdle() => _autoRefreshOnlyWhenIdle;
@@ -911,6 +965,14 @@ namespace ReelRoulette
                 return false;
             }
             if (_numberOfBackups < 1 || _numberOfBackups > 30)
+            {
+                return false;
+            }
+            if (_minimumSettingsBackupGapMinutes < 1 || _minimumSettingsBackupGapMinutes > 60)
+            {
+                return false;
+            }
+            if (_numberOfSettingsBackups < 1 || _numberOfSettingsBackups > 30)
             {
                 return false;
             }
