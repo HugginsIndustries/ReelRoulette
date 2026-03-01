@@ -191,8 +191,6 @@
                                       IsChecked="{Binding LoopEnabled}"/>
                             <CheckBox Content="Auto-play next video"
                                       IsChecked="{Binding AutoPlayNext}"/>
-                            <CheckBox Content="No repeats until all played"
-                                      IsChecked="{Binding NoRepeatMode}"/>
                         </StackPanel>
                         
                         <!-- Timer Interval Section -->

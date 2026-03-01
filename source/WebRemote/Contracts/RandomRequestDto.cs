@@ -18,5 +18,8 @@ namespace ReelRoulette.WebRemote.Contracts
 
         [JsonPropertyName("includePhotos")]
         public bool IncludePhotos { get; set; } = true;
+
+        [JsonPropertyName("randomizationMode")]
+        public string? RandomizationMode { get; set; }
     }
 }

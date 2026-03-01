@@ -2,6 +2,7 @@
   const API = window.location.origin;
   const CLIENT_ID_KEY = 'rr_clientId';
   const PHOTO_DURATION_KEY = 'rr_photoDuration';
+  const RANDOMIZATION_MODE_KEY = 'rr_randomizationMode';
 
   function getClientId() {
     let id = localStorage.getItem(CLIENT_ID_KEY);
@@ -28,7 +29,9 @@
     loop: false,
     autoplay: false,
     photoDurationSeconds: 15,
-    clientId: getClientId()
+    clientId: getClientId(),
+    randomizationMode: 'SmartShuffle',
+    lastRecordedPresentationKey: ''
   };
   let photoTimerId = null;
   let touchStartX = 0, touchStartY = 0, touchWasSwipe = false, touchHandledTap = false, ignoreSwipeTouch = false;
@@ -45,6 +48,7 @@
   const video = el('video');
   const photo = el('photo');
   const presetSelect = el('preset-select');
+  const randomizationModeSelect = el('randomization-mode-select');
   const statusEl = el('status');
   const versionEl = el('version');
   const nowPlaying = el('now-playing');
@@ -236,7 +240,8 @@
         presetId,
         clientId: state.clientId,
         includeVideos: true,
-        includePhotos: true
+        includePhotos: true,
+        randomizationMode: state.randomizationMode
       })
     })
       .then(r => {
@@ -306,6 +311,7 @@
     nowPlayingName.textContent = truncateName(fullName, 45);
     nowPlayingName.title = fullName;
     nowPlayingDuration.textContent = c.durationSeconds != null ? fmtTime(c.durationSeconds) : '';
+    recordPlaybackForPresentation(c);
 
     if (c.mediaType === 'photo') {
       photo.src = c.mediaUrl;
@@ -366,6 +372,26 @@
       video.oncanplay = null;
       video.play().catch(function () {});
     };
+  }
+
+  function recordPlaybackForPresentation(item) {
+    if (!item || !item.id) return;
+    var key = String(state.historyIndex) + ':' + String(item.id).toLowerCase();
+    if (state.lastRecordedPresentationKey === key) return;
+    state.lastRecordedPresentationKey = key;
+
+    fetch(API + '/api/record-playback', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ clientId: state.clientId, path: item.id })
+    }).then(function (r) {
+      if (!r.ok && r.status !== 404) {
+        console.warn('record playback failed', r.status);
+      }
+    }).catch(function (err) {
+      console.warn('record playback request failed', err);
+    });
   }
 
   function updateTimeDisplay() {
@@ -525,6 +551,17 @@
     });
   }
   presetSelect.addEventListener('change', () => { state.currentPresetId = presetSelect.value; });
+  if (randomizationModeSelect) {
+    var savedMode = localStorage.getItem(RANDOMIZATION_MODE_KEY);
+    if (savedMode && Array.from(randomizationModeSelect.options).some(function (o) { return o.value === savedMode; })) {
+      state.randomizationMode = savedMode;
+    }
+    randomizationModeSelect.value = state.randomizationMode;
+    randomizationModeSelect.addEventListener('change', function () {
+      state.randomizationMode = randomizationModeSelect.value || 'SmartShuffle';
+      localStorage.setItem(RANDOMIZATION_MODE_KEY, state.randomizationMode);
+    });
+  }
 
   var evtSource = null;
   var evtReconnectTimer = null;

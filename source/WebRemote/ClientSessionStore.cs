@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using ReelRoulette;
 
 namespace ReelRoulette.WebRemote
 {
@@ -11,6 +12,9 @@ namespace ReelRoulette.WebRemote
     public class ClientSessionStore
     {
         private readonly Dictionary<string, LinkedList<string>> _history = new();
+        private readonly Dictionary<string, RandomizationRuntimeState> _randomizationStates = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, RandomizationMode> _clientModes = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, string> _clientSignatures = new(StringComparer.OrdinalIgnoreCase);
         private readonly int _maxHistory = 50;
         private readonly object _lock = new object();
 
@@ -94,6 +98,44 @@ namespace ReelRoulette.WebRemote
                 var recent = new HashSet<string>(list.TakeLast(excludeCount), StringComparer.OrdinalIgnoreCase);
                 var filtered = paths.Where(p => !recent.Contains(p)).ToList();
                 return filtered.Count > 0 ? filtered : paths;
+            }
+        }
+
+        /// <summary>
+        /// Picks a random path for a specific client based on the selected mode.
+        /// State is per-client and in-memory only.
+        /// </summary>
+        public string? SelectPathForClient(
+            string clientId,
+            RandomizationMode mode,
+            IReadOnlyList<LibraryItem> eligibleItems,
+            Random rng)
+        {
+            if (string.IsNullOrWhiteSpace(clientId) || eligibleItems == null || eligibleItems.Count == 0)
+                return null;
+
+            lock (_lock)
+            {
+                if (!_randomizationStates.TryGetValue(clientId, out var state))
+                {
+                    state = new RandomizationRuntimeState();
+                    _randomizationStates[clientId] = state;
+                }
+
+                var signature = RandomSelectionEngine.ComputeEligibleSignature(eligibleItems);
+                var modeChanged = !_clientModes.TryGetValue(clientId, out var previousMode) || previousMode != mode;
+                var signatureChanged = !_clientSignatures.TryGetValue(clientId, out var previousSignature)
+                    || !string.Equals(previousSignature, signature, StringComparison.Ordinal);
+
+                if (modeChanged || signatureChanged)
+                {
+                    RandomSelectionEngine.RebuildState(state, mode, eligibleItems, rng);
+                    _clientModes[clientId] = mode;
+                    _clientSignatures[clientId] = signature;
+                }
+
+                var selectedPath = RandomSelectionEngine.SelectPath(state, mode, eligibleItems, rng);
+                return selectedPath;
             }
         }
     }

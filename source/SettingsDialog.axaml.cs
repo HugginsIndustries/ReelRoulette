@@ -14,7 +14,6 @@ namespace ReelRoulette
         // Playback behavior
         private bool _loopEnabled;
         private bool _autoPlayNext;
-        private bool _noRepeatMode;
         
         // Timer interval
         private decimal _timerIntervalSeconds;
@@ -48,7 +47,6 @@ namespace ReelRoulette
             // Set defaults
             _loopEnabled = true;
             _autoPlayNext = true;
-            _noRepeatMode = true;
             _timerIntervalSeconds = 300;
             _seekStep5s = true;
             _volumeStep5 = true;
@@ -83,19 +81,6 @@ namespace ReelRoulette
                 if (_autoPlayNext != value)
                 {
                     _autoPlayNext = value;
-                    OnPropertyChanged();
-                }
-            }
-        }
-
-        public bool NoRepeatMode
-        {
-            get => _noRepeatMode;
-            set
-            {
-                if (_noRepeatMode != value)
-                {
-                    _noRepeatMode = value;
                     OnPropertyChanged();
                 }
             }
@@ -710,7 +695,6 @@ namespace ReelRoulette
         public void LoadFromSettings(
             bool loopEnabled,
             bool autoPlayNext,
-            bool noRepeatMode,
             double? intervalSeconds,
             string? seekStep,
             int volumeStep,
@@ -744,12 +728,10 @@ namespace ReelRoulette
             // Set backing fields directly and notify
             _loopEnabled = loopEnabled;
             _autoPlayNext = autoPlayNext;
-            _noRepeatMode = noRepeatMode;
             
             // Notify UI of changes
             OnPropertyChanged(nameof(LoopEnabled));
             OnPropertyChanged(nameof(AutoPlayNext));
-            OnPropertyChanged(nameof(NoRepeatMode));
             
             // Timer interval
             if (intervalSeconds.HasValue)

@@ -43,5 +43,10 @@ namespace ReelRoulette.WebRemote
         /// Sets the blacklist state for an item. Returns true if updated.
         /// </summary>
         bool SetItemBlacklist(string fullPath, bool isBlacklisted);
+
+        /// <summary>
+        /// Records a playback event for a path and updates play stats.
+        /// </summary>
+        bool RecordPlayback(string fullPath);
     }
 }

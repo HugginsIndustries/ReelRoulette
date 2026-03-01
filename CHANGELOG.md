@@ -2,7 +2,18 @@
 
 ## Unreleased
 
-- **Harden settings reliability and privacy-safe diagnostics** (2026-03-01):
+- **Implement enhanced random selection modes across desktop and web** (2026-02-28):
+  - Replace legacy no-repeat behavior with a shared `RandomizationMode` model: `PureRandom`, `WeightedRandom`, `SmartShuffle`, `SpreadMode`, `WeightedWithSpread`.
+  - Add shared random selection engine/runtime state used by both desktop and web for consistent mode behavior and state rebuild when eligible sets change.
+  - Desktop random playback now routes through mode-based selection logic; no-repeat menu/toggle controls are removed.
+  - Desktop settings migrate to persisted `RandomizationMode` with one-time forced migration to `SmartShuffle`.
+  - Add desktop Library panel randomization dropdown directly under preset selection, matching preset dropdown styling and width (no extra label).
+  - Web `POST /api/random` now honors per-client `randomizationMode` and uses per-client mode-aware randomization state.
+  - Add web header randomization dropdown (no extra label), persisted client-locally and sent with random requests.
+  - Add web `POST /api/record-playback` and UI playback reporting so web playback updates `PlayCount`/`LastPlayedUtc`, keeping weighted selection accurate.
+  - Preserve existing back/forward/autoplay history semantics: forward history is consumed before requesting a new random item.
+
+- **Harden settings reliability and privacy-safe diagnostics** (2026-02-28):
   - Web Remote port input in Settings is widened so full 5-digit ports are fully visible while editing.
   - Settings open is now re-entrancy guarded so repeated open requests do not create overlapping dialog flows.
   - Applying settings avoids unnecessary side effects when values are unchanged (no-op apply path).

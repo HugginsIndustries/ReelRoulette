@@ -192,11 +192,6 @@
         <!-- Row 0: Menu bar -->
         <Menu x:Name="MainMenu" Grid.Row="0">
             <MenuItem Header="_Playback">
-                <MenuItem x:Name="NoRepeatMenuItem"
-                          Header="No Repeats Until All Played"
-                          ToggleType="CheckBox"
-                          IsChecked="True"
-                          Click="NoRepeatMenuItem_Click"/>
                 <MenuItem x:Name="KeepPlayingMenuItem"
                           Header="Keep Playing (Timer)"
                           ToggleType="CheckBox"
@@ -515,10 +510,6 @@
 
             <!-- Hidden controls kept for logic (driven via menus/dialogs) -->
             <StackPanel Orientation="Horizontal" Spacing="4" IsVisible="False">
-                <CheckBox x:Name="NoRepeatToggle"
-                          IsChecked="True"
-                          Checked="NoRepeatToggle_Changed"
-                          Unchecked="NoRepeatToggle_Changed"/>
                 <NumericUpDown x:Name="IntervalNumericUpDown"
                                Minimum="1"
                                Maximum="3600"
@@ -548,7 +539,7 @@
                     HorizontalAlignment="Stretch"
                     VerticalAlignment="Stretch"
                     IsVisible="False">
-                <Grid RowDefinitions="Auto Auto Auto Auto Auto Auto *" VerticalAlignment="Stretch" x:DataType="local:MainWindow">
+                <Grid RowDefinitions="Auto Auto Auto Auto Auto Auto Auto *" VerticalAlignment="Stretch" x:DataType="local:MainWindow">
                     <!-- Row 0: Library info header -->
                     <TextBlock x:Name="LibraryInfoTextBlock"
                               Grid.Row="0"
@@ -604,9 +595,22 @@
                              SelectionChanged="LibraryPresetComboBox_SelectionChanged">
                         <!-- Items will be populated in code-behind -->
                     </ComboBox>
+
+                    <!-- Row 4: Randomization mode selection -->
+                    <ComboBox x:Name="LibraryRandomizationModeComboBox"
+                             Grid.Row="4"
+                             HorizontalAlignment="Stretch"
+                             Margin="0,0,0,8"
+                             SelectionChanged="LibraryRandomizationModeComboBox_SelectionChanged">
+                        <ComboBoxItem Content="Pure Random" Tag="PureRandom"/>
+                        <ComboBoxItem Content="Weighted Random" Tag="WeightedRandom"/>
+                        <ComboBoxItem Content="Smart Shuffle" Tag="SmartShuffle"/>
+                        <ComboBoxItem Content="Spread Mode" Tag="SpreadMode"/>
+                        <ComboBoxItem Content="Weighted with Spread" Tag="WeightedWithSpread"/>
+                    </ComboBox>
                     
-                    <!-- Row 4: Controls row (view preset, source, sort) -->
-                    <Grid Grid.Row="4" ColumnDefinitions="* * *" ColumnSpacing="8" Margin="0,0,0,8">
+                    <!-- Row 5: Controls row (view preset, source, sort) -->
+                    <Grid Grid.Row="5" ColumnDefinitions="* * *" ColumnSpacing="8" Margin="0,0,0,8">
                         <ComboBox x:Name="LibraryViewPresetComboBox"
                                  Grid.Column="0"
                                  HorizontalAlignment="Stretch"
@@ -632,16 +636,16 @@
                         </ComboBox>
                     </Grid>
                     
-                    <!-- Row 5: Search box -->
+                    <!-- Row 6: Search box -->
                     <TextBox x:Name="LibrarySearchTextBox"
-                            Grid.Row="5"
+                            Grid.Row="6"
                             Watermark="Search..."
                             Margin="0,0,0,8"
                             TextChanged="LibrarySearchTextBox_TextChanged"/>
                     
-                    <!-- Row 6: Items list (virtualized) -->
+                    <!-- Row 7: Items list (virtualized) -->
                     <ListBox x:Name="LibraryListBox"
-                             Grid.Row="6"
+                             Grid.Row="7"
                              VerticalAlignment="Stretch"
                              SelectionMode="Multiple"
                              Background="Transparent"

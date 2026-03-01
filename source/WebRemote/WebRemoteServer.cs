@@ -16,6 +16,7 @@ using Microsoft.AspNetCore.Http.Features;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using ReelRoulette;
 using ReelRoulette.WebRemote.Contracts;
 
 namespace ReelRoulette.WebRemote
@@ -257,7 +258,7 @@ namespace ReelRoulette.WebRemote
                 return Results.Json(dtos);
             });
 
-            app.MapPost("/api/random", async (HttpContext context, RandomRequestDto? req) =>
+            app.MapPost("/api/random", (HttpContext context, RandomRequestDto? req) =>
             {
                 if (req == null)
                     return Results.BadRequest("Invalid request body");
@@ -277,6 +278,8 @@ namespace ReelRoulette.WebRemote
                 if (filterState == null)
                     filterState = new FilterState();
 
+                var mode = ParseRandomizationMode(req.RandomizationMode);
+
                 // Apply media type filter from request
                 var effectiveFilter = CloneFilterState(filterState);
                 if (!req.IncludeVideos && req.IncludePhotos)
@@ -287,16 +290,13 @@ namespace ReelRoulette.WebRemote
                     return Results.Problem("Must include at least videos or photos", statusCode: 400);
 
                 var eligible = filterService.BuildEligibleSetWithoutFileCheck(effectiveFilter, index).ToList();
-                var paths = eligible.Select(i => i.FullPath).ToList();
+                if (eligible.Count == 0)
+                    return Results.Json(new { });
 
                 var clientId = req.ClientId ?? Guid.NewGuid().ToString("N");
-                paths = sessionStore.ExcludeRecent(clientId, paths).ToList();
-                if (paths.Count == 0)
-                    paths = eligible.Select(i => i.FullPath).ToList();
-
-                var rng = new Random();
-                var idx = rng.Next(paths.Count);
-                var selectedPath = paths[idx];
+                var selectedPath = sessionStore.SelectPathForClient(clientId, mode, eligible, Random.Shared);
+                if (string.IsNullOrWhiteSpace(selectedPath))
+                    return Results.Problem("No media could be selected", statusCode: 500);
                 var item = eligible.FirstOrDefault(i => string.Equals(i.FullPath, selectedPath, StringComparison.OrdinalIgnoreCase))
                     ?? services.GetItemByPath(selectedPath);
 
@@ -321,6 +321,19 @@ namespace ReelRoulette.WebRemote
                     IsFavorite = item.IsFavorite,
                     IsBlacklisted = item.IsBlacklisted
                 });
+            });
+
+            app.MapPost("/api/record-playback", (RecordPlaybackRequestDto? req) =>
+            {
+                if (services == null)
+                    return Results.Problem("API services not available", statusCode: 503);
+                if (req == null || string.IsNullOrWhiteSpace(req.Path))
+                    return Results.BadRequest("Invalid request");
+
+                var updated = services.RecordPlayback(req.Path);
+                if (!updated)
+                    return Results.NotFound("Item not found");
+                return Results.Ok();
             });
 
             app.MapPost("/api/favorite", (FavoriteRequestDto? req) =>
@@ -610,6 +623,15 @@ namespace ReelRoulette.WebRemote
                 clone.CategoryLocalMatchModes = new Dictionary<string, TagMatchMode>(source.CategoryLocalMatchModes);
             clone.GlobalMatchMode = source.GlobalMatchMode;
             return clone;
+        }
+
+        private static RandomizationMode ParseRandomizationMode(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return RandomizationMode.SmartShuffle;
+            return Enum.TryParse<RandomizationMode>(value.Trim(), ignoreCase: true, out var mode)
+                ? mode
+                : RandomizationMode.SmartShuffle;
         }
 
         /// <summary>

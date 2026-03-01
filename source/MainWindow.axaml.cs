@@ -85,9 +85,10 @@ namespace ReelRoulette
         private double? _cachedBaselineLoudnessDb = null;
         private bool _hasShownMissingLoudnessWarning = false;
 
-        // Queue system
-        private Queue<string> _playQueue = new();
-        private bool _noRepeatMode = true;
+        // Randomization mode state (runtime-only, rebuilt as eligible-set changes)
+        private readonly RandomizationRuntimeState _desktopRandomizationState = new();
+        private readonly object _desktopRandomizationLock = new object();
+        private RandomizationMode _randomizationMode = RandomizationMode.SmartShuffle;
 
         // Current video tracking
         private string? _currentVideoPath;
@@ -200,6 +201,8 @@ namespace ReelRoulette
         private string? _activePresetName; // Track which preset is currently active for display in library panel
         private List<FilterPreset>? _filterPresets; // Store filter presets
         private bool _isUpdatingPresetComboBox = false; // Flag to suppress SelectionChanged event during programmatic updates
+        private bool _isUpdatingRandomizationModeComboBox = false;
+        private bool _randomizationModeMigrated = false;
 
         // Library panel state
         private ObservableCollection<LibraryItem> _libraryItems = new ObservableCollection<LibraryItem>();
@@ -1458,12 +1461,7 @@ namespace ReelRoulette
                 }
             }
 
-            // Remove from queue if present
-            var queueList = _playQueue.ToList();
-            queueList.Remove(_currentVideoPath);
-            _playQueue = new Queue<string>(queueList);
-
-            // Rebuild queue if needed
+            // Rebuild randomization state after eligibility change.
             RebuildPlayQueueIfNeeded();
             UpdatePerVideoToggleStates();
         }
@@ -3627,6 +3625,7 @@ namespace ReelRoulette
                 // Initialize preset combo box
                 Log("  Updating preset combo box...");
                 UpdateLibraryPresetComboBox();
+                UpdateRandomizationModeComboBox();
                 
                 // Update the panel (only if library is loaded)
                 Log($"  Checking library index (null: {_libraryIndex == null})...");
@@ -5200,206 +5199,107 @@ namespace ReelRoulette
             }
         }
 
-        #region Queue System
+        #region Randomization System
 
-        private string[] GetEligiblePool()
+        private List<LibraryItem> GetEligibleItems()
         {
-            Log("GetEligiblePool: Starting eligible pool calculation");
+            Log("GetEligibleItems: Starting eligible pool calculation");
             try
             {
-                // Use FilterService with FilterState - this is the only source of truth for filtering
                 if (_libraryIndex == null || _currentFilterState == null)
                 {
-                    Log($"GetEligiblePool: Library system not available (libraryIndex: {_libraryIndex != null}, filterState: {_currentFilterState != null}), returning empty pool");
-                    return Array.Empty<string>();
+                    Log($"GetEligibleItems: Library system not available (libraryIndex: {_libraryIndex != null}, filterState: {_currentFilterState != null}), returning empty pool");
+                    return new List<LibraryItem>();
                 }
 
                 if (_libraryIndex.Items.Count == 0)
                 {
-                    Log("GetEligiblePool: Library has no items, returning empty pool");
-                    return Array.Empty<string>();
+                    Log("GetEligibleItems: Library has no items, returning empty pool");
+                    return new List<LibraryItem>();
                 }
 
-                Log($"GetEligiblePool: Using FilterService with {_libraryIndex.Items.Count} items");
-                // Use BuildEligibleSetWithoutFileCheck for performance - file existence will be checked when video is actually played
-                var eligibleItems = _filterService.BuildEligibleSetWithoutFileCheck(_currentFilterState, _libraryIndex);
-                var result = eligibleItems.Select(item => item.FullPath).ToArray();
-                Log($"GetEligiblePool: FilterService returned {result.Length} eligible items after filtering");
-                return result;
+                var eligibleItems = _filterService.BuildEligibleSetWithoutFileCheck(_currentFilterState, _libraryIndex).ToList();
+                Log($"GetEligibleItems: FilterService returned {eligibleItems.Count} eligible items after filtering");
+                return eligibleItems;
             }
             catch (Exception ex)
             {
-                // Log error but don't crash
-                Log($"GetEligiblePool: ERROR - Exception: {ex.GetType().Name}, Message: {ex.Message}");
-                Log($"GetEligiblePool: ERROR - Stack trace: {ex.StackTrace}");
+                Log($"GetEligibleItems: ERROR - Exception: {ex.GetType().Name}, Message: {ex.Message}");
+                Log($"GetEligibleItems: ERROR - Stack trace: {ex.StackTrace}");
                 if (ex.InnerException != null)
                 {
-                    Log($"GetEligiblePool: ERROR - Inner exception: {ex.InnerException.GetType().Name}, Message: {ex.InnerException.Message}");
-                    Log($"GetEligiblePool: ERROR - Inner exception stack trace: {ex.InnerException.StackTrace}");
+                    Log($"GetEligibleItems: ERROR - Inner exception: {ex.InnerException.GetType().Name}, Message: {ex.InnerException.Message}");
                 }
-                return Array.Empty<string>();
+                return new List<LibraryItem>();
             }
         }
 
-        private async Task<string[]> GetEligiblePoolAsync()
+        private async Task<List<LibraryItem>> GetEligibleItemsAsync()
         {
-            return await Task.Run(() => GetEligiblePool());
+            return await Task.Run(GetEligibleItems);
         }
 
         private void RebuildPlayQueueIfNeeded()
         {
-            // Fire and forget async version to avoid blocking
             _ = RebuildPlayQueueIfNeededAsync();
         }
 
         private async Task RebuildPlayQueueIfNeededAsync()
         {
-            Log("RebuildPlayQueueIfNeededAsync: Starting queue rebuild check");
-            if (!_noRepeatMode)
+            var eligibleItems = await GetEligibleItemsAsync();
+            lock (_desktopRandomizationLock)
             {
-                Log("RebuildPlayQueueIfNeededAsync: No-repeat mode is off, skipping queue rebuild");
-                return;
+                RandomSelectionEngine.RebuildState(_desktopRandomizationState, _randomizationMode, eligibleItems, _rng);
             }
-
-            Log("RebuildPlayQueueIfNeededAsync: No-repeat mode is on, getting eligible pool...");
-            var pool = await GetEligiblePoolAsync();
-            Log($"RebuildPlayQueueIfNeededAsync: Eligible pool has {pool.Length} videos");
-            
-            // Get current queue contents to exclude from rebuild (prevents duplicates)
-            var currentQueueItems = await Dispatcher.UIThread.InvokeAsync(() =>
-            {
-                return new HashSet<string>(_playQueue, StringComparer.OrdinalIgnoreCase);
-            });
-            Log($"RebuildPlayQueueIfNeededAsync: Current queue has {currentQueueItems.Count} videos that will be excluded from rebuild");
-            
-            // Exclude videos that are already in the current queue
-            var poolSet = new HashSet<string>(pool, StringComparer.OrdinalIgnoreCase);
-            poolSet.ExceptWith(currentQueueItems);
-            var poolWithoutQueueItems = poolSet.ToArray();
-            Log($"RebuildPlayQueueIfNeededAsync: After excluding current queue items, {poolWithoutQueueItems.Length} videos remain");
-            
-            if (poolWithoutQueueItems.Length == 0)
-            {
-                // No new videos to add - if queue is empty, we need to cycle through all videos again
-                // If queue is not empty, we still need to filter it to remove ineligible items
-                await Dispatcher.UIThread.InvokeAsync(() =>
-                {
-                    var eligibleSet = new HashSet<string>(pool, StringComparer.OrdinalIgnoreCase);
-                    
-                    if (_playQueue.Count == 0)
-                    {
-                        Log("RebuildPlayQueueIfNeededAsync: Queue is empty and no new videos available - rebuilding with all eligible videos to cycle again");
-                        // Queue is empty, cycle through all videos again
-                        var shuffled = pool.OrderBy(x => _rng.Next()).ToList();
-                        _playQueue = new Queue<string>(shuffled);
-                        Log($"STATE CHANGE: Queue cycled - New size: {_playQueue.Count}");
-                    }
-                    else
-                    {
-                        Log("RebuildPlayQueueIfNeededAsync: No new videos to add, filtering existing queue to remove ineligible items");
-                        // Filter existing queue to remove items that are no longer eligible
-                        var filteredExistingQueue = new Queue<string>();
-                        int removedCount = 0;
-                        while (_playQueue.Count > 0)
-                        {
-                            var item = _playQueue.Dequeue();
-                            if (eligibleSet.Contains(item))
-                            {
-                                filteredExistingQueue.Enqueue(item);
-                            }
-                            else
-                            {
-                                removedCount++;
-                            }
-                        }
-                        _playQueue = filteredExistingQueue;
-                        Log($"STATE CHANGE: Queue filtered - Removed (no longer eligible): {removedCount}, Remaining: {_playQueue.Count}");
-                    }
-                    // Clear the status messages
-                    if (StatusTextBlock.Text == "Finding eligible media..." || 
-                        StatusTextBlock.Text == "Applying filters and rebuilding queue...")
-                    {
-                        StatusTextBlock.Text = "Ready";
-                    }
-                });
-                return;
-            }
-
-            Log($"RebuildPlayQueueIfNeededAsync: Shuffling {poolWithoutQueueItems.Length} videos...");
-            // Shuffle using Fisher-Yates (on background thread)
-            var shuffled = poolWithoutQueueItems.OrderBy(x => _rng.Next()).ToList();
-            Log($"RebuildPlayQueueIfNeededAsync: Shuffling complete, updating queue on UI thread");
-            
-            // Update queue on UI thread - preserve existing queue items (if still eligible) and append new ones
-            await Dispatcher.UIThread.InvokeAsync(() =>
-            {
-                var oldCount = _playQueue.Count;
-                var eligibleSet = new HashSet<string>(pool, StringComparer.OrdinalIgnoreCase);
-                
-                // If queue is empty, replace it entirely. Otherwise, filter existing queue and append new items
-                if (_playQueue.Count == 0)
-                {
-                    _playQueue = new Queue<string>(shuffled);
-                    Log($"STATE CHANGE: Queue rebuilt (empty) - New size: {_playQueue.Count}");
-                }
-                else
-                {
-                    // Filter existing queue to remove items that are no longer eligible
-                    var filteredExistingQueue = new Queue<string>();
-                    int removedCount = 0;
-                    while (_playQueue.Count > 0)
-                    {
-                        var item = _playQueue.Dequeue();
-                        if (eligibleSet.Contains(item))
-                        {
-                            filteredExistingQueue.Enqueue(item);
-                        }
-                        else
-                        {
-                            removedCount++;
-                        }
-                    }
-                    _playQueue = filteredExistingQueue;
-                    
-                    // Append new items to filtered existing queue
-                    foreach (var item in shuffled)
-                    {
-                        _playQueue.Enqueue(item);
-                    }
-                    Log($"STATE CHANGE: Queue rebuilt - Previous size: {oldCount}, Removed (no longer eligible): {removedCount}, Added: {shuffled.Count}, New size: {_playQueue.Count}");
-                }
-                // Clear the status messages once queue is built
-                if (StatusTextBlock.Text == "Finding eligible media..." || 
-                    StatusTextBlock.Text == "Applying filters and rebuilding queue...")
-                {
-                    StatusTextBlock.Text = "Ready";
-                }
-            });
-            Log("RebuildPlayQueueIfNeededAsync: Queue rebuild complete");
+            Log($"Randomization: Rebuilt runtime state for mode '{_randomizationMode}' with {eligibleItems.Count} eligible items");
         }
 
-        private void NoRepeatToggle_Changed(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        private void UpdateRandomizationModeComboBox()
         {
-            _noRepeatMode = NoRepeatToggle.IsChecked == true;
-            var isUserInitiated = !_isApplyingSettings && !_isLoadingSettings && !_isProgrammaticUiSync;
-            Log($"{(isUserInitiated ? "UI ACTION" : "STATE SYNC")}: NoRepeatToggle changed to: {_noRepeatMode}");
-            NoRepeatMenuItem.IsChecked = _noRepeatMode;
-            if (_noRepeatMode)
+            if (LibraryRandomizationModeComboBox == null)
+                return;
+
+            _isUpdatingRandomizationModeComboBox = true;
+            try
             {
-                RebuildPlayQueueIfNeeded();
+                foreach (var itemObj in LibraryRandomizationModeComboBox.Items)
+                {
+                    if (itemObj is ComboBoxItem item
+                        && item.Tag is string tag
+                        && Enum.TryParse<RandomizationMode>(tag, ignoreCase: true, out var mode)
+                        && mode == _randomizationMode)
+                    {
+                        LibraryRandomizationModeComboBox.SelectedItem = item;
+                        return;
+                    }
+                }
+                LibraryRandomizationModeComboBox.SelectedIndex = 2; // SmartShuffle fallback
             }
-            else
+            finally
             {
-                var oldCount = _playQueue.Count;
-                _playQueue.Clear();
-                Log($"STATE CHANGE: Queue cleared (no-repeat mode disabled) - Previous size: {oldCount}, New size: {_playQueue.Count}");
+                _isUpdatingRandomizationModeComboBox = false;
             }
-            
-            // Persist the setting (unless we're applying settings from dialog)
-            if (!_isApplyingSettings && !_isLoadingSettings && !_isProgrammaticUiSync)
-            {
-                SaveSettings();
-            }
+        }
+
+        private void LibraryRandomizationModeComboBox_SelectionChanged(object? sender, SelectionChangedEventArgs e)
+        {
+            if (_isUpdatingRandomizationModeComboBox || _isInitializingLibraryPanel)
+                return;
+
+            if (LibraryRandomizationModeComboBox?.SelectedItem is not ComboBoxItem item)
+                return;
+
+            if (item.Tag is not string tag || !Enum.TryParse<RandomizationMode>(tag, ignoreCase: true, out var selectedMode))
+                return;
+
+            if (selectedMode == _randomizationMode)
+                return;
+
+            var previous = _randomizationMode;
+            _randomizationMode = selectedMode;
+            Log($"UI ACTION: Randomization mode changed from {previous} to {_randomizationMode}");
+            RebuildPlayQueueIfNeeded();
+            SaveSettings();
         }
 
         #endregion
@@ -6693,99 +6593,41 @@ namespace ReelRoulette
 
             Log($"PlayRandomVideoAsync: Using library system - {_libraryIndex.Items.Count} items available");
 
-            string[] pool;
-            bool needsRebuild = false;
-
-            if (_noRepeatMode)
+            await Dispatcher.UIThread.InvokeAsync(() =>
             {
-                Log("PlayRandomVideoAsync: No-repeat mode is enabled");
-                // Check queue count on UI thread to ensure thread safety
-                int queueCount = await Dispatcher.UIThread.InvokeAsync(() => _playQueue.Count);
-                Log($"PlayRandomVideoAsync: Current queue count: {queueCount}");
+                StatusTextBlock.Text = "Finding eligible media...";
+            });
 
-                if (queueCount == 0)
-                {
-                    needsRebuild = true;
-                    Log("PlayRandomVideoAsync: Queue is empty - rebuilding queue");
-                    // Show status only when actually rebuilding queue
-                    await Dispatcher.UIThread.InvokeAsync(() =>
-                    {
-                        StatusTextBlock.Text = "Finding eligible media...";
-                    });
+            var eligibleItems = await GetEligibleItemsAsync();
+            Log($"PlayRandomVideoAsync: Eligible pool size: {eligibleItems.Count}");
 
-                    // Rebuild queue asynchronously
-                    await RebuildPlayQueueIfNeededAsync();
-
-                    // Check again after rebuild
-                    queueCount = await Dispatcher.UIThread.InvokeAsync(() => _playQueue.Count);
-                    Log($"PlayRandomVideoAsync: Queue count after rebuild: {queueCount}");
-                }
-
-                if (queueCount > 0)
-                {
-                    // Queue has items - just pick one, no status message needed
-                    var pick = await Dispatcher.UIThread.InvokeAsync(() =>
-                    {
-                        var oldCount = _playQueue.Count;
-                        var picked = _playQueue.Dequeue();
-                        Log($"STATE CHANGE: Queue item dequeued - Previous size: {oldCount}, New size: {_playQueue.Count}, Dequeued: {Path.GetFileName(picked)}");
-                        return picked;
-                    });
-                    Log($"PlayRandomVideoAsync: Selected video from queue: {Path.GetFileName(pick)}");
-                    await Dispatcher.UIThread.InvokeAsync(() => PlayVideo(pick));
-                    return;
-                }
-
-                // Still no queue after rebuild - need to get pool directly (shouldn't happen normally)
-                if (needsRebuild)
-                {
-                    Log("PlayRandomVideoAsync: Still no queue after rebuild - getting eligible pool directly");
-                    pool = await GetEligiblePoolAsync();
-                    Log($"PlayRandomVideoAsync: Eligible pool size: {pool.Length}");
-                    if (pool.Length == 0)
-                    {
-                        Log("PlayRandomVideoAsync: No eligible media found");
-                        await Dispatcher.UIThread.InvokeAsync(() =>
-                        {
-                            StatusTextBlock.Text = "No eligible media found. Check your filters or import a folder.";
-                        });
-                        return;
-                    }
-                    // Fall through to random selection
-                }
-                else
-                {
-                    // This shouldn't happen, but handle it
-                    Log("PlayRandomVideoAsync: Unexpected state - getting eligible pool");
-                    pool = await GetEligiblePoolAsync();
-                    Log($"PlayRandomVideoAsync: Eligible pool size: {pool.Length}");
-                }
-            }
-            else
+            if (eligibleItems.Count == 0)
             {
-                Log("PlayRandomVideoAsync: No-repeat mode is disabled - getting eligible pool directly");
-                // Direct random selection (no repeat mode off) - show status since we need to get pool
+                Log("PlayRandomVideoAsync: No eligible media found in pool");
                 await Dispatcher.UIThread.InvokeAsync(() =>
                 {
-                    StatusTextBlock.Text = "Finding eligible media...";
+                    StatusTextBlock.Text = "No eligible media found. Check your filters or import a folder.";
                 });
-                pool = await GetEligiblePoolAsync();
-                Log($"PlayRandomVideoAsync: Eligible pool size: {pool.Length}");
-            }
-
-            if (pool.Length == 0)
-            {
-                        Log("PlayRandomVideoAsync: No eligible media found in pool");
-                        await Dispatcher.UIThread.InvokeAsync(() =>
-                        {
-                            StatusTextBlock.Text = "No eligible media found. Check your filters or import a folder.";
-                        });
                 return;
             }
 
-            var randomIndex = _rng.Next(pool.Length);
-            var randomPick = pool[randomIndex];
-            Log($"PlayRandomVideoAsync: Randomly selected video {randomIndex + 1} of {pool.Length}: {Path.GetFileName(randomPick)}");
+            string? randomPick;
+            lock (_desktopRandomizationLock)
+            {
+                randomPick = RandomSelectionEngine.SelectPath(_desktopRandomizationState, _randomizationMode, eligibleItems, _rng);
+            }
+
+            if (string.IsNullOrWhiteSpace(randomPick))
+            {
+                Log("PlayRandomVideoAsync: Selector returned no media path");
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    StatusTextBlock.Text = "No eligible media found. Check your filters or import a folder.";
+                });
+                return;
+            }
+
+            Log($"PlayRandomVideoAsync: Selected ({_randomizationMode}) {Path.GetFileName(randomPick)}");
             await Dispatcher.UIThread.InvokeAsync(() => PlayVideo(randomPick));
         }
 
@@ -6942,21 +6784,24 @@ namespace ReelRoulette
                     StatusTextBlock.Text = isBlacklisted ? $"Synced blacklist: {fileName}" : $"Synced unblacklist: {fileName}";
                 }
 
-                if (isBlacklisted)
-                {
-                    var q = _playQueue.ToList();
-                    q.Remove(fullPath);
-                    _playQueue = new Queue<string>(q);
-                    RebuildPlayQueueIfNeeded();
-                }
-                else
-                {
-                    RebuildPlayQueueIfNeeded();
-                }
+                RebuildPlayQueueIfNeeded();
 
                 if (_showLibraryPanel) UpdateLibraryPanel();
                 RecalculateGlobalStats();
             });
+            return true;
+        }
+
+        bool WebRemote.IWebRemoteApiServices.RecordPlayback(string fullPath)
+        {
+            if (string.IsNullOrWhiteSpace(fullPath) || _libraryIndex == null)
+                return false;
+
+            var item = _libraryService.FindItemByPath(fullPath);
+            if (item == null)
+                return false;
+
+            RecordPlayback(fullPath);
             return true;
         }
 
@@ -7027,7 +6872,8 @@ namespace ReelRoulette
             public bool AutoPlayNext { get; set; } = true;
             public bool IsMuted { get; set; } = false; // Persist mute state
             public int VolumeLevel { get; set; } = 100; // Persist volume level (0-200)
-            public bool NoRepeatMode { get; set; } = true;
+            public RandomizationMode RandomizationMode { get; set; } = RandomizationMode.SmartShuffle;
+            public bool RandomizationModeMigrated { get; set; } = false;
             public int PhotoDisplayDurationSeconds { get; set; } = 5; // Photo display duration
             
             // Image scaling
@@ -7273,7 +7119,31 @@ namespace ReelRoulette
                 _lastNonZeroVolume = settings.VolumeLevel;
             }
             
-            _noRepeatMode = settings.NoRepeatMode;
+            // One-time migration rule: force all existing users to SmartShuffle after this update.
+            if (!settings.RandomizationModeMigrated)
+            {
+                _randomizationMode = RandomizationMode.SmartShuffle;
+                _randomizationModeMigrated = true;
+                settings.RandomizationMode = _randomizationMode;
+                settings.RandomizationModeMigrated = true;
+                Log("LoadSettings: Applied one-time randomization migration to SmartShuffle");
+                try
+                {
+                    var settingsPath = AppDataManager.GetSettingsPath();
+                    var migratedJson = JsonSerializer.Serialize(settings, new JsonSerializerOptions { WriteIndented = true });
+                    File.WriteAllText(settingsPath, migratedJson);
+                    Log("LoadSettings: Persisted randomization migration marker");
+                }
+                catch (Exception persistEx)
+                {
+                    Log($"LoadSettings: Failed to persist randomization migration marker ({persistEx.Message})");
+                }
+            }
+            else
+            {
+                _randomizationMode = settings.RandomizationMode;
+                _randomizationModeMigrated = settings.RandomizationModeMigrated;
+            }
             _photoDisplayDurationSeconds = settings.PhotoDisplayDurationSeconds > 0 ? settings.PhotoDisplayDurationSeconds : 5; // Default to 5 if invalid
             Log($"LoadSettings: Restored photo display duration: {_photoDisplayDurationSeconds} seconds");
             
@@ -7337,10 +7207,7 @@ namespace ReelRoulette
                 {
                     AutoPlayNextCheckBox.IsChecked = _autoPlayNext;
                 }
-                if (NoRepeatMenuItem != null)
-                {
-                    NoRepeatMenuItem.IsChecked = _noRepeatMode;
-                }
+                UpdateRandomizationModeComboBox();
             }
             finally
             {
@@ -7357,7 +7224,7 @@ namespace ReelRoulette
                 }
             }
             
-            Log($"LoadSettings: Restored playback preferences - Loop={_isLoopEnabled}, AutoPlay={_autoPlayNext}, Muted={_isMuted}, NoRepeat={_noRepeatMode}");
+            Log($"LoadSettings: Restored playback preferences - Loop={_isLoopEnabled}, AutoPlay={_autoPlayNext}, Muted={_isMuted}, RandomizationMode={_randomizationMode}");
             
             // Apply filter state
             var previousFilterState = _currentFilterState;
@@ -7623,7 +7490,8 @@ namespace ReelRoulette
                 settings.AutoPlayNext = _autoPlayNext;
                 settings.IsMuted = _isMuted; // Save our tracked mute state
                 settings.VolumeLevel = _isMuted ? _lastNonZeroVolume : _userVolumePreference; // Save last non-zero volume when muted
-                settings.NoRepeatMode = _noRepeatMode;
+                settings.RandomizationMode = _randomizationMode;
+                settings.RandomizationModeMigrated = _randomizationModeMigrated;
                 settings.PhotoDisplayDurationSeconds = _photoDisplayDurationSeconds;
                 
                 // Image scaling
@@ -8566,7 +8434,6 @@ namespace ReelRoulette
                 dialog.LoadFromSettings(
                     _isLoopEnabled,
                     _autoPlayNext,
-                    _noRepeatMode,
                     (double)intervalValue,
                     _seekStep,
                     _volumeStep,
@@ -8633,7 +8500,7 @@ namespace ReelRoulette
                     {
                         var oldLoopEnabled = _isLoopEnabled;
                         var oldAutoPlayNext = _autoPlayNext;
-                        var oldNoRepeatMode = _noRepeatMode;
+                        var oldRandomizationMode = _randomizationMode;
                         var oldSeekStep = _seekStep;
                         var oldVolumeStep = _volumeStep;
                         var oldVolumeNormalizationEnabled = _volumeNormalizationEnabled;
@@ -8666,7 +8533,6 @@ namespace ReelRoulette
                     // Apply settings from dialog
                     _isLoopEnabled = dialog.LoopEnabled;
                     _autoPlayNext = dialog.AutoPlayNext;
-                    _noRepeatMode = dialog.NoRepeatMode;
                     _seekStep = dialog.GetSeekStep();
                     _volumeStep = dialog.GetVolumeStep();
                     _volumeNormalizationEnabled = dialog.GetVolumeNormalizationEnabled();
@@ -8719,7 +8585,7 @@ namespace ReelRoulette
                         var settingsChanged =
                             oldLoopEnabled != _isLoopEnabled ||
                             oldAutoPlayNext != _autoPlayNext ||
-                            oldNoRepeatMode != _noRepeatMode ||
+                            oldRandomizationMode != _randomizationMode ||
                             !string.Equals(oldSeekStep, _seekStep, StringComparison.OrdinalIgnoreCase) ||
                             oldVolumeStep != _volumeStep ||
                             oldVolumeNormalizationEnabled != _volumeNormalizationEnabled ||
@@ -8785,8 +8651,7 @@ namespace ReelRoulette
                         {
                             if (LoopToggle != null) LoopToggle.IsChecked = _isLoopEnabled;
                             if (AutoPlayNextCheckBox != null) AutoPlayNextCheckBox.IsChecked = _autoPlayNext;
-                            if (NoRepeatMenuItem != null) NoRepeatMenuItem.IsChecked = _noRepeatMode;
-                            if (NoRepeatToggle != null) NoRepeatToggle.IsChecked = _noRepeatMode;
+                            UpdateRandomizationModeComboBox();
                             if (IntervalNumericUpDown != null) IntervalNumericUpDown.Value = dialog.TimerIntervalSeconds;
                         });
                         
@@ -8851,7 +8716,7 @@ namespace ReelRoulette
                             var saveSettingsStopwatch = Stopwatch.StartNew();
                             SaveSettings();
                             Log($"Settings: SaveSettings completed in {saveSettingsStopwatch.ElapsedMilliseconds}ms");
-                            Log($"Settings: Applied and saved - Loop={_isLoopEnabled}, AutoPlay={_autoPlayNext}, NoRepeat={_noRepeatMode}, SeekStep={_seekStep}, VolumeStep={_volumeStep}, VolumeNorm={_volumeNormalizationEnabled}");
+                            Log($"Settings: Applied and saved - Loop={_isLoopEnabled}, AutoPlay={_autoPlayNext}, RandomizationMode={_randomizationMode}, SeekStep={_seekStep}, VolumeStep={_volumeStep}, VolumeNorm={_volumeNormalizationEnabled}");
                         }
                         else
                         {
@@ -9235,7 +9100,6 @@ namespace ReelRoulette
 
         private void SyncMenuStates()
         {
-            NoRepeatMenuItem.IsChecked = _noRepeatMode;
             KeepPlayingMenuItem.IsChecked = _isKeepPlayingActive;
             // OnlyFavoritesMenuItem removed - now using FilterDialog
             FavoriteToggle.IsEnabled = !string.IsNullOrEmpty(_currentVideoPath);
@@ -9243,26 +9107,6 @@ namespace ReelRoulette
             ManageTagsButton.IsEnabled = !string.IsNullOrEmpty(_currentVideoPath);
             
             // Audio filter menu items removed - now using FilterDialog
-        }
-
-        private void NoRepeatMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-        {
-            _noRepeatMode = NoRepeatMenuItem.IsChecked == true;
-            
-            // Sync with toggle button
-            if (NoRepeatToggle != null)
-            {
-                NoRepeatToggle.IsChecked = _noRepeatMode;
-            }
-            
-            var isUserInitiated = !_isApplyingSettings && !_isLoadingSettings && !_isProgrammaticUiSync;
-            Log($"{(isUserInitiated ? "UI ACTION" : "STATE SYNC")}: NoRepeatMenuItem changed to: {_noRepeatMode}");
-            
-            // Persist the setting (unless we're applying settings from dialog)
-            if (!_isApplyingSettings && !_isLoadingSettings && !_isProgrammaticUiSync)
-            {
-                SaveSettings();
-            }
         }
 
         private void KeepPlayingMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -9534,15 +9378,7 @@ namespace ReelRoulette
 
             if (isBlacklisted)
             {
-                Log("BlacklistToggle_Changed: Video blacklisted, removing from queue and rebuilding");
-                // Remove from queue if present
-                var queueList = _playQueue.ToList();
-                var beforeCount = queueList.Count;
-                queueList.Remove(path);
-                var afterCount = queueList.Count;
-                _playQueue = new Queue<string>(queueList);
-                Log($"BlacklistToggle_Changed: Queue updated - {beforeCount} -> {afterCount} items (removed blacklisted video)");
-
+                Log("BlacklistToggle_Changed: Video blacklisted, rebuilding randomization state");
                 RebuildPlayQueueIfNeeded();
                 StatusTextBlock.Text = $"Blacklisted: {System.IO.Path.GetFileName(path)}";
             }
