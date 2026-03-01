@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **Stabilize autoplay media handoff and tighten privacy-safe diagnostics** (2026-03-01):
+  - Fix end-of-video autoplay hangs by guarding duplicate `EndReached` handling and avoiding synchronous `MediaPlayer.Stop()` during end-triggered transitions before prior media disposal.
+  - Improve playback-transition diagnostics with explicit stop/dispose logging around prior-media teardown.
+  - Fix filter-apply settings persistence to save on the UI thread so `SaveSettingsInternal` does not read UI-owned values from background threads.
+  - Strengthen log sanitization by redacting multiline `Tags:` payloads and preset names/fields (quoted preset names plus active/selected preset values) across preset-related logs.
+
 - **Implement enhanced random selection modes across desktop and web** (2026-02-28):
   - Replace legacy no-repeat behavior with a shared `RandomizationMode` model: `PureRandom`, `WeightedRandom`, `SmartShuffle`, `SpreadMode`, `WeightedWithSpread`.
   - Add shared random selection engine/runtime state used by both desktop and web for consistent mode behavior and state rebuild when eligible sets change.

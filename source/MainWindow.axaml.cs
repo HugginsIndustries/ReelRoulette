@@ -89,6 +89,8 @@ namespace ReelRoulette
         private readonly RandomizationRuntimeState _desktopRandomizationState = new();
         private readonly object _desktopRandomizationLock = new object();
         private RandomizationMode _randomizationMode = RandomizationMode.SmartShuffle;
+        private int _isHandlingEndReached = 0;
+        private int _suppressStopForEndReachedTransition = 0;
 
         // Current video tracking
         private string? _currentVideoPath;
@@ -1161,6 +1163,11 @@ namespace ReelRoulette
             // Only handle EndReached for videos - photos use timer
             if (!_isCurrentlyPlayingPhoto)
             {
+                if (Interlocked.CompareExchange(ref _isHandlingEndReached, 1, 0) != 0)
+                {
+                    Log("MediaPlayer_EndReached: EndReached handler already running - skipping duplicate event");
+                    return;
+                }
                 // Hand off end-of-media work asynchronously so UI thread stays responsive
                 _ = HandleEndReachedAsync();
             }
@@ -1297,7 +1304,15 @@ namespace ReelRoulette
                     if (!advanced)
                     {
                         Log("HandleEndReachedAsync: Auto-play next enabled - playing random media");
-                        await PlayRandomVideoAsync();
+                        Interlocked.Exchange(ref _suppressStopForEndReachedTransition, 1);
+                        try
+                        {
+                            await PlayRandomVideoAsync();
+                        }
+                        finally
+                        {
+                            Interlocked.Exchange(ref _suppressStopForEndReachedTransition, 0);
+                        }
                     }
                 }
                 else
@@ -1318,6 +1333,10 @@ namespace ReelRoulette
                 {
                     StatusTextBlock.Text = $"Playback error: {ex.Message}";
                 });
+            }
+            finally
+            {
+                Interlocked.Exchange(ref _isHandlingEndReached, 0);
             }
         }
 
@@ -6102,9 +6121,21 @@ namespace ReelRoulette
                 // Dispose previous media
                 if (_currentMedia != null)
                 {
-                    Log("PlayVideo: Stopping player and disposing previous media");
-                    _mediaPlayer.Stop(); // Stop playback cleanly before disposing to prevent audio spikes
+                    var skipStopForEndReached = Interlocked.CompareExchange(ref _suppressStopForEndReachedTransition, 0, 0) == 1;
+                    if (skipStopForEndReached)
+                    {
+                        Log("PlayVideo: EndReached transition active - skipping MediaPlayer.Stop() before disposing previous media");
+                    }
+                    else
+                    {
+                        Log("PlayVideo: Stopping player before disposing previous media");
+                        _mediaPlayer.Stop(); // Stop playback cleanly before disposing to prevent audio spikes
+                        Log("PlayVideo: MediaPlayer.Stop() completed");
+                    }
+                    Log("PlayVideo: Disposing previous media");
                     _currentMedia.Dispose();
+                    _currentMedia = null;
+                    Log("PlayVideo: Previous media disposed");
                 }
 
                 // Create and play new media
@@ -9215,29 +9246,9 @@ namespace ReelRoulette
                 var intervalValue = IntervalNumericUpDown?.Value;
                 Log($"  Captured intervalValue on UI thread: {intervalValue}");
                 
-                // Save the filter state asynchronously
-                Log("  Starting async save operation...");
-                _ = Task.Run(() =>
-                {
-                    try
-                    {
-                        Log("  Task.Run: Inside task, calling SaveSettings...");
-                        // Use captured interval value to avoid UI thread access
-                        SaveSettingsInternal(intervalValue);
-                        Log("  Task.Run: SaveSettings completed successfully");
-                    }
-                    catch (Exception ex)
-                    {
-                        Log($"  Task.Run: ERROR saving filter state - Exception type: {ex.GetType().Name}, Message: {ex.Message}");
-                        Log($"  Task.Run: ERROR - Stack trace: {ex.StackTrace}");
-                        if (ex.InnerException != null)
-                        {
-                            Log($"  Task.Run: ERROR - Inner exception: {ex.InnerException.Message}");
-                        }
-                        Log($"Error saving filter state: {ex.Message}");
-                    }
-                });
-                Log("  Task.Run started (async save initiated)");
+                // Save filter state on UI thread (SaveSettings reads UI-owned properties).
+                Log("  Saving filter state on UI thread...");
+                SaveSettingsInternal(intervalValue);
                 
                 // Update Library panel if it's visible and respecting filters
                 if (_showLibraryPanel)
