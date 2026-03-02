@@ -1,4 +1,5 @@
 using ReelRoulette.Core.Verification;
+using ReelRoulette.Server.Services;
 
 var verbose = args.Any(arg => string.Equals(arg, "--verbose", StringComparison.OrdinalIgnoreCase));
 
@@ -16,6 +17,16 @@ if (!result.Success)
         Console.WriteLine($"- {issue.Name}: {issue.Message}");
     }
 
+    Environment.ExitCode = 1;
+    return;
+}
+
+var serverState = new ServerStateService();
+var eventA = serverState.CreateEnvelope("systemCheck", new { index = 1 });
+var eventB = serverState.CreateEnvelope("systemCheck", new { index = 2 });
+if (eventB.Revision <= eventA.Revision)
+{
+    Console.WriteLine("Server envelope revision check failed.");
     Environment.ExitCode = 1;
     return;
 }

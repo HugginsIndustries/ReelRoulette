@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
   title: ReelRoulette API
-  version: 0.1.0
-  description: Contract-first API skeleton for migration milestones.
+  version: 0.3.0
+  description: Contract-first API (M3 initial query/command and SSE envelope).
 paths:
   /health:
     get:
@@ -14,8 +14,305 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                    example: ok
+                $ref: "#/components/schemas/HealthResponse"
+
+  /api/version:
+    get:
+      summary: Get API and app version
+      operationId: getVersion
+      responses:
+        "200":
+          description: Version response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VersionResponse"
+
+  /api/presets:
+    get:
+      summary: Get available presets
+      operationId: getPresets
+      responses:
+        "200":
+          description: Preset list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PresetResponse"
+
+  /api/random:
+    post:
+      summary: Request a random media item
+      operationId: postRandom
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RandomRequest"
+      responses:
+        "200":
+          description: Random media result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RandomResponse"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/favorite:
+    post:
+      summary: Update favorite state for an item
+      operationId: postFavorite
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FavoriteRequest"
+      responses:
+        "200":
+          description: Favorite updated
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/blacklist:
+    post:
+      summary: Update blacklist state for an item
+      operationId: postBlacklist
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BlacklistRequest"
+      responses:
+        "200":
+          description: Blacklist updated
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/record-playback:
+    post:
+      summary: Record playback for an item
+      operationId: postRecordPlayback
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RecordPlaybackRequest"
+      responses:
+        "200":
+          description: Playback recorded
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/events:
+    get:
+      summary: Stream server events
+      operationId: getEventsSse
+      responses:
+        "200":
+          description: Event stream (SSE)
+          content:
+            text/event-stream:
+              schema:
+                $ref: "#/components/schemas/ServerEventEnvelope"
+
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          example: ok
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+
+    VersionResponse:
+      type: object
+      required:
+        - appVersion
+        - apiVersion
+      properties:
+        appVersion:
+          type: string
+        apiVersion:
+          type: string
+        assetsVersion:
+          type: string
+          nullable: true
+
+    PresetResponse:
+      type: object
+      required:
+        - id
+        - name
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        summary:
+          type: string
+          nullable: true
+
+    RandomRequest:
+      type: object
+      required:
+        - presetId
+      properties:
+        presetId:
+          type: string
+        clientId:
+          type: string
+          nullable: true
+        includeVideos:
+          type: boolean
+          default: true
+        includePhotos:
+          type: boolean
+          default: true
+        randomizationMode:
+          type: string
+          nullable: true
+
+    RandomResponse:
+      type: object
+      required:
+        - id
+        - displayName
+        - mediaType
+        - mediaUrl
+        - isFavorite
+        - isBlacklisted
+      properties:
+        id:
+          type: string
+        displayName:
+          type: string
+        mediaType:
+          type: string
+          enum:
+            - video
+            - photo
+        durationSeconds:
+          type: number
+          format: double
+          nullable: true
+        mediaUrl:
+          type: string
+        isFavorite:
+          type: boolean
+        isBlacklisted:
+          type: boolean
+
+    FavoriteRequest:
+      type: object
+      required:
+        - path
+        - isFavorite
+      properties:
+        path:
+          type: string
+        isFavorite:
+          type: boolean
+
+    BlacklistRequest:
+      type: object
+      required:
+        - path
+        - isBlacklisted
+      properties:
+        path:
+          type: string
+        isBlacklisted:
+          type: boolean
+
+    RecordPlaybackRequest:
+      type: object
+      required:
+        - path
+      properties:
+        clientId:
+          type: string
+          nullable: true
+        path:
+          type: string
+
+    ServerEventEnvelope:
+      type: object
+      required:
+        - revision
+        - eventType
+        - timestamp
+        - payload
+      properties:
+        revision:
+          type: integer
+          format: int64
+        eventType:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        payload:
+          oneOf:
+            - $ref: "#/components/schemas/ItemStateChangedPayload"
+            - $ref: "#/components/schemas/PlaybackRecordedPayload"
+
+    ItemStateChangedPayload:
+      type: object
+      required:
+        - itemId
+        - path
+        - isFavorite
+        - isBlacklisted
+      properties:
+        itemId:
+          type: string
+        path:
+          type: string
+        isFavorite:
+          type: boolean
+        isBlacklisted:
+          type: boolean
+
+    PlaybackRecordedPayload:
+      type: object
+      required:
+        - path
+      properties:
+        path:
+          type: string
+        clientId:
+          type: string
+          nullable: true

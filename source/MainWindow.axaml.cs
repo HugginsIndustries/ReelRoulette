@@ -16,6 +16,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Net.Http;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text.Json;
@@ -133,6 +134,10 @@ namespace ReelRoulette
         private WebRemote.WebRemoteAuthMode _webRemoteAuthMode = WebRemote.WebRemoteAuthMode.TokenRequired;
         private string? _webRemoteSharedToken;
         private WebRemote.WebRemoteServer? _webRemoteServer;
+        private static readonly HttpClient _coreServerHttpClient = new()
+        {
+            Timeout = TimeSpan.FromSeconds(2)
+        };
 
         // Duration scanning
         private CancellationTokenSource? _scanCancellationSource;
@@ -936,6 +941,10 @@ namespace ReelRoulette
 #pragma warning restore CS4014
                         Log("MainWindow Loaded event: Web Remote server start requested.");
                     }
+
+#pragma warning disable CS4014
+                    ProbeCoreServerVersionAsync();
+#pragma warning restore CS4014
 
                     // Run non-essential startup work in background so first paint is fast.
 #pragma warning disable CS4014
@@ -6847,6 +6856,26 @@ namespace ReelRoulette
             _webRemoteSharedToken = Guid.NewGuid().ToString("N");
             SaveSettings();
             Log($"WebRemote: Auto-generated shared token (Settings > Web Remote to view/copy)");
+        }
+
+        private async Task ProbeCoreServerVersionAsync()
+        {
+            try
+            {
+                using var response = await _coreServerHttpClient.GetAsync("http://localhost:51301/api/version");
+                if (!response.IsSuccessStatusCode)
+                {
+                    Log($"CoreServerProbe: /api/version responded {response.StatusCode}");
+                    return;
+                }
+
+                var body = await response.Content.ReadAsStringAsync();
+                Log($"CoreServerProbe: /api/version success ({body})");
+            }
+            catch (Exception ex)
+            {
+                Log($"CoreServerProbe: /api/version unavailable ({ex.Message})");
+            }
         }
 
         #endregion

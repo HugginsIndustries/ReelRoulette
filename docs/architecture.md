@@ -59,3 +59,29 @@ flowchart TD
 - Core state services own randomization/filter/playback session primitives.
 - Core storage services own JSON load/save and atomic write semantics.
 - Desktop retains UI/media rendering concerns and uses adapters for persistence/state access.
+
+## M3 Contract-First Server Seam
+
+```mermaid
+flowchart TD
+    desktopClient["Desktop Client"]
+    webClient["Web Client"]
+    serverHost["ReelRoulette.Server"]
+    openApi["OpenAPI Contract"]
+    handlers["Thin Endpoint Handlers"]
+    coreAndAdapters["Core + Adapter Services"]
+    sseStream["SSE Stream"]
+
+    desktopClient --> serverHost
+    webClient --> serverHost
+    openApi --> serverHost
+    serverHost --> handlers
+    handlers --> coreAndAdapters
+    serverHost --> sseStream
+    sseStream --> desktopClient
+    sseStream --> webClient
+```
+
+- `ReelRoulette.Server` now exposes initial query/command endpoints and an SSE event stream.
+- OpenAPI is expanded to document live M3 endpoint contracts and event envelope shape.
+- Desktop includes a local HTTP probe (`/api/version`) to prove the M3 integration boundary.

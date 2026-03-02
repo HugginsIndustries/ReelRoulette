@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **Implement M3 contract-first server seam and initial API boundary proof** (2026-03-01):
+  - Expand `shared/api/openapi.yaml` from health-only to initial M3 query/command endpoints and typed SSE envelope schema (`revision`, `eventType`, `timestamp`, `payload`).
+  - Add typed server contract models and mapping helpers under `src/core/ReelRoulette.Server/Contracts`.
+  - Implement thin `ReelRoulette.Server` endpoint handlers for `version`, `presets`, `random`, `favorite`, `blacklist`, `record-playback`, and SSE events.
+  - Add in-memory server state/event service with revisioned envelope publishing for SSE streaming.
+  - Add desktop local HTTP probe for `/api/version` to prove one local HTTP state/query integration seam.
+  - Extend verification coverage with server contract/revision tests and system-check harness revision sanity checks.
+  - Update API/architecture docs to reflect M3 contract-first server boundary.
+
 - **Implement M2 storage/state service layer and hybrid verification foundation** (2026-03-01):
   - Add core storage abstractions and JSON-backed atomic storage services (`IAtomicUpdateStorageService`, `JsonFileStorageService`, and typed `LibraryIndexStorageService`/`SettingsStorageService` wrappers).
   - Add core runtime state services for randomization scope state, filter session snapshots, and playback session primitives.

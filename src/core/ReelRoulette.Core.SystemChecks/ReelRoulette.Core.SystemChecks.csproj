@@ -7,5 +7,6 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\ReelRoulette.Core\ReelRoulette.Core.csproj" />
+    <ProjectReference Include="..\ReelRoulette.Server\ReelRoulette.Server.csproj" />
   </ItemGroup>
 </Project>
