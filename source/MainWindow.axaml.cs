@@ -134,6 +134,9 @@ namespace ReelRoulette
         private WebRemote.WebRemoteAuthMode _webRemoteAuthMode = WebRemote.WebRemoteAuthMode.TokenRequired;
         private string? _webRemoteSharedToken;
         private WebRemote.WebRemoteServer? _webRemoteServer;
+        private bool _autoStartCoreRuntime;
+        private string _coreServerBaseUrl = "http://localhost:51301";
+        private bool _isStartingCoreRuntime;
         private static readonly HttpClient _coreServerHttpClient = new()
         {
             Timeout = TimeSpan.FromSeconds(2)
@@ -942,9 +945,7 @@ namespace ReelRoulette
                         Log("MainWindow Loaded event: Web Remote server start requested.");
                     }
 
-#pragma warning disable CS4014
-                    ProbeCoreServerVersionAsync();
-#pragma warning restore CS4014
+                    await EnsureCoreRuntimeAvailableAsync();
 
                     // Run non-essential startup work in background so first paint is fast.
 #pragma warning disable CS4014
@@ -6858,24 +6859,127 @@ namespace ReelRoulette
             Log($"WebRemote: Auto-generated shared token (Settings > Web Remote to view/copy)");
         }
 
-        private async Task ProbeCoreServerVersionAsync()
+        private async Task<bool> ProbeCoreServerVersionAsync(bool updateStatus = false)
         {
+            var endpoint = $"{_coreServerBaseUrl.TrimEnd('/')}/api/version";
             try
             {
-                using var response = await _coreServerHttpClient.GetAsync("http://localhost:51301/api/version");
+                using var response = await _coreServerHttpClient.GetAsync(endpoint);
                 if (!response.IsSuccessStatusCode)
                 {
                     Log($"CoreServerProbe: /api/version responded {response.StatusCode}");
-                    return;
+                    if (updateStatus)
+                    {
+                        SetStatusMessage("Core runtime unavailable. Use View > Start Core Runtime.", 0);
+                    }
+                    return false;
                 }
 
                 var body = await response.Content.ReadAsStringAsync();
                 Log($"CoreServerProbe: /api/version success ({body})");
+                if (updateStatus)
+                {
+                    SetStatusMessage("Core runtime connected.", 0);
+                }
+                return true;
             }
             catch (Exception ex)
             {
                 Log($"CoreServerProbe: /api/version unavailable ({ex.Message})");
+                if (updateStatus)
+                {
+                    SetStatusMessage("Core runtime unavailable. Use View > Start Core Runtime.", 0);
+                }
+                return false;
             }
+        }
+
+        private async Task EnsureCoreRuntimeAvailableAsync()
+        {
+            var connected = await ProbeCoreServerVersionAsync(updateStatus: true);
+            if (connected || !_autoStartCoreRuntime)
+            {
+                return;
+            }
+
+            var started = await TryStartCoreRuntimeAsync();
+            if (!started)
+            {
+                return;
+            }
+
+            await Task.Delay(TimeSpan.FromSeconds(2));
+            await ProbeCoreServerVersionAsync(updateStatus: true);
+        }
+
+        private async Task<bool> TryStartCoreRuntimeAsync()
+        {
+            if (_isStartingCoreRuntime)
+            {
+                return false;
+            }
+
+            _isStartingCoreRuntime = true;
+            try
+            {
+                var repoRoot = FindRepositoryRoot();
+                if (repoRoot == null)
+                {
+                    Log("CoreRuntime: Unable to locate repository root; cannot run start script.");
+                    SetStatusMessage("Unable to locate run-core script.", 0);
+                    return false;
+                }
+
+                var scriptPath = Path.Combine(repoRoot, "tools", "scripts", "run-core.ps1");
+                if (!File.Exists(scriptPath))
+                {
+                    Log($"CoreRuntime: run-core script not found at {scriptPath}");
+                    SetStatusMessage("run-core.ps1 not found.", 0);
+                    return false;
+                }
+
+                var startInfo = new ProcessStartInfo
+                {
+                    FileName = "powershell",
+                    Arguments = $"-NoProfile -ExecutionPolicy Bypass -File \"{scriptPath}\"",
+                    WorkingDirectory = repoRoot,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+
+                Process.Start(startInfo);
+                Log("CoreRuntime: Start script launched from desktop.");
+                SetStatusMessage("Starting core runtime...", 0);
+                await Task.Delay(TimeSpan.FromMilliseconds(200));
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Log($"CoreRuntime: Failed to launch start script ({ex.Message})");
+                SetStatusMessage("Failed to start core runtime.", 0);
+                return false;
+            }
+            finally
+            {
+                _isStartingCoreRuntime = false;
+            }
+        }
+
+        private string? FindRepositoryRoot()
+        {
+            var directory = new DirectoryInfo(AppContext.BaseDirectory);
+            while (directory != null)
+            {
+                var solutionPath = Path.Combine(directory.FullName, "ReelRoulette.sln");
+                if (File.Exists(solutionPath))
+                {
+                    return directory.FullName;
+                }
+
+                directory = directory.Parent;
+            }
+
+            return null;
         }
 
         #endregion
@@ -6967,6 +7071,8 @@ namespace ReelRoulette
 
             // Web Remote settings
             public WebRemote.WebRemoteSettings? WebRemote { get; set; }
+            public bool AutoStartCoreRuntime { get; set; } = false;
+            public string CoreServerBaseUrl { get; set; } = "http://localhost:51301";
         }
 
         private static SettingsStorageService<AppSettings> CreateSettingsStorageService()
@@ -7223,6 +7329,15 @@ namespace ReelRoulette
             }
             if (OpenWebRemoteMenuItem != null)
                 OpenWebRemoteMenuItem.IsEnabled = _webRemoteEnabled;
+
+            _autoStartCoreRuntime = settings.AutoStartCoreRuntime;
+            _coreServerBaseUrl = string.IsNullOrWhiteSpace(settings.CoreServerBaseUrl)
+                ? "http://localhost:51301"
+                : settings.CoreServerBaseUrl.Trim();
+            if (AutoStartCoreRuntimeMenuItem != null)
+            {
+                AutoStartCoreRuntimeMenuItem.IsChecked = _autoStartCoreRuntime;
+            }
             
             // Bug fix: Initialize _lastNonZeroVolume with saved volume level
             // This ensures unmuting restores the correct volume, not the default (100)
@@ -7555,6 +7670,8 @@ namespace ReelRoulette
                     AuthMode = _webRemoteAuthMode,
                     SharedToken = _webRemoteSharedToken
                 };
+                settings.AutoStartCoreRuntime = _autoStartCoreRuntime;
+                settings.CoreServerBaseUrl = _coreServerBaseUrl;
 
                 // Filter state (always save an object, never null)
                 _filterSessionStateService.Set(
@@ -8205,6 +8322,26 @@ namespace ReelRoulette
             var isFullScreen = FullscreenMenuItem.IsChecked == true;
             Log($"UI ACTION: FullscreenMenuItem clicked, setting fullscreen to: {isFullScreen}");
             IsFullScreen = isFullScreen;
+        }
+
+        private async void StartCoreRuntimeMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            Log("UI ACTION: StartCoreRuntimeMenuItem clicked");
+            var started = await TryStartCoreRuntimeAsync();
+            if (!started)
+            {
+                return;
+            }
+
+            await Task.Delay(TimeSpan.FromSeconds(2));
+            await ProbeCoreServerVersionAsync(updateStatus: true);
+        }
+
+        private void AutoStartCoreRuntimeMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            _autoStartCoreRuntime = AutoStartCoreRuntimeMenuItem.IsChecked == true;
+            Log($"UI ACTION: AutoStartCoreRuntimeMenuItem clicked, setting auto-start to {_autoStartCoreRuntime}");
+            SaveSettings();
         }
 
         private async void ManageTagsMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)

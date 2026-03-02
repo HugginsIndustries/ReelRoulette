@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **Implement M4 worker runtime, pairing/auth primitive, and desktop core lifecycle UX** (2026-03-01):
+  - Refactor `ReelRoulette.Server` startup into shared endpoint composition so both server and worker hosts use the same API/SSE/auth mapping.
+  - Convert `ReelRoulette.Worker` from scaffold placeholder into a real console-first host with lifecycle logging and graceful shutdown wiring.
+  - Add pairing/auth primitive on the core server seam (`/api/pair` GET/POST, cookie/token auth middleware, optional localhost trust, and auth-required behavior for non-pair endpoints).
+  - Add desktop lifecycle UX for headless core runtime (`View > Start Core Runtime`, optional auto-start, probe-driven status messaging).
+  - Replace `tools/scripts/run-core.ps1` and `tools/scripts/run-core.sh` placeholders with functional worker launch scripts and runtime configuration flags.
+  - Expand OpenAPI/docs/README for M4 runtime/auth behavior and explicitly document server-thin guardrails for future milestones.
+
 - **Finalize M3 reconnect/resync contract and runtime behavior** (2026-03-01):
   - Add `POST /api/library-states` to `ReelRoulette.Server` and OpenAPI for authoritative item-state re-fetch during reconnect recovery.
   - Add SSE reconnect handling in `ReelRoulette.Server` for `Last-Event-ID` replay and emit `resyncRequired` when revision gaps exceed replay retention.

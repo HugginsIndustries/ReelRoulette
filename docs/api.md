@@ -3,7 +3,7 @@
 ## Source of Truth
 
 - API contract lives at `shared/api/openapi.yaml`.
-- M3 establishes initial contract-first query/command/SSE endpoints in `ReelRoulette.Server`.
+- M4 runs the contract-first query/command/SSE surface from `ReelRoulette.Worker` using shared `ReelRoulette.Server` endpoint composition.
 
 ## Eventing Direction
 
@@ -12,15 +12,27 @@
   - `eventType`
   - `timestamp`
   - `payload`
-- Reconnect/resync contract for M3 final state:
+- Reconnect/resync contract:
   - Client reconnects to `GET /api/events` with `Last-Event-ID`.
   - Server replays buffered events newer than that revision when available.
   - If the gap exceeds replay retention, server emits `resyncRequired`.
   - Client then re-fetches authoritative state via `POST /api/library-states`.
 
-## M3 Initial Endpoint Surface
+## Pairing / Auth Primitive (M4)
+
+- Pairing endpoint:
+  - `GET /api/pair?token=...`
+  - `POST /api/pair` with `{ "token": "..." }`
+- Protected endpoint behavior:
+  - when auth is required, unpaired requests return `401`
+  - localhost requests can be optionally trusted for dev workflows
+  - LAN access requires pairing token/cookie when auth is enabled
+
+## Current Endpoint Surface
 
 - `GET /health`
+- `GET /api/pair`
+- `POST /api/pair`
 - `GET /api/version`
 - `GET /api/presets`
 - `POST /api/random`

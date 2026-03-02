@@ -1,0 +1,181 @@
+using System.Text.Json;
+using ReelRoulette.Server.Auth;
+using ReelRoulette.Server.Contracts;
+using ReelRoulette.Server.Services;
+
+namespace ReelRoulette.Server.Hosting;
+
+public static class ServerHostComposition
+{
+    public static void AddReelRouletteServer(this IServiceCollection services)
+    {
+        services.AddSingleton<ServerStateService>();
+    }
+
+    public static void MapReelRouletteEndpoints(this WebApplication app, ServerRuntimeOptions options)
+    {
+        if (options.RequireAuth)
+        {
+            app.Use((context, next) => new ServerPairingAuthMiddleware(next, options).InvokeAsync(context));
+        }
+
+        app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
+
+        app.MapGet("/api/pair", (HttpContext context, string? token) =>
+        {
+            return HandlePairRequest(context, token, options);
+        });
+
+        app.MapPost("/api/pair", (HttpContext context, PairRequest? request) =>
+        {
+            return HandlePairRequest(context, request?.Token, options);
+        });
+
+        app.MapGet("/api/version", (ServerStateService state) =>
+        {
+            return Results.Ok(state.GetVersion());
+        });
+
+        app.MapGet("/api/presets", (ServerStateService state) =>
+        {
+            return Results.Ok(state.GetPresets());
+        });
+
+        app.MapPost("/api/random", (RandomRequest request, ServerStateService state) =>
+        {
+            if (string.IsNullOrWhiteSpace(request.PresetId))
+            {
+                return Results.BadRequest(new { error = "presetId is required" });
+            }
+
+            return Results.Ok(state.GetRandom(request));
+        });
+
+        app.MapPost("/api/favorite", (FavoriteRequest request, ServerStateService state) =>
+        {
+            if (string.IsNullOrWhiteSpace(request.Path))
+            {
+                return Results.BadRequest(new { error = "path is required" });
+            }
+
+            state.SetFavorite(request);
+            return Results.Ok();
+        });
+
+        app.MapPost("/api/blacklist", (BlacklistRequest request, ServerStateService state) =>
+        {
+            if (string.IsNullOrWhiteSpace(request.Path))
+            {
+                return Results.BadRequest(new { error = "path is required" });
+            }
+
+            state.SetBlacklist(request);
+            return Results.Ok();
+        });
+
+        app.MapPost("/api/record-playback", (RecordPlaybackRequest request, ServerStateService state) =>
+        {
+            if (string.IsNullOrWhiteSpace(request.Path))
+            {
+                return Results.BadRequest(new { error = "path is required" });
+            }
+
+            state.RecordPlayback(request);
+            return Results.Ok();
+        });
+
+        app.MapPost("/api/library-states", (LibraryStatesRequest request, ServerStateService state) =>
+        {
+            var states = state.GetLibraryStates(request);
+            return Results.Ok(states);
+        });
+
+        app.MapGet("/api/events", async (HttpContext context, ServerStateService state) =>
+        {
+            context.Response.Headers.Append("Content-Type", "text/event-stream");
+            context.Response.Headers.Append("Cache-Control", "no-cache");
+            context.Response.Headers.Append("Connection", "keep-alive");
+
+            var cancellationToken = context.RequestAborted;
+            var reader = state.Subscribe(cancellationToken);
+            var serializerOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+            var lastEventHeader = context.Request.Headers["Last-Event-ID"].ToString();
+            var hasLastEvent = long.TryParse(lastEventHeader, out var lastEventRevision);
+
+            await context.Response.WriteAsync("retry: 1000\n\n", cancellationToken);
+            await context.Response.Body.FlushAsync(cancellationToken);
+
+            if (hasLastEvent)
+            {
+                var replay = state.GetReplayAfter(lastEventRevision);
+                if (replay.GapDetected)
+                {
+                    var resyncEnvelope = state.CreateEnvelope(
+                        "resyncRequired",
+                        new
+                        {
+                            reason = "revisionGap",
+                            lastEventId = lastEventRevision,
+                            currentRevision = replay.CurrentRevision
+                        });
+                    await WriteSseEnvelopeAsync(context, resyncEnvelope, serializerOptions, cancellationToken);
+                }
+
+                foreach (var missedEvent in replay.Events)
+                {
+                    await WriteSseEnvelopeAsync(context, missedEvent, serializerOptions, cancellationToken);
+                }
+            }
+
+            while (await reader.WaitToReadAsync(cancellationToken))
+            {
+                while (reader.TryRead(out var envelope))
+                {
+                    await WriteSseEnvelopeAsync(context, envelope, serializerOptions, cancellationToken);
+                }
+            }
+        });
+    }
+
+    private static IResult HandlePairRequest(HttpContext context, string? token, ServerRuntimeOptions options)
+    {
+        if (!options.RequireAuth || string.IsNullOrEmpty(options.PairingToken))
+        {
+            return Results.Ok(new { paired = true, message = "Auth disabled" });
+        }
+
+        var effectiveToken = token ?? context.Request.Query["token"].ToString();
+        if (string.IsNullOrEmpty(effectiveToken) ||
+            !string.Equals(effectiveToken, options.PairingToken, StringComparison.Ordinal))
+        {
+            return Results.Json(new { error = "Unauthorized" }, statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        context.Response.Cookies.Append(
+            options.PairingCookieName,
+            options.PairingToken,
+            new CookieOptions
+            {
+                HttpOnly = true,
+                SameSite = SameSiteMode.Lax,
+                Secure = false,
+                Path = "/",
+                MaxAge = TimeSpan.FromDays(30)
+            });
+
+        return Results.Ok(new { paired = true, message = "Paired successfully" });
+    }
+
+    private static async Task WriteSseEnvelopeAsync(
+        HttpContext context,
+        ServerEventEnvelope envelope,
+        JsonSerializerOptions serializerOptions,
+        CancellationToken cancellationToken)
+    {
+        var json = JsonSerializer.Serialize(envelope, serializerOptions);
+        await context.Response.WriteAsync($"id: {envelope.Revision}\n", cancellationToken);
+        await context.Response.WriteAsync($"event: {envelope.EventType}\n", cancellationToken);
+        await context.Response.WriteAsync($"data: {json}\n\n", cancellationToken);
+        await context.Response.Body.FlushAsync(cancellationToken);
+    }
+}

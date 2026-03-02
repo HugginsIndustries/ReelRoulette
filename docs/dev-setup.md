@@ -4,8 +4,8 @@
 
 - Existing desktop runtime: `source/ReelRoulette.csproj`
 - Core library: `src/core/ReelRoulette.Core/ReelRoulette.Core.csproj`
-- Server stub: `src/core/ReelRoulette.Server/ReelRoulette.Server.csproj`
-- Worker stub: `src/core/ReelRoulette.Worker/ReelRoulette.Worker.csproj`
+- Server host: `src/core/ReelRoulette.Server/ReelRoulette.Server.csproj`
+- Worker host: `src/core/ReelRoulette.Worker/ReelRoulette.Worker.csproj`
 - Windows target location: `src/clients/windows/ReelRoulette.WindowsApp/ReelRoulette.WindowsApp.csproj`
 - Web target location: `src/clients/web/ReelRoulette.WebUI/ReelRoulette.WebUI.csproj`
 - Core test gate: `src/core/ReelRoulette.Core.Tests/ReelRoulette.Core.Tests.csproj`
@@ -30,3 +30,14 @@
 - Server replays retained events newer than the supplied revision.
 - If a reconnect misses more history than replay retention, server emits `resyncRequired`.
 - Client recovers by calling `POST /api/library-states` to re-fetch authoritative state.
+
+## M4 Worker Runtime + Auth Notes
+
+- Console-first worker host:
+  - `dotnet run --project .\\src\\core\\ReelRoulette.Worker\\ReelRoulette.Worker.csproj`
+  - or `tools/scripts/run-core.ps1` / `tools/scripts/run-core.sh`.
+- Worker and server runtime options are configured through `CoreServer` settings (`ListenUrl`, `RequireAuth`, `TrustLocalhost`, `BindOnLan`, `PairingToken`).
+- Pairing/auth primitive:
+  - pair via `GET /api/pair?token=...` or `POST /api/pair`
+  - cookie/token authorizes subsequent calls when auth is required
+  - localhost trust can be enabled for dev while keeping LAN pairing required.

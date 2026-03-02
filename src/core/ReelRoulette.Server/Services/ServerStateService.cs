@@ -3,6 +3,8 @@ using ReelRoulette.Server.Contracts;
 
 namespace ReelRoulette.Server.Services;
 
+// M4 guardrail: keep this service focused on transport-facing state projection/event streaming
+// and move business-rule expansion to ReelRoulette.Core services as migrations continue.
 public sealed class ServerStateService
 {
     private readonly object _revisionLock = new();
@@ -24,7 +26,7 @@ public sealed class ServerStateService
 
     public VersionResponse GetVersion()
     {
-        return ApiContractMapper.MapVersion("1", assetsVersion: "m3");
+        return ApiContractMapper.MapVersion("1", assetsVersion: "m4");
     }
 
     public IReadOnlyList<PresetResponse> GetPresets()

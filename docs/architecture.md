@@ -86,3 +86,24 @@ flowchart TD
 - OpenAPI is expanded to document live M3 endpoint contracts and event envelope shape.
 - Desktop includes a local HTTP probe (`/api/version`) to prove the M3 integration boundary.
 - M3 reconnect semantics are explicit: `Last-Event-ID` replay is attempted first, and clients re-fetch state (`/api/library-states`) when a revision gap exceeds replay retention.
+
+## M4 Worker Runtime + Pairing/Auth
+
+```mermaid
+flowchart TD
+    desktopClient["Desktop Client"]
+    workerHost["ReelRoulette.Worker Console Host"]
+    serverComposition["Shared Server Endpoint Composition"]
+    authPairing["Pairing/Auth Primitive"]
+    coreServices["Core + Adapter Services"]
+
+    desktopClient --> workerHost
+    workerHost --> serverComposition
+    serverComposition --> authPairing
+    serverComposition --> coreServices
+```
+
+- `ReelRoulette.Worker` is now the headless runtime host for API/SSE in console-first mode.
+- Pairing/auth now exists on the core server seam (`/api/pair` + auth middleware with optional localhost trust).
+- Desktop has a lifecycle UX path to start core runtime when local probe fails.
+- Server-thin guardrail for M4+: keep HTTP/SSE/auth glue in server; avoid introducing new business rules in endpoint handlers.

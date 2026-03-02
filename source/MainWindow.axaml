@@ -248,6 +248,14 @@
                 <MenuItem Header="Show FFmpeg Logs"
                           Click="ShowFFmpegLogsMenuItem_Click"/>
                 <Separator/>
+                <MenuItem Header="Start Core Runtime"
+                          Click="StartCoreRuntimeMenuItem_Click"/>
+                <MenuItem x:Name="AutoStartCoreRuntimeMenuItem"
+                          Header="Auto-start Core Runtime"
+                          ToggleType="CheckBox"
+                          IsChecked="False"
+                          Click="AutoStartCoreRuntimeMenuItem_Click"/>
+                <Separator/>
                 <MenuItem x:Name="FullscreenMenuItem"
                           Header="Fullscreen (F11)"
                           ToggleType="CheckBox"

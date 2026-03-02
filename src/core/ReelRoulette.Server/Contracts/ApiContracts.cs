@@ -66,6 +66,11 @@ public sealed class LibraryStateResponse
     public long Revision { get; set; }
 }
 
+public sealed class PairRequest
+{
+    public string? Token { get; set; }
+}
+
 public sealed class ServerEventEnvelope
 {
     public long Revision { get; set; }
