@@ -84,11 +84,18 @@ Each TODO entry follows this structure:
       2. duration scan
       3. loudness scan
       4. thumbnail generation
-    - Auto refresh loudness mode: only new/unscanned.
-    - Manual refresh runs the same background pipeline as auto refresh.
-    - Manual refresh prompts loudness mode (`Only New/Unscanned` vs `Rescan All`) before starting.
+    - Pipeline execution and auto-refresh scheduling run in core runtime (not desktop-local orchestration).
+    - Auto refresh loudness mode: only new/unscanned (drop scan-all mode for this flow).
+    - Manual refresh triggers core pipeline via `POST /api/refresh/start` (same run path as auto refresh).
+    - Add `GET /api/refresh/status` snapshot endpoint and SSE progress events for active clients.
+    - Concurrency policy: reject overlaps with `409 already running`; auto/manual runs do not execute concurrently.
+    - Starting manual refresh resets the auto-refresh interval baseline.
     - Manage Sources dialog may be closed while refresh continues.
-    - Keep status-line/log progress updates consistent with existing background behavior.
+    - Keep status-line/log progress updates consistent with existing background behavior and project them to desktop/web/mobile clients.
+  - **Core refresh config ownership**:
+    - Move auto-refresh settings ownership to core config (appsettings + CLI override).
+    - Client settings updates flow through API and persist in core settings.
+    - Defaults: auto-refresh enabled, 15-minute interval, idle-only settings removed.
   - **UX simplification**:
     - Remove standalone duration/loudness scan actions after pipeline integration.
     - Keep manual/auto mutual exclusion (skip overlapping runs).

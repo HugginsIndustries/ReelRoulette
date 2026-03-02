@@ -23,10 +23,48 @@ It is designed to be:
 
 ---
 
+## Cross-Cutting Workstreams
+
+These run in parallel across milestones:
+
+- **Contract discipline**:
+  - Keep `openapi.yaml` current.
+  - Update OpenAPI whenever endpoint shape/behavior changes (do not require unrelated OpenAPI churn).
+  - Add change log section for API breaking/non-breaking changes.
+
+- **Observability**:
+  - Standardize structured event and operation logging.
+  - Preserve privacy-safe log sanitization across all hosts/clients.
+
+- **Concurrency and consistency**:
+  - Explicit conflict policy (currently last-write-wins).
+  - Idempotent commands where practical.
+
+- **Developer workflow**:
+  - Add scripts for build/run/test/generate-clients.
+  - Ensure one-command local setup for core + desktop + web.
+
+---
+
+## Client-Only Responsibilities Checklist
+
+- **UI/Platform only in clients**: render screens, capture input, manage ephemeral UI state, handle local playback/rendering primitives, and project API/SSE data into view models.
+- **Core/Server authority**: own all domain logic and persistence (library state, sources, tags/categories/presets/filters, randomization, playback stats, refresh pipeline, thumbnails, and domain-affecting settings).
+- **No direct local mutation**: clients must not write authoritative domain state directly (no direct JSON mutation for migrated domains).
+- **API-first execution**: user actions invoke core/server commands/queries; clients orchestrate UX and display results.
+- **SSE + snapshot recovery**: clients consume SSE for live sync and use query re-fetch/resync when reconnect gaps occur.
+- **Cross-client parity**: desktop/web/mobile use the same contracts; behavior changes are made once in core and reflected through API/SSE.
+- **Thin-client end state**: after migration, adding new clients should primarily be UI integration over existing API contracts, not reimplementation of business logic.
+
+---
+
 ## Milestone Board
 
-## M0 - Repo and Solution Foundation
+Status legend: `✅ Complete` | `⏳ Planned`
 
+### M0 - Repo and Solution Foundation
+
+- **Status**: ✅ Complete
 - **Goal**: Introduce target project layout and baseline docs without changing runtime behavior.
 - **Scope**:
   - Create/organize solution folders: `src/core`, `src/clients`, `shared`, `docs`, `tools`.
@@ -45,8 +83,9 @@ It is designed to be:
   - Existing app startup/playback unchanged.
   - Documentation includes current-state and target-state diagrams.
 
-## M1 - Core Domain Extraction (Pure Library)
+### M1 - Core Domain Extraction (Pure Library)
 
+- **Status**: ✅ Complete
 - **Goal**: Move pure business logic from desktop code-behind into reusable core library.
 - **Scope**:
   - Move non-UI logic into `ReelRoulette.Core`:
@@ -61,8 +100,9 @@ It is designed to be:
   - Desktop behavior remains functionally equivalent for migrated paths.
   - Unit tests added for extracted logic hotspots (randomization, tag updates, filter set building).
 
-## M2 - Storage and State Service Layer
+### M2 - Storage and State Service Layer
 
+- **Status**: ✅ Complete
 - **Goal**: Centralize data access and persistence logic behind core services.
 - **Scope**:
   - Move library/settings read-write and consistency logic to `Core/Storage`.
@@ -83,8 +123,9 @@ It is designed to be:
   - `dotnet test` runs the default fast verification suite and is treated as the primary gate.
   - Console harness runs the same reusable verification checks with optional verbose logging and scenario/performance options (no duplicated assertion logic).
 
-## M3 - Server API Skeleton + Contract First
+### M3 - Server API Skeleton + Contract First
 
+- **Status**: ✅ Complete
 - **Goal**: Introduce API seam as primary integration boundary.
 - **Scope**:
   - Define initial `shared/api/openapi.yaml`.
@@ -99,8 +140,9 @@ It is designed to be:
   - Client reconnect behavior is explicitly defined (minimum: reconnect detects missed revisions and re-fetches state; optional replay endpoint may be added later).
   - Desktop can call at least one state query via HTTP locally.
 
-## M4 - Worker Runtime (Headless Host)
+### M4 - Worker Runtime (Headless Host)
 
+- **Status**: ✅ Complete
 - **Goal**: Run core runtime independently of desktop UI.
 - **Scope**:
   - Implement `ReelRoulette.Worker` to host server + scheduled/background jobs.
@@ -129,8 +171,9 @@ It is designed to be:
   - Desktop provides a clear UX path when core is not running.
   - Closing desktop UI does not stop worker background jobs (when configured).
 
-## M5 - Desktop as API Client (State Flows)
+### M5 - Desktop as API Client (State Flows)
 
+- **Status**: ✅ Complete
 - **Goal**: Convert desktop from state owner to API client for core state.
 - **Scope**:
   - Add `ApiClient` layer to Windows app.
@@ -146,8 +189,9 @@ It is designed to be:
   - Existing user workflows remain stable.
   - Regression tests for desktop API-client request shape/parsing and M5 server-state replay/filter-session behaviors are added to `dotnet test` and passing.
 
-## M6a - P1 Feature Alignment Through API (Web Tag Editing)
+### M6a - P1 Feature Alignment Through API (Web Tag Editing)
 
+- **Status**: ⏳ Planned
 - **Goal**: Ship API-backed web tag editing parity as an independent, low-blast-radius milestone.
 - **Linked TODO**: `Web Remote Tag Editing (API-First, Desktop-Parity)` in `TODO.md`.
 - **Scope**:
@@ -167,20 +211,31 @@ It is designed to be:
   - Tag editing can ship independently of grid/thumbnail/pipeline refactors.
   - Regression tests validate tag/category mutation contracts plus SSE sync projections (including batch-ready `itemIds[]` request handling) and pass in `dotnet test`.
 
-## M6b - P1 Feature Alignment Through API (Grid/Thumbnails + Unified Refresh Pipeline)
+### M6b - P1 Feature Alignment Through API (Grid/Thumbnails + Unified Refresh Pipeline)
 
+- **Status**: ⏳ Planned
 - **Goal**: Deliver API-backed grid/thumbnails and refresh pipeline refactor as a separate milestone.
 - **Linked TODO**: `Grid View for Library Panel with Thumbnail Generation (Unified Refresh Pipeline)` in `TODO.md`.
 - **Scope**:
   - Implement API-backed **Grid View with Thumbnail Generation** pipeline:
     - list/grid toggle persistence
     - thumbnail generation for photos/videos
+    - pipeline execution and scheduling owned by core runtime (not desktop-local orchestration)
     - unified refresh stage order:
       1. source refresh
       2. duration scan
       3. loudness scan
       4. thumbnail generation
-    - manual refresh behavior aligned to background auto-refresh workflow
+    - loudness stage runs new/unscanned files only (drop scan-all mode for this flow)
+    - manual refresh is triggered via `POST /api/refresh/start` and runs through the same core pipeline as auto-refresh
+    - `GET /api/refresh/status` snapshot endpoint complements SSE progress events for active clients
+    - core rejects overlapping runs with `409 already running`; auto and manual refresh do not run concurrently
+    - triggering manual refresh resets the auto-refresh interval baseline
+    - status/progress events are emitted for both auto/manual runs and projected to active clients (desktop/web/mobile)
+  - Move refresh scheduling/config ownership to core host config:
+    - support appsettings + CLI override model
+    - client settings updates are pushed to core via API and persisted in core settings
+    - default auto refresh remains enabled, default interval becomes 15 minutes, idle-only gating settings are removed
   - Define thumbnail artifact policy before feature completion:
     - artifact location convention (for example, `data/thumbnails/{itemId}.jpg`)
     - invalidation rules (file change/fingerprint change -> thumbnail stale/regenerate)
@@ -188,12 +243,17 @@ It is designed to be:
 - **Acceptance criteria**:
   - Grid view and thumbnail generation work end-to-end through server/core.
   - No standalone legacy duration/loudness actions in UX (as planned).
-  - Refresh progress/status remains observable while dialogs close.
+  - Refresh progress/status remains observable while dialogs close and via `GET /api/refresh/status` + SSE across active clients.
+  - Core runtime is the single execution owner for unified refresh pipeline and auto-refresh scheduling.
+  - Manual refresh is API-triggered (`POST /api/refresh/start`) and returns `409` when a refresh run is already active.
+  - Auto-refresh timer baseline is reset when a manual refresh is started.
+  - Core config defaults are applied (auto enabled, 15-minute interval, no idle gating settings).
   - Thumbnail artifact/invalidation policy is implemented and documented.
-  - Regression tests cover thumbnail invalidation decisions and unified refresh stage sequencing/progress projection; all pass in `dotnet test`.
+  - Regression tests cover thumbnail invalidation decisions, unified refresh stage sequencing, refresh overlap rejection (`409`), and status/progress projection behavior; all pass in `dotnet test`.
 
-## M7 - Web UI Separation and Build Pipeline
+### M7 - Web UI Separation and Build Pipeline
 
+- **Status**: ⏳ Planned
 - **Goal**: Decouple web client codebase while preserving host integration.
 - **Scope**:
   - Move web UI to `src/clients/web/ReelRoulette.WebUI`.
@@ -206,9 +266,33 @@ It is designed to be:
   - Legacy embedded web-remote mutation paths are removed once new web UI serves equivalent flows.
   - Regression tests include build-output asset serving and contract compatibility checks against current OpenAPI, and pass in `dotnet test`.
 
-## M8 - Android Client Bootstrap
+### M8 - Hardening, Packaging, and Migration Cleanup
 
-- **Goal**: Enable initial Android app development on stable API seam.
+- **Status**: ⏳ Planned
+- **Goal**: Make architecture production-ready and reduce legacy coupling.
+- **Scope**:
+  - Add integration tests:
+    - API command/query
+    - SSE ordering/reconnect
+    - background refresh pipeline
+  - Finalize config/state migration strategy.
+  - Reduce remaining legacy in-process paths from desktop.
+  - Migrate stats aggregation/query logic to core services and expose API endpoints/contracts used by desktop/web clients.
+  - Add packaging/distribution strategy for worker + clients.
+- **Acceptance criteria**:
+  - Stable multi-client operation (desktop + web at minimum).
+  - No critical state divergence between clients.
+  - Source CRUD + enable/disable and operational settings that affect domain behavior are core-owned API commands/queries, with desktop/web as orchestration/render only.
+  - All migrated domains (state/tag/random/filter/etc.) have zero direct desktop JSON mutation paths; exceptions list is empty or explicitly documented.
+  - Library panel dataset composition (filters/sources/search/sort/paging/result shaping) is executed via core/server query paths; desktop/web clients are render/orchestration only for migrated views.
+  - Global library stats and current-file stats panel data are retrieved via core/server API query paths; desktop/web clients do not compute or persist authoritative stats locally for migrated views.
+  - Migration and upgrade path documented.
+  - Full regression suite (unit + integration + reconnect/ordering checks) is part of the default CI `dotnet test` gate and remains green.
+
+### M9 - Android Client Bootstrap
+
+- **Status**: ⏳ Planned
+- **Goal**: Enable initial Android app development on stable API seam after desktop/web client migration is functionally complete.
 - **Scope**:
   - Create `src/clients/android/ReelRoulette.Android` Gradle project.
   - Implement basic API connectivity + SSE consumption.
@@ -219,54 +303,3 @@ It is designed to be:
   - Event sync works for favorite/blacklist/tag updates.
   - Mobile resume/reconnect auth continuity is verified (pairing/auth state survives app background/resume and SSE reconnect paths).
   - Regression tests validate Android client API/SSE compatibility expectations (schema, event envelope handling, and reconnect behavior) and pass in `dotnet test`.
-
-## M9 - Hardening, Packaging, and Migration Cleanup
-
-- **Goal**: Make architecture production-ready and reduce legacy coupling.
-- **Scope**:
-  - Add integration tests:
-    - API command/query
-    - SSE ordering/reconnect
-    - background refresh pipeline
-  - Finalize config/state migration strategy.
-  - Reduce remaining legacy in-process paths from desktop.
-  - Add packaging/distribution strategy for worker + clients.
-- **Acceptance criteria**:
-  - Stable multi-client operation (desktop + web at minimum).
-  - No critical state divergence between clients.
-  - All migrated domains (state/tag/random/filter/etc.) have zero direct desktop JSON mutation paths; exceptions list is empty or explicitly documented.
-  - Migration and upgrade path documented.
-  - Full regression suite (unit + integration + reconnect/ordering checks) is part of the default CI `dotnet test` gate and remains green.
-
----
-
-## Cross-Cutting Workstreams
-
-These run in parallel across milestones:
-
-- **Contract discipline**:
-  - Keep `openapi.yaml` current.
-  - Update OpenAPI whenever endpoint shape/behavior changes (do not require unrelated OpenAPI churn).
-  - Add change log section for API breaking/non-breaking changes.
-
-- **Observability**:
-  - Standardize structured event and operation logging.
-  - Preserve privacy-safe log sanitization across all hosts/clients.
-
-- **Concurrency and consistency**:
-  - Explicit conflict policy (currently last-write-wins).
-  - Idempotent commands where practical.
-
-- **Developer workflow**:
-  - Add scripts for build/run/test/generate-clients.
-  - Ensure one-command local setup for core + desktop + web.
-
----
-
-## Immediate Next Actions (Recommended)
-
-- Start **M0 + M1** first.
-- In parallel, define OpenAPI skeleton for the two current P1 tracks:
-  - Web Remote Tag Editing
-  - Grid View with Thumbnail Generation and unified refresh
-- Keep desktop app shipping during migration by routing feature-by-feature through adapters.
