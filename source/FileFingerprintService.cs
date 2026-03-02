@@ -1,6 +1,5 @@
 using System;
-using System.IO;
-using System.Security.Cryptography;
+using ReelRoulette.Core.Fingerprints;
 
 namespace ReelRoulette
 {
@@ -15,41 +14,19 @@ namespace ReelRoulette
 
     public class FileFingerprintService
     {
+        private readonly ReelRoulette.Core.Fingerprints.FileFingerprintService _core = new();
+
         public FileFingerprintResult ComputeFingerprint(string fullPath)
         {
-            try
+            var result = _core.ComputeFingerprint(fullPath);
+            return new FileFingerprintResult
             {
-                if (!File.Exists(fullPath))
-                {
-                    return new FileFingerprintResult { Error = "File not found" };
-                }
-
-                var before = new FileInfo(fullPath);
-                var beforeSize = before.Length;
-                var beforeWriteUtc = before.LastWriteTimeUtc;
-
-                using var stream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read);
-                using var sha = SHA256.Create();
-                var hashBytes = sha.ComputeHash(stream);
-                var hash = Convert.ToHexString(hashBytes).ToLowerInvariant();
-
-                var after = new FileInfo(fullPath);
-                var afterSize = after.Length;
-                var afterWriteUtc = after.LastWriteTimeUtc;
-                var stable = beforeSize == afterSize && beforeWriteUtc == afterWriteUtc;
-
-                return new FileFingerprintResult
-                {
-                    Fingerprint = hash,
-                    FileSizeBytes = afterSize,
-                    LastWriteTimeUtc = afterWriteUtc,
-                    IsStableRead = stable
-                };
-            }
-            catch (Exception ex)
-            {
-                return new FileFingerprintResult { Error = ex.Message };
-            }
+                Fingerprint = result.Fingerprint,
+                FileSizeBytes = result.FileSizeBytes,
+                LastWriteTimeUtc = result.LastWriteTimeUtc,
+                IsStableRead = result.IsStableRead,
+                Error = result.Error
+            };
         }
     }
 }

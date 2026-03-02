@@ -81,7 +81,7 @@ class Program
                     Environment.SetEnvironmentVariable("VLC_PLUGIN_PATH", pluginPath);
                 }
 
-                Core.Initialize(bundledLibVlcPath);
+                LibVLCSharp.Shared.Core.Initialize(bundledLibVlcPath);
                 initialized = true;
                 libVlcSource = $"bundled ({bundledLibVlcPath})";
                 Log($"Using bundled LibVLC: {bundledLibVlcPath}");
@@ -98,7 +98,7 @@ class Program
         {
             try
             {
-                Core.Initialize();
+                LibVLCSharp.Shared.Core.Initialize();
                 initialized = true;
                 libVlcSource = "system (default)";
                 Log("Using system LibVLC (default initialization)");
@@ -119,7 +119,7 @@ class Program
                     {
                         try
                         {
-                            Core.Initialize(path);
+                            LibVLCSharp.Shared.Core.Initialize(path);
                             initialized = true;
                             libVlcSource = $"system ({path})";
                             Log($"Using system LibVLC: {path}");

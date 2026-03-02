@@ -4,6 +4,8 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Threading;
+using ReelRoulette.Core.Fingerprints;
+using ReelRoulette.Core.Tags;
 
 namespace ReelRoulette
 {
@@ -46,6 +48,7 @@ namespace ReelRoulette
         private bool _needsPostLoadSave;
         private bool _postLoadWorkStarted;
         private int _activeRefreshCount;
+        private static readonly TagMutationService _tagMutationService = new();
 
         public event Action<FingerprintProgressSnapshot>? FingerprintProgressUpdated;
         public bool IsRefreshRunning => Volatile.Read(ref _activeRefreshCount) > 0;
@@ -1450,43 +1453,9 @@ namespace ReelRoulette
             
             lock (_lock)
             {
-                // Update tag in Tags list
-                if (_libraryIndex.Tags != null)
-                {
-                    var tag = _libraryIndex.Tags.FirstOrDefault(t =>
-                        string.Equals(t.Name, oldName, StringComparison.OrdinalIgnoreCase));
-                    
-                    if (tag != null)
-                    {
-                        tag.Name = newName;
-                        if (newCategoryId != null)
-                        {
-                            tag.CategoryId = newCategoryId;
-                        }
-                        Log($"LibraryService.RenameTag: Updated tag in Tags list");
-                    }
-                }
-
-                // Update all library items that have this tag
-                int itemsUpdated = 0;
-                foreach (var item in _libraryIndex.Items)
-                {
-                    if (item.Tags != null)
-                    {
-                        var tagIndex = item.Tags.FindIndex(t =>
-                            string.Equals(t, oldName, StringComparison.OrdinalIgnoreCase));
-                        
-                        if (tagIndex >= 0)
-                        {
-                            item.Tags[tagIndex] = newName;
-                            itemsUpdated++;
-                        }
-                    }
-                }
-                Log($"LibraryService.RenameTag: Updated {itemsUpdated} library items");
-                
-                // Note: Filter presets should be updated separately by the caller if needed
-                // using UpdateFilterPresetsForRenamedTag() static method
+                var coreIndex = ToCoreLibraryIndex(_libraryIndex);
+                _tagMutationService.RenameTag(coreIndex, oldName, newName, newCategoryId);
+                ApplyCoreLibraryIndex(coreIndex, _libraryIndex);
             }
         }
 
@@ -1499,44 +1468,9 @@ namespace ReelRoulette
             
             lock (_lock)
             {
-                if (_libraryIndex.Categories != null)
-                {
-                    _libraryIndex.Categories.RemoveAll(c => c.Id == categoryId);
-                }
-
-                if (_libraryIndex.Tags != null)
-                {
-                    if (newCategoryId != null)
-                    {
-                        // Reassign tags to new category
-                        var tagsToReassign = _libraryIndex.Tags.Where(t => t.CategoryId == categoryId).ToList();
-                        foreach (var tag in tagsToReassign)
-                        {
-                            tag.CategoryId = newCategoryId;
-                        }
-                        Log($"LibraryService.DeleteCategory: Reassigned {tagsToReassign.Count} tags to category {newCategoryId}");
-                    }
-                    else
-                    {
-                        // Delete all tags in this category
-                        var tagsToDelete = _libraryIndex.Tags.Where(t => t.CategoryId == categoryId).ToList();
-                        var tagNamesSet = new HashSet<string>(
-                            tagsToDelete.Select(t => t.Name),
-                            StringComparer.OrdinalIgnoreCase);
-                        
-                        _libraryIndex.Tags.RemoveAll(t => t.CategoryId == categoryId);
-                        
-                        // Remove these tags from all items (case-insensitive)
-                        foreach (var item in _libraryIndex.Items)
-                        {
-                            if (item.Tags != null)
-                            {
-                                item.Tags.RemoveAll(t => tagNamesSet.Contains(t));
-                            }
-                        }
-                        Log($"LibraryService.DeleteCategory: Deleted {tagsToDelete.Count} tags from category");
-                    }
-                }
+                var coreIndex = ToCoreLibraryIndex(_libraryIndex);
+                _tagMutationService.DeleteCategory(coreIndex, categoryId, newCategoryId);
+                ApplyCoreLibraryIndex(coreIndex, _libraryIndex);
             }
         }
 
@@ -1549,27 +1483,9 @@ namespace ReelRoulette
             
             lock (_lock)
             {
-                if (_libraryIndex.Tags != null)
-                {
-                    _libraryIndex.Tags.RemoveAll(t =>
-                        string.Equals(t.Name, tagName, StringComparison.OrdinalIgnoreCase));
-                }
-
-                // Remove from all items
-                int itemsUpdated = 0;
-                foreach (var item in _libraryIndex.Items)
-                {
-                    if (item.Tags != null)
-                    {
-                        var removed = item.Tags.RemoveAll(t =>
-                            string.Equals(t, tagName, StringComparison.OrdinalIgnoreCase));
-                        if (removed > 0) itemsUpdated++;
-                    }
-                }
-                Log($"LibraryService.DeleteTag: Removed tag from {itemsUpdated} items");
-                
-                // Note: Filter presets should be updated separately by the caller if needed
-                // using UpdateFilterPresetsForDeletedTag() static method
+                var coreIndex = ToCoreLibraryIndex(_libraryIndex);
+                _tagMutationService.DeleteTag(coreIndex, tagName);
+                ApplyCoreLibraryIndex(coreIndex, _libraryIndex);
             }
         }
 
@@ -1583,51 +1499,9 @@ namespace ReelRoulette
         /// <returns>Number of presets that were updated</returns>
         public static int UpdateFilterPresetsForRenamedTag(List<FilterPreset>? presets, string oldName, string newName)
         {
-            if (presets == null || presets.Count == 0)
-            {
-                return 0;
-            }
-
-            int presetsUpdated = 0;
-
-            foreach (var preset in presets)
-            {
-                bool presetModified = false;
-
-                // Update SelectedTags
-                if (preset.FilterState.SelectedTags != null)
-                {
-                    for (int i = 0; i < preset.FilterState.SelectedTags.Count; i++)
-                    {
-                        if (string.Equals(preset.FilterState.SelectedTags[i], oldName, StringComparison.OrdinalIgnoreCase))
-                        {
-                            preset.FilterState.SelectedTags[i] = newName;
-                            presetModified = true;
-                        }
-                    }
-                }
-
-                // Update ExcludedTags
-                if (preset.FilterState.ExcludedTags != null)
-                {
-                    for (int i = 0; i < preset.FilterState.ExcludedTags.Count; i++)
-                    {
-                        if (string.Equals(preset.FilterState.ExcludedTags[i], oldName, StringComparison.OrdinalIgnoreCase))
-                        {
-                            preset.FilterState.ExcludedTags[i] = newName;
-                            presetModified = true;
-                        }
-                    }
-                }
-
-                if (presetModified)
-                {
-                    presetsUpdated++;
-                    Log($"LibraryService.UpdateFilterPresetsForRenamedTag: Updated preset '{preset.Name}'");
-                }
-            }
-
-            Log($"LibraryService.UpdateFilterPresetsForRenamedTag: Updated {presetsUpdated} presets for tag '{oldName}' -> '{newName}'");
+            var corePresets = ToCoreFilterPresets(presets);
+            var presetsUpdated = _tagMutationService.UpdateFilterPresetsForRenamedTag(corePresets, oldName, newName);
+            ApplyCoreFilterPresets(corePresets, presets);
             return presetsUpdated;
         }
 
@@ -1640,42 +1514,91 @@ namespace ReelRoulette
         /// <returns>Number of presets that were updated</returns>
         public static int UpdateFilterPresetsForDeletedTag(List<FilterPreset>? presets, string tagName)
         {
-            if (presets == null || presets.Count == 0)
-            {
-                return 0;
-            }
-
-            int presetsUpdated = 0;
-
-            foreach (var preset in presets)
-            {
-                bool presetModified = false;
-
-                // Remove from SelectedTags
-                if (preset.FilterState.SelectedTags != null)
-                {
-                    var removed = preset.FilterState.SelectedTags.RemoveAll(t =>
-                        string.Equals(t, tagName, StringComparison.OrdinalIgnoreCase));
-                    if (removed > 0) presetModified = true;
-                }
-
-                // Remove from ExcludedTags
-                if (preset.FilterState.ExcludedTags != null)
-                {
-                    var removed = preset.FilterState.ExcludedTags.RemoveAll(t =>
-                        string.Equals(t, tagName, StringComparison.OrdinalIgnoreCase));
-                    if (removed > 0) presetModified = true;
-                }
-
-                if (presetModified)
-                {
-                    presetsUpdated++;
-                    Log($"LibraryService.UpdateFilterPresetsForDeletedTag: Updated preset '{preset.Name}'");
-                }
-            }
-
-            Log($"LibraryService.UpdateFilterPresetsForDeletedTag: Updated {presetsUpdated} presets for deleted tag '{tagName}'");
+            var corePresets = ToCoreFilterPresets(presets);
+            var presetsUpdated = _tagMutationService.UpdateFilterPresetsForDeletedTag(corePresets, tagName);
+            ApplyCoreFilterPresets(corePresets, presets);
             return presetsUpdated;
+        }
+
+        private static CoreLibraryIndex ToCoreLibraryIndex(LibraryIndex sourceIndex)
+        {
+            return new CoreLibraryIndex
+            {
+                Items = sourceIndex.Items
+                    .Select(item => new CoreLibraryItem
+                    {
+                        Tags = item.Tags?.ToList() ?? new List<string>()
+                    })
+                    .ToList(),
+                Categories = sourceIndex.Categories?
+                    .Select(category => new CoreTagCategory
+                    {
+                        Id = category.Id,
+                        Name = category.Name,
+                        SortOrder = category.SortOrder
+                    })
+                    .ToList(),
+                Tags = sourceIndex.Tags?
+                    .Select(tag => new CoreTag
+                    {
+                        Name = tag.Name,
+                        CategoryId = tag.CategoryId
+                    })
+                    .ToList()
+            };
+        }
+
+        private static void ApplyCoreLibraryIndex(CoreLibraryIndex coreIndex, LibraryIndex targetIndex)
+        {
+            for (var i = 0; i < targetIndex.Items.Count && i < coreIndex.Items.Count; i++)
+            {
+                targetIndex.Items[i].Tags = coreIndex.Items[i].Tags.ToList();
+            }
+
+            targetIndex.Categories = coreIndex.Categories?
+                .Select(category => new TagCategory
+                {
+                    Id = category.Id,
+                    Name = category.Name,
+                    SortOrder = category.SortOrder
+                })
+                .ToList();
+
+            targetIndex.Tags = coreIndex.Tags?
+                .Select(tag => new Tag
+                {
+                    Name = tag.Name,
+                    CategoryId = tag.CategoryId
+                })
+                .ToList();
+        }
+
+        private static List<CoreFilterPreset> ToCoreFilterPresets(List<FilterPreset>? presets)
+        {
+            if (presets == null)
+                return new List<CoreFilterPreset>();
+
+            return presets.Select(preset => new CoreFilterPreset
+            {
+                Name = preset.Name,
+                FilterState = new CoreFilterState
+                {
+                    SelectedTags = preset.FilterState.SelectedTags?.ToList() ?? new List<string>(),
+                    ExcludedTags = preset.FilterState.ExcludedTags?.ToList() ?? new List<string>()
+                }
+            }).ToList();
+        }
+
+        private static void ApplyCoreFilterPresets(List<CoreFilterPreset> corePresets, List<FilterPreset>? presets)
+        {
+            if (presets == null)
+                return;
+
+            for (var i = 0; i < presets.Count && i < corePresets.Count; i++)
+            {
+                presets[i].FilterState.SelectedTags = corePresets[i].FilterState.SelectedTags.ToList();
+                presets[i].FilterState.ExcludedTags = corePresets[i].FilterState.ExcludedTags.ToList();
+            }
         }
 
         public DuplicateScanResult ScanDuplicates(DuplicateScanScope scope, string? sourceId = null)
@@ -1705,26 +1628,34 @@ namespace ReelRoulette
                                 i.FingerprintVersion == 1)
                     .ToList();
 
-                var groups = ready
-                    .GroupBy(i => i.Fingerprint!, StringComparer.OrdinalIgnoreCase)
-                    .Where(g => g.Count() > 1)
-                    .Select(g => new DuplicateGroup
+                var candidateItems = ready.Select(item => new FingerprintDuplicateItem
+                {
+                    ItemId = item.Id,
+                    Fingerprint = item.Fingerprint!,
+                    IsReady = true
+                });
+                var coreGroups = FingerprintDuplicateHelper.BuildExactDuplicateGroups(candidateItems);
+
+                var groups = coreGroups
+                    .Select(coreGroup => new DuplicateGroup
                     {
-                        Fingerprint = g.Key,
-                        Items = g.Select(item => new DuplicateGroupItem
-                        {
-                            ItemId = item.Id,
-                            FullPath = item.FullPath,
-                            SourceId = item.SourceId,
-                            IsFavorite = item.IsFavorite,
-                            IsBlacklisted = item.IsBlacklisted,
-                            PlayCount = item.PlayCount,
-                            LastPlayedUtc = item.LastPlayedUtc,
-                            FileSizeBytes = item.FileSizeBytes,
-                            LastWriteTimeUtc = item.LastWriteTimeUtc
-                        }).ToList()
+                        Fingerprint = coreGroup.Fingerprint,
+                        Items = coreGroup.ItemIds
+                            .Select(itemId => ready.First(item => string.Equals(item.Id, itemId, StringComparison.OrdinalIgnoreCase)))
+                            .Select(item => new DuplicateGroupItem
+                            {
+                                ItemId = item.Id,
+                                FullPath = item.FullPath,
+                                SourceId = item.SourceId,
+                                IsFavorite = item.IsFavorite,
+                                IsBlacklisted = item.IsBlacklisted,
+                                PlayCount = item.PlayCount,
+                                LastPlayedUtc = item.LastPlayedUtc,
+                                FileSizeBytes = item.FileSizeBytes,
+                                LastWriteTimeUtc = item.LastWriteTimeUtc
+                            })
+                            .ToList()
                     })
-                    .OrderBy(g => g.Items.Count)
                     .ToList();
 
                 return new DuplicateScanResult

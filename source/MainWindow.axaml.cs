@@ -25,13 +25,6 @@ using System.Timers;
 
 namespace ReelRoulette
 {
-    public enum AudioFilterMode
-    {
-        PlayAll = 0,           // Default: no audio filtering
-        WithAudioOnly = 1,      // Only videos with audio
-        WithoutAudioOnly = 2    // Only videos without audio
-    }
-
     public enum ImageScalingMode
     {
         Off = 0,      // No scaling

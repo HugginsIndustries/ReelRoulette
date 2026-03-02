@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **Kick off M0/M1 migration foundation and core extraction** (2026-03-01):
+  - Add migration solution scaffold and target folders/projects: `ReelRoulette.Core`, `ReelRoulette.Server`, `ReelRoulette.Worker`, `ReelRoulette.WindowsApp` (placeholder), `ReelRoulette.WebUI` (placeholder), plus `shared/api/openapi.yaml`.
+  - Add baseline migration docs for architecture, API, setup, and M1 domain inventory.
+  - Extract pure randomization, filtering, tag mutation, and fingerprint helper logic into `src/core/ReelRoulette.Core`.
+  - Convert desktop `FilterService`, `RandomSelectionEngine`, `FileFingerprintService`, and `LibraryService` tag/duplicate flows into adapters that route to core services.
+  - Add `ReelRoulette.Core.Tests` lightweight unit test harness covering randomization, filter set building, and tag mutation behavior.
+
 - **Stabilize autoplay media handoff and tighten privacy-safe diagnostics** (2026-03-01):
   - Fix end-of-video autoplay hangs by guarding duplicate `EndReached` handling and avoiding synchronous `MediaPlayer.Stop()` during end-triggered transitions before prior media disposal.
   - Improve playback-transition diagnostics with explicit stop/dispose logging around prior-media teardown.
