@@ -69,10 +69,17 @@ It is designed to be:
     - settings
     - runtime randomization states
   - Keep JSON schema compatibility with existing files.
+  - Establish hybrid verification structure for migration safety:
+    - make `dotnet test` the default quality gate using a standard test project (xUnit/NUnit/MSTest)
+    - cover fast unit checks for randomization logic, filter evaluation, tag operations, and DTO mapping rules
+    - create reusable verification modules (for example, `CoreVerification.RunAll(...)`) shared by test and harness flows
+    - add a console system-check harness for fixture-driven migration checks, fingerprint pipeline invariants, `RefreshSource` reconciliation checks, and performance sanity checks
 - **Acceptance criteria**:
   - Desktop no longer directly mutates raw JSON files in migrated flows.
   - Existing `library.json` and `settings.json` are read/written without schema break.
   - Migration tests cover load/save round trips.
+  - `dotnet test` runs the default fast verification suite and is treated as the primary gate.
+  - Console harness runs the same reusable verification checks with optional verbose logging and scenario/performance options (no duplicated assertion logic).
 
 ## M3 - Server API Skeleton + Contract First
 
