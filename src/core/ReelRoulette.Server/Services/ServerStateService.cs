@@ -11,12 +11,14 @@ public sealed class ServerStateService
     private readonly object _subscribersLock = new();
     private readonly object _historyLock = new();
     private readonly object _itemStatesLock = new();
+    private readonly object _filterSessionLock = new();
     private long _revision;
     private readonly Dictionary<string, ItemStateRecord> _itemStates = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<Channel<ServerEventEnvelope>> _subscribers = new();
     private readonly Queue<ServerEventEnvelope> _eventHistory = new();
     private readonly Random _random = new();
     private const int EventHistoryCapacity = 256;
+    private FilterSessionSnapshot _filterSession = new();
 
     private static readonly List<PresetResponse> Presets =
     [
@@ -57,6 +59,11 @@ public sealed class ServerStateService
     {
         var current = GetOrCreateItemState(request.Path);
         current.Payload.IsFavorite = request.IsFavorite;
+        if (request.IsFavorite)
+        {
+            // Favorite/blacklist must remain mutually exclusive.
+            current.Payload.IsBlacklisted = false;
+        }
         var envelope = Publish("itemStateChanged", current.Payload);
         current.Revision = envelope.Revision;
     }
@@ -65,6 +72,11 @@ public sealed class ServerStateService
     {
         var current = GetOrCreateItemState(request.Path);
         current.Payload.IsBlacklisted = request.IsBlacklisted;
+        if (request.IsBlacklisted)
+        {
+            // Favorite/blacklist must remain mutually exclusive.
+            current.Payload.IsFavorite = false;
+        }
         var envelope = Publish("itemStateChanged", current.Payload);
         current.Revision = envelope.Revision;
     }
@@ -135,6 +147,24 @@ public sealed class ServerStateService
                 Revision = record.Revision
             })
             .ToList();
+    }
+
+    public FilterSessionSnapshot GetFilterSessionSnapshot()
+    {
+        lock (_filterSessionLock)
+        {
+            return CloneFilterSession(_filterSession);
+        }
+    }
+
+    public void SetFilterSessionSnapshot(FilterSessionSnapshot snapshot)
+    {
+        lock (_filterSessionLock)
+        {
+            _filterSession = CloneFilterSession(snapshot);
+        }
+
+        Publish("filterSessionChanged", GetFilterSessionSnapshot());
     }
 
     public ChannelReader<ServerEventEnvelope> Subscribe(CancellationToken cancellationToken)
@@ -243,6 +273,20 @@ public sealed class ServerStateService
         }
 
         return envelope;
+    }
+
+    private static FilterSessionSnapshot CloneFilterSession(FilterSessionSnapshot source)
+    {
+        return new FilterSessionSnapshot
+        {
+            ActivePresetName = source.ActivePresetName,
+            CurrentFilterState = source.CurrentFilterState,
+            Presets = source.Presets?.Select(p => new FilterPresetSnapshot
+            {
+                Name = p.Name,
+                FilterState = p.FilterState
+            }).ToList() ?? []
+        };
     }
 
     private sealed class ItemStateRecord

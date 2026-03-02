@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace ReelRoulette.Server.Contracts;
 
 public sealed class VersionResponse
@@ -69,6 +71,19 @@ public sealed class LibraryStateResponse
 public sealed class PairRequest
 {
     public string? Token { get; set; }
+}
+
+public sealed class FilterPresetSnapshot
+{
+    public string Name { get; set; } = string.Empty;
+    public JsonElement FilterState { get; set; }
+}
+
+public sealed class FilterSessionSnapshot
+{
+    public string? ActivePresetName { get; set; }
+    public JsonElement? CurrentFilterState { get; set; }
+    public List<FilterPresetSnapshot>? Presets { get; set; }
 }
 
 public sealed class ServerEventEnvelope

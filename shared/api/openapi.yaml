@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
   title: ReelRoulette API
-  version: 0.4.0
-  description: Contract-first API with M4 worker runtime and pairing/auth primitive.
+  version: 0.5.0
+  description: Contract-first API with M5 desktop API-client state migration.
 paths:
   /health:
     get:
@@ -241,6 +241,42 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/filter-session:
+    get:
+      summary: Get current filter session projection
+      operationId: getFilterSession
+      responses:
+        "200":
+          description: Current filter session snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FilterSessionSnapshot"
+        "401":
+          description: Unauthorized when auth is required and request is not paired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      summary: Update current filter session projection
+      operationId: postFilterSession
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FilterSessionSnapshot"
+      responses:
+        "200":
+          description: Filter session updated
+        "401":
+          description: Unauthorized when auth is required and request is not paired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/events:
     get:
       summary: Stream server events
@@ -442,6 +478,7 @@ components:
             - $ref: "#/components/schemas/ItemStateChangedPayload"
             - $ref: "#/components/schemas/PlaybackRecordedPayload"
             - $ref: "#/components/schemas/ResyncRequiredPayload"
+            - $ref: "#/components/schemas/FilterSessionSnapshot"
 
     ItemStateChangedPayload:
       type: object
@@ -517,3 +554,31 @@ components:
         revision:
           type: integer
           format: int64
+
+    FilterPresetSnapshot:
+      type: object
+      required:
+        - name
+        - filterState
+      properties:
+        name:
+          type: string
+        filterState:
+          type: object
+          additionalProperties: true
+
+    FilterSessionSnapshot:
+      type: object
+      properties:
+        activePresetName:
+          type: string
+          nullable: true
+        currentFilterState:
+          type: object
+          nullable: true
+          additionalProperties: true
+        presets:
+          type: array
+          nullable: true
+          items:
+            $ref: "#/components/schemas/FilterPresetSnapshot"

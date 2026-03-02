@@ -41,7 +41,7 @@ public sealed class ServerContractTests
     }
 
     [Fact]
-    public void LibraryStates_ShouldExposeLatestRevisionForItem()
+    public void LibraryStates_ShouldEnforceFavoriteBlacklistMutualExclusion()
     {
         var service = new ServerStateService();
         service.SetFavorite(new FavoriteRequest { Path = "movie.mp4", IsFavorite = true });
@@ -50,7 +50,7 @@ public sealed class ServerContractTests
         var states = service.GetLibraryStates(new LibraryStatesRequest { Paths = ["movie.mp4"] });
         var state = Assert.Single(states);
         Assert.Equal("movie.mp4", state.Path);
-        Assert.True(state.IsFavorite);
+        Assert.False(state.IsFavorite);
         Assert.True(state.IsBlacklisted);
         Assert.True(state.Revision > 0);
     }

@@ -134,12 +134,21 @@ namespace ReelRoulette
         private WebRemote.WebRemoteAuthMode _webRemoteAuthMode = WebRemote.WebRemoteAuthMode.TokenRequired;
         private string? _webRemoteSharedToken;
         private WebRemote.WebRemoteServer? _webRemoteServer;
-        private bool _autoStartCoreRuntime;
         private string _coreServerBaseUrl = "http://localhost:51301";
         private bool _isStartingCoreRuntime;
+        private readonly string _coreClientId = Guid.NewGuid().ToString("N");
+        private readonly CoreServerApiClient _coreServerApiClient;
+        private CancellationTokenSource? _coreEventsCancellationSource;
+        private Task? _coreEventsTask;
+        private volatile bool _isCoreApiReachable;
+        private bool _isApplyingCoreSync;
         private static readonly HttpClient _coreServerHttpClient = new()
         {
             Timeout = TimeSpan.FromSeconds(2)
+        };
+        private static readonly HttpClient _coreServerEventsHttpClient = new()
+        {
+            Timeout = Timeout.InfiniteTimeSpan
         };
 
         // Duration scanning
@@ -769,6 +778,7 @@ namespace ReelRoulette
                 InitializeComponent();
                 Log("MainWindow constructor: InitializeComponent completed.");
                 _desktopRandomizationState = new RandomizationRuntimeState(_randomizationStateService.GetOrCreate("desktop"));
+                _coreServerApiClient = new CoreServerApiClient(_coreServerHttpClient);
             
             // Initialize window size tracking for aspect ratio locking
             _lastWindowSize = new Size(this.Width, this.Height);
@@ -946,6 +956,10 @@ namespace ReelRoulette
                     }
 
                     await EnsureCoreRuntimeAvailableAsync();
+                    if (_isCoreApiReachable)
+                    {
+                        EnsureCoreEventStreamStarted();
+                    }
 
                     // Run non-essential startup work in background so first paint is fast.
 #pragma warning disable CS4014
@@ -1063,6 +1077,7 @@ namespace ReelRoulette
             // Cancel any ongoing scan
             _scanCancellationSource?.Cancel();
             _scanCancellationSource?.Dispose();
+            _coreEventsCancellationSource?.Cancel();
 
             // Save data
             SaveSettings();
@@ -1162,6 +1177,9 @@ namespace ReelRoulette
                 }
                 _webRemoteServer = null;
             }
+
+            _coreEventsCancellationSource?.Dispose();
+            _coreEventsCancellationSource = null;
 
             base.OnClosed(e);
         }
@@ -1351,9 +1369,73 @@ namespace ReelRoulette
 
         #region Favorites System
 
-        private void FavoriteToggle_Changed(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        private void ApplyRemoteItemStateProjection(string fullPath, bool isFavorite, bool isBlacklisted, string statusMessage, bool persistLibrary = false)
+        {
+            if (_libraryIndex == null || string.IsNullOrWhiteSpace(fullPath))
+            {
+                Log($"CoreEvents: Projection skipped (library unavailable or empty path): '{fullPath ?? "null"}'");
+                return;
+            }
+
+            var item = _libraryService.FindItemByPath(fullPath);
+            if (item == null)
+            {
+                Log($"CoreEvents: Projection skipped (item not found in library): {Path.GetFileName(fullPath)}");
+                return;
+            }
+
+            _isApplyingCoreSync = true;
+            try
+            {
+                item.IsFavorite = isFavorite;
+                item.IsBlacklisted = isBlacklisted;
+                _libraryService.UpdateItem(item);
+                if (persistLibrary)
+                {
+                    _ = Task.Run(() =>
+                    {
+                        try
+                        {
+                            _libraryService.SaveLibrary();
+                        }
+                        catch
+                        {
+                        }
+                    });
+                }
+
+                var isCurrentItem = string.Equals(_currentVideoPath, fullPath, StringComparison.OrdinalIgnoreCase);
+                if (isCurrentItem)
+                {
+                    FavoriteToggle.IsChecked = isFavorite;
+                    BlacklistToggle.IsChecked = isBlacklisted;
+                    UpdateCurrentFileStatsUi();
+                }
+
+                _webRemoteServer?.BroadcastLibraryItemChanged(fullPath, isFavorite, isBlacklisted);
+                if (_showLibraryPanel)
+                {
+                    UpdateLibraryPanel();
+                }
+
+                RebuildPlayQueueIfNeeded();
+                RecalculateGlobalStats();
+                StatusTextBlock.Text = statusMessage;
+            }
+            finally
+            {
+                _isApplyingCoreSync = false;
+            }
+        }
+
+        private async void FavoriteToggle_Changed(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
             Log("FavoriteToggle_Changed: Favorite toggle changed event fired");
+            if (_isApplyingCoreSync)
+            {
+                return;
+            }
+
             if (string.IsNullOrEmpty(_currentVideoPath))
             {
                 Log("FavoriteToggle_Changed: No current video path, disabling toggle");
@@ -1365,90 +1447,39 @@ namespace ReelRoulette
 
             var isFavorite = FavoriteToggle.IsChecked == true;
             Log($"FavoriteToggle_Changed: Setting favorite to {isFavorite} for video: {Path.GetFileName(_currentVideoPath)}");
-
-            // Update library item
-            if (_libraryIndex != null)
+            var path = _currentVideoPath;
+            if (string.IsNullOrWhiteSpace(path))
             {
-                var item = _libraryService.FindItemByPath(_currentVideoPath);
-                if (item != null)
+                return;
+            }
+
+            if (_isCoreApiReachable)
+            {
+                try
                 {
-                    var oldFavorite = item.IsFavorite;
-                    if (oldFavorite == isFavorite)
+                    var success = await _coreServerApiClient.SetFavoriteAsync(_coreServerBaseUrl, path, isFavorite);
+                    if (!success)
                     {
-                        Log($"FavoriteToggle_Changed: Item already has IsFavorite={isFavorite}, skipping update (likely programmatic change)");
+                        SetStatusMessage("Core runtime rejected favorite update.", 0);
                         return;
                     }
-                    
-                    item.IsFavorite = isFavorite;
-                    
-                    // EXCLUSIVE: If adding to favorites, remove from blacklist
-                    if (isFavorite && item.IsBlacklisted)
-                    {
-                        Log($"FavoriteToggle_Changed: Removing from blacklist (exclusive with favorites)");
-                        item.IsBlacklisted = false;
-                        // Update blacklist toggle UI to reflect change
-                        BlacklistToggle.IsChecked = false;
-                    }
-                    
-                    _libraryService.UpdateItem(item);
-                    Log($"FavoriteToggle_Changed: Updated library item - IsFavorite: {oldFavorite} -> {isFavorite}");
-                    _webRemoteServer?.BroadcastLibraryItemChanged(_currentVideoPath, isFavorite, item.IsBlacklisted);
 
-                    if (isFavorite)
-                    {
-                        StatusTextBlock.Text = $"Added to favorites: {System.IO.Path.GetFileName(_currentVideoPath)}";
-                        Log("FavoriteToggle_Changed: Added to favorites");
-                    }
-                    else
-                    {
-                        StatusTextBlock.Text = $"Removed from favorites: {System.IO.Path.GetFileName(_currentVideoPath)}";
-                        Log("FavoriteToggle_Changed: Removed from favorites");
-                    }
-                    
-                    // Save library asynchronously to avoid blocking
-                    _ = Task.Run(() =>
-                    {
-                        try
-                        {
-                            Log("FavoriteToggle_Changed: Saving library asynchronously...");
-                            _libraryService.SaveLibrary();
-                            Log("FavoriteToggle_Changed: Library saved successfully");
-                        }
-                        catch (Exception ex)
-                        {
-                            Log($"FavoriteToggle_Changed: ERROR saving library - Exception: {ex.GetType().Name}, Message: {ex.Message}");
-                            Log($"FavoriteToggle_Changed: ERROR - Stack trace: {ex.StackTrace}");
-                            if (ex.InnerException != null)
-                            {
-                                Log($"FavoriteToggle_Changed: ERROR - Inner exception: {ex.InnerException.GetType().Name}, Message: {ex.InnerException.Message}");
-                            }
-                        }
-                    });
+                    var priorItem = _libraryService.FindItemByPath(path);
+                    var projectedBlacklist = isFavorite ? false : (priorItem?.IsBlacklisted ?? false);
+                    ApplyRemoteItemStateProjection(path, isFavorite, projectedBlacklist, isFavorite
+                        ? $"Added to favorites: {System.IO.Path.GetFileName(path)}"
+                        : $"Removed from favorites: {System.IO.Path.GetFileName(path)}");
+                    return;
                 }
-                else
+                catch (Exception ex)
                 {
-                    Log($"FavoriteToggle_Changed: Library item not found for path: {_currentVideoPath}");
+                    Log($"FavoriteToggle_Changed: API call failed ({ex.Message})");
                 }
-            }
-            else
-            {
-                Log("FavoriteToggle_Changed: Library index is null, cannot update item");
-            }
-
-            // Update Library panel if visible
-            if (_showLibraryPanel)
-            {
-                Log("FavoriteToggle_Changed: Updating library panel");
-                UpdateLibraryPanel();
             }
             
-            // Update stats when favorites change
-            Log("FavoriteToggle_Changed: Recalculating global stats");
-            RecalculateGlobalStats();
-            UpdateCurrentFileStatsUi();
-            Log("FavoriteToggle_Changed: Favorite toggle change complete");
-
-            // Queue will be rebuilt when filters change via FilterDialog
+            SetStatusMessage("Core runtime is required for state changes. Please wait for startup and retry.", 0);
+            await EnsureCoreRuntimeAvailableAsync();
+            UpdatePerVideoToggleStates();
         }
 
         #endregion
@@ -1494,44 +1525,43 @@ namespace ReelRoulette
             UpdatePerVideoToggleStates();
         }
 
-        private void RemoveFromBlacklist(string videoPath)
+        private async Task RemoveFromBlacklistAsync(string videoPath)
         {
-            // Update library item
-            if (_libraryIndex != null)
+            if (_libraryIndex == null || string.IsNullOrWhiteSpace(videoPath))
             {
-                var item = _libraryService.FindItemByPath(videoPath);
-                if (item != null)
+                return;
+            }
+
+            if (_isCoreApiReachable)
+            {
+                try
                 {
-                    item.IsBlacklisted = false;
-                    _libraryService.UpdateItem(item);
-                    
-                    // Save library asynchronously
-                    _ = Task.Run(() =>
+                    var accepted = await _coreServerApiClient.SetBlacklistAsync(_coreServerBaseUrl, videoPath, false);
+                    if (!accepted)
                     {
-                        try
-                        {
-                            _libraryService.SaveLibrary();
-                        }
-                        catch (Exception ex)
-                        {
-                            Log($"RemoveFromBlacklist: ERROR saving library - Exception: {ex.GetType().Name}, Message: {ex.Message}");
-                            Log($"RemoveFromBlacklist: ERROR - Stack trace: {ex.StackTrace}");
-                            if (ex.InnerException != null)
-                            {
-                                Log($"RemoveFromBlacklist: ERROR - Inner exception: {ex.InnerException.GetType().Name}, Message: {ex.InnerException.Message}");
-                            }
-                        }
-                    });
+                        SetStatusMessage("Core runtime rejected blacklist update.", 0);
+                        return;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Log($"RemoveFromBlacklist: API call failed ({ex.Message})");
                 }
             }
-            
-            RebuildPlayQueueIfNeeded();
-            UpdatePerVideoToggleStates();
-            // Update Library panel if visible
-            if (_showLibraryPanel)
+            else
             {
-                UpdateLibraryPanel();
+                await EnsureCoreRuntimeAvailableAsync();
             }
+
+            if (!_isCoreApiReachable)
+            {
+                SetStatusMessage("Core runtime is required for state changes. Please wait for startup and retry.", 0);
+                return;
+            }
+
+            var item = _libraryService.FindItemByPath(videoPath);
+            var projectedFavorite = item?.IsFavorite ?? false;
+            ApplyRemoteItemStateProjection(videoPath, projectedFavorite, false, $"Removed from blacklist: {Path.GetFileName(videoPath)}");
         }
 
         #endregion
@@ -1539,6 +1569,40 @@ namespace ReelRoulette
         #region Playback Stats System
 
         private void RecordPlayback(string path)
+        {
+            _ = RecordPlaybackViaApiAsync(path);
+        }
+
+        private async Task RecordPlaybackViaApiAsync(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return;
+            }
+
+            if (_isCoreApiReachable)
+            {
+                try
+                {
+                    var success = await _coreServerApiClient.RecordPlaybackAsync(_coreServerBaseUrl, path, _coreClientId);
+                    if (success)
+                    {
+                        await Dispatcher.UIThread.InvokeAsync(() => RecordPlaybackProjection(path, persistLibrary: false));
+                        return;
+                    }
+                    Log("RecordPlayback: API rejected record-playback request.");
+                }
+                catch (Exception ex)
+                {
+                    Log($"RecordPlayback: API call failed ({ex.Message})");
+                }
+            }
+            
+            SetStatusMessage("Core runtime is required for playback state updates. Please wait for startup and retry.", 0);
+            await EnsureCoreRuntimeAvailableAsync();
+        }
+
+        private void RecordPlaybackProjection(string path, bool persistLibrary)
         {
             Log($"RecordPlayback: Starting - path: {path ?? "null"}");
             
@@ -1568,25 +1632,28 @@ namespace ReelRoulette
                     
                     _libraryService.UpdateItem(item);
                     
-                    // Save library asynchronously to avoid blocking
-                    _ = Task.Run(() =>
+                    if (persistLibrary)
                     {
-                        try
+                        // Save library asynchronously to avoid blocking
+                        _ = Task.Run(() =>
                         {
-                            Log("RecordPlayback: Saving library asynchronously...");
-                            _libraryService.SaveLibrary();
-                            Log("RecordPlayback: Library saved successfully");
-                        }
-                        catch (Exception ex)
-                        {
-                            Log($"RecordPlayback: ERROR saving library - Exception: {ex.GetType().Name}, Message: {ex.Message}");
-                            Log($"RecordPlayback: ERROR - Stack trace: {ex.StackTrace}");
-                            if (ex.InnerException != null)
+                            try
                             {
-                                Log($"RecordPlayback: ERROR - Inner exception: {ex.InnerException.GetType().Name}, Message: {ex.InnerException.Message}");
+                                Log("RecordPlayback: Saving library asynchronously...");
+                                _libraryService.SaveLibrary();
+                                Log("RecordPlayback: Library saved successfully");
                             }
-                        }
-                    });
+                            catch (Exception ex)
+                            {
+                                Log($"RecordPlayback: ERROR saving library - Exception: {ex.GetType().Name}, Message: {ex.Message}");
+                                Log($"RecordPlayback: ERROR - Stack trace: {ex.StackTrace}");
+                                if (ex.InnerException != null)
+                                {
+                                    Log($"RecordPlayback: ERROR - Inner exception: {ex.InnerException.GetType().Name}, Message: {ex.InnerException.Message}");
+                                }
+                            }
+                        });
+                    }
                 }
                 else
                 {
@@ -4513,6 +4580,7 @@ namespace ReelRoulette
                 StatusTextBlock.Text = "Cleared filter preset";
                 _ = Task.Run(async () => await RebuildPlayQueueIfNeededAsync());
                 SaveSettings();
+                _ = SyncFilterSessionToCoreAsync();
                 return;
             }
             
@@ -4544,6 +4612,7 @@ namespace ReelRoulette
             }
             StatusTextBlock.Text = $"Applied filter preset: {selectedPresetName}";
             _ = Task.Run(async () => await RebuildPlayQueueIfNeededAsync());
+            _ = SyncFilterSessionToCoreAsync();
         }
 
 
@@ -5133,18 +5202,12 @@ namespace ReelRoulette
             }
         }
 
-        private void BlacklistRemove_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        private async void BlacklistRemove_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
             if (sender is Button button && button.Tag is string path)
             {
                 Log($"UI ACTION: BlacklistRemove clicked for: {Path.GetFileName(path)}");
-                RemoveFromBlacklist(path);
-                // Update Library panel if visible
-                if (_showLibraryPanel)
-                {
-                    UpdateLibraryPanel();
-                }
-                StatusTextBlock.Text = $"Removed from blacklist: {System.IO.Path.GetFileName(path)}";
+                await RemoveFromBlacklistAsync(path);
             }
         }
 
@@ -6651,10 +6714,39 @@ namespace ReelRoulette
                 return;
             }
 
-            string? randomPick;
-            lock (_desktopRandomizationLock)
+            string? randomPick = null;
+            if (_isCoreApiReachable)
             {
-                randomPick = RandomSelectionEngine.SelectPath(_desktopRandomizationState, _randomizationMode, eligibleItems, _rng);
+                try
+                {
+                    var randomResponse = await _coreServerApiClient.RequestRandomAsync(
+                        _coreServerBaseUrl,
+                        new CoreRandomRequest
+                        {
+                            PresetId = string.IsNullOrWhiteSpace(_activePresetName) ? "all-media" : _activePresetName!,
+                            ClientId = _coreClientId,
+                            IncludeVideos = true,
+                            IncludePhotos = true,
+                            RandomizationMode = _randomizationMode.ToString()
+                        });
+
+                    if (randomResponse != null && !string.IsNullOrWhiteSpace(randomResponse.MediaUrl) && File.Exists(randomResponse.MediaUrl))
+                    {
+                        randomPick = randomResponse.MediaUrl;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Log($"PlayRandomVideoAsync: API random call failed ({ex.Message}), using local selector.");
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(randomPick))
+            {
+                lock (_desktopRandomizationLock)
+                {
+                    randomPick = RandomSelectionEngine.SelectPath(_desktopRandomizationState, _randomizationMode, eligibleItems, _rng);
+                }
             }
 
             if (string.IsNullOrWhiteSpace(randomPick))
@@ -6769,67 +6861,69 @@ namespace ReelRoulette
         bool WebRemote.IWebRemoteApiServices.SetItemFavorite(string fullPath, bool isFavorite)
         {
             if (string.IsNullOrEmpty(fullPath) || _libraryIndex == null) return false;
-            var item = _libraryService.FindItemByPath(fullPath);
-            if (item == null || item.IsFavorite == isFavorite) return false;
-            item.IsFavorite = isFavorite;
-            if (isFavorite && item.IsBlacklisted) item.IsBlacklisted = false;
-            _libraryService.UpdateItem(item);
-            Log($"SetItemFavorite (Web): {Path.GetFileName(fullPath)} -> {isFavorite}");
-            _ = Task.Run(() => { try { _libraryService.SaveLibrary(); } catch { } });
-            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            try
             {
-                var fileName = Path.GetFileName(fullPath);
-                var isCurrentItem = string.Equals(_currentVideoPath, fullPath, StringComparison.OrdinalIgnoreCase);
-                if (isCurrentItem)
+                if (!_isCoreApiReachable)
                 {
-                    StatusTextBlock.Text = isFavorite ? $"Added to favorites: {fileName}" : $"Removed from favorites: {fileName}";
-                    FavoriteToggle.IsChecked = isFavorite;
-                    if (isFavorite) BlacklistToggle.IsChecked = false;
-                    UpdateCurrentFileStatsUi();
-                }
-                else
-                {
-                    StatusTextBlock.Text = isFavorite ? $"Synced favorite: {fileName}" : $"Synced unfavorite: {fileName}";
+                    Log("SetItemFavorite (Web): Core runtime unavailable; rejecting mutation.");
+                    return false;
                 }
 
-                if (_showLibraryPanel) UpdateLibraryPanel();
-                RecalculateGlobalStats();
-            });
-            return true;
+                var accepted = _coreServerApiClient.SetFavoriteAsync(_coreServerBaseUrl, fullPath, isFavorite).GetAwaiter().GetResult();
+                if (!accepted)
+                {
+                    return false;
+                }
+
+                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                {
+                    var priorItem = _libraryService.FindItemByPath(fullPath);
+                    var projectedBlacklist = isFavorite ? false : (priorItem?.IsBlacklisted ?? false);
+                    ApplyRemoteItemStateProjection(fullPath, isFavorite, projectedBlacklist, isFavorite
+                        ? $"Synced favorite: {Path.GetFileName(fullPath)}"
+                        : $"Synced unfavorite: {Path.GetFileName(fullPath)}");
+                });
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Log($"SetItemFavorite (Web): API delegation failed ({ex.Message})");
+                return false;
+            }
         }
 
         bool WebRemote.IWebRemoteApiServices.SetItemBlacklist(string fullPath, bool isBlacklisted)
         {
             if (string.IsNullOrEmpty(fullPath) || _libraryIndex == null) return false;
-            var item = _libraryService.FindItemByPath(fullPath);
-            if (item == null || item.IsBlacklisted == isBlacklisted) return false;
-            item.IsBlacklisted = isBlacklisted;
-            if (isBlacklisted && item.IsFavorite) item.IsFavorite = false;
-            _libraryService.UpdateItem(item);
-            Log($"SetItemBlacklist (Web): {Path.GetFileName(fullPath)} -> {isBlacklisted}");
-            _ = Task.Run(() => { try { _libraryService.SaveLibrary(); } catch { } });
-            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            try
             {
-                var fileName = Path.GetFileName(fullPath);
-                var isCurrentItem = string.Equals(_currentVideoPath, fullPath, StringComparison.OrdinalIgnoreCase);
-                if (isCurrentItem)
+                if (!_isCoreApiReachable)
                 {
-                    StatusTextBlock.Text = isBlacklisted ? $"Blacklisted: {fileName}" : $"Removed from blacklist: {fileName}";
-                    BlacklistToggle.IsChecked = isBlacklisted;
-                    if (isBlacklisted) FavoriteToggle.IsChecked = false;
-                    UpdateCurrentFileStatsUi();
-                }
-                else
-                {
-                    StatusTextBlock.Text = isBlacklisted ? $"Synced blacklist: {fileName}" : $"Synced unblacklist: {fileName}";
+                    Log("SetItemBlacklist (Web): Core runtime unavailable; rejecting mutation.");
+                    return false;
                 }
 
-                RebuildPlayQueueIfNeeded();
+                var accepted = _coreServerApiClient.SetBlacklistAsync(_coreServerBaseUrl, fullPath, isBlacklisted).GetAwaiter().GetResult();
+                if (!accepted)
+                {
+                    return false;
+                }
 
-                if (_showLibraryPanel) UpdateLibraryPanel();
-                RecalculateGlobalStats();
-            });
-            return true;
+                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                {
+                    var priorItem = _libraryService.FindItemByPath(fullPath);
+                    var projectedFavorite = isBlacklisted ? false : (priorItem?.IsFavorite ?? false);
+                    ApplyRemoteItemStateProjection(fullPath, projectedFavorite, isBlacklisted, isBlacklisted
+                        ? $"Synced blacklist: {Path.GetFileName(fullPath)}"
+                        : $"Synced unblacklist: {Path.GetFileName(fullPath)}");
+                });
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Log($"SetItemBlacklist (Web): API delegation failed ({ex.Message})");
+                return false;
+            }
         }
 
         bool WebRemote.IWebRemoteApiServices.RecordPlayback(string fullPath)
@@ -6861,22 +6955,24 @@ namespace ReelRoulette
 
         private async Task<bool> ProbeCoreServerVersionAsync(bool updateStatus = false)
         {
-            var endpoint = $"{_coreServerBaseUrl.TrimEnd('/')}/api/version";
             try
             {
-                using var response = await _coreServerHttpClient.GetAsync(endpoint);
-                if (!response.IsSuccessStatusCode)
+                var version = await _coreServerApiClient.GetVersionAsync(_coreServerBaseUrl);
+                if (version == null)
                 {
-                    Log($"CoreServerProbe: /api/version responded {response.StatusCode}");
+                    Log("CoreServerProbe: /api/version probe failed");
+                    _isCoreApiReachable = false;
+                    StopCoreEventStream();
                     if (updateStatus)
                     {
-                        SetStatusMessage("Core runtime unavailable. Use View > Start Core Runtime.", 0);
+                        SetStatusMessage("Core runtime unavailable; attempting startup...", 0);
                     }
                     return false;
                 }
 
-                var body = await response.Content.ReadAsStringAsync();
-                Log($"CoreServerProbe: /api/version success ({body})");
+                _isCoreApiReachable = true;
+                Log($"CoreServerProbe: /api/version success (api={version.ApiVersion}, app={version.AppVersion}, assets={version.AssetsVersion ?? "n/a"})");
+                EnsureCoreEventStreamStarted();
                 if (updateStatus)
                 {
                     SetStatusMessage("Core runtime connected.", 0);
@@ -6886,9 +6982,11 @@ namespace ReelRoulette
             catch (Exception ex)
             {
                 Log($"CoreServerProbe: /api/version unavailable ({ex.Message})");
+                _isCoreApiReachable = false;
+                StopCoreEventStream();
                 if (updateStatus)
                 {
-                    SetStatusMessage("Core runtime unavailable. Use View > Start Core Runtime.", 0);
+                    SetStatusMessage("Core runtime unavailable; attempting startup...", 0);
                 }
                 return false;
             }
@@ -6897,8 +6995,9 @@ namespace ReelRoulette
         private async Task EnsureCoreRuntimeAvailableAsync()
         {
             var connected = await ProbeCoreServerVersionAsync(updateStatus: true);
-            if (connected || !_autoStartCoreRuntime)
+            if (connected)
             {
+                EnsureCoreEventStreamStarted();
                 return;
             }
 
@@ -6909,7 +7008,172 @@ namespace ReelRoulette
             }
 
             await Task.Delay(TimeSpan.FromSeconds(2));
-            await ProbeCoreServerVersionAsync(updateStatus: true);
+            var connectedAfterStart = await ProbeCoreServerVersionAsync(updateStatus: true);
+            if (connectedAfterStart)
+            {
+                EnsureCoreEventStreamStarted();
+            }
+        }
+
+        private void EnsureCoreEventStreamStarted()
+        {
+            if (_coreEventsTask != null && !_coreEventsTask.IsCompleted)
+            {
+                return;
+            }
+
+            _coreEventsCancellationSource?.Cancel();
+            _coreEventsCancellationSource?.Dispose();
+            _coreEventsCancellationSource = new CancellationTokenSource();
+            var token = _coreEventsCancellationSource.Token;
+            var sseApiClient = new CoreServerApiClient(_coreServerEventsHttpClient);
+
+            _coreEventsTask = Task.Run(async () =>
+            {
+                while (!token.IsCancellationRequested)
+                {
+                    Log("CoreEvents: Connecting SSE stream...");
+                    try
+                    {
+                        await sseApiClient.ListenToEventsAsync(
+                            _coreServerBaseUrl,
+                            _coreClientId,
+                            HandleCoreServerEnvelopeAsync,
+                            Log,
+                            token);
+
+                        if (token.IsCancellationRequested)
+                        {
+                            break;
+                        }
+
+                        Log("CoreEvents: SSE stream ended; scheduling reconnect.");
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        Log("CoreEvents: SSE stream cancelled.");
+                        break;
+                    }
+                    catch (Exception ex)
+                    {
+                        Log($"CoreEvents: SSE stream failed ({ex.Message}); scheduling reconnect.");
+                    }
+
+                    if (token.IsCancellationRequested)
+                    {
+                        break;
+                    }
+
+                    try
+                    {
+                        await Task.Delay(TimeSpan.FromSeconds(2), token);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        break;
+                    }
+                }
+            }, token);
+        }
+
+        private void StopCoreEventStream()
+        {
+            _coreEventsCancellationSource?.Cancel();
+            _coreEventsTask = null;
+        }
+
+        private async Task HandleCoreServerEnvelopeAsync(CoreServerEventEnvelope envelope)
+        {
+            if (string.IsNullOrWhiteSpace(envelope.EventType))
+            {
+                return;
+            }
+            var eventPayloadOptions = new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            };
+
+            switch (envelope.EventType)
+            {
+                case "itemStateChanged":
+                    CoreItemStateChangedPayload? itemState = null;
+                    try
+                    {
+                        itemState = envelope.Payload.Deserialize<CoreItemStateChangedPayload>(eventPayloadOptions);
+                    }
+                    catch
+                    {
+                        // Ignore malformed payloads and keep stream alive.
+                    }
+
+                    if (itemState == null || string.IsNullOrWhiteSpace(itemState.Path))
+                    {
+                        Log("CoreEvents: itemStateChanged payload missing required path.");
+                        return;
+                    }
+
+                    await Dispatcher.UIThread.InvokeAsync(() =>
+                    {
+                        ApplyRemoteItemStateProjection(itemState.Path, itemState.IsFavorite, itemState.IsBlacklisted, $"Core sync update: {Path.GetFileName(itemState.Path)}");
+                    });
+                    break;
+                case "playbackRecorded":
+                    CorePlaybackRecordedPayload? playback = null;
+                    try
+                    {
+                        playback = envelope.Payload.Deserialize<CorePlaybackRecordedPayload>(eventPayloadOptions);
+                    }
+                    catch
+                    {
+                        // Ignore malformed payloads and keep stream alive.
+                    }
+
+                    if (playback == null || string.IsNullOrWhiteSpace(playback.Path))
+                    {
+                        return;
+                    }
+
+                    if (string.Equals(playback.ClientId, _coreClientId, StringComparison.Ordinal))
+                    {
+                        return;
+                    }
+
+                    await Dispatcher.UIThread.InvokeAsync(() =>
+                    {
+                        RecordPlaybackProjection(playback.Path, persistLibrary: false);
+                    });
+                    break;
+            }
+        }
+
+        private async Task SyncFilterSessionToCoreAsync()
+        {
+            if (!_isCoreApiReachable || _currentFilterState == null)
+            {
+                return;
+            }
+
+            try
+            {
+                var snapshot = new CoreFilterSessionSnapshot
+                {
+                    ActivePresetName = _activePresetName,
+                    CurrentFilterState = JsonSerializer.SerializeToElement(_currentFilterState),
+                    Presets = (_filterPresets ?? new List<FilterPreset>())
+                        .Select(p => new CoreFilterPresetSnapshot
+                        {
+                            Name = p.Name,
+                            FilterState = JsonSerializer.SerializeToElement(p.FilterState)
+                        })
+                        .ToList()
+                };
+
+                await _coreServerApiClient.SyncFilterSessionAsync(_coreServerBaseUrl, snapshot);
+            }
+            catch (Exception ex)
+            {
+                Log($"CoreFilterSession: Failed to sync filter session ({ex.Message})");
+            }
         }
 
         private async Task<bool> TryStartCoreRuntimeAsync()
@@ -7071,7 +7335,6 @@ namespace ReelRoulette
 
             // Web Remote settings
             public WebRemote.WebRemoteSettings? WebRemote { get; set; }
-            public bool AutoStartCoreRuntime { get; set; } = false;
             public string CoreServerBaseUrl { get; set; } = "http://localhost:51301";
         }
 
@@ -7330,14 +7593,9 @@ namespace ReelRoulette
             if (OpenWebRemoteMenuItem != null)
                 OpenWebRemoteMenuItem.IsEnabled = _webRemoteEnabled;
 
-            _autoStartCoreRuntime = settings.AutoStartCoreRuntime;
             _coreServerBaseUrl = string.IsNullOrWhiteSpace(settings.CoreServerBaseUrl)
                 ? "http://localhost:51301"
                 : settings.CoreServerBaseUrl.Trim();
-            if (AutoStartCoreRuntimeMenuItem != null)
-            {
-                AutoStartCoreRuntimeMenuItem.IsChecked = _autoStartCoreRuntime;
-            }
             
             // Bug fix: Initialize _lastNonZeroVolume with saved volume level
             // This ensures unmuting restores the correct volume, not the default (100)
@@ -7670,7 +7928,6 @@ namespace ReelRoulette
                     AuthMode = _webRemoteAuthMode,
                     SharedToken = _webRemoteSharedToken
                 };
-                settings.AutoStartCoreRuntime = _autoStartCoreRuntime;
                 settings.CoreServerBaseUrl = _coreServerBaseUrl;
 
                 // Filter state (always save an object, never null)
@@ -8322,26 +8579,6 @@ namespace ReelRoulette
             var isFullScreen = FullscreenMenuItem.IsChecked == true;
             Log($"UI ACTION: FullscreenMenuItem clicked, setting fullscreen to: {isFullScreen}");
             IsFullScreen = isFullScreen;
-        }
-
-        private async void StartCoreRuntimeMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-        {
-            Log("UI ACTION: StartCoreRuntimeMenuItem clicked");
-            var started = await TryStartCoreRuntimeAsync();
-            if (!started)
-            {
-                return;
-            }
-
-            await Task.Delay(TimeSpan.FromSeconds(2));
-            await ProbeCoreServerVersionAsync(updateStatus: true);
-        }
-
-        private void AutoStartCoreRuntimeMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-        {
-            _autoStartCoreRuntime = AutoStartCoreRuntimeMenuItem.IsChecked == true;
-            Log($"UI ACTION: AutoStartCoreRuntimeMenuItem clicked, setting auto-start to {_autoStartCoreRuntime}");
-            SaveSettings();
         }
 
         private async void ManageTagsMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -9343,6 +9580,7 @@ namespace ReelRoulette
                 _activePresetName = dialog.GetActivePresetName();
                 
                 Log($"FilterMenuItem: Saved {_filterPresets?.Count ?? 0} presets, active preset: {_activePresetName ?? "None"}");
+                _ = SyncFilterSessionToCoreAsync();
                 
                 // Update preset dropdown in library panel
                 UpdateLibraryPresetComboBox();
@@ -9436,9 +9674,14 @@ namespace ReelRoulette
             }
         }
 
-        private void BlacklistToggle_Changed(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        private async void BlacklistToggle_Changed(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
             Log("BlacklistToggle_Changed: Blacklist toggle changed event fired");
+            if (_isApplyingCoreSync)
+            {
+                return;
+            }
+
             if (string.IsNullOrEmpty(_currentVideoPath))
             {
                 Log("BlacklistToggle_Changed: No current video path, disabling toggle");
@@ -9451,84 +9694,33 @@ namespace ReelRoulette
             var isBlacklisted = BlacklistToggle.IsChecked == true;
             Log($"BlacklistToggle_Changed: Setting blacklisted to {isBlacklisted} for video: {Path.GetFileName(path)}");
 
-            // Update library item
-            if (_libraryIndex != null)
+            if (_isCoreApiReachable)
             {
-                var item = _libraryService.FindItemByPath(path);
-                if (item != null)
+                try
                 {
-                    var oldBlacklisted = item.IsBlacklisted;
-                    if (oldBlacklisted == isBlacklisted)
+                    var success = await _coreServerApiClient.SetBlacklistAsync(_coreServerBaseUrl, path, isBlacklisted);
+                    if (!success)
                     {
-                        Log($"BlacklistToggle_Changed: Item already has IsBlacklisted={isBlacklisted}, skipping update (likely programmatic change)");
+                        SetStatusMessage("Core runtime rejected blacklist update.", 0);
                         return;
                     }
-                    
-                    item.IsBlacklisted = isBlacklisted;
-                    
-                    // EXCLUSIVE: If adding to blacklist, remove from favorites
-                    if (isBlacklisted && item.IsFavorite)
-                    {
-                        Log($"BlacklistToggle_Changed: Removing from favorites (exclusive with blacklist)");
-                        item.IsFavorite = false;
-                        // Update favorite toggle UI to reflect change
-                        FavoriteToggle.IsChecked = false;
-                    }
-                    
-                    _libraryService.UpdateItem(item);
-                    Log($"BlacklistToggle_Changed: Updated library item - IsBlacklisted: {oldBlacklisted} -> {isBlacklisted}");
-                    _webRemoteServer?.BroadcastLibraryItemChanged(path, item.IsFavorite, isBlacklisted);
 
-                    // Save library asynchronously
-                    _ = Task.Run(() =>
-                    {
-                        try
-                        {
-                            Log("BlacklistToggle_Changed: Saving library asynchronously...");
-                            _libraryService.SaveLibrary();
-                            Log("BlacklistToggle_Changed: Library saved successfully");
-                        }
-                        catch (Exception ex)
-                        {
-                            Log($"BlacklistToggle_Changed: ERROR saving library - Exception: {ex.GetType().Name}, Message: {ex.Message}");
-                            Log($"BlacklistToggle_Changed: ERROR - Stack trace: {ex.StackTrace}");
-                        }
-                    });
+                    var priorItem = _libraryService.FindItemByPath(path);
+                    var projectedFavorite = isBlacklisted ? false : (priorItem?.IsFavorite ?? false);
+                    ApplyRemoteItemStateProjection(path, projectedFavorite, isBlacklisted, isBlacklisted
+                        ? $"Blacklisted: {System.IO.Path.GetFileName(path)}"
+                        : $"Removed from blacklist: {System.IO.Path.GetFileName(path)}");
+                    return;
                 }
-                else
+                catch (Exception ex)
                 {
-                    Log($"BlacklistToggle_Changed: Library item not found for path: {path}");
+                    Log($"BlacklistToggle_Changed: API call failed ({ex.Message})");
                 }
             }
-            else
-            {
-                Log("BlacklistToggle_Changed: Library index is null, cannot update item");
-            }
-
-            if (isBlacklisted)
-            {
-                Log("BlacklistToggle_Changed: Video blacklisted, rebuilding randomization state");
-                RebuildPlayQueueIfNeeded();
-                StatusTextBlock.Text = $"Blacklisted: {System.IO.Path.GetFileName(path)}";
-            }
-            else
-            {
-                Log("BlacklistToggle_Changed: Video removed from blacklist, rebuilding queue");
-                RebuildPlayQueueIfNeeded();
-                // Update Library panel if visible
-                if (_showLibraryPanel)
-                {
-                    Log("BlacklistToggle_Changed: Updating library panel");
-                    UpdateLibraryPanel();
-                }
-                StatusTextBlock.Text = $"Removed from blacklist: {System.IO.Path.GetFileName(path)}";
-            }
-
-            // Update stats when blacklist changes
-            Log("BlacklistToggle_Changed: Recalculating global stats");
-            RecalculateGlobalStats();
-            UpdateCurrentFileStatsUi();
-            Log("BlacklistToggle_Changed: Blacklist toggle change complete");
+            
+            SetStatusMessage("Core runtime is required for state changes. Please wait for startup and retry.", 0);
+            await EnsureCoreRuntimeAvailableAsync();
+            UpdatePerVideoToggleStates();
         }
 
         // ShowDurationFilterDialogAsync and related duration filter methods removed - now using FilterDialog

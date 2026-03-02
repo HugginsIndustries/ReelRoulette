@@ -90,6 +90,17 @@ public static class ServerHostComposition
             return Results.Ok(states);
         });
 
+        app.MapGet("/api/filter-session", (ServerStateService state) =>
+        {
+            return Results.Ok(state.GetFilterSessionSnapshot());
+        });
+
+        app.MapPost("/api/filter-session", (FilterSessionSnapshot snapshot, ServerStateService state) =>
+        {
+            state.SetFilterSessionSnapshot(snapshot);
+            return Results.Ok();
+        });
+
         app.MapGet("/api/events", async (HttpContext context, ServerStateService state) =>
         {
             context.Response.Headers.Append("Content-Type", "text/event-stream");

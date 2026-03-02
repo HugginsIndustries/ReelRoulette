@@ -3,7 +3,7 @@
 ## Source of Truth
 
 - API contract lives at `shared/api/openapi.yaml`.
-- M4 runs the contract-first query/command/SSE surface from `ReelRoulette.Worker` using shared `ReelRoulette.Server` endpoint composition.
+- M5 continues the contract-first worker/server seam and adds a desktop API-client migration surface for filter-session projection sync.
 
 ## Eventing Direction
 
@@ -12,6 +12,8 @@
   - `eventType`
   - `timestamp`
   - `payload`
+- M5 adds `filterSessionChanged` as an additional SSE event type when the desktop syncs filter/preset session state via API.
+- Desktop event consumption now uses a long-lived SSE client with reconnect behavior; payload parsing is case-insensitive to avoid projection drops from JSON casing differences.
 - Reconnect/resync contract:
   - Client reconnects to `GET /api/events` with `Last-Event-ID`.
   - Server replays buffered events newer than that revision when available.
@@ -40,6 +42,8 @@
 - `POST /api/blacklist`
 - `POST /api/record-playback`
 - `POST /api/library-states`
+- `GET /api/filter-session`
+- `POST /api/filter-session`
 - `GET /api/events` (`text/event-stream`)
 
 ## Near-Term Contract Tracks

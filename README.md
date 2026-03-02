@@ -32,11 +32,14 @@ Or run worker via helper scripts:
 ./tools/scripts/run-core.sh
 ```
 
-M4 runtime notes:
+M4/M5 runtime notes:
 
 - `ReelRoulette.Worker` hosts the API/SSE runtime using shared server endpoint composition.
 - Pairing/auth primitive is available through `/api/pair` with optional localhost trust and token/cookie enforcement for paired clients.
 - SSE reconnect supports `Last-Event-ID` replay and `POST /api/library-states` authoritative resync when history gaps are detected.
+- Desktop migrated M5 state flows now call the worker/server API first (favorite/blacklist/playback/random command), then project updates from SSE.
+- Filter/preset session projection sync is available through `GET/POST /api/filter-session`.
+- Migrated M5 state writes are API-required (no local mutation fallback for those flows when core runtime is unavailable).
 
 ## Testing
 
@@ -55,7 +58,7 @@ dotnet run --project .\src\core\ReelRoulette.Core.SystemChecks\ReelRoulette.Core
 Worker runtime independence check (desktop close should not stop worker):
 
 ```bash
-# 1) Start desktop, then use View > Start Core Runtime
+# 1) Start desktop (it auto-starts core runtime if needed)
 # 2) Verify worker health while desktop is open
 Invoke-WebRequest -UseBasicParsing http://localhost:51301/health | Select-Object -ExpandProperty Content
 

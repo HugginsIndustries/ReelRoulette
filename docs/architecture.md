@@ -105,5 +105,27 @@ flowchart TD
 
 - `ReelRoulette.Worker` is now the headless runtime host for API/SSE in console-first mode.
 - Pairing/auth now exists on the core server seam (`/api/pair` + auth middleware with optional localhost trust).
-- Desktop has a lifecycle UX path to start core runtime when local probe fails.
+- Desktop auto-starts core runtime during launch when local probe fails.
 - Server-thin guardrail for M4+: keep HTTP/SSE/auth glue in server; avoid introducing new business rules in endpoint handlers.
+
+## M5 Desktop API-Client Migration
+
+```mermaid
+flowchart TD
+    desktopUi["Desktop UI"]
+    desktopApi["Desktop API Client Layer"]
+    workerApi["Worker/Server API"]
+    sse["SSE Event Stream"]
+    uiProjection["Desktop UI Projection State"]
+
+    desktopUi --> desktopApi
+    desktopApi --> workerApi
+    workerApi --> sse
+    sse --> uiProjection
+    uiProjection --> desktopUi
+```
+
+- Desktop command flows (favorite/blacklist/playback/random command) now delegate to the worker/server seam first.
+- Desktop subscribes to SSE and applies projected item-state updates for cross-client sync.
+- Desktop keeps the SSE stream alive with reconnect behavior and applies case-insensitive payload projection to avoid dropped updates.
+- Legacy embedded web-remote mutation calls are contained by delegating through the same API-client path.

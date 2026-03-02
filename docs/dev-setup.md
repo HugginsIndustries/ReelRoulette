@@ -41,3 +41,11 @@
   - pair via `GET /api/pair?token=...` or `POST /api/pair`
   - cookie/token authorizes subsequent calls when auth is required
   - localhost trust can be enabled for dev while keeping LAN pairing required.
+
+## M5 Desktop API-Client Notes
+
+- Desktop now runs an internal API-client layer for migrated state flows instead of directly mutating those paths first.
+- SSE subscription is used to keep desktop projections synchronized with out-of-process updates.
+- Filter/preset session mutations are mirrored via `POST /api/filter-session`.
+- Migrated state flows are API-required: desktop no longer applies local write fallback for those mutations when core runtime is unavailable.
+- Desktop attempts to auto-start core runtime on launch if local probe fails.

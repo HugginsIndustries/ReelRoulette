@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- **Implement M5 desktop API-client state migration flow** (2026-03-01):
+  - Add a desktop `CoreServerApiClient` layer for worker/server query-command calls plus SSE event consumption.
+  - Migrate desktop favorite/blacklist/playback/random command flow to API-first behavior and remove local state-mutation fallback for migrated paths.
+  - Add desktop SSE projection handling for `itemStateChanged` and `playbackRecorded` updates to keep UI state synchronized with out-of-process changes.
+  - Harden desktop SSE reliability with a dedicated long-lived SSE client, reconnect loop behavior, and case-insensitive payload projection to prevent dropped updates.
+  - Add filter/preset session sync endpoint contract (`GET/POST /api/filter-session`) and server state support for filter-session projection snapshots.
+  - Contain legacy web-remote mutation path by routing through the same desktop API-delegated mutation helpers.
+  - Enforce backend favorite/blacklist mutual exclusion so server projections cannot persist both flags as true for the same item.
+  - Switch desktop lifecycle UX to automatic core runtime startup on launch probe failure (remove manual Start/Auto-start menu actions).
+  - Update OpenAPI/docs/README to reflect M5 API surface and desktop API-client + SSE synchronization behavior.
+
 - **Implement M4 worker runtime, pairing/auth primitive, and desktop core lifecycle UX** (2026-03-01):
   - Refactor `ReelRoulette.Server` startup into shared endpoint composition so both server and worker hosts use the same API/SSE/auth mapping.
   - Convert `ReelRoulette.Worker` from scaffold placeholder into a real console-first host with lifecycle logging and graceful shutdown wiring.

@@ -144,6 +144,7 @@ It is designed to be:
   - Desktop writes state via API (not direct in-process data mutation) for migrated flows.
   - SSE updates keep desktop UI in sync with out-of-process changes.
   - Existing user workflows remain stable.
+  - Regression tests for desktop API-client request shape/parsing and M5 server-state replay/filter-session behaviors are added to `dotnet test` and passing.
 
 ## M6a - P1 Feature Alignment Through API (Web Tag Editing)
 
@@ -157,6 +158,7 @@ It is designed to be:
   - Web remote tag editing works end-to-end through server/core.
   - Desktop and web remain synchronized via SSE for tag/category/item-tag changes.
   - Tag editing can ship independently of grid/thumbnail/pipeline refactors.
+  - Regression tests validate tag/category mutation contracts plus SSE sync projections (including batch-ready `itemIds[]` request handling) and pass in `dotnet test`.
 
 ## M6b - P1 Feature Alignment Through API (Grid/Thumbnails + Unified Refresh Pipeline)
 
@@ -180,6 +182,7 @@ It is designed to be:
   - No standalone legacy duration/loudness actions in UX (as planned).
   - Refresh progress/status remains observable while dialogs close.
   - Thumbnail artifact/invalidation policy is implemented and documented.
+  - Regression tests cover thumbnail invalidation decisions and unified refresh stage sequencing/progress projection; all pass in `dotnet test`.
 
 ## M7 - Web UI Separation and Build Pipeline
 
@@ -192,6 +195,7 @@ It is designed to be:
   - Web UI builds independently from desktop app build.
   - Server can serve production web assets from web build output.
   - No API drift between web and desktop clients.
+  - Regression tests include build-output asset serving and contract compatibility checks against current OpenAPI, and pass in `dotnet test`.
 
 ## M8 - Android Client Bootstrap
 
@@ -204,6 +208,7 @@ It is designed to be:
 - **Acceptance criteria**:
   - Android app can discover/connect, list presets, request random media, and stream.
   - Event sync works for favorite/blacklist/tag updates.
+  - Regression tests validate Android client API/SSE compatibility expectations (schema, event envelope handling, and reconnect behavior) and pass in `dotnet test`.
 
 ## M9 - Hardening, Packaging, and Migration Cleanup
 
@@ -220,6 +225,7 @@ It is designed to be:
   - Stable multi-client operation (desktop + web at minimum).
   - No critical state divergence between clients.
   - Migration and upgrade path documented.
+  - Full regression suite (unit + integration + reconnect/ordering checks) is part of the default CI `dotnet test` gate and remains green.
 
 ---
 
