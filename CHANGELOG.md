@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- **Implement M2 storage/state service layer and hybrid verification foundation** (2026-03-01):
+  - Add core storage abstractions and JSON-backed atomic storage services (`IAtomicUpdateStorageService`, `JsonFileStorageService`, and typed `LibraryIndexStorageService`/`SettingsStorageService` wrappers).
+  - Add core runtime state services for randomization scope state, filter session snapshots, and playback session primitives.
+  - Refactor desktop persistence paths to use core storage adapters in `LibraryService`, `MainWindow` settings flows, and `FilterStateService` while keeping existing JSON schema compatibility.
+  - Wire web client session randomization state to the new core randomization state service.
+  - Add shared reusable verification entrypoint `CoreVerification.RunAll()` for randomization/filter/tag/DTO contract checks.
+  - Convert `ReelRoulette.Core.Tests` to framework-based `dotnet test` structure and add xUnit verification test coverage.
+  - Add `ReelRoulette.Core.SystemChecks` console harness that reuses shared verification logic and supports verbose system-check output.
+  - Update architecture and development setup docs with M2 storage/state layering and verification workflow guidance.
+
 - **Kick off M0/M1 migration foundation and core extraction** (2026-03-01):
   - Add migration solution scaffold and target folders/projects: `ReelRoulette.Core`, `ReelRoulette.Server`, `ReelRoulette.Worker`, `ReelRoulette.WindowsApp` (placeholder), `ReelRoulette.WebUI` (placeholder), plus `shared/api/openapi.yaml`.
   - Add baseline migration docs for architecture, API, setup, and M1 domain inventory.

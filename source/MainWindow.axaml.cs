@@ -22,6 +22,8 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Timers;
+using ReelRoulette.Core.State;
+using ReelRoulette.Core.Storage;
 
 namespace ReelRoulette
 {
@@ -79,7 +81,10 @@ namespace ReelRoulette
         private bool _hasShownMissingLoudnessWarning = false;
 
         // Randomization mode state (runtime-only, rebuilt as eligible-set changes)
-        private readonly RandomizationRuntimeState _desktopRandomizationState = new();
+        private readonly RandomizationStateService _randomizationStateService = new();
+        private readonly FilterSessionStateService _filterSessionStateService = new();
+        private readonly PlaybackSessionStateService _playbackSessionStateService = new();
+        private readonly RandomizationRuntimeState _desktopRandomizationState;
         private readonly object _desktopRandomizationLock = new object();
         private RandomizationMode _randomizationMode = RandomizationMode.SmartShuffle;
         private int _isHandlingEndReached = 0;
@@ -755,6 +760,7 @@ namespace ReelRoulette
                 Log("MainWindow constructor: Calling InitializeComponent...");
                 InitializeComponent();
                 Log("MainWindow constructor: InitializeComponent completed.");
+                _desktopRandomizationState = new RandomizationRuntimeState(_randomizationStateService.GetOrCreate("desktop"));
             
             // Initialize window size tracking for aspect ratio locking
             _lastWindowSize = new Size(this.Width, this.Height);
@@ -6934,25 +6940,24 @@ namespace ReelRoulette
             public WebRemote.WebRemoteSettings? WebRemote { get; set; }
         }
 
+        private static SettingsStorageService<AppSettings> CreateSettingsStorageService()
+        {
+            return new SettingsStorageService<AppSettings>(new JsonFileStorageOptions<AppSettings>
+            {
+                FilePathResolver = AppDataManager.GetSettingsPath,
+                CreateDefault = () => new AppSettings(),
+                SerializerOptions = new JsonSerializerOptions { WriteIndented = true },
+                Logger = Log
+            });
+        }
+
         // Static methods for dialog persistence (can be called from dialogs)
         public static void SaveDialogBounds(string dialogName, double x, double y, double width, double height)
         {
             try
             {
-                var path = AppDataManager.GetSettingsPath();
-                AppSettings settings;
-                string? json;
-                
-                if (!File.Exists(path))
-                {
-                    Log($"SaveDialogBounds: Settings file not found at {path}, creating new settings");
-                    settings = new AppSettings();
-                }
-                else
-                {
-                    json = File.ReadAllText(path);
-                    settings = JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
-                }
+                var storage = CreateSettingsStorageService();
+                var settings = storage.Load();
 
                 if (dialogName == "ItemTagsDialog")
                 {
@@ -6969,8 +6974,7 @@ namespace ReelRoulette
                     settings.FilterDialogHeight = height;
                 }
 
-                json = JsonSerializer.Serialize(settings, new JsonSerializerOptions { WriteIndented = true });
-                File.WriteAllText(path, json);
+                storage.Save(settings);
                 Log($"SaveDialogBounds: Saved bounds for {dialogName} - X={x}, Y={y}, W={width}, H={height}");
             }
             catch (Exception ex)
@@ -6983,21 +6987,8 @@ namespace ReelRoulette
         {
             try
             {
-                var path = AppDataManager.GetSettingsPath();
-                if (!File.Exists(path))
-                {
-                    Log($"LoadDialogBounds: Settings file not found at {path}");
-                    return (null, null, null, null);
-                }
-
-                var json = File.ReadAllText(path);
-                var settings = JsonSerializer.Deserialize<AppSettings>(json);
-                
-                if (settings == null)
-                {
-                    Log($"LoadDialogBounds: Failed to deserialize settings");
-                    return (null, null, null, null);
-                }
+                var storage = CreateSettingsStorageService();
+                var settings = storage.Load();
 
                 if (dialogName == "ItemTagsDialog")
                 {
@@ -7023,25 +7014,12 @@ namespace ReelRoulette
             _isLoadingSettings = true;
             try
             {
-            AppSettings? settings = null;
-            
-            // Try to load unified settings.json first
-            try
-            {
-                var settingsPath = AppDataManager.GetSettingsPath();
-                if (File.Exists(settingsPath))
-                {
-                    var json = File.ReadAllText(settingsPath);
-                    settings = JsonSerializer.Deserialize<AppSettings>(json);
-                }
-            }
-            catch
-            {
-                // If unified settings fail, try legacy files
-            }
-            
-            // If unified settings don't exist or failed, try loading from legacy files and migrate
-            if (settings == null)
+            var settingsStorage = CreateSettingsStorageService();
+            var settings = settingsStorage.Load();
+            var settingsPath = AppDataManager.GetSettingsPath();
+
+            // If unified settings don't exist, try loading from legacy files and migrate
+            if (!File.Exists(settingsPath))
             {
                 settings = new AppSettings();
                 MigrateLegacySettings(settings);
@@ -7136,6 +7114,13 @@ namespace ReelRoulette
             _autoPlayNext = settings.AutoPlayNext;
             _isMuted = settings.IsMuted;
             _userVolumePreference = settings.VolumeLevel; // Restore saved volume level
+            _playbackSessionStateService.Set(new PlaybackSessionState
+            {
+                LoopEnabled = _isLoopEnabled,
+                AutoPlayNext = _autoPlayNext,
+                IsMuted = _isMuted,
+                VolumeLevel = _userVolumePreference
+            });
             
             // Initialize _lastNonZeroVolume from saved volume for proper unmute behavior
             if (settings.VolumeLevel > 0)
@@ -7153,9 +7138,7 @@ namespace ReelRoulette
                 Log("LoadSettings: Applied one-time randomization migration to SmartShuffle");
                 try
                 {
-                    var settingsPath = AppDataManager.GetSettingsPath();
-                    var migratedJson = JsonSerializer.Serialize(settings, new JsonSerializerOptions { WriteIndented = true });
-                    File.WriteAllText(settingsPath, migratedJson);
+                    settingsStorage.Save(settings);
                     Log("LoadSettings: Persisted randomization migration marker");
                 }
                 catch (Exception persistEx)
@@ -7263,6 +7246,10 @@ namespace ReelRoulette
             _filterPresets = settings.FilterPresets;
             _activePresetName = settings.ActivePresetName;
             _autoTagScanFullLibrary = settings.AutoTagScanFullLibrary;
+            _filterSessionStateService.Set(
+                _currentFilterState,
+                (_filterPresets ?? new List<FilterPreset>()).Cast<object>(),
+                _activePresetName);
             Log($"LoadSettings: Loaded {_filterPresets?.Count ?? 0} filter presets, active preset name: {_activePresetName ?? "None"}");
             Log($"LoadSettings: Preset guardrail - persistedCount={persistedPresetCount}, inMemoryCount={_filterPresets?.Count ?? 0}, loadingInProgress={_isLoadingSettings}");
             
@@ -7412,9 +7399,8 @@ namespace ReelRoulette
             // Save unified settings after migration
             try
             {
-                var settingsPath = AppDataManager.GetSettingsPath();
-                var json = JsonSerializer.Serialize(settings, new JsonSerializerOptions { WriteIndented = true });
-                File.WriteAllText(settingsPath, json);
+                var storage = CreateSettingsStorageService();
+                storage.Save(settings);
             }
             catch
             {
@@ -7441,6 +7427,7 @@ namespace ReelRoulette
             {
                 Log("SaveSettings: Starting save operation...");
                 var path = AppDataManager.GetSettingsPath();
+                var settingsStorage = CreateSettingsStorageService();
                 Log($"SaveSettings: Path = {path}");
                 
                 Log($"SaveSettings: Using intervalValue = {intervalValue}");
@@ -7457,26 +7444,7 @@ namespace ReelRoulette
                 }
                 
                 // Load existing settings to preserve dialog bounds and other fields
-                AppSettings settings;
-                if (File.Exists(path))
-                {
-                    try
-                    {
-                        var existingJson = File.ReadAllText(path);
-                        settings = JsonSerializer.Deserialize<AppSettings>(existingJson) ?? new AppSettings();
-                        Log("SaveSettings: Loaded existing settings file to preserve dialog bounds");
-                    }
-                    catch (Exception ex)
-                    {
-                        Log($"SaveSettings: Failed to load existing settings ({ex.Message}), creating new");
-                        settings = new AppSettings();
-                    }
-                }
-                else
-                {
-                    settings = new AppSettings();
-                    Log("SaveSettings: No existing settings file, creating new");
-                }
+                var settings = settingsStorage.Load();
                 
                 // Update MainWindow-managed fields (preserve dialog bounds from existing settings)
                 // View preferences
@@ -7510,10 +7478,18 @@ namespace ReelRoulette
                 settings.AudioFilterMode = _audioFilterMode;
                 
                 // Playback preferences (now persisted)
-                settings.LoopEnabled = _isLoopEnabled;
-                settings.AutoPlayNext = _autoPlayNext;
-                settings.IsMuted = _isMuted; // Save our tracked mute state
-                settings.VolumeLevel = _isMuted ? _lastNonZeroVolume : _userVolumePreference; // Save last non-zero volume when muted
+                _playbackSessionStateService.Set(new PlaybackSessionState
+                {
+                    LoopEnabled = _isLoopEnabled,
+                    AutoPlayNext = _autoPlayNext,
+                    IsMuted = _isMuted,
+                    VolumeLevel = _isMuted ? _lastNonZeroVolume : _userVolumePreference
+                });
+                var playbackState = _playbackSessionStateService.GetSnapshot();
+                settings.LoopEnabled = playbackState.LoopEnabled;
+                settings.AutoPlayNext = playbackState.AutoPlayNext;
+                settings.IsMuted = playbackState.IsMuted;
+                settings.VolumeLevel = playbackState.VolumeLevel;
                 settings.RandomizationMode = _randomizationMode;
                 settings.RandomizationModeMigrated = _randomizationModeMigrated;
                 settings.PhotoDisplayDurationSeconds = _photoDisplayDurationSeconds;
@@ -7552,18 +7528,23 @@ namespace ReelRoulette
                 };
 
                 // Filter state (always save an object, never null)
-                settings.FilterState = _currentFilterState ?? new FilterState();
+                _filterSessionStateService.Set(
+                    _currentFilterState ?? new FilterState(),
+                    (_filterPresets ?? new List<FilterPreset>()).Cast<object>(),
+                    _activePresetName);
+                var filterSession = _filterSessionStateService.GetSnapshot();
+                settings.FilterState = filterSession.CurrentFilterState as FilterState ?? new FilterState();
                 
                 // Filter presets
-                if (_filterPresets != null)
+                if (filterSession.FilterPresets.Count > 0)
                 {
-                    settings.FilterPresets = _filterPresets;
+                    settings.FilterPresets = filterSession.FilterPresets.OfType<FilterPreset>().ToList();
                 }
                 else
                 {
                     Log("SaveSettings: Preserving existing filter presets because in-memory presets are not initialized");
                 }
-                settings.ActivePresetName = _activePresetName;
+                settings.ActivePresetName = filterSession.ActivePresetName;
                 settings.AutoTagScanFullLibrary = _autoTagScanFullLibrary;
                 
                 // Dialog bounds are preserved from existing settings (not updated here)
@@ -7581,29 +7562,7 @@ namespace ReelRoulette
                 // Settings backup safety net (separate policy from library backups).
                 CreateSettingsBackupIfNeeded(path);
                 
-                Log("SaveSettings: Serializing to JSON...");
-                var json = JsonSerializer.Serialize(settings, new JsonSerializerOptions { WriteIndented = true });
-                Log($"SaveSettings: JSON length = {json.Length} characters");
-                
-                Log("SaveSettings: Writing to file...");
-                var tempPath = path + ".tmp";
-                File.WriteAllText(tempPath, json);
-                if (File.Exists(path))
-                {
-                    try
-                    {
-                        File.Replace(tempPath, path, null);
-                    }
-                    catch
-                    {
-                        File.Copy(tempPath, path, true);
-                        File.Delete(tempPath);
-                    }
-                }
-                else
-                {
-                    File.Move(tempPath, path);
-                }
+                settingsStorage.Save(settings);
                 Log($"SaveSettings: Successfully saved settings to {path}");
             }
             catch (Exception ex)

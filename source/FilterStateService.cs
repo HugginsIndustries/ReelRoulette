@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Text.Json;
+using ReelRoulette.Core.Storage;
 
 namespace ReelRoulette
 {
@@ -10,6 +11,13 @@ namespace ReelRoulette
     /// </summary>
     public class FilterStateService
     {
+        private readonly JsonFileStorageService<FilterState> _storage = new(new JsonFileStorageOptions<FilterState>
+        {
+            FilePathResolver = AppDataManager.GetFilterStatePath,
+            CreateDefault = () => new FilterState(),
+            SerializerOptions = new JsonSerializerOptions { WriteIndented = true }
+        });
+
         private static void Log(string message)
         {
             try
@@ -30,25 +38,7 @@ namespace ReelRoulette
             {
                 var path = AppDataManager.GetFilterStatePath();
                 Log($"FilterStateService.LoadFilterState: Path = {path}");
-                
-                if (File.Exists(path))
-                {
-                    var json = File.ReadAllText(path);
-                    var filterState = JsonSerializer.Deserialize<FilterState>(json);
-                    if (filterState != null)
-                    {
-                        Log($"FilterStateService.LoadFilterState: Successfully loaded filter state from {path}");
-                        return filterState;
-                    }
-                    else
-                    {
-                        Log("FilterStateService.LoadFilterState: File exists but deserialization returned null, using defaults");
-                    }
-                }
-                else
-                {
-                    Log("FilterStateService.LoadFilterState: File does not exist, using defaults");
-                }
+                return _storage.Load();
             }
             catch (Exception ex)
             {
@@ -81,15 +71,7 @@ namespace ReelRoulette
             {
                 var path = AppDataManager.GetFilterStatePath();
                 Log($"FilterStateService.SaveFilterState: Path = {path}");
-                
-                var options = new JsonSerializerOptions
-                {
-                    WriteIndented = true
-                };
-                var json = JsonSerializer.Serialize(filterState, options);
-                Log($"FilterStateService.SaveFilterState: Serialized to JSON, length = {json.Length} characters");
-                
-                File.WriteAllText(path, json);
+                _storage.Save(filterState);
                 Log($"FilterStateService.SaveFilterState: Successfully saved filter state to {path}");
             }
             catch (Exception ex)

@@ -77,6 +77,15 @@ namespace ReelRoulette
     /// </summary>
     public sealed class RandomizationRuntimeState
     {
-        internal RandomizationRuntimeStateCore CoreState { get; } = new();
+        internal RandomizationRuntimeStateCore CoreState { get; }
+
+        public RandomizationRuntimeState() : this(new RandomizationRuntimeStateCore())
+        {
+        }
+
+        internal RandomizationRuntimeState(RandomizationRuntimeStateCore coreState)
+        {
+            CoreState = coreState;
+        }
     }
 }

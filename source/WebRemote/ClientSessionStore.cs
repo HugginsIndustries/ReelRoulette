@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using ReelRoulette;
+using ReelRoulette.Core.State;
 
 namespace ReelRoulette.WebRemote
 {
@@ -12,7 +13,7 @@ namespace ReelRoulette.WebRemote
     public class ClientSessionStore
     {
         private readonly Dictionary<string, LinkedList<string>> _history = new();
-        private readonly Dictionary<string, RandomizationRuntimeState> _randomizationStates = new(StringComparer.OrdinalIgnoreCase);
+        private readonly RandomizationStateService _randomizationStateService = new();
         private readonly Dictionary<string, RandomizationMode> _clientModes = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, string> _clientSignatures = new(StringComparer.OrdinalIgnoreCase);
         private readonly int _maxHistory = 50;
@@ -116,11 +117,7 @@ namespace ReelRoulette.WebRemote
 
             lock (_lock)
             {
-                if (!_randomizationStates.TryGetValue(clientId, out var state))
-                {
-                    state = new RandomizationRuntimeState();
-                    _randomizationStates[clientId] = state;
-                }
+                var state = new RandomizationRuntimeState(_randomizationStateService.GetOrCreate(clientId));
 
                 var signature = RandomSelectionEngine.ComputeEligibleSignature(eligibleItems);
                 var modeChanged = !_clientModes.TryGetValue(clientId, out var previousMode) || previousMode != mode;

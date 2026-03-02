@@ -33,3 +33,29 @@ flowchart TD
 - M0 introduces the target repo layout and project stubs without changing runtime behavior.
 - M1 extracts pure domain logic into `ReelRoulette.Core` with desktop adapters calling into core.
 - Desktop UI remains the shipping runtime while core extraction happens by feature slice.
+
+## M2 Storage-State Layering
+
+```mermaid
+flowchart TD
+    desktopAdapters["Desktop Adapters"]
+    coreState["Core State Services"]
+    coreStorage["Core Storage Services"]
+    fileAdapters["Desktop File Adapters"]
+    persistedJson["library.json / settings.json"]
+    dotnetTest["dotnet test gate"]
+    systemHarness["System-check harness"]
+
+    desktopAdapters --> coreState
+    coreState --> coreStorage
+    coreStorage --> fileAdapters
+    fileAdapters --> persistedJson
+    dotnetTest --> coreState
+    dotnetTest --> coreStorage
+    systemHarness --> coreState
+    systemHarness --> coreStorage
+```
+
+- Core state services own randomization/filter/playback session primitives.
+- Core storage services own JSON load/save and atomic write semantics.
+- Desktop retains UI/media rendering concerns and uses adapters for persistence/state access.

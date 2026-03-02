@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using ReelRoulette.Core.Fingerprints;
+using ReelRoulette.Core.Storage;
 using ReelRoulette.Core.Tags;
 
 namespace ReelRoulette
@@ -49,12 +50,21 @@ namespace ReelRoulette
         private bool _postLoadWorkStarted;
         private int _activeRefreshCount;
         private static readonly TagMutationService _tagMutationService = new();
+        private readonly LibraryIndexStorageService<LibraryIndex> _libraryStorage;
 
         public event Action<FingerprintProgressSnapshot>? FingerprintProgressUpdated;
         public bool IsRefreshRunning => Volatile.Read(ref _activeRefreshCount) > 0;
 
         public LibraryService()
         {
+            _libraryStorage = new LibraryIndexStorageService<LibraryIndex>(new JsonFileStorageOptions<LibraryIndex>
+            {
+                FilePathResolver = AppDataManager.GetLibraryIndexPath,
+                CreateDefault = () => new LibraryIndex(),
+                SerializerOptions = new JsonSerializerOptions { WriteIndented = true },
+                Logger = Log
+            });
+
             _fingerprintCoordinator = new FingerprintCoordinator(
                 _fingerprintService,
                 Log,
@@ -353,70 +363,49 @@ namespace ReelRoulette
             Log("LibraryService.LoadLibrary: Starting...");
             try
             {
-                var path = AppDataManager.GetLibraryIndexPath();
-                Log($"LibraryService.LoadLibrary: Path = {path}");
-                
-                if (File.Exists(path))
+                var index = _libraryStorage.Load();
+                bool needsSaveAfterMigration = false;
+                lock (_lock)
                 {
-                    var json = File.ReadAllText(path);
-                    Log($"LibraryService.LoadLibrary: File exists, JSON length = {json.Length} characters");
-                    
-                    var index = JsonSerializer.Deserialize<LibraryIndex>(json);
-                    if (index != null)
+                    _libraryIndex = index;
+
+                    foreach (var item in _libraryIndex.Items)
                     {
-                        bool needsSaveAfterMigration = false;
-                        lock (_lock)
+                        var hadId = !string.IsNullOrWhiteSpace(item.Id);
+                        var oldStatus = item.FingerprintStatus;
+                        EnsureIdentityAndFingerprintDefaults(item);
+
+                        if (!hadId || oldStatus != item.FingerprintStatus)
                         {
-                            _libraryIndex = index;
-
-                            foreach (var item in _libraryIndex.Items)
-                            {
-                                var hadId = !string.IsNullOrWhiteSpace(item.Id);
-                                var oldStatus = item.FingerprintStatus;
-                                EnsureIdentityAndFingerprintDefaults(item);
-
-                                if (!hadId || oldStatus != item.FingerprintStatus)
-                                {
-                                    needsSaveAfterMigration = true;
-                                }
-                            }
-
-                            RebuildFingerprintIndex();
-                            
-                            // Check if migration is needed: old format has AvailableTags but not Categories/Tags
-                            _requiresTagMigration = (index.AvailableTags != null && index.AvailableTags.Count > 0) &&
-                                                    (index.Categories == null || index.Categories.Count == 0) &&
-                                                    (index.Tags == null || index.Tags.Count == 0);
-                            
-                            if (_requiresTagMigration)
-                            {
-                                Log($"LibraryService.LoadLibrary: Migration required - Found {index.AvailableTags?.Count ?? 0} flat tags that need to be categorized");
-                            }
-                            else if (index.Categories != null && index.Tags != null)
-                            {
-                                Log($"LibraryService.LoadLibrary: Using new tag format - {index.Categories.Count} categories, {index.Tags.Count} tags");
-                            }
-                            else
-                            {
-                                Log("LibraryService.LoadLibrary: No tags found in library");
-                            }
+                            needsSaveAfterMigration = true;
                         }
-                        Log($"LibraryService.LoadLibrary: Successfully loaded library - {index.Items.Count} items, {index.Sources.Count} sources");
+                    }
 
-                        if (needsSaveAfterMigration)
-                        {
-                            Log("LibraryService.LoadLibrary: Migration updates detected; scheduling save for post-load background work");
-                            _needsPostLoadSave = true;
-                        }
+                    RebuildFingerprintIndex();
+
+                    _requiresTagMigration = (index.AvailableTags != null && index.AvailableTags.Count > 0) &&
+                                            (index.Categories == null || index.Categories.Count == 0) &&
+                                            (index.Tags == null || index.Tags.Count == 0);
+
+                    if (_requiresTagMigration)
+                    {
+                        Log($"LibraryService.LoadLibrary: Migration required - Found {index.AvailableTags?.Count ?? 0} flat tags that need to be categorized");
+                    }
+                    else if (index.Categories != null && index.Tags != null)
+                    {
+                        Log($"LibraryService.LoadLibrary: Using new tag format - {index.Categories.Count} categories, {index.Tags.Count} tags");
                     }
                     else
                     {
-                        Log("LibraryService.LoadLibrary: File exists but deserialization returned null, using empty library");
+                        Log("LibraryService.LoadLibrary: No tags found in library");
                     }
                 }
-                else
+                Log($"LibraryService.LoadLibrary: Successfully loaded library - {index.Items.Count} items, {index.Sources.Count} sources");
+
+                if (needsSaveAfterMigration)
                 {
-                    Log("LibraryService.LoadLibrary: File does not exist, using empty library");
+                    Log("LibraryService.LoadLibrary: Migration updates detected; scheduling save for post-load background work");
+                    _needsPostLoadSave = true;
                 }
             }
             catch (Exception ex)
@@ -443,29 +432,14 @@ namespace ReelRoulette
             {
                 try
                 {
-                    var path = AppDataManager.GetLibraryIndexPath();
                     LibraryIndex indexToSave;
                     lock (_lock)
                     {
                         indexToSave = _libraryIndex;
                     }
-                    
-                    Log($"LibraryService.SaveLibrary: Saving {indexToSave.Items.Count} items, {indexToSave.Sources.Count} sources to {path}");
 
-                    var options = new JsonSerializerOptions
-                    {
-                        WriteIndented = true
-                    };
-                    var json = JsonSerializer.Serialize(indexToSave, options);
-                    Log($"LibraryService.SaveLibrary: Serialized to JSON, length = {json.Length} characters");
-                    
-                    // Write to a temp file first, then move it to prevent corruption
-                    var tempPath = path + ".tmp";
-                    File.WriteAllText(tempPath, json);
-                    
-                    // Replace the old file with the new one atomically
-                    File.Move(tempPath, path, true);
-                    Log($"LibraryService.SaveLibrary: Successfully saved library to {path}");
+                    _libraryStorage.Save(indexToSave);
+                    Log($"LibraryService.SaveLibrary: Saved {indexToSave.Items.Count} items, {indexToSave.Sources.Count} sources");
                 }
                 catch (Exception ex)
                 {
