@@ -23,3 +23,10 @@
 - Optional system checks with verbose output:
   - `dotnet run --project .\\src\\core\\ReelRoulette.Core.SystemChecks\\ReelRoulette.Core.SystemChecks.csproj -- --verbose`
 - Shared verification logic lives in `src/core/ReelRoulette.Core/Verification/CoreVerification.cs` and is reused by both test and harness flows.
+
+## M3 Reconnect/Resync Notes
+
+- `GET /api/events` supports reconnect using `Last-Event-ID`.
+- Server replays retained events newer than the supplied revision.
+- If a reconnect misses more history than replay retention, server emits `resyncRequired`.
+- Client recovers by calling `POST /api/library-states` to re-fetch authoritative state.

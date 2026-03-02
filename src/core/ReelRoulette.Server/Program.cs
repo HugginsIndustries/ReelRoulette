@@ -54,6 +54,12 @@ app.MapPost("/api/record-playback", (RecordPlaybackRequest request, ServerStateS
     return Results.Ok();
 });
 
+app.MapPost("/api/library-states", (LibraryStatesRequest request, ServerStateService state) =>
+{
+    var states = state.GetLibraryStates(request);
+    return Results.Ok(states);
+});
+
 app.MapGet("/api/events", async (HttpContext context, ServerStateService state) =>
 {
     context.Response.Headers.Append("Content-Type", "text/event-stream");
@@ -63,10 +69,42 @@ app.MapGet("/api/events", async (HttpContext context, ServerStateService state) 
     var cancellationToken = context.RequestAborted;
     var reader = state.Subscribe(cancellationToken);
     var serializerOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+    var lastEventHeader = context.Request.Headers["Last-Event-ID"].ToString();
+    var hasLastEvent = long.TryParse(lastEventHeader, out var lastEventRevision);
 
     // Initial control frame
     await context.Response.WriteAsync("retry: 1000\n\n", cancellationToken);
     await context.Response.Body.FlushAsync(cancellationToken);
+
+    if (hasLastEvent)
+    {
+        var replay = state.GetReplayAfter(lastEventRevision);
+        if (replay.GapDetected)
+        {
+            var resyncEnvelope = state.CreateEnvelope(
+                "resyncRequired",
+                new
+                {
+                    reason = "revisionGap",
+                    lastEventId = lastEventRevision,
+                    currentRevision = replay.CurrentRevision
+                });
+            var resyncJson = JsonSerializer.Serialize(resyncEnvelope, serializerOptions);
+            await context.Response.WriteAsync($"id: {resyncEnvelope.Revision}\n", cancellationToken);
+            await context.Response.WriteAsync($"event: {resyncEnvelope.EventType}\n", cancellationToken);
+            await context.Response.WriteAsync($"data: {resyncJson}\n\n", cancellationToken);
+            await context.Response.Body.FlushAsync(cancellationToken);
+        }
+
+        foreach (var missedEvent in replay.Events)
+        {
+            var replayJson = JsonSerializer.Serialize(missedEvent, serializerOptions);
+            await context.Response.WriteAsync($"id: {missedEvent.Revision}\n", cancellationToken);
+            await context.Response.WriteAsync($"event: {missedEvent.EventType}\n", cancellationToken);
+            await context.Response.WriteAsync($"data: {replayJson}\n\n", cancellationToken);
+            await context.Response.Body.FlushAsync(cancellationToken);
+        }
+    }
 
     while (await reader.WaitToReadAsync(cancellationToken))
     {

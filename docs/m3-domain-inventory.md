@@ -6,14 +6,14 @@
   - `src/core/ReelRoulette.Server/Contracts/ApiContracts.cs` (typed query/command/SSE contract models).
   - `src/core/ReelRoulette.Server/Contracts/ApiContractMapper.cs` (contract shaping/mapping helpers).
 - Server state/event domain service:
-  - `src/core/ReelRoulette.Server/Services/ServerStateService.cs` (in-memory state, revision sequencing, SSE envelope publishing).
+  - `src/core/ReelRoulette.Server/Services/ServerStateService.cs` (in-memory state, revision sequencing, SSE envelope publishing, replay buffer, and state re-fetch projection).
 - Contract source of truth:
   - `shared/api/openapi.yaml` (initial M3 query/command endpoints + SSE envelope schema).
 
 ## IO / Service Adapters (host + client boundary)
 
 - Thin server endpoint host:
-  - `src/core/ReelRoulette.Server/Program.cs` (health/version/presets/random/favorite/blacklist/record-playback/events endpoint wiring).
+  - `src/core/ReelRoulette.Server/Program.cs` (health/version/presets/random/favorite/blacklist/record-playback/library-states/events endpoint wiring with `Last-Event-ID` replay and gap-triggered `resyncRequired` signaling).
 - Desktop local HTTP seam proof:
   - `source/MainWindow.axaml.cs` (local `/api/version` probe to validate client to server contract boundary).
 

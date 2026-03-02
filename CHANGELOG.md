@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **Finalize M3 reconnect/resync contract and runtime behavior** (2026-03-01):
+  - Add `POST /api/library-states` to `ReelRoulette.Server` and OpenAPI for authoritative item-state re-fetch during reconnect recovery.
+  - Add SSE reconnect handling in `ReelRoulette.Server` for `Last-Event-ID` replay and emit `resyncRequired` when revision gaps exceed replay retention.
+  - Extend server state service with bounded replay history and revision-aware library state projections.
+  - Extend verification checks with replay/state-resync coverage in both xUnit contract tests and system-check harness.
+  - Update M3 documentation (`docs/api.md`, `docs/architecture.md`, `docs/dev-setup.md`, `docs/m3-domain-inventory.md`, `README.md`) to reflect final reconnect semantics.
+
 - **Implement M3 contract-first server seam and initial API boundary proof** (2026-03-01):
   - Expand `shared/api/openapi.yaml` from health-only to initial M3 query/command endpoints and typed SSE envelope schema (`revision`, `eventType`, `timestamp`, `payload`).
   - Add typed server contract models and mapping helpers under `src/core/ReelRoulette.Server/Contracts`.

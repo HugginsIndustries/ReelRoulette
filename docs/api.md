@@ -12,6 +12,11 @@
   - `eventType`
   - `timestamp`
   - `payload`
+- Reconnect/resync contract for M3 final state:
+  - Client reconnects to `GET /api/events` with `Last-Event-ID`.
+  - Server replays buffered events newer than that revision when available.
+  - If the gap exceeds replay retention, server emits `resyncRequired`.
+  - Client then re-fetches authoritative state via `POST /api/library-states`.
 
 ## M3 Initial Endpoint Surface
 
@@ -22,6 +27,7 @@
 - `POST /api/favorite`
 - `POST /api/blacklist`
 - `POST /api/record-playback`
+- `POST /api/library-states`
 - `GET /api/events` (`text/event-stream`)
 
 ## Near-Term Contract Tracks

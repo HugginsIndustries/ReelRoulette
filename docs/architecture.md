@@ -85,3 +85,4 @@ flowchart TD
 - `ReelRoulette.Server` now exposes initial query/command endpoints and an SSE event stream.
 - OpenAPI is expanded to document live M3 endpoint contracts and event envelope shape.
 - Desktop includes a local HTTP probe (`/api/version`) to prove the M3 integration boundary.
+- M3 reconnect semantics are explicit: `Last-Event-ID` replay is attempted first, and clients re-fetch state (`/api/library-states`) when a revision gap exceeds replay retention.

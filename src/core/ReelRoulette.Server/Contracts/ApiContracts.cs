@@ -52,6 +52,20 @@ public sealed class RecordPlaybackRequest
     public string Path { get; set; } = string.Empty;
 }
 
+public sealed class LibraryStatesRequest
+{
+    public List<string>? Paths { get; set; }
+}
+
+public sealed class LibraryStateResponse
+{
+    public string ItemId { get; set; } = string.Empty;
+    public string Path { get; set; } = string.Empty;
+    public bool IsFavorite { get; set; }
+    public bool IsBlacklisted { get; set; }
+    public long Revision { get; set; }
+}
+
 public sealed class ServerEventEnvelope
 {
     public long Revision { get; set; }

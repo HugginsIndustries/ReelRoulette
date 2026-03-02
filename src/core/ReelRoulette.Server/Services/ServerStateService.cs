@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Threading.Channels;
 using ReelRoulette.Server.Contracts;
 
@@ -8,10 +7,14 @@ public sealed class ServerStateService
 {
     private readonly object _revisionLock = new();
     private readonly object _subscribersLock = new();
+    private readonly object _historyLock = new();
+    private readonly object _itemStatesLock = new();
     private long _revision;
-    private readonly Dictionary<string, ItemStateChangedPayload> _itemStates = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, ItemStateRecord> _itemStates = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<Channel<ServerEventEnvelope>> _subscribers = new();
+    private readonly Queue<ServerEventEnvelope> _eventHistory = new();
     private readonly Random _random = new();
+    private const int EventHistoryCapacity = 256;
 
     private static readonly List<PresetResponse> Presets =
     [
@@ -51,15 +54,17 @@ public sealed class ServerStateService
     public void SetFavorite(FavoriteRequest request)
     {
         var current = GetOrCreateItemState(request.Path);
-        current.IsFavorite = request.IsFavorite;
-        Publish("itemStateChanged", current);
+        current.Payload.IsFavorite = request.IsFavorite;
+        var envelope = Publish("itemStateChanged", current.Payload);
+        current.Revision = envelope.Revision;
     }
 
     public void SetBlacklist(BlacklistRequest request)
     {
         var current = GetOrCreateItemState(request.Path);
-        current.IsBlacklisted = request.IsBlacklisted;
-        Publish("itemStateChanged", current);
+        current.Payload.IsBlacklisted = request.IsBlacklisted;
+        var envelope = Publish("itemStateChanged", current.Payload);
+        current.Revision = envelope.Revision;
     }
 
     public void RecordPlayback(RecordPlaybackRequest request)
@@ -70,6 +75,64 @@ public sealed class ServerStateService
             ClientId = request.ClientId
         };
         Publish("playbackRecorded", payload);
+    }
+
+    public ReplayResult GetReplayAfter(long revision)
+    {
+        var currentRevision = GetCurrentRevision();
+        lock (_historyLock)
+        {
+            if (_eventHistory.Count == 0)
+            {
+                return new ReplayResult
+                {
+                    CurrentRevision = currentRevision,
+                    GapDetected = revision > 0 && currentRevision > revision,
+                    Events = []
+                };
+            }
+
+            var snapshot = _eventHistory.ToArray();
+            var oldestRevision = snapshot[0].Revision;
+            var gapDetected = revision > 0 && currentRevision > revision && revision < oldestRevision - 1;
+            var replay = snapshot.Where(e => e.Revision > revision).ToList();
+            return new ReplayResult
+            {
+                CurrentRevision = currentRevision,
+                GapDetected = gapDetected,
+                Events = replay
+            };
+        }
+    }
+
+    public IReadOnlyList<LibraryStateResponse> GetLibraryStates(LibraryStatesRequest? request)
+    {
+        var requestedPaths = request?.Paths?
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        List<ItemStateRecord> items;
+        lock (_itemStatesLock)
+        {
+            items = _itemStates.Values.ToList();
+        }
+
+        if (requestedPaths is { Count: > 0 })
+        {
+            items = items.Where(record => requestedPaths.Contains(record.Payload.Path)).ToList();
+        }
+
+        return items
+            .OrderBy(record => record.Payload.Path, StringComparer.OrdinalIgnoreCase)
+            .Select(record => new LibraryStateResponse
+            {
+                ItemId = record.Payload.ItemId,
+                Path = record.Payload.Path,
+                IsFavorite = record.Payload.IsFavorite,
+                IsBlacklisted = record.Payload.IsBlacklisted,
+                Revision = record.Revision
+            })
+            .ToList();
     }
 
     public ChannelReader<ServerEventEnvelope> Subscribe(CancellationToken cancellationToken)
@@ -104,22 +167,29 @@ public sealed class ServerStateService
         return channel.Reader;
     }
 
-    private ItemStateChangedPayload GetOrCreateItemState(string path)
+    private ItemStateRecord GetOrCreateItemState(string path)
     {
-        if (_itemStates.TryGetValue(path, out var existing))
+        lock (_itemStatesLock)
         {
-            return existing;
-        }
+            if (_itemStates.TryGetValue(path, out var existing))
+            {
+                return existing;
+            }
 
-        var created = new ItemStateChangedPayload
-        {
-            ItemId = Guid.NewGuid().ToString("N"),
-            Path = path,
-            IsFavorite = false,
-            IsBlacklisted = false
-        };
-        _itemStates[path] = created;
-        return created;
+            var created = new ItemStateRecord
+            {
+                Payload = new ItemStateChangedPayload
+                {
+                    ItemId = Guid.NewGuid().ToString("N"),
+                    Path = path,
+                    IsFavorite = false,
+                    IsBlacklisted = false
+                },
+                Revision = 0
+            };
+            _itemStates[path] = created;
+            return created;
+        }
     }
 
     public ServerEventEnvelope CreateEnvelope(string eventType, object payload)
@@ -139,9 +209,26 @@ public sealed class ServerStateService
         };
     }
 
-    private void Publish(string eventType, object payload)
+    public long GetCurrentRevision()
+    {
+        lock (_revisionLock)
+        {
+            return _revision;
+        }
+    }
+
+    private ServerEventEnvelope Publish(string eventType, object payload)
     {
         var envelope = CreateEnvelope(eventType, payload);
+        lock (_historyLock)
+        {
+            _eventHistory.Enqueue(envelope);
+            while (_eventHistory.Count > EventHistoryCapacity)
+            {
+                _eventHistory.Dequeue();
+            }
+        }
+
         List<Channel<ServerEventEnvelope>> subscribersSnapshot;
         lock (_subscribersLock)
         {
@@ -152,5 +239,20 @@ public sealed class ServerStateService
         {
             subscriber.Writer.TryWrite(envelope);
         }
+
+        return envelope;
     }
+
+    private sealed class ItemStateRecord
+    {
+        public ItemStateChangedPayload Payload { get; init; } = new();
+        public long Revision { get; set; }
+    }
+}
+
+public sealed class ReplayResult
+{
+    public long CurrentRevision { get; init; }
+    public bool GapDetected { get; init; }
+    public IReadOnlyList<ServerEventEnvelope> Events { get; init; } = [];
 }

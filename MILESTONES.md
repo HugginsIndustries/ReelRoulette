@@ -15,9 +15,11 @@ It is designed to be:
 - Keep existing desktop behavior functional while migrating.
 - Move business logic to core before moving UI behavior.
 - Keep `ReelRoulette.Server` thin; put domain logic in `ReelRoulette.Core`.
+- `ReelRoulette.Server` contains only HTTP/SSE/auth/streaming glue (no direct JSON file I/O).
 - Treat `shared/api/openapi.yaml` as API source of truth.
 - Use SSE revisions for cross-client consistency.
 - Prefer adapters during transition over hard cutovers.
+- No state mutation happens in two places: once a flow is migrated to core/server, desktop must not also write JSON directly for that same data.
 
 ---
 
@@ -94,6 +96,7 @@ It is designed to be:
 - **Acceptance criteria**:
   - OpenAPI validates and documents live endpoints.
   - SSE event envelope stable (`revision`, `eventType`, timestamp, payload).
+  - Client reconnect behavior is explicitly defined (minimum: reconnect detects missed revisions and re-fetches state; optional replay endpoint may be added later).
   - Desktop can call at least one state query via HTTP locally.
 
 ## M4 - Worker Runtime (Headless Host)
@@ -101,17 +104,29 @@ It is designed to be:
 - **Goal**: Run core runtime independently of desktop UI.
 - **Scope**:
   - Implement `ReelRoulette.Worker` to host server + scheduled/background jobs.
+  - Worker runtime target for this milestone:
+    - run as console host first (service packaging/hardening deferred)
   - Add worker lifecycle:
     - start
     - stop
     - health check
     - graceful shutdown
+  - Add pairing/auth primitive used by web and future clients:
+    - auth can be required
+    - localhost trust can be optionally enabled for dev workflows
+    - LAN access requires pairing token/cookie
+  - Add desktop lifecycle UX for headless core:
+    - desktop detects core not running
+    - desktop can show friendly `Start Core` action (or equivalent auto-start behavior)
   - Add scripts:
     - `tools/scripts/run-core.ps1`
     - `tools/scripts/run-core.sh`
 - **Acceptance criteria**:
   - Worker runs headless and serves API/SSE.
+  - Worker can be launched as console host on Windows.
   - Desktop can connect to worker localhost API.
+  - Auth/pairing primitive is functional (required auth supported; localhost trust optional; LAN pairing enforced when configured).
+  - Desktop provides a clear UX path when core is not running.
   - Closing desktop UI does not stop worker background jobs (when configured).
 
 ## M5 - Desktop as API Client (State Flows)
@@ -130,14 +145,23 @@ It is designed to be:
   - SSE updates keep desktop UI in sync with out-of-process changes.
   - Existing user workflows remain stable.
 
-## M6 - P1 Feature Alignment Through API (Tag Editing + Grid/Thumbnails)
+## M6a - P1 Feature Alignment Through API (Web Tag Editing)
 
-- **Goal**: Implement top-priority features using new architecture seams.
+- **Goal**: Ship API-backed web tag editing parity as an independent, low-blast-radius milestone.
 - **Scope**:
   - Implement API-backed **Web Remote Tag Editing** parity:
     - tag/category edit flows
     - batch-ready `itemIds[]`
     - immediate SSE sync
+- **Acceptance criteria**:
+  - Web remote tag editing works end-to-end through server/core.
+  - Desktop and web remain synchronized via SSE for tag/category/item-tag changes.
+  - Tag editing can ship independently of grid/thumbnail/pipeline refactors.
+
+## M6b - P1 Feature Alignment Through API (Grid/Thumbnails + Unified Refresh Pipeline)
+
+- **Goal**: Deliver API-backed grid/thumbnails and refresh pipeline refactor as a separate milestone.
+- **Scope**:
   - Implement API-backed **Grid View with Thumbnail Generation** pipeline:
     - list/grid toggle persistence
     - thumbnail generation for photos/videos
@@ -147,10 +171,15 @@ It is designed to be:
       3. loudness scan
       4. thumbnail generation
     - manual refresh behavior aligned to background auto-refresh workflow
+  - Define thumbnail artifact policy before feature completion:
+    - artifact location convention (for example, `data/thumbnails/{itemId}.jpg`)
+    - invalidation rules (file change/fingerprint change -> thumbnail stale/regenerate)
+    - target size/quality and video thumbnail timestamp strategy
 - **Acceptance criteria**:
-  - Both P1 features work end-to-end through server/core.
+  - Grid view and thumbnail generation work end-to-end through server/core.
   - No standalone legacy duration/loudness actions in UX (as planned).
   - Refresh progress/status remains observable while dialogs close.
+  - Thumbnail artifact/invalidation policy is implemented and documented.
 
 ## M7 - Web UI Separation and Build Pipeline
 
@@ -170,7 +199,7 @@ It is designed to be:
 - **Scope**:
   - Create `src/clients/android/ReelRoulette.Android` Gradle project.
   - Implement basic API connectivity + SSE consumption.
-  - Add mDNS discovery and pairing/auth flow compatible with server.
+  - Add mDNS discovery and integrate with the existing pairing/auth primitive from earlier milestones.
   - Optional: generate Kotlin API client from OpenAPI.
 - **Acceptance criteria**:
   - Android app can discover/connect, list presets, request random media, and stream.
@@ -200,6 +229,7 @@ These run in parallel across milestones:
 
 - **Contract discipline**:
   - Keep `openapi.yaml` current.
+  - Update OpenAPI whenever endpoint shape/behavior changes (do not require unrelated OpenAPI churn).
   - Add change log section for API breaking/non-breaking changes.
 
 - **Observability**:

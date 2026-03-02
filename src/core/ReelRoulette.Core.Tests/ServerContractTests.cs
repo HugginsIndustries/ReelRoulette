@@ -26,4 +26,32 @@ public sealed class ServerContractTests
         Assert.Equal("testEvent", first.EventType);
         Assert.Equal("testEvent", second.EventType);
     }
+
+    [Fact]
+    public void ReplayAfter_ShouldReturnBufferedEventsWithoutGap()
+    {
+        var service = new ServerStateService();
+        service.SetFavorite(new FavoriteRequest { Path = "a.mp4", IsFavorite = true });
+        service.SetBlacklist(new BlacklistRequest { Path = "b.mp4", IsBlacklisted = true });
+
+        var replay = service.GetReplayAfter(1);
+        Assert.False(replay.GapDetected);
+        Assert.Single(replay.Events);
+        Assert.True(replay.Events[0].Revision > 1);
+    }
+
+    [Fact]
+    public void LibraryStates_ShouldExposeLatestRevisionForItem()
+    {
+        var service = new ServerStateService();
+        service.SetFavorite(new FavoriteRequest { Path = "movie.mp4", IsFavorite = true });
+        service.SetBlacklist(new BlacklistRequest { Path = "movie.mp4", IsBlacklisted = true });
+
+        var states = service.GetLibraryStates(new LibraryStatesRequest { Paths = ["movie.mp4"] });
+        var state = Assert.Single(states);
+        Assert.Equal("movie.mp4", state.Path);
+        Assert.True(state.IsFavorite);
+        Assert.True(state.IsBlacklisted);
+        Assert.True(state.Revision > 0);
+    }
 }

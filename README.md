@@ -25,6 +25,11 @@ dotnet run --project .\src\core\ReelRoulette.Server\ReelRoulette.Server.csproj
 dotnet run --project .\src\core\ReelRoulette.Worker\ReelRoulette.Worker.csproj
 ```
 
+M3 server seam notes:
+
+- `ReelRoulette.Server` exposes initial query/command endpoints plus `GET /api/events` SSE.
+- SSE reconnect supports `Last-Event-ID` replay and uses `POST /api/library-states` for authoritative resync when history gaps are detected.
+
 ## Testing
 
 Default test gate:

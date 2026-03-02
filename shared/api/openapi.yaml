@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: ReelRoulette API
-  version: 0.3.0
+  version: 0.3.1
   description: Contract-first API (M3 initial query/command and SSE envelope).
 paths:
   /health:
@@ -126,10 +126,48 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/library-states:
+    post:
+      summary: Fetch authoritative item state snapshots
+      operationId: postLibraryStates
+      description: |
+        Re-fetch endpoint used during SSE reconnect/resync flows.
+        Clients submit known item paths and receive current favorite/blacklist
+        state with the latest revision observed for each item.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LibraryStatesRequest"
+      responses:
+        "200":
+          description: State snapshots for requested paths (or all known states when no paths are provided)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LibraryStateResponse"
+
   /api/events:
     get:
       summary: Stream server events
       operationId: getEventsSse
+      description: |
+        SSE stream with monotonic `id` values matching envelope `revision`.
+        Reconnect behavior:
+        - Client reconnects with `Last-Event-ID`.
+        - Server replays buffered events newer than that revision when available.
+        - If the revision gap exceeds replay buffer retention, server emits a
+          `resyncRequired` event and client must call `/api/library-states`.
+      parameters:
+        - name: Last-Event-ID
+          in: header
+          required: false
+          schema:
+            type: string
+          description: Last acknowledged SSE revision from the previous connection.
       responses:
         "200":
           description: Event stream (SSE)
@@ -288,6 +326,7 @@ components:
           oneOf:
             - $ref: "#/components/schemas/ItemStateChangedPayload"
             - $ref: "#/components/schemas/PlaybackRecordedPayload"
+            - $ref: "#/components/schemas/ResyncRequiredPayload"
 
     ItemStateChangedPayload:
       type: object
@@ -316,3 +355,50 @@ components:
         clientId:
           type: string
           nullable: true
+
+    ResyncRequiredPayload:
+      type: object
+      required:
+        - reason
+        - lastEventId
+        - currentRevision
+      properties:
+        reason:
+          type: string
+          example: revisionGap
+        lastEventId:
+          type: integer
+          format: int64
+        currentRevision:
+          type: integer
+          format: int64
+
+    LibraryStatesRequest:
+      type: object
+      properties:
+        paths:
+          type: array
+          items:
+            type: string
+          nullable: true
+
+    LibraryStateResponse:
+      type: object
+      required:
+        - itemId
+        - path
+        - isFavorite
+        - isBlacklisted
+        - revision
+      properties:
+        itemId:
+          type: string
+        path:
+          type: string
+        isFavorite:
+          type: boolean
+        isBlacklisted:
+          type: boolean
+        revision:
+          type: integer
+          format: int64
