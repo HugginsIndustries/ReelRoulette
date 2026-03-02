@@ -149,13 +149,20 @@ It is designed to be:
 ## M6a - P1 Feature Alignment Through API (Web Tag Editing)
 
 - **Goal**: Ship API-backed web tag editing parity as an independent, low-blast-radius milestone.
+- **Linked TODO**: `Web Remote Tag Editing (API-First, Desktop-Parity)` in `TODO.md`.
 - **Scope**:
   - Implement API-backed **Web Remote Tag Editing** parity:
     - tag/category edit flows
     - batch-ready `itemIds[]`
     - immediate SSE sync
+  - Migrate desktop tag/category/item-tag mutation flows to the same core/server command path:
+    - desktop tag editing remains orchestration/UI only
+    - mutation authority for migrated tag flows is core/server
+    - remove direct desktop JSON mutation for migrated tag/category/item-tag paths
 - **Acceptance criteria**:
   - Web remote tag editing works end-to-end through server/core.
+  - Desktop and web tag edits execute through the same API/core mutation services (single-writer for migrated tag flows).
+  - Desktop does not directly mutate JSON for migrated tag/category/item-tag flows.
   - Desktop and web remain synchronized via SSE for tag/category/item-tag changes.
   - Tag editing can ship independently of grid/thumbnail/pipeline refactors.
   - Regression tests validate tag/category mutation contracts plus SSE sync projections (including batch-ready `itemIds[]` request handling) and pass in `dotnet test`.
@@ -163,6 +170,7 @@ It is designed to be:
 ## M6b - P1 Feature Alignment Through API (Grid/Thumbnails + Unified Refresh Pipeline)
 
 - **Goal**: Deliver API-backed grid/thumbnails and refresh pipeline refactor as a separate milestone.
+- **Linked TODO**: `Grid View for Library Panel with Thumbnail Generation (Unified Refresh Pipeline)` in `TODO.md`.
 - **Scope**:
   - Implement API-backed **Grid View with Thumbnail Generation** pipeline:
     - list/grid toggle persistence
@@ -195,6 +203,7 @@ It is designed to be:
   - Web UI builds independently from desktop app build.
   - Server can serve production web assets from web build output.
   - No API drift between web and desktop clients.
+  - Legacy embedded web-remote mutation paths are removed once new web UI serves equivalent flows.
   - Regression tests include build-output asset serving and contract compatibility checks against current OpenAPI, and pass in `dotnet test`.
 
 ## M8 - Android Client Bootstrap
@@ -208,6 +217,7 @@ It is designed to be:
 - **Acceptance criteria**:
   - Android app can discover/connect, list presets, request random media, and stream.
   - Event sync works for favorite/blacklist/tag updates.
+  - Mobile resume/reconnect auth continuity is verified (pairing/auth state survives app background/resume and SSE reconnect paths).
   - Regression tests validate Android client API/SSE compatibility expectations (schema, event envelope handling, and reconnect behavior) and pass in `dotnet test`.
 
 ## M9 - Hardening, Packaging, and Migration Cleanup
@@ -224,6 +234,7 @@ It is designed to be:
 - **Acceptance criteria**:
   - Stable multi-client operation (desktop + web at minimum).
   - No critical state divergence between clients.
+  - All migrated domains (state/tag/random/filter/etc.) have zero direct desktop JSON mutation paths; exceptions list is empty or explicitly documented.
   - Migration and upgrade path documented.
   - Full regression suite (unit + integration + reconnect/ordering checks) is part of the default CI `dotnet test` gate and remains green.
 

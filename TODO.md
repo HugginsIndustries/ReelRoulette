@@ -28,6 +28,7 @@ Each TODO entry follows this structure:
 ### Web Remote Tag Editing (API-First, Desktop-Parity)
 
 - **Priority**: P1
+- **Milestone Link**: `M6a - P1 Feature Alignment Through API (Web Tag Editing)` in `MILESTONES.md`
 - **Impact**: High - Delivers desktop-equivalent tag editing from web remote and establishes reusable API/core seams for multi-client architecture.
 - **Description**: Implement full-screen web tag editing with strict functional parity to desktop `ItemTagsDialog`, while moving tag logic and mutation flows into Core + Server APIs so desktop and web both act as clients.
 - **Implementation**:
@@ -63,6 +64,7 @@ Each TODO entry follows this structure:
 ### Grid View for Library Panel with Thumbnail Generation (Unified Refresh Pipeline)
 
 - **Priority**: P1
+- **Milestone Link**: `M6b - P1 Feature Alignment Through API (Grid/Thumbnails + Unified Refresh Pipeline)` in `MILESTONES.md`
 - **Impact**: High - Adds modern visual browsing and consolidates heavy media processing into one background pipeline suitable for headless worker/server architecture.
 - **Description**: Add List/Grid view modes and thumbnail generation for all media, then unify source refresh, duration scan, loudness scan, and thumbnail generation into a single sequential background refresh workflow shared by manual and auto refresh.
 - **Implementation**:
