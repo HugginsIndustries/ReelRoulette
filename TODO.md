@@ -25,42 +25,6 @@ Each TODO entry follows this structure:
 
 ## P1 - High Priority
 
-### Web Remote Tag Editing (API-First, Desktop-Parity)
-
-- **Priority**: P1
-- **Milestone Link**: `M6a - P1 Feature Alignment Through API (Web Tag Editing)` in `MILESTONES.md`
-- **Impact**: High - Delivers desktop-equivalent tag editing from web remote and establishes reusable API/core seams for multi-client architecture.
-- **Description**: Implement full-screen web tag editing with strict functional parity to desktop `ItemTagsDialog`, while moving tag logic and mutation flows into Core + Server APIs so desktop and web both act as clients.
-- **Implementation**:
-  - **Core-first extraction**:
-    - Move shared tag/preset/category mutation logic into `ReelRoulette.Core` services (no Avalonia/UI dependencies).
-    - Keep desktop `ItemTagsDialog` as source-of-truth behavior while replacing direct mutation paths with calls into shared core services.
-  - **API contract (batch-ready from day 1)**:
-    - Define OpenAPI-backed tag endpoints that accept `itemIds: string[]` (initial web caller can still send current item only).
-    - Add endpoints for:
-      - editable tag model query (categories/tags/current item state),
-      - apply add/remove tag deltas to items,
-      - create/rename/move tag and category assignment flows,
-      - preset update behavior when tag names change.
-    - Concurrency policy: last write wins.
-  - **Web UI behavior**:
-    - Add tag edit button in media bottom controls between Next and Loop, using desktop-style tag icon/emoji.
-    - Open a full-screen editor.
-    - Match desktop icon ordering and state colors (`✏️`, `➕`, `➖`; green/orange/violet semantics).
-    - Keep responsive chip wrapping while preserving desktop spacing/padding/interaction patterns.
-  - **Playback behavior while editing (web only)**:
-    - Pause web video playback while editor is open.
-    - Suspend photo autoplay progression while editor is open.
-    - On close, resume only if media was playing before open; for photos, restart timer only if autoplay was active before open.
-  - **Realtime sync**:
-    - Emit immediate SSE events for tag/category/item-tag mutations so desktop/web remain in sync without polling delay.
-    - Use revisioned events compatible with shared server event model.
-  - **Forward compatibility**:
-    - Keep API and client state batch-capable to support future web library-view parity.
-- **Notes**:
-  - Tag editing is always available in web remote (no feature gate).
-  - Slight responsive layout differences are acceptable; functional behavior must match desktop exactly.
-
 ### Grid View for Library Panel with Thumbnail Generation (Unified Refresh Pipeline)
 
 - **Priority**: P1

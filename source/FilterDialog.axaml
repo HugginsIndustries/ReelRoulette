@@ -180,7 +180,7 @@
                                        FontSize="13"
                                        Margin="0,0,0,4"/>
                             <TextBlock x:Name="NoTagsTextBlock"
-                                       Text="No tags available. Use Library → Manage Tags to create tags."
+                                      Text="No tags available. Use Edit tags (T) to create tags."
                                        Foreground="Gray"
                                        TextWrapping="Wrap"
                                        Margin="0,0,0,8"

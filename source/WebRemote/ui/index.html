@@ -46,6 +46,7 @@
             <button id="prev-btn" class="overlay-btn" aria-label="Previous" title="Previous">⏮</button>
             <button id="play-btn" class="overlay-btn overlay-btn-play" aria-label="Play/Pause" title="Play/Pause">⏯</button>
             <button id="next-btn" class="overlay-btn" aria-label="Next" title="Next">⏭</button>
+            <button id="tag-edit-btn" class="overlay-btn" aria-label="Edit Tags" title="Edit Tags">🏷️</button>
             <button id="loop-btn" class="overlay-btn overlay-toggle" aria-label="Loop" title="Loop">🔂</button>
             <button id="autoplay-btn" class="overlay-btn overlay-toggle" aria-label="Autoplay" title="Autoplay">➡️</button>
             <button id="fullscreen-btn" class="overlay-btn" aria-label="Fullscreen" title="Fullscreen">⛶</button>
@@ -57,6 +58,36 @@
         </div>
       </div>
     </main>
+    <div id="tag-editor" class="tag-editor" style="display:none">
+      <div class="tag-editor-header">
+        <h2>Tag Editor</h2>
+        <div class="tag-editor-actions">
+          <button id="tag-editor-add-category-btn">➕ Category</button>
+          <button id="tag-editor-refresh-btn" title="Refresh" aria-label="Refresh">🔄</button>
+          <button id="tag-editor-close-btn" title="Close" aria-label="Close">❌</button>
+        </div>
+      </div>
+      <div id="tag-editor-body" class="tag-editor-body"></div>
+      <div class="tag-editor-footer">
+        <select id="tag-editor-category-select"></select>
+        <input id="tag-editor-new-tag" type="text" placeholder="New tag name">
+        <button id="tag-editor-add-tag-btn">➕ Tag</button>
+        <button id="tag-editor-apply-btn" title="Apply" aria-label="Apply">✅️</button>
+      </div>
+      <div id="tag-edit-modal" class="tag-edit-modal" style="display:none">
+        <div class="tag-edit-modal-card">
+          <h3>Edit Tag</h3>
+          <label for="tag-edit-name">Tag Name</label>
+          <input id="tag-edit-name" type="text" autocomplete="off">
+          <label for="tag-edit-category">Category</label>
+          <select id="tag-edit-category"></select>
+          <div class="tag-edit-modal-actions">
+            <button id="tag-edit-cancel-btn" type="button">Cancel</button>
+            <button id="tag-edit-save-btn" type="button">Save</button>
+          </div>
+        </div>
+      </div>
+    </div>
     <div id="status" class="status status-bottom"></div>
   </div>
   <script src="/app.js"></script>

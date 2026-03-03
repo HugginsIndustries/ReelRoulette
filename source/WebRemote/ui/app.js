@@ -3,6 +3,8 @@
   const CLIENT_ID_KEY = 'rr_clientId';
   const PHOTO_DURATION_KEY = 'rr_photoDuration';
   const RANDOMIZATION_MODE_KEY = 'rr_randomizationMode';
+  const TAG_EDITOR_COLLAPSED_KEY = 'rr_tagEditorCollapsed';
+  const UNCATEGORIZED_CATEGORY_ID = 'uncategorized';
 
   function getClientId() {
     let id = localStorage.getItem(CLIENT_ID_KEY);
@@ -31,7 +33,17 @@
     photoDurationSeconds: 15,
     clientId: getClientId(),
     randomizationMode: 'SmartShuffle',
-    lastRecordedPresentationKey: ''
+    lastRecordedPresentationKey: '',
+    tagEditorOpen: false,
+    tagEditorModel: null,
+    tagEditorSelections: new Map(),
+    tagEditorPending: null,
+    tagEditorCategoryOrder: [],
+    tagEditorCollapsedCategories: new Set(),
+    tagEditorItemIds: [],
+    tagEditContext: null,
+    tagEditorWasPlaying: false,
+    tagEditorPhotoTimerRunning: false
   };
   let photoTimerId = null;
   let touchStartX = 0, touchStartY = 0, touchWasSwipe = false, touchHandledTap = false, ignoreSwipeTouch = false;
@@ -70,6 +82,21 @@
   const blacklistBtn = el('blacklist-btn');
   const loopBtn = el('loop-btn');
   const autoplayBtn = el('autoplay-btn');
+  const tagEditBtn = el('tag-edit-btn');
+  const tagEditor = el('tag-editor');
+  const tagEditorBody = el('tag-editor-body');
+  const tagEditorCategorySelect = el('tag-editor-category-select');
+  const tagEditorNewTag = el('tag-editor-new-tag');
+  const tagEditorAddTagBtn = el('tag-editor-add-tag-btn');
+  const tagEditorApplyBtn = el('tag-editor-apply-btn');
+  const tagEditorCloseBtn = el('tag-editor-close-btn');
+  const tagEditorRefreshBtn = el('tag-editor-refresh-btn');
+  const tagEditorAddCategoryBtn = el('tag-editor-add-category-btn');
+  const tagEditModal = el('tag-edit-modal');
+  const tagEditNameInput = el('tag-edit-name');
+  const tagEditCategorySelect = el('tag-edit-category');
+  const tagEditCancelBtn = el('tag-edit-cancel-btn');
+  const tagEditSaveBtn = el('tag-edit-save-btn');
   mediaContainer.classList.add('controls-visible');
 
   function setStatus(msg) { statusEl.textContent = msg; }
@@ -195,6 +222,819 @@
       .finally(function () {
         reconcileInFlight = false;
       });
+  }
+
+  function apiPost(path, payload) {
+    return fetch(API + path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(payload || {})
+    });
+  }
+
+  function createTagEditorPending() {
+    return {
+      upsertCategories: new Map(),
+      deleteCategoryIds: new Set(),
+      upsertTags: new Map(),
+      renameTags: new Map(),
+      deleteTags: new Map()
+    };
+  }
+
+  function resetTagEditorPending() {
+    state.tagEditorSelections = new Map();
+    state.tagEditorPending = createTagEditorPending();
+  }
+
+  function loadTagEditorCollapsedCategories() {
+    try {
+      var raw = sessionStorage.getItem(TAG_EDITOR_COLLAPSED_KEY);
+      if (!raw) return new Set();
+      var arr = JSON.parse(raw);
+      if (!Array.isArray(arr)) return new Set();
+      return new Set(arr.map(function (id) { return String(id || ''); }));
+    } catch {
+      return new Set();
+    }
+  }
+
+  function persistTagEditorCollapsedCategories() {
+    try {
+      sessionStorage.setItem(TAG_EDITOR_COLLAPSED_KEY, JSON.stringify(Array.from(state.tagEditorCollapsedCategories)));
+    } catch {
+      // best-effort only
+    }
+  }
+
+  function normalizeTagKey(tagName) {
+    return String(tagName || '').trim().toLowerCase();
+  }
+
+  function isUncategorizedCategoryId(categoryId) {
+    var id = String(categoryId || '').trim().toLowerCase();
+    return id === '' || id === UNCATEGORIZED_CATEGORY_ID;
+  }
+
+  function isUncategorizedCategory(category) {
+    if (!category) return false;
+    if (isUncategorizedCategoryId(category.id)) return true;
+    return String(category.name || '').trim().toLowerCase() === 'uncategorized';
+  }
+
+  function canonicalizeCategories(categories) {
+    var deduped = new Map();
+    (categories || []).forEach(function (cat, idx) {
+      var normalized = {
+        id: isUncategorizedCategory(cat) ? UNCATEGORIZED_CATEGORY_ID : String(cat.id || ''),
+        name: String(cat.name || ''),
+        sortOrder: Number(cat.sortOrder ?? idx)
+      };
+      if (isUncategorizedCategoryId(normalized.id) && !normalized.name) {
+        normalized.name = 'Uncategorized';
+      }
+
+      var existing = deduped.get(normalized.id);
+      if (!existing) {
+        deduped.set(normalized.id, normalized);
+        return;
+      }
+
+      if (normalized.sortOrder < existing.sortOrder) {
+        existing.sortOrder = normalized.sortOrder;
+      }
+      if (normalized.name && !existing.name) {
+        existing.name = normalized.name;
+      }
+    });
+
+    return Array.from(deduped.values());
+  }
+
+  function ensureUncategorizedCategory(categories, include) {
+    var hasUncategorized = categories.some(function (c) { return isUncategorizedCategoryId(c.id); });
+    if (include && !hasUncategorized) {
+      categories.push({ id: UNCATEGORIZED_CATEGORY_ID, name: 'Uncategorized', sortOrder: Number.MAX_SAFE_INTEGER });
+    }
+    if (!include && hasUncategorized) {
+      categories = categories.filter(function (c) { return !isUncategorizedCategoryId(c.id); });
+    }
+
+    return categories;
+  }
+
+  function getCategoryOptionsForInputs(categories) {
+    var opts = canonicalizeCategories(Array.isArray(categories) ? categories.slice() : []);
+    if (!opts.some(function (c) { return isUncategorizedCategoryId(c.id); })) {
+      opts.push({ id: UNCATEGORIZED_CATEGORY_ID, name: 'Uncategorized', sortOrder: Number.MAX_SAFE_INTEGER });
+    }
+    opts.sort(function (a, b) {
+      var x = Number(a.sortOrder || 0);
+      var y = Number(b.sortOrder || 0);
+      if (x !== y) return x - y;
+      return String(a.name || '').localeCompare(String(b.name || ''));
+    });
+    return opts;
+  }
+
+  function getCurrentItemIdsForTagEditor() {
+    if (Array.isArray(state.tagEditorItemIds) && state.tagEditorItemIds.length > 0) {
+      return state.tagEditorItemIds.slice();
+    }
+
+    return state.current?.id ? [state.current.id] : [];
+  }
+
+  function getCategoryNameById(categoryId) {
+    var categories = Array.isArray(state.tagEditorModel?.categories) ? state.tagEditorModel.categories : [];
+    var match = categories.find(function (c) { return String(c.id || '') === String(categoryId || ''); });
+    if (match) return String(match.name || '');
+
+    if (state.tagEditorPending?.upsertCategories?.has(String(categoryId || ''))) {
+      return String(state.tagEditorPending.upsertCategories.get(String(categoryId || '')).name || '');
+    }
+
+    return '';
+  }
+
+  function reorderCategories(baseCategories) {
+    var includeUncategorized = baseCategories.some(function (c) { return isUncategorizedCategoryId(c.id); });
+    var categoriesById = new Map();
+    baseCategories.forEach(function (c) {
+      categoriesById.set(String(c.id || ''), c);
+    });
+
+    if (!Array.isArray(state.tagEditorCategoryOrder) || state.tagEditorCategoryOrder.length === 0) {
+      state.tagEditorCategoryOrder = baseCategories.map(function (c) { return String(c.id || ''); });
+    }
+
+    var ordered = [];
+    var seen = new Set();
+    state.tagEditorCategoryOrder.forEach(function (id) {
+      var key = String(id || '');
+      if (seen.has(key)) return;
+      if (!categoriesById.has(key)) return;
+      ordered.push(categoriesById.get(key));
+      seen.add(key);
+    });
+
+    baseCategories.forEach(function (c) {
+      var key = String(c.id || '');
+      if (seen.has(key)) return;
+      if (isUncategorizedCategoryId(key)) return;
+      ordered.push(c);
+      seen.add(key);
+    });
+
+    if (includeUncategorized) {
+      var uncategorized = categoriesById.get(UNCATEGORIZED_CATEGORY_ID) || { id: UNCATEGORIZED_CATEGORY_ID, name: 'Uncategorized', sortOrder: Number.MAX_SAFE_INTEGER };
+      ordered.push(uncategorized);
+    }
+
+    state.tagEditorCategoryOrder = ordered.map(function (c) { return String(c.id || ''); });
+    return ordered;
+  }
+
+  function buildTagEditorDisplayModel() {
+    var model = state.tagEditorModel || { categories: [], tags: [], items: [] };
+    var pending = state.tagEditorPending || createTagEditorPending();
+
+    var categories = canonicalizeCategories((Array.isArray(model.categories) ? model.categories : [])
+      .map(function (c) {
+        return {
+          id: String(c.id || ''),
+          name: String(c.name || ''),
+          sortOrder: Number(c.sortOrder || 0)
+        };
+      }));
+
+    pending.upsertCategories.forEach(function (cat, key) {
+      if (!key) return;
+      var existing = categories.find(function (c) { return c.id === key; });
+      if (existing) {
+        existing.name = String(cat.name || existing.name || '');
+      } else {
+        categories.push({
+          id: key,
+          name: String(cat.name || ''),
+          sortOrder: Number(cat.sortOrder || 0)
+        });
+      }
+    });
+
+    categories = canonicalizeCategories(categories);
+    categories = categories.filter(function (c) {
+      if (isUncategorizedCategoryId(c.id)) return true;
+      return !pending.deleteCategoryIds.has(c.id);
+    });
+
+    var tags = (Array.isArray(model.tags) ? model.tags : [])
+      .map(function (t) {
+        return {
+          name: String(t.name || ''),
+          categoryId: String(t.categoryId || UNCATEGORIZED_CATEGORY_ID)
+        };
+      })
+      .filter(function (t) { return t.name.length > 0; });
+
+    pending.upsertTags.forEach(function (tagOp, key) {
+      var existing = tags.find(function (t) { return normalizeTagKey(t.name) === key; });
+      if (existing) {
+        existing.categoryId = String(tagOp.categoryId || UNCATEGORIZED_CATEGORY_ID);
+      } else {
+        tags.push({
+          name: String(tagOp.name || ''),
+          categoryId: String(tagOp.categoryId || UNCATEGORIZED_CATEGORY_ID)
+        });
+      }
+    });
+
+    pending.renameTags.forEach(function (renameOp) {
+      var existing = tags.find(function (t) { return normalizeTagKey(t.name) === normalizeTagKey(renameOp.oldName); });
+      if (existing) {
+        existing.name = String(renameOp.newName || existing.name);
+        if (typeof renameOp.newCategoryId === 'string') {
+          existing.categoryId = renameOp.newCategoryId;
+        }
+      }
+    });
+
+    var items = (Array.isArray(model.items) ? model.items : [])
+      .map(function (item) {
+        return {
+          itemId: String(item?.itemId || ''),
+          tags: Array.isArray(item?.tags) ? item.tags.slice() : []
+        };
+      });
+
+    pending.renameTags.forEach(function (renameOp) {
+      var oldKey = normalizeTagKey(renameOp.oldName);
+      var newName = String(renameOp.newName || renameOp.oldName || '');
+      var newKey = normalizeTagKey(newName);
+      items.forEach(function (item) {
+        if (!Array.isArray(item.tags)) item.tags = [];
+        var hasOld = item.tags.some(function (t) { return normalizeTagKey(t) === oldKey; });
+        if (!hasOld) return;
+        item.tags = item.tags.filter(function (t) { return normalizeTagKey(t) !== oldKey; });
+        if (!item.tags.some(function (t) { return normalizeTagKey(t) === newKey; })) {
+          item.tags.push(newName);
+        }
+      });
+    });
+
+    pending.deleteTags.forEach(function (_, key) {
+      tags = tags.filter(function (t) { return normalizeTagKey(t.name) !== key; });
+    });
+
+    var categoryIds = new Set(categories.map(function (c) { return c.id; }));
+    tags.forEach(function (t) {
+      if (!t.categoryId || pending.deleteCategoryIds.has(t.categoryId) || !categoryIds.has(t.categoryId)) {
+        t.categoryId = UNCATEGORIZED_CATEGORY_ID;
+      }
+    });
+
+    var hasUncategorizedTags = tags.some(function (t) { return isUncategorizedCategoryId(t.categoryId); });
+    categories = ensureUncategorizedCategory(categories, hasUncategorizedTags);
+    categories = reorderCategories(canonicalizeCategories(categories));
+    categories.forEach(function (c, idx) {
+      c.sortOrder = isUncategorizedCategoryId(c.id) ? Number.MAX_SAFE_INTEGER : idx;
+    });
+
+    tags.sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); });
+
+    return {
+      categories: categories,
+      tags: tags,
+      items: items
+    };
+  }
+
+  function computeTagStateForItems(tagName, items) {
+    var list = Array.isArray(items) ? items : [];
+    if (list.length === 0) return 'state-none';
+    var wanted = normalizeTagKey(tagName);
+    var withTag = 0;
+    for (var i = 0; i < list.length; i++) {
+      var itemTags = Array.isArray(list[i]?.tags) ? list[i].tags : [];
+      var hasTag = itemTags.some(function (t) { return normalizeTagKey(t) === wanted; });
+      if (hasTag) withTag++;
+    }
+
+    if (withTag === 0) return 'state-none';
+    if (withTag === list.length) return 'state-all';
+    return 'state-some';
+  }
+
+  function getEffectiveTagStateClass(tagName, items) {
+    return computeTagStateForItems(tagName, items);
+  }
+
+  function getPendingTagAction(tagName) {
+    var key = normalizeTagKey(tagName);
+    return state.tagEditorSelections.get(key)?.action || null;
+  }
+
+  function toggleTagSelection(tagName, action) {
+    var key = normalizeTagKey(tagName);
+    var current = state.tagEditorSelections.get(key);
+    if (current?.action === action) {
+      state.tagEditorSelections.delete(key);
+      return;
+    }
+
+    state.tagEditorSelections.set(key, { action: action, name: tagName });
+  }
+
+  function toggleCategoryCollapsed(categoryId) {
+    var key = String(categoryId || '');
+    if (state.tagEditorCollapsedCategories.has(key)) {
+      state.tagEditorCollapsedCategories.delete(key);
+    } else {
+      state.tagEditorCollapsedCategories.add(key);
+    }
+
+    persistTagEditorCollapsedCategories();
+    renderTagEditor();
+  }
+
+  function moveCategory(categoryId, direction) {
+    var id = String(categoryId || '');
+    if (!id || isUncategorizedCategoryId(id)) return;
+    var order = state.tagEditorCategoryOrder.slice();
+    var movable = order.filter(function (x) { return !isUncategorizedCategoryId(x); });
+    var idx = movable.indexOf(id);
+    if (idx < 0) return;
+    var next = idx + direction;
+    if (next < 0 || next >= movable.length) return;
+
+    var tmp = movable[idx];
+    movable[idx] = movable[next];
+    movable[next] = tmp;
+
+    var hasUncategorized = order.some(function (x) { return isUncategorizedCategoryId(x); });
+    state.tagEditorCategoryOrder = hasUncategorized ? movable.concat([UNCATEGORIZED_CATEGORY_ID]) : movable;
+    renderTagEditor();
+  }
+
+  function queueDeleteCategory(category) {
+    if (!category || isUncategorizedCategoryId(category.id)) return;
+    state.tagEditorPending.deleteCategoryIds.add(String(category.id));
+    state.tagEditorPending.upsertCategories.delete(String(category.id));
+    state.tagEditorCategoryOrder = state.tagEditorCategoryOrder.filter(function (id) { return String(id) !== String(category.id); });
+    renderTagEditor();
+  }
+
+  function queueDeleteTag(tagName) {
+    var key = normalizeTagKey(tagName);
+    state.tagEditorPending.deleteTags.set(key, { name: tagName });
+    state.tagEditorPending.upsertTags.delete(key);
+    state.tagEditorPending.renameTags.delete(key);
+    state.tagEditorSelections.delete(key);
+    renderTagEditor();
+  }
+
+  function queueRenameTag(oldTagName, newTagName, newCategoryId) {
+    var oldKey = normalizeTagKey(oldTagName);
+    var newKey = normalizeTagKey(newTagName);
+    state.tagEditorPending.deleteTags.delete(oldKey);
+    state.tagEditorPending.deleteTags.delete(newKey);
+    state.tagEditorPending.renameTags.set(oldKey, {
+      oldName: oldTagName,
+      newName: newTagName,
+      newCategoryId: typeof newCategoryId === 'string' ? newCategoryId : null
+    });
+    renderTagEditor();
+  }
+
+  function hasPendingTagEditorMutations() {
+    if (!state.tagEditorPending) return state.tagEditorSelections.size > 0;
+    return state.tagEditorSelections.size > 0 ||
+      state.tagEditorPending.upsertCategories.size > 0 ||
+      state.tagEditorPending.deleteCategoryIds.size > 0 ||
+      state.tagEditorPending.upsertTags.size > 0 ||
+      state.tagEditorPending.renameTags.size > 0 ||
+      state.tagEditorPending.deleteTags.size > 0;
+  }
+
+  function openTagEditModal(tag, categories) {
+    if (!tagEditModal || !tagEditNameInput || !tagEditCategorySelect) {
+      var fallbackName = prompt('Rename tag', tag.name);
+      if (!fallbackName || fallbackName.trim() === '') return;
+      queueRenameTag(tag.name, fallbackName.trim(), null);
+      return;
+    }
+
+    state.tagEditContext = {
+      oldName: tag.name,
+      oldCategoryId: String(tag.categoryId || UNCATEGORIZED_CATEGORY_ID)
+    };
+
+    tagEditNameInput.value = tag.name;
+    tagEditCategorySelect.innerHTML = '';
+
+    var categoryOptions = getCategoryOptionsForInputs(categories || []);
+
+    categoryOptions.forEach(function (cat) {
+      var opt = document.createElement('option');
+      opt.value = String(cat.id || '');
+      opt.textContent = String(cat.name || '');
+      tagEditCategorySelect.appendChild(opt);
+    });
+
+    if (tagEditCategorySelect.options.length > 0) {
+      var currentCategoryId = String(tag.categoryId || '');
+      if (Array.from(tagEditCategorySelect.options).some(function (o) { return o.value === currentCategoryId; })) {
+        tagEditCategorySelect.value = currentCategoryId;
+      } else {
+        tagEditCategorySelect.selectedIndex = 0;
+      }
+    }
+
+    tagEditModal.style.display = 'flex';
+    setTimeout(function () {
+      try {
+        tagEditNameInput.focus();
+        tagEditNameInput.select();
+      } catch { }
+    }, 0);
+  }
+
+  function closeTagEditModal() {
+    if (!tagEditModal) return;
+    tagEditModal.style.display = 'none';
+    state.tagEditContext = null;
+  }
+
+  function renderTagEditor() {
+    if (!tagEditorBody) return;
+    var model = state.tagEditorModel;
+    tagEditorBody.innerHTML = '';
+    if (!model) {
+      tagEditorBody.textContent = 'No tag model available.';
+      return;
+    }
+
+    var display = buildTagEditorDisplayModel();
+    var categories = canonicalizeCategories(display.categories);
+    var tags = display.tags;
+    var items = display.items;
+
+    if (tagEditorCategorySelect) {
+      var prevValue = tagEditorCategorySelect.value;
+      tagEditorCategorySelect.innerHTML = '';
+      getCategoryOptionsForInputs(categories).forEach(function (cat) {
+        var opt = document.createElement('option');
+        opt.value = cat.id;
+        opt.textContent = cat.name;
+        tagEditorCategorySelect.appendChild(opt);
+      });
+
+      if (tagEditorCategorySelect.options.length > 0) {
+        if (prevValue && Array.from(tagEditorCategorySelect.options).some(function (o) { return o.value === prevValue; })) {
+          tagEditorCategorySelect.value = prevValue;
+        } else {
+          tagEditorCategorySelect.selectedIndex = 0;
+        }
+      }
+    }
+
+    var tagsByCategory = new Map();
+    tags.forEach(function (tag) {
+      var key = isUncategorizedCategoryId(tag.categoryId) ? UNCATEGORIZED_CATEGORY_ID : String(tag.categoryId || '');
+      if (!tagsByCategory.has(key)) tagsByCategory.set(key, []);
+      tagsByCategory.get(key).push(tag);
+    });
+
+    categories.forEach(function (cat, catIdx) {
+      var wrap = document.createElement('section');
+      wrap.className = 'tag-editor-category';
+
+      var header = document.createElement('div');
+      header.className = 'tag-editor-category-header';
+
+      var left = document.createElement('div');
+      left.className = 'tag-editor-category-left';
+
+      var toggleBtn = document.createElement('button');
+      toggleBtn.className = 'tag-editor-category-toggle';
+      var collapsed = state.tagEditorCollapsedCategories.has(String(cat.id || ''));
+      toggleBtn.textContent = collapsed ? '▶' : '▼';
+      toggleBtn.title = collapsed ? 'Expand category' : 'Collapse category';
+      toggleBtn.onclick = function () { toggleCategoryCollapsed(cat.id); };
+      left.appendChild(toggleBtn);
+
+      var title = document.createElement('div');
+      title.className = 'tag-editor-category-title';
+      title.textContent = cat.name || 'Uncategorized';
+      left.appendChild(title);
+      header.appendChild(left);
+
+      var controls = document.createElement('div');
+      controls.className = 'tag-editor-category-controls';
+      var isUncategorized = isUncategorizedCategoryId(cat.id);
+      var movableCount = categories.filter(function (c) { return !isUncategorizedCategoryId(c.id); }).length;
+
+      var upBtn = document.createElement('button');
+      upBtn.className = 'tag-editor-category-btn';
+      upBtn.textContent = '⬆️';
+      upBtn.title = 'Move category up';
+      upBtn.disabled = isUncategorized || movableCount <= 1 || catIdx === 0;
+      upBtn.onclick = function () { moveCategory(cat.id, -1); };
+      controls.appendChild(upBtn);
+
+      var downBtn = document.createElement('button');
+      downBtn.className = 'tag-editor-category-btn';
+      downBtn.textContent = '⬇️';
+      downBtn.title = 'Move category down';
+      var lastMovableIndex = categories.filter(function (c) { return !isUncategorizedCategoryId(c.id); }).length - 1;
+      downBtn.disabled = isUncategorized || movableCount <= 1 || catIdx >= lastMovableIndex;
+      downBtn.onclick = function () { moveCategory(cat.id, 1); };
+      controls.appendChild(downBtn);
+
+      var editCategoryBtn = document.createElement('button');
+      editCategoryBtn.className = 'tag-editor-category-btn';
+      editCategoryBtn.textContent = '✏️';
+      editCategoryBtn.title = 'Rename category';
+      editCategoryBtn.disabled = isUncategorized;
+      editCategoryBtn.onclick = function () {
+        var currentName = String(cat.name || '').trim();
+        var nextName = prompt('Rename Category', currentName);
+        if (!nextName) return;
+        nextName = String(nextName).trim();
+        if (!nextName) return;
+        var duplicate = categories.some(function (c) {
+          if (String(c.id || '') === String(cat.id || '')) return false;
+          return String(c.name || '').trim().toLowerCase() === nextName.toLowerCase();
+        });
+        if (duplicate) {
+          alert('Category already exists.');
+          return;
+        }
+
+        state.tagEditorPending.upsertCategories.set(String(cat.id || ''), {
+          id: String(cat.id || ''),
+          name: nextName,
+          sortOrder: Number(cat.sortOrder || 0)
+        });
+        renderTagEditor();
+      };
+      controls.appendChild(editCategoryBtn);
+
+      var delCategoryBtn = document.createElement('button');
+      delCategoryBtn.className = 'tag-editor-category-btn';
+      delCategoryBtn.textContent = '🗑';
+      delCategoryBtn.title = 'Delete category';
+      delCategoryBtn.disabled = isUncategorized;
+      delCategoryBtn.onclick = function () {
+        var name = cat.name || 'Category';
+        if (!confirm('Delete category "' + name + '"? Tags will become Uncategorized.')) return;
+        queueDeleteCategory(cat);
+      };
+      controls.appendChild(delCategoryBtn);
+
+      header.appendChild(controls);
+      wrap.appendChild(header);
+
+      var grid = document.createElement('div');
+      grid.className = 'tag-editor-tag-grid';
+      if (collapsed) {
+        grid.style.display = 'none';
+      }
+
+      var catTags = tagsByCategory.get(cat.id) || [];
+      catTags.sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); });
+      catTags.forEach(function (tag) {
+        var chip = document.createElement('div');
+        var stateClass = getEffectiveTagStateClass(tag.name, items);
+        chip.className = 'tag-chip ' + stateClass;
+        chip.dataset.tag = tag.name;
+        var pendingAction = getPendingTagAction(tag.name);
+
+        var label = document.createElement('span');
+        label.className = 'tag-chip-label';
+        label.textContent = tag.name;
+        chip.appendChild(label);
+
+        var plusBtn = document.createElement('button');
+        plusBtn.className = 'chip-btn';
+        plusBtn.textContent = '➕';
+        plusBtn.title = 'Add tag';
+        plusBtn.disabled = !Array.isArray(items) || items.length === 0;
+        if (pendingAction === 'add') {
+          plusBtn.classList.add('is-selected');
+          plusBtn.setAttribute('aria-pressed', 'true');
+        } else {
+          plusBtn.setAttribute('aria-pressed', 'false');
+        }
+        plusBtn.onclick = function () {
+          toggleTagSelection(tag.name, 'add');
+          renderTagEditor();
+        };
+        chip.appendChild(plusBtn);
+
+        var minusBtn = document.createElement('button');
+        minusBtn.className = 'chip-btn';
+        minusBtn.textContent = '➖';
+        minusBtn.title = 'Remove tag';
+        minusBtn.disabled = !Array.isArray(items) || items.length === 0;
+        if (pendingAction === 'remove') {
+          minusBtn.classList.add('is-selected');
+          minusBtn.setAttribute('aria-pressed', 'true');
+        } else {
+          minusBtn.setAttribute('aria-pressed', 'false');
+        }
+        minusBtn.onclick = function () {
+          toggleTagSelection(tag.name, 'remove');
+          renderTagEditor();
+        };
+        chip.appendChild(minusBtn);
+
+        var editBtn = document.createElement('button');
+        editBtn.className = 'chip-btn';
+        editBtn.textContent = '✏️';
+        editBtn.title = 'Edit tag';
+        editBtn.onclick = function () {
+          openTagEditModal(tag, categories);
+        };
+        chip.appendChild(editBtn);
+
+        var delBtn = document.createElement('button');
+        delBtn.className = 'chip-btn';
+        delBtn.textContent = '🗑';
+        delBtn.title = 'Delete tag';
+        delBtn.onclick = function () {
+          if (!confirm('Delete tag "' + tag.name + '"?')) return;
+          queueDeleteTag(tag.name);
+        };
+        chip.appendChild(delBtn);
+
+        grid.appendChild(chip);
+      });
+
+      wrap.appendChild(grid);
+      tagEditorBody.appendChild(wrap);
+    });
+
+    if (tagEditorApplyBtn) {
+      tagEditorApplyBtn.textContent = hasPendingTagEditorMutations() ? '✅️*' : '✅️';
+      tagEditorApplyBtn.disabled = !hasPendingTagEditorMutations();
+    }
+  }
+
+  function refreshTagEditorModel() {
+    var itemIds = getCurrentItemIdsForTagEditor();
+    return apiPost('/api/tag-editor/model', { itemIds: itemIds })
+      .then(function (r) {
+        if (!r.ok) throw new Error('tag-model:' + r.status);
+        return r.json();
+      })
+      .then(function (model) {
+        state.tagEditorModel = model || { categories: [], tags: [], items: [] };
+        if (!Array.isArray(state.tagEditorCategoryOrder) || state.tagEditorCategoryOrder.length === 0) {
+          var initialCategories = Array.isArray(state.tagEditorModel.categories) ? state.tagEditorModel.categories.slice() : [];
+          initialCategories = canonicalizeCategories(initialCategories);
+          initialCategories.sort(function (a, b) {
+            var x = Number(a.sortOrder || 0);
+            var y = Number(b.sortOrder || 0);
+            if (x !== y) return x - y;
+            return String(a.name || '').localeCompare(String(b.name || ''));
+          });
+          state.tagEditorCategoryOrder = initialCategories.map(function (c) { return String(c.id || ''); });
+        }
+        renderTagEditor();
+      });
+  }
+
+  function pauseForTagEditor() {
+    state.tagEditorWasPlaying = false;
+    state.tagEditorPhotoTimerRunning = false;
+    if (state.current?.mediaType === 'photo') {
+      state.tagEditorPhotoTimerRunning = !!photoTimerId;
+      clearPhotoTimer();
+      return;
+    }
+
+    if (video && video.style.display !== 'none') {
+      state.tagEditorWasPlaying = !video.paused;
+      video.pause();
+    }
+  }
+
+  function resumeAfterTagEditor() {
+    if (!state.current) return;
+    if (state.current.mediaType === 'photo') {
+      if (state.tagEditorPhotoTimerRunning && (state.autoplay || state.loop)) {
+        playCurrent();
+      }
+      return;
+    }
+
+    if (state.tagEditorWasPlaying && video && video.style.display !== 'none') {
+      video.play().catch(function () {});
+    }
+  }
+
+  function openTagEditor() {
+    if (!tagEditor) {
+      return;
+    }
+
+    state.tagEditorOpen = true;
+    state.tagEditorItemIds = getCurrentItemIdsForTagEditor();
+    state.tagEditorCategoryOrder = [];
+    state.tagEditorCollapsedCategories = loadTagEditorCollapsedCategories();
+    resetTagEditorPending();
+    pauseForTagEditor();
+    tagEditor.style.display = 'flex';
+    refreshTagEditorModel().catch(function (err) {
+      setStatus('Tag editor unavailable: ' + (err.message || err));
+    });
+  }
+
+  function closeTagEditor() {
+    if (!tagEditor) return;
+    closeTagEditModal();
+    state.tagEditorOpen = false;
+    state.tagEditorItemIds = [];
+    tagEditor.style.display = 'none';
+    resumeAfterTagEditor();
+  }
+
+  async function applyTagEditorChangesAsync() {
+    var pending = state.tagEditorPending || createTagEditorPending();
+    var itemIds = getCurrentItemIdsForTagEditor();
+    var display = buildTagEditorDisplayModel();
+    var categories = display.categories || [];
+
+    for (var i = 0; i < categories.length; i++) {
+      var category = categories[i];
+      if (isUncategorizedCategoryId(category.id)) continue;
+      var upsertResp = await apiPost('/api/tag-editor/upsert-category', {
+        id: category.id,
+        name: category.name,
+        sortOrder: category.sortOrder
+      });
+      if (!upsertResp.ok) {
+        throw new Error('Category update failed (' + upsertResp.status + ')');
+      }
+    }
+
+    for (const categoryId of pending.deleteCategoryIds.values()) {
+      var deleteCategoryResp = await apiPost('/api/tag-editor/delete-category', {
+        categoryId: categoryId,
+        newCategoryId: null
+      });
+      if (!deleteCategoryResp.ok) {
+        throw new Error('Category delete failed (' + deleteCategoryResp.status + ')');
+      }
+    }
+
+    for (const upsertTagOp of pending.upsertTags.values()) {
+      var upsertTagResp = await apiPost('/api/tag-editor/upsert-tag', {
+        name: upsertTagOp.name,
+        categoryId: upsertTagOp.categoryId || ''
+      });
+      if (!upsertTagResp.ok) {
+        throw new Error('Tag create/update failed (' + upsertTagResp.status + ')');
+      }
+    }
+
+    for (const renameTagOp of pending.renameTags.values()) {
+      var renameTagResp = await apiPost('/api/tag-editor/rename-tag', {
+        oldName: renameTagOp.oldName,
+        newName: renameTagOp.newName,
+        newCategoryId: renameTagOp.newCategoryId
+      });
+      if (!renameTagResp.ok) {
+        throw new Error('Tag rename failed (' + renameTagResp.status + ')');
+      }
+    }
+
+    for (const deleteTagOp of pending.deleteTags.values()) {
+      var deleteTagResp = await apiPost('/api/tag-editor/delete-tag', { name: deleteTagOp.name });
+      if (!deleteTagResp.ok) {
+        throw new Error('Tag delete failed (' + deleteTagResp.status + ')');
+      }
+    }
+
+    var addTags = [];
+    var removeTags = [];
+    for (const selection of state.tagEditorSelections.values()) {
+      if (selection?.action === 'add') addTags.push(selection.name);
+      else if (selection?.action === 'remove') removeTags.push(selection.name);
+    }
+
+    if (itemIds.length > 0 && (addTags.length > 0 || removeTags.length > 0)) {
+      var applyResp = await apiPost('/api/tag-editor/apply-item-tags', {
+        itemIds: itemIds,
+        addTags: addTags,
+        removeTags: removeTags
+      });
+      if (!applyResp.ok) {
+        throw new Error('Tag apply failed (' + applyResp.status + ')');
+      }
+    }
   }
 
   function toggleOverlayControls() {
@@ -533,6 +1373,111 @@
     }
     updateToggleButtons();
   });
+  if (tagEditBtn) {
+    tagEditBtn.addEventListener('click', function (e) {
+      onControlAction(e);
+      openTagEditor();
+    });
+  }
+  if (tagEditorCloseBtn) tagEditorCloseBtn.addEventListener('click', closeTagEditor);
+  if (tagEditorRefreshBtn) {
+    tagEditorRefreshBtn.addEventListener('click', function () {
+      resetTagEditorPending();
+      state.tagEditorCategoryOrder = [];
+      refreshTagEditorModel().catch(function (err) {
+        setStatus('Tag refresh failed: ' + (err.message || err));
+      });
+    });
+  }
+  if (tagEditorAddCategoryBtn) {
+    tagEditorAddCategoryBtn.addEventListener('click', function () {
+      var name = prompt('New category name');
+      if (!name || !name.trim()) return;
+      var id = crypto.randomUUID ? crypto.randomUUID() : String(Date.now());
+      state.tagEditorPending.upsertCategories.set(id, {
+        id: id,
+        name: name.trim(),
+        sortOrder: state.tagEditorCategoryOrder.length
+      });
+      var uncatIdx = state.tagEditorCategoryOrder.findIndex(function (x) { return isUncategorizedCategoryId(x); });
+      if (uncatIdx >= 0) {
+        state.tagEditorCategoryOrder.splice(uncatIdx, 0, id);
+      } else {
+        state.tagEditorCategoryOrder.push(id);
+      }
+      renderTagEditor();
+    });
+  }
+  if (tagEditorAddTagBtn) {
+    tagEditorAddTagBtn.addEventListener('click', function () {
+      var tagName = (tagEditorNewTag && tagEditorNewTag.value || '').trim();
+      var categoryId = tagEditorCategorySelect ? tagEditorCategorySelect.value : UNCATEGORIZED_CATEGORY_ID;
+      if (!tagName) return;
+      var tagKey = normalizeTagKey(tagName);
+      state.tagEditorPending.deleteTags.delete(tagKey);
+      state.tagEditorPending.upsertTags.set(tagKey, { name: tagName, categoryId: categoryId || UNCATEGORIZED_CATEGORY_ID });
+      if (getCurrentItemIdsForTagEditor().length > 0) {
+        state.tagEditorSelections.set(tagKey, { action: 'add', name: tagName });
+      } else {
+        state.tagEditorSelections.delete(tagKey);
+      }
+      if (tagEditorNewTag) tagEditorNewTag.value = '';
+      renderTagEditor();
+    });
+  }
+  if (tagEditorApplyBtn) {
+    tagEditorApplyBtn.addEventListener('click', async function () {
+      try {
+        await applyTagEditorChangesAsync();
+        setStatus('Tag editor changes applied');
+        closeTagEditor();
+      } catch (err) {
+        setStatus((err && err.message) ? err.message : ('Tag apply failed: ' + err));
+      }
+    });
+  }
+
+  if (tagEditCancelBtn) {
+    tagEditCancelBtn.addEventListener('click', function () {
+      closeTagEditModal();
+    });
+  }
+
+  if (tagEditSaveBtn) {
+    tagEditSaveBtn.addEventListener('click', function () {
+      if (!state.tagEditContext || !tagEditNameInput || !tagEditCategorySelect) {
+        closeTagEditModal();
+        return;
+      }
+
+      var nextName = String(tagEditNameInput.value || '').trim();
+      if (!nextName) {
+        setStatus('Tag name is required.');
+        return;
+      }
+
+      var oldName = state.tagEditContext.oldName;
+      var oldCategoryId = state.tagEditContext.oldCategoryId;
+      var selectedCategoryId = String(tagEditCategorySelect.value || UNCATEGORIZED_CATEGORY_ID);
+      var nameChanged = normalizeTagKey(nextName) !== normalizeTagKey(oldName);
+      var categoryChanged = selectedCategoryId !== oldCategoryId;
+      if (!nameChanged && !categoryChanged) {
+        closeTagEditModal();
+        return;
+      }
+
+      queueRenameTag(oldName, nextName, categoryChanged ? selectedCategoryId : null);
+      closeTagEditModal();
+    });
+  }
+
+  if (tagEditModal) {
+    tagEditModal.addEventListener('click', function (evt) {
+      if (evt.target === tagEditModal) {
+        closeTagEditModal();
+      }
+    });
+  }
 
   var photoDurationInput = el('photo-duration');
   if (photoDurationInput) {

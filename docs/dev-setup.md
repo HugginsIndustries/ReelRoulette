@@ -49,3 +49,23 @@
 - Filter/preset session mutations are mirrored via `POST /api/filter-session`.
 - Migrated state flows are API-required: desktop no longer applies local write fallback for those mutations when core runtime is unavailable.
 - Desktop attempts to auto-start core runtime on launch if local probe fails.
+
+## M6a Tag Editing Notes
+
+- Desktop and web tag/category/item-tag mutations are routed through tag-editor API endpoints (`/api/tag-editor/*`).
+- Batch item-tag deltas use `itemIds[]` plus `addTags[]` / `removeTags[]`.
+- Desktop SSE projection now includes tag events (`itemTagsChanged`, `tagCatalogChanged`) to keep local UI state synchronized with out-of-process updates.
+- Desktop additionally syncs local tag catalog to core on successful core connect/start (`POST /api/tag-editor/sync-catalog`) so the core/web model starts from complete category/tag data.
+- Desktop hydrates requested item-tag snapshots to core with `POST /api/tag-editor/sync-item-tags` ahead of web tag-editor model queries.
+- Category deletes in migrated tag flows reassign tags to canonical `uncategorized` (fixed ID) instead of deleting tags.
+- Web remote tag editor is full-screen and pauses playback/photo autoplay while open, then resumes prior media behavior on close.
+- Web editor supports touch-friendly controls, per-session category collapse state, inline category move/delete controls, and staged category/tag operations that are applied in one batch when `Apply` is pressed.
+- Chip backgrounds remain current-state indicators (`all/some/none`), while pending add/remove intent is represented by orange `+/-` toggle button selection.
+- Tag edit supports rename and reassignment to an existing category via dropdown.
+- Desktop `ItemTagsDialog` uses a parity control layout with top controls (`➕ Category`, `🔄`, `❌`) and a single bottom action row (`category`, `tag name`, `➕ Tag`, `✅️`) replacing the old `Cancel`/`OK` footer.
+- Desktop tag chip controls follow `➕`, `➖`, `✏️`, `🗑` order and reuse existing shared icon button/toggle styles.
+- Desktop category headers expose inline `⬆️`, `⬇️`, `🗑` controls using the same shared square icon button style family.
+- Desktop category delete/reorder is staged in-dialog (delete warning shown on click) and sent to core only on `Apply`; `Close` discards staged category changes.
+- Desktop `ItemTagsDialog` is the single tag-management dialog (player button/context entry points). Opening with no selected items is supported; item tag `+/-` assignment controls are disabled in that mode while category/tag catalog editing remains available.
+- Desktop and web category inline controls use `up`, `down`, `edit`, `delete` order, and category create/rename blocks duplicate names (trimmed, case-insensitive).
+- Web footer controls keep a single-row layout on small screens with the tag name input as the flexible/fill field.

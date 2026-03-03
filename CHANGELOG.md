@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+- **Implement M6a API-first tag editing parity (desktop + web)** (2026-03-01):
+  - Add batch-ready tag editor contract surface (`/api/tag-editor/*`) to OpenAPI and server endpoint composition for item-tag deltas plus tag/category CRUD flows.
+  - Extend server state with tag catalog/item-tag projection methods and publish revisioned `itemTagsChanged` / `tagCatalogChanged` SSE events.
+  - Extend desktop `CoreServerApiClient` with typed tag-editor commands/queries and add desktop SSE projection handling for new tag events.
+  - Migrate desktop tag dialog orchestration (`ItemTagsDialog` and main-window bulk tag handlers) to API-first mutation paths via `ITagMutationClient`, then remove legacy `ManageTagsDialog` source and redundant Library menu entry.
+  - Extend legacy web-remote API services/endpoints with tag-editor routes and add a full-screen web tag editor UI (including playback/photo-autoplay pause/resume behavior while editing).
+  - Add desktop-to-core catalog hydration (`POST /api/tag-editor/sync-catalog`) and startup/connect sync behavior to prevent sparse tag catalogs from regressing dialog/editor category mappings.
+  - Rework web tag editor interactions to a touch-first combined layout with collapsible category sections, inline category move/delete controls, staged tag/category actions applied in one batch on `Apply`, desktop-like chip corner radius, and desktop-style button hover/press/toggle feedback.
+  - Keep chip background colors tied to current item state (`all/some/none`) while pending add/remove intent is shown on `+/-` toggle buttons (orange selected state before apply).
+  - Extend web tag edit flow to support both rename and reassignment to an existing category via dropdown.
+  - Ensure web tag editor shows a single `Uncategorized` bucket only when uncategorized tags exist and renders current-item tag-state highlighting from synchronized item-tag snapshots.
+  - Normalize migrated tag flows to canonical `uncategorized` category semantics: deleting a category reassigns its tags to `uncategorized` (fixed ID), and `Uncategorized` is always available in category dropdowns while remaining hidden in category lists when empty.
+  - Align desktop `ItemTagsDialog` control layout with the combined editor pattern: top controls (`➕ Category`, `🔄`, `❌`), bottom action row (`category`, `tag name`, `➕ Tag`, `✅️`), and chip control order `➕`, `➖`, `✏️`, `🗑` with shared icon button styles.
+  - Align web editor control labels to icon-only `🔄` (refresh), `✅️` (apply), and `❌` (close) for consistent cross-client affordances.
+  - Add desktop inline category header controls (`↑`, `↓`, `🗑`) with shared square icon button styling and keep web footer controls in a single-row small-screen layout with flexible tag-name input.
+  - Update desktop `ItemTagsDialog` category delete/reorder semantics to match staged-apply behavior: delete warns on click, category UI updates locally (including uncategorized projection), and backend mutations occur only on `Apply` while `Close` discards staged category changes.
+  - Make desktop `ItemTagsDialog` API-model-first at open/refresh, support no-selection open (disabling `+/-` item-assignment toggles in that mode), and use it as the primary desktop tag-management entry path.
+  - Add category inline `edit` control in both desktop and web (`up`, `down`, `edit`, `delete` order), prevent duplicate category names, and normalize web uncategorized grouping to avoid duplicate `Uncategorized` sections.
+  - Isolate desktop tag-editor staged state from shared live library objects so category/tag staging no longer leaks into persisted library state before `Apply`.
+  - Add M6a regression coverage for tag API request shapes and server-side tag mutation/event behavior.
+  - Update M6a docs/artifacts (`README`, `docs/api.md`, `docs/architecture.md`, `docs/dev-setup.md`, `docs/m6a-domain-inventory.md`).
+
 - **Implement M5 desktop API-client state migration flow** (2026-03-01):
   - Add a desktop `CoreServerApiClient` layer for worker/server query-command calls plus SSE event consumption.
   - Migrate desktop favorite/blacklist/playback/random command flow to API-first behavior and remove local state-mutation fallback for migrated paths.

@@ -122,4 +122,84 @@ public sealed class ServerStateRegressionTests
         Assert.True(state.IsFavorite);
         Assert.False(state.IsBlacklisted);
     }
+
+    [Fact]
+    public void ApplyItemTags_ShouldPublishItemTagsChangedEvent()
+    {
+        var service = new ServerStateService();
+        service.ApplyItemTags(new ApplyItemTagsRequest
+        {
+            ItemIds = ["a.mp4"],
+            AddTags = ["TagA"]
+        });
+
+        var replay = service.GetReplayAfter(0);
+        var envelope = Assert.Single(replay.Events);
+        Assert.Equal("itemTagsChanged", envelope.EventType);
+        var payload = Assert.IsType<ItemTagsChangedPayload>(envelope.Payload);
+        Assert.Equal("a.mp4", Assert.Single(payload.ItemIds));
+        Assert.Equal("TagA", Assert.Single(payload.AddedTags));
+    }
+
+    [Fact]
+    public void RenameTag_ShouldUpdateCatalogAndItemTagModel()
+    {
+        var service = new ServerStateService();
+        service.UpsertCategory(new UpsertCategoryRequest { Id = "cat-1", Name = "Category 1" });
+        service.UpsertTag(new UpsertTagRequest { Name = "TagA", CategoryId = "cat-1" });
+        service.ApplyItemTags(new ApplyItemTagsRequest
+        {
+            ItemIds = ["a.mp4"],
+            AddTags = ["TagA"]
+        });
+
+        service.RenameTag(new RenameTagRequest
+        {
+            OldName = "TagA",
+            NewName = "TagB",
+            NewCategoryId = "cat-1"
+        });
+
+        var model = service.GetTagEditorModel(new TagEditorModelRequest { ItemIds = ["a.mp4"] });
+        Assert.Contains(model.Tags, t => t.Name == "TagB");
+        Assert.DoesNotContain(model.Tags, t => t.Name == "TagA");
+        var item = Assert.Single(model.Items);
+        Assert.Contains("TagB", item.Tags);
+        Assert.DoesNotContain("TagA", item.Tags);
+    }
+
+    [Fact]
+    public void DeleteCategory_ShouldReassignTagsToUncategorized()
+    {
+        var service = new ServerStateService();
+        service.UpsertCategory(new UpsertCategoryRequest { Id = "cat-1", Name = "Category 1" });
+        service.UpsertTag(new UpsertTagRequest { Name = "TagA", CategoryId = "cat-1" });
+
+        service.DeleteCategory(new DeleteCategoryRequest { CategoryId = "cat-1" });
+
+        var model = service.GetTagEditorModel(new TagEditorModelRequest { ItemIds = [] });
+        var tag = Assert.Single(model.Tags, t => t.Name == "TagA");
+        Assert.Equal("uncategorized", tag.CategoryId);
+        Assert.Contains(model.Categories, c => c.Id == "uncategorized" && c.Name == "Uncategorized");
+    }
+
+    [Fact]
+    public void SyncTagCatalog_ShouldNormalizeBlankCategoryIdsToUncategorized()
+    {
+        var service = new ServerStateService();
+        service.SyncTagCatalog(new SyncTagCatalogRequest
+        {
+            Categories = [new TagCategorySnapshot { Id = "cat-1", Name = "Category 1", SortOrder = 0 }],
+            Tags =
+            [
+                new TagSnapshot { Name = "TagA", CategoryId = string.Empty },
+                new TagSnapshot { Name = "TagB", CategoryId = "cat-1" }
+            ]
+        });
+
+        var model = service.GetTagEditorModel(new TagEditorModelRequest { ItemIds = [] });
+        var uncategorizedTag = Assert.Single(model.Tags, t => t.Name == "TagA");
+        Assert.Equal("uncategorized", uncategorizedTag.CategoryId);
+        Assert.Contains(model.Categories, c => c.Id == "uncategorized" && c.Name == "Uncategorized");
+    }
 }

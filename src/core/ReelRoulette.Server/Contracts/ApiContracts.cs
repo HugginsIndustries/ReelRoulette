@@ -86,6 +86,86 @@ public sealed class FilterSessionSnapshot
     public List<FilterPresetSnapshot>? Presets { get; set; }
 }
 
+public sealed class TagCategorySnapshot
+{
+    public string Id { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public int SortOrder { get; set; }
+}
+
+public sealed class TagSnapshot
+{
+    public string Name { get; set; } = string.Empty;
+    public string CategoryId { get; set; } = string.Empty;
+}
+
+public sealed class ItemTagsSnapshot
+{
+    public string ItemId { get; set; } = string.Empty;
+    public List<string> Tags { get; set; } = [];
+}
+
+public sealed class TagEditorModelRequest
+{
+    public List<string> ItemIds { get; set; } = [];
+}
+
+public sealed class TagEditorModelResponse
+{
+    public List<TagCategorySnapshot> Categories { get; set; } = [];
+    public List<TagSnapshot> Tags { get; set; } = [];
+    public List<ItemTagsSnapshot> Items { get; set; } = [];
+}
+
+public sealed class ApplyItemTagsRequest
+{
+    public List<string> ItemIds { get; set; } = [];
+    public List<string> AddTags { get; set; } = [];
+    public List<string> RemoveTags { get; set; } = [];
+}
+
+public sealed class UpsertCategoryRequest
+{
+    public string Id { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public int? SortOrder { get; set; }
+}
+
+public sealed class UpsertTagRequest
+{
+    public string Name { get; set; } = string.Empty;
+    public string CategoryId { get; set; } = string.Empty;
+}
+
+public sealed class RenameTagRequest
+{
+    public string OldName { get; set; } = string.Empty;
+    public string NewName { get; set; } = string.Empty;
+    public string? NewCategoryId { get; set; }
+}
+
+public sealed class DeleteTagRequest
+{
+    public string Name { get; set; } = string.Empty;
+}
+
+public sealed class DeleteCategoryRequest
+{
+    public string CategoryId { get; set; } = string.Empty;
+    public string? NewCategoryId { get; set; }
+}
+
+public sealed class SyncTagCatalogRequest
+{
+    public List<TagCategorySnapshot> Categories { get; set; } = [];
+    public List<TagSnapshot> Tags { get; set; } = [];
+}
+
+public sealed class SyncItemTagsRequest
+{
+    public List<ItemTagsSnapshot> Items { get; set; } = [];
+}
+
 public sealed class ServerEventEnvelope
 {
     public long Revision { get; set; }
@@ -106,4 +186,18 @@ public sealed class PlaybackRecordedPayload
 {
     public string Path { get; set; } = string.Empty;
     public string? ClientId { get; set; }
+}
+
+public sealed class ItemTagsChangedPayload
+{
+    public List<string> ItemIds { get; set; } = [];
+    public List<string> AddedTags { get; set; } = [];
+    public List<string> RemovedTags { get; set; } = [];
+}
+
+public sealed class TagCatalogChangedPayload
+{
+    public string Reason { get; set; } = string.Empty;
+    public List<TagCategorySnapshot> Categories { get; set; } = [];
+    public List<TagSnapshot> Tags { get; set; } = [];
 }

@@ -208,9 +208,6 @@
                           Click="ImportFolderMenuItem_Click"/>
                 <MenuItem Header="Auto Tag"
                           Click="AutoTagMenuItem_Click"/>
-                <MenuItem x:Name="ManageTagsMenuItem"
-                          Header="Manage Tags"
-                          Click="ManageTagsMenuItem_Click"/>
                 <MenuItem x:Name="ManageSourcesMenuItem"
                           Header="Manage Sources"
                           Click="ManageSourcesMenuItem_Click"/>
@@ -379,7 +376,7 @@
             <Button x:Name="ManageTagsButton"
                     Grid.Column="5"
                     Classes="IconMomentaryLarge"
-                    ToolTip.Tip="Manage tags for current video (T)"
+                    ToolTip.Tip="Edit tags (T)"
                     Margin="0,0,8,0"
                     Click="ManageTagsForCurrentVideo_Click">
                 <TextBlock Text="🏷️"

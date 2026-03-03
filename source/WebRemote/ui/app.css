@@ -194,6 +194,204 @@ body {
   min-height: 1.2em;
 }
 
+.tag-editor {
+  position: fixed;
+  inset: 0;
+  background: rgba(16, 16, 16, 0.96);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  gap: 12px;
+}
+.tag-editor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.tag-editor-header h2 {
+  margin: 0;
+}
+.tag-editor-actions {
+  display: flex;
+  gap: 8px;
+}
+.tag-editor button,
+.tag-editor select,
+.tag-editor input {
+  min-height: 44px;
+  font-size: 1rem;
+}
+.tag-editor button {
+  padding: 8px 12px;
+  border: 1px solid #555;
+  border-radius: 8px;
+  background: #2a2a2a;
+  color: #fff;
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease, transform 60ms ease;
+}
+.tag-editor button:hover:not(:disabled) {
+  background: #353535;
+  border-color: #7a7a7a;
+}
+.tag-editor button:active:not(:disabled) {
+  background: #414141;
+  transform: translateY(1px);
+}
+.tag-editor button:focus-visible,
+.tag-editor input:focus-visible,
+.tag-editor select:focus-visible {
+  outline: 2px solid #7aa7ff;
+  outline-offset: 1px;
+}
+.tag-editor button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.tag-editor-body {
+  flex: 1;
+  overflow: auto;
+  border: 1px solid #333;
+  border-radius: 8px;
+  padding: 12px;
+  background: #111;
+}
+.tag-editor-category {
+  margin-bottom: 12px;
+}
+.tag-editor-category-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.tag-editor-category-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.tag-editor-category-toggle {
+  min-width: 44px;
+  width: 44px;
+  padding: 0;
+}
+.tag-editor-category-title {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tag-editor-category-controls {
+  display: inline-flex;
+  gap: 6px;
+}
+.tag-editor-category-btn {
+  min-width: 44px;
+  width: 44px;
+  padding: 0;
+}
+.tag-editor-tag-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  min-height: 44px;
+  border-radius: 10px;
+  border: 1px solid #444;
+  background: #2a2050;
+}
+.tag-chip.state-all {
+  background: #1f5f2a;
+  border-color: #7ed88f;
+  box-shadow: 0 0 0 1px #7ed88f66 inset;
+}
+.tag-chip.state-some {
+  background: #5f3b1f;
+  border-color: #ffb26b;
+  box-shadow: 0 0 0 1px #ffb26b66 inset;
+}
+.tag-chip.state-none {
+  background: #2a2050;
+  border-color: #6b5fa8;
+}
+.tag-chip-label {
+  font-weight: 500;
+}
+.tag-chip .chip-btn {
+  min-width: 44px;
+  width: 44px;
+  min-height: 44px;
+  height: 44px;
+  padding: 0;
+  background: #0006;
+  color: #fff;
+  border-radius: 8px;
+  border: 1px solid #666;
+}
+.tag-chip .chip-btn.is-selected {
+  background: #5f3b1f;
+  border-color: #ffb26b;
+  box-shadow: 0 0 0 1px #ffb26b66 inset;
+}
+.tag-editor-footer {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 10px;
+  align-items: center;
+}
+.tag-editor-footer select {
+  flex: 0 1 180px;
+  min-width: 120px;
+}
+.tag-editor-footer input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.tag-editor-footer #tag-editor-add-tag-btn,
+.tag-editor-footer #tag-editor-apply-btn {
+  flex: 0 0 auto;
+}
+
+.tag-edit-modal {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 20;
+}
+
+.tag-edit-modal-card {
+  width: min(460px, 90vw);
+  background: #1b1b1b;
+  border: 1px solid #555;
+  border-radius: 10px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.tag-edit-modal-card h3 {
+  margin: 0 0 4px 0;
+}
+
+.tag-edit-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 main {
   flex: 1;
   min-height: 0;
@@ -207,4 +405,11 @@ main {
     align-items: stretch;
   }
   .now-playing { margin-left: 0; }
+  .tag-editor-footer {
+    gap: 6px;
+  }
+  .tag-editor-footer select {
+    flex-basis: 120px;
+    min-width: 96px;
+  }
 }

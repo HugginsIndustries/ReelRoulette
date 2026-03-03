@@ -191,9 +191,8 @@ Status legend: `✅ Complete` | `⏳ Planned`
 
 ### M6a - P1 Feature Alignment Through API (Web Tag Editing)
 
-- **Status**: ⏳ Planned
+- **Status**: ✅ Complete
 - **Goal**: Ship API-backed web tag editing parity as an independent, low-blast-radius milestone.
-- **Linked TODO**: `Web Remote Tag Editing (API-First, Desktop-Parity)` in `TODO.md`.
 - **Scope**:
   - Implement API-backed **Web Remote Tag Editing** parity:
     - tag/category edit flows
@@ -208,6 +207,8 @@ Status legend: `✅ Complete` | `⏳ Planned`
   - Desktop and web tag edits execute through the same API/core mutation services (single-writer for migrated tag flows).
   - Desktop does not directly mutate JSON for migrated tag/category/item-tag flows.
   - Desktop and web remain synchronized via SSE for tag/category/item-tag changes.
+  - Category delete semantics reassign tags to canonical `uncategorized` (fixed ID) instead of deleting tags.
+  - `Uncategorized` appears in category dropdowns and remains hidden from category lists when it has no tags.
   - Tag editing can ship independently of grid/thumbnail/pipeline refactors.
   - Regression tests validate tag/category mutation contracts plus SSE sync projections (including batch-ready `itemIds[]` request handling) and pass in `dotnet test`.
 

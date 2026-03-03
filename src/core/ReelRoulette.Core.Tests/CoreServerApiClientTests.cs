@@ -75,6 +75,61 @@ public sealed class CoreServerApiClientTests
     }
 
     [Fact]
+    public async Task ApplyItemTagsAsync_ShouldPostBatchItemIdsAndDeltas()
+    {
+        string? capturedJson = null;
+        var handler = new DelegatingStubHandler(async request =>
+        {
+            capturedJson = await request.Content!.ReadAsStringAsync();
+            return new HttpResponseMessage(HttpStatusCode.OK);
+        });
+        var apiClient = new CoreServerApiClient(new HttpClient(handler));
+        var request = new CoreApplyItemTagsRequest
+        {
+            ItemIds = ["a.mp4", "b.mp4"],
+            AddTags = ["new"],
+            RemoveTags = ["old"]
+        };
+
+        var success = await apiClient.ApplyItemTagsAsync("http://localhost:51301", request);
+
+        Assert.True(success);
+        Assert.False(string.IsNullOrWhiteSpace(capturedJson));
+        using var doc = JsonDocument.Parse(capturedJson!);
+        Assert.Equal(2, doc.RootElement.GetProperty("itemIds").GetArrayLength());
+        Assert.Equal("new", doc.RootElement.GetProperty("addTags")[0].GetString());
+        Assert.Equal("old", doc.RootElement.GetProperty("removeTags")[0].GetString());
+    }
+
+    [Fact]
+    public async Task RenameTagAsync_ShouldPostExpectedJsonShape()
+    {
+        HttpRequestMessage? capturedRequest = null;
+        string? capturedJson = null;
+        var handler = new DelegatingStubHandler(async request =>
+        {
+            capturedRequest = request;
+            capturedJson = await request.Content!.ReadAsStringAsync();
+            return new HttpResponseMessage(HttpStatusCode.OK);
+        });
+        var apiClient = new CoreServerApiClient(new HttpClient(handler));
+
+        var success = await apiClient.RenameTagAsync("http://localhost:51301", new CoreRenameTagRequest
+        {
+            OldName = "OldTag",
+            NewName = "NewTag",
+            NewCategoryId = "cat-2"
+        });
+
+        Assert.True(success);
+        Assert.Equal("http://localhost:51301/api/tag-editor/rename-tag", capturedRequest!.RequestUri!.ToString());
+        using var doc = JsonDocument.Parse(capturedJson!);
+        Assert.Equal("OldTag", doc.RootElement.GetProperty("oldName").GetString());
+        Assert.Equal("NewTag", doc.RootElement.GetProperty("newName").GetString());
+        Assert.Equal("cat-2", doc.RootElement.GetProperty("newCategoryId").GetString());
+    }
+
+    [Fact]
     public async Task ListenToEventsAsync_ShouldParseSingleSseEnvelope()
     {
         var payloadJson = "{\"revision\":42,\"eventType\":\"itemStateChanged\",\"timestamp\":\"2026-03-01T00:00:00Z\",\"payload\":{\"path\":\"movie.mp4\",\"isFavorite\":true,\"isBlacklisted\":false}}";

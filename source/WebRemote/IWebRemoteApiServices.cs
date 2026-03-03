@@ -48,5 +48,40 @@ namespace ReelRoulette.WebRemote
         /// Records a playback event for a path and updates play stats.
         /// </summary>
         bool RecordPlayback(string fullPath);
+
+        /// <summary>
+        /// Gets tag editor model snapshot for the requested item IDs.
+        /// </summary>
+        CoreTagEditorModelResponse? GetTagEditorModel(IReadOnlyList<string> itemIds);
+
+        /// <summary>
+        /// Applies add/remove tag deltas to one or more items.
+        /// </summary>
+        bool ApplyItemTags(IReadOnlyList<string> itemIds, IReadOnlyList<string> addTags, IReadOnlyList<string> removeTags);
+
+        /// <summary>
+        /// Creates or updates a category.
+        /// </summary>
+        bool UpsertCategory(TagCategory category);
+
+        /// <summary>
+        /// Creates or updates a tag.
+        /// </summary>
+        bool UpsertTag(string tagName, string categoryId);
+
+        /// <summary>
+        /// Renames a tag and optionally moves category.
+        /// </summary>
+        bool RenameTag(string oldTagName, string newTagName, string? newCategoryId);
+
+        /// <summary>
+        /// Deletes a tag.
+        /// </summary>
+        bool DeleteTag(string tagName);
+
+        /// <summary>
+        /// Deletes a category and optionally reassigns its tags.
+        /// </summary>
+        bool DeleteCategory(string categoryId, string? newCategoryId);
     }
 }

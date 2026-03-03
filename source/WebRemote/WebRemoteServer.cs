@@ -400,6 +400,138 @@ namespace ReelRoulette.WebRemote
                 return Results.Json(states);
             });
 
+            app.MapPost("/api/tag-editor/model", (JsonDocument? req) =>
+            {
+                if (services == null) return Results.Problem("API services not available", statusCode: 503);
+                var itemIds = new List<string>();
+                if (req != null &&
+                    req.RootElement.ValueKind == JsonValueKind.Object &&
+                    req.RootElement.TryGetProperty("itemIds", out var itemIdsElement) &&
+                    itemIdsElement.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var item in itemIdsElement.EnumerateArray())
+                    {
+                        if (item.ValueKind != JsonValueKind.String) continue;
+                        var id = item.GetString();
+                        if (!string.IsNullOrWhiteSpace(id))
+                            itemIds.Add(id.Trim());
+                    }
+                }
+
+                var model = services.GetTagEditorModel(itemIds);
+                return model == null ? Results.Problem("Tag model unavailable", statusCode: 503) : Results.Json(model);
+            });
+
+            app.MapPost("/api/tag-editor/apply-item-tags", (JsonDocument? req) =>
+            {
+                if (services == null) return Results.Problem("API services not available", statusCode: 503);
+                if (req == null || req.RootElement.ValueKind != JsonValueKind.Object) return Results.BadRequest("Invalid request");
+                if (!req.RootElement.TryGetProperty("itemIds", out var itemIdsElement) || itemIdsElement.ValueKind != JsonValueKind.Array)
+                    return Results.BadRequest("Expected itemIds array");
+
+                var itemIds = new List<string>();
+                foreach (var element in itemIdsElement.EnumerateArray())
+                {
+                    if (element.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(element.GetString()))
+                        itemIds.Add(element.GetString()!.Trim());
+                }
+
+                if (itemIds.Count == 0) return Results.BadRequest("itemIds must not be empty");
+
+                static List<string> ReadTags(JsonElement root, string propertyName)
+                {
+                    var tags = new List<string>();
+                    if (!root.TryGetProperty(propertyName, out var tagsElement) || tagsElement.ValueKind != JsonValueKind.Array)
+                        return tags;
+                    foreach (var element in tagsElement.EnumerateArray())
+                    {
+                        if (element.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(element.GetString()))
+                            tags.Add(element.GetString()!.Trim());
+                    }
+
+                    return tags;
+                }
+
+                var addTags = ReadTags(req.RootElement, "addTags");
+                var removeTags = ReadTags(req.RootElement, "removeTags");
+                var accepted = services.ApplyItemTags(itemIds, addTags, removeTags);
+                return accepted ? Results.Ok() : Results.Problem("Tag mutation failed", statusCode: 409);
+            });
+
+            app.MapPost("/api/tag-editor/upsert-category", (JsonDocument? req) =>
+            {
+                if (services == null) return Results.Problem("API services not available", statusCode: 503);
+                if (req == null || req.RootElement.ValueKind != JsonValueKind.Object) return Results.BadRequest("Invalid request");
+                if (!req.RootElement.TryGetProperty("id", out var idElement) || idElement.ValueKind != JsonValueKind.String)
+                    return Results.BadRequest("id is required");
+                if (!req.RootElement.TryGetProperty("name", out var nameElement) || nameElement.ValueKind != JsonValueKind.String)
+                    return Results.BadRequest("name is required");
+
+                int sortOrder = 0;
+                if (req.RootElement.TryGetProperty("sortOrder", out var sortOrderElement) && sortOrderElement.ValueKind == JsonValueKind.Number)
+                    sortOrderElement.TryGetInt32(out sortOrder);
+
+                var accepted = services.UpsertCategory(new TagCategory
+                {
+                    Id = idElement.GetString() ?? string.Empty,
+                    Name = nameElement.GetString() ?? string.Empty,
+                    SortOrder = sortOrder
+                });
+
+                return accepted ? Results.Ok() : Results.Problem("Category upsert failed", statusCode: 409);
+            });
+
+            app.MapPost("/api/tag-editor/upsert-tag", (JsonDocument? req) =>
+            {
+                if (services == null) return Results.Problem("API services not available", statusCode: 503);
+                if (req == null || req.RootElement.ValueKind != JsonValueKind.Object) return Results.BadRequest("Invalid request");
+                if (!req.RootElement.TryGetProperty("name", out var nameElement) || nameElement.ValueKind != JsonValueKind.String)
+                    return Results.BadRequest("name is required");
+                var categoryId = req.RootElement.TryGetProperty("categoryId", out var categoryElement) && categoryElement.ValueKind == JsonValueKind.String
+                    ? categoryElement.GetString() ?? string.Empty
+                    : string.Empty;
+                var accepted = services.UpsertTag(nameElement.GetString() ?? string.Empty, categoryId);
+                return accepted ? Results.Ok() : Results.Problem("Tag upsert failed", statusCode: 409);
+            });
+
+            app.MapPost("/api/tag-editor/rename-tag", (JsonDocument? req) =>
+            {
+                if (services == null) return Results.Problem("API services not available", statusCode: 503);
+                if (req == null || req.RootElement.ValueKind != JsonValueKind.Object) return Results.BadRequest("Invalid request");
+                if (!req.RootElement.TryGetProperty("oldName", out var oldNameElement) || oldNameElement.ValueKind != JsonValueKind.String)
+                    return Results.BadRequest("oldName is required");
+                if (!req.RootElement.TryGetProperty("newName", out var newNameElement) || newNameElement.ValueKind != JsonValueKind.String)
+                    return Results.BadRequest("newName is required");
+                var newCategoryId = req.RootElement.TryGetProperty("newCategoryId", out var categoryElement) && categoryElement.ValueKind == JsonValueKind.String
+                    ? categoryElement.GetString()
+                    : null;
+                var accepted = services.RenameTag(oldNameElement.GetString() ?? string.Empty, newNameElement.GetString() ?? string.Empty, newCategoryId);
+                return accepted ? Results.Ok() : Results.Problem("Tag rename failed", statusCode: 409);
+            });
+
+            app.MapPost("/api/tag-editor/delete-tag", (JsonDocument? req) =>
+            {
+                if (services == null) return Results.Problem("API services not available", statusCode: 503);
+                if (req == null || req.RootElement.ValueKind != JsonValueKind.Object) return Results.BadRequest("Invalid request");
+                if (!req.RootElement.TryGetProperty("name", out var nameElement) || nameElement.ValueKind != JsonValueKind.String)
+                    return Results.BadRequest("name is required");
+                var accepted = services.DeleteTag(nameElement.GetString() ?? string.Empty);
+                return accepted ? Results.Ok() : Results.Problem("Tag delete failed", statusCode: 409);
+            });
+
+            app.MapPost("/api/tag-editor/delete-category", (JsonDocument? req) =>
+            {
+                if (services == null) return Results.Problem("API services not available", statusCode: 503);
+                if (req == null || req.RootElement.ValueKind != JsonValueKind.Object) return Results.BadRequest("Invalid request");
+                if (!req.RootElement.TryGetProperty("categoryId", out var categoryIdElement) || categoryIdElement.ValueKind != JsonValueKind.String)
+                    return Results.BadRequest("categoryId is required");
+                var newCategoryId = req.RootElement.TryGetProperty("newCategoryId", out var newCategoryIdElement) && newCategoryIdElement.ValueKind == JsonValueKind.String
+                    ? newCategoryIdElement.GetString()
+                    : null;
+                var accepted = services.DeleteCategory(categoryIdElement.GetString() ?? string.Empty, newCategoryId);
+                return accepted ? Results.Ok() : Results.Problem("Category delete failed", statusCode: 409);
+            });
+
             app.MapPost("/api/events/ack", (JsonDocument? req) =>
             {
                 if (req == null || req.RootElement.ValueKind != JsonValueKind.Object)

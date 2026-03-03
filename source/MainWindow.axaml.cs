@@ -41,7 +41,7 @@ namespace ReelRoulette
         AlwaysRemoveFromLibrary = 1 // Always remove from library without showing dialog
     }
 
-    public partial class MainWindow : Window, INotifyPropertyChanged, WebRemote.IWebRemoteApiServices
+    public partial class MainWindow : Window, INotifyPropertyChanged, WebRemote.IWebRemoteApiServices, ITagMutationClient
     {
         private readonly string[] _videoExtensions =
         {
@@ -4859,7 +4859,7 @@ namespace ReelRoulette
             if (sender is Button button && button.Tag is LibraryItem item)
             {
                 Log($"LibraryItemTags_Click: Opening tags dialog for: {item.FileName}");
-                var dialog = new ItemTagsDialog(new List<LibraryItem> { item }, _libraryIndex, _libraryService, _filterPresets);
+                var dialog = new ItemTagsDialog(new List<LibraryItem> { item }, _libraryIndex, _libraryService, this, _filterPresets);
                 var result = await dialog.ShowDialog<bool?>(this);
                 if (result == true)
                 {
@@ -5051,7 +5051,7 @@ namespace ReelRoulette
 
             Log($"ContextMenu_AddTags_Click: Opening tags dialog for {selectedItems.Count} items");
             
-            var dialog = new ItemTagsDialog(selectedItems, _libraryIndex, _libraryService, _filterPresets);
+            var dialog = new ItemTagsDialog(selectedItems, _libraryIndex, _libraryService, this, _filterPresets);
             var result = await dialog.ShowDialog<bool?>(this);
             if (result == true)
             {
@@ -5107,18 +5107,16 @@ namespace ReelRoulette
 
             Log($"ContextMenu_RemoveTags_Click: Removing tags from {selectedItems.Count} items");
             
-            // For now, we'll remove all common tags from all selected items
-            // A more sophisticated UI could be added later to select which tags to remove
-            foreach (var item in selectedItems)
+            var accepted = await ApplyItemTagDeltaAsync(
+                selectedItems.Select(item => item.FullPath).ToList(),
+                [],
+                commonTags.ToList());
+            if (!accepted)
             {
-                if (item.Tags != null)
-                {
-                    item.Tags.RemoveAll(tag => commonTags.Contains(tag, StringComparer.OrdinalIgnoreCase));
-                    _libraryService.UpdateItem(item);
-                }
+                StatusTextBlock.Text = "Tag removal failed (API required).";
+                return;
             }
-            
-            await Task.Run(() => _libraryService.SaveLibrary());
+
             StatusTextBlock.Text = $"Removed {commonTags.Count} tag(s) from {selectedItems.Count} item(s)";
             UpdateLibraryPanel();
             if (_currentVideoPath != null && selectedItems.Any(item => item.FullPath == _currentVideoPath))
@@ -6939,6 +6937,365 @@ namespace ReelRoulette
             return true;
         }
 
+        CoreTagEditorModelResponse? WebRemote.IWebRemoteApiServices.GetTagEditorModel(IReadOnlyList<string> itemIds)
+        {
+            try
+            {
+                if (!_isCoreApiReachable)
+                {
+                    return null;
+                }
+
+                SyncRequestedItemTagsToCore(itemIds);
+                return _coreServerApiClient.GetTagEditorModelAsync(_coreServerBaseUrl, itemIds?.ToList() ?? []).GetAwaiter().GetResult();
+            }
+            catch (Exception ex)
+            {
+                Log($"GetTagEditorModel (Web): API delegation failed ({ex.Message})");
+                return null;
+            }
+        }
+
+        bool WebRemote.IWebRemoteApiServices.ApplyItemTags(IReadOnlyList<string> itemIds, IReadOnlyList<string> addTags, IReadOnlyList<string> removeTags)
+        {
+            try
+            {
+                return ApplyItemTagDeltaAsync(itemIds?.ToList() ?? [], addTags?.ToList() ?? [], removeTags?.ToList() ?? []).GetAwaiter().GetResult();
+            }
+            catch (Exception ex)
+            {
+                Log($"ApplyItemTags (Web): API delegation failed ({ex.Message})");
+                return false;
+            }
+        }
+
+        bool WebRemote.IWebRemoteApiServices.UpsertCategory(TagCategory category)
+        {
+            try
+            {
+                return UpsertCategoryAsync(category).GetAwaiter().GetResult();
+            }
+            catch (Exception ex)
+            {
+                Log($"UpsertCategory (Web): API delegation failed ({ex.Message})");
+                return false;
+            }
+        }
+
+        bool WebRemote.IWebRemoteApiServices.UpsertTag(string tagName, string categoryId)
+        {
+            try
+            {
+                return UpsertTagAsync(tagName, categoryId).GetAwaiter().GetResult();
+            }
+            catch (Exception ex)
+            {
+                Log($"UpsertTag (Web): API delegation failed ({ex.Message})");
+                return false;
+            }
+        }
+
+        bool WebRemote.IWebRemoteApiServices.RenameTag(string oldTagName, string newTagName, string? newCategoryId)
+        {
+            try
+            {
+                return RenameTagAsync(oldTagName, newTagName, newCategoryId).GetAwaiter().GetResult();
+            }
+            catch (Exception ex)
+            {
+                Log($"RenameTag (Web): API delegation failed ({ex.Message})");
+                return false;
+            }
+        }
+
+        bool WebRemote.IWebRemoteApiServices.DeleteTag(string tagName)
+        {
+            try
+            {
+                return DeleteTagAsync(tagName).GetAwaiter().GetResult();
+            }
+            catch (Exception ex)
+            {
+                Log($"DeleteTag (Web): API delegation failed ({ex.Message})");
+                return false;
+            }
+        }
+
+        bool WebRemote.IWebRemoteApiServices.DeleteCategory(string categoryId, string? newCategoryId)
+        {
+            try
+            {
+                return DeleteCategoryAsync(categoryId, newCategoryId).GetAwaiter().GetResult();
+            }
+            catch (Exception ex)
+            {
+                Log($"DeleteCategory (Web): API delegation failed ({ex.Message})");
+                return false;
+            }
+        }
+
+        public async Task<bool> UpsertCategoryAsync(TagCategory category)
+        {
+            if (category == null || string.IsNullOrWhiteSpace(category.Id) || string.IsNullOrWhiteSpace(category.Name))
+            {
+                return false;
+            }
+
+            if (!await EnsureCoreRuntimeAvailableAsync())
+            {
+                return false;
+            }
+
+            var accepted = await _coreServerApiClient.UpsertCategoryAsync(_coreServerBaseUrl, new CoreUpsertCategoryRequest
+            {
+                Id = category.Id,
+                Name = category.Name,
+                SortOrder = category.SortOrder
+            });
+            if (!accepted)
+            {
+                return false;
+            }
+
+            _libraryService.AddOrUpdateCategory(category);
+            _libraryIndex = _libraryService.LibraryIndex;
+            return true;
+        }
+
+        public async Task<CoreTagEditorModelResponse?> GetTagEditorModelAsync(List<string> itemIds)
+        {
+            try
+            {
+                if (!await EnsureCoreRuntimeAvailableAsync())
+                {
+                    return null;
+                }
+
+                SyncRequestedItemTagsToCore(itemIds ?? []);
+                return await _coreServerApiClient.GetTagEditorModelAsync(_coreServerBaseUrl, itemIds ?? []);
+            }
+            catch (Exception ex)
+            {
+                Log($"GetTagEditorModelAsync: API delegation failed ({ex.Message})");
+                return null;
+            }
+        }
+
+        public async Task<bool> DeleteCategoryAsync(string categoryId, string? newCategoryId)
+        {
+            if (string.IsNullOrWhiteSpace(categoryId))
+            {
+                return false;
+            }
+
+            if (!await EnsureCoreRuntimeAvailableAsync())
+            {
+                return false;
+            }
+
+            var accepted = await _coreServerApiClient.DeleteCategoryAsync(_coreServerBaseUrl, categoryId, newCategoryId);
+            if (!accepted)
+            {
+                return false;
+            }
+
+            _libraryService.DeleteCategory(categoryId, newCategoryId);
+            _libraryIndex = _libraryService.LibraryIndex;
+            return true;
+        }
+
+        public async Task<bool> UpsertTagAsync(string tagName, string categoryId)
+        {
+            if (string.IsNullOrWhiteSpace(tagName))
+            {
+                return false;
+            }
+
+            if (!await EnsureCoreRuntimeAvailableAsync())
+            {
+                return false;
+            }
+
+            var accepted = await _coreServerApiClient.UpsertTagAsync(_coreServerBaseUrl, new CoreUpsertTagRequest
+            {
+                Name = tagName,
+                CategoryId = categoryId ?? string.Empty
+            });
+            if (!accepted)
+            {
+                return false;
+            }
+
+            _libraryService.AddOrUpdateTag(new Tag
+            {
+                Name = tagName,
+                CategoryId = categoryId ?? string.Empty
+            });
+            _libraryIndex = _libraryService.LibraryIndex;
+            return true;
+        }
+
+        public async Task<bool> RenameTagAsync(string oldTagName, string newTagName, string? newCategoryId)
+        {
+            if (string.IsNullOrWhiteSpace(oldTagName) || string.IsNullOrWhiteSpace(newTagName))
+            {
+                return false;
+            }
+
+            if (!await EnsureCoreRuntimeAvailableAsync())
+            {
+                return false;
+            }
+
+            var accepted = await _coreServerApiClient.RenameTagAsync(_coreServerBaseUrl, new CoreRenameTagRequest
+            {
+                OldName = oldTagName,
+                NewName = newTagName,
+                NewCategoryId = newCategoryId
+            });
+            if (!accepted)
+            {
+                return false;
+            }
+
+            _libraryService.RenameTag(oldTagName, newTagName, newCategoryId);
+            _ = LibraryService.UpdateFilterPresetsForRenamedTag(_filterPresets, oldTagName, newTagName);
+            _libraryIndex = _libraryService.LibraryIndex;
+            return true;
+        }
+
+        public async Task<bool> DeleteTagAsync(string tagName)
+        {
+            if (string.IsNullOrWhiteSpace(tagName))
+            {
+                return false;
+            }
+
+            if (!await EnsureCoreRuntimeAvailableAsync())
+            {
+                return false;
+            }
+
+            var accepted = await _coreServerApiClient.DeleteTagAsync(_coreServerBaseUrl, tagName);
+            if (!accepted)
+            {
+                return false;
+            }
+
+            _libraryService.DeleteTag(tagName);
+            _ = LibraryService.UpdateFilterPresetsForDeletedTag(_filterPresets, tagName);
+            _libraryIndex = _libraryService.LibraryIndex;
+            return true;
+        }
+
+        public async Task<bool> ApplyItemTagDeltaAsync(List<string> itemIds, List<string> addTags, List<string> removeTags)
+        {
+            if (itemIds == null || itemIds.Count == 0)
+            {
+                return false;
+            }
+
+            if (!await EnsureCoreRuntimeAvailableAsync())
+            {
+                return false;
+            }
+
+            var accepted = await _coreServerApiClient.ApplyItemTagsAsync(_coreServerBaseUrl, new CoreApplyItemTagsRequest
+            {
+                ItemIds = itemIds,
+                AddTags = addTags ?? [],
+                RemoveTags = removeTags ?? []
+            });
+            if (!accepted)
+            {
+                return false;
+            }
+
+            foreach (var itemId in itemIds)
+            {
+                var item = _libraryService.FindItemByPath(itemId);
+                if (item == null)
+                {
+                    continue;
+                }
+
+                item.Tags ??= [];
+                var tagSet = new HashSet<string>(item.Tags, StringComparer.OrdinalIgnoreCase);
+                foreach (var tag in removeTags ?? [])
+                {
+                    tagSet.Remove(tag);
+                }
+
+                foreach (var tag in addTags ?? [])
+                {
+                    tagSet.Add(tag);
+                }
+
+                item.Tags = tagSet.OrderBy(t => t, StringComparer.OrdinalIgnoreCase).ToList();
+                _libraryService.UpdateItem(item);
+            }
+
+            _libraryIndex = _libraryService.LibraryIndex;
+            return true;
+        }
+
+        private void ApplyItemTagsProjection(CoreItemTagsChangedPayload payload)
+        {
+            if (_libraryIndex == null || payload.ItemIds.Count == 0)
+            {
+                return;
+            }
+
+            var changedCurrent = false;
+            foreach (var itemId in payload.ItemIds)
+            {
+                var item = _libraryService.FindItemByPath(itemId);
+                if (item == null)
+                {
+                    continue;
+                }
+
+                item.Tags ??= [];
+                var tagSet = new HashSet<string>(item.Tags, StringComparer.OrdinalIgnoreCase);
+                foreach (var removed in payload.RemovedTags)
+                {
+                    tagSet.Remove(removed);
+                }
+
+                foreach (var added in payload.AddedTags)
+                {
+                    tagSet.Add(added);
+                }
+
+                item.Tags = tagSet.OrderBy(t => t, StringComparer.OrdinalIgnoreCase).ToList();
+                _libraryService.UpdateItem(item);
+                if (!string.IsNullOrWhiteSpace(_currentVideoPath) &&
+                    string.Equals(_currentVideoPath, item.FullPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    changedCurrent = true;
+                }
+            }
+
+            _libraryIndex = _libraryService.LibraryIndex;
+            if (_showLibraryPanel)
+            {
+                UpdateLibraryPanel();
+            }
+
+            if (changedCurrent)
+            {
+                UpdateCurrentFileStatsUi();
+            }
+        }
+
+        private void ApplyTagCatalogProjection(CoreTagCatalogChangedPayload payload)
+        {
+            // Do not replace local tag catalog from SSE payloads.
+            // The desktop catalog is currently the authoritative source for dialog visibility;
+            // applying partial remote snapshots can collapse categories/tags into uncategorized.
+            Log($"CoreEvents: tagCatalogChanged received (reason={payload.Reason}); preserving local catalog.");
+        }
+
         /// <summary>
         /// Ensures a shared token exists when auth is enabled. Generates and persists if blank.
         /// </summary>
@@ -6992,19 +7349,20 @@ namespace ReelRoulette
             }
         }
 
-        private async Task EnsureCoreRuntimeAvailableAsync()
+        private async Task<bool> EnsureCoreRuntimeAvailableAsync()
         {
             var connected = await ProbeCoreServerVersionAsync(updateStatus: true);
             if (connected)
             {
                 EnsureCoreEventStreamStarted();
-                return;
+                _ = SyncTagCatalogToCoreAsync();
+                return true;
             }
 
             var started = await TryStartCoreRuntimeAsync();
             if (!started)
             {
-                return;
+                return false;
             }
 
             await Task.Delay(TimeSpan.FromSeconds(2));
@@ -7012,6 +7370,102 @@ namespace ReelRoulette
             if (connectedAfterStart)
             {
                 EnsureCoreEventStreamStarted();
+                _ = SyncTagCatalogToCoreAsync();
+            }
+
+            return connectedAfterStart;
+        }
+
+        private async Task SyncTagCatalogToCoreAsync()
+        {
+            const string uncategorizedCategoryId = "uncategorized";
+            const string uncategorizedCategoryName = "Uncategorized";
+            if (!_isCoreApiReachable || _libraryIndex == null)
+            {
+                return;
+            }
+
+            try
+            {
+                var request = new CoreSyncTagCatalogRequest
+                {
+                    Categories = (_libraryIndex.Categories ?? [])
+                        .Where(c => !string.IsNullOrWhiteSpace(c.Name))
+                        .Select(c => new CoreTagCategorySnapshot
+                        {
+                            Id = string.IsNullOrWhiteSpace(c.Id) ? uncategorizedCategoryId : c.Id,
+                            Name = string.Equals(c.Id, uncategorizedCategoryId, StringComparison.OrdinalIgnoreCase)
+                                ? uncategorizedCategoryName
+                                : c.Name,
+                            SortOrder = c.SortOrder
+                        })
+                        .GroupBy(c => c.Id, StringComparer.OrdinalIgnoreCase)
+                        .Select(g => g.OrderBy(c => c.SortOrder).First())
+                        .Append(new CoreTagCategorySnapshot
+                        {
+                            Id = uncategorizedCategoryId,
+                            Name = uncategorizedCategoryName,
+                            SortOrder = int.MaxValue
+                        })
+                        .GroupBy(c => c.Id, StringComparer.OrdinalIgnoreCase)
+                        .Select(g => g.First())
+                        .ToList(),
+                    Tags = (_libraryIndex.Tags ?? [])
+                        .Where(t => !string.IsNullOrWhiteSpace(t.Name))
+                        .Select(t => new CoreTagSnapshot
+                        {
+                            Name = t.Name,
+                            CategoryId = string.IsNullOrWhiteSpace(t.CategoryId) ? uncategorizedCategoryId : t.CategoryId
+                        })
+                        .ToList()
+                };
+
+                await _coreServerApiClient.SyncTagCatalogAsync(_coreServerBaseUrl, request);
+            }
+            catch (Exception ex)
+            {
+                Log($"CoreTagCatalog: Failed to sync catalog ({ex.Message})");
+            }
+        }
+
+        private void SyncRequestedItemTagsToCore(IReadOnlyList<string>? itemIds)
+        {
+            if (!_isCoreApiReachable || _libraryService == null || itemIds == null || itemIds.Count == 0)
+            {
+                return;
+            }
+
+            try
+            {
+                var items = itemIds
+                    .Where(id => !string.IsNullOrWhiteSpace(id))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .Select(id => _libraryService.FindItemByPath(id))
+                    .Where(item => item != null)
+                    .Select(item => new CoreItemTagsSnapshot
+                    {
+                        ItemId = item!.FullPath,
+                        Tags = (item.Tags ?? [])
+                            .Where(t => !string.IsNullOrWhiteSpace(t))
+                            .Distinct(StringComparer.OrdinalIgnoreCase)
+                            .OrderBy(t => t, StringComparer.OrdinalIgnoreCase)
+                            .ToList()
+                    })
+                    .ToList();
+
+                if (items.Count == 0)
+                {
+                    return;
+                }
+
+                _coreServerApiClient.SyncItemTagsAsync(_coreServerBaseUrl, new CoreSyncItemTagsRequest
+                {
+                    Items = items
+                }).GetAwaiter().GetResult();
+            }
+            catch (Exception ex)
+            {
+                Log($"CoreTagCatalog: Failed to sync requested item tags ({ex.Message})");
             }
         }
 
@@ -7141,6 +7595,48 @@ namespace ReelRoulette
                     await Dispatcher.UIThread.InvokeAsync(() =>
                     {
                         RecordPlaybackProjection(playback.Path, persistLibrary: false);
+                    });
+                    break;
+                case "itemTagsChanged":
+                    CoreItemTagsChangedPayload? itemTags = null;
+                    try
+                    {
+                        itemTags = envelope.Payload.Deserialize<CoreItemTagsChangedPayload>(eventPayloadOptions);
+                    }
+                    catch
+                    {
+                        // Ignore malformed payloads and keep stream alive.
+                    }
+
+                    if (itemTags == null)
+                    {
+                        return;
+                    }
+
+                    await Dispatcher.UIThread.InvokeAsync(() =>
+                    {
+                        ApplyItemTagsProjection(itemTags);
+                    });
+                    break;
+                case "tagCatalogChanged":
+                    CoreTagCatalogChangedPayload? tagCatalog = null;
+                    try
+                    {
+                        tagCatalog = envelope.Payload.Deserialize<CoreTagCatalogChangedPayload>(eventPayloadOptions);
+                    }
+                    catch
+                    {
+                        // Ignore malformed payloads and keep stream alive.
+                    }
+
+                    if (tagCatalog == null)
+                    {
+                        return;
+                    }
+
+                    await Dispatcher.UIThread.InvokeAsync(() =>
+                    {
+                        ApplyTagCatalogProjection(tagCatalog);
                     });
                     break;
             }
@@ -8581,32 +9077,6 @@ namespace ReelRoulette
             IsFullScreen = isFullScreen;
         }
 
-        private async void ManageTagsMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-        {
-            Log("UI ACTION: ManageTagsMenuItem clicked");
-            var dialog = new ManageTagsDialog(_libraryService, _filterPresets);
-            var result = await dialog.ShowDialog<bool?>(this);
-            if (result == true)
-            {
-                Log("ManageTagsMenuItem_Click: Tags updated, saving library and refreshing UI");
-                
-                // Save library to persist tag changes
-                _libraryService.SaveLibrary();
-                
-                // Save filter presets (in case tags were renamed/deleted)
-                SaveSettings();
-                
-                // Refresh library index reference
-                _libraryIndex = _libraryService.LibraryIndex;
-                
-                // Update library panel if visible
-                if (_showLibraryPanel)
-                {
-                    UpdateLibraryPanel();
-                }
-            }
-        }
-
         private async void AutoTagMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
             Log("UI ACTION: AutoTagMenuItem clicked");
@@ -8646,6 +9116,7 @@ namespace ReelRoulette
 
             int assignmentsAdded = 0;
             var changedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var addTagByPath = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var row in acceptedRows)
             {
@@ -8663,8 +9134,13 @@ namespace ReelRoulette
                         continue;
                     }
 
-                    item.Tags.Add(row.TagName);
-                    _libraryService.UpdateItem(item);
+                    if (!addTagByPath.TryGetValue(path, out var tags))
+                    {
+                        tags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                        addTagByPath[path] = tags;
+                    }
+
+                    tags.Add(row.TagName);
                     assignmentsAdded++;
                     changedPaths.Add(item.FullPath);
                 }
@@ -8677,8 +9153,15 @@ namespace ReelRoulette
                 return;
             }
 
-            await Task.Run(() => _libraryService.SaveLibrary());
-            _libraryIndex = _libraryService.LibraryIndex;
+            foreach (var entry in addTagByPath)
+            {
+                var accepted = await ApplyItemTagDeltaAsync([entry.Key], entry.Value.ToList(), []);
+                if (!accepted)
+                {
+                    StatusTextBlock.Text = "Auto-tag apply failed (API required).";
+                    return;
+                }
+            }
 
             if (_showLibraryPanel)
             {
@@ -9490,7 +9973,7 @@ namespace ReelRoulette
             // OnlyFavoritesMenuItem removed - now using FilterDialog
             FavoriteToggle.IsEnabled = !string.IsNullOrEmpty(_currentVideoPath);
             BlacklistToggle.IsEnabled = !string.IsNullOrEmpty(_currentVideoPath);
-            ManageTagsButton.IsEnabled = !string.IsNullOrEmpty(_currentVideoPath);
+            ManageTagsButton.IsEnabled = true;
             
             // Audio filter menu items removed - now using FilterDialog
         }
@@ -9629,13 +10112,6 @@ namespace ReelRoulette
         private async void ManageTagsForCurrentVideo_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
             Log("UI ACTION: ManageTagsForCurrentVideo button clicked");
-            
-            if (string.IsNullOrEmpty(_currentVideoPath))
-            {
-                Log("ManageTagsForCurrentVideo_Click: No current video selected");
-                StatusTextBlock.Text = "No video selected.";
-                return;
-            }
 
             if (_libraryIndex == null || _libraryService == null)
             {
@@ -9644,21 +10120,31 @@ namespace ReelRoulette
                 return;
             }
 
-            var item = _libraryService.FindItemByPath(_currentVideoPath);
-            if (item == null)
+            var items = new List<LibraryItem>();
+            if (!string.IsNullOrEmpty(_currentVideoPath))
             {
-                Log($"ManageTagsForCurrentVideo_Click: Could not find library item for path: {_currentVideoPath}");
-                StatusTextBlock.Text = "Video not found in library.";
-                return;
+                var item = _libraryService.FindItemByPath(_currentVideoPath);
+                if (item == null)
+                {
+                    Log($"ManageTagsForCurrentVideo_Click: Could not find library item for path: {_currentVideoPath}; opening tag editor with no selected item.");
+                }
+                else
+                {
+                    items.Add(item);
+                }
             }
 
-            Log($"ManageTagsForCurrentVideo_Click: Opening tags dialog for current video: {item.FileName}");
-            var dialog = new ItemTagsDialog(new List<LibraryItem> { item }, _libraryIndex, _libraryService, _filterPresets);
+            Log(items.Count > 0
+                ? $"ManageTagsForCurrentVideo_Click: Opening tags dialog for current video: {items[0].FileName}"
+                : "ManageTagsForCurrentVideo_Click: Opening tags dialog with no selected item.");
+            var dialog = new ItemTagsDialog(items, _libraryIndex, _libraryService, this, _filterPresets);
             var result = await dialog.ShowDialog<bool?>(this);
             
             if (result == true)
             {
-                Log($"ManageTagsForCurrentVideo_Click: Tags updated for: {item.FileName}");
+                Log(items.Count > 0
+                    ? $"ManageTagsForCurrentVideo_Click: Tags updated for: {items[0].FileName}"
+                    : "ManageTagsForCurrentVideo_Click: Tag catalog updated (no selected item)");
                 // Save filter presets (in case tags were renamed/deleted)
                 SaveSettings();
                 // Refresh library index reference
@@ -9670,7 +10156,9 @@ namespace ReelRoulette
                 }
                 // Update stats for current video
                 UpdateCurrentFileStatsUi();
-                StatusTextBlock.Text = $"Tags updated for {Path.GetFileName(_currentVideoPath)}";
+                StatusTextBlock.Text = items.Count > 0
+                    ? $"Tags updated for {Path.GetFileName(_currentVideoPath)}"
+                    : "Tag catalog updated.";
             }
         }
 
@@ -9735,7 +10223,7 @@ namespace ReelRoulette
             FavoriteToggle.IsEnabled = hasVideo;
             BlacklistToggle.IsEnabled = hasVideo;
             ShowInFileManagerButton.IsEnabled = hasVideo;
-            ManageTagsButton.IsEnabled = hasVideo;
+            ManageTagsButton.IsEnabled = true;
 
             if (!hasVideo)
             {

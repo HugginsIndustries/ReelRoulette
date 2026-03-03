@@ -32,7 +32,7 @@ Or run worker via helper scripts:
 ./tools/scripts/run-core.sh
 ```
 
-M4/M5 runtime notes:
+M4/M5/M6a runtime notes:
 
 - `ReelRoulette.Worker` hosts the API/SSE runtime using shared server endpoint composition.
 - Pairing/auth primitive is available through `/api/pair` with optional localhost trust and token/cookie enforcement for paired clients.
@@ -40,6 +40,21 @@ M4/M5 runtime notes:
 - Desktop migrated M5 state flows now call the worker/server API first (favorite/blacklist/playback/random command), then project updates from SSE.
 - Filter/preset session projection sync is available through `GET/POST /api/filter-session`.
 - Migrated M5 state writes are API-required (no local mutation fallback for those flows when core runtime is unavailable).
+- M6a tag/category/item-tag edits are API-first through `/api/tag-editor/*` (desktop dialogs + web tag editor share the same mutation seam).
+- SSE now carries tag synchronization events (`itemTagsChanged`, `tagCatalogChanged`) used by desktop projection paths.
+- Desktop now performs a defensive tag-catalog sync (`POST /api/tag-editor/sync-catalog`) when core connectivity is established so server/web tag-editor model starts from the full library catalog.
+- Desktop hydrates requested item-tag snapshots (`POST /api/tag-editor/sync-item-tags`) before web tag-editor model reads so existing-item tag states render correctly.
+- Category delete operations now reassign tags to canonical `uncategorized` (fixed ID); `Uncategorized` remains selectable in tag-category dropdowns across clients.
+- Web tag editor keeps the combined ItemTags/ManageTags layout, now with touch-friendly controls, collapsible categories, desktop-style button interaction feedback, and batched apply semantics for staged tag/category changes.
+- Chip background colors show current item tag state (`all/some/none`), while pending add/remove intent is shown by orange `+/-` button toggle state before `Apply`.
+- Tag edit supports rename plus reassignment to an existing category via dropdown.
+- Desktop `ItemTagsDialog` now mirrors the combined editor control layout with top controls (`➕ Category`, `🔄`, `❌`) and a single bottom action row (`category`, `tag name`, `➕ Tag`, `✅️`).
+- Desktop tag chip control order is now `➕`, `➖`, `✏️`, `🗑` using existing shared button styles for consistent interaction feedback.
+- Desktop category headers include inline controls (`⬆️`, `⬇️`, `🗑`) using shared square icon button styles.
+- Desktop `ItemTagsDialog` category delete/reorder actions now stage locally (with delete warning on click) and commit through API only on `Apply`; closing the dialog discards staged category mutations.
+- Desktop `ItemTagsDialog` now serves as the single desktop tag-management entry point (including library-level open with no selected items); `+/-` per-tag item assignment controls are disabled when no items are selected.
+- Desktop and web category inline controls now follow `up`, `down`, `edit`, `delete`, and both enforce duplicate category-name prevention.
+- Web bottom controls keep one row on small screens; the tag name input flex-fills remaining width.
 
 ## Testing
 

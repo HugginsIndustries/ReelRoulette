@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
   title: ReelRoulette API
-  version: 0.5.0
-  description: Contract-first API with M5 desktop API-client state migration.
+  version: 0.6.2
+  description: Contract-first API with M6a tag/category mutation flows, desktop hydration sync paths, and web/desktop parity contracts.
 paths:
   /health:
     get:
@@ -277,6 +277,190 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/tag-editor/model:
+    post:
+      summary: Get tag editor model snapshot
+      operationId: postTagEditorModel
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TagEditorModelRequest"
+      responses:
+        "200":
+          description: Tag editor model snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TagEditorModelResponse"
+        "401":
+          description: Unauthorized when auth is required and request is not paired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/tag-editor/apply-item-tags:
+    post:
+      summary: Apply batch add/remove tag deltas to items
+      operationId: postTagEditorApplyItemTags
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApplyItemTagsRequest"
+      responses:
+        "200":
+          description: Tag delta applied
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/tag-editor/upsert-category:
+    post:
+      summary: Create or update category metadata
+      operationId: postTagEditorUpsertCategory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpsertCategoryRequest"
+      responses:
+        "200":
+          description: Category upserted
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/tag-editor/upsert-tag:
+    post:
+      summary: Create or update tag metadata
+      operationId: postTagEditorUpsertTag
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpsertTagRequest"
+      responses:
+        "200":
+          description: Tag upserted
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/tag-editor/rename-tag:
+    post:
+      summary: Rename tag and optionally move category
+      operationId: postTagEditorRenameTag
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RenameTagRequest"
+      responses:
+        "200":
+          description: Tag renamed
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/tag-editor/delete-tag:
+    post:
+      summary: Delete a tag
+      operationId: postTagEditorDeleteTag
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeleteTagRequest"
+      responses:
+        "200":
+          description: Tag deleted
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/tag-editor/delete-category:
+    post:
+      summary: Delete a category and optionally reassign tags
+      operationId: postTagEditorDeleteCategory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeleteCategoryRequest"
+      responses:
+        "200":
+          description: Category deleted
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/tag-editor/sync-catalog:
+    post:
+      summary: Replace server tag catalog snapshot from client source-of-truth
+      operationId: postTagEditorSyncCatalog
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SyncTagCatalogRequest"
+      responses:
+        "200":
+          description: Catalog synchronized
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/tag-editor/sync-item-tags:
+    post:
+      summary: Hydrate item-tag snapshots for requested items
+      operationId: postTagEditorSyncItemTags
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SyncItemTagsRequest"
+      responses:
+        "200":
+          description: Item tags synchronized
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/events:
     get:
       summary: Stream server events
@@ -479,6 +663,8 @@ components:
             - $ref: "#/components/schemas/PlaybackRecordedPayload"
             - $ref: "#/components/schemas/ResyncRequiredPayload"
             - $ref: "#/components/schemas/FilterSessionSnapshot"
+            - $ref: "#/components/schemas/ItemTagsChangedPayload"
+            - $ref: "#/components/schemas/TagCatalogChangedPayload"
 
     ItemStateChangedPayload:
       type: object
@@ -582,3 +768,182 @@ components:
           nullable: true
           items:
             $ref: "#/components/schemas/FilterPresetSnapshot"
+
+    TagCategorySnapshot:
+      type: object
+      required: [id, name, sortOrder]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        sortOrder:
+          type: integer
+          format: int32
+
+    TagSnapshot:
+      type: object
+      required: [name, categoryId]
+      properties:
+        name:
+          type: string
+        categoryId:
+          type: string
+
+    ItemTagsSnapshot:
+      type: object
+      required: [itemId, tags]
+      properties:
+        itemId:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+
+    TagEditorModelRequest:
+      type: object
+      properties:
+        itemIds:
+          type: array
+          items:
+            type: string
+
+    TagEditorModelResponse:
+      type: object
+      required: [categories, tags, items]
+      properties:
+        categories:
+          type: array
+          items:
+            $ref: "#/components/schemas/TagCategorySnapshot"
+        tags:
+          type: array
+          items:
+            $ref: "#/components/schemas/TagSnapshot"
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ItemTagsSnapshot"
+
+    ApplyItemTagsRequest:
+      type: object
+      required: [itemIds]
+      properties:
+        itemIds:
+          type: array
+          items:
+            type: string
+        addTags:
+          type: array
+          items:
+            type: string
+        removeTags:
+          type: array
+          items:
+            type: string
+
+    UpsertCategoryRequest:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        sortOrder:
+          type: integer
+          format: int32
+          nullable: true
+
+    UpsertTagRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        categoryId:
+          type: string
+
+    RenameTagRequest:
+      type: object
+      required: [oldName, newName]
+      properties:
+        oldName:
+          type: string
+        newName:
+          type: string
+        newCategoryId:
+          type: string
+          nullable: true
+
+    DeleteTagRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+
+    DeleteCategoryRequest:
+      type: object
+      required: [categoryId]
+      properties:
+        categoryId:
+          type: string
+        newCategoryId:
+          type: string
+          nullable: true
+
+    SyncTagCatalogRequest:
+      type: object
+      required: [categories, tags]
+      properties:
+        categories:
+          type: array
+          items:
+            $ref: "#/components/schemas/TagCategorySnapshot"
+        tags:
+          type: array
+          items:
+            $ref: "#/components/schemas/TagSnapshot"
+
+    SyncItemTagsRequest:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ItemTagsSnapshot"
+
+    ItemTagsChangedPayload:
+      type: object
+      required: [itemIds, addedTags, removedTags]
+      properties:
+        itemIds:
+          type: array
+          items:
+            type: string
+        addedTags:
+          type: array
+          items:
+            type: string
+        removedTags:
+          type: array
+          items:
+            type: string
+
+    TagCatalogChangedPayload:
+      type: object
+      required: [reason, categories, tags]
+      properties:
+        reason:
+          type: string
+        categories:
+          type: array
+          items:
+            $ref: "#/components/schemas/TagCategorySnapshot"
+        tags:
+          type: array
+          items:
+            $ref: "#/components/schemas/TagSnapshot"

@@ -129,3 +129,32 @@ flowchart TD
 - Desktop subscribes to SSE and applies projected item-state updates for cross-client sync.
 - Desktop keeps the SSE stream alive with reconnect behavior and applies case-insensitive payload projection to avoid dropped updates.
 - Legacy embedded web-remote mutation calls are contained by delegating through the same API-client path.
+
+## M6a Web Tag Editing + Desktop Tag Migration
+
+```mermaid
+flowchart TD
+    desktopDialogs["Desktop Tag Dialogs"]
+    webTagEditor["Web Full-Screen Tag Editor"]
+    tagApiClient["API Tag Mutation Client"]
+    tagEndpoints["Tag Editor API Endpoints"]
+    coreTagState["Core/Server Tag State + Events"]
+    sseTag["SSE Tag Events"]
+    desktopProjection["Desktop Tag Projection"]
+    webProjection["Web Tag Projection"]
+
+    desktopDialogs --> tagApiClient
+    webTagEditor --> tagApiClient
+    tagApiClient --> tagEndpoints
+    tagEndpoints --> coreTagState
+    coreTagState --> sseTag
+    sseTag --> desktopProjection
+    sseTag --> webProjection
+```
+
+- M6a routes migrated tag/category/item-tag mutations through shared API contracts (`itemIds[]` batch-ready).
+- Desktop dialogs remain UI orchestration while mutation authority moves to core/server API paths.
+- Web tag editing keeps a combined ItemTags/ManageTags full-screen layout with touch-first controls, collapsible categories, and batched apply behavior for staged tag/category operations.
+- Desktop seeds core tag catalog state on connect/start (`sync-catalog`) to prevent sparse server tag models and keep web/desktop tag views consistent.
+- Desktop hydrates requested item-tag snapshots (`sync-item-tags`) before web model fetches so tag state projections match current item assignments.
+- Category deletion no longer deletes tags; migrated flows always reassign category-owned tags to canonical `uncategorized` (fixed ID) for consistent multi-client behavior.

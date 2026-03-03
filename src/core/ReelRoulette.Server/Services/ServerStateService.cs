@@ -7,11 +7,14 @@ namespace ReelRoulette.Server.Services;
 // and move business-rule expansion to ReelRoulette.Core services as migrations continue.
 public sealed class ServerStateService
 {
+    private const string UncategorizedCategoryId = "uncategorized";
+    private const string UncategorizedCategoryName = "Uncategorized";
     private readonly object _revisionLock = new();
     private readonly object _subscribersLock = new();
     private readonly object _historyLock = new();
     private readonly object _itemStatesLock = new();
     private readonly object _filterSessionLock = new();
+    private readonly object _tagLock = new();
     private long _revision;
     private readonly Dictionary<string, ItemStateRecord> _itemStates = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<Channel<ServerEventEnvelope>> _subscribers = new();
@@ -19,6 +22,9 @@ public sealed class ServerStateService
     private readonly Random _random = new();
     private const int EventHistoryCapacity = 256;
     private FilterSessionSnapshot _filterSession = new();
+    private readonly Dictionary<string, HashSet<string>> _itemTags = new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<TagCategorySnapshot> _tagCategories = [];
+    private readonly List<TagSnapshot> _tags = [];
 
     private static readonly List<PresetResponse> Presets =
     [
@@ -167,6 +173,258 @@ public sealed class ServerStateService
         Publish("filterSessionChanged", GetFilterSessionSnapshot());
     }
 
+    public TagEditorModelResponse GetTagEditorModel(TagEditorModelRequest? request)
+    {
+        var itemIds = request?.ItemIds?
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList() ?? [];
+
+        lock (_tagLock)
+        {
+            EnsureUncategorizedCategoryLocked();
+            var items = itemIds
+                .Select(id => new ItemTagsSnapshot
+                {
+                    ItemId = id,
+                    Tags = GetOrCreateItemTags(id).OrderBy(t => t, StringComparer.OrdinalIgnoreCase).ToList()
+                })
+                .ToList();
+
+            return new TagEditorModelResponse
+            {
+                Categories = _tagCategories
+                    .OrderBy(c => c.SortOrder)
+                    .ThenBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
+                    .Select(CloneCategory)
+                    .ToList(),
+                Tags = _tags
+                    .OrderBy(t => t.Name, StringComparer.OrdinalIgnoreCase)
+                    .Select(CloneTag)
+                    .ToList(),
+                Items = items
+            };
+        }
+    }
+
+    public void ApplyItemTags(ApplyItemTagsRequest request)
+    {
+        var itemIds = request.ItemIds
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var addTags = request.AddTags
+            .Where(tag => !string.IsNullOrWhiteSpace(tag))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var removeTags = request.RemoveTags
+            .Where(tag => !string.IsNullOrWhiteSpace(tag))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (itemIds.Count == 0 || (addTags.Count == 0 && removeTags.Count == 0))
+        {
+            return;
+        }
+
+        lock (_tagLock)
+        {
+            foreach (var itemId in itemIds)
+            {
+                var tags = GetOrCreateItemTags(itemId);
+                foreach (var removeTag in removeTags)
+                {
+                    tags.Remove(removeTag);
+                }
+
+                foreach (var addTag in addTags)
+                {
+                    tags.Add(addTag);
+                    EnsureTagExists(addTag, UncategorizedCategoryId);
+                }
+            }
+        }
+
+        Publish("itemTagsChanged", new ItemTagsChangedPayload
+        {
+            ItemIds = itemIds,
+            AddedTags = addTags,
+            RemovedTags = removeTags
+        });
+    }
+
+    public void UpsertCategory(UpsertCategoryRequest request)
+    {
+        lock (_tagLock)
+        {
+            var categoryId = NormalizeCategoryId(request.Id);
+            if (string.IsNullOrWhiteSpace(categoryId))
+            {
+                categoryId = UncategorizedCategoryId;
+            }
+
+            if (string.Equals(categoryId, UncategorizedCategoryId, StringComparison.OrdinalIgnoreCase))
+            {
+                EnsureUncategorizedCategoryLocked();
+                return;
+            }
+
+            var existing = _tagCategories.FirstOrDefault(c => string.Equals(c.Id, categoryId, StringComparison.OrdinalIgnoreCase));
+            if (existing == null)
+            {
+                _tagCategories.Add(new TagCategorySnapshot
+                {
+                    Id = categoryId,
+                    Name = request.Name,
+                    SortOrder = request.SortOrder ?? _tagCategories.Count
+                });
+            }
+            else
+            {
+                existing.Name = request.Name;
+                if (request.SortOrder.HasValue)
+                {
+                    existing.SortOrder = request.SortOrder.Value;
+                }
+            }
+        }
+
+        Publish("tagCatalogChanged", CreateTagCatalogPayload("upsertCategory"));
+    }
+
+    public void UpsertTag(UpsertTagRequest request)
+    {
+        lock (_tagLock)
+        {
+            EnsureTagExists(request.Name, NormalizeCategoryId(request.CategoryId));
+        }
+
+        Publish("tagCatalogChanged", CreateTagCatalogPayload("upsertTag"));
+    }
+
+    public void RenameTag(RenameTagRequest request)
+    {
+        lock (_tagLock)
+        {
+            var existing = _tags.FirstOrDefault(t => string.Equals(t.Name, request.OldName, StringComparison.OrdinalIgnoreCase));
+            if (existing == null)
+            {
+                return;
+            }
+
+            existing.Name = request.NewName;
+            if (request.NewCategoryId != null)
+            {
+                existing.CategoryId = NormalizeCategoryId(request.NewCategoryId);
+            }
+
+            foreach (var itemTags in _itemTags.Values)
+            {
+                if (itemTags.Remove(request.OldName))
+                {
+                    itemTags.Add(request.NewName);
+                }
+            }
+        }
+
+        Publish("tagCatalogChanged", CreateTagCatalogPayload("renameTag"));
+    }
+
+    public void DeleteTag(DeleteTagRequest request)
+    {
+        lock (_tagLock)
+        {
+            _tags.RemoveAll(t => string.Equals(t.Name, request.Name, StringComparison.OrdinalIgnoreCase));
+            foreach (var itemTags in _itemTags.Values)
+            {
+                itemTags.Remove(request.Name);
+            }
+        }
+
+        Publish("tagCatalogChanged", CreateTagCatalogPayload("deleteTag"));
+    }
+
+    public void DeleteCategory(DeleteCategoryRequest request)
+    {
+        lock (_tagLock)
+        {
+            var sourceCategoryId = NormalizeCategoryId(request.CategoryId);
+            if (string.Equals(sourceCategoryId, UncategorizedCategoryId, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            var targetCategoryId = request.NewCategoryId == null
+                ? UncategorizedCategoryId
+                : NormalizeCategoryId(request.NewCategoryId);
+
+            EnsureUncategorizedCategoryLocked();
+            _tagCategories.RemoveAll(c => string.Equals(c.Id, sourceCategoryId, StringComparison.OrdinalIgnoreCase));
+            foreach (var tag in _tags.Where(t => string.Equals(t.CategoryId, sourceCategoryId, StringComparison.OrdinalIgnoreCase)))
+            {
+                tag.CategoryId = targetCategoryId;
+            }
+        }
+
+        Publish("tagCatalogChanged", CreateTagCatalogPayload("deleteCategory"));
+    }
+
+    public void SyncTagCatalog(SyncTagCatalogRequest request)
+    {
+        lock (_tagLock)
+        {
+            _tagCategories.Clear();
+            foreach (var category in request.Categories
+                         .Where(c => !string.IsNullOrWhiteSpace(c.Name))
+                         .Select(CloneCategory))
+            {
+                category.Id = NormalizeCategoryId(category.Id);
+                if (string.Equals(category.Id, UncategorizedCategoryId, StringComparison.OrdinalIgnoreCase))
+                {
+                    category.Id = UncategorizedCategoryId;
+                    category.Name = UncategorizedCategoryName;
+                    category.SortOrder = int.MaxValue;
+                }
+
+                if (_tagCategories.Any(c => string.Equals(c.Id, category.Id, StringComparison.OrdinalIgnoreCase)))
+                {
+                    continue;
+                }
+
+                _tagCategories.Add(category);
+            }
+
+            _tags.Clear();
+            foreach (var tag in request.Tags
+                         .Where(t => !string.IsNullOrWhiteSpace(t.Name))
+                         .Select(CloneTag))
+            {
+                tag.CategoryId = NormalizeCategoryId(tag.CategoryId);
+                _tags.RemoveAll(t => string.Equals(t.Name, tag.Name, StringComparison.OrdinalIgnoreCase));
+                _tags.Add(tag);
+            }
+
+            EnsureUncategorizedCategoryLocked();
+        }
+
+        Publish("tagCatalogChanged", CreateTagCatalogPayload("syncCatalog"));
+    }
+
+    public void SyncItemTags(SyncItemTagsRequest request)
+    {
+        lock (_tagLock)
+        {
+            foreach (var item in request.Items.Where(i => !string.IsNullOrWhiteSpace(i.ItemId)))
+            {
+                var itemId = item.ItemId.Trim();
+                _itemTags[itemId] = (item.Tags ?? [])
+                    .Where(t => !string.IsNullOrWhiteSpace(t))
+                    .Select(t => t.Trim())
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            }
+        }
+    }
+
     public ChannelReader<ServerEventEnvelope> Subscribe(CancellationToken cancellationToken)
     {
         var channel = Channel.CreateUnbounded<ServerEventEnvelope>();
@@ -286,6 +544,94 @@ public sealed class ServerStateService
                 Name = p.Name,
                 FilterState = p.FilterState
             }).ToList() ?? []
+        };
+    }
+
+    private HashSet<string> GetOrCreateItemTags(string itemId)
+    {
+        if (_itemTags.TryGetValue(itemId, out var existing))
+        {
+            return existing;
+        }
+
+        var created = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        _itemTags[itemId] = created;
+        return created;
+    }
+
+    private void EnsureTagExists(string tagName, string categoryId)
+    {
+        var normalizedCategoryId = NormalizeCategoryId(categoryId);
+        EnsureUncategorizedCategoryLocked();
+        var existing = _tags.FirstOrDefault(t => string.Equals(t.Name, tagName, StringComparison.OrdinalIgnoreCase));
+        if (existing == null)
+        {
+            _tags.Add(new TagSnapshot
+            {
+                Name = tagName,
+                CategoryId = normalizedCategoryId
+            });
+            return;
+        }
+
+        existing.CategoryId = normalizedCategoryId;
+    }
+
+    private static string NormalizeCategoryId(string? categoryId)
+    {
+        return string.IsNullOrWhiteSpace(categoryId)
+            ? UncategorizedCategoryId
+            : categoryId.Trim();
+    }
+
+    private void EnsureUncategorizedCategoryLocked()
+    {
+        var existing = _tagCategories.FirstOrDefault(c => string.Equals(c.Id, UncategorizedCategoryId, StringComparison.OrdinalIgnoreCase));
+        if (existing == null)
+        {
+            _tagCategories.Add(new TagCategorySnapshot
+            {
+                Id = UncategorizedCategoryId,
+                Name = UncategorizedCategoryName,
+                SortOrder = int.MaxValue
+            });
+            return;
+        }
+
+        existing.Id = UncategorizedCategoryId;
+        existing.Name = UncategorizedCategoryName;
+        existing.SortOrder = int.MaxValue;
+    }
+
+    private TagCatalogChangedPayload CreateTagCatalogPayload(string reason)
+    {
+        lock (_tagLock)
+        {
+            return new TagCatalogChangedPayload
+            {
+                Reason = reason,
+                Categories = _tagCategories.Select(CloneCategory).ToList(),
+                Tags = _tags.Select(CloneTag).ToList()
+            };
+        }
+    }
+
+    private static TagCategorySnapshot CloneCategory(TagCategorySnapshot source)
+    {
+        return new TagCategorySnapshot
+        {
+            Id = source.Id,
+            Name = source.Name,
+            SortOrder = source.SortOrder
+        };
+    }
+
+    private static TagSnapshot CloneTag(TagSnapshot source)
+    {
+        return new TagSnapshot
+        {
+            Name = source.Name,
+            CategoryId = source.CategoryId
         };
     }
 

@@ -78,6 +78,81 @@ public sealed class CoreServerApiClient
         return response.IsSuccessStatusCode;
     }
 
+    public async Task<CoreTagEditorModelResponse?> GetTagEditorModelAsync(string baseUrl, List<string> itemIds, CancellationToken cancellationToken = default)
+    {
+        var request = new CoreTagEditorModelRequest
+        {
+            ItemIds = itemIds
+        };
+        using var content = SerializeJson(request);
+        using var response = await _httpClient.PostAsync($"{baseUrl.TrimEnd('/')}/api/tag-editor/model", content, cancellationToken).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        return await JsonSerializer.DeserializeAsync<CoreTagEditorModelResponse>(stream, _serializerOptions, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<bool> ApplyItemTagsAsync(string baseUrl, CoreApplyItemTagsRequest request, CancellationToken cancellationToken = default)
+    {
+        using var content = SerializeJson(request);
+        using var response = await _httpClient.PostAsync($"{baseUrl.TrimEnd('/')}/api/tag-editor/apply-item-tags", content, cancellationToken).ConfigureAwait(false);
+        return response.IsSuccessStatusCode;
+    }
+
+    public async Task<bool> UpsertCategoryAsync(string baseUrl, CoreUpsertCategoryRequest request, CancellationToken cancellationToken = default)
+    {
+        using var content = SerializeJson(request);
+        using var response = await _httpClient.PostAsync($"{baseUrl.TrimEnd('/')}/api/tag-editor/upsert-category", content, cancellationToken).ConfigureAwait(false);
+        return response.IsSuccessStatusCode;
+    }
+
+    public async Task<bool> UpsertTagAsync(string baseUrl, CoreUpsertTagRequest request, CancellationToken cancellationToken = default)
+    {
+        using var content = SerializeJson(request);
+        using var response = await _httpClient.PostAsync($"{baseUrl.TrimEnd('/')}/api/tag-editor/upsert-tag", content, cancellationToken).ConfigureAwait(false);
+        return response.IsSuccessStatusCode;
+    }
+
+    public async Task<bool> RenameTagAsync(string baseUrl, CoreRenameTagRequest request, CancellationToken cancellationToken = default)
+    {
+        using var content = SerializeJson(request);
+        using var response = await _httpClient.PostAsync($"{baseUrl.TrimEnd('/')}/api/tag-editor/rename-tag", content, cancellationToken).ConfigureAwait(false);
+        return response.IsSuccessStatusCode;
+    }
+
+    public async Task<bool> DeleteTagAsync(string baseUrl, string tagName, CancellationToken cancellationToken = default)
+    {
+        var request = new { name = tagName };
+        using var content = SerializeJson(request);
+        using var response = await _httpClient.PostAsync($"{baseUrl.TrimEnd('/')}/api/tag-editor/delete-tag", content, cancellationToken).ConfigureAwait(false);
+        return response.IsSuccessStatusCode;
+    }
+
+    public async Task<bool> DeleteCategoryAsync(string baseUrl, string categoryId, string? newCategoryId, CancellationToken cancellationToken = default)
+    {
+        var request = new { categoryId, newCategoryId };
+        using var content = SerializeJson(request);
+        using var response = await _httpClient.PostAsync($"{baseUrl.TrimEnd('/')}/api/tag-editor/delete-category", content, cancellationToken).ConfigureAwait(false);
+        return response.IsSuccessStatusCode;
+    }
+
+    public async Task<bool> SyncTagCatalogAsync(string baseUrl, CoreSyncTagCatalogRequest request, CancellationToken cancellationToken = default)
+    {
+        using var content = SerializeJson(request);
+        using var response = await _httpClient.PostAsync($"{baseUrl.TrimEnd('/')}/api/tag-editor/sync-catalog", content, cancellationToken).ConfigureAwait(false);
+        return response.IsSuccessStatusCode;
+    }
+
+    public async Task<bool> SyncItemTagsAsync(string baseUrl, CoreSyncItemTagsRequest request, CancellationToken cancellationToken = default)
+    {
+        using var content = SerializeJson(request);
+        using var response = await _httpClient.PostAsync($"{baseUrl.TrimEnd('/')}/api/tag-editor/sync-item-tags", content, cancellationToken).ConfigureAwait(false);
+        return response.IsSuccessStatusCode;
+    }
+
     public async Task ListenToEventsAsync(
         string baseUrl,
         string clientId,
@@ -207,4 +282,87 @@ public sealed class CoreFilterSessionSnapshot
     public string? ActivePresetName { get; set; }
     public JsonElement? CurrentFilterState { get; set; }
     public List<CoreFilterPresetSnapshot>? Presets { get; set; }
+}
+
+public sealed class CoreTagEditorModelRequest
+{
+    public List<string> ItemIds { get; set; } = [];
+}
+
+public sealed class CoreTagEditorModelResponse
+{
+    public List<CoreTagCategorySnapshot> Categories { get; set; } = [];
+    public List<CoreTagSnapshot> Tags { get; set; } = [];
+    public List<CoreItemTagsSnapshot> Items { get; set; } = [];
+}
+
+public sealed class CoreTagCategorySnapshot
+{
+    public string Id { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public int SortOrder { get; set; }
+}
+
+public sealed class CoreTagSnapshot
+{
+    public string Name { get; set; } = string.Empty;
+    public string CategoryId { get; set; } = string.Empty;
+}
+
+public sealed class CoreItemTagsSnapshot
+{
+    public string ItemId { get; set; } = string.Empty;
+    public List<string> Tags { get; set; } = [];
+}
+
+public sealed class CoreApplyItemTagsRequest
+{
+    public List<string> ItemIds { get; set; } = [];
+    public List<string> AddTags { get; set; } = [];
+    public List<string> RemoveTags { get; set; } = [];
+}
+
+public sealed class CoreUpsertCategoryRequest
+{
+    public string Id { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public int? SortOrder { get; set; }
+}
+
+public sealed class CoreUpsertTagRequest
+{
+    public string Name { get; set; } = string.Empty;
+    public string CategoryId { get; set; } = string.Empty;
+}
+
+public sealed class CoreRenameTagRequest
+{
+    public string OldName { get; set; } = string.Empty;
+    public string NewName { get; set; } = string.Empty;
+    public string? NewCategoryId { get; set; }
+}
+
+public sealed class CoreItemTagsChangedPayload
+{
+    public List<string> ItemIds { get; set; } = [];
+    public List<string> AddedTags { get; set; } = [];
+    public List<string> RemovedTags { get; set; } = [];
+}
+
+public sealed class CoreTagCatalogChangedPayload
+{
+    public string Reason { get; set; } = string.Empty;
+    public List<CoreTagCategorySnapshot> Categories { get; set; } = [];
+    public List<CoreTagSnapshot> Tags { get; set; } = [];
+}
+
+public sealed class CoreSyncTagCatalogRequest
+{
+    public List<CoreTagCategorySnapshot> Categories { get; set; } = [];
+    public List<CoreTagSnapshot> Tags { get; set; } = [];
+}
+
+public sealed class CoreSyncItemTagsRequest
+{
+    public List<CoreItemTagsSnapshot> Items { get; set; } = [];
 }

@@ -23,6 +23,7 @@ namespace ReelRoulette
 
     public class ItemTagsCategoryViewModel : INotifyPropertyChanged
     {
+        public const string UncategorizedCategoryId = "uncategorized";
         private bool _isExpanded = true;
 
         public string CategoryId { get; set; } = string.Empty;
@@ -41,6 +42,9 @@ namespace ReelRoulette
         }
 
         public string ExpandIcon => IsExpanded ? "▼" : "▶";
+        public bool IsReorderable =>
+            !string.IsNullOrWhiteSpace(CategoryId) &&
+            !string.Equals(CategoryId, UncategorizedCategoryId, StringComparison.OrdinalIgnoreCase);
 
         public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -68,6 +72,7 @@ namespace ReelRoulette
         }
 
         public string CategoryId { get; set; } = string.Empty;
+        public bool IsSelectionEnabled { get; set; } = true;
 
         public TagState TagState
         {
@@ -139,6 +144,13 @@ namespace ReelRoulette
         private System.Collections.Generic.List<FilterPreset>? _filterPresets;
         private ObservableCollection<ItemTagsCategoryViewModel> _categoryViewModels = new ObservableCollection<ItemTagsCategoryViewModel>();
         private PixelPoint? _savedPosition; // Store position to set after window opens
+        private readonly ITagMutationClient _tagMutationClient;
+        private readonly HashSet<string> _pendingDeletedCategoryIds = new(StringComparer.OrdinalIgnoreCase);
+        private readonly HashSet<string> _pendingDeletedTagNames = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, Tag> _pendingUpsertTags = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, (string OldName, string NewName, string? NewCategoryId)> _pendingRenameTags = new(StringComparer.OrdinalIgnoreCase);
+        private List<string> _baselineCategoryOrder = [];
+        private Dictionary<string, string> _baselineCategoryNames = new(StringComparer.OrdinalIgnoreCase);
 
         private static void Log(string message)
         {
@@ -151,13 +163,19 @@ namespace ReelRoulette
             catch { }
         }
 
-        public ItemTagsDialog(List<LibraryItem> items, LibraryIndex? libraryIndex, LibraryService? libraryService, System.Collections.Generic.List<FilterPreset>? filterPresets = null)
+        public ItemTagsDialog(
+            List<LibraryItem> items,
+            LibraryIndex? libraryIndex,
+            LibraryService? libraryService,
+            ITagMutationClient tagMutationClient,
+            System.Collections.Generic.List<FilterPreset>? filterPresets = null)
         {
             InitializeComponent();
-            _items = items;
-            _libraryIndex = libraryIndex;
+            _items = CloneItemsForEditor(items);
+            _libraryIndex = CloneLibraryIndexForEditor(libraryIndex);
             _libraryService = libraryService;
             _filterPresets = filterPresets;
+            _tagMutationClient = tagMutationClient ?? throw new ArgumentNullException(nameof(tagMutationClient));
 
             Log($"ItemTagsDialog: Opening tags dialog for {items.Count} item(s)");
 
@@ -193,11 +211,10 @@ namespace ReelRoulette
             Opened += OnOpened;
             Closing += OnClosing;
 
-            LoadTagsByCategory();
-            UpdateCategoryComboBox();
+            CategoriesItemsControl.ItemsSource = _categoryViewModels;
         }
 
-        private void OnOpened(object? sender, EventArgs e)
+        private async void OnOpened(object? sender, EventArgs e)
         {
             // Set position after window is fully opened and laid out (Avalonia best practice)
             if (_savedPosition.HasValue)
@@ -205,6 +222,8 @@ namespace ReelRoulette
                 Position = _savedPosition.Value;
                 Log($"ItemTagsDialog: Position set to ({_savedPosition.Value.X}, {_savedPosition.Value.Y}) after window opened");
             }
+
+            await RefreshTagEditorModelAsync();
         }
 
         private void OnClosing(object? sender, WindowClosingEventArgs e)
@@ -218,8 +237,39 @@ namespace ReelRoulette
         {
             _categoryViewModels.Clear();
 
-            var categories = _libraryIndex?.Categories ?? new List<TagCategory>();
-            var availableTags = _libraryIndex?.Tags ?? new List<Tag>();
+            var categories = (_libraryIndex?.Categories ?? new List<TagCategory>())
+                .Where(c => !string.IsNullOrWhiteSpace(c.Name))
+                .Where(c => !_pendingDeletedCategoryIds.Contains(c.Id ?? string.Empty))
+                .Select(c => new TagCategory
+                {
+                    Id = string.IsNullOrWhiteSpace(c.Id) ? ItemTagsCategoryViewModel.UncategorizedCategoryId : c.Id,
+                    Name = string.Equals(c.Id, ItemTagsCategoryViewModel.UncategorizedCategoryId, StringComparison.OrdinalIgnoreCase)
+                        ? "Uncategorized"
+                        : c.Name,
+                    SortOrder = c.SortOrder
+                })
+                .GroupBy(c => c.Id, StringComparer.OrdinalIgnoreCase)
+                .Select(g => g.OrderBy(c => c.SortOrder).First())
+                .ToList();
+
+            if (!categories.Any(c => string.Equals(c.Id, ItemTagsCategoryViewModel.UncategorizedCategoryId, StringComparison.OrdinalIgnoreCase)))
+            {
+                categories.Add(new TagCategory
+                {
+                    Id = ItemTagsCategoryViewModel.UncategorizedCategoryId,
+                    Name = "Uncategorized",
+                    SortOrder = int.MaxValue
+                });
+            }
+
+            var availableTags = (_libraryIndex?.Tags ?? new List<Tag>())
+                .Where(t => !string.IsNullOrWhiteSpace(t.Name))
+                .Select(t => new Tag
+                {
+                    Name = t.Name,
+                    CategoryId = string.IsNullOrWhiteSpace(t.CategoryId) ? ItemTagsCategoryViewModel.UncategorizedCategoryId : t.CategoryId
+                })
+                .ToList();
 
             // Get all unique tags from all items
             var allItemTags = _items.SelectMany(item => item.Tags ?? new List<string>())
@@ -254,7 +304,7 @@ namespace ReelRoulette
                         string.Equals(t.Name, tagName, StringComparison.OrdinalIgnoreCase));
 
                     // Include tag if it belongs to this category
-                    if (availableTag != null && availableTag.CategoryId == category.Id)
+                    if (availableTag != null && string.Equals(availableTag.CategoryId, category.Id, StringComparison.OrdinalIgnoreCase))
                     {
                         // Count how many items have this tag
                         var itemsWithTag = _items.Count(item =>
@@ -271,6 +321,7 @@ namespace ReelRoulette
                         {
                             Tag = tagName,
                             CategoryId = category.Id,
+                            IsSelectionEnabled = _items.Count > 0,
                             TagState = tagState,
                             IsPlusSelected = false,
                             IsMinusSelected = false
@@ -280,7 +331,8 @@ namespace ReelRoulette
                     }
                 }
 
-                if (categoryVm.Tags.Count > 0)
+                var isUncategorized = string.Equals(categoryVm.CategoryId, ItemTagsCategoryViewModel.UncategorizedCategoryId, StringComparison.OrdinalIgnoreCase);
+                if (!isUncategorized || categoryVm.Tags.Count > 0)
                 {
                     _categoryViewModels.Add(categoryVm);
                 }
@@ -292,9 +344,11 @@ namespace ReelRoulette
             {
                 Log($"ItemTagsDialog.LoadTagsByCategory: Found {orphanedTags.Count} orphaned tags");
 
-                var orphanedCategoryVm = new ItemTagsCategoryViewModel
+                var orphanedCategoryVm = _categoryViewModels.FirstOrDefault(c =>
+                    string.Equals(c.CategoryId, ItemTagsCategoryViewModel.UncategorizedCategoryId, StringComparison.OrdinalIgnoreCase))
+                    ?? new ItemTagsCategoryViewModel
                 {
-                    CategoryId = string.Empty,
+                    CategoryId = ItemTagsCategoryViewModel.UncategorizedCategoryId,
                     CategoryName = "Uncategorized"
                 };
 
@@ -313,24 +367,46 @@ namespace ReelRoulette
                     orphanedCategoryVm.Tags.Add(new BatchTagViewModel
                     {
                         Tag = tagName,
-                        CategoryId = string.Empty,
+                        CategoryId = ItemTagsCategoryViewModel.UncategorizedCategoryId,
+                        IsSelectionEnabled = _items.Count > 0,
                         TagState = tagState,
                         IsPlusSelected = false,
                         IsMinusSelected = false
                     });
                 }
 
-                _categoryViewModels.Add(orphanedCategoryVm);
+                if (!_categoryViewModels.Any(c => ReferenceEquals(c, orphanedCategoryVm)))
+                {
+                    _categoryViewModels.Add(orphanedCategoryVm);
+                }
             }
 
             CategoriesItemsControl.ItemsSource = _categoryViewModels;
+            UpdateApplyButtonState();
         }
 
         private void UpdateCategoryComboBox()
         {
             TagCategoryComboBox.Items.Clear();
-            var categories = _libraryIndex?.Categories ?? new List<TagCategory>();
-            foreach (var category in categories.OrderBy(c => c.SortOrder))
+            var categories = _categoryViewModels
+                .Select((c, index) => new TagCategory
+                {
+                    Id = c.CategoryId,
+                    Name = c.CategoryName,
+                    SortOrder = index
+                })
+                .ToList();
+            if (!categories.Any(c => string.Equals(c.Id, ItemTagsCategoryViewModel.UncategorizedCategoryId, StringComparison.OrdinalIgnoreCase)))
+            {
+                categories.Add(new TagCategory
+                {
+                    Id = ItemTagsCategoryViewModel.UncategorizedCategoryId,
+                    Name = "Uncategorized",
+                    SortOrder = int.MaxValue
+                });
+            }
+
+            foreach (var category in categories)
             {
                 TagCategoryComboBox.Items.Add(new ComboBoxItem
                 {
@@ -355,6 +431,512 @@ namespace ReelRoulette
             }
         }
 
+        private void MoveCategoryUpButton_Click(object? sender, RoutedEventArgs e)
+        {
+            if (sender is not Button button || button.CommandParameter is not ItemTagsCategoryViewModel categoryVm || !categoryVm.IsReorderable)
+            {
+                return;
+            }
+
+            var movableWithIndices = _categoryViewModels
+                .Select((category, index) => new { category, index })
+                .Where(x => x.category.IsReorderable)
+                .ToList();
+            var currentPosition = movableWithIndices.FindIndex(x => ReferenceEquals(x.category, categoryVm));
+            if (currentPosition <= 0)
+            {
+                return;
+            }
+
+            var sourceIndex = movableWithIndices[currentPosition].index;
+            var targetIndex = movableWithIndices[currentPosition - 1].index;
+            _categoryViewModels.Move(sourceIndex, targetIndex);
+            SyncLibraryIndexFromViewModels();
+            UpdateCategoryComboBox();
+            Log($"ItemTagsDialog.MoveCategoryUpButton_Click: Queued reorder for category '{categoryVm.CategoryName}'");
+            UpdateApplyButtonState();
+        }
+
+        private void MoveCategoryDownButton_Click(object? sender, RoutedEventArgs e)
+        {
+            if (sender is not Button button || button.CommandParameter is not ItemTagsCategoryViewModel categoryVm || !categoryVm.IsReorderable)
+            {
+                return;
+            }
+
+            var movableWithIndices = _categoryViewModels
+                .Select((category, index) => new { category, index })
+                .Where(x => x.category.IsReorderable)
+                .ToList();
+            var currentPosition = movableWithIndices.FindIndex(x => ReferenceEquals(x.category, categoryVm));
+            if (currentPosition < 0 || currentPosition >= movableWithIndices.Count - 1)
+            {
+                return;
+            }
+
+            var sourceIndex = movableWithIndices[currentPosition].index;
+            var targetIndex = movableWithIndices[currentPosition + 1].index;
+            _categoryViewModels.Move(sourceIndex, targetIndex);
+            SyncLibraryIndexFromViewModels();
+            UpdateCategoryComboBox();
+            Log($"ItemTagsDialog.MoveCategoryDownButton_Click: Queued reorder for category '{categoryVm.CategoryName}'");
+            UpdateApplyButtonState();
+        }
+
+        private async void DeleteCategoryButton_Click(object? sender, RoutedEventArgs e)
+        {
+            if (sender is not Button button || button.CommandParameter is not ItemTagsCategoryViewModel categoryVm || !categoryVm.IsReorderable)
+            {
+                return;
+            }
+
+            var confirmed = await ShowDeleteCategoryWarningAsync(categoryVm);
+            if (!confirmed)
+            {
+                return;
+            }
+
+            _pendingDeletedCategoryIds.Add(categoryVm.CategoryId);
+
+            var uncategorizedCategory = _categoryViewModels.FirstOrDefault(c =>
+                string.Equals(c.CategoryId, ItemTagsCategoryViewModel.UncategorizedCategoryId, StringComparison.OrdinalIgnoreCase));
+            if (uncategorizedCategory == null)
+            {
+                uncategorizedCategory = new ItemTagsCategoryViewModel
+                {
+                    CategoryId = ItemTagsCategoryViewModel.UncategorizedCategoryId,
+                    CategoryName = "Uncategorized"
+                };
+                _categoryViewModels.Add(uncategorizedCategory);
+            }
+
+            foreach (var tag in categoryVm.Tags)
+            {
+                if (uncategorizedCategory.Tags.Any(existing =>
+                        string.Equals(existing.Tag, tag.Tag, StringComparison.OrdinalIgnoreCase)))
+                {
+                    continue;
+                }
+
+                tag.CategoryId = ItemTagsCategoryViewModel.UncategorizedCategoryId;
+                uncategorizedCategory.Tags.Add(tag);
+            }
+
+            _categoryViewModels.Remove(categoryVm);
+            SyncLibraryIndexFromViewModels();
+            UpdateCategoryComboBox();
+            Log($"ItemTagsDialog.DeleteCategoryButton_Click: Queued delete for category '{categoryVm.CategoryName}'");
+            UpdateApplyButtonState();
+        }
+
+        private async System.Threading.Tasks.Task<bool> ShowDeleteCategoryWarningAsync(ItemTagsCategoryViewModel categoryVm)
+        {
+            var dialog = new Window
+            {
+                Title = "Delete Category",
+                Width = 420,
+                Height = 180,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner
+            };
+
+            var message = new TextBlock
+            {
+                Text = $"Delete category '{categoryVm.CategoryName}'? Tags will become Uncategorized when you click Apply.",
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(16, 16, 16, 8)
+            };
+
+            var buttonPanel = new StackPanel
+            {
+                Orientation = Avalonia.Layout.Orientation.Horizontal,
+                HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
+                Margin = new Thickness(16, 8, 16, 16),
+                Spacing = 8,
+                Children =
+                {
+                    new Button { Content = "Cancel", MinWidth = 90 },
+                    new Button { Content = "Delete", MinWidth = 90, Classes = { "accent" } }
+                }
+            };
+
+            dialog.Content = new StackPanel { Children = { message, buttonPanel } };
+
+            var confirmed = false;
+            (buttonPanel.Children[0] as Button)!.Click += (_, _) => dialog.Close();
+            (buttonPanel.Children[1] as Button)!.Click += (_, _) =>
+            {
+                confirmed = true;
+                dialog.Close();
+            };
+
+            await dialog.ShowDialog(this);
+            return confirmed;
+        }
+
+        private async System.Threading.Tasks.Task<bool> ApplyPendingCategoryMutationsAsync()
+        {
+            foreach (var categoryId in _pendingDeletedCategoryIds)
+            {
+                var accepted = await _tagMutationClient.DeleteCategoryAsync(categoryId, ItemTagsCategoryViewModel.UncategorizedCategoryId);
+                if (!accepted)
+                {
+                    ShowApiRequiredError();
+                    return false;
+                }
+            }
+
+            var orderedCategories = _categoryViewModels
+                .Where(c => c.IsReorderable)
+                .ToList();
+            for (var i = 0; i < orderedCategories.Count; i++)
+            {
+                var categoryVm = orderedCategories[i];
+                var accepted = await _tagMutationClient.UpsertCategoryAsync(new TagCategory
+                {
+                    Id = categoryVm.CategoryId,
+                    Name = categoryVm.CategoryName,
+                    SortOrder = i
+                });
+                if (!accepted)
+                {
+                    ShowApiRequiredError();
+                    return false;
+                }
+            }
+
+            _pendingDeletedCategoryIds.Clear();
+            return true;
+        }
+
+        private async System.Threading.Tasks.Task<bool> ApplyPendingTagMutationsAsync()
+        {
+            foreach (var tagName in _pendingDeletedTagNames.ToList())
+            {
+                var deleted = await _tagMutationClient.DeleteTagAsync(tagName);
+                if (!deleted)
+                {
+                    ShowApiRequiredError();
+                    return false;
+                }
+
+                _ = LibraryService.UpdateFilterPresetsForDeletedTag(_filterPresets, tagName);
+            }
+
+            foreach (var rename in _pendingRenameTags.Values.ToList())
+            {
+                var renamed = await _tagMutationClient.RenameTagAsync(rename.OldName, rename.NewName, rename.NewCategoryId);
+                if (!renamed)
+                {
+                    ShowApiRequiredError();
+                    return false;
+                }
+
+                if (!string.Equals(rename.OldName, rename.NewName, StringComparison.OrdinalIgnoreCase))
+                {
+                    _ = LibraryService.UpdateFilterPresetsForRenamedTag(_filterPresets, rename.OldName, rename.NewName);
+                }
+            }
+
+            foreach (var upsert in _pendingUpsertTags.Values.ToList())
+            {
+                var upserted = await _tagMutationClient.UpsertTagAsync(upsert.Name, upsert.CategoryId);
+                if (!upserted)
+                {
+                    ShowApiRequiredError();
+                    return false;
+                }
+            }
+
+            _pendingDeletedTagNames.Clear();
+            _pendingRenameTags.Clear();
+            _pendingUpsertTags.Clear();
+            return true;
+        }
+
+        private bool CategoryNameExists(string name, string? exceptCategoryId = null)
+        {
+            var normalized = (name ?? string.Empty).Trim();
+            return _categoryViewModels.Any(c =>
+                !string.Equals(c.CategoryId, exceptCategoryId, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals((c.CategoryName ?? string.Empty).Trim(), normalized, StringComparison.OrdinalIgnoreCase));
+        }
+
+        private async System.Threading.Tasks.Task ShowCategoryExistsWarningAsync()
+        {
+            var dialog = new Window
+            {
+                Title = "Category exists",
+                Width = 360,
+                Height = 150,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner
+            };
+            var text = new TextBlock
+            {
+                Text = "Category already exists.",
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(16, 16, 16, 8)
+            };
+            var ok = new Button
+            {
+                Content = "OK",
+                MinWidth = 80,
+                HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
+                Margin = new Thickness(16)
+            };
+            ok.Click += (_, _) => dialog.Close();
+            dialog.Content = new StackPanel { Children = { text, ok } };
+            await dialog.ShowDialog(this);
+        }
+
+        private async System.Threading.Tasks.Task<bool> RefreshTagEditorModelAsync()
+        {
+            var model = await _tagMutationClient.GetTagEditorModelAsync(_items.Select(i => i.FullPath).ToList());
+            if (model == null)
+            {
+                ShowApiRequiredError();
+                return false;
+            }
+
+            if (_libraryIndex != null)
+            {
+                _libraryIndex.Categories = model.Categories
+                    .Select(c => new TagCategory
+                    {
+                        Id = string.IsNullOrWhiteSpace(c.Id) ? ItemTagsCategoryViewModel.UncategorizedCategoryId : c.Id,
+                        Name = c.Name,
+                        SortOrder = c.SortOrder
+                    })
+                    .ToList();
+                _libraryIndex.Tags = model.Tags
+                    .Select(t => new Tag
+                    {
+                        Name = t.Name,
+                        CategoryId = string.IsNullOrWhiteSpace(t.CategoryId) ? ItemTagsCategoryViewModel.UncategorizedCategoryId : t.CategoryId
+                    })
+                    .ToList();
+            }
+
+            var itemsById = model.Items.ToDictionary(i => i.ItemId, StringComparer.OrdinalIgnoreCase);
+            foreach (var item in _items)
+            {
+                if (itemsById.TryGetValue(item.FullPath, out var snapshot))
+                {
+                    item.Tags = snapshot.Tags?.ToList() ?? [];
+                }
+            }
+
+            _pendingDeletedCategoryIds.Clear();
+            _pendingDeletedTagNames.Clear();
+            _pendingRenameTags.Clear();
+            _pendingUpsertTags.Clear();
+            LoadTagsByCategory();
+            UpdateCategoryComboBox();
+            _baselineCategoryOrder = GetCurrentReorderableCategoryOrder();
+            _baselineCategoryNames = GetCurrentCategoryNames();
+            UpdateApplyButtonState();
+            return true;
+        }
+
+        private void UpdateApplyButtonState()
+        {
+            var hasItemTagSelections = _categoryViewModels.Any(c => c.Tags.Any(t => t.IsPlusSelected || t.IsMinusSelected));
+            var hasCategoryOrderChanges = !GetCurrentReorderableCategoryOrder().SequenceEqual(_baselineCategoryOrder, StringComparer.OrdinalIgnoreCase);
+            var currentCategoryNames = GetCurrentCategoryNames();
+            var hasCategoryNameChanges = !_baselineCategoryNames.OrderBy(kv => kv.Key, StringComparer.OrdinalIgnoreCase)
+                .SequenceEqual(currentCategoryNames.OrderBy(kv => kv.Key, StringComparer.OrdinalIgnoreCase));
+            var hasPendingChanges = hasItemTagSelections
+                || hasCategoryOrderChanges
+                || hasCategoryNameChanges
+                || _pendingDeletedCategoryIds.Count > 0
+                || _pendingDeletedTagNames.Count > 0
+                || _pendingRenameTags.Count > 0
+                || _pendingUpsertTags.Count > 0;
+            if (ApplyButton != null)
+            {
+                ApplyButton.IsEnabled = hasPendingChanges;
+            }
+        }
+
+        private List<string> GetCurrentReorderableCategoryOrder()
+        {
+            return _categoryViewModels
+                .Where(c => c.IsReorderable)
+                .Select(c => c.CategoryId)
+                .ToList();
+        }
+
+        private Dictionary<string, string> GetCurrentCategoryNames()
+        {
+            return _categoryViewModels
+                .ToDictionary(c => c.CategoryId, c => c.CategoryName ?? string.Empty, StringComparer.OrdinalIgnoreCase);
+        }
+
+        private void SyncLibraryIndexFromViewModels()
+        {
+            if (_libraryIndex == null)
+            {
+                return;
+            }
+
+            _libraryIndex.Categories = _categoryViewModels
+                .Select((c, index) => new TagCategory
+                {
+                    Id = c.CategoryId,
+                    Name = c.CategoryName,
+                    SortOrder = string.Equals(c.CategoryId, ItemTagsCategoryViewModel.UncategorizedCategoryId, StringComparison.OrdinalIgnoreCase)
+                        ? int.MaxValue
+                        : index
+                })
+                .GroupBy(c => c.Id, StringComparer.OrdinalIgnoreCase)
+                .Select(g => g.First())
+                .ToList();
+
+            _libraryIndex.Tags = _categoryViewModels
+                .SelectMany(c => c.Tags.Select(t => new Tag
+                {
+                    Name = t.Tag,
+                    CategoryId = c.CategoryId
+                }))
+                .GroupBy(t => t.Name, StringComparer.OrdinalIgnoreCase)
+                .Select(g => g.First())
+                .ToList();
+        }
+
+        private async void EditCategoryButton_Click(object? sender, RoutedEventArgs e)
+        {
+            if (sender is not Button button || button.CommandParameter is not ItemTagsCategoryViewModel categoryVm || !categoryVm.IsReorderable)
+            {
+                return;
+            }
+
+            var dialog = new Window
+            {
+                Title = "Rename Category",
+                Width = 350,
+                Height = 150,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner
+            };
+
+            var textBox = new TextBox { Text = categoryVm.CategoryName, Margin = new Thickness(16, 16, 16, 8) };
+            var buttonPanel = new StackPanel
+            {
+                Orientation = Avalonia.Layout.Orientation.Horizontal,
+                HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
+                Margin = new Thickness(16, 8, 16, 16),
+                Spacing = 8,
+                Children =
+                {
+                    new Button { Content = "Cancel", MinWidth = 80 },
+                    new Button { Content = "OK", MinWidth = 80, Classes = { "accent" } }
+                }
+            };
+            dialog.Content = new StackPanel { Children = { textBox, buttonPanel } };
+            bool accepted = false;
+            (buttonPanel.Children[0] as Button)!.Click += (_, _) => dialog.Close();
+            (buttonPanel.Children[1] as Button)!.Click += (_, _) => { accepted = true; dialog.Close(); };
+            await dialog.ShowDialog(this);
+            if (!accepted)
+            {
+                return;
+            }
+
+            var newName = textBox.Text?.Trim();
+            if (string.IsNullOrWhiteSpace(newName))
+            {
+                return;
+            }
+            if (CategoryNameExists(newName, categoryVm.CategoryId))
+            {
+                await ShowCategoryExistsWarningAsync();
+                return;
+            }
+
+            categoryVm.CategoryName = newName;
+            SyncLibraryIndexFromViewModels();
+            LoadTagsByCategory();
+            UpdateCategoryComboBox();
+            UpdateApplyButtonState();
+        }
+
+        private async void AddCategoryButton_Click(object? sender, RoutedEventArgs e)
+        {
+            Log("ItemTagsDialog.AddCategoryButton_Click: Adding new category");
+
+            var dialog = new Window
+            {
+                Title = "New Category",
+                Width = 350,
+                Height = 150,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner
+            };
+
+            var textBox = new TextBox { Watermark = "Category name", Margin = new Thickness(16, 16, 16, 8) };
+            var buttonPanel = new StackPanel
+            {
+                Orientation = Avalonia.Layout.Orientation.Horizontal,
+                HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
+                Margin = new Thickness(16, 8, 16, 16),
+                Spacing = 8,
+                Children =
+                {
+                    new Button { Content = "Cancel", MinWidth = 80 },
+                    new Button { Content = "Add", MinWidth = 80, Classes = { "accent" } }
+                }
+            };
+
+            dialog.Content = new StackPanel { Children = { textBox, buttonPanel } };
+
+            string? newCategoryName = null;
+            (buttonPanel.Children[0] as Button)!.Click += (_, _) => dialog.Close();
+            (buttonPanel.Children[1] as Button)!.Click += (_, _) =>
+            {
+                newCategoryName = textBox.Text?.Trim();
+                dialog.Close();
+            };
+
+            await dialog.ShowDialog(this);
+
+            if (string.IsNullOrEmpty(newCategoryName))
+            {
+                return;
+            }
+
+            if (CategoryNameExists(newCategoryName))
+            {
+                await ShowCategoryExistsWarningAsync();
+                return;
+            }
+
+            var categoryCount = _categoryViewModels.Count(c => c.IsReorderable);
+            var newCategory = new TagCategory
+            {
+                Id = Guid.NewGuid().ToString(),
+                Name = newCategoryName,
+                SortOrder = categoryCount
+            };
+
+            _categoryViewModels.Add(new ItemTagsCategoryViewModel
+            {
+                CategoryId = newCategory.Id,
+                CategoryName = newCategory.Name
+            });
+            SyncLibraryIndexFromViewModels();
+            UpdateCategoryComboBox();
+            UpdateApplyButtonState();
+        }
+
+        private async void RefreshButton_Click(object? sender, RoutedEventArgs e)
+        {
+            await RefreshTagEditorModelAsync();
+            Log("ItemTagsDialog.RefreshButton_Click: Reloaded tag editor model from API and cleared staged changes");
+        }
+
+        private void CloseButton_Click(object? sender, RoutedEventArgs e)
+        {
+            Log($"ItemTagsDialog: Closed without apply for {_items.Count} item(s)");
+            Close(false);
+        }
+
         private async void EditTagButton_Click(object? sender, RoutedEventArgs e)
         {
             if (sender is Button button && button.CommandParameter is BatchTagViewModel tagVm)
@@ -376,39 +958,198 @@ namespace ReelRoulette
 
                 if (dialog.WasOk && !string.IsNullOrEmpty(dialog.TagName) && !string.IsNullOrEmpty(dialog.CategoryId))
                 {
-                    // Check if category is new
-                    if (!string.IsNullOrEmpty(dialog.CategoryName) &&
-                        !categories.Any(c => c.Id == dialog.CategoryId))
-                    {
-                        var newCategory = new TagCategory
-                        {
-                            Id = dialog.CategoryId,
-                            Name = dialog.CategoryName,
-                            SortOrder = categories.Count
-                        };
-                        _libraryService.AddOrUpdateCategory(newCategory);
-                        Log($"ItemTagsDialog.EditTagButton_Click: Created new category '{newCategory.Name}'");
-                    }
-
-                    // Rename tag
                     string oldTagName = tagVm.Tag;
-                    string? newCategoryId = dialog.CategoryId != tagVm.CategoryId ? dialog.CategoryId : null;
-                    _libraryService.RenameTag(oldTagName, dialog.TagName, newCategoryId);
-                    Log($"ItemTagsDialog.EditTagButton_Click: Renamed tag to '{dialog.TagName}'");
-
-                    // Update filter presets if tag name changed
-                    if (!string.Equals(oldTagName, dialog.TagName, StringComparison.OrdinalIgnoreCase))
+                    string newTagName = dialog.TagName;
+                    string newCategoryId = dialog.CategoryId;
+                    if (_pendingUpsertTags.TryGetValue(oldTagName, out var pendingUpsert))
                     {
-                        int presetsUpdated = LibraryService.UpdateFilterPresetsForRenamedTag(_filterPresets, oldTagName, dialog.TagName);
-                        Log($"ItemTagsDialog.EditTagButton_Click: Updated {presetsUpdated} filter presets");
+                        // Tag is staged-only (not yet persisted). Keep it as upsert mutation
+                        // so apply does not attempt a rename on a non-existent server tag.
+                        _pendingUpsertTags.Remove(oldTagName);
+                        pendingUpsert.Name = newTagName;
+                        pendingUpsert.CategoryId = newCategoryId;
+                        _pendingUpsertTags[newTagName] = pendingUpsert;
+                        _pendingDeletedTagNames.Remove(oldTagName);
+                        _pendingDeletedTagNames.Remove(newTagName);
+                        _pendingRenameTags.Remove(oldTagName);
+                        Log($"ItemTagsDialog.EditTagButton_Click: Updated staged new tag '{oldTagName}' -> '{newTagName}'");
+                    }
+                    else
+                    {
+                        _pendingRenameTags[oldTagName] = (oldTagName, newTagName, newCategoryId);
+                        _pendingDeletedTagNames.Remove(oldTagName);
+                        _pendingUpsertTags.Remove(oldTagName);
+                        _pendingUpsertTags.Remove(newTagName);
+                        Log($"ItemTagsDialog.EditTagButton_Click: Queued rename tag '{oldTagName}' -> '{newTagName}'");
                     }
 
-                    // Reload the UI
-                    _libraryIndex = _libraryService.LibraryIndex;
+                    // Defer filter preset updates until Apply succeeds.
+
+                    // Reload the UI from current local projection.
+                    foreach (var item in _items)
+                    {
+                        item.Tags ??= [];
+                        var itemTagSet = new HashSet<string>(item.Tags, StringComparer.OrdinalIgnoreCase);
+                        if (itemTagSet.Remove(oldTagName))
+                        {
+                            itemTagSet.Add(newTagName);
+                        }
+                        item.Tags = itemTagSet.OrderBy(t => t, StringComparer.OrdinalIgnoreCase).ToList();
+                    }
+
+                    BatchTagViewModel? movedTag = null;
+                    ItemTagsCategoryViewModel? sourceCategory = null;
+                    foreach (var categoryVm in _categoryViewModels)
+                    {
+                        var match = categoryVm.Tags.FirstOrDefault(t => string.Equals(t.Tag, oldTagName, StringComparison.OrdinalIgnoreCase));
+                        if (match != null)
+                        {
+                            movedTag = match;
+                            sourceCategory = categoryVm;
+                            break;
+                        }
+                    }
+
+                    if (movedTag != null && sourceCategory != null)
+                    {
+                        sourceCategory.Tags.Remove(movedTag);
+                        movedTag.Tag = newTagName;
+                        movedTag.CategoryId = newCategoryId;
+
+                        var targetCategory = _categoryViewModels.FirstOrDefault(c =>
+                            string.Equals(c.CategoryId, newCategoryId, StringComparison.OrdinalIgnoreCase));
+                        if (targetCategory == null)
+                        {
+                            var targetCategoryName = _libraryIndex?.Categories?
+                                .FirstOrDefault(c => string.Equals(c.Id, newCategoryId, StringComparison.OrdinalIgnoreCase))?.Name
+                                ?? (string.Equals(newCategoryId, ItemTagsCategoryViewModel.UncategorizedCategoryId, StringComparison.OrdinalIgnoreCase)
+                                    ? "Uncategorized"
+                                    : newCategoryId);
+                            targetCategory = new ItemTagsCategoryViewModel
+                            {
+                                CategoryId = newCategoryId,
+                                CategoryName = targetCategoryName
+                            };
+                            _categoryViewModels.Add(targetCategory);
+                        }
+
+                        if (!targetCategory.Tags.Any(t => string.Equals(t.Tag, movedTag.Tag, StringComparison.OrdinalIgnoreCase)))
+                        {
+                            targetCategory.Tags.Add(movedTag);
+                        }
+                    }
+                    SyncLibraryIndexFromViewModels();
                     LoadTagsByCategory();
                     UpdateCategoryComboBox();
+                    UpdateApplyButtonState();
                 }
             }
+        }
+
+        private async void DeleteTagButton_Click(object? sender, RoutedEventArgs e)
+        {
+            if (sender is not Button button || button.CommandParameter is not BatchTagViewModel tagVm)
+            {
+                return;
+            }
+
+            var tagName = tagVm.Tag;
+            if (string.IsNullOrWhiteSpace(tagName))
+            {
+                return;
+            }
+
+            var confirmed = await ShowDeleteTagWarningAsync(tagName);
+            if (!confirmed)
+            {
+                return;
+            }
+
+            string deleteTagName = tagName;
+            var renameKeysToRemove = _pendingRenameTags
+                .Where(kv =>
+                    string.Equals(kv.Key, tagName, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(kv.Value.NewName, tagName, StringComparison.OrdinalIgnoreCase))
+                .Select(kv => kv.Key)
+                .ToList();
+            foreach (var renameKey in renameKeysToRemove)
+            {
+                var rename = _pendingRenameTags[renameKey];
+                if (string.Equals(rename.NewName, tagName, StringComparison.OrdinalIgnoreCase))
+                {
+                    // Rename old->new was staged, then new was deleted before apply.
+                    // Delete should target the original backend tag name.
+                    deleteTagName = rename.OldName;
+                }
+                _pendingRenameTags.Remove(renameKey);
+            }
+
+            var removedPendingUpsert =
+                _pendingUpsertTags.Remove(tagName) |
+                _pendingUpsertTags.Remove(deleteTagName);
+            if (!removedPendingUpsert)
+            {
+                _pendingDeletedTagNames.Add(deleteTagName);
+            }
+
+            Log($"ItemTagsDialog.DeleteTagButton_Click: Queued delete '{deleteTagName}'");
+
+            foreach (var categoryVm in _categoryViewModels.ToList())
+            {
+                var match = categoryVm.Tags.FirstOrDefault(t => string.Equals(t.Tag, tagName, StringComparison.OrdinalIgnoreCase));
+                if (match != null)
+                {
+                    categoryVm.Tags.Remove(match);
+                }
+            }
+            SyncLibraryIndexFromViewModels();
+            LoadTagsByCategory();
+            UpdateCategoryComboBox();
+            UpdateApplyButtonState();
+        }
+
+        private async System.Threading.Tasks.Task<bool> ShowDeleteTagWarningAsync(string tagName)
+        {
+            var dialog = new Window
+            {
+                Title = "Delete Tag",
+                Width = 360,
+                Height = 150,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner
+            };
+
+            var message = new TextBlock
+            {
+                Text = $"Delete tag '{tagName}'?",
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(16, 16, 16, 8)
+            };
+
+            var buttonPanel = new StackPanel
+            {
+                Orientation = Avalonia.Layout.Orientation.Horizontal,
+                HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
+                Margin = new Thickness(16, 8, 16, 16),
+                Spacing = 8,
+                Children =
+                {
+                    new Button { Content = "Cancel", MinWidth = 90 },
+                    new Button { Content = "Delete", MinWidth = 90, Classes = { "accent" } }
+                }
+            };
+
+            dialog.Content = new StackPanel { Children = { message, buttonPanel } };
+
+            var confirmed = false;
+            (buttonPanel.Children[0] as Button)!.Click += (_, _) => dialog.Close();
+            (buttonPanel.Children[1] as Button)!.Click += (_, _) =>
+            {
+                confirmed = true;
+                dialog.Close();
+            };
+
+            await dialog.ShowDialog(this);
+            return confirmed;
         }
 
         private void PlusButton_Click(object? sender, RoutedEventArgs e)
@@ -421,6 +1162,7 @@ namespace ReelRoulette
                 {
                     viewModel.IsMinusSelected = false;
                 }
+                UpdateApplyButtonState();
             }
         }
 
@@ -434,24 +1176,25 @@ namespace ReelRoulette
                 {
                     viewModel.IsPlusSelected = false;
                 }
+                UpdateApplyButtonState();
             }
         }
 
-        private void AddTagButton_Click(object? sender, RoutedEventArgs e)
+        private async void AddTagButton_Click(object? sender, RoutedEventArgs e)
         {
-            AddNewTag();
+            await AddNewTagAsync();
         }
 
-        private void NewTagTextBox_KeyDown(object? sender, KeyEventArgs e)
+        private async void NewTagTextBox_KeyDown(object? sender, KeyEventArgs e)
         {
             if (e.Key == Key.Enter)
             {
-                AddNewTag();
+                await AddNewTagAsync();
                 e.Handled = true;
             }
         }
 
-        private void AddNewTag()
+        private async System.Threading.Tasks.Task AddNewTagAsync()
         {
             var tagName = NewTagTextBox?.Text?.Trim();
             if (string.IsNullOrWhiteSpace(tagName))
@@ -467,10 +1210,9 @@ namespace ReelRoulette
             }
 
             var categoryId = selectedItem.Tag as string;
-            if (string.IsNullOrEmpty(categoryId))
-            {
-                return;
-            }
+            categoryId = string.IsNullOrWhiteSpace(categoryId)
+                ? ItemTagsCategoryViewModel.UncategorizedCategoryId
+                : categoryId;
 
             // Check if tag already exists
             var availableTags = _libraryIndex?.Tags ?? new List<Tag>();
@@ -486,19 +1228,16 @@ namespace ReelRoulette
                         string.Equals(t.Tag, tagName, StringComparison.OrdinalIgnoreCase));
                     if (tagVm != null)
                     {
-                        tagVm.IsPlusSelected = true;
-                        tagVm.IsMinusSelected = false;
+                        if (_items.Count > 0)
+                        {
+                            tagVm.IsPlusSelected = true;
+                            tagVm.IsMinusSelected = false;
+                        }
                         NewTagTextBox!.Text = "";
+                        UpdateApplyButtonState();
                         return;
                     }
                 }
-            }
-
-            // Check if library service is available
-            if (_libraryService == null)
-            {
-                ShowLibraryServiceError();
-                return;
             }
 
             // Save current selection states before reloading
@@ -515,16 +1254,42 @@ namespace ReelRoulette
                 }
             }
 
-            // Add new tag
-            var newTag = new Tag { Name = tagName, CategoryId = categoryId };
-            _libraryService.AddOrUpdateTag(newTag);
-            Log($"ItemTagsDialog.AddNewTag: Added tag '{tagName}' to category '{categoryId}'");
+            // Queue new tag for apply.
+            _pendingUpsertTags[tagName] = new Tag
+            {
+                Name = tagName,
+                CategoryId = categoryId
+            };
+            _pendingDeletedTagNames.Remove(tagName);
+            Log($"ItemTagsDialog.AddNewTag: Queued tag '{tagName}' to category '{categoryId}'");
 
             // Add newly added tag to plus selection
             plusSelectedTags.Add(tagName);
 
-            // Reload UI
-            _libraryIndex = _libraryService.LibraryIndex;
+            var existingCategory = _categoryViewModels.FirstOrDefault(c => string.Equals(c.CategoryId, categoryId, StringComparison.OrdinalIgnoreCase));
+            if (existingCategory == null)
+            {
+                existingCategory = new ItemTagsCategoryViewModel
+                {
+                    CategoryId = categoryId,
+                    CategoryName = string.Equals(categoryId, ItemTagsCategoryViewModel.UncategorizedCategoryId, StringComparison.OrdinalIgnoreCase)
+                        ? "Uncategorized"
+                        : categoryId
+                };
+                _categoryViewModels.Add(existingCategory);
+            }
+            if (!existingCategory.Tags.Any(t => string.Equals(t.Tag, tagName, StringComparison.OrdinalIgnoreCase)))
+            {
+                existingCategory.Tags.Add(new BatchTagViewModel
+                {
+                    Tag = tagName,
+                    CategoryId = categoryId,
+                    IsSelectionEnabled = _items.Count > 0,
+                    TagState = TagState.NoItemsHaveTag,
+                    IsPlusSelected = _items.Count > 0
+                });
+            }
+            SyncLibraryIndexFromViewModels();
             LoadTagsByCategory();
 
             // Restore selection states after reload
@@ -546,6 +1311,7 @@ namespace ReelRoulette
             }
 
             NewTagTextBox!.Text = "";
+            UpdateApplyButtonState();
         }
 
         private void ShowLibraryServiceError()
@@ -598,7 +1364,57 @@ namespace ReelRoulette
             errorDialog.ShowDialog(this);
         }
 
-        private void OkButton_Click(object? sender, RoutedEventArgs e)
+        private void ShowApiRequiredError()
+        {
+            Log("ItemTagsDialog: API-required mutation failed; core API unavailable or request rejected.");
+            var errorDialog = new Window
+            {
+                Title = "Tag Update Failed",
+                Width = 460,
+                Height = 190,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner
+            };
+
+            var grid = new Grid();
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            grid.Margin = new Thickness(16);
+
+            var titleText = new TextBlock
+            {
+                Text = "API required",
+                FontWeight = FontWeight.Bold,
+                FontSize = 14,
+                Margin = new Thickness(0, 0, 0, 12)
+            };
+            Grid.SetRow(titleText, 0);
+            grid.Children.Add(titleText);
+
+            var messageText = new TextBlock
+            {
+                Text = "Tag changes now require the core API. Ensure core is running and try again.",
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 0, 0, 12)
+            };
+            Grid.SetRow(messageText, 1);
+            grid.Children.Add(messageText);
+
+            var okButton = new Button
+            {
+                Content = "OK",
+                HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
+                Width = 80
+            };
+            okButton.Click += (s, args) => errorDialog.Close();
+            Grid.SetRow(okButton, 2);
+            grid.Children.Add(okButton);
+
+            errorDialog.Content = grid;
+            errorDialog.ShowDialog(this);
+        }
+
+        private async void OkButton_Click(object? sender, RoutedEventArgs e)
         {
             Log($"ItemTagsDialog: Saving tags for {_items.Count} item(s)");
             
@@ -609,51 +1425,48 @@ namespace ReelRoulette
                 return;
             }
             
-            // Apply tag changes to all items
-            foreach (var item in _items)
+            var categoryMutationsAccepted = await ApplyPendingCategoryMutationsAsync();
+            if (!categoryMutationsAccepted)
             {
-                // Ensure Tags list exists
-                if (item.Tags == null)
-                {
-                    item.Tags = new List<string>();
-                }
-
-                var oldTags = item.Tags.ToList();
-                var currentTags = new HashSet<string>(item.Tags, StringComparer.OrdinalIgnoreCase);
-
-                // Process each tag view model in all categories
-                foreach (var categoryVm in _categoryViewModels)
-                {
-                    foreach (var vm in categoryVm.Tags)
-                    {
-                        var tagName = vm.Tag;
-                        var hasTag = currentTags.Contains(tagName);
-
-                        if (vm.IsPlusSelected && !hasTag)
-                        {
-                            // Add tag
-                            item.Tags.Add(tagName);
-                            currentTags.Add(tagName);
-                        }
-                        else if (vm.IsMinusSelected && hasTag)
-                        {
-                            // Remove tag
-                            item.Tags.RemoveAll(t => string.Equals(t, tagName, StringComparison.OrdinalIgnoreCase));
-                            currentTags.Remove(tagName);
-                        }
-                    }
-                }
-
-                Log($"ItemTagsDialog: Tags updated for {item.FileName} - Old: [{string.Join(", ", oldTags)}], New: [{string.Join(", ", item.Tags)}]");
-
-                // Update library item (service is guaranteed to be non-null here)
-                _libraryService.UpdateItem(item);
+                return;
             }
 
-            // Save library once for all items (service is guaranteed to be non-null here)
-            _libraryService.SaveLibrary();
+            var tagMutationsAccepted = await ApplyPendingTagMutationsAsync();
+            if (!tagMutationsAccepted)
+            {
+                return;
+            }
 
-            Log($"ItemTagsDialog: Tags saved successfully for {_items.Count} item(s)");
+            // Build batch item-tag deltas and apply through API.
+            var addTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var removeTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var categoryVm in _categoryViewModels)
+            {
+                foreach (var vm in categoryVm.Tags)
+                {
+                    if (vm.IsPlusSelected)
+                    {
+                        addTags.Add(vm.Tag);
+                    }
+                    else if (vm.IsMinusSelected)
+                    {
+                        removeTags.Add(vm.Tag);
+                    }
+                }
+            }
+
+            var itemIds = _items.Select(i => i.FullPath).ToList();
+            if (itemIds.Count > 0 && (addTags.Count > 0 || removeTags.Count > 0))
+            {
+                var accepted = await _tagMutationClient.ApplyItemTagDeltaAsync(itemIds, addTags.ToList(), removeTags.ToList());
+                if (!accepted)
+                {
+                    ShowApiRequiredError();
+                    return;
+                }
+            }
+
+            Log($"ItemTagsDialog: API tag delta applied for {itemIds.Count} item(s)");
             Close(true);
         }
 
@@ -661,6 +1474,53 @@ namespace ReelRoulette
         {
             Log($"ItemTagsDialog: Cancelled tags dialog for {_items.Count} item(s)");
             Close(false);
+        }
+
+        private static List<LibraryItem> CloneItemsForEditor(List<LibraryItem>? items)
+        {
+            if (items == null || items.Count == 0)
+            {
+                return [];
+            }
+
+            return items.Select(item => new LibraryItem
+            {
+                Id = item.Id,
+                FullPath = item.FullPath,
+                FileName = item.FileName,
+                Tags = (item.Tags ?? []).ToList()
+            }).ToList();
+        }
+
+        private static LibraryIndex CloneLibraryIndexForEditor(LibraryIndex? source)
+        {
+            if (source == null)
+            {
+                return new LibraryIndex
+                {
+                    Categories = [],
+                    Tags = []
+                };
+            }
+
+            return new LibraryIndex
+            {
+                Categories = (source.Categories ?? [])
+                    .Select(c => new TagCategory
+                    {
+                        Id = c.Id,
+                        Name = c.Name,
+                        SortOrder = c.SortOrder
+                    })
+                    .ToList(),
+                Tags = (source.Tags ?? [])
+                    .Select(t => new Tag
+                    {
+                        Name = t.Name,
+                        CategoryId = t.CategoryId
+                    })
+                    .ToList()
+            };
         }
     }
 }

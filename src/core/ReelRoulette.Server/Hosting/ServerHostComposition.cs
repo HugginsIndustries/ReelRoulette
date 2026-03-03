@@ -101,6 +101,90 @@ public static class ServerHostComposition
             return Results.Ok();
         });
 
+        app.MapPost("/api/tag-editor/model", (TagEditorModelRequest request, ServerStateService state) =>
+        {
+            var model = state.GetTagEditorModel(request);
+            return Results.Ok(model);
+        });
+
+        app.MapPost("/api/tag-editor/apply-item-tags", (ApplyItemTagsRequest request, ServerStateService state) =>
+        {
+            if (request.ItemIds.Count == 0)
+            {
+                return Results.BadRequest(new { error = "itemIds must contain at least one id" });
+            }
+
+            state.ApplyItemTags(request);
+            return Results.Ok();
+        });
+
+        app.MapPost("/api/tag-editor/upsert-category", (UpsertCategoryRequest request, ServerStateService state) =>
+        {
+            if (string.IsNullOrWhiteSpace(request.Id) || string.IsNullOrWhiteSpace(request.Name))
+            {
+                return Results.BadRequest(new { error = "id and name are required" });
+            }
+
+            state.UpsertCategory(request);
+            return Results.Ok();
+        });
+
+        app.MapPost("/api/tag-editor/upsert-tag", (UpsertTagRequest request, ServerStateService state) =>
+        {
+            if (string.IsNullOrWhiteSpace(request.Name))
+            {
+                return Results.BadRequest(new { error = "name is required" });
+            }
+
+            state.UpsertTag(request);
+            return Results.Ok();
+        });
+
+        app.MapPost("/api/tag-editor/rename-tag", (RenameTagRequest request, ServerStateService state) =>
+        {
+            if (string.IsNullOrWhiteSpace(request.OldName) || string.IsNullOrWhiteSpace(request.NewName))
+            {
+                return Results.BadRequest(new { error = "oldName and newName are required" });
+            }
+
+            state.RenameTag(request);
+            return Results.Ok();
+        });
+
+        app.MapPost("/api/tag-editor/delete-tag", (DeleteTagRequest request, ServerStateService state) =>
+        {
+            if (string.IsNullOrWhiteSpace(request.Name))
+            {
+                return Results.BadRequest(new { error = "name is required" });
+            }
+
+            state.DeleteTag(request);
+            return Results.Ok();
+        });
+
+        app.MapPost("/api/tag-editor/delete-category", (DeleteCategoryRequest request, ServerStateService state) =>
+        {
+            if (string.IsNullOrWhiteSpace(request.CategoryId))
+            {
+                return Results.BadRequest(new { error = "categoryId is required" });
+            }
+
+            state.DeleteCategory(request);
+            return Results.Ok();
+        });
+
+        app.MapPost("/api/tag-editor/sync-catalog", (SyncTagCatalogRequest request, ServerStateService state) =>
+        {
+            state.SyncTagCatalog(request);
+            return Results.Ok();
+        });
+
+        app.MapPost("/api/tag-editor/sync-item-tags", (SyncItemTagsRequest request, ServerStateService state) =>
+        {
+            state.SyncItemTags(request);
+            return Results.Ok();
+        });
+
         app.MapGet("/api/events", async (HttpContext context, ServerStateService state) =>
         {
             context.Response.Headers.Append("Content-Type", "text/event-stream");
