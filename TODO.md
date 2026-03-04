@@ -25,51 +25,30 @@ Each TODO entry follows this structure:
 
 ## P1 - High Priority
 
-### Grid View for Library Panel with Thumbnail Generation (Unified Refresh Pipeline)
+No open P1 TODO items.
 
-- **Priority**: P1
+## Completed Features
+
+### Grid View for Library Panel with Thumbnail Generation (Unified Refresh Pipeline) ✅
+
 - **Milestone Link**: `M6b - P1 Feature Alignment Through API (Grid/Thumbnails + Unified Refresh Pipeline)` in `MILESTONES.md`
-- **Impact**: High - Adds modern visual browsing and consolidates heavy media processing into one background pipeline suitable for headless worker/server architecture.
-- **Description**: Add List/Grid view modes and thumbnail generation for all media, then unify source refresh, duration scan, loudness scan, and thumbnail generation into a single sequential background refresh workflow shared by manual and auto refresh.
-- **Implementation**:
-  - **View modes**:
-    - Add global persisted view mode setting (List/Grid).
-    - Place view toggle immediately left of `Select filters...` (fader icon) using existing toggle style.
-    - Use `🖼️` icon for Grid mode; default remains List (toggle off).
-    - Keep List behavior intact and add responsive, virtualized, infinite-scroll-style Grid behavior.
-  - **Thumbnail generation (all media)**:
-    - Videos: generate thumbnails from midpoint (with midpoint-adjacent fallback), avoiding intro-biased frames.
-    - Photos: generate thumbnails via image decode path (no FFmpeg).
-    - Cache in app data with size limits + eviction support.
-    - Invalidate/regenerate based on content/fingerprint changes; reuse when unchanged.
-  - **Unified refresh pipeline**:
-    - Sequential stage order:
-      1. source refresh
-      2. duration scan
-      3. loudness scan
-      4. thumbnail generation
-    - Pipeline execution and auto-refresh scheduling run in core runtime (not desktop-local orchestration).
-    - Auto refresh loudness mode: only new/unscanned (drop scan-all mode for this flow).
-    - Manual refresh triggers core pipeline via `POST /api/refresh/start` (same run path as auto refresh).
-    - Add `GET /api/refresh/status` snapshot endpoint and SSE progress events for active clients.
-    - Concurrency policy: reject overlaps with `409 already running`; auto/manual runs do not execute concurrently.
-    - Starting manual refresh resets the auto-refresh interval baseline.
-    - Manage Sources dialog may be closed while refresh continues.
-    - Keep status-line/log progress updates consistent with existing background behavior and project them to desktop/web/mobile clients.
-  - **Core refresh config ownership**:
-    - Move auto-refresh settings ownership to core config (appsettings + CLI override).
-    - Client settings updates flow through API and persist in core settings.
-    - Defaults: auto-refresh enabled, 15-minute interval, idle-only settings removed.
-  - **UX simplification**:
-    - Remove standalone duration/loudness scan actions after pipeline integration.
-    - Keep manual/auto mutual exclusion (skip overlapping runs).
-  - **Performance/reliability**:
-    - One stage at a time (no overlap between duration/loudness/thumbnail stages).
-    - Preserve virtualization/lazy materialization for large libraries in both List and Grid.
-    - Keep cancellation/progress throttling aligned with current background architecture.
-- **Notes**:
-  - This supersedes standalone legacy thumbnail/grid scan TODO scopes.
-  - Advanced settings for thumbnail cache/task limits remain relevant and should point to this unified feature.
+- **Impact**: High - Adds modern visual browsing and consolidates media processing into one core-owned background pipeline.
+- **Final State**:
+  - Added persisted List/Grid library view mode with `🖼️` toggle while preserving existing list behavior.
+  - Implemented desktop justified grid layout with responsive width fill and aspect-ratio-preserving thumbnails (variable-size, metadata-driven dimensions).
+  - Added real thumbnail generation in core pipeline:
+    - videos use midpoint-first extraction with fallbacks
+    - photos use image decode path (no FFmpeg)
+    - output dimensions preserve source aspect ratio (max-edge capped).
+  - Added thumbnail metadata index entries (`revision`, `width`, `height`, `generatedUtc`) with legacy index compatibility/backfill.
+  - Thumbnail artifacts now use local app-data storage (`%LOCALAPPDATA%\\ReelRoulette\\thumbnails\\{itemId}.jpg`) with cache limits + eviction policy.
+  - Implemented core-owned unified refresh pipeline with strict stage order (source refresh, duration scan, loudness new/unscanned, thumbnail generation).
+  - Added refresh start/status/settings APIs (`POST /api/refresh/start`, `GET /api/refresh/status`, `GET/POST /api/refresh/settings`) plus SSE `refreshStatusChanged`.
+  - Enforced overlap rejection (`409 already running`) and manual-start auto-refresh baseline reset behavior.
+  - Moved auto-refresh ownership to core config/API defaults (enabled, 15-minute interval, no idle-only gating path).
+  - Removed standalone desktop duration/loudness menu actions in favor of unified core refresh flow.
+  - Added regression coverage for stage sequencing, overlap rejection, thumbnail invalidation/regeneration, metadata backfill, status projection, and refresh API shapes.
+  - Direct web-to-core SSE refresh-status projection is explicitly deferred to M7 as part of web/desktop decoupling.
 
 ---
 

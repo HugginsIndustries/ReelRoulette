@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
+using Avalonia.Media.Imaging;
 
 namespace ReelRoulette
 {
@@ -140,6 +141,60 @@ namespace ReelRoulette
         /// </summary>
         [JsonPropertyName("fingerprintStatus")]
         public FingerprintStatus FingerprintStatus { get; set; } = FingerprintStatus.Pending;
+
+        private string _thumbnailPath = string.Empty;
+        private Bitmap? _thumbnailBitmap;
+
+        [JsonIgnore]
+        public string ThumbnailPath
+        {
+            get => _thumbnailPath;
+            set
+            {
+                if (string.Equals(_thumbnailPath, value, StringComparison.Ordinal))
+                {
+                    return;
+                }
+
+                _thumbnailBitmap?.Dispose();
+                _thumbnailPath = value ?? string.Empty;
+                _thumbnailBitmap = null;
+            }
+        }
+
+        [JsonIgnore]
+        public Bitmap? ThumbnailBitmap
+        {
+            get
+            {
+                if (_thumbnailBitmap != null)
+                {
+                    return _thumbnailBitmap;
+                }
+
+                if (string.IsNullOrWhiteSpace(_thumbnailPath))
+                {
+                    return null;
+                }
+
+                try
+                {
+                    _thumbnailBitmap = new Bitmap(_thumbnailPath);
+                }
+                catch
+                {
+                    _thumbnailBitmap = null;
+                }
+
+                return _thumbnailBitmap;
+            }
+        }
+
+        [JsonIgnore]
+        public double ThumbnailWidth { get; set; }
+
+        [JsonIgnore]
+        public double ThumbnailHeight { get; set; }
     }
 }
 

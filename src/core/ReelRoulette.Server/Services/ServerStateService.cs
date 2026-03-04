@@ -457,6 +457,11 @@ public sealed class ServerStateService
         return channel.Reader;
     }
 
+    public ServerEventEnvelope PublishExternal(string eventType, object payload)
+    {
+        return Publish(eventType, payload);
+    }
+
     private ItemStateRecord GetOrCreateItemState(string path)
     {
         lock (_itemStatesLock)

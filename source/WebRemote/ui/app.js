@@ -1570,6 +1570,91 @@
       connectEvents();
     }, EVENTS_RETRY_MS);
   }
+
+  function getRefreshStageMessage(snapshot, stageName, fallback) {
+    if (!snapshot || !Array.isArray(snapshot.stages)) return fallback;
+    for (var i = 0; i < snapshot.stages.length; i++) {
+      var stage = snapshot.stages[i];
+      if (!stage || !stage.stage) continue;
+      if (String(stage.stage).toLowerCase() !== String(stageName).toLowerCase()) continue;
+      if (!stage.message || !String(stage.message).trim()) return fallback;
+      return String(stage.message).trim();
+    }
+    return fallback;
+  }
+
+  function buildRefreshCompletionMessage(snapshot) {
+    var sourceSummary = getRefreshStageMessage(snapshot, 'sourceRefresh', 'Source refresh: no details reported');
+    var durationSummary = getRefreshStageMessage(snapshot, 'durationScan', 'Duration scan: no details reported');
+    var loudnessSummary = getRefreshStageMessage(snapshot, 'loudnessScan', 'Loudness scan: no details reported');
+    var thumbnailSummary = getRefreshStageMessage(snapshot, 'thumbnailGeneration', 'Thumbnail generation: no details reported');
+    return 'Core refresh complete | Source: ' + sourceSummary +
+      ' | Duration: ' + durationSummary +
+      ' | Loudness: ' + loudnessSummary +
+      ' | Thumbnails: ' + thumbnailSummary;
+  }
+
+  function applyRefreshStatusSnapshot(snapshot) {
+    if (!snapshot) return;
+    if (snapshot.isRunning) {
+      var stage = snapshot.currentStage || 'initializing';
+      var activeStageMessage = getRefreshStageMessage(snapshot, stage, stage);
+      var percent = 0;
+      if (Array.isArray(snapshot.stages)) {
+        for (var i = 0; i < snapshot.stages.length; i++) {
+          var s = snapshot.stages[i];
+          if (!s || !s.stage) continue;
+          if (String(s.stage).toLowerCase() === String(stage).toLowerCase()) {
+            percent = Number(s.percent || 0);
+            break;
+          }
+        }
+      }
+      setStatus('Core refresh: ' + activeStageMessage + ' (' + percent + '%)');
+      return;
+    }
+
+    if (snapshot.lastError) {
+      setStatus('Core refresh failed: ' + snapshot.lastError);
+      return;
+    }
+
+    if (snapshot.completedUtc) {
+      setStatus(buildRefreshCompletionMessage(snapshot));
+    }
+  }
+
+  function handleRefreshStatusEventData(rawData) {
+    try {
+      var parsed = JSON.parse(rawData);
+      // Core server SSE sends ServerEventEnvelope with payload.snapshot.
+      if (parsed && parsed.payload && (parsed.payload.snapshot || parsed.payload.Snapshot)) {
+        applyRefreshStatusSnapshot(parsed.payload.snapshot || parsed.payload.Snapshot);
+        return;
+      }
+      // Defensive fallback for direct snapshot payloads.
+      if (parsed && (parsed.snapshot || parsed.Snapshot)) {
+        applyRefreshStatusSnapshot(parsed.snapshot || parsed.Snapshot);
+      }
+    } catch (err) {
+      console.warn('refreshStatusChanged parse failed', err);
+    }
+  }
+
+  function syncRefreshStatusFromCore() {
+    fetch(API + '/api/refresh/status', { credentials: 'include' })
+      .then(function (r) {
+        if (!r.ok) throw new Error('refresh-status:' + r.status);
+        return r.json();
+      })
+      .then(function (snapshot) {
+        applyRefreshStatusSnapshot(snapshot);
+      })
+      .catch(function (err) {
+        console.warn('refresh status snapshot fetch failed', err);
+      });
+  }
+
   function connectEvents() {
     clearEventsReconnectTimer();
     ensureSseWatchdog();
@@ -1586,6 +1671,7 @@
       markSseActivity();
       postSyncLog('info', 'SSE open');
       reconcileKnownStates('open');
+      syncRefreshStatusFromCore();
     };
     evtSource.onmessage = function (e) {
       try {
@@ -1617,6 +1703,10 @@
     };
     evtSource.addEventListener('ping', function () {
       markSseActivity();
+    });
+    evtSource.addEventListener('refreshStatusChanged', function (e) {
+      markSseActivity();
+      handleRefreshStatusEventData(e.data);
     });
     evtSource.onerror = function () {
       postSyncLog('warn', 'SSE error');

@@ -214,7 +214,7 @@ Status legend: `✅ Complete` | `⏳ Planned`
 
 ### M6b - P1 Feature Alignment Through API (Grid/Thumbnails + Unified Refresh Pipeline)
 
-- **Status**: ⏳ Planned
+- **Status**: ✅ Complete
 - **Goal**: Deliver API-backed grid/thumbnails and refresh pipeline refactor as a separate milestone.
 - **Linked TODO**: `Grid View for Library Panel with Thumbnail Generation (Unified Refresh Pipeline)` in `TODO.md`.
 - **Scope**:
@@ -232,19 +232,19 @@ Status legend: `✅ Complete` | `⏳ Planned`
     - `GET /api/refresh/status` snapshot endpoint complements SSE progress events for active clients
     - core rejects overlapping runs with `409 already running`; auto and manual refresh do not run concurrently
     - triggering manual refresh resets the auto-refresh interval baseline
-    - status/progress events are emitted for both auto/manual runs and projected to active clients (desktop/web/mobile)
+    - status/progress events are emitted for both auto/manual runs; desktop projects them during M6b, while direct web/mobile projection is completed in M7+ when those clients are decoupled from desktop-hosted bridges
   - Move refresh scheduling/config ownership to core host config:
     - support appsettings + CLI override model
     - client settings updates are pushed to core via API and persisted in core settings
     - default auto refresh remains enabled, default interval becomes 15 minutes, idle-only gating settings are removed
   - Define thumbnail artifact policy before feature completion:
-    - artifact location convention (for example, `data/thumbnails/{itemId}.jpg`)
+    - artifact location convention (for example, `%LOCALAPPDATA%\\ReelRoulette\\thumbnails\\{itemId}.jpg`)
     - invalidation rules (file change/fingerprint change -> thumbnail stale/regenerate)
     - target size/quality and video thumbnail timestamp strategy
 - **Acceptance criteria**:
   - Grid view and thumbnail generation work end-to-end through server/core.
   - No standalone legacy duration/loudness actions in UX (as planned).
-  - Refresh progress/status remains observable while dialogs close and via `GET /api/refresh/status` + SSE across active clients.
+  - Refresh progress/status remains observable while dialogs close and via `GET /api/refresh/status` + SSE for desktop in M6b; direct web-to-core SSE status parity is tracked in M7.
   - Core runtime is the single execution owner for unified refresh pipeline and auto-refresh scheduling.
   - Manual refresh is API-triggered (`POST /api/refresh/start`) and returns `409` when a refresh run is already active.
   - Auto-refresh timer baseline is reset when a manual refresh is started.
@@ -264,8 +264,10 @@ Status legend: `✅ Complete` | `⏳ Planned`
   - Web UI builds independently from desktop app build.
   - Server can serve production web assets from web build output.
   - No API drift between web and desktop clients.
-  - Legacy embedded web-remote mutation paths are removed once new web UI serves equivalent flows.
-  - Regression tests include build-output asset serving and contract compatibility checks against current OpenAPI, and pass in `dotnet test`.
+  - Web UI runs independently of desktop hosting: web clients connect directly to core/server API + SSE endpoints (including `/api/events` and `/api/refresh/status`) and do not require desktop `WebRemoteServer` bridging/proxy.
+  - SSE status/progress parity is preserved in web client: `refreshStatusChanged` updates are received directly from core/server and projected on web status line during active runs, failures, and completion summaries.
+  - Legacy embedded web-remote mutation/event paths are removed once new web UI serves equivalent flows.
+  - Regression tests include build-output asset serving, direct web-to-core SSE/refresh status projection, and contract compatibility checks against current OpenAPI, and pass in `dotnet test`.
 
 ### M8 - Hardening, Packaging, and Migration Cleanup
 
@@ -286,6 +288,7 @@ Status legend: `✅ Complete` | `⏳ Planned`
   - Source CRUD + enable/disable and operational settings that affect domain behavior are core-owned API commands/queries, with desktop/web as orchestration/render only.
   - All migrated domains (state/tag/random/filter/etc.) have zero direct desktop JSON mutation paths; exceptions list is empty or explicitly documented.
   - Library panel dataset composition (filters/sources/search/sort/paging/result shaping) is executed via core/server query paths; desktop/web clients are render/orchestration only for migrated views.
+  - Library refresh completion is thin-client projected: clients observe core refresh status/events and re-query core API datasets (no authoritative local JSON reload/path scanning to discover new or removed items).
   - Global library stats and current-file stats panel data are retrieved via core/server API query paths; desktop/web clients do not compute or persist authoritative stats locally for migrated views.
   - Migration and upgrade path documented.
   - Full regression suite (unit + integration + reconnect/ordering checks) is part of the default CI `dotnet test` gate and remains green.

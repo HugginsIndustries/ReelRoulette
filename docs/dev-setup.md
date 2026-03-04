@@ -69,3 +69,27 @@
 - Desktop `ItemTagsDialog` is the single tag-management dialog (player button/context entry points). Opening with no selected items is supported; item tag `+/-` assignment controls are disabled in that mode while category/tag catalog editing remains available.
 - Desktop and web category inline controls use `up`, `down`, `edit`, `delete` order, and category create/rename blocks duplicate names (trimmed, case-insensitive).
 - Web footer controls keep a single-row layout on small screens with the tag name input as the flexible/fill field.
+
+## M6b Unified Refresh + Grid/Thumbnail Notes
+
+- Core refresh pipeline + ownership:
+  - `POST /api/refresh/start` starts manual refresh.
+  - `GET /api/refresh/status` returns snapshot state.
+  - `GET/POST /api/refresh/settings` reads/writes core-owned refresh settings.
+  - SSE emits `refreshStatusChanged` payloads during and after runs.
+- Overlap behavior:
+  - refresh overlap is rejected (`409 already running`), with one active refresh run at a time.
+- Stage order:
+  1. source refresh
+  2. duration scan
+  3. loudness scan (new/unscanned)
+  4. thumbnail generation
+- Desktop UX migration:
+  - `Manage Sources` refresh now requests core refresh start (dialog can be closed while run continues).
+  - standalone `Scan Durations`/`Scan Loudness` library menu actions are removed.
+  - library panel supports persisted list/grid view toggle (`🖼️`) and a justified, responsive grid using variable-size aspect-ratio-preserving thumbnails.
+- Thumbnail artifacts + metadata:
+  - artifacts are stored at `%LOCALAPPDATA%\\ReelRoulette\\thumbnails\\{itemId}.jpg`.
+  - index metadata tracks `revision`, `width`, `height`, and `generatedUtc` for layout projection and invalidation.
+- Web refresh-status projection note:
+  - desktop projects refresh status in M6b; direct web-to-core SSE status parity is completed in M7 when web UI is decoupled from desktop-hosted bridge paths.

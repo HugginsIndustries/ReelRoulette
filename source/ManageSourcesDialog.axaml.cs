@@ -14,16 +14,18 @@ namespace ReelRoulette
     public partial class ManageSourcesDialog : Window, INotifyPropertyChanged
     {
         private readonly LibraryService _libraryService;
+        private readonly Func<Task<bool>>? _requestRefreshAsync;
         private ObservableCollection<SourceViewModel> _sources = new();
 
-        public ManageSourcesDialog() : this(new LibraryService())
+        public ManageSourcesDialog() : this(new LibraryService(), null)
         {
             // Design-time constructor
         }
 
-        public ManageSourcesDialog(LibraryService libraryService)
+        public ManageSourcesDialog(LibraryService libraryService, Func<Task<bool>>? requestRefreshAsync = null)
         {
             _libraryService = libraryService;
+            _requestRefreshAsync = requestRefreshAsync;
             InitializeComponent();
             DataContext = this;
             LoadSources();
@@ -131,21 +133,18 @@ namespace ReelRoulette
                     button.IsEnabled = false;
                     button.Content = "Refreshing...";
 
-                    var refreshProgress = new Progress<RefreshProgress>(p =>
+                    if (_requestRefreshAsync == null)
                     {
-                        button.Content = string.IsNullOrWhiteSpace(p.Message)
-                            ? "Refreshing..."
-                            : p.Message;
-                    });
+                        throw new InvalidOperationException("Core refresh API is required.");
+                    }
 
-                    var result = await Task.Run(() => _libraryService.RefreshSource(sourceId, refreshProgress));
-                    _libraryService.SaveLibrary();
-                    
-                    var message = $"Refresh complete:\n" +
-                                  $"{result.Added} added, {result.Removed} removed, {result.Renamed} renamed, {result.Moved} moved, {result.Updated} updated, {result.UnresolvedQueued} unresolved";
+                    var accepted = await _requestRefreshAsync();
+                    var message = accepted
+                        ? "Refresh started in core runtime.\nProgress updates will continue while this dialog is closed."
+                        : "Refresh is already running in core runtime.";
                     var msgBox = new Window
                     {
-                        Title = "Refresh Complete",
+                        Title = "Refresh",
                         Width = 520,
                         Height = 190,
                         WindowStartupLocation = WindowStartupLocation.CenterOwner,
@@ -169,7 +168,7 @@ namespace ReelRoulette
                     ((Button)((StackPanel)msgBox.Content).Children[1]).Click += (s, e) => msgBox.Close();
                     await msgBox.ShowDialog(this);
                     
-                    LoadSources(); // Refresh display
+                    LoadSources(); // Refresh local source stats display
                 }
                 catch (Exception ex)
                 {

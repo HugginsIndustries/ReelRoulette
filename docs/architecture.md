@@ -158,3 +158,31 @@ flowchart TD
 - Desktop seeds core tag catalog state on connect/start (`sync-catalog`) to prevent sparse server tag models and keep web/desktop tag views consistent.
 - Desktop hydrates requested item-tag snapshots (`sync-item-tags`) before web model fetches so tag state projections match current item assignments.
 - Category deletion no longer deletes tags; migrated flows always reassign category-owned tags to canonical `uncategorized` (fixed ID) for consistent multi-client behavior.
+
+## M6b Grid/Thumbnails + Unified Refresh Pipeline
+
+```mermaid
+flowchart TD
+    desktopUi["Desktop UI (List/Grid Render)"]
+    refreshApi["Refresh API (`/api/refresh/*`)"]
+    thumbnailApi["Thumbnail API (`/api/thumbnail/{itemId}`)"]
+    refreshSvc["RefreshPipelineService"]
+    serverState["ServerStateService (SSE envelope)"]
+    sse["SSE `refreshStatusChanged`"]
+    libraryJson["library.json"]
+    thumbStore["LocalAppData thumbnails/{itemId}.jpg (+index metadata)"]
+
+    desktopUi --> refreshApi
+    desktopUi --> thumbnailApi
+    refreshApi --> refreshSvc
+    refreshSvc --> libraryJson
+    refreshSvc --> thumbStore
+    refreshSvc --> serverState
+    serverState --> sse
+    sse --> desktopUi
+```
+
+- Core runtime is the execution owner for refresh orchestration and scheduling.
+- Desktop no longer exposes standalone duration/loudness scan menu actions; refresh runs through core API.
+- Refresh settings ownership moved to core (`appsettings` + API updates), with client-side orchestration/render only.
+- Desktop library panel now supports persisted list/grid mode with a justified responsive thumbnail grid (aspect-ratio preserved, variable-size cards) while preserving existing list-mode behavior.

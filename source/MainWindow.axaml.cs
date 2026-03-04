@@ -20,6 +20,7 @@ using System.Net.Http;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Timers;
@@ -123,8 +124,8 @@ namespace ReelRoulette
         // Auto-refresh settings
         private bool _autoRefreshSourcesEnabled = true;
         private int _autoRefreshIntervalMinutes = 60;
-        private bool _autoRefreshOnlyWhenIdle = true;
-        private int _autoRefreshIdleThresholdMinutes = 3;
+        private bool _autoRefreshOnlyWhenIdle = false;
+        private int _autoRefreshIdleThresholdMinutes = 1;
 
         // Web Remote settings
         private bool _webRemoteEnabled = false;
@@ -223,11 +224,17 @@ namespace ReelRoulette
 
         // Library panel state
         private ObservableCollection<LibraryItem> _libraryItems = new ObservableCollection<LibraryItem>();
+        private ObservableCollection<LibraryGridRowViewModel> _libraryGridRows = new ObservableCollection<LibraryGridRowViewModel>();
         private string? _currentViewPreset = null; // null = All videos, or "Favorites", "Blacklisted", "RecentlyPlayed", "NeverPlayed"
         private string? _selectedSourceId = null; // null = All sources
         private double _libraryPanelWidth = 400; // Track panel width independently from Bounds (default matches XAML MinWidth)
         private string _librarySearchText = "";
         private string _librarySortMode = "Name"; // "Name", "LastPlayed", "PlayCount", "Duration"
+        private bool _libraryGridViewEnabled = false;
+        private int _libraryGridColumns = 2;
+        private DateTime _thumbnailIndexLastWriteUtc = DateTime.MinValue;
+        private readonly Dictionary<string, (double Width, double Height)> _thumbnailMetadataByItemId = new(StringComparer.OrdinalIgnoreCase);
+        private string? _lastAppliedRefreshCompletionRunId;
         private bool _autoTagScanFullLibrary = true;
         
         // Selection tracking for batch operations
@@ -342,6 +349,20 @@ namespace ReelRoulette
                 if (_globalTotalPlays != value)
                 {
                     _globalTotalPlays = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public int LibraryGridColumns
+        {
+            get => _libraryGridColumns;
+            private set
+            {
+                var clamped = Math.Clamp(value, 1, 8);
+                if (_libraryGridColumns != clamped)
+                {
+                    _libraryGridColumns = clamped;
                     OnPropertyChanged();
                 }
             }
@@ -929,6 +950,10 @@ namespace ReelRoulette
                                 {
                                     _libraryPanelWidth = currentWidth.Value;
                                     Log($"LibraryVideoSplitter DragCompleted: Captured new panel width: {_libraryPanelWidth}");
+                                    if (_libraryGridViewEnabled && _showLibraryPanel)
+                                    {
+                                        UpdateLibraryPanel();
+                                    }
                                 }
                             }
                         };
@@ -976,7 +1001,8 @@ namespace ReelRoulette
                     });
 #pragma warning restore CS4014
 
-                    StartOrRestartAutoRefreshTimer();
+                    _ = SyncRefreshSettingsFromCoreAsync();
+                    _ = SyncRefreshStatusFromCoreAsync();
                 }
                 catch (Exception ex)
                 {
@@ -3682,6 +3708,18 @@ namespace ReelRoulette
                 {
                     Log("InitializeLibraryPanel: WARNING - LibraryListBox is null!");
                 }
+
+                if (LibraryGridItemsControl != null)
+                {
+                    LibraryGridItemsControl.ItemsSource = _libraryGridRows;
+                }
+
+                if (LibraryGridViewToggle != null)
+                {
+                    LibraryGridViewToggle.IsChecked = _libraryGridViewEnabled;
+                }
+
+                UpdateLibraryViewModeVisibility();
                 
                 // Initialize source combo box
                 Log("  Updating source combo box...");
@@ -4047,6 +4085,7 @@ namespace ReelRoulette
                         // Apply sorting
                         items = ApplySort(items);
                         Log($"UpdateLibraryPanel: After sorting: {items.Count} items. Final count ready for UI.");
+                        PopulateThumbnailPaths(items);
 
                         // Update UI on UI thread
                         Log("UpdateLibraryPanel: Posting to UI thread...");
@@ -4139,6 +4178,8 @@ namespace ReelRoulette
                                         }
                                         _libraryItems.Add(item);
                                     }
+                                    BuildGridRowsFromItems(_libraryItems.ToList());
+                                    UpdateLibraryViewModeVisibility();
                                     Log($"UpdateLibraryPanel: UI thread callback completed. _libraryItems now has {_libraryItems.Count} items. LibraryListBox.ItemsSource is set: {LibraryListBox?.ItemsSource != null}, LibraryListBox.IsVisible: {LibraryListBox?.IsVisible}, LibraryPanelContainer.IsVisible: {LibraryPanelContainer?.IsVisible}");
                                     
                                     // Update filter count display
@@ -4454,6 +4495,245 @@ namespace ReelRoulette
             if (ContextMenu_RemoveTagsMenuItem != null)
             {
                 ContextMenu_RemoveTagsMenuItem.IsEnabled = hasSelection && commonTags.Count > 0;
+            }
+        }
+
+        private void LibraryGridViewToggle_Changed(object? sender, RoutedEventArgs e)
+        {
+            _libraryGridViewEnabled = LibraryGridViewToggle?.IsChecked == true;
+            Log($"UI ACTION: LibraryGridViewToggle changed to: {_libraryGridViewEnabled}");
+            UpdateLibraryViewModeVisibility();
+            SaveSettings();
+
+            if (_showLibraryPanel)
+            {
+                UpdateLibraryPanel();
+            }
+        }
+
+        private void LibraryPanelContainer_SizeChanged(object? sender, SizeChangedEventArgs e)
+        {
+            if (!_libraryGridViewEnabled || !_showLibraryPanel)
+            {
+                return;
+            }
+
+            if (Math.Abs(e.NewSize.Width - e.PreviousSize.Width) < 1)
+            {
+                return;
+            }
+
+            RebuildLibraryGridRowsFromCurrentItems();
+        }
+
+        private void UpdateLibraryViewModeVisibility()
+        {
+            if (LibraryListBox != null)
+            {
+                LibraryListBox.IsVisible = !_libraryGridViewEnabled;
+            }
+
+            if (LibraryGridScrollViewer != null)
+            {
+                LibraryGridScrollViewer.IsVisible = _libraryGridViewEnabled;
+            }
+        }
+
+        private void BuildGridRowsFromItems(IReadOnlyList<LibraryItem> items)
+        {
+            _libraryGridRows.Clear();
+            if (items.Count == 0)
+            {
+                LibraryGridColumns = 1;
+                return;
+            }
+
+            var layoutWidth = ComputeLibraryGridAvailableWidth();
+            const double targetRowHeight = 150;
+            const double minRowHeight = 100;
+            const double maxRowHeight = 260;
+            const double horizontalGap = 2;
+            var maxColumns = 1;
+
+            var pendingItems = new List<LibraryItem>();
+            var pendingAspects = new List<double>();
+            var pendingAspectSum = 0d;
+
+            void AddRow(bool isLastRow)
+            {
+                if (pendingItems.Count == 0)
+                {
+                    return;
+                }
+
+                var rowHeight = isLastRow
+                    ? targetRowHeight
+                    : (layoutWidth - ((pendingItems.Count - 1) * horizontalGap)) / Math.Max(0.01, pendingAspectSum);
+                rowHeight = Math.Clamp(rowHeight, minRowHeight, maxRowHeight);
+
+                var row = new LibraryGridRowViewModel();
+                var widths = pendingAspects.Select(aspect => Math.Max(1, aspect * rowHeight)).ToList();
+                if (!isLastRow)
+                {
+                    var widthDelta = layoutWidth - ((pendingItems.Count - 1) * horizontalGap) - widths.Sum();
+                    widths[widths.Count - 1] = Math.Max(1, widths[^1] + widthDelta);
+                }
+
+                for (var i = 0; i < pendingItems.Count; i++)
+                {
+                    row.Items.Add(new LibraryGridTileViewModel
+                    {
+                        Item = pendingItems[i],
+                        TileWidth = widths[i],
+                        TileHeight = rowHeight
+                    });
+                }
+
+                _libraryGridRows.Add(row);
+                maxColumns = Math.Max(maxColumns, row.Items.Count);
+                pendingItems.Clear();
+                pendingAspects.Clear();
+                pendingAspectSum = 0;
+            }
+
+            foreach (var item in items)
+            {
+                var aspect = GetThumbnailAspectRatio(item);
+                pendingItems.Add(item);
+                pendingAspects.Add(aspect);
+                pendingAspectSum += aspect;
+
+                var projectedWidth = (pendingAspectSum * targetRowHeight) + ((pendingItems.Count - 1) * horizontalGap);
+                if (projectedWidth >= layoutWidth && pendingItems.Count > 0)
+                {
+                    AddRow(isLastRow: false);
+                }
+            }
+
+            AddRow(isLastRow: true);
+            LibraryGridColumns = Math.Clamp(maxColumns, 1, 12);
+        }
+
+        private void PopulateThumbnailPaths(IReadOnlyList<LibraryItem> items)
+        {
+            var thumbRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ReelRoulette", "thumbnails");
+            var metadata = LoadThumbnailMetadata(thumbRoot);
+            foreach (var item in items)
+            {
+                var thumbnailFilePath = string.IsNullOrWhiteSpace(item.Id)
+                    ? string.Empty
+                    : Path.Combine(thumbRoot, $"{item.Id}.jpg");
+                item.ThumbnailPath = !string.IsNullOrWhiteSpace(thumbnailFilePath) && File.Exists(thumbnailFilePath)
+                    ? thumbnailFilePath
+                    : string.Empty;
+                var fallbackAspect = item.MediaType == MediaType.Photo ? (4d / 3d) : (16d / 9d);
+                var fallbackHeight = 100d;
+                var fallbackWidth = fallbackHeight * fallbackAspect;
+
+                if (!string.IsNullOrWhiteSpace(item.Id) &&
+                    metadata.TryGetValue(item.Id, out var dims) &&
+                    dims.Width > 0 &&
+                    dims.Height > 0)
+                {
+                    item.ThumbnailWidth = dims.Width;
+                    item.ThumbnailHeight = dims.Height;
+                }
+                else
+                {
+                    item.ThumbnailWidth = fallbackWidth;
+                    item.ThumbnailHeight = fallbackHeight;
+                }
+            }
+        }
+
+        private void RebuildLibraryGridRowsFromCurrentItems()
+        {
+            if (!_libraryGridViewEnabled)
+            {
+                return;
+            }
+
+            BuildGridRowsFromItems(_libraryItems.ToList());
+        }
+
+        private double ComputeLibraryGridAvailableWidth()
+        {
+            const double rightSafetyPx = 24;
+            var measuredWidth = LibraryGridItemsControl?.Bounds.Width > 0
+                ? LibraryGridItemsControl.Bounds.Width
+                : (LibraryGridScrollViewer?.Bounds.Width > 0
+                    ? LibraryGridScrollViewer.Bounds.Width
+                    : (LibraryPanelContainer?.Bounds.Width > 0
+                        ? LibraryPanelContainer.Bounds.Width
+                        : _libraryPanelWidth));
+
+            return Math.Max(280, measuredWidth - rightSafetyPx);
+        }
+
+        private static double GetThumbnailAspectRatio(LibraryItem item)
+        {
+            if (item.ThumbnailWidth > 0 && item.ThumbnailHeight > 0)
+            {
+                return Math.Clamp(item.ThumbnailWidth / item.ThumbnailHeight, 0.25, 4.0);
+            }
+
+            return item.MediaType == MediaType.Photo ? (4d / 3d) : (16d / 9d);
+        }
+
+        private Dictionary<string, (double Width, double Height)> LoadThumbnailMetadata(string thumbRoot)
+        {
+            var indexPath = Path.Combine(thumbRoot, "index.json");
+            if (!File.Exists(indexPath))
+            {
+                _thumbnailMetadataByItemId.Clear();
+                _thumbnailIndexLastWriteUtc = DateTime.MinValue;
+                return _thumbnailMetadataByItemId;
+            }
+
+            var writeUtc = File.GetLastWriteTimeUtc(indexPath);
+            if (_thumbnailMetadataByItemId.Count > 0 && writeUtc == _thumbnailIndexLastWriteUtc)
+            {
+                return _thumbnailMetadataByItemId;
+            }
+
+            _thumbnailMetadataByItemId.Clear();
+            _thumbnailIndexLastWriteUtc = writeUtc;
+            try
+            {
+                var root = JsonNode.Parse(File.ReadAllText(indexPath)) as JsonObject;
+                if (root == null)
+                {
+                    return _thumbnailMetadataByItemId;
+                }
+
+                foreach (var entry in root)
+                {
+                    if (entry.Value is not JsonObject obj)
+                    {
+                        continue;
+                    }
+
+                    var width = obj["width"]?.GetValue<double?>() ?? 0;
+                    var height = obj["height"]?.GetValue<double?>() ?? 0;
+                    if (width > 0 && height > 0)
+                    {
+                        _thumbnailMetadataByItemId[entry.Key] = (width, height);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Log($"LoadThumbnailMetadata: Failed to parse thumbnail index metadata - {ex.GetType().Name}: {ex.Message}");
+            }
+
+            return _thumbnailMetadataByItemId;
+        }
+
+        private void LibraryGridItem_Click(object? sender, RoutedEventArgs e)
+        {
+            if (sender is Button button && button.Tag is string fullPath && !string.IsNullOrWhiteSpace(fullPath))
+            {
+                PlayFromPath(fullPath);
             }
         }
 
@@ -7356,6 +7636,8 @@ namespace ReelRoulette
             {
                 EnsureCoreEventStreamStarted();
                 _ = SyncTagCatalogToCoreAsync();
+                _ = SyncRefreshSettingsFromCoreAsync();
+                _ = SyncRefreshStatusFromCoreAsync();
                 return true;
             }
 
@@ -7371,6 +7653,8 @@ namespace ReelRoulette
             {
                 EnsureCoreEventStreamStarted();
                 _ = SyncTagCatalogToCoreAsync();
+                _ = SyncRefreshSettingsFromCoreAsync();
+                _ = SyncRefreshStatusFromCoreAsync();
             }
 
             return connectedAfterStart;
@@ -7639,6 +7923,179 @@ namespace ReelRoulette
                         ApplyTagCatalogProjection(tagCatalog);
                     });
                     break;
+                case "refreshStatusChanged":
+                    CoreRefreshStatusChangedPayload? refreshStatusChanged = null;
+                    try
+                    {
+                        refreshStatusChanged = envelope.Payload.Deserialize<CoreRefreshStatusChangedPayload>(eventPayloadOptions);
+                    }
+                    catch
+                    {
+                        // Ignore malformed payloads and keep stream alive.
+                    }
+
+                    if (refreshStatusChanged?.Snapshot == null)
+                    {
+                        return;
+                    }
+
+                    await Dispatcher.UIThread.InvokeAsync(() =>
+                    {
+                        ApplyRefreshStatusProjection(refreshStatusChanged.Snapshot);
+                    });
+                    break;
+            }
+        }
+
+        private void ApplyRefreshStatusProjection(CoreRefreshStatusSnapshot snapshot)
+        {
+            if (snapshot.IsRunning)
+            {
+                var stage = string.IsNullOrWhiteSpace(snapshot.CurrentStage) ? "initializing" : snapshot.CurrentStage;
+                var active = snapshot.Stages.FirstOrDefault(s => string.Equals(s.Stage, stage, StringComparison.OrdinalIgnoreCase));
+                var percent = active?.Percent ?? 0;
+                var message = string.IsNullOrWhiteSpace(active?.Message) ? stage : active!.Message;
+                SetStatusMessage($"Core refresh: {message} ({percent}%)", 0);
+                return;
+            }
+
+            var hasCompleted = snapshot.CompletedUtc.HasValue;
+            if (hasCompleted)
+            {
+                var completionRunId = string.IsNullOrWhiteSpace(snapshot.RunId) ? "__no-run-id__" : snapshot.RunId;
+                if (!string.Equals(_lastAppliedRefreshCompletionRunId, completionRunId, StringComparison.Ordinal))
+                {
+                    _lastAppliedRefreshCompletionRunId = completionRunId;
+                    try
+                    {
+                        // Immediate parity fix: refresh desktop's local projection when core refresh completes.
+                        _libraryService.LoadLibrary();
+                        _libraryIndex = _libraryService.LibraryIndex;
+                        if (_showLibraryPanel)
+                        {
+                            UpdateLibraryPanel();
+                        }
+                        UpdateLibraryInfoText();
+                        UpdateFilterSummaryText();
+                        RecalculateGlobalStats();
+                    }
+                    catch (Exception ex)
+                    {
+                        Log($"CoreRefresh: Failed to reload desktop library projection ({ex.Message})");
+                    }
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(snapshot.LastError))
+            {
+                SetStatusMessage($"Core refresh failed: {snapshot.LastError}", 0);
+                return;
+            }
+
+            if (hasCompleted)
+            {
+                string GetStageMessage(string stageName, string fallback)
+                {
+                    var stage = snapshot.Stages.FirstOrDefault(s =>
+                        string.Equals(s.Stage, stageName, StringComparison.OrdinalIgnoreCase));
+                    if (stage == null || string.IsNullOrWhiteSpace(stage.Message))
+                    {
+                        return fallback;
+                    }
+
+                    return stage.Message.Trim();
+                }
+
+                // Keep this as one consolidated summary so users can see what each stage did.
+                var sourceSummary = GetStageMessage("sourceRefresh", "Source refresh: no details reported");
+                var durationSummary = GetStageMessage("durationScan", "Duration scan: no details reported");
+                var loudnessSummary = GetStageMessage("loudnessScan", "Loudness scan: no details reported");
+                var thumbnailSummary = GetStageMessage("thumbnailGeneration", "Thumbnail generation: placeholder results pending");
+
+                var finalMessage =
+                    $"Core refresh complete | Source: {sourceSummary} | Duration: {durationSummary} | Loudness: {loudnessSummary} | Thumbnails: {thumbnailSummary}";
+                SetStatusMessage(finalMessage, 0);
+            }
+        }
+
+        private async Task<bool> RequestCoreRefreshAsync()
+        {
+            if (!await EnsureCoreRuntimeAvailableAsync())
+            {
+                return false;
+            }
+
+            try
+            {
+                var response = await _coreServerApiClient.StartRefreshAsync(_coreServerBaseUrl);
+                if (response == null)
+                {
+                    SetStatusMessage("Core refresh request failed.", 0);
+                    return false;
+                }
+
+                if (response.Accepted)
+                {
+                    SetStatusMessage("Core refresh started.", 0);
+                    _ = SyncRefreshStatusFromCoreAsync();
+                    return true;
+                }
+
+                SetStatusMessage("Core refresh already running.", 0);
+                return false;
+            }
+            catch (Exception ex)
+            {
+                Log($"CoreRefresh: Failed to start ({ex.Message})");
+                SetStatusMessage("Core refresh request failed.", 0);
+                return false;
+            }
+        }
+
+        private async Task SyncRefreshStatusFromCoreAsync()
+        {
+            if (!_isCoreApiReachable)
+            {
+                return;
+            }
+
+            try
+            {
+                var snapshot = await _coreServerApiClient.GetRefreshStatusAsync(_coreServerBaseUrl);
+                if (snapshot != null)
+                {
+                    await Dispatcher.UIThread.InvokeAsync(() => ApplyRefreshStatusProjection(snapshot));
+                }
+            }
+            catch (Exception ex)
+            {
+                Log($"CoreRefresh: Failed to fetch refresh status ({ex.Message})");
+            }
+        }
+
+        private async Task SyncRefreshSettingsFromCoreAsync()
+        {
+            if (!_isCoreApiReachable)
+            {
+                return;
+            }
+
+            try
+            {
+                var settings = await _coreServerApiClient.GetRefreshSettingsAsync(_coreServerBaseUrl);
+                if (settings == null)
+                {
+                    return;
+                }
+
+                _autoRefreshSourcesEnabled = settings.AutoRefreshEnabled;
+                _autoRefreshIntervalMinutes = Math.Clamp(settings.AutoRefreshIntervalMinutes, 5, 1440);
+                _autoRefreshOnlyWhenIdle = false;
+                _autoRefreshIdleThresholdMinutes = 1;
+            }
+            catch (Exception ex)
+            {
+                Log($"CoreRefresh: Failed to fetch refresh settings ({ex.Message})");
             }
         }
 
@@ -7818,8 +8275,9 @@ namespace ReelRoulette
             // Auto-refresh settings
             public bool AutoRefreshSourcesEnabled { get; set; } = true;
             public int AutoRefreshIntervalMinutes { get; set; } = 60;
-            public bool AutoRefreshOnlyWhenIdle { get; set; } = true;
-            public int AutoRefreshIdleThresholdMinutes { get; set; } = 3;
+            public bool AutoRefreshOnlyWhenIdle { get; set; } = false;
+            public int AutoRefreshIdleThresholdMinutes { get; set; } = 1;
+            public bool LibraryGridViewEnabled { get; set; } = false;
             
             // Filter state
             public FilterState? FilterState { get; set; }
@@ -8070,9 +8528,10 @@ namespace ReelRoulette
             // Load auto-refresh settings
             _autoRefreshSourcesEnabled = settings.AutoRefreshSourcesEnabled;
             _autoRefreshIntervalMinutes = settings.AutoRefreshIntervalMinutes >= 5 ? settings.AutoRefreshIntervalMinutes : 60;
-            _autoRefreshOnlyWhenIdle = settings.AutoRefreshOnlyWhenIdle;
-            _autoRefreshIdleThresholdMinutes = settings.AutoRefreshIdleThresholdMinutes >= 1 ? settings.AutoRefreshIdleThresholdMinutes : 3;
-            Log($"LoadSettings: Restored auto-refresh settings - Enabled: {_autoRefreshSourcesEnabled}, Interval: {_autoRefreshIntervalMinutes}m, IdleOnly: {_autoRefreshOnlyWhenIdle}, IdleThreshold: {_autoRefreshIdleThresholdMinutes}m");
+            _autoRefreshOnlyWhenIdle = false;
+            _autoRefreshIdleThresholdMinutes = 1;
+            _libraryGridViewEnabled = settings.LibraryGridViewEnabled;
+            Log($"LoadSettings: Restored auto-refresh settings - Enabled: {_autoRefreshSourcesEnabled}, Interval: {_autoRefreshIntervalMinutes}m (idle options disabled; core-owned refresh pipeline)");
 
             // Load Web Remote settings
             var wr = settings.WebRemote;
@@ -8411,8 +8870,9 @@ namespace ReelRoulette
                 // Auto-refresh settings
                 settings.AutoRefreshSourcesEnabled = _autoRefreshSourcesEnabled;
                 settings.AutoRefreshIntervalMinutes = _autoRefreshIntervalMinutes;
-                settings.AutoRefreshOnlyWhenIdle = _autoRefreshOnlyWhenIdle;
-                settings.AutoRefreshIdleThresholdMinutes = _autoRefreshIdleThresholdMinutes;
+                settings.AutoRefreshOnlyWhenIdle = false;
+                settings.AutoRefreshIdleThresholdMinutes = 1;
+                settings.LibraryGridViewEnabled = _libraryGridViewEnabled;
 
                 // Web Remote settings
                 settings.WebRemote = new WebRemote.WebRemoteSettings
@@ -9180,7 +9640,7 @@ namespace ReelRoulette
         private async void ManageSourcesMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
             Log("UI ACTION: ManageSourcesMenuItem clicked");
-            var dialog = new ManageSourcesDialog(_libraryService);
+            var dialog = new ManageSourcesDialog(_libraryService, RequestCoreRefreshAsync);
             await dialog.ShowDialog(this);
             
             Log("ManageSourcesMenuItem_Click: Dialog closed, refreshing UI");
@@ -9291,6 +9751,11 @@ namespace ReelRoulette
                 Log("Settings: Creating dialog instance...");
                 var dialog = new SettingsDialog();
                 Log("Settings: Dialog instance created.");
+
+                if (_isCoreApiReachable)
+                {
+                    await SyncRefreshSettingsFromCoreAsync();
+                }
 
                 dialog.WindowStartupLocation = WindowStartupLocation.CenterOwner;
                 dialog.Topmost = this.Topmost;
@@ -9437,10 +9902,10 @@ namespace ReelRoulette
                     Log($"Settings: Backup settings changed - LibraryEnabled: {oldBackupEnabled} -> {_backupLibraryEnabled}, LibraryMinGap: {oldMinGap} -> {_minimumBackupGapMinutes} minutes, LibraryCount: {oldBackupCount} -> {_numberOfBackups}, SettingsEnabled: {oldSettingsBackupEnabled} -> {_backupSettingsEnabled}, SettingsMinGap: {oldSettingsMinGap} -> {_minimumSettingsBackupGapMinutes} minutes, SettingsCount: {oldSettingsBackupCount} -> {_numberOfSettingsBackups}");
                     
                     _autoRefreshSourcesEnabled = dialog.GetAutoRefreshSourcesEnabled();
-                    _autoRefreshIntervalMinutes = dialog.GetAutoRefreshIntervalMinutes();
-                    _autoRefreshOnlyWhenIdle = dialog.GetAutoRefreshOnlyWhenIdle();
-                    _autoRefreshIdleThresholdMinutes = dialog.GetAutoRefreshIdleThresholdMinutes();
-                    Log($"Settings: Auto-refresh settings changed - Enabled: {oldAutoRefreshEnabled} -> {_autoRefreshSourcesEnabled}, Interval: {oldAutoRefreshInterval} -> {_autoRefreshIntervalMinutes} minutes, IdleOnly: {oldAutoRefreshIdleOnly} -> {_autoRefreshOnlyWhenIdle}, IdleThreshold: {oldAutoRefreshIdleThreshold} -> {_autoRefreshIdleThresholdMinutes} minutes");
+                    _autoRefreshIntervalMinutes = Math.Clamp(dialog.GetAutoRefreshIntervalMinutes(), 5, 1440);
+                    _autoRefreshOnlyWhenIdle = false;
+                    _autoRefreshIdleThresholdMinutes = 1;
+                    Log($"Settings: Auto-refresh settings changed - Enabled: {oldAutoRefreshEnabled} -> {_autoRefreshSourcesEnabled}, Interval: {oldAutoRefreshInterval} -> {_autoRefreshIntervalMinutes} minutes (idle settings are core-owned and disabled)");
 
                     // Update Web Remote settings
                     _webRemoteEnabled = dialog.GetWebRemoteEnabled();
@@ -9498,11 +9963,33 @@ namespace ReelRoulette
                             oldWebRemoteAuthMode != _webRemoteAuthMode ||
                             !string.Equals(oldWebRemoteSharedToken ?? string.Empty, _webRemoteSharedToken ?? string.Empty, StringComparison.Ordinal);
 
-                        if (autoRefreshChanged)
+                        if (autoRefreshChanged && _isCoreApiReachable)
                         {
-                            var timerRestartStopwatch = Stopwatch.StartNew();
-                            StartOrRestartAutoRefreshTimer();
-                            Log($"Settings: Auto-refresh timer restart completed in {timerRestartStopwatch.ElapsedMilliseconds}ms");
+                            try
+                            {
+                                var updated = await _coreServerApiClient.UpdateRefreshSettingsAsync(_coreServerBaseUrl, new CoreRefreshSettingsSnapshot
+                                {
+                                    AutoRefreshEnabled = _autoRefreshSourcesEnabled,
+                                    AutoRefreshIntervalMinutes = _autoRefreshIntervalMinutes
+                                });
+
+                                if (updated != null)
+                                {
+                                    _autoRefreshSourcesEnabled = updated.AutoRefreshEnabled;
+                                    _autoRefreshIntervalMinutes = Math.Clamp(updated.AutoRefreshIntervalMinutes, 5, 1440);
+                                    _autoRefreshOnlyWhenIdle = false;
+                                    _autoRefreshIdleThresholdMinutes = 1;
+                                    Log("Settings: Core refresh settings updated via API.");
+                                }
+                                else
+                                {
+                                    Log("Settings: Core refresh settings update returned no payload.");
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                Log($"Settings: Failed to push core refresh settings ({ex.Message})");
+                            }
                         }
 
                         if (webRemoteChanged)
@@ -10489,7 +10976,7 @@ namespace ReelRoulette
                 if (!_hasShownMissingLoudnessWarning)
                 {
                     _hasShownMissingLoudnessWarning = true;
-                    SetStatusMessage("Volume normalization enabled, but some videos lack loudness data. Run 'Library > Scan Loudness' for best results.");
+                    SetStatusMessage("Volume normalization enabled, but some videos lack loudness data. Run a core refresh for best results.");
                 }
                 
                 // Fall back to direct volume if no loudness data

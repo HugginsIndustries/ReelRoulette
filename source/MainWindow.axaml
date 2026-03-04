@@ -186,6 +186,40 @@
         <Style Selector="Button.IconMomentarySmall:disabled">
             <Setter Property="Opacity" Value="0.45"/>
         </Style>
+
+        <Style Selector="ListBox#LibraryGridListBox ListBoxItem">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Margin" Value="0"/>
+        </Style>
+        <Style Selector="ListBox#LibraryGridListBox ListBoxItem:pointerover">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+        </Style>
+        <Style Selector="ListBox#LibraryGridListBox ListBoxItem:selected">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+        </Style>
+        <Style Selector="ListBox#LibraryGridListBox ListBoxItem:selected:pointerover">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+        </Style>
+        <Style Selector="ListBox#LibraryGridListBox Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="0"/>
+        </Style>
+        <Style Selector="ListBox#LibraryGridListBox Button:pointerover">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+        </Style>
+        <Style Selector="ListBox#LibraryGridListBox Button:pressed">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+        </Style>
     </Window.Styles>
     
     <Grid RowDefinitions="Auto,Auto,Auto,*" Margin="0">
@@ -211,10 +245,6 @@
                 <MenuItem x:Name="ManageSourcesMenuItem"
                           Header="Manage Sources"
                           Click="ManageSourcesMenuItem_Click"/>
-                <MenuItem Header="Scan Durations"
-                          Click="ScanDurations_Click"/>
-                <MenuItem Header="Scan Loudness"
-                          Click="ScanLoudness_Click"/>
             </MenuItem>
             <MenuItem Header="_View">
                 <MenuItem x:Name="ShowMenuMenuItem"
@@ -535,6 +565,7 @@
                     Padding="8"
                     HorizontalAlignment="Stretch"
                     VerticalAlignment="Stretch"
+                    SizeChanged="LibraryPanelContainer_SizeChanged"
                     IsVisible="False">
                 <Grid RowDefinitions="Auto Auto Auto Auto Auto Auto Auto *" VerticalAlignment="Stretch" x:DataType="local:MainWindow">
                     <!-- Row 0: Library info header -->
@@ -554,13 +585,24 @@
                               Text="🎯 0 filtered • 📝 0 selected"/>
                     
                     <!-- Row 2: Filters row -->
-                    <Grid Grid.Row="2" ColumnDefinitions="* Auto Auto" ColumnSpacing="4" Margin="0,0,0,8">
+                    <Grid Grid.Row="2" ColumnDefinitions="* Auto Auto Auto" ColumnSpacing="4" Margin="0,0,0,8">
                         <TextBlock x:Name="LibraryFilterSummaryTextBlock"
                                  Grid.Column="0"
                                  VerticalAlignment="Center"
                                  Text="{Binding FilterSummaryText}"/>
+                        <ToggleButton x:Name="LibraryGridViewToggle"
+                                    Grid.Column="1"
+                                    Classes="IconToggleSmall"
+                                    ToolTip.Tip="Grid view"
+                                    Checked="LibraryGridViewToggle_Changed"
+                                    Unchecked="LibraryGridViewToggle_Changed">
+                            <TextBlock Text="🖼️"
+                                       TextAlignment="Center"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"/>
+                        </ToggleButton>
                         <Button x:Name="LibraryFilterButton"
-                               Grid.Column="1"
+                               Grid.Column="2"
                                Classes="IconMomentarySmall"
                                ToolTip.Tip="Select filters..."
                                Margin="0,0,4,0"
@@ -571,7 +613,7 @@
                                        VerticalAlignment="Center"/>
                         </Button>
                         <ToggleButton x:Name="LibraryRespectFiltersToggle"
-                                    Grid.Column="2"
+                                    Grid.Column="3"
                                     Classes="IconToggleSmall"
                                     ToolTip.Tip="Respect filters"
                                     IsChecked="True"
@@ -647,6 +689,7 @@
                              SelectionMode="Multiple"
                              Background="Transparent"
                              BorderThickness="0"
+                             IsVisible="True"
                              DoubleTapped="LibraryListBox_DoubleTapped"
                              KeyDown="LibraryListBox_KeyDown"
                              SelectionChanged="LibraryListBox_SelectionChanged"
@@ -777,6 +820,62 @@
                             </DataTemplate>
                         </ListBox.ItemTemplate>
                     </ListBox>
+
+                    <ScrollViewer x:Name="LibraryGridScrollViewer"
+                                  Grid.Row="7"
+                                  VerticalAlignment="Stretch"
+                                  HorizontalScrollBarVisibility="Disabled"
+                                  VerticalScrollBarVisibility="Auto"
+                                  IsVisible="False">
+                        <ItemsControl x:Name="LibraryGridItemsControl"
+                                      ItemsSource="{Binding}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <VirtualizingStackPanel />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="local:LibraryGridRowViewModel">
+                                    <ItemsControl ItemsSource="{Binding Items}" Margin="0,0,0,1">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <StackPanel Orientation="Horizontal" Spacing="2"/>
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate DataType="local:LibraryGridTileViewModel">
+                                                <Button Tag="{Binding Item.FullPath}"
+                                                        Click="LibraryGridItem_Click"
+                                                        Width="{Binding TileWidth}"
+                                                        Height="{Binding TileHeight}"
+                                                        HorizontalAlignment="Stretch"
+                                                        VerticalAlignment="Stretch">
+                                                    <Grid>
+                                                        <Border Background="#22000000"
+                                                                CornerRadius="0"
+                                                                ClipToBounds="True">
+                                                            <Image Source="{Binding Item.ThumbnailBitmap}"
+                                                                   Stretch="UniformToFill"/>
+                                                        </Border>
+                                                        <Border VerticalAlignment="Bottom"
+                                                                Background="#AA000000"
+                                                                CornerRadius="0"
+                                                                Padding="6,3">
+                                                            <TextBlock Text="{Binding Item.FileName}"
+                                                                       MaxLines="1"
+                                                                       TextTrimming="CharacterEllipsis"
+                                                                       Foreground="White"
+                                                                       FontSize="12"/>
+                                                        </Border>
+                                                    </Grid>
+                                                </Button>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
                 </Grid>
             </Border>
 

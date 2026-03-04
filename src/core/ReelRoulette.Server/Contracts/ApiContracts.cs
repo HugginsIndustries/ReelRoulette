@@ -166,6 +166,44 @@ public sealed class SyncItemTagsRequest
     public List<ItemTagsSnapshot> Items { get; set; } = [];
 }
 
+public sealed class RefreshStartRequest
+{
+    public string Trigger { get; set; } = "manual";
+}
+
+public sealed class RefreshStartResponse
+{
+    public bool Accepted { get; set; }
+    public string? Message { get; set; }
+    public string? RunId { get; set; }
+}
+
+public sealed class RefreshSettingsSnapshot
+{
+    public bool AutoRefreshEnabled { get; set; } = true;
+    public int AutoRefreshIntervalMinutes { get; set; } = 15;
+}
+
+public sealed class RefreshStageProgress
+{
+    public string Stage { get; set; } = string.Empty;
+    public int Percent { get; set; }
+    public string Message { get; set; } = string.Empty;
+    public bool IsComplete { get; set; }
+}
+
+public sealed class RefreshStatusSnapshot
+{
+    public bool IsRunning { get; set; }
+    public string? RunId { get; set; }
+    public string Trigger { get; set; } = "manual";
+    public DateTimeOffset? StartedUtc { get; set; }
+    public DateTimeOffset? CompletedUtc { get; set; }
+    public string? CurrentStage { get; set; }
+    public string? LastError { get; set; }
+    public List<RefreshStageProgress> Stages { get; set; } = [];
+}
+
 public sealed class ServerEventEnvelope
 {
     public long Revision { get; set; }
@@ -200,4 +238,9 @@ public sealed class TagCatalogChangedPayload
     public string Reason { get; set; } = string.Empty;
     public List<TagCategorySnapshot> Categories { get; set; } = [];
     public List<TagSnapshot> Tags { get; set; } = [];
+}
+
+public sealed class RefreshStatusChangedPayload
+{
+    public RefreshStatusSnapshot Snapshot { get; set; } = new();
 }

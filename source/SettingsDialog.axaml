@@ -143,32 +143,7 @@
                                            Foreground="Gray"
                                            FontSize="12"/>
                             </Grid>
-                            <CheckBox Content="Run only when idle"
-                                      IsChecked="{Binding AutoRefreshOnlyWhenIdle}"
-                                      Margin="20,4,0,0"
-                                      ToolTip.Tip="Defers auto-refresh while you are actively using the app or while other library jobs are running. Playback does not block refresh."/>
-                            <Grid ColumnDefinitions="Auto * Auto" ColumnSpacing="8" Margin="20,4,0,4"
-                                  IsEnabled="{Binding AutoRefreshIdleThresholdEnabled}">
-                                <TextBlock Grid.Column="0"
-                                           Text="Idle threshold (minutes):"
-                                           VerticalAlignment="Center"/>
-                                <NumericUpDown Grid.Column="1"
-                                               Value="{Binding AutoRefreshIdleThresholdMinutes}"
-                                               Minimum="1"
-                                               Maximum="60"
-                                               FormatString="0"
-                                               Increment="1"
-                                               ShowButtonSpinner="True"
-                                               HorizontalAlignment="Left"
-                                               Width="150"
-                                               ToolTip.Tip="Minimum time since your last interaction before auto-refresh starts."/>
-                                <TextBlock Grid.Column="2"
-                                           Text="(1-60)"
-                                           VerticalAlignment="Center"
-                                           Foreground="Gray"
-                                           FontSize="12"/>
-                            </Grid>
-                            <TextBlock Text="Auto-refresh applies to enabled sources only."
+                            <TextBlock Text="Auto-refresh runs in core and applies to enabled sources only."
                                        FontSize="11"
                                        Foreground="Gray"
                                        Margin="20,0,0,0"/>
@@ -360,7 +335,7 @@
                             <CheckBox x:Name="NormalizationEnabledCheckBox"
                                       Content="Enable volume normalization"
                                       IsChecked="{Binding VolumeNormalizationEnabled}"/>
-                            <TextBlock Text="Reduces loud videos to match quieter ones in your library. Run 'Library > Scan Loudness' first for best results."
+                            <TextBlock Text="Reduces loud videos to match quieter ones in your library. Run a core refresh first for best results."
                                        FontSize="11"
                                        Foreground="Gray"
                                        TextWrapping="Wrap"

@@ -7,4 +7,7 @@
   <ItemGroup>
     <ProjectReference Include="..\ReelRoulette.Core\ReelRoulette.Core.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="SkiaSharp" Version="2.88.9" />
+  </ItemGroup>
 </Project>

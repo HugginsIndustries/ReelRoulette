@@ -10,6 +10,8 @@ public static class ServerHostComposition
     public static void AddReelRouletteServer(this IServiceCollection services)
     {
         services.AddSingleton<ServerStateService>();
+        services.AddSingleton<RefreshPipelineService>();
+        services.AddHostedService(sp => sp.GetRequiredService<RefreshPipelineService>());
     }
 
     public static void MapReelRouletteEndpoints(this WebApplication app, ServerRuntimeOptions options)
@@ -183,6 +185,48 @@ public static class ServerHostComposition
         {
             state.SyncItemTags(request);
             return Results.Ok();
+        });
+
+        app.MapPost("/api/refresh/start", (RefreshStartRequest? request, RefreshPipelineService refresh) =>
+        {
+            var response = refresh.TryStartManual();
+            if (!response.Accepted)
+            {
+                return Results.Json(new { error = "already running", runId = response.RunId }, statusCode: StatusCodes.Status409Conflict);
+            }
+
+            return Results.Ok(response);
+        });
+
+        app.MapGet("/api/refresh/status", (RefreshPipelineService refresh) =>
+        {
+            return Results.Ok(refresh.GetStatus());
+        });
+
+        app.MapGet("/api/refresh/settings", (RefreshPipelineService refresh) =>
+        {
+            return Results.Ok(refresh.GetSettings());
+        });
+
+        app.MapPost("/api/refresh/settings", (RefreshSettingsSnapshot snapshot, RefreshPipelineService refresh) =>
+        {
+            return Results.Ok(refresh.UpdateSettings(snapshot));
+        });
+
+        app.MapGet("/api/thumbnail/{itemId}", (string itemId, RefreshPipelineService refresh) =>
+        {
+            if (string.IsNullOrWhiteSpace(itemId))
+            {
+                return Results.BadRequest(new { error = "itemId is required" });
+            }
+
+            var path = refresh.GetThumbnailPath(itemId);
+            if (!File.Exists(path))
+            {
+                return Results.NotFound();
+            }
+
+            return Results.File(path, "image/jpeg");
         });
 
         app.MapGet("/api/events", async (HttpContext context, ServerStateService state) =>

@@ -4,6 +4,7 @@
 
 - API contract lives at `shared/api/openapi.yaml`.
 - M6a extends the contract-first worker/server seam with batch-ready tag/category/item-tag mutation APIs shared by desktop and web clients.
+- M6b extends the same seam with unified refresh pipeline status/settings APIs and thumbnail retrieval.
 
 ## Eventing Direction
 
@@ -14,6 +15,7 @@
   - `payload`
 - M5 adds `filterSessionChanged` when the desktop syncs filter/preset session state via API.
 - M6a adds `itemTagsChanged` and `tagCatalogChanged` for tag-editor synchronization.
+- M6b adds `refreshStatusChanged` so clients can project refresh progress/completion state (desktop in M6b; direct web-to-core projection in M7).
 - Desktop event consumption now uses a long-lived SSE client with reconnect behavior; payload parsing is case-insensitive to avoid projection drops from JSON casing differences.
 - Reconnect/resync contract:
   - Client reconnects to `GET /api/events` with `Last-Event-ID`.
@@ -54,6 +56,11 @@
 - `POST /api/tag-editor/delete-category`
 - `POST /api/tag-editor/sync-catalog`
 - `POST /api/tag-editor/sync-item-tags`
+- `POST /api/refresh/start`
+- `GET /api/refresh/status`
+- `GET /api/refresh/settings`
+- `POST /api/refresh/settings`
+- `GET /api/thumbnail/{itemId}`
 - `GET /api/events` (`text/event-stream`)
 
 ## M6a Tag Editing Notes
@@ -64,3 +71,16 @@
 - Before web tag-editor model reads for active items, desktop hydrates requested item-tag snapshots to core via `POST /api/tag-editor/sync-item-tags` so current tag-state styling reflects authoritative item tags.
 - Deleting a category reassigns its tags to the canonical `uncategorized` category (fixed ID), and `Uncategorized` remains available in category dropdowns.
 - Web tag editor uses full-screen UX with touch-friendly controls, collapsible categories, and staged/batched apply semantics for tag/category actions while preserving playback/photo autoplay pause/resume behavior during editing.
+
+## M6b Unified Refresh + Grid/Thumbnail Notes
+
+- Unified refresh pipeline runs in core runtime with strict stage order:
+  1. `sourceRefresh`
+  2. `durationScan`
+  3. `loudnessScan` (new/unscanned only)
+  4. `thumbnailGeneration`
+- Manual refresh entrypoint is `POST /api/refresh/start`; overlap is rejected with `409`.
+- Snapshot endpoint `GET /api/refresh/status` complements SSE `refreshStatusChanged` projection events.
+- Core-owned refresh settings are managed via `GET/POST /api/refresh/settings` (default enabled, 15-minute interval, no idle-only settings).
+- Thumbnail artifacts are fetched via `GET /api/thumbnail/{itemId}` and generated into local app-data thumbnail storage (`%LOCALAPPDATA%\\ReelRoulette\\thumbnails\\{itemId}.jpg`) by core pipeline stages.
+- Thumbnail index metadata is persisted per item (`revision`, `width`, `height`, `generatedUtc`) and legacy string entries are backfilled when reused.

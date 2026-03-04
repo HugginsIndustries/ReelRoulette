@@ -196,6 +196,75 @@ public sealed class CoreServerApiClientTests
         Assert.Contains(logs, message => message.Contains("Failed to parse SSE payload", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public async Task StartRefreshAsync_ShouldPostManualTrigger()
+    {
+        string? capturedJson = null;
+        var handler = new DelegatingStubHandler(async request =>
+        {
+            capturedJson = await request.Content!.ReadAsStringAsync();
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("{\"accepted\":true,\"message\":\"started\",\"runId\":\"run-1\"}", Encoding.UTF8, "application/json")
+            };
+        });
+        var client = new CoreServerApiClient(new HttpClient(handler));
+
+        var response = await client.StartRefreshAsync("http://localhost:51301");
+
+        Assert.NotNull(response);
+        Assert.True(response!.Accepted);
+        Assert.Equal("run-1", response.RunId);
+        Assert.False(string.IsNullOrWhiteSpace(capturedJson));
+        using var doc = JsonDocument.Parse(capturedJson!);
+        Assert.Equal("manual", doc.RootElement.GetProperty("trigger").GetString());
+    }
+
+    [Fact]
+    public async Task GetAndUpdateRefreshSettingsAsync_ShouldRoundTripSnapshot()
+    {
+        var step = 0;
+        string? updatePayload = null;
+        var handler = new DelegatingStubHandler(async request =>
+        {
+            step++;
+            if (step == 1)
+            {
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent("{\"autoRefreshEnabled\":true,\"autoRefreshIntervalMinutes\":15}", Encoding.UTF8, "application/json")
+                };
+            }
+
+            updatePayload = await request.Content!.ReadAsStringAsync();
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(updatePayload, Encoding.UTF8, "application/json")
+            };
+        });
+        var client = new CoreServerApiClient(new HttpClient(handler));
+
+        var existing = await client.GetRefreshSettingsAsync("http://localhost:51301");
+        var updated = await client.UpdateRefreshSettingsAsync("http://localhost:51301", new CoreRefreshSettingsSnapshot
+        {
+            AutoRefreshEnabled = false,
+            AutoRefreshIntervalMinutes = 20
+        });
+
+        Assert.NotNull(existing);
+        Assert.True(existing!.AutoRefreshEnabled);
+        Assert.Equal(15, existing.AutoRefreshIntervalMinutes);
+
+        Assert.NotNull(updated);
+        Assert.False(updated!.AutoRefreshEnabled);
+        Assert.Equal(20, updated.AutoRefreshIntervalMinutes);
+
+        Assert.False(string.IsNullOrWhiteSpace(updatePayload));
+        using var doc = JsonDocument.Parse(updatePayload!);
+        Assert.False(doc.RootElement.GetProperty("autoRefreshEnabled").GetBoolean());
+        Assert.Equal(20, doc.RootElement.GetProperty("autoRefreshIntervalMinutes").GetInt32());
+    }
+
     private sealed class DelegatingStubHandler : HttpMessageHandler
     {
         private readonly Func<HttpRequestMessage, Task<HttpResponseMessage>> _handler;

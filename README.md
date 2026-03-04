@@ -55,6 +55,12 @@ M4/M5/M6a runtime notes:
 - Desktop `ItemTagsDialog` now serves as the single desktop tag-management entry point (including library-level open with no selected items); `+/-` per-tag item assignment controls are disabled when no items are selected.
 - Desktop and web category inline controls now follow `up`, `down`, `edit`, `delete`, and both enforce duplicate category-name prevention.
 - Web bottom controls keep one row on small screens; the tag name input flex-fills remaining width.
+- M6b adds core-owned refresh endpoints (`POST /api/refresh/start`, `GET /api/refresh/status`, `GET/POST /api/refresh/settings`) and SSE `refreshStatusChanged` projection events.
+- In M6b, desktop projects refresh status directly from core SSE/events; direct web-to-core refresh-status parity remains tracked in M7 decoupling scope.
+- Desktop `Manage Sources` refresh now starts core refresh runs (dialog may close while refresh continues), and standalone `Scan Durations`/`Scan Loudness` library menu actions are removed.
+- Auto-refresh ownership is now core-side (default enabled, 15-minute interval, idle-only desktop settings removed from active behavior).
+- Library panel now supports persisted list/grid mode with `🖼️` toggle (left of `Select filters...`) and a justified responsive grid layout using aspect-ratio-preserving variable-size thumbnails.
+- Core thumbnail artifacts are generated into `%LOCALAPPDATA%\\ReelRoulette\\thumbnails\\{itemId}.jpg`, with metadata/index tracking (`revision`, `width`, `height`, `generatedUtc`) and cache eviction.
 
 ## Testing
 

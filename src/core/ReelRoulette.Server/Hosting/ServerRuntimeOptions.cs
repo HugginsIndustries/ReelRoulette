@@ -8,6 +8,8 @@ public sealed class ServerRuntimeOptions
     public bool BindOnLan { get; set; }
     public string? PairingToken { get; set; }
     public string PairingCookieName { get; set; } = "rr_paired";
+    public bool AutoRefreshEnabled { get; set; } = true;
+    public int AutoRefreshIntervalMinutes { get; set; } = 15;
 
     public static ServerRuntimeOptions FromConfiguration(IConfiguration configuration)
     {
@@ -33,6 +35,8 @@ public sealed class ServerRuntimeOptions
         {
             options.ListenUrl = options.ListenUrl.Replace("localhost", "0.0.0.0", StringComparison.OrdinalIgnoreCase);
         }
+
+        options.AutoRefreshIntervalMinutes = Math.Clamp(options.AutoRefreshIntervalMinutes, 5, 1440);
 
         return options;
     }

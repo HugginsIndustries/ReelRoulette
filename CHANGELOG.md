@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- **Implement M6b unified refresh pipeline and desktop grid/thumbnail API flow** (2026-03-01):
+  - Add M6b contract surface to OpenAPI and server contracts for refresh start/status/settings plus thumbnail retrieval.
+  - Implement `RefreshPipelineService` as core-owned execution owner for sequential refresh stages (source refresh, duration scan, loudness scan for new/unscanned items, thumbnail generation).
+  - Add overlap guard semantics (`already running` / `409`), run status snapshots, SSE `refreshStatusChanged` publication, and core settings persistence/defaults (enabled, 15-minute interval).
+  - Wire refresh and thumbnail routes into shared server host composition and register runtime options in both server and worker hosts.
+  - Extend desktop core API client with typed refresh settings/status/start methods and DTOs.
+  - Migrate desktop Manage Sources refresh action to API-only core refresh start path; refresh can continue after dialog close.
+  - Remove standalone desktop library menu actions for `Scan Durations` and `Scan Loudness` after pipeline integration.
+  - Add desktop list/grid library view toggle persistence (`🖼️`) and justified responsive grid composition with aspect-ratio-preserving variable-size thumbnails.
+  - Move thumbnail artifact storage to `%LOCALAPPDATA%\\ReelRoulette\\thumbnails\\{itemId}.jpg`, persist per-item thumbnail index metadata (`revision`, `width`, `height`, `generatedUtc`), and backfill legacy index entries.
+  - Add 500ms refresh-status projection throttling for thumbnail stage updates to reduce SSE/UI churn on large libraries.
+  - Add M6b regression coverage for refresh overlap rejection, stage sequencing, loudness scan semantics, thumbnail invalidation/regeneration/metadata backfill behavior, and refresh API client request/response shapes.
+  - Keep direct web-to-core refresh-status SSE parity scoped to M7 web/desktop decoupling; M6b finalizes desktop projection + core status contracts.
+  - Mark M6b milestone as complete and normalize docs to the final projection scope (desktop in M6b; direct web-to-core parity in M7).
+  - Update M6b documentation (`README`, `docs/api.md`, `docs/architecture.md`, `docs/dev-setup.md`, `docs/m6b-domain-inventory.md`, `TODO.md`, `MILESTONES.md`) to reflect final-state contracts and behavior.
+
 - **Implement M6a API-first tag editing parity (desktop + web)** (2026-03-01):
   - Add batch-ready tag editor contract surface (`/api/tag-editor/*`) to OpenAPI and server endpoint composition for item-tag deltas plus tag/category CRUD flows.
   - Extend server state with tag catalog/item-tag projection methods and publish revisioned `itemTagsChanged` / `tagCatalogChanged` SSE events.

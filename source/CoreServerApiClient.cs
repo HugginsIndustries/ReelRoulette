@@ -153,6 +153,56 @@ public sealed class CoreServerApiClient
         return response.IsSuccessStatusCode;
     }
 
+    public async Task<CoreRefreshStartResponse?> StartRefreshAsync(string baseUrl, CancellationToken cancellationToken = default)
+    {
+        using var content = SerializeJson(new CoreRefreshStartRequest { Trigger = "manual" });
+        using var response = await _httpClient.PostAsync($"{baseUrl.TrimEnd('/')}/api/refresh/start", content, cancellationToken).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        return await JsonSerializer.DeserializeAsync<CoreRefreshStartResponse>(stream, _serializerOptions, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<CoreRefreshStatusSnapshot?> GetRefreshStatusAsync(string baseUrl, CancellationToken cancellationToken = default)
+    {
+        using var response = await _httpClient.GetAsync($"{baseUrl.TrimEnd('/')}/api/refresh/status", cancellationToken).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        return await JsonSerializer.DeserializeAsync<CoreRefreshStatusSnapshot>(stream, _serializerOptions, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<CoreRefreshSettingsSnapshot?> GetRefreshSettingsAsync(string baseUrl, CancellationToken cancellationToken = default)
+    {
+        using var response = await _httpClient.GetAsync($"{baseUrl.TrimEnd('/')}/api/refresh/settings", cancellationToken).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        return await JsonSerializer.DeserializeAsync<CoreRefreshSettingsSnapshot>(stream, _serializerOptions, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<CoreRefreshSettingsSnapshot?> UpdateRefreshSettingsAsync(string baseUrl, CoreRefreshSettingsSnapshot snapshot, CancellationToken cancellationToken = default)
+    {
+        using var content = SerializeJson(snapshot);
+        using var response = await _httpClient.PostAsync($"{baseUrl.TrimEnd('/')}/api/refresh/settings", content, cancellationToken).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        return await JsonSerializer.DeserializeAsync<CoreRefreshSettingsSnapshot>(stream, _serializerOptions, cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task ListenToEventsAsync(
         string baseUrl,
         string clientId,
@@ -365,4 +415,47 @@ public sealed class CoreSyncTagCatalogRequest
 public sealed class CoreSyncItemTagsRequest
 {
     public List<CoreItemTagsSnapshot> Items { get; set; } = [];
+}
+
+public sealed class CoreRefreshStartRequest
+{
+    public string Trigger { get; set; } = "manual";
+}
+
+public sealed class CoreRefreshStartResponse
+{
+    public bool Accepted { get; set; }
+    public string? Message { get; set; }
+    public string? RunId { get; set; }
+}
+
+public sealed class CoreRefreshSettingsSnapshot
+{
+    public bool AutoRefreshEnabled { get; set; } = true;
+    public int AutoRefreshIntervalMinutes { get; set; } = 15;
+}
+
+public sealed class CoreRefreshStageProgress
+{
+    public string Stage { get; set; } = string.Empty;
+    public int Percent { get; set; }
+    public string Message { get; set; } = string.Empty;
+    public bool IsComplete { get; set; }
+}
+
+public sealed class CoreRefreshStatusSnapshot
+{
+    public bool IsRunning { get; set; }
+    public string? RunId { get; set; }
+    public string Trigger { get; set; } = "manual";
+    public DateTimeOffset? StartedUtc { get; set; }
+    public DateTimeOffset? CompletedUtc { get; set; }
+    public string? CurrentStage { get; set; }
+    public string? LastError { get; set; }
+    public List<CoreRefreshStageProgress> Stages { get; set; } = [];
+}
+
+public sealed class CoreRefreshStatusChangedPayload
+{
+    public CoreRefreshStatusSnapshot Snapshot { get; set; } = new();
 }
