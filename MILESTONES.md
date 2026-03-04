@@ -252,22 +252,86 @@ Status legend: `✅ Complete` | `⏳ Planned`
   - Thumbnail artifact/invalidation policy is implemented and documented.
   - Regression tests cover thumbnail invalidation decisions, unified refresh stage sequencing, refresh overlap rejection (`409`), and status/progress projection behavior; all pass in `dotnet test`.
 
-### M7 - Web UI Separation and Build Pipeline
+### M7a - Web Client Foundation and Independent Host Bootstrap
 
 - **Status**: ⏳ Planned
-- **Goal**: Decouple web client codebase while preserving host integration.
+- **Goal**: Establish `ReelRoulette.WebUI` as an independently buildable/runnable web client without desktop-hosted runtime dependency.
 - **Scope**:
-  - Move web UI to `src/clients/web/ReelRoulette.WebUI`.
-  - Add build pipeline that outputs static assets consumed by server.
-  - Keep dev-mode local web UI and packaged hosted web UI workflows.
+  - Stand up `src/clients/web/ReelRoulette.WebUI` with Vite + TypeScript as the canonical web client project.
+  - Add runtime config bootstrap for API/SSE endpoint resolution (no compile-time hardcoded base URLs).
+  - Define independent dev-server and production-build workflows for web iteration.
 - **Acceptance criteria**:
   - Web UI builds independently from desktop app build.
-  - Server can serve production web assets from web build output.
-  - No API drift between web and desktop clients.
-  - Web UI runs independently of desktop hosting: web clients connect directly to core/server API + SSE endpoints (including `/api/events` and `/api/refresh/status`) and do not require desktop `WebRemoteServer` bridging/proxy.
-  - SSE status/progress parity is preserved in web client: `refreshStatusChanged` updates are received directly from core/server and projected on web status line during active runs, failures, and completion summaries.
-  - Legacy embedded web-remote mutation/event paths are removed once new web UI serves equivalent flows.
-  - Regression tests include build-output asset serving, direct web-to-core SSE/refresh status projection, and contract compatibility checks against current OpenAPI, and pass in `dotnet test`.
+  - Web UI runs in dev mode with runtime-configured API/SSE endpoints.
+  - Web iteration (build/reload) does not require restarting desktop app or core server.
+  - Runtime config keys/shape are documented and validated in tests.
+  - Automated checks for web build output and runtime-config schema pass.
+
+### M7b - Direct Web-to-Core Auth and SSE Reliability
+
+- **Status**: ⏳ Planned
+- **Goal**: Move web auth/eventing to direct core/server integration with robust reconnect/resync behavior.
+- **Scope**:
+  - Implement pair-token bootstrap followed by secure HTTP-only session-cookie auth for web API/SSE usage.
+  - Connect web directly to core/server SSE (`/api/events`) and refresh status APIs (`/api/refresh/status`) without desktop bridge/proxy.
+  - Implement revision-aware SSE reconnect (`Last-Event-ID`), replay handling, and authoritative API requery fallback when replay gaps occur.
+  - Define explicit CORS/cookie environment matrix for localhost, LAN/dev-cert, and production paths.
+- **Acceptance criteria**:
+  - Web auth sessions persist through expected reconnect/navigation flows using secure cookie semantics.
+  - `refreshStatusChanged` and related events are projected directly from core/server to web status line during active runs, failures, and completions.
+  - Replay-gap/resync-required scenarios recover by requerying authoritative API state with no persistent client divergence.
+  - CORS/cookie policies validate in supported environments.
+  - Automated reconnect/resync checks plus focused manual parity checks pass.
+
+### M7c - Zero-Restart Web Deployment, Caching, and Rollback
+
+- **Status**: ⏳ Planned
+- **Goal**: Enable independent web deployments without desktop/core restarts and with fast rollback.
+- **Scope**:
+  - Publish web artifacts as immutable versioned bundles.
+  - Activate versions via atomic pointer/symlink/manifest switch.
+  - Apply split caching policy:
+    - `index.html` and runtime config: no-store (or short revalidate-first policy)
+    - hashed JS/CSS/assets: long-lived immutable caching
+  - Add atomic rollback path to prior known-good web artifact.
+- **Acceptance criteria**:
+  - New web versions can be activated without restarting desktop app or core server.
+  - Clients pick up shell/config updates promptly while retaining cached hashed assets.
+  - Rollback to previous artifact works via atomic switch only.
+  - Deployment/rollback flow is documented and repeatable.
+  - Automated smoke checks validate active version, cache policy behavior, and rollback.
+
+### M7d - Controlled Cutover and Legacy Bridge Retirement
+
+- **Status**: ⏳ Planned
+- **Goal**: Complete migration to direct web-to-core paths and remove legacy embedded web-remote bridge mutations/events.
+- **Scope**:
+  - Use a two-phase rollout with time-bounded migration feature flags:
+    1. parity-capable independent web path behind flag(s)
+    2. default-on independent path followed by legacy removal
+  - Define flag owner/default-by-environment/validation coverage/removal target metadata.
+  - Remove legacy desktop `WebRemoteServer` mutation/event bridge paths after parity verification.
+- **Acceptance criteria**:
+  - Migration flag metadata is explicit (owner, defaults, tests, sunset/removal target).
+  - Required web parity flows are verified before default cutover.
+  - Legacy embedded web-remote mutation/event bridge paths are removed once parity path is default.
+  - Desktop/core behavior remains stable after legacy path retirement.
+  - Time-bounded migration flags are removed or scheduled with explicit follow-up completion criteria.
+
+### M7e - Contract Compatibility and Final M7 Verification Gate
+
+- **Status**: ⏳ Planned
+- **Goal**: Lock independent-release safety and complete M7 sign-off with contract-compatibility guarantees.
+- **Scope**:
+  - Enforce N/N-1 compatibility policy with capability checks for independent web/core releases.
+  - Generate TS web client contracts from OpenAPI; verify C# contract compatibility against the same API source.
+  - Execute hybrid verification gate (automated + manual) as required milestone exit criteria.
+- **Acceptance criteria**:
+  - Web API/event models are generated from OpenAPI and validated in CI.
+  - Capability checks prevent unsupported feature usage against older compatible core/server versions.
+  - Automated gates pass: build-output asset serving, direct web-to-core SSE/refresh status projection, and OpenAPI compatibility checks.
+  - Manual gates pass: direct web connect without desktop bridge, refresh status-line parity through run/fail/complete states, and auth/reconnect continuity.
+  - M7a-M7e acceptance criteria are explicitly verified before advancing to M8.
 
 ### M8 - Hardening, Packaging, and Migration Cleanup
 
