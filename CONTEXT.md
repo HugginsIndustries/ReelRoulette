@@ -16,19 +16,20 @@ Primary outcome: new clients can be added without reimplementing domain logic.
 
 As of current milestones:
 
-- `M0`-`M6b` are complete in `MILESTONES.md`.
+- `M0`-`M7a` are complete in `MILESTONES.md`.
 - Desktop runtime is still `source/ReelRoulette.csproj`.
 - Core/server/worker runtime exists under `src/core/*`.
 - API contract source of truth is `shared/api/openapi.yaml` (currently `0.7.0`).
 - M6a tag editing migration is API-first and shared across desktop/web seams.
 - M6b refresh pipeline/thumbnails/grid are core-owned; desktop consumes API/SSE projection.
-- Direct web-to-core decoupling and full independent web serving are planned in `M7a`-`M7e`.
+- M7a web foundation is complete: independent Vite+TypeScript web bootstrap with runtime endpoint config contract and verification gates.
+- Direct web-to-core auth/SSE reliability, deployment/rollback activation, and compatibility gates remain in `M7b`-`M7e`.
 
 ## Planned State (Upcoming)
 
 Near-term planned milestones:
 
-- `M7a`-`M7e`: web separation, direct auth/SSE to core, zero-restart web deploys, controlled legacy bridge retirement, contract compatibility gates.
+- `M7b`-`M7e`: direct web auth/SSE to core, zero-restart web deploys, controlled legacy bridge retirement, contract compatibility gates.
 - `M8`: hardening/packaging/migration cleanup and thin-client completion guardrails.
 - `M9`: Android client bootstrap on stable API seam.
 
@@ -55,6 +56,7 @@ Detailed M7 decisions and rollout strategy: `docs/m7-clarifications.md`.
   - Architecture, API baseline, dev setup, milestone domain inventories, and clarification records.
 - `tools/scripts/`
   - Core runtime helper scripts (`run-core.ps1`, `run-core.sh`).
+  - Web verification helper scripts (`verify-web.ps1`, `verify-web.sh`).
 - `licenses/`
   - Third-party license texts (VLC, FFmpeg licensing artifacts).
 
@@ -109,8 +111,8 @@ From repo root:
 
 For M7 web separation:
 
-- Web client should build/run independently under `src/clients/web/ReelRoulette.WebUI`.
-- Runtime endpoint resolution should come from runtime config (not compile-time constants).
+- Web client builds/runs independently under `src/clients/web/ReelRoulette.WebUI` (M7a complete).
+- Runtime endpoint resolution now comes from runtime config (not compile-time constants).
 - Web deployment should support versioned artifacts + atomic activation/rollback.
 - Direct web-to-core auth/SSE should replace desktop-hosted bridge dependencies.
 

@@ -93,3 +93,20 @@
   - index metadata tracks `revision`, `width`, `height`, and `generatedUtc` for layout projection and invalidation.
 - Web refresh-status projection note:
   - desktop projects refresh status in M6b; direct web-to-core SSE status parity is completed in M7 when web UI is decoupled from desktop-hosted bridge paths.
+
+## M7a Web Client Foundation Notes
+
+- Canonical web client location:
+  - `src/clients/web/ReelRoulette.WebUI`
+- Toolchain:
+  - Vite + TypeScript (`npm run dev`, `npm run build`, `npm run test`)
+- Runtime endpoint bootstrap (no compile-time base URL constants):
+  - load `window.__REEL_ROULETTE_RUNTIME_CONFIG` when present
+  - otherwise fetch `/runtime-config.json` with `no-store`
+  - required keys: `apiBaseUrl`, `sseUrl`
+- Validation:
+  - runtime-config schema is validated by web unit tests (`src/test/runtimeConfig.test.ts`)
+  - build-output verification checks `dist` artifacts and runtime-config presence (`scripts/verify-build-output.mjs`)
+- One-command web verification helpers:
+  - `tools/scripts/verify-web.ps1`
+  - `tools/scripts/verify-web.sh`

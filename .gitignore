@@ -43,6 +43,12 @@ AppData/
 *.temp
 COMMIT_MESSAGE.txt
 
+# Node/web artifacts
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
 # FFmpeg binaries (too large for GitHub)
 ffprobe.exe
 */ffprobe.exe

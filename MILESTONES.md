@@ -254,7 +254,7 @@ Status legend: `✅ Complete` | `⏳ Planned`
 
 ### M7a - Web Client Foundation and Independent Host Bootstrap
 
-- **Status**: ⏳ Planned
+- **Status**: ✅ Complete
 - **Goal**: Establish `ReelRoulette.WebUI` as an independently buildable/runnable web client without desktop-hosted runtime dependency.
 - **Scope**:
   - Stand up `src/clients/web/ReelRoulette.WebUI` with Vite + TypeScript as the canonical web client project.
@@ -266,6 +266,9 @@ Status legend: `✅ Complete` | `⏳ Planned`
   - Web iteration (build/reload) does not require restarting desktop app or core server.
   - Runtime config keys/shape are documented and validated in tests.
   - Automated checks for web build output and runtime-config schema pass.
+  - Verification evidence:
+    - `npm run verify` passes in `src/clients/web/ReelRoulette.WebUI` (typecheck + runtime-config tests + production build + build-output checks).
+    - Web dev bootstrap starts successfully via `npm run dev` without desktop/core restart dependencies.
 
 ### M7b - Direct Web-to-Core Auth and SSE Reliability
 

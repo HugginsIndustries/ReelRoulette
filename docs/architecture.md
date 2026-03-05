@@ -186,3 +186,23 @@ flowchart TD
 - Desktop no longer exposes standalone duration/loudness scan menu actions; refresh runs through core API.
 - Refresh settings ownership moved to core (`appsettings` + API updates), with client-side orchestration/render only.
 - Desktop library panel now supports persisted list/grid mode with a justified responsive thumbnail grid (aspect-ratio preserved, variable-size cards) while preserving existing list-mode behavior.
+
+## M7a Web Client Foundation + Independent Bootstrap
+
+```mermaid
+flowchart TD
+    runtimeConfig["Runtime Config (`window` or `/runtime-config.json`)"]
+    webUi["ReelRoulette.WebUI (Vite + TS)"]
+    apiBase["Core API Base URL"]
+    sseBase["Core SSE URL"]
+    independentLoop["Independent dev/build loop"]
+
+    runtimeConfig --> webUi
+    webUi --> apiBase
+    webUi --> sseBase
+    webUi --> independentLoop
+```
+
+- Web client now boots as a standalone Vite+TypeScript project under `src/clients/web/ReelRoulette.WebUI`.
+- API and SSE endpoints are runtime-configured and validated at startup (no compile-time hardcoded service base URL values).
+- Web build/test/typecheck/build-output checks are independent from desktop app restart cycles.

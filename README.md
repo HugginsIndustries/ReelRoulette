@@ -25,6 +25,14 @@ dotnet run --project .\src\core\ReelRoulette.Server\ReelRoulette.Server.csproj
 dotnet run --project .\src\core\ReelRoulette.Worker\ReelRoulette.Worker.csproj
 ```
 
+Run web client (M7a foundation):
+
+```bash
+cd .\src\clients\web\ReelRoulette.WebUI
+npm install
+npm run dev
+```
+
 Or run worker via helper scripts:
 
 ```bash
@@ -61,6 +69,9 @@ M4/M5/M6a runtime notes:
 - Auto-refresh ownership is now core-side (default enabled, 15-minute interval, idle-only desktop settings removed from active behavior).
 - Library panel now supports persisted list/grid mode with `🖼️` toggle (left of `Select filters...`) and a justified responsive grid layout using aspect-ratio-preserving variable-size thumbnails.
 - Core thumbnail artifacts are generated into `%LOCALAPPDATA%\\ReelRoulette\\thumbnails\\{itemId}.jpg`, with metadata/index tracking (`revision`, `width`, `height`, `generatedUtc`) and cache eviction.
+- M7a introduces independent web-client bootstrap under `src/clients/web/ReelRoulette.WebUI` using Vite + TypeScript.
+- Web API/SSE endpoints are runtime-configured from `window.__REEL_ROULETTE_RUNTIME_CONFIG` or `/runtime-config.json` (no compile-time base URL constants).
+- Web build/typecheck/test/build-output verification is available via `npm run verify` (or `.\tools\scripts\verify-web.ps1` / `./tools/scripts/verify-web.sh`).
 
 ## Testing
 
@@ -74,6 +85,14 @@ Core verification system checks (verbose mode):
 
 ```bash
 dotnet run --project .\src\core\ReelRoulette.Core.SystemChecks\ReelRoulette.Core.SystemChecks.csproj -- --verbose
+```
+
+M7a web verification gate:
+
+```bash
+.\tools\scripts\verify-web.ps1
+# or
+./tools/scripts/verify-web.sh
 ```
 
 Worker runtime independence check (desktop close should not stop worker):

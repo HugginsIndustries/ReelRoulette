@@ -1,0 +1,4 @@
+{
+  "apiBaseUrl": "http://localhost:51301/api",
+  "sseUrl": "http://localhost:51301/api/events"
+}

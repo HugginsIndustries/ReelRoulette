@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **Implement M7a independent web client foundation and runtime endpoint bootstrap** (2026-03-05):
+  - Replace `src/clients/web/ReelRoulette.WebUI` placeholder-only state with a canonical Vite + TypeScript web client project (real app bootstrap, styling, and runtime-config-aware startup flow).
+  - Add runtime endpoint config contract loading (`window.__REEL_ROULETTE_RUNTIME_CONFIG` fallback to `/runtime-config.json`) with strict URL validation and startup error surfacing for invalid/missing config.
+  - Add web runtime-config schema regression tests and build-output validation gate (`npm run verify`) covering typecheck, tests, production build, and artifact assertions.
+  - Add cross-platform helper scripts for repeatable web verification from repo root (`tools/scripts/verify-web.ps1`, `tools/scripts/verify-web.sh`).
+  - Verify project health with automated gates (`npm run verify`, `dotnet build ReelRoulette.sln`, `dotnet test ReelRoulette.sln`) plus web dev bootstrap smoke (`npm run dev` startup).
+  - Mark M7a complete in `MILESTONES.md` and synchronize milestone-state docs (`README.md`, `CONTEXT.md`, `docs/api.md`, `docs/architecture.md`, `docs/dev-setup.md`, `docs/m7-domain-inventory.md`, `TODO.md`).
+
 - **Implement M6b unified refresh pipeline and desktop grid/thumbnail API flow** (2026-03-01):
   - Add M6b contract surface to OpenAPI and server contracts for refresh start/status/settings plus thumbnail retrieval.
   - Implement `RefreshPipelineService` as core-owned execution owner for sequential refresh stages (source refresh, duration scan, loudness scan for new/unscanned items, thumbnail generation).

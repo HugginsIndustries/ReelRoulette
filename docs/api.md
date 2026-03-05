@@ -5,6 +5,9 @@
 - API contract lives at `shared/api/openapi.yaml`.
 - M6a extends the contract-first worker/server seam with batch-ready tag/category/item-tag mutation APIs shared by desktop and web clients.
 - M6b extends the same seam with unified refresh pipeline status/settings APIs and thumbnail retrieval.
+- M7a establishes runtime endpoint bootstrap for the independent web client:
+  - `apiBaseUrl` and `sseUrl` are read from runtime config (not compile-time constants).
+  - config source order: `window.__REEL_ROULETTE_RUNTIME_CONFIG`, then `/runtime-config.json`.
 
 ## Eventing Direction
 
@@ -62,6 +65,15 @@
 - `POST /api/refresh/settings`
 - `GET /api/thumbnail/{itemId}`
 - `GET /api/events` (`text/event-stream`)
+
+## M7a Runtime Config Keys (Web Client)
+
+- Required:
+  - `apiBaseUrl` (absolute `http`/`https` URL for API requests, usually ending with `/api`)
+  - `sseUrl` (absolute `http`/`https` URL for SSE stream, usually `/api/events`)
+- Validation behavior:
+  - missing keys or non-http(s) URLs fail startup with explicit runtime-config error UI.
+  - trailing slash normalization is applied by the web config parser.
 
 ## M6a Tag Editing Notes
 

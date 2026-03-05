@@ -29,6 +29,25 @@ No open P1 TODO items.
 
 ## Completed Features
 
+### M7a - Web Client Foundation and Independent Host Bootstrap ✅
+
+- **Milestone Link**: `M7a - Web Client Foundation and Independent Host Bootstrap` in `MILESTONES.md`
+- **Impact**: High - Establishes a standalone web client build/run path and runtime endpoint bootstrap contract needed for direct web-to-core migration.
+- **Final State**:
+  - Bootstrapped canonical web client project at `src/clients/web/ReelRoulette.WebUI` using Vite + TypeScript.
+  - Added independent web workflows (`npm run dev`, `build`, `test`, `typecheck`, `preview`, `verify`) with no desktop restart coupling for iteration.
+  - Implemented runtime config bootstrap contract with strict validation:
+    - config sources: `window.__REEL_ROULETTE_RUNTIME_CONFIG` first, then `/runtime-config.json`
+    - required keys: `apiBaseUrl`, `sseUrl`
+    - startup fails with explicit UI error when runtime config is missing/invalid.
+  - Added runtime-config schema tests (`src/test/runtimeConfig.test.ts`) and build-output verification (`scripts/verify-build-output.mjs`).
+  - Added cross-platform verification helpers:
+    - `tools/scripts/verify-web.ps1`
+    - `tools/scripts/verify-web.sh`
+  - Documented runtime config contract and independent web verification workflow in `README.md`, `docs/api.md`, `docs/dev-setup.md`, `docs/architecture.md`, and `CONTEXT.md`.
+
+---
+
 ### Grid View for Library Panel with Thumbnail Generation (Unified Refresh Pipeline) ✅
 
 - **Milestone Link**: `M6b - P1 Feature Alignment Through API (Grid/Thumbnails + Unified Refresh Pipeline)` in `MILESTONES.md`
