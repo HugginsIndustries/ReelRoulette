@@ -324,17 +324,27 @@ Status legend: `✅ Complete` | `⏳ Planned`
 ### M7d - Controlled Cutover and Legacy Bridge Retirement
 
 - **Status**: ⏳ Planned
-- **Goal**: Complete migration to direct web-to-core paths and remove legacy embedded web-remote bridge mutations/events.
+- **Goal**: Complete migration to direct web-to-core paths while preserving current web-remote user experience, then remove legacy embedded web-remote bridge mutations/events.
 - **Scope**:
   - Use a two-phase rollout with time-bounded migration feature flags:
     1. parity-capable independent web path behind flag(s)
     2. default-on independent path followed by legacy removal
   - Define flag owner/default-by-environment/validation coverage/removal target metadata.
-  - Remove legacy desktop `WebRemoteServer` mutation/event bridge paths after parity verification.
+  - Migrate the current legacy web UI experience into `ReelRoulette.WebUI` with functional and visual parity for the main media page, custom media controls, tag editor workflows, and related interaction paths.
+  - Integrate desktop settings UX so users can continue controlling web runtime behavior from desktop UI (web server enable/disable, LAN binding/access, hostname behavior including `reel.local`, and auth/token settings mapped to core/server or web-host runtime controls).
+  - Require explicit phase gates before any legacy removal:
+    - automated parity/build/test gate pass
+    - focused manual parity verification pass executed by the user (not by the agent)
+    - explicit user approval to proceed with removing legacy `source/WebRemote` paths
+  - Process requirement: after automated gate completion, the agent must stop implementation work, provide a manual migrated-WebUI verification checklist/instructions to the user, and wait for user confirmation before continuing.
+  - Remove legacy desktop `WebRemoteServer` mutation/event bridge paths only after parity verification and gate approval.
 - **Acceptance criteria**:
   - Migration flag metadata is explicit (owner, defaults, tests, sunset/removal target).
-  - Required web parity flows are verified before default cutover.
-  - Legacy embedded web-remote mutation/event bridge paths are removed once parity path is default.
+  - `ReelRoulette.WebUI` preserves required legacy web-remote UX parity for main media interactions, custom media controls, and tag editor flows.
+  - Desktop settings maintain equivalent user-facing controls for web runtime behavior (including `reel.local`/LAN discoverability and enable/disable/auth configuration paths) after migration.
+  - Required web parity flows are verified before default cutover and before legacy removal.
+  - Manual parity verification is user-executed; the agent provides instructions/checklist and waits for user confirmation before removal work resumes.
+  - Legacy embedded web-remote mutation/event bridge paths are removed only after automated gate pass, user-executed manual parity gate pass, and explicit user approval is recorded.
   - Desktop/core behavior remains stable after legacy path retirement.
   - Time-bounded migration flags are removed or scheduled with explicit follow-up completion criteria.
 
