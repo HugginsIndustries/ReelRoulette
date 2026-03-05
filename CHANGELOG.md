@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **Implement M7c zero-restart web deployment, caching, and rollback** (2026-03-05):
+  - Add independent static web host project (`ReelRoulette.WebHost`) that serves immutable versioned web artifacts selected by atomic `active-manifest.json` pointer.
+  - Add deployment orchestration scripts for publish/activate/rollback across PowerShell and Bash (`publish-web.*`, `activate-web-version.*`, `rollback-web-version.*`).
+  - Enforce split cache policy in the web host (`index.html` + runtime config as `no-store`; fingerprinted assets as long-lived `immutable`).
+  - Add cross-platform deployment smoke verification scripts (`verify-web-deploy.ps1`, `verify-web-deploy.sh`) covering active version switch, cache headers, and rollback without host restart.
+  - Update milestone/context/docs/domain inventory artifacts for final M7c state (`MILESTONES.md`, `CONTEXT.md`, `README.md`, `docs/api.md`, `docs/architecture.md`, `docs/dev-setup.md`, `docs/m7-domain-inventory.md`, `TODO.md`).
+
 - **Implement M7b direct web-to-core auth/session and SSE reliability** (2026-03-05):
   - Add direct WebUI auth bootstrap flow that pairs via `/api/pair`, verifies API authorization, and uses credentialed requests for ongoing API/SSE access.
   - Introduce server-side session-id cookie auth semantics (HTTP-only cookie storing generated session id, configurable same-site/secure/session duration policy).

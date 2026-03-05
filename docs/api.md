@@ -12,6 +12,10 @@
   - pair-token bootstrap (`/api/pair`) issues HTTP-only session cookie.
   - credentialed direct web API/SSE calls use that session cookie.
   - `/api/events` supports `Last-Event-ID` header and `lastEventId` query fallback for reconnect.
+- M7c adds independent web static hosting/deployment mechanics (outside core API contract):
+  - immutable versioned web artifacts under `.web-deploy/versions/{versionId}`
+  - atomic active pointer in `.web-deploy/active-manifest.json`
+  - split cache policy at the web host layer (`no-store` shell/config, immutable hashed assets)
 
 ## Eventing Direction
 

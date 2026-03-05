@@ -295,7 +295,7 @@ Status legend: `✅ Complete` | `⏳ Planned`
 
 ### M7c - Zero-Restart Web Deployment, Caching, and Rollback
 
-- **Status**: ⏳ Planned
+- **Status**: ✅ Complete
 - **Goal**: Enable independent web deployments without desktop/core restarts and with fast rollback.
 - **Scope**:
   - Publish web artifacts as immutable versioned bundles.
@@ -310,6 +310,16 @@ Status legend: `✅ Complete` | `⏳ Planned`
   - Rollback to previous artifact works via atomic switch only.
   - Deployment/rollback flow is documented and repeatable.
   - Automated smoke checks validate active version, cache policy behavior, and rollback.
+- **Verification evidence**:
+  - `dotnet build ReelRoulette.sln` passes with the new `ReelRoulette.WebHost` project included.
+  - `dotnet test ReelRoulette.sln` passes after M7c deployment-host/script changes.
+  - `npm run verify` passes in `src/clients/web/ReelRoulette.WebUI`.
+  - `tools/scripts/verify-web-deploy.ps1` passes end-to-end:
+    - publishes two immutable versions,
+    - activates v1 then v2 without restarting web host process,
+    - verifies split caching headers (`index.html`/`runtime-config.json` no-store, hashed assets immutable),
+    - rolls back atomically to v1 via manifest pointer switch.
+  - Activation/rollback are performed through atomic `active-manifest.json` pointer updates (`publish-web.*`, `activate-web-version.*`, `rollback-web-version.*`).
 
 ### M7d - Controlled Cutover and Legacy Bridge Retirement
 

@@ -2,6 +2,8 @@
 
 Canonical web client project for M7a (`Vite + TypeScript`).
 
+For M7c deployment, this app is served by `ReelRoulette.WebHost` from immutable versioned artifacts (not directly from the WebUI source tree).
+
 ## Runtime Config
 
 The web app resolves API/SSE endpoints at runtime (no compile-time endpoint constants).

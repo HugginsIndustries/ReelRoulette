@@ -229,3 +229,31 @@ flowchart TD
 - Web UI now authenticates directly to core/server via pair-token bootstrap and cookie session continuity.
 - Server applies explicit runtime-configurable CORS/cookie policy controls for direct browser clients.
 - Web SSE path is direct core/server with reconnect, revision tracking, replay-gap `resyncRequired`, and authoritative recovery queries.
+
+## M7c Zero-Restart Web Deployment + Rollback
+
+```mermaid
+flowchart TD
+    webUiBuild["WebUI Build Output (dist/)"]
+    publishScripts["Publish/Activate/Rollback Scripts"]
+    deployRoot["Deployment Root (.web-deploy)"]
+    versions["Immutable Versions (/versions/{versionId})"]
+    activeManifest["active-manifest.json"]
+    webHost["ReelRoulette.WebHost"]
+    browserClient["Browser Client"]
+
+    webUiBuild --> publishScripts
+    publishScripts --> versions
+    publishScripts --> activeManifest
+    deployRoot --> versions
+    deployRoot --> activeManifest
+    webHost --> activeManifest
+    webHost --> versions
+    browserClient --> webHost
+```
+
+- `ReelRoulette.WebHost` is an independent static host process (no desktop/core restart coupling for web deploys).
+- Activation/rollback is pointer-based through atomic `active-manifest.json` updates.
+- Served cache policy is split:
+  - `index.html` and runtime config are always fresh (`no-store`).
+  - fingerprinted assets are long-lived immutable for fast repeat loads.

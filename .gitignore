@@ -48,6 +48,8 @@ node_modules/
 dist/
 coverage/
 *.tsbuildinfo
+.web-deploy/
+.web-deploy-smoke/
 
 # FFmpeg binaries (too large for GitHub)
 ffprobe.exe

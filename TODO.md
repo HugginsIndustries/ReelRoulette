@@ -29,6 +29,27 @@ No open P1 TODO items.
 
 ## Completed Features
 
+### M7c - Zero-Restart Web Deployment, Caching, and Rollback ✅
+
+- **Milestone Link**: `M7c - Zero-Restart Web Deployment, Caching, and Rollback` in `MILESTONES.md`
+- **Impact**: High - Enables independent web rollout and rollback without desktop/core restart coupling.
+- **Final State**:
+  - Added independent web static host project at `src/clients/web/ReelRoulette.WebHost`.
+  - Implemented immutable versioned web artifact publish flow under `.web-deploy/versions/{versionId}`.
+  - Added atomic manifest-pointer activation/rollback flow via `active-manifest.json`.
+  - Enforced split cache policy in web host:
+    - `index.html` and `runtime-config.json`: `Cache-Control: no-store`
+    - fingerprinted assets under `assets/`: `Cache-Control: public, max-age=31536000, immutable`
+  - Added cross-platform deployment helper scripts:
+    - `tools/scripts/publish-web.ps1` / `publish-web.sh`
+    - `tools/scripts/activate-web-version.ps1` / `activate-web-version.sh`
+    - `tools/scripts/rollback-web-version.ps1` / `rollback-web-version.sh`
+  - Added cross-platform deploy smoke verification:
+    - `tools/scripts/verify-web-deploy.ps1` / `verify-web-deploy.sh`
+    - verifies active version switch, cache policy, and rollback while host stays running.
+
+---
+
 ### M7b - Direct Web-to-Core Auth and SSE Reliability ✅
 
 - **Milestone Link**: `M7b - Direct Web-to-Core Auth and SSE Reliability` in `MILESTONES.md`

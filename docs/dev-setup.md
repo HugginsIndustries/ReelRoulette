@@ -8,6 +8,7 @@
 - Worker host: `src/core/ReelRoulette.Worker/ReelRoulette.Worker.csproj`
 - Windows target location: `src/clients/windows/ReelRoulette.WindowsApp/ReelRoulette.WindowsApp.csproj`
 - Web target location: `src/clients/web/ReelRoulette.WebUI/ReelRoulette.WebUI.csproj`
+- Web deployment host: `src/clients/web/ReelRoulette.WebHost/ReelRoulette.WebHost.csproj`
 - Core test gate: `src/core/ReelRoulette.Core.Tests/ReelRoulette.Core.Tests.csproj`
 - Core system-check harness: `src/core/ReelRoulette.Core.SystemChecks/ReelRoulette.Core.SystemChecks.csproj`
 
@@ -131,3 +132,23 @@
     - `OPTIONS /api/version` from allowed origin (`http://localhost:5173`) should return `Access-Control-Allow-Origin` + `Access-Control-Allow-Credentials`
     - `OPTIONS /api/version` from blocked origin should omit CORS allow-origin header
     - `POST /api/pair?token=...` should issue `Set-Cookie` with HTTP-only session semantics
+
+## M7c Zero-Restart Web Deployment Notes
+
+- Independent web host:
+  - run with `dotnet run --project .\\src\\clients\\web\\ReelRoulette.WebHost\\ReelRoulette.WebHost.csproj`
+  - default listen URL: `http://localhost:51302`
+- Versioned artifact layout:
+  - deployment root: `.web-deploy` (configurable)
+  - immutable builds: `.web-deploy/versions/{versionId}`
+  - active pointer: `.web-deploy/active-manifest.json`
+- Deployment commands:
+  - `tools/scripts/publish-web.ps1` / `tools/scripts/publish-web.sh`
+  - `tools/scripts/activate-web-version.ps1` / `tools/scripts/activate-web-version.sh`
+  - `tools/scripts/rollback-web-version.ps1` / `tools/scripts/rollback-web-version.sh`
+- Cache policy:
+  - `index.html` and `runtime-config.json`: `Cache-Control: no-store`
+  - fingerprinted `assets/*`: `Cache-Control: public, max-age=31536000, immutable`
+- Smoke verification:
+  - `tools/scripts/verify-web-deploy.ps1`
+  - `tools/scripts/verify-web-deploy.sh`

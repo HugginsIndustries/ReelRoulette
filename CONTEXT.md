@@ -16,7 +16,7 @@ Primary outcome: new clients can be added without reimplementing domain logic.
 
 As of current milestones:
 
-- `M0`-`M7b` are complete in `MILESTONES.md`.
+- `M0`-`M7c` are complete in `MILESTONES.md`.
 - Desktop runtime is still `source/ReelRoulette.csproj`.
 - Core/server/worker runtime exists under `src/core/*`.
 - API contract source of truth is `shared/api/openapi.yaml` (currently `0.7.0`).
@@ -24,13 +24,14 @@ As of current milestones:
 - M6b refresh pipeline/thumbnails/grid are core-owned; desktop consumes API/SSE projection.
 - M7a web foundation is complete: independent Vite+TypeScript web bootstrap with runtime endpoint config contract and verification gates.
 - M7b direct web auth/SSE reliability is complete: pair-token bootstrap to session-cookie auth, direct web SSE status projection, replay-gap resync fallback, and explicit CORS/cookie runtime policy controls.
-- Deployment/rollback activation and compatibility gates remain in `M7c`-`M7e`.
+- M7c zero-restart web deployment is complete: independent `ReelRoulette.WebHost` static host, immutable versioned web artifacts, atomic `active-manifest.json` activation/rollback, and split shell-vs-asset cache policy.
+- Compatibility/cutover gates remain in `M7d`-`M7e`.
 
 ## Planned State (Upcoming)
 
 Near-term planned milestones:
 
-- `M7c`-`M7e`: zero-restart web deploys, controlled legacy bridge retirement, contract compatibility gates.
+- `M7d`-`M7e`: controlled legacy bridge retirement and contract compatibility gates.
 - `M8`: hardening/packaging/migration cleanup and thin-client completion guardrails.
 - `M9`: Android client bootstrap on stable API seam.
 
@@ -51,6 +52,7 @@ Detailed M7 decisions and rollout strategy: `docs/m7-clarifications.md`.
 - `src/clients/`
   - `windows/ReelRoulette.WindowsApp`: target location for desktop client migration.
   - `web/ReelRoulette.WebUI`: target location for decoupled web client migration.
+  - `web/ReelRoulette.WebHost`: independent static web host with manifest-based active-version switching.
 - `shared/api/`
   - `openapi.yaml`: API contract source of truth.
 - `docs/`
@@ -58,6 +60,7 @@ Detailed M7 decisions and rollout strategy: `docs/m7-clarifications.md`.
 - `tools/scripts/`
   - Core runtime helper scripts (`run-core.ps1`, `run-core.sh`).
   - Web verification helper scripts (`verify-web.ps1`, `verify-web.sh`).
+  - M7c web deployment scripts (`publish-web.*`, `activate-web-version.*`, `rollback-web-version.*`, `verify-web-deploy.*`).
 - `licenses/`
   - Third-party license texts (VLC, FFmpeg licensing artifacts).
 
@@ -115,8 +118,8 @@ For M7 web separation:
 - Web client builds/runs independently under `src/clients/web/ReelRoulette.WebUI` (M7a complete).
 - Runtime endpoint resolution now comes from runtime config (not compile-time constants).
 - Web auth/session and SSE reconnect/resync now run through direct web-to-core paths (M7b complete).
-- Web deployment should support versioned artifacts + atomic activation/rollback.
-- Controlled legacy bridge retirement and deployment hardening continue in M7c+.
+- Web deployment now supports immutable versioned artifacts with atomic activation/rollback and split cache policy (M7c complete).
+- Controlled legacy bridge retirement and compatibility hardening continue in M7d+.
 
 See `docs/m7-clarifications.md` for chosen options and sequencing.
 

@@ -66,3 +66,37 @@
   - `src/clients/web/ReelRoulette.WebUI/src/app.ts`
   - `src/clients/web/ReelRoulette.WebUI/src/config/runtimeConfig.ts`
   - `src/clients/web/ReelRoulette.WebUI/src/types/runtimeConfig.ts`
+
+## M7c - Zero-Restart Web Deployment, Caching, and Rollback
+
+## Pure Domain Logic (deployment policy + cache semantics)
+
+- Web deployment policy contracts:
+  - immutable version directories (`/versions/{versionId}`)
+  - atomic active pointer (`active-manifest.json`)
+  - cache split rules for shell/config vs fingerprinted assets
+- Host policy helpers:
+  - `src/clients/web/ReelRoulette.WebHost/CachePolicyResolver.cs`
+  - `src/clients/web/ReelRoulette.WebHost/WebDeploymentOptions.cs`
+  - `src/clients/web/ReelRoulette.WebHost/ActiveManifest.cs`
+  - `src/clients/web/ReelRoulette.WebHost/ActiveVersionResolver.cs`
+
+## IO / Service Adapters (deploy tooling + host runtime)
+
+- Independent web host process:
+  - `src/clients/web/ReelRoulette.WebHost/Program.cs`
+  - `src/clients/web/ReelRoulette.WebHost/appsettings.json`
+- Deployment orchestration scripts:
+  - `tools/scripts/publish-web.ps1`
+  - `tools/scripts/publish-web.sh`
+  - `tools/scripts/activate-web-version.ps1`
+  - `tools/scripts/activate-web-version.sh`
+  - `tools/scripts/rollback-web-version.ps1`
+  - `tools/scripts/rollback-web-version.sh`
+- Deployment smoke verification:
+  - `tools/scripts/verify-web-deploy.ps1`
+  - `tools/scripts/verify-web-deploy.sh`
+
+## UI Orchestration (consumer behavior)
+
+- WebUI app remains deployment-agnostic and runtime-config-driven; host activation/rollback changes are projected via static-shell fetch behavior and cache headers.

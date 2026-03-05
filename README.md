@@ -76,6 +76,11 @@ M4/M5/M6a runtime notes:
   - pair-token bootstrap to HTTP-only session-cookie auth (`/api/pair`)
   - explicit CORS/cookie runtime policy controls in `CoreServer` options
   - direct credentialed SSE status projection (`/api/events`) with reconnect/resync fallback (`/api/library-states` + `/api/refresh/status`)
+- M7c adds zero-restart web deployment and rollback:
+  - independent static host at `src/clients/web/ReelRoulette.WebHost`
+  - immutable versioned artifacts under `.web-deploy/versions/{versionId}`
+  - atomic `active-manifest.json` activation/rollback pointer flow
+  - split cache policy (`index.html`/`runtime-config.json` no-store; hashed assets immutable)
 
 ## Testing
 
@@ -108,6 +113,22 @@ dotnet run --project .\src\core\ReelRoulette.Worker\ReelRoulette.Worker.csproj
 # In another terminal, start web UI
 cd .\src\clients\web\ReelRoulette.WebUI
 npm run dev
+```
+
+M7c zero-restart web deploy smoke checks:
+
+```bash
+# Publish and activate versioned web artifacts
+.\tools\scripts\publish-web.ps1
+.\tools\scripts\activate-web-version.ps1 -VersionId <versionId>
+
+# Run independent web host against deployment root
+dotnet run --project .\src\clients\web\ReelRoulette.WebHost\ReelRoulette.WebHost.csproj -- --WebDeployment:DeployRootPath=.\.web-deploy
+
+# Full activation/cache/rollback smoke gate
+.\tools\scripts\verify-web-deploy.ps1
+# or
+./tools/scripts/verify-web-deploy.sh
 ```
 
 Worker runtime independence check (desktop close should not stop worker):
