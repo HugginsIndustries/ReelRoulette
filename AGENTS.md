@@ -22,6 +22,7 @@ This file contains guidelines and instructions for AI agents working on this cod
 - Assume no changes have been committed yet until the user explicitly confirms a commit occurred
 - Replace `COMMIT_MESSAGE.txt` with only the current diff since the last commit (concise, no historical context)
 - If the user says nothing has been committed yet, keep the existing Mx entry style in `COMMIT_MESSAGE.txt` and update/append it in place unless they explicitly ask to replace the whole message
+- Check `CONTEXT.md` for repo context before major planning/implementation, and update it whenever structure, workflows, architecture ownership, or milestone-driven runtime behavior changes.
 - Update `CHANGELOG.md` for significant changes and reflect only final delta from the previous commit (no intermediate attempts)
 - After user-confirmed commit, start a new `COMMIT_MESSAGE.txt` and a new changelog entry for subsequent changes
 - Apply the same “final state only” rule to `TODO.md` updates/moves to Completed Features
