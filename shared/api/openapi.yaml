@@ -564,6 +564,12 @@ paths:
           schema:
             type: string
           description: Last acknowledged SSE revision from the previous connection.
+        - name: lastEventId
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Query-string reconnect revision fallback for browser EventSource clients.
       responses:
         "200":
           description: Event stream (SSE)

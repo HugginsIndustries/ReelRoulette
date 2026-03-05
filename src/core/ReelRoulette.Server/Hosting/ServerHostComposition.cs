@@ -7,30 +7,42 @@ namespace ReelRoulette.Server.Hosting;
 
 public static class ServerHostComposition
 {
+    public const string WebClientCorsPolicyName = "ReelRouletteWebClient";
+
     public static void AddReelRouletteServer(this IServiceCollection services)
     {
         services.AddSingleton<ServerStateService>();
         services.AddSingleton<RefreshPipelineService>();
+        services.AddSingleton<ServerSessionStore>();
         services.AddHostedService(sp => sp.GetRequiredService<RefreshPipelineService>());
     }
 
     public static void MapReelRouletteEndpoints(this WebApplication app, ServerRuntimeOptions options)
     {
+        if (options.EnableCors && options.CorsAllowedOrigins.Length > 0)
+        {
+            app.UseCors(WebClientCorsPolicyName);
+        }
+
         if (options.RequireAuth)
         {
-            app.Use((context, next) => new ServerPairingAuthMiddleware(next, options).InvokeAsync(context));
+            app.Use((context, next) =>
+            {
+                var sessions = context.RequestServices.GetRequiredService<ServerSessionStore>();
+                return new ServerPairingAuthMiddleware(next, options, sessions).InvokeAsync(context);
+            });
         }
 
         app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
-        app.MapGet("/api/pair", (HttpContext context, string? token) =>
+        app.MapGet("/api/pair", (HttpContext context, string? token, ServerSessionStore sessions) =>
         {
-            return HandlePairRequest(context, token, options);
+            return HandlePairRequest(context, token, options, sessions);
         });
 
-        app.MapPost("/api/pair", (HttpContext context, PairRequest? request) =>
+        app.MapPost("/api/pair", (HttpContext context, PairRequest? request, ServerSessionStore sessions) =>
         {
-            return HandlePairRequest(context, request?.Token, options);
+            return HandlePairRequest(context, request?.Token, options, sessions);
         });
 
         app.MapGet("/api/version", (ServerStateService state) =>
@@ -236,14 +248,17 @@ public static class ServerHostComposition
             context.Response.Headers.Append("Connection", "keep-alive");
 
             var cancellationToken = context.RequestAborted;
-            var reader = state.Subscribe(cancellationToken);
             var serializerOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
             var lastEventHeader = context.Request.Headers["Last-Event-ID"].ToString();
-            var hasLastEvent = long.TryParse(lastEventHeader, out var lastEventRevision);
+            var lastEventQuery = context.Request.Query["lastEventId"].ToString();
+            var hasLastEvent = long.TryParse(lastEventHeader, out var lastEventRevision) ||
+                               long.TryParse(lastEventQuery, out lastEventRevision);
+            long lastDeliveredRevision = 0;
 
             await context.Response.WriteAsync("retry: 1000\n\n", cancellationToken);
             await context.Response.Body.FlushAsync(cancellationToken);
 
+            var reader = state.Subscribe(cancellationToken);
             if (hasLastEvent)
             {
                 var replay = state.GetReplayAfter(lastEventRevision);
@@ -258,11 +273,13 @@ public static class ServerHostComposition
                             currentRevision = replay.CurrentRevision
                         });
                     await WriteSseEnvelopeAsync(context, resyncEnvelope, serializerOptions, cancellationToken);
+                    lastDeliveredRevision = resyncEnvelope.Revision;
                 }
 
                 foreach (var missedEvent in replay.Events)
                 {
                     await WriteSseEnvelopeAsync(context, missedEvent, serializerOptions, cancellationToken);
+                    lastDeliveredRevision = Math.Max(lastDeliveredRevision, missedEvent.Revision);
                 }
             }
 
@@ -270,13 +287,23 @@ public static class ServerHostComposition
             {
                 while (reader.TryRead(out var envelope))
                 {
+                    if (envelope.Revision <= lastDeliveredRevision)
+                    {
+                        continue;
+                    }
+
                     await WriteSseEnvelopeAsync(context, envelope, serializerOptions, cancellationToken);
+                    lastDeliveredRevision = envelope.Revision;
                 }
             }
         });
     }
 
-    private static IResult HandlePairRequest(HttpContext context, string? token, ServerRuntimeOptions options)
+    private static IResult HandlePairRequest(
+        HttpContext context,
+        string? token,
+        ServerRuntimeOptions options,
+        ServerSessionStore sessions)
     {
         if (!options.RequireAuth || string.IsNullOrEmpty(options.PairingToken))
         {
@@ -290,17 +317,14 @@ public static class ServerHostComposition
             return Results.Json(new { error = "Unauthorized" }, statusCode: StatusCodes.Status401Unauthorized);
         }
 
+        var sessionId = sessions.CreateSession(
+            DateTimeOffset.UtcNow,
+            TimeSpan.FromHours(options.PairingSessionDurationHours));
+
         context.Response.Cookies.Append(
             options.PairingCookieName,
-            options.PairingToken,
-            new CookieOptions
-            {
-                HttpOnly = true,
-                SameSite = SameSiteMode.Lax,
-                Secure = false,
-                Path = "/",
-                MaxAge = TimeSpan.FromDays(30)
-            });
+            sessionId,
+            PairingCookiePolicy.BuildCookieOptions(options, context.Request.IsHttps));
 
         return Results.Ok(new { paired = true, message = "Paired successfully" });
     }

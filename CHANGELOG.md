@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **Implement M7b direct web-to-core auth/session and SSE reliability** (2026-03-05):
+  - Add direct WebUI auth bootstrap flow that pairs via `/api/pair`, verifies API authorization, and uses credentialed requests for ongoing API/SSE access.
+  - Introduce server-side session-id cookie auth semantics (HTTP-only cookie storing generated session id, configurable same-site/secure/session duration policy).
+  - Add explicit runtime-configurable CORS policy controls (`EnableCors`, `CorsAllowedOrigins`, `CorsAllowCredentials`) and browser-preflight-safe auth middleware behavior.
+  - Extend `/api/events` reconnect handling with `lastEventId` query fallback and replay/live dedupe guard based on delivered revision tracking.
+  - Add WebUI SSE reconnect/watchdog/lifecycle reconnect flow with direct `refreshStatusChanged` status-line projection and `resyncRequired` authoritative requery fallback (`/api/library-states` + `/api/refresh/status`).
+  - Add regression coverage for server auth middleware/session-cookie behavior, cookie/CORS policy normalization matrix, and WebUI auth/event helper modules (including `resyncRequired` requery handling).
+  - Update OpenAPI/docs/milestone inventory artifacts for final M7b state (`README`, `CONTEXT`, `docs/api.md`, `docs/dev-setup.md`, `docs/architecture.md`, `docs/m7-domain-inventory.md`, `TODO.md`, `MILESTONES.md`).
+
 - **Implement M7a independent web client foundation and runtime endpoint bootstrap** (2026-03-05):
   - Replace `src/clients/web/ReelRoulette.WebUI` placeholder-only state with a canonical Vite + TypeScript web client project (real app bootstrap, styling, and runtime-config-aware startup flow).
   - Add runtime endpoint config contract loading (`window.__REEL_ROULETTE_RUNTIME_CONFIG` fallback to `/runtime-config.json`) with strict URL validation and startup error surfacing for invalid/missing config.

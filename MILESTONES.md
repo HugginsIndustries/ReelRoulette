@@ -266,13 +266,13 @@ Status legend: `✅ Complete` | `⏳ Planned`
   - Web iteration (build/reload) does not require restarting desktop app or core server.
   - Runtime config keys/shape are documented and validated in tests.
   - Automated checks for web build output and runtime-config schema pass.
-  - Verification evidence:
-    - `npm run verify` passes in `src/clients/web/ReelRoulette.WebUI` (typecheck + runtime-config tests + production build + build-output checks).
-    - Web dev bootstrap starts successfully via `npm run dev` without desktop/core restart dependencies.
+- **Verification evidence**:
+  - `npm run verify` passes in `src/clients/web/ReelRoulette.WebUI` (typecheck + runtime-config tests + production build + build-output checks).
+  - Web dev bootstrap starts successfully via `npm run dev` without desktop/core restart dependencies.
 
 ### M7b - Direct Web-to-Core Auth and SSE Reliability
 
-- **Status**: ⏳ Planned
+- **Status**: ✅ Complete
 - **Goal**: Move web auth/eventing to direct core/server integration with robust reconnect/resync behavior.
 - **Scope**:
   - Implement pair-token bootstrap followed by secure HTTP-only session-cookie auth for web API/SSE usage.
@@ -285,6 +285,13 @@ Status legend: `✅ Complete` | `⏳ Planned`
   - Replay-gap/resync-required scenarios recover by requerying authoritative API state with no persistent client divergence.
   - CORS/cookie policies validate in supported environments.
   - Automated reconnect/resync checks plus focused manual parity checks pass.
+- **Verification evidence**:
+  - `npm run verify` in `src/clients/web/ReelRoulette.WebUI` passes, including `sseClient` resync/requery regression coverage (`src/test/sseClient.test.ts`).
+  - `dotnet test ReelRoulette.sln` passes with server auth/cookie/CORS policy coverage (`ServerAuthRegressionTests`, `ServerCookiePolicyTests`, `ServerRuntimeOptionsTests`).
+  - `dotnet build ReelRoulette.sln` passes after stopping an active worker process that was locking `ReelRoulette.Server.dll`.
+  - Manual CORS preflight check (allowed origin): `OPTIONS /api/version` with `Origin: http://localhost:5173` returns `204` plus `Access-Control-Allow-Origin: http://localhost:5173` and `Access-Control-Allow-Credentials: true`.
+  - Manual CORS preflight check (blocked origin): `OPTIONS /api/version` with `Origin: http://example.com` returns `204` without `Access-Control-Allow-Origin`.
+  - Manual pairing check: `POST /api/pair?token=...` returns `200` and `Set-Cookie` with `httponly` + `samesite=lax`, confirming credentialed session bootstrap behavior.
 
 ### M7c - Zero-Restart Web Deployment, Caching, and Rollback
 

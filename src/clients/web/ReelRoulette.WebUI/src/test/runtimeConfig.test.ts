@@ -5,11 +5,13 @@ describe("runtime config parsing", () => {
   it("accepts valid runtime config values", () => {
     const config = parseRuntimeConfig({
       apiBaseUrl: "http://localhost:51301/api/",
-      sseUrl: "http://localhost:51301/api/events/"
+      sseUrl: "http://localhost:51301/api/events/",
+      pairToken: "  dev-token "
     });
 
     expect(config.apiBaseUrl).toBe("http://localhost:51301/api");
     expect(config.sseUrl).toBe("http://localhost:51301/api/events");
+    expect(config.pairToken).toBe("dev-token");
   });
 
   it("rejects missing apiBaseUrl", () => {

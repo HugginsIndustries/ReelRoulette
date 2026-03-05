@@ -8,6 +8,10 @@
 - M7a establishes runtime endpoint bootstrap for the independent web client:
   - `apiBaseUrl` and `sseUrl` are read from runtime config (not compile-time constants).
   - config source order: `window.__REEL_ROULETTE_RUNTIME_CONFIG`, then `/runtime-config.json`.
+- M7b establishes direct web-to-core auth/event reliability:
+  - pair-token bootstrap (`/api/pair`) issues HTTP-only session cookie.
+  - credentialed direct web API/SSE calls use that session cookie.
+  - `/api/events` supports `Last-Event-ID` header and `lastEventId` query fallback for reconnect.
 
 ## Eventing Direction
 
@@ -35,6 +39,21 @@
   - when auth is required, unpaired requests return `401`
   - localhost requests can be optionally trusted for dev workflows
   - LAN access requires pairing token/cookie when auth is enabled
+- M7b session/cookie notes:
+  - server now issues generated session-id cookies (not raw pairing token values).
+  - cookie controls are runtime-configurable (`PairingCookieSameSite`, `PairingCookieSecureMode`, `PairingSessionDurationHours`).
+  - auth middleware validates session cookie first and supports optional legacy bearer/query token fallback when enabled.
+
+## CORS / Cookie Environment Matrix (M7b)
+
+- Runtime policy controls live under `CoreServer` options:
+  - `EnableCors`
+  - `CorsAllowedOrigins[]`
+  - `CorsAllowCredentials`
+  - cookie options listed above
+- Recommended profiles:
+  - localhost dev: `PairingCookieSameSite=Lax`, `PairingCookieSecureMode=Request`, local Vite origins allowed.
+  - LAN/dev-cert + production: use HTTPS with `PairingCookieSameSite=None` and `PairingCookieSecureMode=Always`, explicit allowed origins, credentials enabled.
 
 ## Current Endpoint Surface
 
@@ -71,6 +90,8 @@
 - Required:
   - `apiBaseUrl` (absolute `http`/`https` URL for API requests, usually ending with `/api`)
   - `sseUrl` (absolute `http`/`https` URL for SSE stream, usually `/api/events`)
+- Optional:
+  - `pairToken` (startup pairing token for direct web auth bootstrap in local/dev environments)
 - Validation behavior:
   - missing keys or non-http(s) URLs fail startup with explicit runtime-config error UI.
   - trailing slash normalization is applied by the web config parser.

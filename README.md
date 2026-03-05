@@ -72,6 +72,10 @@ M4/M5/M6a runtime notes:
 - M7a introduces independent web-client bootstrap under `src/clients/web/ReelRoulette.WebUI` using Vite + TypeScript.
 - Web API/SSE endpoints are runtime-configured from `window.__REEL_ROULETTE_RUNTIME_CONFIG` or `/runtime-config.json` (no compile-time base URL constants).
 - Web build/typecheck/test/build-output verification is available via `npm run verify` (or `.\tools\scripts\verify-web.ps1` / `./tools/scripts/verify-web.sh`).
+- M7b adds direct web-to-core auth/event reliability:
+  - pair-token bootstrap to HTTP-only session-cookie auth (`/api/pair`)
+  - explicit CORS/cookie runtime policy controls in `CoreServer` options
+  - direct credentialed SSE status projection (`/api/events`) with reconnect/resync fallback (`/api/library-states` + `/api/refresh/status`)
 
 ## Testing
 
@@ -93,6 +97,17 @@ M7a web verification gate:
 .\tools\scripts\verify-web.ps1
 # or
 ./tools/scripts/verify-web.sh
+```
+
+M7b direct auth/SSE smoke checks:
+
+```bash
+# Start worker (auth enabled by default in worker appsettings)
+dotnet run --project .\src\core\ReelRoulette.Worker\ReelRoulette.Worker.csproj
+
+# In another terminal, start web UI
+cd .\src\clients\web\ReelRoulette.WebUI
+npm run dev
 ```
 
 Worker runtime independence check (desktop close should not stop worker):

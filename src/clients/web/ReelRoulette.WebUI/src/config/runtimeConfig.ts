@@ -5,6 +5,7 @@ const RUNTIME_CONFIG_PATH = "/runtime-config.json";
 type RuntimeConfigInput = {
   apiBaseUrl?: unknown;
   sseUrl?: unknown;
+  pairToken?: unknown;
 };
 
 declare global {
@@ -49,7 +50,10 @@ export function parseRuntimeConfig(raw: RuntimeConfigInput | null | undefined): 
 
   return {
     apiBaseUrl: normalizeAbsoluteHttpUrl(apiBaseUrl.trim(), "apiBaseUrl"),
-    sseUrl: normalizeAbsoluteHttpUrl(sseUrl.trim(), "sseUrl")
+    sseUrl: normalizeAbsoluteHttpUrl(sseUrl.trim(), "sseUrl"),
+    pairToken: typeof raw.pairToken === "string" && raw.pairToken.trim().length > 0
+      ? raw.pairToken.trim()
+      : undefined
   };
 }
 

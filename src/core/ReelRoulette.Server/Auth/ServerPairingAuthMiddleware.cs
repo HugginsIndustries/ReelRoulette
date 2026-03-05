@@ -7,11 +7,13 @@ public sealed class ServerPairingAuthMiddleware
 {
     private readonly RequestDelegate _next;
     private readonly ServerRuntimeOptions _options;
+    private readonly ServerSessionStore _sessions;
 
-    public ServerPairingAuthMiddleware(RequestDelegate next, ServerRuntimeOptions options)
+    public ServerPairingAuthMiddleware(RequestDelegate next, ServerRuntimeOptions options, ServerSessionStore sessions)
     {
         _next = next;
         _options = options;
+        _sessions = sessions;
     }
 
     public async Task InvokeAsync(HttpContext context)
@@ -29,13 +31,19 @@ public sealed class ServerPairingAuthMiddleware
             return;
         }
 
+        if (HttpMethods.IsOptions(context.Request.Method))
+        {
+            await _next(context);
+            return;
+        }
+
         if (_options.TrustLocalhost && IsLocalRequest(context))
         {
             await _next(context);
             return;
         }
 
-        if (IsTokenAuthorized(context))
+        if (IsAuthorized(context))
         {
             await _next(context);
             return;
@@ -45,12 +53,17 @@ public sealed class ServerPairingAuthMiddleware
         await context.Response.WriteAsJsonAsync(new { error = "Unauthorized" });
     }
 
-    private bool IsTokenAuthorized(HttpContext context)
+    private bool IsAuthorized(HttpContext context)
     {
         if (context.Request.Cookies.TryGetValue(_options.PairingCookieName, out var cookieValue) &&
-            string.Equals(cookieValue, _options.PairingToken, StringComparison.Ordinal))
+            _sessions.IsSessionValid(cookieValue, DateTimeOffset.UtcNow))
         {
             return true;
+        }
+
+        if (!_options.AllowLegacyTokenAuth)
+        {
+            return false;
         }
 
         var authHeader = context.Request.Headers.Authorization.ToString();

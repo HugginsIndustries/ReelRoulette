@@ -206,3 +206,26 @@ flowchart TD
 - Web client now boots as a standalone Vite+TypeScript project under `src/clients/web/ReelRoulette.WebUI`.
 - API and SSE endpoints are runtime-configured and validated at startup (no compile-time hardcoded service base URL values).
 - Web build/test/typecheck/build-output checks are independent from desktop app restart cycles.
+
+## M7b Direct Web Auth + SSE Reliability
+
+```mermaid
+flowchart TD
+    webUi[WebUI]
+    pairApi["Pair API (/api/pair)"]
+    sessionCookie["Session Cookie (HttpOnly)"]
+    sseApi["SSE API (/api/events)"]
+    replayResync["Replay + resyncRequired"]
+    authoritativeRequery["Authoritative Requery (/api/library-states + /api/refresh/status)"]
+
+    webUi --> pairApi
+    pairApi --> sessionCookie
+    webUi --> sseApi
+    sseApi --> replayResync
+    replayResync --> authoritativeRequery
+    authoritativeRequery --> webUi
+```
+
+- Web UI now authenticates directly to core/server via pair-token bootstrap and cookie session continuity.
+- Server applies explicit runtime-configurable CORS/cookie policy controls for direct browser clients.
+- Web SSE path is direct core/server with reconnect, revision tracking, replay-gap `resyncRequired`, and authoritative recovery queries.

@@ -104,9 +104,30 @@
   - load `window.__REEL_ROULETTE_RUNTIME_CONFIG` when present
   - otherwise fetch `/runtime-config.json` with `no-store`
   - required keys: `apiBaseUrl`, `sseUrl`
+  - optional key: `pairToken` for direct web auth bootstrap convenience
 - Validation:
   - runtime-config schema is validated by web unit tests (`src/test/runtimeConfig.test.ts`)
   - build-output verification checks `dist` artifacts and runtime-config presence (`scripts/verify-build-output.mjs`)
 - One-command web verification helpers:
   - `tools/scripts/verify-web.ps1`
   - `tools/scripts/verify-web.sh`
+
+## M7b Direct Web Auth + SSE Reliability Notes
+
+- Worker/server direct web auth flow:
+  - Pair with `GET/POST /api/pair` token bootstrap.
+  - Server issues HTTP-only session cookie; credentialed web requests/SSE use that cookie.
+- Runtime policy controls (`CoreServer`):
+  - `EnableCors`, `CorsAllowedOrigins`, `CorsAllowCredentials`
+  - `PairingSessionDurationHours`, `PairingCookieSameSite`, `PairingCookieSecureMode`
+  - `AllowLegacyTokenAuth` (temporary compatibility fallback)
+- Web reconnect/resync behavior:
+  - direct `EventSource` to `/api/events` with credentials
+  - reconnect tracks revision and passes `lastEventId` query fallback
+  - `resyncRequired` triggers authoritative requery (`POST /api/library-states`) and refresh snapshot sync (`GET /api/refresh/status`)
+- Verification notes:
+  - automated: `dotnet test ReelRoulette.sln` and `npm run verify` (web includes `src/test/sseClient.test.ts` resync regression coverage)
+  - manual CORS/pairing sanity checks:
+    - `OPTIONS /api/version` from allowed origin (`http://localhost:5173`) should return `Access-Control-Allow-Origin` + `Access-Control-Allow-Credentials`
+    - `OPTIONS /api/version` from blocked origin should omit CORS allow-origin header
+    - `POST /api/pair?token=...` should issue `Set-Cookie` with HTTP-only session semantics

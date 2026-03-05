@@ -29,6 +29,22 @@ No open P1 TODO items.
 
 ## Completed Features
 
+### M7b - Direct Web-to-Core Auth and SSE Reliability ✅
+
+- **Milestone Link**: `M7b - Direct Web-to-Core Auth and SSE Reliability` in `MILESTONES.md`
+- **Impact**: High - Completes direct web session/event reliability foundation for parity-oriented independent web runtime.
+- **Final State**:
+  - Implemented direct WebUI pair-token bootstrap -> HTTP-only session-cookie auth flow with credentialed API calls.
+  - Added explicit server runtime policy controls for CORS/cookie behavior (`EnableCors`, `CorsAllowedOrigins`, `CorsAllowCredentials`, cookie same-site/secure/session settings).
+  - Hardened auth middleware for browser preflight (`OPTIONS`) handling and session-cookie-first authorization (with optional legacy token fallback).
+  - WebUI now connects directly to core SSE (`/api/events`) with revision-aware reconnect, `lastEventId` reconnect fallback, stale-stream watchdog, and lifecycle-triggered reconnects.
+  - Implemented `resyncRequired` authoritative recovery path using `/api/library-states` requery plus refresh-status snapshot sync.
+  - Web status line now projects direct core `refreshStatusChanged` and refresh snapshot states for running/failure/completion visibility.
+  - Added M7b regression coverage for auth middleware/session-cookie behavior, runtime option normalization, and WebUI reconnect/resync handlers (`resyncRequired` authoritative requery + refresh snapshot sync).
+  - Added OpenAPI contract note for `lastEventId` query reconnect fallback on `/api/events`.
+
+---
+
 ### M7a - Web Client Foundation and Independent Host Bootstrap ✅
 
 - **Milestone Link**: `M7a - Web Client Foundation and Independent Host Bootstrap` in `MILESTONES.md`

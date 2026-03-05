@@ -29,3 +29,40 @@
   - `src/clients/web/ReelRoulette.WebUI/src/styles.css`
 - Runtime config artifact for environment injection:
   - `src/clients/web/ReelRoulette.WebUI/public/runtime-config.json`
+
+## M7b - Direct Web-to-Core Auth and SSE Reliability
+
+## Pure Domain Logic (auth/session + reconnect contracts)
+
+- Server runtime policy options and normalization:
+  - `src/core/ReelRoulette.Server/Hosting/ServerRuntimeOptions.cs`
+  - CORS/cookie/session controls (`EnableCors`, origins/credentials, same-site/secure/session duration).
+- Session-id store for pairing-auth middleware:
+  - `src/core/ReelRoulette.Server/Auth/ServerSessionStore.cs`
+- Reconnect contract adjustment:
+  - `/api/events` supports `Last-Event-ID` header and `lastEventId` query fallback in `shared/api/openapi.yaml`.
+
+## IO / Service Adapters (server/web transport wiring)
+
+- Server/worker host transport wiring:
+  - `src/core/ReelRoulette.Server/Program.cs`
+  - `src/core/ReelRoulette.Worker/Program.cs`
+  - `src/core/ReelRoulette.Server/Hosting/ServerHostComposition.cs`
+  - `src/core/ReelRoulette.Server/Auth/ServerPairingAuthMiddleware.cs`
+- Core runtime defaults for auth/cors/cookies:
+  - `src/core/ReelRoulette.Server/appsettings.json`
+  - `src/core/ReelRoulette.Worker/appsettings.json`
+
+## UI Orchestration (WebUI direct auth/event projection)
+
+- Web auth bootstrap and API adapters:
+  - `src/clients/web/ReelRoulette.WebUI/src/auth/authBootstrap.ts`
+  - `src/clients/web/ReelRoulette.WebUI/src/api/coreApi.ts`
+- Web SSE reconnect/resync and refresh projection:
+  - `src/clients/web/ReelRoulette.WebUI/src/events/sseClient.ts`
+  - `src/clients/web/ReelRoulette.WebUI/src/events/eventEnvelope.ts`
+  - `src/clients/web/ReelRoulette.WebUI/src/events/refreshStatusProjection.ts`
+- Updated app shell and runtime config typing:
+  - `src/clients/web/ReelRoulette.WebUI/src/app.ts`
+  - `src/clients/web/ReelRoulette.WebUI/src/config/runtimeConfig.ts`
+  - `src/clients/web/ReelRoulette.WebUI/src/types/runtimeConfig.ts`
