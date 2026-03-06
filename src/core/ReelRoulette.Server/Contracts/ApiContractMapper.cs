@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Text.Json;
 
 namespace ReelRoulette.Server.Contracts;
 
@@ -35,13 +36,25 @@ public static class ApiContractMapper
         };
     }
 
-    public static PresetResponse MapPreset(string id, string name, string? summary = null)
+    public static PresetResponse MapPreset(string id, string name, string? summary = null, JsonElement? filterState = null)
     {
         return new PresetResponse
         {
             Id = id,
             Name = name,
-            Summary = summary
+            Summary = summary,
+            FilterState = filterState
+        };
+    }
+
+    public static SourceResponse MapSource(string id, string rootPath, string? displayName, bool isEnabled)
+    {
+        return new SourceResponse
+        {
+            Id = id,
+            RootPath = rootPath,
+            DisplayName = displayName,
+            IsEnabled = isEnabled
         };
     }
 }

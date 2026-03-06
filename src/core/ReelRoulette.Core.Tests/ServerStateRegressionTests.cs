@@ -1,4 +1,3 @@
-using System.Text.Json;
 using ReelRoulette.Server.Contracts;
 using ReelRoulette.Server.Services;
 using Xunit;
@@ -7,59 +6,6 @@ namespace ReelRoulette.Core.Tests;
 
 public sealed class ServerStateRegressionTests
 {
-    [Fact]
-    public void SetFilterSessionSnapshot_ShouldPublishFilterSessionChangedEvent()
-    {
-        var service = new ServerStateService();
-        var snapshot = new FilterSessionSnapshot
-        {
-            ActivePresetName = "Favorites",
-            CurrentFilterState = JsonSerializer.SerializeToElement(new { favoritesOnly = true }),
-            Presets =
-            [
-                new FilterPresetSnapshot
-                {
-                    Name = "Favorites",
-                    FilterState = JsonSerializer.SerializeToElement(new { favoritesOnly = true })
-                }
-            ]
-        };
-
-        service.SetFilterSessionSnapshot(snapshot);
-
-        var replay = service.GetReplayAfter(0);
-        var envelope = Assert.Single(replay.Events);
-        Assert.Equal("filterSessionChanged", envelope.EventType);
-        Assert.True(envelope.Revision > 0);
-    }
-
-    [Fact]
-    public void GetFilterSessionSnapshot_ShouldReturnDefensiveCopy()
-    {
-        var service = new ServerStateService();
-        service.SetFilterSessionSnapshot(new FilterSessionSnapshot
-        {
-            ActivePresetName = "Original",
-            CurrentFilterState = JsonSerializer.SerializeToElement(new { includeVideos = true }),
-            Presets =
-            [
-                new FilterPresetSnapshot
-                {
-                    Name = "Original",
-                    FilterState = JsonSerializer.SerializeToElement(new { includeVideos = true })
-                }
-            ]
-        });
-
-        var firstRead = service.GetFilterSessionSnapshot();
-        firstRead.ActivePresetName = "Mutated";
-        firstRead.Presets![0].Name = "Mutated";
-
-        var secondRead = service.GetFilterSessionSnapshot();
-        Assert.Equal("Original", secondRead.ActivePresetName);
-        Assert.Equal("Original", secondRead.Presets![0].Name);
-    }
-
     [Fact]
     public void ReplayAfter_ShouldDetectGapWhenRevisionFallsOutsideBuffer()
     {
@@ -139,6 +85,60 @@ public sealed class ServerStateRegressionTests
         var payload = Assert.IsType<ItemTagsChangedPayload>(envelope.Payload);
         Assert.Equal("a.mp4", Assert.Single(payload.ItemIds));
         Assert.Equal("TagA", Assert.Single(payload.AddedTags));
+    }
+
+    [Fact]
+    public void ApplyItemTags_ShouldPreserveExistingTagCategory()
+    {
+        var service = new ServerStateService();
+        service.UpsertCategory(new UpsertCategoryRequest { Id = "cat-1", Name = "Category 1", SortOrder = 1 });
+        service.UpsertTag(new UpsertTagRequest { Name = "TagA", CategoryId = "cat-1" });
+
+        service.ApplyItemTags(new ApplyItemTagsRequest
+        {
+            ItemIds = ["a.mp4"],
+            AddTags = ["TagA"]
+        });
+
+        var model = service.GetTagEditorModel(new TagEditorModelRequest { ItemIds = ["a.mp4"] });
+        var tag = Assert.Single(model.Tags, t => string.Equals(t.Name, "TagA", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal("cat-1", tag.CategoryId);
+    }
+
+    [Fact]
+    public void BootstrapFromDisk_ShouldNotLoadPresetsFromLegacySettingsJson()
+    {
+        var appDataPath = Path.Combine(Path.GetTempPath(), "reelroulette-server-state-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(appDataPath);
+
+        try
+        {
+            var settingsPath = Path.Combine(appDataPath, "settings.json");
+            File.WriteAllText(settingsPath, """
+            {
+              "filterPresets": [
+                {
+                  "name": "Favorites",
+                  "filterState": {
+                    "favoritesOnly": true
+                  }
+                }
+              ]
+            }
+            """);
+
+            var service = new ServerStateService(appDataPathOverride: appDataPath);
+            var presetCatalog = service.GetPresetCatalogSnapshot();
+            Assert.Empty(presetCatalog);
+            Assert.False(File.Exists(Path.Combine(appDataPath, "presets.json")));
+        }
+        finally
+        {
+            if (Directory.Exists(appDataPath))
+            {
+                Directory.Delete(appDataPath, recursive: true);
+            }
+        }
     }
 
     [Fact]

@@ -361,12 +361,14 @@ public sealed class RefreshPipelineServiceTests
     private static RefreshPipelineService CreateService(ServerStateService state, string appDataPathOverride)
     {
         var logger = new Microsoft.Extensions.Logging.Abstractions.NullLogger<RefreshPipelineService>();
+        var settingsLogger = new Microsoft.Extensions.Logging.Abstractions.NullLogger<CoreSettingsService>();
         var options = new ServerRuntimeOptions
         {
             AutoRefreshEnabled = true,
             AutoRefreshIntervalMinutes = 15
         };
-        return new RefreshPipelineService(state, logger, options, appDataPathOverride);
+        var coreSettings = new CoreSettingsService(settingsLogger, options, appDataPathOverride);
+        return new RefreshPipelineService(state, logger, coreSettings, appDataPathOverride);
     }
 
     private static async Task<ReelRoulette.Server.Contracts.RefreshStatusSnapshot> WaitForCompletionAsync(

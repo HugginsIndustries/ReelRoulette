@@ -40,13 +40,19 @@ Or run worker via helper scripts:
 ./tools/scripts/run-core.sh
 ```
 
+All-in-one: publish WebUI, activate latest version, and run worker.
+
+```powershell
+.\tools\scripts\publish-activate-run-worker.ps1
+```
+
 M4/M5/M6a runtime notes:
 
 - `ReelRoulette.Worker` hosts the API/SSE runtime using shared server endpoint composition.
 - Pairing/auth primitive is available through `/api/pair` with optional localhost trust and token/cookie enforcement for paired clients.
 - SSE reconnect supports `Last-Event-ID` replay and `POST /api/library-states` authoritative resync when history gaps are detected.
 - Desktop migrated M5 state flows now call the worker/server API first (favorite/blacklist/playback/random command), then project updates from SSE.
-- Filter/preset session projection sync is available through `GET/POST /api/filter-session`.
+- Preset catalog sync is API-first through `GET/POST /api/presets`.
 - Migrated M5 state writes are API-required (no local mutation fallback for those flows when core runtime is unavailable).
 - M6a tag/category/item-tag edits are API-first through `/api/tag-editor/*` (desktop dialogs + web tag editor share the same mutation seam).
 - SSE now carries tag synchronization events (`itemTagsChanged`, `tagCatalogChanged`) used by desktop projection paths.
@@ -81,6 +87,11 @@ M4/M5/M6a runtime notes:
   - immutable versioned artifacts under `.web-deploy/versions/{versionId}`
   - atomic `active-manifest.json` activation/rollback pointer flow
   - split cache policy (`index.html`/`runtime-config.json` no-store; hashed assets immutable)
+- M7d completes controlled cutover and legacy bridge retirement:
+  - legacy embedded `source/WebRemote` runtime/resources are retired from active runtime behavior
+  - worker now supervises WebHost lifecycle and mDNS advertisement from core-owned web runtime settings
+  - WebHost serves host-aware runtime config and core uses dynamic CORS origin registration for localhost/LAN hostname/LAN-IP access
+  - desktop/web preset + random selection behavior is API-authoritative (server-owned preset catalog and random eligibility semantics)
 
 ## Testing
 

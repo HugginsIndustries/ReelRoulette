@@ -68,6 +68,27 @@
                                          IsChecked="{Binding MediaTypePhotosOnly}"/>
                         </StackPanel>
 
+                        <!-- Sources Section -->
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="Sources (Client Filter)"
+                                       FontWeight="SemiBold"
+                                       FontSize="13"
+                                       Margin="0,0,0,4"/>
+                            <TextBlock Text="Checked sources are included for this client filter/preset. If all are checked, no source restriction is stored."
+                                      FontSize="11"
+                                      Opacity="0.7"
+                                      TextWrapping="Wrap"/>
+                            <ItemsControl ItemsSource="{Binding SourceOptions}" IsVisible="{Binding HasSourceOptions}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="local:FilterSourceOptionViewModel">
+                                        <CheckBox Content="{Binding DisplayName}"
+                                                  IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                                  IsEnabled="{Binding IsEnabledGlobally}"/>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+
                         <!-- Audio Section -->
                         <StackPanel Spacing="8">
                             <TextBlock Text="Audio Filter" 
@@ -310,12 +331,14 @@
                     </StackPanel>
 
                     <!-- Manage Presets Section -->
-                    <StackPanel Grid.Row="2" Spacing="8" VerticalAlignment="Stretch">
+                    <Grid Grid.Row="2" RowDefinitions="Auto *" RowSpacing="8" VerticalAlignment="Stretch">
                         <TextBlock Text="Manage Presets" 
+                                   Grid.Row="0"
                                    FontWeight="SemiBold" 
                                    FontSize="13"
                                    Margin="0,0,0,4"/>
                         <Border BorderBrush="{DynamicResource ThemeBorderBrush}"
+                                Grid.Row="1"
                                 BorderThickness="1"
                                 CornerRadius="4"
                                 Padding="8"
@@ -363,7 +386,7 @@
                                 </ListBox.ItemTemplate>
                             </ListBox>
                         </Border>
-                    </StackPanel>
+                    </Grid>
                 </Grid>
             </TabItem>
         </TabControl>
@@ -379,7 +402,8 @@
             <Button Content="Cancel"
                     Click="CancelButton_Click"
                     MinWidth="100"/>
-            <Button Content="Apply"
+            <Button IsEnabled="{Binding HasPendingChanges}"
+                    Content="{Binding ApplyButtonText}"
                     Click="ApplyButton_Click"
                     MinWidth="100"
                     IsDefault="True"/>

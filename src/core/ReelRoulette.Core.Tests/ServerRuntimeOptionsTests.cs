@@ -26,4 +26,5 @@ public sealed class ServerRuntimeOptionsTests
         Assert.Equal("Always", options.PairingCookieSecureMode);
         Assert.Equal(2, options.CorsAllowedOrigins.Length);
     }
+
 }

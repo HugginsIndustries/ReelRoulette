@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- **Implement M7d controlled cutover, legacy WebRemote retirement, and worker-owned web runtime** (2026-03-06):
+  - Migrate the legacy WebRemote UX into `ReelRoulette.WebUI` with parity for player controls, touch gestures, refresh-status projection, and tag-editor workflows.
+  - Remove legacy embedded WebRemote runtime/resources (`source/WebRemote/*`) and desktop bridge contracts after gate approvals.
+  - Shift web runtime ownership to core/server + worker flows:
+    - add `CoreSettingsService` for core-owned runtime settings persistence,
+    - add worker-hosted `WebUiHostSupervisorService` (WebHost process lifecycle),
+    - add worker-hosted `WebUiMdnsService` (`*.local` discoverability).
+  - Add dynamic CORS origin registration (`DynamicCorsOriginRegistry`) and host-aware `runtime-config.json` rewriting in `ReelRoulette.WebHost` to support localhost/LAN hostname/LAN-IP clients.
+  - Canonicalize server-owned preset/random/filter behavior for desktop + WebUI parity (`/api/presets`, `/api/presets/match`, `/api/random` filter-state-first semantics), and remove legacy filter-session runtime paths.
+  - Split desktop/client-local vs core-owned setting boundaries, remove temporary migration compatibility flags/services completed during cutover, and align docs/checklists to final M7d end-state.
+  - Defer post-cutover runtime stabilization issues (settings reopen lockout, LAN apply edge consistency, orphaned host cleanup hardening) to `M8b`.
+
 - **Implement M7c zero-restart web deployment, caching, and rollback** (2026-03-05):
   - Add independent static web host project (`ReelRoulette.WebHost`) that serves immutable versioned web artifacts selected by atomic `active-manifest.json` pointer.
   - Add deployment orchestration scripts for publish/activate/rollback across PowerShell and Bash (`publish-web.*`, `activate-web-version.*`, `rollback-web-version.*`).

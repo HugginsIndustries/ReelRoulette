@@ -100,3 +100,43 @@
 ## UI Orchestration (consumer behavior)
 
 - WebUI app remains deployment-agnostic and runtime-config-driven; host activation/rollback changes are projected via static-shell fetch behavior and cache headers.
+
+## M7d - Controlled Cutover and Legacy Bridge Retirement
+
+## Pure Domain Logic (core-owned runtime + random/filter parity)
+
+- Core-owned runtime settings service:
+  - `src/core/ReelRoulette.Server/Services/CoreSettingsService.cs`
+  - owns persisted web runtime settings and publishes change notifications consumed by runtime services.
+- Server-owned random/filter eligibility logic:
+  - `src/core/ReelRoulette.Server/Services/LibraryPlaybackService.cs`
+  - `src/core/ReelRoulette.Core/Filtering/FilterSetBuilder.cs`
+  - aligns desktop/web random selection semantics from one server-side filter model.
+- Dynamic CORS origin derivation:
+  - `src/core/ReelRoulette.Server/Hosting/DynamicCorsOriginRegistry.cs`
+  - derives allowed origins from web runtime settings plus active LAN interfaces.
+
+## IO / Service Adapters (worker/webhost orchestration + host-aware serving)
+
+- Worker runtime host ownership:
+  - `src/core/ReelRoulette.Worker/WebUiHostSupervisorService.cs`
+  - `src/core/ReelRoulette.Worker/WebUiMdnsService.cs`
+  - manages WebHost lifecycle and mDNS advertisement from core-owned runtime settings.
+- Host-aware runtime config serving:
+  - `src/clients/web/ReelRoulette.WebHost/Program.cs`
+  - rewrites runtime config API/SSE host targets to match request host for localhost/mDNS/LAN-IP clients.
+- Runtime bootstrap helper script:
+  - `tools/scripts/publish-activate-run-worker.ps1`
+
+## UI Orchestration (desktop + web parity after legacy retirement)
+
+- Desktop settings and Web UI launch orchestration:
+  - `source/MainWindow.axaml.cs`
+  - `source/SettingsDialog.axaml(.cs)`
+  - desktop controls project to core/worker runtime settings, no embedded WebRemote bridge host ownership.
+- Migrated Web UI parity surface:
+  - `src/clients/web/ReelRoulette.WebUI/src/legacyApp.js`
+  - `src/clients/web/ReelRoulette.WebUI/src/styles.css`
+  - parity control/tag/touch behaviors retained on independent WebUI runtime.
+- Legacy bridge retirement:
+  - embedded `source/WebRemote/*` runtime/resources removed from active runtime and project wiring.

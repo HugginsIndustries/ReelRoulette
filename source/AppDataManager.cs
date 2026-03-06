@@ -44,61 +44,14 @@ namespace ReelRoulette
             }
         }
 
-        public static string GetFavoritesPath()
-        {
-            return Path.Combine(AppDataDirectory, "favorites.json");
-        }
-
-        public static string GetHistoryPath()
-        {
-            return Path.Combine(AppDataDirectory, "history.json");
-        }
-
-        public static string GetBlacklistPath()
-        {
-            return Path.Combine(AppDataDirectory, "blacklist.json");
-        }
-
-        public static string GetDurationsPath()
-        {
-            return Path.Combine(AppDataDirectory, "durations.json");
-        }
-
         public static string GetSettingsPath()
         {
-            return Path.Combine(AppDataDirectory, "settings.json");
-        }
-
-        // Legacy paths - kept for migration purposes
-        public static string GetViewPreferencesPath()
-        {
-            return Path.Combine(AppDataDirectory, "view_prefs.json");
-        }
-
-        public static string GetPlaybackSettingsPath()
-        {
-            return Path.Combine(AppDataDirectory, "playback_settings.json");
-        }
-
-        public static string GetPlaybackStatsPath()
-        {
-            return Path.Combine(AppDataDirectory, "playbackStats.json");
-        }
-
-        public static string GetLoudnessStatsPath()
-        {
-            return Path.Combine(AppDataDirectory, "loudnessStats.json");
+            return Path.Combine(AppDataDirectory, "desktop-settings.json");
         }
 
         public static string GetLibraryIndexPath()
         {
             return Path.Combine(AppDataDirectory, "library.json");
-        }
-
-        // Legacy paths - kept for migration purposes
-        public static string GetFilterStatePath()
-        {
-            return Path.Combine(AppDataDirectory, "filterState.json");
         }
 
         public static string GetBackupDirectoryPath()

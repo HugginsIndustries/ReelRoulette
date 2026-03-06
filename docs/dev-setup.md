@@ -47,7 +47,7 @@
 
 - Desktop now runs an internal API-client layer for migrated state flows instead of directly mutating those paths first.
 - SSE subscription is used to keep desktop projections synchronized with out-of-process updates.
-- Filter/preset session mutations are mirrored via `POST /api/filter-session`.
+- Preset catalog mutations are mirrored via `POST /api/presets`.
 - Migrated state flows are API-required: desktop no longer applies local write fallback for those mutations when core runtime is unavailable.
 - Desktop attempts to auto-start core runtime on launch if local probe fails.
 
@@ -152,3 +152,22 @@
 - Smoke verification:
   - `tools/scripts/verify-web-deploy.ps1`
   - `tools/scripts/verify-web-deploy.sh`
+
+## M7d Controlled Cutover Notes
+
+- Legacy embedded `source/WebRemote` runtime is retired; use independent WebUI + WebHost paths.
+- Worker now supervises WebHost lifecycle and mDNS advertisement from core-owned web runtime settings:
+  - `WebUiHostSupervisorService`
+  - `WebUiMdnsService`
+- Core web runtime settings API:
+  - `GET /api/web-runtime/settings`
+  - `POST /api/web-runtime/settings`
+- Source and preset flows used by desktop/web are API-first:
+  - `GET /api/sources`
+  - `POST /api/sources/{sourceId}/enabled`
+  - `GET /api/presets`
+  - `POST /api/presets`
+  - `POST /api/presets/match`
+  - `POST /api/random`
+- Local bootstrap helper for publish+activate+worker:
+  - `tools/scripts/publish-activate-run-worker.ps1`

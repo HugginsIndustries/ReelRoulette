@@ -293,9 +293,9 @@
                 <Separator/>
                 <MenuItem Header="Settings (S)"
                           Click="SettingsMenuItem_Click"/>
-                <MenuItem x:Name="OpenWebRemoteMenuItem"
-                          Header="Open Web Remote"
-                          Click="OpenWebRemoteMenuItem_Click"/>
+                <MenuItem x:Name="OpenWebUiMenuItem"
+                          Header="Open Web UI"
+                          Click="OpenWebUiMenuItem_Click"/>
             </MenuItem>
         </Menu>
 
@@ -648,31 +648,22 @@
                         <ComboBoxItem Content="Weighted with Spread" Tag="WeightedWithSpread"/>
                     </ComboBox>
                     
-                    <!-- Row 5: Controls row (view preset, source, sort) -->
-                    <Grid Grid.Row="5" ColumnDefinitions="* * *" ColumnSpacing="8" Margin="0,0,0,8">
-                        <ComboBox x:Name="LibraryViewPresetComboBox"
+                    <!-- Row 5: Sort controls -->
+                    <Grid Grid.Row="5" ColumnDefinitions="* Auto" ColumnSpacing="8" Margin="0,0,0,8">
+                        <ComboBox x:Name="LibrarySortComboBox"
                                  Grid.Column="0"
                                  HorizontalAlignment="Stretch"
-                                 SelectionChanged="LibraryViewPresetComboBox_SelectionChanged">
-                            <ComboBoxItem Content="All videos" Tag="All"/>
-                            <ComboBoxItem Content="Favorites only" Tag="Favorites"/>
-                            <ComboBoxItem Content="Blacklisted only" Tag="Blacklisted"/>
-                            <ComboBoxItem Content="Recently played" Tag="RecentlyPlayed"/>
-                            <ComboBoxItem Content="Never played" Tag="NeverPlayed"/>
-                        </ComboBox>
-                        <ComboBox x:Name="LibrarySourceComboBox"
-                                 Grid.Column="1"
-                                 HorizontalAlignment="Stretch"
-                                 SelectionChanged="LibrarySourceComboBox_SelectionChanged"/>
-                        <ComboBox x:Name="LibrarySortComboBox"
-                                 Grid.Column="2"
-                                 HorizontalAlignment="Stretch"
                                  SelectionChanged="LibrarySortComboBox_SelectionChanged">
-                            <ComboBoxItem Content="Name (A-Z)" Tag="Name"/>
-                            <ComboBoxItem Content="Last played (newest)" Tag="LastPlayed"/>
-                            <ComboBoxItem Content="Play count (most)" Tag="PlayCount"/>
-                            <ComboBoxItem Content="Duration (longest)" Tag="Duration"/>
+                            <ComboBoxItem Content="Name" Tag="Name"/>
+                            <ComboBoxItem Content="Last played" Tag="LastPlayed"/>
+                            <ComboBoxItem Content="Play count" Tag="PlayCount"/>
+                            <ComboBoxItem Content="Duration" Tag="Duration"/>
                         </ComboBox>
+                        <Button x:Name="LibrarySortDirectionButton"
+                                Grid.Column="1"
+                                MinWidth="128"
+                                HorizontalAlignment="Right"
+                                Click="LibrarySortDirectionButton_Click"/>
                     </Grid>
                     
                     <!-- Row 6: Search box -->

@@ -16,6 +16,10 @@
   - immutable versioned web artifacts under `.web-deploy/versions/{versionId}`
   - atomic active pointer in `.web-deploy/active-manifest.json`
   - split cache policy at the web host layer (`no-store` shell/config, immutable hashed assets)
+- M7d completes direct-web cutover and runtime ownership:
+  - legacy embedded WebRemote bridge routes are retired.
+  - web runtime settings are core-owned and updated via API (`GET/POST /api/web-runtime/settings`).
+  - presets/random/source flows are canonical API paths consumed by desktop and web.
 
 ## Eventing Direction
 
@@ -24,7 +28,6 @@
   - `eventType`
   - `timestamp`
   - `payload`
-- M5 adds `filterSessionChanged` when the desktop syncs filter/preset session state via API.
 - M6a adds `itemTagsChanged` and `tagCatalogChanged` for tag-editor synchronization.
 - M6b adds `refreshStatusChanged` so clients can project refresh progress/completion state (desktop in M6b; direct web-to-core projection in M7).
 - Desktop event consumption now uses a long-lived SSE client with reconnect behavior; payload parsing is case-insensitive to avoid projection drops from JSON casing differences.
@@ -66,13 +69,17 @@
 - `POST /api/pair`
 - `GET /api/version`
 - `GET /api/presets`
+- `POST /api/presets`
+- `POST /api/presets/match`
 - `POST /api/random`
+- `GET /api/sources`
+- `POST /api/sources/{sourceId}/enabled`
 - `POST /api/favorite`
 - `POST /api/blacklist`
 - `POST /api/record-playback`
 - `POST /api/library-states`
-- `GET /api/filter-session`
-- `POST /api/filter-session`
+- `GET /api/web-runtime/settings`
+- `POST /api/web-runtime/settings`
 - `POST /api/tag-editor/model`
 - `POST /api/tag-editor/apply-item-tags`
 - `POST /api/tag-editor/upsert-category`
@@ -92,7 +99,7 @@
 ## M7a Runtime Config Keys (Web Client)
 
 - Required:
-  - `apiBaseUrl` (absolute `http`/`https` URL for API requests, usually ending with `/api`)
+  - `apiBaseUrl` (absolute `http`/`https` URL for API host root; web client appends `/api/...` paths)
   - `sseUrl` (absolute `http`/`https` URL for SSE stream, usually `/api/events`)
 - Optional:
   - `pairToken` (startup pairing token for direct web auth bootstrap in local/dev environments)

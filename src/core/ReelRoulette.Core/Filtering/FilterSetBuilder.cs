@@ -26,6 +26,14 @@ public sealed class FilterSetBuilder
             .ToHashSet();
         eligible = eligible.Where(item => enabledSourceIds.Contains(item.SourceId));
 
+        if (filterState.IncludedSourceIds is { Count: > 0 })
+        {
+            var includedSourceIds = filterState.IncludedSourceIds
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            eligible = eligible.Where(item => includedSourceIds.Contains(item.SourceId));
+        }
+
         eligible = eligible.Where(item => fileExists(item.FullPath));
 
         if (filterState.ExcludeBlacklisted)

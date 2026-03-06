@@ -2,10 +2,10 @@
 
 ## Pure Domain Logic (API-client migration boundary)
 
-- Server filter-session projection contract/state:
-  - `src/core/ReelRoulette.Server/Contracts/ApiContracts.cs` (`FilterSessionSnapshot`, `FilterPresetSnapshot` DTOs).
-  - `src/core/ReelRoulette.Server/Services/ServerStateService.cs` (filter-session snapshot storage + `filterSessionChanged` event publication).
-  - `src/core/ReelRoulette.Server/Hosting/ServerHostComposition.cs` (`GET/POST /api/filter-session` endpoint mapping).
+- Server preset catalog contract/state:
+  - `src/core/ReelRoulette.Server/Contracts/ApiContracts.cs` (`FilterPresetSnapshot` DTO).
+  - `src/core/ReelRoulette.Server/Services/ServerStateService.cs` (preset catalog storage + persistence).
+  - `src/core/ReelRoulette.Server/Hosting/ServerHostComposition.cs` (`GET/POST /api/presets` endpoint mapping).
 
 ## IO / Service Adapters (desktop API seam)
 
@@ -17,6 +17,6 @@
 ## UI Orchestration (desktop-specific projection)
 
 - Desktop projection synchronization:
-  - `source/MainWindow.axaml.cs` (`ApplyRemoteItemStateProjection`, SSE envelope handling, filter-session sync trigger points from preset/filter flows).
+  - `source/MainWindow.axaml.cs` (`ApplyRemoteItemStateProjection`, SSE envelope handling, preset-catalog sync trigger points from preset/filter flows).
 - Legacy mutation containment:
-  - `source/MainWindow.axaml.cs` (`IWebRemoteApiServices` mutation methods now delegate through API-first update path instead of directly owning primary mutation writes).
+  - Legacy embedded `IWebRemoteApiServices` bridge methods were removed during M7d retirement; desktop now uses only API-first command/query orchestration for migrated paths.

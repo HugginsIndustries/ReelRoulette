@@ -15,17 +15,22 @@ namespace ReelRoulette
     {
         private readonly LibraryService _libraryService;
         private readonly Func<Task<bool>>? _requestRefreshAsync;
+        private readonly Func<string, bool, Task<bool>>? _setSourceEnabledAsync;
         private ObservableCollection<SourceViewModel> _sources = new();
 
-        public ManageSourcesDialog() : this(new LibraryService(), null)
+        public ManageSourcesDialog() : this(new LibraryService(), null, null)
         {
             // Design-time constructor
         }
 
-        public ManageSourcesDialog(LibraryService libraryService, Func<Task<bool>>? requestRefreshAsync = null)
+        public ManageSourcesDialog(
+            LibraryService libraryService,
+            Func<Task<bool>>? requestRefreshAsync = null,
+            Func<string, bool, Task<bool>>? setSourceEnabledAsync = null)
         {
             _libraryService = libraryService;
             _requestRefreshAsync = requestRefreshAsync;
+            _setSourceEnabledAsync = setSourceEnabledAsync;
             InitializeComponent();
             DataContext = this;
             LoadSources();
@@ -80,16 +85,30 @@ namespace ReelRoulette
             SourcesItemsControl.ItemsSource = _sources;
         }
 
-        private void EnableToggle_Click(object? sender, RoutedEventArgs e)
+        private async void EnableToggle_Click(object? sender, RoutedEventArgs e)
         {
             if (sender is ToggleButton toggle && toggle.Tag is string sourceId)
             {
                 var source = _libraryService.LibraryIndex.Sources.FirstOrDefault(s => s.Id == sourceId);
                 if (source != null)
                 {
-                    source.IsEnabled = toggle.IsChecked ?? true;
+                    var nextEnabled = toggle.IsChecked ?? true;
+                    if (_setSourceEnabledAsync != null)
+                    {
+                        var accepted = await _setSourceEnabledAsync(sourceId, nextEnabled);
+                        if (!accepted)
+                        {
+                            toggle.IsChecked = source.IsEnabled;
+                            return;
+                        }
+                    }
+
+                    source.IsEnabled = nextEnabled;
                     _libraryService.UpdateSource(source);
-                    _libraryService.SaveLibrary();
+                    if (_setSourceEnabledAsync == null)
+                    {
+                        _libraryService.SaveLibrary();
+                    }
                     
                     // Update the view model to reflect the change
                     var viewModel = _sources.FirstOrDefault(s => s.Id == sourceId);

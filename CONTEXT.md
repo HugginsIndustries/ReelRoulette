@@ -16,7 +16,7 @@ Primary outcome: new clients can be added without reimplementing domain logic.
 
 As of current milestones:
 
-- `M0`-`M7c` are complete in `MILESTONES.md`.
+- `M0`-`M7d` are complete in `MILESTONES.md`.
 - Desktop runtime is still `source/ReelRoulette.csproj`.
 - Core/server/worker runtime exists under `src/core/*`.
 - API contract source of truth is `shared/api/openapi.yaml` (currently `0.7.0`).
@@ -25,14 +25,15 @@ As of current milestones:
 - M7a web foundation is complete: independent Vite+TypeScript web bootstrap with runtime endpoint config contract and verification gates.
 - M7b direct web auth/SSE reliability is complete: pair-token bootstrap to session-cookie auth, direct web SSE status projection, replay-gap resync fallback, and explicit CORS/cookie runtime policy controls.
 - M7c zero-restart web deployment is complete: independent `ReelRoulette.WebHost` static host, immutable versioned web artifacts, atomic `active-manifest.json` activation/rollback, and split shell-vs-asset cache policy.
-- Compatibility/cutover gates remain in `M7d`-`M7e`.
+- Contract compatibility and final M7 sign-off gates remain in `M7e`.
+- Post-cutover runtime stabilization items identified during M7d validation are deferred to `M8b`.
 
 ## Planned State (Upcoming)
 
 Near-term planned milestones:
 
-- `M7d`-`M7e`: controlled legacy bridge retirement and contract compatibility gates.
-- `M8`: hardening/packaging/migration cleanup and thin-client completion guardrails.
+- `M7e`: contract compatibility and final M7 verification gate.
+- `M8a`-`M8c`: core control-plane/runtime ownership cutover, post-M7 stabilization fixes, and hardening/packaging/migration cleanup.
 - `M9`: Android client bootstrap on stable API seam.
 
 Detailed M7 decisions and rollout strategy: `docs/m7-clarifications.md`.
@@ -41,7 +42,6 @@ Detailed M7 decisions and rollout strategy: `docs/m7-clarifications.md`.
 
 - `source/`
   - Current shipping desktop application (Avalonia).
-  - Includes legacy embedded web remote implementation under `source/WebRemote/`.
   - Contains desktop API client (`source/CoreServerApiClient.cs`) and UI orchestration.
 - `src/core/`
   - `ReelRoulette.Core`: domain logic, storage/state services, verification helpers.
@@ -61,6 +61,7 @@ Detailed M7 decisions and rollout strategy: `docs/m7-clarifications.md`.
   - Core runtime helper scripts (`run-core.ps1`, `run-core.sh`).
   - Web verification helper scripts (`verify-web.ps1`, `verify-web.sh`).
   - M7c web deployment scripts (`publish-web.*`, `activate-web-version.*`, `rollback-web-version.*`, `verify-web-deploy.*`).
+  - M7d helper script (`publish-activate-run-worker.ps1`) for local publish/activate/worker startup workflow.
 - `licenses/`
   - Third-party license texts (VLC, FFmpeg licensing artifacts).
 
@@ -82,7 +83,7 @@ Detailed M7 decisions and rollout strategy: `docs/m7-clarifications.md`.
 
 ## Runtime Architecture (Current)
 
-- `ReelRoulette.Worker` hosts server composition (API + SSE + auth/pairing).
+- `ReelRoulette.Worker` hosts server composition (API + SSE + auth/pairing) plus Web UI runtime supervision (WebHost lifecycle + mDNS).
 - Desktop acts as thin client for migrated flows:
   - Commands/queries via API
   - Live projection via SSE
@@ -92,6 +93,7 @@ Detailed M7 decisions and rollout strategy: `docs/m7-clarifications.md`.
   3. loudness scan (new/unscanned)
   4. thumbnail generation
 - Event envelope includes revision metadata and supports reconnect replay semantics (`Last-Event-ID`, `resyncRequired` + authoritative requery).
+- Legacy embedded `source/WebRemote` runtime bridge is retired; Web UI traffic runs through independent `ReelRoulette.WebHost` + direct core API paths.
 
 ## Development Workflows (Current)
 
@@ -119,7 +121,7 @@ For M7 web separation:
 - Runtime endpoint resolution now comes from runtime config (not compile-time constants).
 - Web auth/session and SSE reconnect/resync now run through direct web-to-core paths (M7b complete).
 - Web deployment now supports immutable versioned artifacts with atomic activation/rollback and split cache policy (M7c complete).
-- Controlled legacy bridge retirement and compatibility hardening continue in M7d+.
+- M7d cutover is complete: parity WebUI migrated, legacy bridge retired, worker-owned WebHost/mDNS/CORS runtime paths active.
 
 See `docs/m7-clarifications.md` for chosen options and sequencing.
 

@@ -102,6 +102,112 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+    post:
+      summary: Replace preset catalog
+      operationId: postPresets
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: "#/components/schemas/FilterPresetSnapshot"
+      responses:
+        "200":
+          description: Preset catalog updated
+        "401":
+          description: Unauthorized when auth is required and request is not paired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/sources:
+    get:
+      summary: Get library sources with global enabled states
+      operationId: getSources
+      responses:
+        "200":
+          description: Source list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SourceResponse"
+        "401":
+          description: Unauthorized when auth is required and request is not paired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/sources/{sourceId}/enabled:
+    post:
+      summary: Update global enabled state for a source
+      operationId: postSourceEnabled
+      parameters:
+        - name: sourceId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSourceEnabledRequest"
+      responses:
+        "200":
+          description: Source state updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SourceResponse"
+        "404":
+          description: Source not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized when auth is required and request is not paired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/presets/match:
+    post:
+      summary: Match filter state to preset
+      operationId: postPresetMatch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PresetMatchRequest"
+      responses:
+        "200":
+          description: Preset match result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PresetMatchResponse"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized when auth is required and request is not paired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /api/random:
     post:
@@ -234,42 +340,6 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/LibraryStateResponse"
-        "401":
-          description: Unauthorized when auth is required and request is not paired
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-
-  /api/filter-session:
-    get:
-      summary: Get current filter session projection
-      operationId: getFilterSession
-      responses:
-        "200":
-          description: Current filter session snapshot
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/FilterSessionSnapshot"
-        "401":
-          description: Unauthorized when auth is required and request is not paired
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-    post:
-      summary: Update current filter session projection
-      operationId: postFilterSession
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/FilterSessionSnapshot"
-      responses:
-        "200":
-          description: Filter session updated
         "401":
           description: Unauthorized when auth is required and request is not paired
           content:
@@ -648,14 +718,45 @@ components:
         summary:
           type: string
           nullable: true
+        filterState:
+          type: object
+          nullable: true
+          additionalProperties: true
+
+    SourceResponse:
+      type: object
+      required:
+        - id
+        - rootPath
+        - isEnabled
+      properties:
+        id:
+          type: string
+        rootPath:
+          type: string
+        displayName:
+          type: string
+          nullable: true
+        isEnabled:
+          type: boolean
+
+    UpdateSourceEnabledRequest:
+      type: object
+      required:
+        - isEnabled
+      properties:
+        isEnabled:
+          type: boolean
 
     RandomRequest:
       type: object
-      required:
-        - presetId
       properties:
         presetId:
           type: string
+        filterState:
+          type: object
+          nullable: true
+          additionalProperties: true
         clientId:
           type: string
           nullable: true
@@ -698,6 +799,28 @@ components:
           type: boolean
         isBlacklisted:
           type: boolean
+
+    PresetMatchRequest:
+      type: object
+      properties:
+        filterState:
+          type: object
+          nullable: true
+          additionalProperties: true
+
+    PresetMatchResponse:
+      type: object
+      required:
+        - matched
+      properties:
+        matched:
+          type: boolean
+        presetId:
+          type: string
+          nullable: true
+        presetName:
+          type: string
+          nullable: true
 
     FavoriteRequest:
       type: object
@@ -753,9 +876,9 @@ components:
             - $ref: "#/components/schemas/ItemStateChangedPayload"
             - $ref: "#/components/schemas/PlaybackRecordedPayload"
             - $ref: "#/components/schemas/ResyncRequiredPayload"
-            - $ref: "#/components/schemas/FilterSessionSnapshot"
             - $ref: "#/components/schemas/ItemTagsChangedPayload"
             - $ref: "#/components/schemas/TagCatalogChangedPayload"
+            - $ref: "#/components/schemas/SourceStateChangedPayload"
             - $ref: "#/components/schemas/RefreshStatusChangedPayload"
 
     ItemStateChangedPayload:
@@ -844,22 +967,6 @@ components:
         filterState:
           type: object
           additionalProperties: true
-
-    FilterSessionSnapshot:
-      type: object
-      properties:
-        activePresetName:
-          type: string
-          nullable: true
-        currentFilterState:
-          type: object
-          nullable: true
-          additionalProperties: true
-        presets:
-          type: array
-          nullable: true
-          items:
-            $ref: "#/components/schemas/FilterPresetSnapshot"
 
     TagCategorySnapshot:
       type: object
@@ -1112,6 +1219,17 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/TagSnapshot"
+
+    SourceStateChangedPayload:
+      type: object
+      required:
+        - sourceId
+        - isEnabled
+      properties:
+        sourceId:
+          type: string
+        isEnabled:
+          type: boolean
 
     RefreshStatusChangedPayload:
       type: object

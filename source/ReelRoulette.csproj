@@ -82,7 +82,4 @@
   <ItemGroup>
     <AvaloniaResource Include="assets\**" />
   </ItemGroup>
-  <ItemGroup>
-    <EmbeddedResource Include="WebRemote\ui\**\*" />
-  </ItemGroup>
 </Project>

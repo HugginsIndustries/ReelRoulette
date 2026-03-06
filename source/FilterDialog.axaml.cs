@@ -31,6 +31,11 @@ namespace ReelRoulette
         private PixelPoint? _savedPosition; // Store position to set after window opens
         private FilterState? _originalPresetState = null; // Store original preset state when loaded
         private bool _isInitializing = false; // Flag to suppress SelectionChanged during initialization
+        private readonly string _initialFilterStateJson;
+        private readonly string _initialPresetsJson;
+        private readonly string? _initialActivePresetName;
+        private bool _hasPendingChanges;
+        private bool _isApplyingSourceSelection;
 
         private static void Log(string message)
         {
@@ -75,6 +80,9 @@ namespace ReelRoulette
             }
             
             _activePresetName = activePresetName;
+            _initialFilterStateJson = SerializeFilterState(_filterState);
+            _initialPresetsJson = SerializePresets(_presets);
+            _initialActivePresetName = _activePresetName;
             
             // Load saved dialog bounds
             var (x, y, width, height) = MainWindow.LoadDialogBounds("FilterDialog");
@@ -116,6 +124,7 @@ namespace ReelRoulette
             {
                 // Load presets into UI (this may trigger SelectionChanged, but we suppress it)
                 LoadPresets();
+                InitializeSourceOptions();
                 UpdateTagSelectionState();
                 OnPropertyChanged(nameof(HeaderText));
             }
@@ -137,6 +146,7 @@ namespace ReelRoulette
             }
             
             Log($"FilterDialog: Initialized with {_presets.Count} presets, active preset: {_activePresetName ?? "None"}");
+            RefreshPendingState();
         }
 
         public FilterState FilterState => _filterState;
@@ -144,6 +154,7 @@ namespace ReelRoulette
         // Preset-related properties
         public ObservableCollection<string> PresetNames { get; } = new ObservableCollection<string>();
         public ObservableCollection<FilterPreset> Presets { get; } = new ObservableCollection<FilterPreset>();
+        public ObservableCollection<FilterSourceOptionViewModel> SourceOptions { get; } = new ObservableCollection<FilterSourceOptionViewModel>();
 
         private string? _selectedPresetName;
         public string? SelectedPresetName
@@ -176,6 +187,12 @@ namespace ReelRoulette
         /// Returns true if a preset is selected and has been modified, enabling the Update Preset button.
         /// </summary>
         public bool CanUpdatePreset => !string.IsNullOrEmpty(_activePresetName) && _presetModified;
+
+        public bool HasPendingChanges => _hasPendingChanges;
+
+        public string ApplyButtonText => _hasPendingChanges ? "Apply*" : "Apply";
+
+        public bool HasSourceOptions => SourceOptions.Count > 0;
 
         // Basic flags
         public bool FavoritesOnly
@@ -484,6 +501,31 @@ namespace ReelRoulette
             // Check if current filters match any preset (including the active one)
             // This will auto-select matching presets and remove asterisk if filters match
             CheckAndSelectMatchingPreset();
+            RefreshPendingState();
+        }
+
+        private static string SerializeFilterState(FilterState filterState)
+        {
+            return JsonSerializer.Serialize(filterState ?? new FilterState());
+        }
+
+        private static string SerializePresets(List<FilterPreset> presets)
+        {
+            return JsonSerializer.Serialize(presets ?? new List<FilterPreset>());
+        }
+
+        private void RefreshPendingState()
+        {
+            var hasFilterChanges = SerializeFilterState(_filterState) != _initialFilterStateJson;
+            var hasPresetChanges = SerializePresets(_presets) != _initialPresetsJson;
+            var hasActivePresetChanges = !string.Equals(_activePresetName, _initialActivePresetName, StringComparison.Ordinal);
+            var next = hasFilterChanges || hasPresetChanges || hasActivePresetChanges;
+            if (_hasPendingChanges != next)
+            {
+                _hasPendingChanges = next;
+                OnPropertyChanged(nameof(HasPendingChanges));
+                OnPropertyChanged(nameof(ApplyButtonText));
+            }
         }
 
         /// <summary>
@@ -574,6 +616,96 @@ namespace ReelRoulette
             }
             
             Log($"FilterDialog: Loaded {_presets.Count} presets into UI, selected: {SelectedPresetName}");
+            RefreshPendingState();
+        }
+
+        private void InitializeSourceOptions()
+        {
+            SourceOptions.Clear();
+            if (_libraryIndex?.Sources == null || _libraryIndex.Sources.Count == 0)
+            {
+                OnPropertyChanged(nameof(HasSourceOptions));
+                return;
+            }
+
+            foreach (var source in _libraryIndex.Sources)
+            {
+                var name = string.IsNullOrWhiteSpace(source.DisplayName)
+                    ? Path.GetFileName(source.RootPath)
+                    : source.DisplayName!;
+                var option = new FilterSourceOptionViewModel
+                {
+                    SourceId = source.Id,
+                    DisplayName = name,
+                    IsEnabledGlobally = source.IsEnabled
+                };
+                option.PropertyChanged += SourceOption_PropertyChanged;
+                SourceOptions.Add(option);
+            }
+
+            ApplyFilterStateToSourceOptions();
+            OnPropertyChanged(nameof(HasSourceOptions));
+        }
+
+        private void SourceOption_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName != nameof(FilterSourceOptionViewModel.IsSelected))
+            {
+                return;
+            }
+
+            if (_isApplyingSourceSelection)
+            {
+                return;
+            }
+
+            ApplySourceOptionsToFilterState(markModified: true);
+        }
+
+        private void ApplyFilterStateToSourceOptions()
+        {
+            _isApplyingSourceSelection = true;
+            try
+            {
+                var included = (_filterState.IncludedSourceIds ?? new List<string>())
+                    .Where(id => !string.IsNullOrWhiteSpace(id))
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                var hasExplicitSelection = included.Count > 0;
+                foreach (var option in SourceOptions)
+                {
+                    option.IsSelected = !hasExplicitSelection || included.Contains(option.SourceId);
+                }
+            }
+            finally
+            {
+                _isApplyingSourceSelection = false;
+            }
+        }
+
+        private void ApplySourceOptionsToFilterState(bool markModified)
+        {
+            var selected = SourceOptions
+                .Where(option => option.IsSelected)
+                .Select(option => option.SourceId)
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            // Empty selection means "all sources" for filter-state storage.
+            if (selected.Count == SourceOptions.Count)
+            {
+                selected.Clear();
+            }
+
+            _filterState.IncludedSourceIds = selected;
+            if (markModified)
+            {
+                MarkPresetModified();
+            }
+            else
+            {
+                RefreshPendingState();
+            }
         }
 
         private void UpdateTagSelectionState()
@@ -781,10 +913,17 @@ namespace ReelRoulette
 
                 // 0 = AND, 1 = OR - read directly from ComboBox to get current selection
                 var matchMode = comboBox.SelectedIndex == 0 ? TagMatchMode.And : TagMatchMode.Or;
+                var hadExisting = _filterState.CategoryLocalMatchModes.TryGetValue(categoryVm.CategoryId, out var existingMode);
                 _filterState.CategoryLocalMatchModes[categoryVm.CategoryId] = matchMode;
                 
                 Log($"FilterDialog.LocalMatchModeChanged: Category '{categoryVm.CategoryName}' local match mode = {matchMode}");
-                MarkPresetModified();
+                var changed = hadExisting
+                    ? existingMode != matchMode
+                    : matchMode != TagMatchMode.And;
+                if (changed)
+                {
+                    MarkPresetModified();
+                }
             }
         }
 
@@ -797,9 +936,13 @@ namespace ReelRoulette
                 item.Tag is string tagStr &&
                 bool.TryParse(tagStr, out var isAnd))
             {
+                var previous = _filterState.GlobalMatchMode ?? true;
                 _filterState.GlobalMatchMode = isAnd;
                 Log($"FilterDialog.GlobalMatchMode_SelectionChanged: Set to {(isAnd ? "AND" : "OR")}");
-                MarkPresetModified();
+                if (previous != isAnd)
+                {
+                    MarkPresetModified();
+                }
             }
         }
 
@@ -822,6 +965,7 @@ namespace ReelRoulette
                 _originalPresetState = null;
                 OnPropertyChanged(nameof(HeaderText));
                 OnPropertyChanged(nameof(CanUpdatePreset));
+                RefreshPendingState();
                 return;
             }
             
@@ -870,6 +1014,7 @@ namespace ReelRoulette
             {
                 _isInitializing = true;
                 UpdateTagSelectionState();
+                ApplyFilterStateToSourceOptions();
             }
             finally
             {
@@ -878,6 +1023,7 @@ namespace ReelRoulette
             
             OnPropertyChanged(nameof(HeaderText));
             OnPropertyChanged(nameof(CanUpdatePreset));
+            RefreshPendingState();
             
             Log($"FilterDialog: Preset '{SelectedPresetName}' loaded successfully");
         }
@@ -943,6 +1089,7 @@ namespace ReelRoulette
             
             OnPropertyChanged(nameof(HeaderText));
             OnPropertyChanged(nameof(CanUpdatePreset));
+            RefreshPendingState();
             
             // Clear text box
             NewPresetNameTextBox!.Text = "";
@@ -993,6 +1140,7 @@ namespace ReelRoulette
                 }
                 
                 LoadPresets();
+                RefreshPendingState();
                 Log($"FilterDialog: Preset renamed from '{oldName}' to '{newName}'");
             }
         }
@@ -1018,6 +1166,7 @@ namespace ReelRoulette
                     Log($"FilterDialog: Cleared active preset after deletion");
                 }
                 
+                RefreshPendingState();
                 Log($"FilterDialog: Preset '{preset.Name}' deleted successfully");
             }
         }
@@ -1032,11 +1181,16 @@ namespace ReelRoulette
                 var index = _presets.IndexOf(preset);
                 if (index > 0)
                 {
+                    var previousSelection = SelectedPresetName;
                     Log($"FilterDialog: Moving preset '{preset.Name}' up from position {index} to {index - 1}");
                     _presets.RemoveAt(index);
                     _presets.Insert(index - 1, preset);
                     LoadPresets();
-                    SelectedPresetName = preset.Name;
+                    if (!string.IsNullOrWhiteSpace(previousSelection) && PresetNames.Contains(previousSelection))
+                    {
+                        SelectedPresetName = previousSelection;
+                    }
+                    RefreshPendingState();
                 }
             }
         }
@@ -1051,11 +1205,16 @@ namespace ReelRoulette
                 var index = _presets.IndexOf(preset);
                 if (index < _presets.Count - 1)
                 {
+                    var previousSelection = SelectedPresetName;
                     Log($"FilterDialog: Moving preset '{preset.Name}' down from position {index} to {index + 1}");
                     _presets.RemoveAt(index);
                     _presets.Insert(index + 1, preset);
                     LoadPresets();
-                    SelectedPresetName = preset.Name;
+                    if (!string.IsNullOrWhiteSpace(previousSelection) && PresetNames.Contains(previousSelection))
+                    {
+                        SelectedPresetName = previousSelection;
+                    }
+                    RefreshPendingState();
                 }
             }
         }
@@ -1091,6 +1250,7 @@ namespace ReelRoulette
             _presetModified = false;
             OnPropertyChanged(nameof(HeaderText));
             OnPropertyChanged(nameof(CanUpdatePreset));
+            RefreshPendingState();
             
             Log($"FilterDialog: Preset '{_activePresetName}' updated successfully");
         }
@@ -1121,6 +1281,8 @@ namespace ReelRoulette
             OnPropertyChanged(nameof(CanUpdatePreset));
             
             UpdateTagSelectionState();
+            ApplyFilterStateToSourceOptions();
+            RefreshPendingState();
             Log("FilterDialog: Cleared all filters and active preset");
         }
 
@@ -1150,6 +1312,8 @@ namespace ReelRoulette
             _originalFilterState.SelectedTags.AddRange(_filterState.SelectedTags);
             _originalFilterState.ExcludedTags.Clear();
             _originalFilterState.ExcludedTags.AddRange(_filterState.ExcludedTags);
+            _originalFilterState.IncludedSourceIds.Clear();
+            _originalFilterState.IncludedSourceIds.AddRange(_filterState.IncludedSourceIds);
             
             // Copy category local match modes
             if (_filterState.CategoryLocalMatchModes != null)
@@ -1435,6 +1599,37 @@ namespace ReelRoulette
                 if (IsMinusSelected)
                     return (IBrush)Application.Current!.Resources["HugginsOrangeBrush"]!;
                 return (IBrush)Application.Current!.Resources["VioletBrush"]!;
+            }
+        }
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+
+        protected virtual void OnPropertyChanged([CallerMemberName] string? propertyName = null)
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
+    }
+
+    public class FilterSourceOptionViewModel : INotifyPropertyChanged
+    {
+        private bool _isSelected = true;
+
+        public string SourceId { get; set; } = string.Empty;
+        public string DisplayName { get; set; } = string.Empty;
+        public bool IsEnabledGlobally { get; set; } = true;
+
+        public bool IsSelected
+        {
+            get => _isSelected;
+            set
+            {
+                if (_isSelected == value)
+                {
+                    return;
+                }
+
+                _isSelected = value;
+                OnPropertyChanged();
             }
         }
 

@@ -9,7 +9,7 @@ export async function getVersion(
   config: RuntimeConfig,
   fetchImpl: typeof fetch = fetch
 ): Promise<Response> {
-  return fetchImpl(buildApiUrl(config, "version"), {
+  return fetchImpl(buildApiUrl(config, "/api/version"), {
     method: "GET",
     credentials: "include"
   });
@@ -20,7 +20,7 @@ export async function pairWithToken(
   token: string,
   fetchImpl: typeof fetch = fetch
 ): Promise<PairResponse> {
-  const response = await fetchImpl(buildApiUrl(config, "pair"), {
+  const response = await fetchImpl(buildApiUrl(config, "/api/pair"), {
     method: "POST",
     credentials: "include",
     headers: {
@@ -40,7 +40,7 @@ export async function getRefreshStatus(
   config: RuntimeConfig,
   fetchImpl: typeof fetch = fetch
 ): Promise<RefreshStatusSnapshot> {
-  const response = await fetchImpl(buildApiUrl(config, "refresh/status"), {
+  const response = await fetchImpl(buildApiUrl(config, "/api/refresh/status"), {
     method: "GET",
     credentials: "include"
   });
@@ -55,7 +55,7 @@ export async function requeryAuthoritativeState(
   config: RuntimeConfig,
   fetchImpl: typeof fetch = fetch
 ): Promise<void> {
-  const response = await fetchImpl(buildApiUrl(config, "library-states"), {
+  const response = await fetchImpl(buildApiUrl(config, "/api/library-states"), {
     method: "POST",
     credentials: "include",
     headers: {

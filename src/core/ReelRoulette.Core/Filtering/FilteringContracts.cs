@@ -69,6 +69,7 @@ public sealed class FilterStateModel
     public bool OnlyKnownDuration { get; set; }
     public bool OnlyKnownLoudness { get; set; }
     public MediaTypeFilterValue MediaTypeFilter { get; set; } = MediaTypeFilterValue.All;
+    public List<string> IncludedSourceIds { get; set; } = new();
 }
 
 public sealed class FilterSetRequest

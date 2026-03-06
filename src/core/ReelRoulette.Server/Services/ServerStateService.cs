@@ -1,4 +1,7 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Threading.Channels;
+using Microsoft.Extensions.Logging.Abstractions;
 using ReelRoulette.Server.Contracts;
 
 namespace ReelRoulette.Server.Services;
@@ -15,50 +18,43 @@ public sealed class ServerStateService
     private readonly object _itemStatesLock = new();
     private readonly object _filterSessionLock = new();
     private readonly object _tagLock = new();
+    private readonly object _sourceLock = new();
+    private readonly ILogger<ServerStateService> _logger;
+    private readonly string _presetsPath;
+    private readonly string _libraryPath;
     private long _revision;
     private readonly Dictionary<string, ItemStateRecord> _itemStates = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<Channel<ServerEventEnvelope>> _subscribers = new();
     private readonly Queue<ServerEventEnvelope> _eventHistory = new();
-    private readonly Random _random = new();
     private const int EventHistoryCapacity = 256;
-    private FilterSessionSnapshot _filterSession = new();
     private readonly Dictionary<string, HashSet<string>> _itemTags = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<TagCategorySnapshot> _tagCategories = [];
     private readonly List<TagSnapshot> _tags = [];
+    private List<FilterPresetSnapshot> _presetCatalog = [];
+    private readonly List<SourceRecord> _sources = [];
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        WriteIndented = true,
+        PropertyNameCaseInsensitive = true
+    };
 
-    private static readonly List<PresetResponse> Presets =
-    [
-        ApiContractMapper.MapPreset("all-media", "All Media", "Default full library preset"),
-        ApiContractMapper.MapPreset("favorites", "Favorites", "Favorite items only")
-    ];
+    public ServerStateService(ILogger<ServerStateService>? logger = null, string? appDataPathOverride = null)
+    {
+        _logger = logger ?? NullLogger<ServerStateService>.Instance;
+        var roamingAppData = appDataPathOverride ??
+                             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ReelRoulette");
+        Directory.CreateDirectory(roamingAppData);
+        _presetsPath = Path.Combine(roamingAppData, "presets.json");
+        _libraryPath = Path.Combine(roamingAppData, "library.json");
+        if (!string.IsNullOrWhiteSpace(appDataPathOverride))
+        {
+            BootstrapFromDisk();
+        }
+    }
 
     public VersionResponse GetVersion()
     {
         return ApiContractMapper.MapVersion("1", assetsVersion: "m4");
-    }
-
-    public IReadOnlyList<PresetResponse> GetPresets()
-    {
-        return Presets;
-    }
-
-    public RandomResponse GetRandom(RandomRequest request)
-    {
-        var mediaType = request.IncludeVideos && !request.IncludePhotos
-            ? "video"
-            : request.IncludePhotos && !request.IncludeVideos
-                ? "photo"
-                : "video";
-
-        var id = $"{request.PresetId}-{_random.Next(1000, 9999)}";
-        return ApiContractMapper.MapRandomResult(
-            id: id,
-            displayName: $"Random Item {id}",
-            mediaType: mediaType,
-            durationSeconds: mediaType == "video" ? 42 : null,
-            mediaUrl: $"/api/media/{id}",
-            isFavorite: false,
-            isBlacklisted: false);
     }
 
     public void SetFavorite(FavoriteRequest request)
@@ -155,22 +151,101 @@ public sealed class ServerStateService
             .ToList();
     }
 
-    public FilterSessionSnapshot GetFilterSessionSnapshot()
+    public IReadOnlyList<FilterPresetSnapshot> GetPresetCatalogSnapshot()
     {
         lock (_filterSessionLock)
         {
-            return CloneFilterSession(_filterSession);
+            return ClonePresetCatalog(_presetCatalog);
         }
     }
 
-    public void SetFilterSessionSnapshot(FilterSessionSnapshot snapshot)
+    public void SetPresetCatalog(IEnumerable<FilterPresetSnapshot>? presets)
     {
         lock (_filterSessionLock)
         {
-            _filterSession = CloneFilterSession(snapshot);
+            _presetCatalog = ClonePresetCatalog(presets ?? []);
         }
 
-        Publish("filterSessionChanged", GetFilterSessionSnapshot());
+        PersistPresetCatalog();
+    }
+
+    public IReadOnlyList<SourceResponse> GetSourcesSnapshot()
+    {
+        lock (_sourceLock)
+        {
+            return _sources
+                .Select(source => ApiContractMapper.MapSource(source.Id, source.RootPath, source.DisplayName, source.IsEnabled))
+                .OrderBy(source => source.DisplayName ?? source.RootPath, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+    }
+
+    public IReadOnlyList<TagCategorySnapshot> GetTagCategoriesSnapshot()
+    {
+        lock (_tagLock)
+        {
+            EnsureUncategorizedCategoryLocked();
+            return _tagCategories
+                .Select(CloneCategory)
+                .OrderBy(category => category.SortOrder)
+                .ThenBy(category => category.Name, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+    }
+
+    public IReadOnlyList<TagSnapshot> GetTagsSnapshot()
+    {
+        lock (_tagLock)
+        {
+            return _tags
+                .Select(CloneTag)
+                .OrderBy(tag => tag.Name, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+    }
+
+    public bool TrySetSourceEnabled(string sourceId, bool isEnabled, out SourceResponse? source)
+    {
+        source = null;
+        if (string.IsNullOrWhiteSpace(sourceId))
+        {
+            return false;
+        }
+
+        SourceRecord? updated = null;
+        var changed = false;
+        lock (_sourceLock)
+        {
+            updated = _sources.FirstOrDefault(s => string.Equals(s.Id, sourceId.Trim(), StringComparison.OrdinalIgnoreCase));
+            if (updated == null)
+            {
+                return false;
+            }
+
+            if (updated.IsEnabled != isEnabled)
+            {
+                updated.IsEnabled = isEnabled;
+                changed = true;
+            }
+        }
+
+        if (updated == null)
+        {
+            return false;
+        }
+
+        if (changed)
+        {
+            PersistSourceStates();
+            Publish("sourceStateChanged", new SourceStateChangedPayload
+            {
+                SourceId = updated.Id,
+                IsEnabled = updated.IsEnabled
+            });
+        }
+
+        source = ApiContractMapper.MapSource(updated.Id, updated.RootPath, updated.DisplayName, updated.IsEnabled);
+        return true;
     }
 
     public TagEditorModelResponse GetTagEditorModel(TagEditorModelRequest? request)
@@ -240,7 +315,7 @@ public sealed class ServerStateService
                 foreach (var addTag in addTags)
                 {
                     tags.Add(addTag);
-                    EnsureTagExists(addTag, UncategorizedCategoryId);
+                    EnsureTagExists(addTag, ResolveCategoryIdForTag(addTag), keepExistingCategory: true);
                 }
             }
         }
@@ -304,6 +379,7 @@ public sealed class ServerStateService
 
     public void RenameTag(RenameTagRequest request)
     {
+        var tagRenamed = false;
         lock (_tagLock)
         {
             var existing = _tags.FirstOrDefault(t => string.Equals(t.Name, request.OldName, StringComparison.OrdinalIgnoreCase));
@@ -313,6 +389,7 @@ public sealed class ServerStateService
             }
 
             existing.Name = request.NewName;
+            tagRenamed = true;
             if (request.NewCategoryId != null)
             {
                 existing.CategoryId = NormalizeCategoryId(request.NewCategoryId);
@@ -327,18 +404,29 @@ public sealed class ServerStateService
             }
         }
 
+        if (tagRenamed && RenameTagInPresetCatalog(request.OldName, request.NewName))
+        {
+            PersistPresetCatalog();
+        }
+
         Publish("tagCatalogChanged", CreateTagCatalogPayload("renameTag"));
     }
 
     public void DeleteTag(DeleteTagRequest request)
     {
+        var removed = false;
         lock (_tagLock)
         {
-            _tags.RemoveAll(t => string.Equals(t.Name, request.Name, StringComparison.OrdinalIgnoreCase));
+            removed = _tags.RemoveAll(t => string.Equals(t.Name, request.Name, StringComparison.OrdinalIgnoreCase)) > 0;
             foreach (var itemTags in _itemTags.Values)
             {
                 itemTags.Remove(request.Name);
             }
+        }
+
+        if (removed && RemoveTagFromPresetCatalog(request.Name))
+        {
+            PersistPresetCatalog();
         }
 
         Publish("tagCatalogChanged", CreateTagCatalogPayload("deleteTag"));
@@ -475,7 +563,7 @@ public sealed class ServerStateService
             {
                 Payload = new ItemStateChangedPayload
                 {
-                    ItemId = Guid.NewGuid().ToString("N"),
+                    ItemId = path,
                     Path = path,
                     IsFavorite = false,
                     IsBlacklisted = false
@@ -538,18 +626,310 @@ public sealed class ServerStateService
         return envelope;
     }
 
-    private static FilterSessionSnapshot CloneFilterSession(FilterSessionSnapshot source)
+    private static List<FilterPresetSnapshot> ClonePresetCatalog(IEnumerable<FilterPresetSnapshot> source)
     {
-        return new FilterSessionSnapshot
-        {
-            ActivePresetName = source.ActivePresetName,
-            CurrentFilterState = source.CurrentFilterState,
-            Presets = source.Presets?.Select(p => new FilterPresetSnapshot
+        return source
+            .Where(p => !string.IsNullOrWhiteSpace(p.Name))
+            .Select(p => new FilterPresetSnapshot
             {
-                Name = p.Name,
+                Name = p.Name.Trim(),
                 FilterState = p.FilterState
-            }).ToList() ?? []
-        };
+            })
+            .GroupBy(p => p.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .ToList();
+    }
+
+    private bool RenameTagInPresetCatalog(string oldName, string newName)
+    {
+        var changed = false;
+        lock (_filterSessionLock)
+        {
+            foreach (var preset in _presetCatalog)
+            {
+                if (!TryMutatePresetFilterState(preset.FilterState, root =>
+                    RenameTagInFilterArray(root, "selectedTags", oldName, newName) |
+                    RenameTagInFilterArray(root, "excludedTags", oldName, newName),
+                    out var updated))
+                {
+                    continue;
+                }
+
+                preset.FilterState = updated;
+                changed = true;
+            }
+        }
+
+        return changed;
+    }
+
+    private bool RemoveTagFromPresetCatalog(string tagName)
+    {
+        var changed = false;
+        lock (_filterSessionLock)
+        {
+            foreach (var preset in _presetCatalog)
+            {
+                if (!TryMutatePresetFilterState(preset.FilterState, root =>
+                    RemoveTagFromFilterArray(root, "selectedTags", tagName) |
+                    RemoveTagFromFilterArray(root, "excludedTags", tagName),
+                    out var updated))
+                {
+                    continue;
+                }
+
+                preset.FilterState = updated;
+                changed = true;
+            }
+        }
+
+        return changed;
+    }
+
+    private static bool TryMutatePresetFilterState(JsonElement source, Func<JsonObject, bool> mutate, out JsonElement updated)
+    {
+        updated = source;
+        JsonObject root;
+        try
+        {
+            root = JsonNode.Parse(source.GetRawText()) as JsonObject ?? new JsonObject();
+        }
+        catch
+        {
+            return false;
+        }
+
+        if (!mutate(root))
+        {
+            return false;
+        }
+
+        updated = JsonSerializer.SerializeToElement(root, JsonOptions);
+        return true;
+    }
+
+    private static bool RenameTagInFilterArray(JsonObject root, string arrayName, string oldName, string newName)
+    {
+        if (root[arrayName] is not JsonArray array)
+        {
+            return false;
+        }
+
+        var changed = false;
+        for (var i = 0; i < array.Count; i++)
+        {
+            var value = array[i]?.GetValue<string>();
+            if (!string.Equals(value, oldName, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            array[i] = newName;
+            changed = true;
+        }
+
+        return changed;
+    }
+
+    private static bool RemoveTagFromFilterArray(JsonObject root, string arrayName, string tagName)
+    {
+        if (root[arrayName] is not JsonArray array)
+        {
+            return false;
+        }
+
+        var changed = false;
+        for (var i = array.Count - 1; i >= 0; i--)
+        {
+            var value = array[i]?.GetValue<string>();
+            if (!string.Equals(value, tagName, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            array.RemoveAt(i);
+            changed = true;
+        }
+
+        return changed;
+    }
+
+    private void PersistPresetCatalog()
+    {
+        try
+        {
+            IReadOnlyList<FilterPresetSnapshot> snapshot;
+            lock (_filterSessionLock)
+            {
+                snapshot = ClonePresetCatalog(_presetCatalog);
+            }
+
+            var serialized = JsonSerializer.Serialize(snapshot, JsonOptions);
+            File.WriteAllText(_presetsPath, serialized);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to persist preset catalog to '{Path}'.", _presetsPath);
+        }
+    }
+
+    private void BootstrapFromDisk()
+    {
+        try
+        {
+            if (File.Exists(_presetsPath))
+            {
+                var rawPresets = File.ReadAllText(_presetsPath);
+                var parsedPresets = JsonSerializer.Deserialize<List<FilterPresetSnapshot>>(rawPresets, JsonOptions) ?? [];
+                lock (_filterSessionLock)
+                {
+                    _presetCatalog = ClonePresetCatalog(parsedPresets);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to bootstrap preset catalog from '{PresetsPath}'.", _presetsPath);
+        }
+
+        try
+        {
+            if (!File.Exists(_libraryPath))
+            {
+                return;
+            }
+
+            var root = JsonNode.Parse(File.ReadAllText(_libraryPath)) as JsonObject;
+            if (root == null)
+            {
+                return;
+            }
+
+            lock (_sourceLock)
+            {
+                _sources.Clear();
+                var sources = root["sources"] as JsonArray;
+                if (sources != null)
+                {
+                    foreach (var node in sources.OfType<JsonObject>())
+                    {
+                        var id = node["id"]?.GetValue<string>()?.Trim();
+                        var rootPath = node["rootPath"]?.GetValue<string>()?.Trim();
+                        if (string.IsNullOrWhiteSpace(id) || string.IsNullOrWhiteSpace(rootPath))
+                        {
+                            continue;
+                        }
+
+                        _sources.Add(new SourceRecord
+                        {
+                            Id = id,
+                            RootPath = rootPath,
+                            DisplayName = node["displayName"]?.GetValue<string>()?.Trim(),
+                            IsEnabled = node["isEnabled"]?.GetValue<bool?>() ?? true
+                        });
+                    }
+                }
+            }
+
+            lock (_tagLock)
+            {
+                _tagCategories.Clear();
+                _tags.Clear();
+
+                var categories = root["categories"] as JsonArray;
+                if (categories != null)
+                {
+                    foreach (var node in categories.OfType<JsonObject>())
+                    {
+                        var id = NormalizeCategoryId(node["id"]?.GetValue<string>());
+                        var name = node["name"]?.GetValue<string>()?.Trim();
+                        if (string.IsNullOrWhiteSpace(name))
+                        {
+                            continue;
+                        }
+
+                        if (_tagCategories.Any(category => string.Equals(category.Id, id, StringComparison.OrdinalIgnoreCase)))
+                        {
+                            continue;
+                        }
+
+                        _tagCategories.Add(new TagCategorySnapshot
+                        {
+                            Id = id,
+                            Name = name,
+                            SortOrder = node["sortOrder"]?.GetValue<int?>() ?? _tagCategories.Count
+                        });
+                    }
+                }
+
+                var tags = root["tags"] as JsonArray;
+                if (tags != null)
+                {
+                    foreach (var node in tags.OfType<JsonObject>())
+                    {
+                        var name = node["name"]?.GetValue<string>()?.Trim();
+                        if (string.IsNullOrWhiteSpace(name))
+                        {
+                            continue;
+                        }
+
+                        var categoryId = NormalizeCategoryId(node["categoryId"]?.GetValue<string>());
+                        _tags.RemoveAll(tag => string.Equals(tag.Name, name, StringComparison.OrdinalIgnoreCase));
+                        _tags.Add(new TagSnapshot
+                        {
+                            Name = name,
+                            CategoryId = categoryId
+                        });
+                    }
+                }
+
+                EnsureUncategorizedCategoryLocked();
+            }
+
+            lock (_itemStatesLock)
+            lock (_tagLock)
+            {
+                var items = root["items"] as JsonArray;
+                if (items == null)
+                {
+                    return;
+                }
+
+                foreach (var node in items.OfType<JsonObject>())
+                {
+                    var path = node["fullPath"]?.GetValue<string>()?.Trim();
+                    if (string.IsNullOrWhiteSpace(path))
+                    {
+                        continue;
+                    }
+
+                    var isFavorite = node["isFavorite"]?.GetValue<bool?>() ?? false;
+                    var isBlacklisted = node["isBlacklisted"]?.GetValue<bool?>() ?? false;
+                    _itemStates[path] = new ItemStateRecord
+                    {
+                        Payload = new ItemStateChangedPayload
+                        {
+                            ItemId = path,
+                            Path = path,
+                            IsFavorite = isFavorite,
+                            IsBlacklisted = isBlacklisted
+                        },
+                        Revision = 0
+                    };
+
+                    var itemTags = node["tags"] as JsonArray;
+                    _itemTags[path] = (itemTags ?? new JsonArray())
+                        .Select(tag => tag?.GetValue<string>()?.Trim())
+                        .Where(tag => !string.IsNullOrWhiteSpace(tag))
+                        .Select(tag => tag!)
+                        .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to bootstrap server state from '{Path}'.", _libraryPath);
+        }
     }
 
     private HashSet<string> GetOrCreateItemTags(string itemId)
@@ -564,7 +944,15 @@ public sealed class ServerStateService
         return created;
     }
 
-    private void EnsureTagExists(string tagName, string categoryId)
+    private string ResolveCategoryIdForTag(string tagName)
+    {
+        var existing = _tags.FirstOrDefault(t => string.Equals(t.Name, tagName, StringComparison.OrdinalIgnoreCase));
+        return string.IsNullOrWhiteSpace(existing?.CategoryId)
+            ? UncategorizedCategoryId
+            : NormalizeCategoryId(existing.CategoryId);
+    }
+
+    private void EnsureTagExists(string tagName, string categoryId, bool keepExistingCategory = false)
     {
         var normalizedCategoryId = NormalizeCategoryId(categoryId);
         EnsureUncategorizedCategoryLocked();
@@ -576,6 +964,11 @@ public sealed class ServerStateService
                 Name = tagName,
                 CategoryId = normalizedCategoryId
             });
+            return;
+        }
+
+        if (keepExistingCategory)
+        {
             return;
         }
 
@@ -640,10 +1033,79 @@ public sealed class ServerStateService
         };
     }
 
+    private void PersistSourceStates()
+    {
+        try
+        {
+            if (!File.Exists(_libraryPath))
+            {
+                return;
+            }
+
+            JsonObject? root;
+            try
+            {
+                root = JsonNode.Parse(File.ReadAllText(_libraryPath)) as JsonObject;
+            }
+            catch
+            {
+                return;
+            }
+
+            if (root == null)
+            {
+                return;
+            }
+
+            var sourceStateById = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+            lock (_sourceLock)
+            {
+                foreach (var source in _sources)
+                {
+                    sourceStateById[source.Id] = source.IsEnabled;
+                }
+            }
+
+            var sources = root["sources"] as JsonArray;
+            if (sources == null)
+            {
+                return;
+            }
+
+            foreach (var sourceNode in sources.OfType<JsonObject>())
+            {
+                var id = sourceNode["id"]?.GetValue<string>()?.Trim();
+                if (string.IsNullOrWhiteSpace(id))
+                {
+                    continue;
+                }
+
+                if (sourceStateById.TryGetValue(id, out var isEnabled))
+                {
+                    sourceNode["isEnabled"] = isEnabled;
+                }
+            }
+
+            File.WriteAllText(_libraryPath, root.ToJsonString(JsonOptions));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to persist source enabled states to '{Path}'.", _libraryPath);
+        }
+    }
+
     private sealed class ItemStateRecord
     {
         public ItemStateChangedPayload Payload { get; init; } = new();
         public long Revision { get; set; }
+    }
+
+    private sealed class SourceRecord
+    {
+        public string Id { get; set; } = string.Empty;
+        public string RootPath { get; set; } = string.Empty;
+        public string? DisplayName { get; set; }
+        public bool IsEnabled { get; set; } = true;
     }
 }
 

@@ -345,13 +345,14 @@ namespace ReelRoulette
         private int _autoRefreshIntervalMinutes = 60;
         private bool _autoRefreshOnlyWhenIdle = true;
         private int _autoRefreshIdleThresholdMinutes = 3;
+        private string _coreServerBaseUrl = "http://localhost:51301";
 
-        // Web Remote settings
+        // Web UI settings
         private bool _webRemoteEnabled = false;
         private int _webRemotePort = 51234;
         private bool _webRemoteBindOnLan = false;
         private string _webRemoteLanHostname = "reel";
-        private WebRemote.WebRemoteAuthMode _webRemoteAuthMode = WebRemote.WebRemoteAuthMode.TokenRequired;
+        private WebUiAuthMode _webRemoteAuthMode = WebUiAuthMode.TokenRequired;
         private string? _webRemoteSharedToken;
 
         // Image scaling mode properties
@@ -594,7 +595,21 @@ namespace ReelRoulette
 
         public bool AutoRefreshIdleThresholdEnabled => _autoRefreshOnlyWhenIdle;
 
-        // Web Remote settings properties
+        public string CoreServerBaseUrl
+        {
+            get => _coreServerBaseUrl;
+            set
+            {
+                var next = string.IsNullOrWhiteSpace(value) ? "http://localhost:51301" : value.Trim();
+                if (_coreServerBaseUrl != next)
+                {
+                    _coreServerBaseUrl = next;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        // Web UI settings properties
         public bool WebRemoteEnabled
         {
             get => _webRemoteEnabled;
@@ -650,12 +665,12 @@ namespace ReelRoulette
 
         public bool WebRemoteAuthOff
         {
-            get => _webRemoteAuthMode == WebRemote.WebRemoteAuthMode.Off;
+            get => _webRemoteAuthMode == WebUiAuthMode.Off;
             set
             {
                 if (value)
                 {
-                    _webRemoteAuthMode = WebRemote.WebRemoteAuthMode.Off;
+                    _webRemoteAuthMode = WebUiAuthMode.Off;
                     OnPropertyChanged();
                     OnPropertyChanged(nameof(WebRemoteAuthTokenRequired));
                 }
@@ -664,12 +679,12 @@ namespace ReelRoulette
 
         public bool WebRemoteAuthTokenRequired
         {
-            get => _webRemoteAuthMode == WebRemote.WebRemoteAuthMode.TokenRequired;
+            get => _webRemoteAuthMode == WebUiAuthMode.TokenRequired;
             set
             {
                 if (value)
                 {
-                    _webRemoteAuthMode = WebRemote.WebRemoteAuthMode.TokenRequired;
+                    _webRemoteAuthMode = WebUiAuthMode.TokenRequired;
                     OnPropertyChanged();
                     OnPropertyChanged(nameof(WebRemoteAuthOff));
                 }
@@ -689,7 +704,7 @@ namespace ReelRoulette
             }
         }
 
-        public WebRemote.WebRemoteAuthMode WebRemoteAuthMode => _webRemoteAuthMode;
+        public WebUiAuthMode WebRemoteAuthMode => _webRemoteAuthMode;
 
         // Helper methods to get/set from AppSettings-like structure
         public void LoadFromSettings(
@@ -718,11 +733,12 @@ namespace ReelRoulette
             int autoRefreshIntervalMinutes = 60,
             bool autoRefreshOnlyWhenIdle = true,
             int autoRefreshIdleThresholdMinutes = 3,
+            string? coreServerBaseUrl = "http://localhost:51301",
             bool webRemoteEnabled = false,
             int webRemotePort = 51234,
             bool webRemoteBindOnLan = false,
             string? webRemoteLanHostname = "reel",
-            WebRemote.WebRemoteAuthMode webRemoteAuthMode = WebRemote.WebRemoteAuthMode.TokenRequired,
+            WebUiAuthMode webRemoteAuthMode = WebUiAuthMode.TokenRequired,
             string? webRemoteSharedToken = null)
         {
             // Set backing fields directly and notify
@@ -854,8 +870,10 @@ namespace ReelRoulette
             OnPropertyChanged(nameof(AutoRefreshOnlyWhenIdle));
             OnPropertyChanged(nameof(AutoRefreshIdleThresholdMinutes));
             OnPropertyChanged(nameof(AutoRefreshIdleThresholdEnabled));
+            _coreServerBaseUrl = string.IsNullOrWhiteSpace(coreServerBaseUrl) ? "http://localhost:51301" : coreServerBaseUrl.Trim();
+            OnPropertyChanged(nameof(CoreServerBaseUrl));
 
-            // Web Remote settings
+            // Web UI settings
             _webRemoteEnabled = webRemoteEnabled;
             _webRemotePort = webRemotePort > 0 ? webRemotePort : 51234;
             _webRemoteBindOnLan = webRemoteBindOnLan;
@@ -906,12 +924,13 @@ namespace ReelRoulette
         public int GetAutoRefreshIntervalMinutes() => _autoRefreshIntervalMinutes;
         public bool GetAutoRefreshOnlyWhenIdle() => _autoRefreshOnlyWhenIdle;
         public int GetAutoRefreshIdleThresholdMinutes() => _autoRefreshIdleThresholdMinutes;
+        public string GetCoreServerBaseUrl() => string.IsNullOrWhiteSpace(_coreServerBaseUrl) ? "http://localhost:51301" : _coreServerBaseUrl.Trim();
 
         public bool GetWebRemoteEnabled() => _webRemoteEnabled;
         public int GetWebRemotePort() => _webRemotePort;
         public bool GetWebRemoteBindOnLan() => _webRemoteBindOnLan;
         public string GetWebRemoteLanHostname() => string.IsNullOrWhiteSpace(_webRemoteLanHostname) ? "reel" : _webRemoteLanHostname.Trim();
-        public WebRemote.WebRemoteAuthMode GetWebRemoteAuthMode() => _webRemoteAuthMode;
+        public WebUiAuthMode GetWebRemoteAuthMode() => _webRemoteAuthMode;
         public string? GetWebRemoteSharedToken() => _webRemoteSharedToken;
 
         private bool ValidateSettings()
@@ -919,9 +938,6 @@ namespace ReelRoulette
             // Validate timer interval
             if (_timerIntervalSeconds < 1 || _timerIntervalSeconds > 3600)
             {
-                // Clamp to valid range
-                _timerIntervalSeconds = Math.Max(1, Math.Min(3600, _timerIntervalSeconds));
-                OnPropertyChanged(nameof(TimerIntervalSeconds));
                 return false;
             }
             
@@ -969,7 +985,13 @@ namespace ReelRoulette
                 return false;
             }
 
-            // Validate Web Remote settings
+            if (!Uri.TryCreate(GetCoreServerBaseUrl(), UriKind.Absolute, out var uri) ||
+                (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+            {
+                return false;
+            }
+
+            // Validate Web UI settings
             if (_webRemotePort < 1024 || _webRemotePort > 65535)
             {
                 return false;
@@ -979,14 +1001,6 @@ namespace ReelRoulette
         }
 
         private void ApplyButton_Click(object? sender, RoutedEventArgs e)
-        {
-            if (ValidateSettings())
-            {
-                _wasApplied = true;
-            }
-        }
-
-        private void OKButton_Click(object? sender, RoutedEventArgs e)
         {
             if (ValidateSettings())
             {

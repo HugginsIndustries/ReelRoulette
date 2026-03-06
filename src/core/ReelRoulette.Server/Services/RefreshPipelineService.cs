@@ -5,7 +5,6 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using ReelRoulette.Core.Fingerprints;
 using ReelRoulette.Server.Contracts;
-using ReelRoulette.Server.Hosting;
 using SkiaSharp;
 
 namespace ReelRoulette.Server.Services;
@@ -43,8 +42,7 @@ public sealed class RefreshPipelineService : BackgroundService
     private readonly string _libraryPath;
     private readonly string _thumbnailDir;
     private readonly string _thumbnailIndexPath;
-    private readonly string _settingsPath;
-    private readonly RefreshSettingsSnapshot _settings;
+    private readonly CoreSettingsService _coreSettings;
     private RefreshStatusSnapshot _status = new();
     private DateTimeOffset _nextAutoRunUtc;
     private bool _isRunLoopActive;
@@ -52,24 +50,24 @@ public sealed class RefreshPipelineService : BackgroundService
     public RefreshPipelineService(
         ServerStateService state,
         ILogger<RefreshPipelineService> logger,
-        ServerRuntimeOptions options,
+        CoreSettingsService coreSettings,
         string? appDataPathOverride = null)
     {
         _state = state;
         _logger = logger;
+        _coreSettings = coreSettings;
         var roamingAppData = appDataPathOverride ??
                              Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ReelRoulette");
         Directory.CreateDirectory(roamingAppData);
         _libraryPath = Path.Combine(roamingAppData, "library.json");
-        _settingsPath = Path.Combine(roamingAppData, "core-refresh-settings.json");
 
         var localAppData = appDataPathOverride ??
                            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ReelRoulette");
         Directory.CreateDirectory(localAppData);
         _thumbnailDir = Path.Combine(localAppData, "thumbnails");
         _thumbnailIndexPath = Path.Combine(_thumbnailDir, "index.json");
-        _settings = LoadSettings(options);
-        _nextAutoRunUtc = DateTimeOffset.UtcNow.AddMinutes(_settings.AutoRefreshIntervalMinutes);
+        var refreshSettings = _coreSettings.GetRefreshSettings();
+        _nextAutoRunUtc = DateTimeOffset.UtcNow.AddMinutes(refreshSettings.AutoRefreshIntervalMinutes);
     }
 
     public RefreshStatusSnapshot GetStatus()
@@ -82,26 +80,27 @@ public sealed class RefreshPipelineService : BackgroundService
 
     public RefreshSettingsSnapshot GetSettings()
     {
-        lock (_runLock)
-        {
-            return new RefreshSettingsSnapshot
-            {
-                AutoRefreshEnabled = _settings.AutoRefreshEnabled,
-                AutoRefreshIntervalMinutes = _settings.AutoRefreshIntervalMinutes
-            };
-        }
+        return _coreSettings.GetRefreshSettings();
     }
 
     public RefreshSettingsSnapshot UpdateSettings(RefreshSettingsSnapshot snapshot)
     {
         lock (_runLock)
         {
-            _settings.AutoRefreshEnabled = snapshot.AutoRefreshEnabled;
-            _settings.AutoRefreshIntervalMinutes = Math.Clamp(snapshot.AutoRefreshIntervalMinutes, 5, 1440);
-            _nextAutoRunUtc = DateTimeOffset.UtcNow.AddMinutes(_settings.AutoRefreshIntervalMinutes);
-            PersistSettings();
-            return GetSettings();
+            var updated = _coreSettings.UpdateRefreshSettings(snapshot);
+            _nextAutoRunUtc = DateTimeOffset.UtcNow.AddMinutes(updated.AutoRefreshIntervalMinutes);
+            return updated;
         }
+    }
+
+    public WebRuntimeSettingsSnapshot GetWebRuntimeSettings()
+    {
+        return _coreSettings.GetWebRuntimeSettings();
+    }
+
+    public WebRuntimeSettingsSnapshot UpdateWebRuntimeSettings(WebRuntimeSettingsSnapshot snapshot)
+    {
+        return _coreSettings.UpdateWebRuntimeSettings(snapshot);
     }
 
     public RefreshStartResponse TryStartManual()
@@ -122,7 +121,7 @@ public sealed class RefreshPipelineService : BackgroundService
         _ = Task.Run(() => ExecuteReservedRunAsync(CancellationToken.None));
         lock (_runLock)
         {
-            _nextAutoRunUtc = DateTimeOffset.UtcNow.AddMinutes(_settings.AutoRefreshIntervalMinutes);
+            _nextAutoRunUtc = DateTimeOffset.UtcNow.AddMinutes(_coreSettings.GetRefreshSettings().AutoRefreshIntervalMinutes);
             return new RefreshStartResponse
             {
                 Accepted = true,
@@ -139,7 +138,8 @@ public sealed class RefreshPipelineService : BackgroundService
             bool shouldRun;
             lock (_runLock)
             {
-                shouldRun = _settings.AutoRefreshEnabled &&
+                var refreshSettings = _coreSettings.GetRefreshSettings();
+                shouldRun = refreshSettings.AutoRefreshEnabled &&
                             !_status.IsRunning &&
                             !_isRunLoopActive &&
                             DateTimeOffset.UtcNow >= _nextAutoRunUtc;
@@ -152,7 +152,7 @@ public sealed class RefreshPipelineService : BackgroundService
                     await ExecuteReservedRunAsync(stoppingToken);
                     lock (_runLock)
                     {
-                        _nextAutoRunUtc = DateTimeOffset.UtcNow.AddMinutes(_settings.AutoRefreshIntervalMinutes);
+                        _nextAutoRunUtc = DateTimeOffset.UtcNow.AddMinutes(_coreSettings.GetRefreshSettings().AutoRefreshIntervalMinutes);
                     }
                 }
             }
@@ -1425,38 +1425,6 @@ public sealed class RefreshPipelineService : BackgroundService
         }
 
         return evicted;
-    }
-
-    private RefreshSettingsSnapshot LoadSettings(ServerRuntimeOptions options)
-    {
-        try
-        {
-            if (File.Exists(_settingsPath))
-            {
-                var parsed = JsonSerializer.Deserialize<RefreshSettingsSnapshot>(File.ReadAllText(_settingsPath), JsonOptions);
-                if (parsed != null)
-                {
-                    parsed.AutoRefreshIntervalMinutes = Math.Clamp(parsed.AutoRefreshIntervalMinutes, 5, 1440);
-                    return parsed;
-                }
-            }
-        }
-        catch
-        {
-            // fall back to runtime defaults
-        }
-
-        return new RefreshSettingsSnapshot
-        {
-            AutoRefreshEnabled = options.AutoRefreshEnabled,
-            AutoRefreshIntervalMinutes = options.AutoRefreshIntervalMinutes
-        };
-    }
-
-    private void PersistSettings()
-    {
-        Directory.CreateDirectory(Path.GetDirectoryName(_settingsPath)!);
-        File.WriteAllText(_settingsPath, JsonSerializer.Serialize(_settings, JsonOptions));
     }
 
     private RefreshStageProgress NewStage(string stage)

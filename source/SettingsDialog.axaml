@@ -148,6 +148,27 @@
                                        Foreground="Gray"
                                        Margin="20,0,0,0"/>
                         </StackPanel>
+
+                        <!-- Core API Endpoint Section -->
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="Core API Endpoint"
+                                       FontWeight="SemiBold"
+                                       FontSize="13"
+                                       Margin="0,0,0,4"/>
+                            <Grid ColumnDefinitions="Auto *" ColumnSpacing="8" Margin="20,4,0,4">
+                                <TextBlock Grid.Column="0"
+                                           Text="Core Server Base URL:"
+                                           VerticalAlignment="Center"/>
+                                <TextBox Grid.Column="1"
+                                         Text="{Binding CoreServerBaseUrl}"
+                                         Width="320"
+                                         Watermark="http://localhost:51301"/>
+                            </Grid>
+                            <TextBlock Text="Desktop uses this URL to call core APIs."
+                                       FontSize="11"
+                                       Foreground="Gray"
+                                       Margin="20,0,0,0"/>
+                        </StackPanel>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
@@ -440,12 +461,12 @@
                 </ScrollViewer>
             </TabItem>
 
-            <!-- Web Remote Tab -->
-            <TabItem Header="Web Remote">
+            <!-- Web UI Tab -->
+            <TabItem Header="Web UI">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel Spacing="20" Margin="12">
                         <StackPanel Spacing="8">
-                            <TextBlock Text="Web Remote" 
+                            <TextBlock Text="Web UI" 
                                        FontWeight="SemiBold" 
                                        FontSize="13"
                                        Margin="0,0,0,4"/>
@@ -454,7 +475,7 @@
                                        Foreground="Gray"
                                        TextWrapping="Wrap"
                                        Margin="0,0,0,8"/>
-                            <CheckBox Content="Enable Web Remote"
+                            <CheckBox Content="Enable Web UI"
                                       IsChecked="{Binding WebRemoteEnabled}"/>
                             <Grid ColumnDefinitions="Auto * Auto" ColumnSpacing="8" Margin="20,4,0,4"
                                   IsEnabled="{Binding WebRemoteEnabled}">
@@ -530,11 +551,9 @@
                     Orientation="Horizontal" 
                     HorizontalAlignment="Right"
                     Spacing="8">
-            <Button Content="Apply"
+            <Button x:Name="ApplyButton"
+                    Content="Apply"
                     Click="ApplyButton_Click"
-                    MinWidth="100"/>
-            <Button Content="OK"
-                    Click="OKButton_Click"
                     MinWidth="100"
                     IsDefault="True"/>
             <Button Content="Cancel"

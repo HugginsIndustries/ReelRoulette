@@ -30,6 +30,11 @@ function normalizeAbsoluteHttpUrl(value: string, key: keyof RuntimeConfig): stri
     throw new Error(`Runtime config '${key}' must include a host.`);
   }
 
+  const normalizedPath = parsed.pathname.replace(/\/+$/, "");
+  if (key === "apiBaseUrl" && normalizedPath.length > 0) {
+    throw new Error("Runtime config 'apiBaseUrl' must be host root (no path).");
+  }
+
   return parsed.href.replace(/\/+$/, "");
 }
 

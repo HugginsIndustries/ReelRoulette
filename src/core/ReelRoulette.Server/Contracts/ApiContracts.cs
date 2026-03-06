@@ -14,15 +14,42 @@ public sealed class PresetResponse
     public string Id { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public string? Summary { get; set; }
+    public JsonElement? FilterState { get; set; }
+}
+
+public sealed class SourceResponse
+{
+    public string Id { get; set; } = string.Empty;
+    public string RootPath { get; set; } = string.Empty;
+    public string? DisplayName { get; set; }
+    public bool IsEnabled { get; set; } = true;
+}
+
+public sealed class UpdateSourceEnabledRequest
+{
+    public bool IsEnabled { get; set; }
 }
 
 public sealed class RandomRequest
 {
     public string PresetId { get; set; } = string.Empty;
+    public JsonElement? FilterState { get; set; }
     public string? ClientId { get; set; }
     public bool IncludeVideos { get; set; } = true;
     public bool IncludePhotos { get; set; } = true;
     public string? RandomizationMode { get; set; }
+}
+
+public sealed class PresetMatchRequest
+{
+    public JsonElement? FilterState { get; set; }
+}
+
+public sealed class PresetMatchResponse
+{
+    public bool Matched { get; set; }
+    public string? PresetId { get; set; }
+    public string? PresetName { get; set; }
 }
 
 public sealed class RandomResponse
@@ -77,13 +104,6 @@ public sealed class FilterPresetSnapshot
 {
     public string Name { get; set; } = string.Empty;
     public JsonElement FilterState { get; set; }
-}
-
-public sealed class FilterSessionSnapshot
-{
-    public string? ActivePresetName { get; set; }
-    public JsonElement? CurrentFilterState { get; set; }
-    public List<FilterPresetSnapshot>? Presets { get; set; }
 }
 
 public sealed class TagCategorySnapshot
@@ -184,6 +204,16 @@ public sealed class RefreshSettingsSnapshot
     public int AutoRefreshIntervalMinutes { get; set; } = 15;
 }
 
+public sealed class WebRuntimeSettingsSnapshot
+{
+    public bool Enabled { get; set; }
+    public int Port { get; set; } = 51234;
+    public bool BindOnLan { get; set; }
+    public string LanHostname { get; set; } = "reel";
+    public string AuthMode { get; set; } = "TokenRequired";
+    public string? SharedToken { get; set; }
+}
+
 public sealed class RefreshStageProgress
 {
     public string Stage { get; set; } = string.Empty;
@@ -231,6 +261,12 @@ public sealed class ItemTagsChangedPayload
     public List<string> ItemIds { get; set; } = [];
     public List<string> AddedTags { get; set; } = [];
     public List<string> RemovedTags { get; set; } = [];
+}
+
+public sealed class SourceStateChangedPayload
+{
+    public string SourceId { get; set; } = string.Empty;
+    public bool IsEnabled { get; set; }
 }
 
 public sealed class TagCatalogChangedPayload

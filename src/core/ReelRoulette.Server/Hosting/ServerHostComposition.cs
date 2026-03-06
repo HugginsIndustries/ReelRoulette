@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.AspNetCore.StaticFiles;
 using ReelRoulette.Server.Auth;
 using ReelRoulette.Server.Contracts;
 using ReelRoulette.Server.Services;
@@ -8,10 +9,25 @@ namespace ReelRoulette.Server.Hosting;
 public static class ServerHostComposition
 {
     public const string WebClientCorsPolicyName = "ReelRouletteWebClient";
+    private static readonly FileExtensionContentTypeProvider ContentTypeProvider = new();
 
     public static void AddReelRouletteServer(this IServiceCollection services)
     {
-        services.AddSingleton<ServerStateService>();
+        services.AddSingleton(sp =>
+        {
+            var logger = sp.GetRequiredService<ILogger<ServerStateService>>();
+            var appDataRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ReelRoulette");
+            return new ServerStateService(logger, appDataRoot);
+        });
+        services.AddSingleton(sp =>
+        {
+            var logger = sp.GetRequiredService<ILogger<CoreSettingsService>>();
+            var options = sp.GetRequiredService<ServerRuntimeOptions>();
+            var appDataRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ReelRoulette");
+            return new CoreSettingsService(logger, options, appDataRoot);
+        });
+        services.AddSingleton<ServerMediaTokenStore>();
+        services.AddSingleton<LibraryPlaybackService>();
         services.AddSingleton<RefreshPipelineService>();
         services.AddSingleton<ServerSessionStore>();
         services.AddHostedService(sp => sp.GetRequiredService<RefreshPipelineService>());
@@ -19,7 +35,7 @@ public static class ServerHostComposition
 
     public static void MapReelRouletteEndpoints(this WebApplication app, ServerRuntimeOptions options)
     {
-        if (options.EnableCors && options.CorsAllowedOrigins.Length > 0)
+        if (options.EnableCors)
         {
             app.UseCors(WebClientCorsPolicyName);
         }
@@ -50,19 +66,80 @@ public static class ServerHostComposition
             return Results.Ok(state.GetVersion());
         });
 
-        app.MapGet("/api/presets", (ServerStateService state) =>
+        app.MapGet("/api/presets", (ServerStateService state, LibraryPlaybackService playback) =>
         {
-            return Results.Ok(state.GetPresets());
+            return Results.Ok(playback.GetPresets(state.GetPresetCatalogSnapshot()));
         });
 
-        app.MapPost("/api/random", (RandomRequest request, ServerStateService state) =>
+        app.MapGet("/api/sources", (ServerStateService state) =>
         {
-            if (string.IsNullOrWhiteSpace(request.PresetId))
+            return Results.Ok(state.GetSourcesSnapshot());
+        });
+
+        app.MapPost("/api/sources/{sourceId}/enabled", (string sourceId, UpdateSourceEnabledRequest request, ServerStateService state) =>
+        {
+            if (string.IsNullOrWhiteSpace(sourceId))
             {
-                return Results.BadRequest(new { error = "presetId is required" });
+                return Results.BadRequest(new { error = "sourceId is required" });
             }
 
-            return Results.Ok(state.GetRandom(request));
+            if (!state.TrySetSourceEnabled(sourceId, request.IsEnabled, out var source) || source == null)
+            {
+                return Results.NotFound(new { error = "source not found" });
+            }
+
+            return Results.Ok(source);
+        });
+
+        app.MapPost("/api/presets", (List<FilterPresetSnapshot>? presets, ServerStateService state) =>
+        {
+            state.SetPresetCatalog(presets ?? []);
+            return Results.Ok();
+        });
+
+        app.MapPost("/api/presets/match", (PresetMatchRequest request, ServerStateService state, LibraryPlaybackService playback) =>
+        {
+            if (!playback.TryMatchPreset(request, state.GetPresetCatalogSnapshot(), out var response, out var statusCode, out var error))
+            {
+                return Results.Json(new { error }, statusCode: statusCode);
+            }
+
+            return Results.Ok(response);
+        });
+
+        app.MapPost("/api/random", (RandomRequest request, ServerStateService state, LibraryPlaybackService playback) =>
+        {
+            if (!playback.TrySelectRandom(
+                    request,
+                    state.GetPresetCatalogSnapshot(),
+                    state.GetTagCategoriesSnapshot(),
+                    state.GetTagsSnapshot(),
+                    out var response,
+                    out var statusCode,
+                    out var error))
+            {
+                return Results.Json(new { error }, statusCode: statusCode);
+            }
+
+            if (response is null)
+            {
+                return Results.Json(new { });
+            }
+
+            return Results.Ok(response);
+        });
+
+        app.MapGet("/api/media/{idOrToken}", (string idOrToken, LibraryPlaybackService playback) =>
+        {
+            if (!playback.TryResolveMediaPath(idOrToken, out var fullPath) || !File.Exists(fullPath))
+            {
+                return Results.NotFound("Media not found");
+            }
+
+            var contentType = ContentTypeProvider.TryGetContentType(fullPath, out var resolvedType)
+                ? resolvedType
+                : "application/octet-stream";
+            return Results.File(fullPath, contentType, enableRangeProcessing: true);
         });
 
         app.MapPost("/api/favorite", (FavoriteRequest request, ServerStateService state) =>
@@ -102,17 +179,6 @@ public static class ServerHostComposition
         {
             var states = state.GetLibraryStates(request);
             return Results.Ok(states);
-        });
-
-        app.MapGet("/api/filter-session", (ServerStateService state) =>
-        {
-            return Results.Ok(state.GetFilterSessionSnapshot());
-        });
-
-        app.MapPost("/api/filter-session", (FilterSessionSnapshot snapshot, ServerStateService state) =>
-        {
-            state.SetFilterSessionSnapshot(snapshot);
-            return Results.Ok();
         });
 
         app.MapPost("/api/tag-editor/model", (TagEditorModelRequest request, ServerStateService state) =>
@@ -215,14 +281,24 @@ public static class ServerHostComposition
             return Results.Ok(refresh.GetStatus());
         });
 
-        app.MapGet("/api/refresh/settings", (RefreshPipelineService refresh) =>
+        app.MapGet("/api/refresh/settings", (CoreSettingsService settings) =>
         {
-            return Results.Ok(refresh.GetSettings());
+            return Results.Ok(settings.GetRefreshSettings());
         });
 
-        app.MapPost("/api/refresh/settings", (RefreshSettingsSnapshot snapshot, RefreshPipelineService refresh) =>
+        app.MapPost("/api/refresh/settings", (RefreshSettingsSnapshot snapshot, CoreSettingsService settings) =>
         {
-            return Results.Ok(refresh.UpdateSettings(snapshot));
+            return Results.Ok(settings.UpdateRefreshSettings(snapshot));
+        });
+
+        app.MapGet("/api/web-runtime/settings", (CoreSettingsService settings) =>
+        {
+            return Results.Ok(settings.GetWebRuntimeSettings());
+        });
+
+        app.MapPost("/api/web-runtime/settings", (WebRuntimeSettingsSnapshot snapshot, CoreSettingsService settings) =>
+        {
+            return Results.Ok(settings.UpdateWebRuntimeSettings(snapshot));
         });
 
         app.MapGet("/api/thumbnail/{itemId}", (string itemId, RefreshPipelineService refresh) =>

@@ -323,7 +323,7 @@ Status legend: `✅ Complete` | `⏳ Planned`
 
 ### M7d - Controlled Cutover and Legacy Bridge Retirement
 
-- **Status**: ⏳ Planned
+- **Status**: ✅ Complete
 - **Goal**: Complete migration to direct web-to-core paths while preserving current web-remote user experience, then remove legacy embedded web-remote bridge mutations/events.
 - **Scope**:
   - Use a two-phase rollout with time-bounded migration feature flags:
@@ -347,6 +347,15 @@ Status legend: `✅ Complete` | `⏳ Planned`
   - Legacy embedded web-remote mutation/event bridge paths are removed only after automated gate pass, user-executed manual parity gate pass, and explicit user approval is recorded.
   - Desktop/core behavior remains stable after legacy path retirement.
   - Time-bounded migration flags are removed or scheduled with explicit follow-up completion criteria.
+- **Verification evidence**:
+  - Legacy embedded WebRemote stack under `source/WebRemote/` is removed from runtime behavior and project resources.
+  - Desktop Web UI controls now map to core-owned runtime settings through API (`/api/web-runtime/settings`) and worker-managed WebHost lifecycle.
+  - Core/server owns preset/filter randomization semantics used by both desktop and WebUI (`/api/presets`, `/api/presets/match`, `/api/random` with filter-state-first semantics).
+  - Independent WebHost serves host-aware `runtime-config.json`, enabling direct `localhost`, mDNS (`*.local`), and LAN-IP client access without legacy desktop bridge routes.
+  - Dynamic CORS allowlist and worker mDNS advertisement are derived from current web runtime settings and active LAN interfaces.
+  - Gate A automated checks passed during cutover slices (`dotnet build ReelRoulette.sln`, core test gate, web verify/build checks).
+  - Gate B manual parity checklist was user-executed and approved; Gate C explicit user approval was recorded prior to legacy removal.
+  - Remaining post-cutover runtime stabilization issues (settings reopen/apply lockout, LAN apply consistency edge cases, worker/WebHost shutdown orphan cleanup) are explicitly deferred to `M8b`.
 
 ### M7e - Contract Compatibility and Final M7 Verification Gate
 
@@ -363,10 +372,47 @@ Status legend: `✅ Complete` | `⏳ Planned`
   - Manual gates pass: direct web connect without desktop bridge, refresh status-line parity through run/fail/complete states, and auth/reconnect continuity.
   - M7a-M7e acceptance criteria are explicitly verified before advancing to M8.
 
-### M8 - Hardening, Packaging, and Migration Cleanup
+### M8a - Core Control App and Runtime Ownership Cutover
 
 - **Status**: ⏳ Planned
-- **Goal**: Make architecture production-ready and reduce legacy coupling.
+- **Goal**: Introduce a dedicated core control app/service that owns runtime settings and lifecycle orchestration for worker + WebHost, and remove desktop direct process control.
+- **Scope**:
+  - Add a small Core Control App (or equivalent hosted control-plane) as the single authority for:
+    - core runtime settings persistence,
+    - worker/WebHost start/stop/restart,
+    - LAN/mDNS runtime coordination.
+  - Remove desktop app direct control paths for worker/WebHost lifecycle.
+  - Replace desktop lifecycle actions with API/IPC control commands to the Core Control App.
+  - Consolidate process ownership/cleanup semantics so owned process trees are deterministic on shutdown/restart.
+  - Define clear ownership boundaries across control-plane, worker, WebHost, and desktop client.
+- **Acceptance criteria**:
+  - Desktop app no longer starts/stops/restarts worker/WebHost directly.
+  - Core Control App is the sole runtime lifecycle owner in supported flows.
+  - Runtime settings that affect host lifecycle are single-writer and apply deterministically.
+  - Shutdown/restart paths leave no orphan owned runtime processes in normal and interrupted flows.
+  - Role boundaries are documented and validated with targeted lifecycle tests.
+
+### M8b - Settings and Post-M7 Runtime Stabilization
+
+- **Status**: ⏳ Planned
+- **Goal**: Fix high-impact settings/runtime bugs discovered during M7d validation and stabilize operator UX.
+- **Scope**:
+  - Fix settings dialog lifecycle issue (reopen/apply repeatedly in one session).
+  - Fix LAN/runtime apply consistency regressions and related false-warning scenarios.
+  - Fix remaining worker/WebHost shutdown edge cases found in manual validation.
+  - Address additional user-reported post-M7 bugs needed for stable day-to-day usage.
+  - Add focused regression tests for settings open/apply cycles and runtime transition paths.
+- **Acceptance criteria**:
+  - Settings dialog can be opened/applied/closed/reopened repeatedly without hang or lockout.
+  - LAN enable/disable transitions behave consistently for localhost/LAN/mDNS access expectations.
+  - Worker stop/restart is reliable and does not leave owned runtime process leaks.
+  - User-facing status/warning messaging accurately reflects runtime state.
+  - Build/tests remain green with new stability regressions covered.
+
+### M8c - Hardening, Packaging, and Migration Cleanup
+
+- **Status**: ⏳ Planned
+- **Goal**: Complete production hardening, thin-client migration cleanup, and packaging/distribution readiness.
 - **Scope**:
   - Add integration tests:
     - API command/query

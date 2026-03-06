@@ -3,7 +3,7 @@ import { bootstrapAuthSession } from "../auth/authBootstrap";
 import type { RuntimeConfig } from "../types/runtimeConfig";
 
 const CONFIG: RuntimeConfig = {
-  apiBaseUrl: "http://localhost:51301/api",
+  apiBaseUrl: "http://localhost:51301",
   sseUrl: "http://localhost:51301/api/events"
 };
 

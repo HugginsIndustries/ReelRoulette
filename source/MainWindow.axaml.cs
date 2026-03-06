@@ -42,7 +42,7 @@ namespace ReelRoulette
         AlwaysRemoveFromLibrary = 1 // Always remove from library without showing dialog
     }
 
-    public partial class MainWindow : Window, INotifyPropertyChanged, WebRemote.IWebRemoteApiServices, ITagMutationClient
+    public partial class MainWindow : Window, INotifyPropertyChanged, ITagMutationClient
     {
         private readonly string[] _videoExtensions =
         {
@@ -127,15 +127,15 @@ namespace ReelRoulette
         private bool _autoRefreshOnlyWhenIdle = false;
         private int _autoRefreshIdleThresholdMinutes = 1;
 
-        // Web Remote settings
+        // Web UI settings
         private bool _webRemoteEnabled = false;
         private int _webRemotePort = 51234;
         private bool _webRemoteBindOnLan = false;
         private string _webRemoteLanHostname = "reel";
-        private WebRemote.WebRemoteAuthMode _webRemoteAuthMode = WebRemote.WebRemoteAuthMode.TokenRequired;
+        private WebUiAuthMode _webRemoteAuthMode = WebUiAuthMode.TokenRequired;
         private string? _webRemoteSharedToken;
-        private WebRemote.WebRemoteServer? _webRemoteServer;
         private string _coreServerBaseUrl = "http://localhost:51301";
+        private string _independentWebUiBaseUrl = "http://localhost:51302";
         private bool _isStartingCoreRuntime;
         private readonly string _coreClientId = Guid.NewGuid().ToString("N");
         private readonly CoreServerApiClient _coreServerApiClient;
@@ -183,6 +183,7 @@ namespace ReelRoulette
         // Prevent recursive SaveSettings calls when updating UI from settings
         private bool _isApplyingSettings = false;
         private bool _isSettingsDialogOpen = false;
+        private bool _isSettingsApplyInProgress = false;
         private bool _isLoadingSettings = false;
         private bool _isProgrammaticUiSync = false;
         
@@ -225,11 +226,10 @@ namespace ReelRoulette
         // Library panel state
         private ObservableCollection<LibraryItem> _libraryItems = new ObservableCollection<LibraryItem>();
         private ObservableCollection<LibraryGridRowViewModel> _libraryGridRows = new ObservableCollection<LibraryGridRowViewModel>();
-        private string? _currentViewPreset = null; // null = All videos, or "Favorites", "Blacklisted", "RecentlyPlayed", "NeverPlayed"
-        private string? _selectedSourceId = null; // null = All sources
         private double _libraryPanelWidth = 400; // Track panel width independently from Bounds (default matches XAML MinWidth)
         private string _librarySearchText = "";
         private string _librarySortMode = "Name"; // "Name", "LastPlayed", "PlayCount", "Duration"
+        private bool _librarySortDescending = false;
         private bool _libraryGridViewEnabled = false;
         private int _libraryGridColumns = 2;
         private DateTime _thumbnailIndexLastWriteUtc = DateTime.MinValue;
@@ -899,9 +899,6 @@ namespace ReelRoulette
             // Load persisted data (includes FilterState)
             LoadSettings();
             
-            // Migrate legacy data to library items (one-time migration)
-            MigrateLegacyDataToLibrary();
-
             // Restore last folder if enabled and path exists
             // Folder restoration removed - library system is now the primary method
 
@@ -960,26 +957,6 @@ namespace ReelRoulette
                         Log("MainWindow Loaded event: GridSplitter event handler set up.");
                     }
 
-                    // Start Web Remote server if enabled
-                    if (_webRemoteEnabled)
-                    {
-                        EnsureWebRemoteToken();
-                        _webRemoteServer ??= new WebRemote.WebRemoteServer();
-                        var wrSettings = new WebRemote.WebRemoteSettings
-                        {
-                            Enabled = _webRemoteEnabled,
-                            Port = _webRemotePort,
-                            BindOnLan = _webRemoteBindOnLan,
-                            LanHostname = _webRemoteLanHostname,
-                            AuthMode = _webRemoteAuthMode,
-                            SharedToken = _webRemoteSharedToken
-                        };
-#pragma warning disable CS4014
-                        _webRemoteServer.StartAsync(wrSettings, this, Log);
-#pragma warning restore CS4014
-                        Log("MainWindow Loaded event: Web Remote server start requested.");
-                    }
-
                     await EnsureCoreRuntimeAvailableAsync();
                     if (_isCoreApiReachable)
                     {
@@ -1002,6 +979,9 @@ namespace ReelRoulette
 #pragma warning restore CS4014
 
                     _ = SyncRefreshSettingsFromCoreAsync();
+                    _ = SyncWebRuntimeSettingsFromCoreAsync();
+                    _ = SyncPresetsFromCoreAsync();
+                    _ = SyncSourcesFromCoreAsync();
                     _ = SyncRefreshStatusFromCoreAsync();
                 }
                 catch (Exception ex)
@@ -1186,22 +1166,6 @@ namespace ReelRoulette
                 _photoDisplayTimer.Elapsed -= PhotoDisplayTimer_Elapsed;
                 _photoDisplayTimer.Dispose();
                 _photoDisplayTimer = null;
-            }
-
-            // Stop Web Remote server
-            if (_webRemoteServer != null)
-            {
-                try
-                {
-                    _webRemoteServer.StopAsync().GetAwaiter().GetResult();
-                    _webRemoteServer.Dispose();
-                    Log("OnClosed: Web Remote server stopped.");
-                }
-                catch (Exception ex)
-                {
-                    Log($"OnClosed: ERROR stopping Web Remote server - {ex.Message}");
-                }
-                _webRemoteServer = null;
             }
 
             _coreEventsCancellationSource?.Dispose();
@@ -1438,7 +1402,6 @@ namespace ReelRoulette
                     UpdateCurrentFileStatsUi();
                 }
 
-                _webRemoteServer?.BroadcastLibraryItemChanged(fullPath, isFavorite, isBlacklisted);
                 if (_showLibraryPanel)
                 {
                     UpdateLibraryPanel();
@@ -1865,6 +1828,34 @@ namespace ReelRoulette
                 filterParts.Add("Without audio");
             if (_currentFilterState.MinDuration.HasValue || _currentFilterState.MaxDuration.HasValue)
                 filterParts.Add("Duration");
+            if (_currentFilterState.IncludedSourceIds != null && _currentFilterState.IncludedSourceIds.Count > 0)
+            {
+                var sourceCount = _currentFilterState.IncludedSourceIds.Count;
+                if (_libraryIndex != null)
+                {
+                    var sourceNames = _libraryIndex.Sources
+                        .Where(source => _currentFilterState.IncludedSourceIds.Contains(source.Id, StringComparer.OrdinalIgnoreCase))
+                        .Select(source => string.IsNullOrWhiteSpace(source.DisplayName) ? source.Id : source.DisplayName)
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToList();
+                    if (sourceNames.Count == 1)
+                    {
+                        filterParts.Add($"Source: {sourceNames[0]}");
+                    }
+                    else if (sourceNames.Count > 1)
+                    {
+                        filterParts.Add($"Sources: {sourceNames.Count}");
+                    }
+                    else
+                    {
+                        filterParts.Add($"Sources: {sourceCount}");
+                    }
+                }
+                else
+                {
+                    filterParts.Add($"Sources: {sourceCount}");
+                }
+            }
             // Tag inclusion filters
             if (_currentFilterState.SelectedTags != null && _currentFilterState.SelectedTags.Count > 0)
             {
@@ -3403,263 +3394,6 @@ namespace ReelRoulette
 
         #endregion
 
-        /// <summary>
-        /// One-time migration: Syncs legacy data (history, playbackStats, loudnessStats) to library items.
-        /// </summary>
-        private void MigrateLegacyDataToLibrary()
-        {
-            Log("MigrateLegacyDataToLibrary: Starting legacy data migration");
-            if (_libraryIndex == null || _libraryIndex.Items.Count == 0)
-            {
-                Log("MigrateLegacyDataToLibrary: Library index is null or empty, skipping migration");
-                return;
-            }
-
-            Log($"MigrateLegacyDataToLibrary: Library has {_libraryIndex.Items.Count} items to check");
-            bool libraryNeedsSaving = false;
-            int itemsUpdated = 0;
-
-            // Load and migrate playback stats
-            try
-            {
-                var playbackStatsPath = AppDataManager.GetPlaybackStatsPath();
-                Log($"MigrateLegacyDataToLibrary: Checking playback stats at {playbackStatsPath}");
-                if (File.Exists(playbackStatsPath))
-                {
-                    Log("MigrateLegacyDataToLibrary: Loading playback stats file...");
-                    var json = File.ReadAllText(playbackStatsPath);
-                    var playbackStats = JsonSerializer.Deserialize<Dictionary<string, FilePlaybackStats>>(json) ?? new();
-                    Log($"MigrateLegacyDataToLibrary: Loaded {playbackStats.Count} playback stat entries");
-                    
-                    foreach (var kvp in playbackStats)
-                    {
-                        var item = _libraryService.FindItemByPath(kvp.Key);
-                        if (item != null)
-                        {
-                            bool updated = false;
-                            if (item.PlayCount < kvp.Value.PlayCount)
-                            {
-                                item.PlayCount = kvp.Value.PlayCount;
-                                updated = true;
-                            }
-                            if (kvp.Value.LastPlayedUtc.HasValue && 
-                                (!item.LastPlayedUtc.HasValue || item.LastPlayedUtc < kvp.Value.LastPlayedUtc))
-                            {
-                                item.LastPlayedUtc = kvp.Value.LastPlayedUtc;
-                                updated = true;
-                            }
-                            if (updated)
-                            {
-                                _libraryService.UpdateItem(item);
-                                libraryNeedsSaving = true;
-                                itemsUpdated++;
-                            }
-                        }
-                    }
-                    Log($"MigrateLegacyDataToLibrary: Migrated playback stats to {itemsUpdated} items");
-                }
-                else
-                {
-                    Log("MigrateLegacyDataToLibrary: Playback stats file not found, skipping");
-                }
-            }
-            catch (Exception ex)
-            {
-                Log($"MigrateLegacyDataToLibrary: ERROR migrating playback stats - Exception: {ex.GetType().Name}, Message: {ex.Message}");
-                Log($"MigrateLegacyDataToLibrary: ERROR - Stack trace: {ex.StackTrace}");
-                if (ex.InnerException != null)
-                {
-                    Log($"MigrateLegacyDataToLibrary: ERROR - Inner exception: {ex.InnerException.GetType().Name}, Message: {ex.InnerException.Message}");
-                }
-            }
-
-            // Load and migrate loudness stats
-            int loudnessItemsUpdated = 0;
-            try
-            {
-                var loudnessStatsPath = AppDataManager.GetLoudnessStatsPath();
-                Log($"MigrateLegacyDataToLibrary: Checking loudness stats at {loudnessStatsPath}");
-                if (File.Exists(loudnessStatsPath))
-                {
-                    Log("MigrateLegacyDataToLibrary: Loading loudness stats file...");
-                    var json = File.ReadAllText(loudnessStatsPath);
-                    var loudnessStats = JsonSerializer.Deserialize<Dictionary<string, FileLoudnessInfo>>(json) ?? new();
-                    Log($"MigrateLegacyDataToLibrary: Loaded {loudnessStats.Count} loudness stat entries");
-                    
-                    foreach (var kvp in loudnessStats)
-                    {
-                        var item = _libraryService.FindItemByPath(kvp.Key);
-                        if (item != null)
-                        {
-                            bool updated = false;
-                            var info = kvp.Value;
-                            
-                            // Fix -91.0 dB placeholder values (these indicate no audio)
-                            if (Math.Abs(info.MeanVolumeDb - (-91.0)) < 0.1 && Math.Abs(info.PeakDb - (-91.0)) < 0.1)
-                            {
-                                info.MeanVolumeDb = 0.0;
-                                info.PeakDb = 0.0;
-                                info.HasAudio = false;
-                            }
-                            // Infer HasAudio if missing
-                            else if (!info.HasAudio.HasValue)
-                            {
-                                if (info.MeanVolumeDb != 0.0 || info.PeakDb != 0.0)
-                                {
-                                    info.HasAudio = true;
-                                }
-                            }
-                            
-                            if (item.HasAudio != info.HasAudio)
-                            {
-                                item.HasAudio = info.HasAudio;
-                                updated = true;
-                            }
-                            
-                            // Store MeanVolumeDb as IntegratedLoudness if audio is present
-                            if (info.HasAudio == true && info.MeanVolumeDb != 0.0)
-                            {
-                                if (!item.IntegratedLoudness.HasValue || 
-                                    Math.Abs(item.IntegratedLoudness.Value - info.MeanVolumeDb) > 0.1)
-                                {
-                                    item.IntegratedLoudness = info.MeanVolumeDb;
-                                    updated = true;
-                                }
-                            }
-                            
-                            // Store PeakDb if available
-                            if (info.HasAudio == true && info.PeakDb != 0.0)
-                            {
-                                if (!item.PeakDb.HasValue || 
-                                    Math.Abs(item.PeakDb.Value - info.PeakDb) > 0.1)
-                                {
-                                    item.PeakDb = info.PeakDb;
-                                    updated = true;
-                                }
-                            }
-                            else if (info.HasAudio == false)
-                            {
-                                // No audio - clear peak if set
-                                if (item.PeakDb.HasValue)
-                                {
-                                    item.PeakDb = null;
-                                    updated = true;
-                                }
-                            }
-                            
-                            if (updated)
-                            {
-                                _libraryService.UpdateItem(item);
-                                libraryNeedsSaving = true;
-                                itemsUpdated++;
-                                loudnessItemsUpdated++;
-                            }
-                        }
-                    }
-                    Log($"MigrateLegacyDataToLibrary: Migrated loudness stats to {loudnessItemsUpdated} items");
-                }
-                else
-                {
-                    Log("MigrateLegacyDataToLibrary: Loudness stats file not found, skipping");
-                }
-            }
-            catch (Exception ex)
-            {
-                Log($"MigrateLegacyDataToLibrary: ERROR migrating loudness stats - Exception: {ex.GetType().Name}, Message: {ex.Message}");
-                Log($"MigrateLegacyDataToLibrary: ERROR - Stack trace: {ex.StackTrace}");
-                if (ex.InnerException != null)
-                {
-                    Log($"MigrateLegacyDataToLibrary: ERROR - Inner exception: {ex.InnerException.GetType().Name}, Message: {ex.InnerException.Message}");
-                }
-            }
-
-            // Load and migrate history (convert to LastPlayedUtc)
-            int historyItemsUpdated = 0;
-            try
-            {
-                var historyPath = AppDataManager.GetHistoryPath();
-                Log($"MigrateLegacyDataToLibrary: Checking history at {historyPath}");
-                if (File.Exists(historyPath))
-                {
-                    Log("MigrateLegacyDataToLibrary: Loading history file...");
-                    var json = File.ReadAllText(historyPath);
-                    var history = JsonSerializer.Deserialize<List<HistoryEntry>>(json) ?? new();
-                    Log($"MigrateLegacyDataToLibrary: Loaded {history.Count} history entries");
-                    
-                    foreach (var entry in history)
-                    {
-                        var item = _libraryService.FindItemByPath(entry.Path);
-                        if (item != null)
-                        {
-                            bool updated = false;
-                            // Update LastPlayedUtc if history entry is newer
-                            var historyTime = entry.PlayedAt.ToUniversalTime();
-                            if (!item.LastPlayedUtc.HasValue || item.LastPlayedUtc < historyTime)
-                            {
-                                item.LastPlayedUtc = historyTime;
-                                updated = true;
-                            }
-                            // Ensure PlayCount is at least 1 if it was in history
-                            if (item.PlayCount == 0)
-                            {
-                                item.PlayCount = 1;
-                                updated = true;
-                            }
-                            if (updated)
-                            {
-                                _libraryService.UpdateItem(item);
-                                libraryNeedsSaving = true;
-                                itemsUpdated++;
-                                historyItemsUpdated++;
-                            }
-                        }
-                    }
-                    Log($"MigrateLegacyDataToLibrary: Migrated history to {historyItemsUpdated} items");
-                }
-                else
-                {
-                    Log("MigrateLegacyDataToLibrary: History file not found, skipping");
-                }
-            }
-            catch (Exception ex)
-            {
-                Log($"MigrateLegacyDataToLibrary: ERROR migrating history - Exception: {ex.GetType().Name}, Message: {ex.Message}");
-                Log($"MigrateLegacyDataToLibrary: ERROR - Stack trace: {ex.StackTrace}");
-                if (ex.InnerException != null)
-                {
-                    Log($"MigrateLegacyDataToLibrary: ERROR - Inner exception: {ex.InnerException.GetType().Name}, Message: {ex.InnerException.Message}");
-                }
-            }
-
-            // Save library if any changes were made
-            if (libraryNeedsSaving)
-            {
-                Log($"MigrateLegacyDataToLibrary: Saving library after migrating {itemsUpdated} items (playback stats, loudness stats, history)");
-                _ = Task.Run(() =>
-                {
-                    try
-                    {
-                        _libraryService.SaveLibrary();
-                        Log($"MigrateLegacyDataToLibrary: Successfully saved library with migrated data");
-                    }
-                    catch (Exception ex)
-                    {
-                        Log($"MigrateLegacyDataToLibrary: ERROR saving library after migration - Exception: {ex.GetType().Name}, Message: {ex.Message}");
-                        Log($"MigrateLegacyDataToLibrary: ERROR - Stack trace: {ex.StackTrace}");
-                        if (ex.InnerException != null)
-                        {
-                            Log($"MigrateLegacyDataToLibrary: ERROR - Inner exception: {ex.InnerException.GetType().Name}, Message: {ex.InnerException.Message}");
-                        }
-                    }
-                });
-            }
-            else
-            {
-                Log("MigrateLegacyDataToLibrary: No items needed updating, skipping save");
-            }
-            Log("MigrateLegacyDataToLibrary: Migration complete");
-        }
-
         #region Library Panel
 
         private static string GetLogPath()
@@ -3721,33 +3455,14 @@ namespace ReelRoulette
 
                 UpdateLibraryViewModeVisibility();
                 
-                // Initialize source combo box
-                Log("  Updating source combo box...");
-                UpdateLibrarySourceComboBox();
-                
-                // Set default view preset
-                Log("  Setting default view preset...");
-                if (LibraryViewPresetComboBox != null && LibraryViewPresetComboBox.Items.Count > 0)
-                {
-                    // Explicitly set the preset value before setting SelectedIndex
-                    if (LibraryViewPresetComboBox.Items[0] is ComboBoxItem firstItem && firstItem.Tag is string presetTag)
-                    {
-                        _currentViewPreset = presetTag;
-                        Log($"  Set _currentViewPreset to: {_currentViewPreset}");
-                    }
-                    LibraryViewPresetComboBox.SelectedIndex = 0; // "All videos"
-                    Log("  View preset set to index 0.");
-                }
-                else
-                {
-                    Log($"  WARNING: LibraryViewPresetComboBox is null or empty (null: {LibraryViewPresetComboBox == null}, count: {LibraryViewPresetComboBox?.Items.Count ?? -1})");
-                }
-                
                 // Set default sort
                 Log("  Setting default sort...");
                 if (LibrarySortComboBox != null && LibrarySortComboBox.Items.Count > 0)
                 {
-                    LibrarySortComboBox.SelectedIndex = 0; // "Name (A-Z)"
+                    LibrarySortComboBox.SelectedIndex = 0;
+                    _librarySortMode = "Name";
+                    _librarySortDescending = false;
+                    UpdateSortDirectionButton();
                     Log("  Sort set to index 0.");
                 }
                 else
@@ -3809,138 +3524,6 @@ namespace ReelRoulette
                 Log(errorMsg);
                 throw;
             }
-        }
-
-        private void UpdateLibrarySourceComboBox()
-        {
-            try
-            {
-                if (LibrarySourceComboBox == null)
-                {
-                    Log("    WARNING: LibrarySourceComboBox is null in UpdateLibrarySourceComboBox");
-                    return;
-                }
-                if (_libraryIndex == null)
-                {
-                    Log("    WARNING: _libraryIndex is null in UpdateLibrarySourceComboBox");
-                    return;
-                }
-
-                Log($"    Clearing source combo box (current items: {LibrarySourceComboBox.Items.Count})...");
-                LibrarySourceComboBox.Items.Clear();
-                
-                // Add "All sources" option
-                var allSourcesItem = new ComboBoxItem { Content = "All sources", Tag = (string?)null };
-                LibrarySourceComboBox.Items.Add(allSourcesItem);
-                Log("    Added 'All sources' option.");
-                
-                // Add each source with checkbox for enable/disable
-                Log($"    Adding {_libraryIndex.Sources.Count} sources...");
-                foreach (var source in _libraryIndex.Sources)
-                {
-                    var displayName = !string.IsNullOrEmpty(source.DisplayName) 
-                        ? source.DisplayName 
-                        : System.IO.Path.GetFileName(source.RootPath);
-                    
-                    // Get item count for this source
-                    var itemCount = _libraryIndex.Items.Count(i => i.SourceId == source.Id);
-                    
-                    // Create a StackPanel with CheckBox and text
-                    var checkBox = new CheckBox
-                    {
-                        IsChecked = source.IsEnabled,
-                        Margin = new Thickness(0, 0, 8, 0),
-                        VerticalAlignment = VerticalAlignment.Center,
-                        Tag = source.Id
-                    };
-                    
-                    // Handle checkbox changes
-                    checkBox.Click += SourceEnableCheckBox_Click;
-                    
-                    var textBlock = new TextBlock
-                    {
-                        Text = $"{displayName} ({itemCount} videos)",
-                        VerticalAlignment = VerticalAlignment.Center
-                    };
-                    
-                    var panel = new StackPanel
-                    {
-                        Orientation = Orientation.Horizontal,
-                        Children = { checkBox, textBlock }
-                    };
-                    
-                    var item = new ComboBoxItem 
-                    { 
-                        Content = panel, 
-                        Tag = source.Id 
-                    };
-                    LibrarySourceComboBox.Items.Add(item);
-                }
-                
-                // Select "All sources" by default (only if we have items)
-                if (LibrarySourceComboBox.Items.Count > 0)
-                {
-                    Log($"    Setting SelectedIndex to 0 (total items: {LibrarySourceComboBox.Items.Count})...");
-                    LibrarySourceComboBox.SelectedIndex = 0;
-                    Log("    SelectedIndex set successfully.");
-                }
-                else
-                {
-                    Log("    WARNING: No items in source combo box, cannot set SelectedIndex");
-                }
-            }
-            catch (Exception ex)
-            {
-                var errorMsg = $"EXCEPTION in UpdateLibrarySourceComboBox: {ex.GetType().Name}\n" +
-                              $"Message: {ex.Message}\n" +
-                              $"Stack Trace:\n{ex.StackTrace}";
-                Log(errorMsg);
-                throw;
-            }
-        }
-
-        private void SourceEnableCheckBox_Click(object? sender, RoutedEventArgs e)
-        {
-            if (sender is CheckBox checkBox && checkBox.Tag is string sourceId)
-            {
-                Log($"SourceEnableCheckBox_Click: Source {sourceId} toggled to {checkBox.IsChecked}");
-                
-                var source = _libraryIndex?.Sources.FirstOrDefault(s => s.Id == sourceId);
-                if (source != null)
-                {
-                    source.IsEnabled = checkBox.IsChecked ?? true;
-                    _libraryService.UpdateSource(source);
-                    
-                    // Save library asynchronously
-                    _ = Task.Run(() =>
-                    {
-                        try
-                        {
-                            _libraryService.SaveLibrary();
-                            Log($"SourceEnableCheckBox_Click: Library saved successfully");
-                        }
-                        catch (Exception ex)
-                        {
-                            Log($"SourceEnableCheckBox_Click: ERROR saving library - {ex.Message}");
-                        }
-                    });
-                    
-                    // Update Library panel if visible
-                    if (_showLibraryPanel)
-                    {
-                        UpdateLibraryPanel();
-                    }
-                    
-                    // Rebuild queue to respect source enable/disable changes
-                    RebuildPlayQueueIfNeeded();
-                    
-                    // Update library info
-                    UpdateLibraryInfoText();
-                }
-            }
-            
-            // Prevent the ComboBox from closing when clicking the checkbox
-            e.Handled = true;
         }
 
         private void UpdateLibraryPanel()
@@ -4022,7 +3605,7 @@ namespace ReelRoulette
                 // Capture UI control values on UI thread before entering background thread
                 bool respectFilters = LibraryRespectFiltersToggle?.IsChecked == true;
                 
-                Log($"UpdateLibraryPanel: Processing {_libraryIndex.Items.Count} items, view preset: {_currentViewPreset ?? "null"}, source: {_selectedSourceId ?? "null"}, search: '{_librarySearchText}', respect filters: {respectFilters}");
+                Log($"UpdateLibraryPanel: Processing {_libraryIndex.Items.Count} items, sort: {_librarySortMode}, descending: {_librarySortDescending}, search: '{_librarySearchText}', respect filters: {respectFilters}");
                 // Run filtering and sorting on background thread
                 await Task.Run(() =>
                 {
@@ -4040,17 +3623,6 @@ namespace ReelRoulette
                         items = items.Where(item => enabledSourceIds.Contains(item.SourceId)).ToList();
                         Log($"UpdateLibraryPanel: After disabled source filter: {items.Count} items.");
 
-                        // Apply view preset filters
-                        items = ApplyViewPresetFilter(items);
-                        Log($"UpdateLibraryPanel: After view preset filter: {items.Count} items.");
-
-                        // Apply source filter
-                        if (_selectedSourceId != null)
-                        {
-                            items = items.Where(item => item.SourceId == _selectedSourceId).ToList();
-                            Log($"UpdateLibraryPanel: After source filter: {items.Count} items.");
-                        }
-
                         // Apply search filter
                         if (!string.IsNullOrWhiteSpace(_librarySearchText))
                         {
@@ -4062,11 +3634,9 @@ namespace ReelRoulette
                             Log($"UpdateLibraryPanel: After search filter: {items.Count} items.");
                         }
 
-                        // Apply FilterState if "Respect filters" is enabled
-                        // But only if we're not in a special view preset that should show everything
+                        // Apply FilterState if "Respect filters" is enabled.
                         bool shouldApplyFilterState = respectFilters 
-                            && _currentFilterState != null
-                            && _currentViewPreset != "Blacklisted"; // Blacklisted view should show all blacklisted items regardless of filter
+                            && _currentFilterState != null;
                         
                         if (shouldApplyFilterState && _currentFilterState != null)
                         {
@@ -4079,7 +3649,7 @@ namespace ReelRoulette
                         }
                         else
                         {
-                            Log("UpdateLibraryPanel: Skipping FilterState (Respect filters off, or no filter state, or special view preset)");
+                            Log("UpdateLibraryPanel: Skipping FilterState (Respect filters off or no filter state)");
                         }
 
                         // Apply sorting
@@ -4307,50 +3877,25 @@ namespace ReelRoulette
             }
         }
 
-        private List<LibraryItem> ApplyViewPresetFilter(List<LibraryItem> items)
-        {
-            switch (_currentViewPreset)
-            {
-                case "Favorites":
-                    return items.Where(item => item.IsFavorite).ToList();
-                
-                case "Blacklisted":
-                    // Show only blacklisted items (ignore ExcludeBlacklisted setting for this view)
-                    return items.Where(item => item.IsBlacklisted).ToList();
-                
-                case "RecentlyPlayed":
-                    // Filter to items with LastPlayedUtc != null, sorted by LastPlayedUtc descending
-                    return items.Where(item => item.LastPlayedUtc != null)
-                        .OrderByDescending(item => item.LastPlayedUtc)
-                        .ToList();
-                
-                case "NeverPlayed":
-                    return items.Where(item => item.PlayCount == 0).ToList();
-                
-                case "All":
-                case null:
-                default:
-                    return items;
-            }
-        }
-
         private List<LibraryItem> ApplySort(List<LibraryItem> items)
         {
-            switch (_librarySortMode)
+            IEnumerable<LibraryItem> sorted = _librarySortMode switch
             {
-                case "LastPlayed":
-                    return items.OrderByDescending(item => item.LastPlayedUtc ?? DateTime.MinValue).ToList();
-                
-                case "PlayCount":
-                    return items.OrderByDescending(item => item.PlayCount).ToList();
-                
-                case "Duration":
-                    return items.OrderByDescending(item => item.Duration ?? TimeSpan.Zero).ToList();
-                
-                case "Name":
-                default:
-                    return items.OrderBy(item => item.FileName, StringComparer.OrdinalIgnoreCase).ToList();
-            }
+                "LastPlayed" => _librarySortDescending
+                    ? items.OrderByDescending(item => item.LastPlayedUtc ?? DateTime.MinValue)
+                    : items.OrderBy(item => item.LastPlayedUtc ?? DateTime.MinValue),
+                "PlayCount" => _librarySortDescending
+                    ? items.OrderByDescending(item => item.PlayCount)
+                    : items.OrderBy(item => item.PlayCount),
+                "Duration" => _librarySortDescending
+                    ? items.OrderByDescending(item => item.Duration ?? TimeSpan.Zero)
+                    : items.OrderBy(item => item.Duration ?? TimeSpan.Zero),
+                _ => _librarySortDescending
+                    ? items.OrderByDescending(item => item.FileName, StringComparer.OrdinalIgnoreCase)
+                    : items.OrderBy(item => item.FileName, StringComparer.OrdinalIgnoreCase)
+            };
+
+            return sorted.ToList();
         }
 
         private List<LibraryItem> GetSelectedLibraryItems()
@@ -4398,13 +3943,6 @@ namespace ReelRoulette
                 .ToHashSet();
             items = items.Where(item => enabledSourceIds.Contains(item.SourceId)).ToList();
 
-            items = ApplyViewPresetFilter(items);
-
-            if (_selectedSourceId != null)
-            {
-                items = items.Where(item => item.SourceId == _selectedSourceId).ToList();
-            }
-
             if (!string.IsNullOrWhiteSpace(_librarySearchText))
             {
                 var searchLower = _librarySearchText.ToLowerInvariant();
@@ -4416,8 +3954,7 @@ namespace ReelRoulette
 
             bool respectFilters = LibraryRespectFiltersToggle?.IsChecked == true;
             bool shouldApplyFilterState = respectFilters
-                && _currentFilterState != null
-                && _currentViewPreset != "Blacklisted";
+                && _currentFilterState != null;
 
             if (shouldApplyFilterState && _currentFilterState != null)
             {
@@ -4737,39 +4274,6 @@ namespace ReelRoulette
             }
         }
 
-        private void LibraryViewPresetComboBox_SelectionChanged(object? sender, SelectionChangedEventArgs e)
-        {
-            if (_isInitializingLibraryPanel) return; // Suppress during initialization
-            
-            if (LibraryViewPresetComboBox?.SelectedItem is ComboBoxItem item && item.Tag is string preset)
-            {
-                var oldPreset = _currentViewPreset;
-                Log($"UI ACTION: LibraryViewPresetComboBox changed to: {preset ?? "null"} (display: {item.Content})");
-                _currentViewPreset = preset;
-                if (oldPreset != _currentViewPreset)
-                {
-                    Log($"STATE CHANGE: View preset changed - Previous: {oldPreset ?? "null"}, New: {_currentViewPreset ?? "null"}");
-                }
-                UpdateLibraryPanel();
-            }
-        }
-
-        private void LibrarySourceComboBox_SelectionChanged(object? sender, SelectionChangedEventArgs e)
-        {
-            if (_isInitializingLibraryPanel) return; // Suppress during initialization
-            
-            if (LibrarySourceComboBox?.SelectedItem is ComboBoxItem item)
-            {
-                var sourceId = item.Tag as string;
-                Log($"UI ACTION: LibrarySourceComboBox changed to: {sourceId ?? "All sources"} (display: {item.Content})");
-                _selectedSourceId = sourceId;
-                // Clear selection when source changes
-                _selectedItemPaths.Clear();
-                _lastSelectedIndex = -1;
-                UpdateLibraryPanel();
-            }
-        }
-
         /// <summary>
         /// Populates and updates the filter preset dropdown in the library panel.
         /// </summary>
@@ -4860,7 +4364,7 @@ namespace ReelRoulette
                 StatusTextBlock.Text = "Cleared filter preset";
                 _ = Task.Run(async () => await RebuildPlayQueueIfNeededAsync());
                 SaveSettings();
-                _ = SyncFilterSessionToCoreAsync();
+                _ = SyncPresetsToCoreAsync();
                 return;
             }
             
@@ -4892,7 +4396,7 @@ namespace ReelRoulette
             }
             StatusTextBlock.Text = $"Applied filter preset: {selectedPresetName}";
             _ = Task.Run(async () => await RebuildPlayQueueIfNeededAsync());
-            _ = SyncFilterSessionToCoreAsync();
+            _ = SyncPresetsToCoreAsync();
         }
 
 
@@ -4915,8 +4419,43 @@ namespace ReelRoulette
             {
                 Log($"UI ACTION: LibrarySortComboBox changed to: {sortMode} (display: {item.Content})");
                 _librarySortMode = sortMode;
+                _librarySortDescending = IsDefaultDescendingForSortMode(sortMode);
+                UpdateSortDirectionButton();
                 UpdateLibraryPanel();
             }
+        }
+
+        private void LibrarySortDirectionButton_Click(object? sender, RoutedEventArgs e)
+        {
+            _librarySortDescending = !_librarySortDescending;
+            UpdateSortDirectionButton();
+            UpdateLibraryPanel();
+        }
+
+        private void UpdateSortDirectionButton()
+        {
+            if (LibrarySortDirectionButton == null)
+            {
+                return;
+            }
+
+            LibrarySortDirectionButton.Content = GetSortDirectionLabel(_librarySortMode, _librarySortDescending);
+        }
+
+        private static bool IsDefaultDescendingForSortMode(string sortMode)
+        {
+            return sortMode is "LastPlayed" or "PlayCount" or "Duration";
+        }
+
+        private static string GetSortDirectionLabel(string sortMode, bool descending)
+        {
+            return sortMode switch
+            {
+                "LastPlayed" => descending ? "Newest -> Oldest" : "Oldest -> Newest",
+                "PlayCount" => descending ? "Most Plays -> Least Plays" : "Least Plays -> Most Plays",
+                "Duration" => descending ? "Longest -> Shortest" : "Shortest -> Longest",
+                _ => descending ? "Z-A" : "A-Z"
+            };
         }
 
         private void LibraryFilterButton_Click(object? sender, RoutedEventArgs e)
@@ -5000,7 +4539,6 @@ namespace ReelRoulette
                 Log($"UI ACTION: LibraryItemFavorite toggled for '{item.FileName}' to: {toggleState} (was: {libraryItem.IsFavorite})");
                 libraryItem.IsFavorite = toggleState;
                 _libraryService.UpdateItem(libraryItem);
-                _webRemoteServer?.BroadcastLibraryItemChanged(libraryItem.FullPath, libraryItem.IsFavorite, libraryItem.IsBlacklisted);
                 _ = Task.Run(() => _libraryService.SaveLibrary());
                 UpdateLibraryPanel();
             }
@@ -5056,7 +4594,6 @@ namespace ReelRoulette
                 Log($"UI ACTION: LibraryItemBlacklist toggled for '{item.FileName}' to: {toggleState} (was: {libraryItem.IsBlacklisted})");
                 libraryItem.IsBlacklisted = toggleState;
                 _libraryService.UpdateItem(libraryItem);
-                _webRemoteServer?.BroadcastLibraryItemChanged(libraryItem.FullPath, libraryItem.IsFavorite, libraryItem.IsBlacklisted);
                 _ = Task.Run(() => _libraryService.SaveLibrary());
                 UpdateLibraryPanel();
                 // Rebuild queue if item was blacklisted
@@ -5176,7 +4713,6 @@ namespace ReelRoulette
                 {
                     item.IsFavorite = true;
                     _libraryService.UpdateItem(item);
-                    _webRemoteServer?.BroadcastLibraryItemChanged(item.FullPath, item.IsFavorite, item.IsBlacklisted);
                 }
             }
             
@@ -5200,7 +4736,6 @@ namespace ReelRoulette
                 {
                     item.IsFavorite = false;
                     _libraryService.UpdateItem(item);
-                    _webRemoteServer?.BroadcastLibraryItemChanged(item.FullPath, item.IsFavorite, item.IsBlacklisted);
                 }
             }
             
@@ -5224,7 +4759,6 @@ namespace ReelRoulette
                 {
                     item.IsBlacklisted = true;
                     _libraryService.UpdateItem(item);
-                    _webRemoteServer?.BroadcastLibraryItemChanged(item.FullPath, item.IsFavorite, item.IsBlacklisted);
                 }
             }
             
@@ -5249,7 +4783,6 @@ namespace ReelRoulette
                 {
                     item.IsBlacklisted = false;
                     _libraryService.UpdateItem(item);
-                    _webRemoteServer?.BroadcastLibraryItemChanged(item.FullPath, item.IsFavorite, item.IsBlacklisted);
                 }
             }
             
@@ -5520,7 +5053,6 @@ namespace ReelRoulette
                     {
                         item.IsFavorite = false;
                         _libraryService.UpdateItem(item);
-                        _webRemoteServer?.BroadcastLibraryItemChanged(item.FullPath, item.IsFavorite, item.IsBlacklisted);
                         
                         // Save library asynchronously
                         _ = Task.Run(() =>
@@ -6961,78 +6493,56 @@ namespace ReelRoulette
         {
             Log("PlayRandomVideoAsync: Starting random video selection");
             
-            // Check if library system is available
-            if (_libraryIndex == null || _libraryIndex.Items.Count == 0)
-            {
-                Log("PlayRandomVideoAsync: No library available - prompting user to import folder");
-                await Dispatcher.UIThread.InvokeAsync(() =>
-                {
-                    StatusTextBlock.Text = "Please import a folder first (Library → Import Folder).";
-                });
-                return;
-            }
-
-            Log($"PlayRandomVideoAsync: Using library system - {_libraryIndex.Items.Count} items available");
+            Log("PlayRandomVideoAsync: Requesting random media from core API");
 
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
                 StatusTextBlock.Text = "Finding eligible media...";
             });
 
-            var eligibleItems = await GetEligibleItemsAsync();
-            Log($"PlayRandomVideoAsync: Eligible pool size: {eligibleItems.Count}");
-
-            if (eligibleItems.Count == 0)
+            if (!_isCoreApiReachable)
             {
-                Log("PlayRandomVideoAsync: No eligible media found in pool");
-                await Dispatcher.UIThread.InvokeAsync(() =>
-                {
-                    StatusTextBlock.Text = "No eligible media found. Check your filters or import a folder.";
-                });
+                await Dispatcher.UIThread.InvokeAsync(() => { StatusTextBlock.Text = "Core API unavailable."; });
                 return;
             }
 
+            var activePresetName = await MatchPresetNameFromCoreAsync(_currentFilterState);
+            if (string.IsNullOrWhiteSpace(activePresetName))
+            {
+                activePresetName = _activePresetName;
+            }
+
             string? randomPick = null;
-            if (_isCoreApiReachable)
+            try
             {
-                try
-                {
-                    var randomResponse = await _coreServerApiClient.RequestRandomAsync(
-                        _coreServerBaseUrl,
-                        new CoreRandomRequest
-                        {
-                            PresetId = string.IsNullOrWhiteSpace(_activePresetName) ? "all-media" : _activePresetName!,
-                            ClientId = _coreClientId,
-                            IncludeVideos = true,
-                            IncludePhotos = true,
-                            RandomizationMode = _randomizationMode.ToString()
-                        });
-
-                    if (randomResponse != null && !string.IsNullOrWhiteSpace(randomResponse.MediaUrl) && File.Exists(randomResponse.MediaUrl))
+                var randomResponse = await _coreServerApiClient.RequestRandomAsync(
+                    _coreServerBaseUrl,
+                    new CoreRandomRequest
                     {
-                        randomPick = randomResponse.MediaUrl;
-                    }
-                }
-                catch (Exception ex)
+                        PresetId = activePresetName ?? string.Empty,
+                        FilterState = _currentFilterState == null ? null : JsonSerializer.SerializeToElement(_currentFilterState),
+                        ClientId = _coreClientId,
+                        IncludeVideos = true,
+                        IncludePhotos = true,
+                        RandomizationMode = _randomizationMode.ToString()
+                    });
+
+                if (randomResponse != null)
                 {
-                    Log($"PlayRandomVideoAsync: API random call failed ({ex.Message}), using local selector.");
+                    randomPick = ResolvePlaybackPathFromApiRandomResponse(randomResponse);
                 }
+            }
+            catch (Exception ex)
+            {
+                Log($"PlayRandomVideoAsync: API random call failed ({ex.Message}).");
             }
 
             if (string.IsNullOrWhiteSpace(randomPick))
             {
-                lock (_desktopRandomizationLock)
-                {
-                    randomPick = RandomSelectionEngine.SelectPath(_desktopRandomizationState, _randomizationMode, eligibleItems, _rng);
-                }
-            }
-
-            if (string.IsNullOrWhiteSpace(randomPick))
-            {
-                Log("PlayRandomVideoAsync: Selector returned no media path");
+                Log("PlayRandomVideoAsync: API random selection returned no playable path");
                 await Dispatcher.UIThread.InvokeAsync(() =>
                 {
-                    StatusTextBlock.Text = "No eligible media found. Check your filters or import a folder.";
+                    StatusTextBlock.Text = "No eligible media found from core API. Check preset filters.";
                 });
                 return;
             }
@@ -7056,6 +6566,27 @@ namespace ReelRoulette
             if (!_isApplyingSettings && !_isLoadingSettings && !_isProgrammaticUiSync)
             {
                 SaveSettings();
+            }
+
+            // Photo playback uses desktop timer instead of LibVLC media looping.
+            if (_isCurrentlyPlayingPhoto)
+            {
+                if (_photoDisplayTimer != null)
+                {
+                    _photoDisplayTimer.Stop();
+                    _photoDisplayTimer.Elapsed -= PhotoDisplayTimer_Elapsed;
+                    _photoDisplayTimer.Dispose();
+                    _photoDisplayTimer = null;
+                }
+
+                if (_isLoopEnabled || _autoPlayNext)
+                {
+                    _photoDisplayTimer = new System.Timers.Timer(_photoDisplayDurationSeconds * 1000);
+                    _photoDisplayTimer.Elapsed += PhotoDisplayTimer_Elapsed;
+                    _photoDisplayTimer.AutoReset = false;
+                    _photoDisplayTimer.Start();
+                    Log($"LoopToggle_Changed: Reset photo timer for {_photoDisplayDurationSeconds}s (Loop={_isLoopEnabled}, AutoPlay={_autoPlayNext})");
+                }
             }
             
             // If media is currently playing, update the input-repeat option
@@ -7110,209 +6641,6 @@ namespace ReelRoulette
         }
 
         #endregion
-
-        #region IWebRemoteApiServices
-
-        LibraryIndex? WebRemote.IWebRemoteApiServices.GetLibraryIndex() => _libraryIndex;
-
-        FilterService WebRemote.IWebRemoteApiServices.GetFilterService() => _filterService;
-
-        IReadOnlyList<FilterPreset> WebRemote.IWebRemoteApiServices.GetFilterPresets()
-            => (IReadOnlyList<FilterPreset>?)_filterPresets ?? Array.Empty<FilterPreset>();
-
-        FilterPreset? WebRemote.IWebRemoteApiServices.GetPresetByName(string presetName)
-        {
-            if (string.IsNullOrEmpty(presetName) || _filterPresets == null)
-                return null;
-            return _filterPresets.FirstOrDefault(p =>
-                string.Equals(p.Name, presetName, StringComparison.OrdinalIgnoreCase));
-        }
-
-        LibraryItem? WebRemote.IWebRemoteApiServices.GetItemByPath(string fullPath)
-        {
-            if (string.IsNullOrEmpty(fullPath) || _libraryIndex == null)
-                return null;
-            return _libraryIndex.Items.FirstOrDefault(i =>
-                string.Equals(i.FullPath, fullPath, StringComparison.OrdinalIgnoreCase));
-        }
-
-        bool WebRemote.IWebRemoteApiServices.SetItemFavorite(string fullPath, bool isFavorite)
-        {
-            if (string.IsNullOrEmpty(fullPath) || _libraryIndex == null) return false;
-            try
-            {
-                if (!_isCoreApiReachable)
-                {
-                    Log("SetItemFavorite (Web): Core runtime unavailable; rejecting mutation.");
-                    return false;
-                }
-
-                var accepted = _coreServerApiClient.SetFavoriteAsync(_coreServerBaseUrl, fullPath, isFavorite).GetAwaiter().GetResult();
-                if (!accepted)
-                {
-                    return false;
-                }
-
-                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-                {
-                    var priorItem = _libraryService.FindItemByPath(fullPath);
-                    var projectedBlacklist = isFavorite ? false : (priorItem?.IsBlacklisted ?? false);
-                    ApplyRemoteItemStateProjection(fullPath, isFavorite, projectedBlacklist, isFavorite
-                        ? $"Synced favorite: {Path.GetFileName(fullPath)}"
-                        : $"Synced unfavorite: {Path.GetFileName(fullPath)}");
-                });
-                return true;
-            }
-            catch (Exception ex)
-            {
-                Log($"SetItemFavorite (Web): API delegation failed ({ex.Message})");
-                return false;
-            }
-        }
-
-        bool WebRemote.IWebRemoteApiServices.SetItemBlacklist(string fullPath, bool isBlacklisted)
-        {
-            if (string.IsNullOrEmpty(fullPath) || _libraryIndex == null) return false;
-            try
-            {
-                if (!_isCoreApiReachable)
-                {
-                    Log("SetItemBlacklist (Web): Core runtime unavailable; rejecting mutation.");
-                    return false;
-                }
-
-                var accepted = _coreServerApiClient.SetBlacklistAsync(_coreServerBaseUrl, fullPath, isBlacklisted).GetAwaiter().GetResult();
-                if (!accepted)
-                {
-                    return false;
-                }
-
-                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-                {
-                    var priorItem = _libraryService.FindItemByPath(fullPath);
-                    var projectedFavorite = isBlacklisted ? false : (priorItem?.IsFavorite ?? false);
-                    ApplyRemoteItemStateProjection(fullPath, projectedFavorite, isBlacklisted, isBlacklisted
-                        ? $"Synced blacklist: {Path.GetFileName(fullPath)}"
-                        : $"Synced unblacklist: {Path.GetFileName(fullPath)}");
-                });
-                return true;
-            }
-            catch (Exception ex)
-            {
-                Log($"SetItemBlacklist (Web): API delegation failed ({ex.Message})");
-                return false;
-            }
-        }
-
-        bool WebRemote.IWebRemoteApiServices.RecordPlayback(string fullPath)
-        {
-            if (string.IsNullOrWhiteSpace(fullPath) || _libraryIndex == null)
-                return false;
-
-            var item = _libraryService.FindItemByPath(fullPath);
-            if (item == null)
-                return false;
-
-            RecordPlayback(fullPath);
-            return true;
-        }
-
-        CoreTagEditorModelResponse? WebRemote.IWebRemoteApiServices.GetTagEditorModel(IReadOnlyList<string> itemIds)
-        {
-            try
-            {
-                if (!_isCoreApiReachable)
-                {
-                    return null;
-                }
-
-                SyncRequestedItemTagsToCore(itemIds);
-                return _coreServerApiClient.GetTagEditorModelAsync(_coreServerBaseUrl, itemIds?.ToList() ?? []).GetAwaiter().GetResult();
-            }
-            catch (Exception ex)
-            {
-                Log($"GetTagEditorModel (Web): API delegation failed ({ex.Message})");
-                return null;
-            }
-        }
-
-        bool WebRemote.IWebRemoteApiServices.ApplyItemTags(IReadOnlyList<string> itemIds, IReadOnlyList<string> addTags, IReadOnlyList<string> removeTags)
-        {
-            try
-            {
-                return ApplyItemTagDeltaAsync(itemIds?.ToList() ?? [], addTags?.ToList() ?? [], removeTags?.ToList() ?? []).GetAwaiter().GetResult();
-            }
-            catch (Exception ex)
-            {
-                Log($"ApplyItemTags (Web): API delegation failed ({ex.Message})");
-                return false;
-            }
-        }
-
-        bool WebRemote.IWebRemoteApiServices.UpsertCategory(TagCategory category)
-        {
-            try
-            {
-                return UpsertCategoryAsync(category).GetAwaiter().GetResult();
-            }
-            catch (Exception ex)
-            {
-                Log($"UpsertCategory (Web): API delegation failed ({ex.Message})");
-                return false;
-            }
-        }
-
-        bool WebRemote.IWebRemoteApiServices.UpsertTag(string tagName, string categoryId)
-        {
-            try
-            {
-                return UpsertTagAsync(tagName, categoryId).GetAwaiter().GetResult();
-            }
-            catch (Exception ex)
-            {
-                Log($"UpsertTag (Web): API delegation failed ({ex.Message})");
-                return false;
-            }
-        }
-
-        bool WebRemote.IWebRemoteApiServices.RenameTag(string oldTagName, string newTagName, string? newCategoryId)
-        {
-            try
-            {
-                return RenameTagAsync(oldTagName, newTagName, newCategoryId).GetAwaiter().GetResult();
-            }
-            catch (Exception ex)
-            {
-                Log($"RenameTag (Web): API delegation failed ({ex.Message})");
-                return false;
-            }
-        }
-
-        bool WebRemote.IWebRemoteApiServices.DeleteTag(string tagName)
-        {
-            try
-            {
-                return DeleteTagAsync(tagName).GetAwaiter().GetResult();
-            }
-            catch (Exception ex)
-            {
-                Log($"DeleteTag (Web): API delegation failed ({ex.Message})");
-                return false;
-            }
-        }
-
-        bool WebRemote.IWebRemoteApiServices.DeleteCategory(string categoryId, string? newCategoryId)
-        {
-            try
-            {
-                return DeleteCategoryAsync(categoryId, newCategoryId).GetAwaiter().GetResult();
-            }
-            catch (Exception ex)
-            {
-                Log($"DeleteCategory (Web): API delegation failed ({ex.Message})");
-                return false;
-            }
-        }
 
         public async Task<bool> UpsertCategoryAsync(TagCategory category)
         {
@@ -7576,18 +6904,27 @@ namespace ReelRoulette
             Log($"CoreEvents: tagCatalogChanged received (reason={payload.Reason}); preserving local catalog.");
         }
 
-        /// <summary>
-        /// Ensures a shared token exists when auth is enabled. Generates and persists if blank.
-        /// </summary>
-        private void EnsureWebRemoteToken()
+        private void ApplySourceStateProjection(CoreSourceStateChangedPayload payload)
         {
-            if (!_webRemoteEnabled || _webRemoteAuthMode != WebRemote.WebRemoteAuthMode.TokenRequired)
+            if (_libraryIndex == null || string.IsNullOrWhiteSpace(payload.SourceId))
+            {
                 return;
-            if (!string.IsNullOrEmpty(_webRemoteSharedToken))
+            }
+
+            var source = _libraryIndex.Sources.FirstOrDefault(s =>
+                string.Equals(s.Id, payload.SourceId, StringComparison.OrdinalIgnoreCase));
+            if (source == null)
+            {
                 return;
-            _webRemoteSharedToken = Guid.NewGuid().ToString("N");
-            SaveSettings();
-            Log($"WebRemote: Auto-generated shared token (Settings > Web Remote to view/copy)");
+            }
+
+            source.IsEnabled = payload.IsEnabled;
+            _libraryService.UpdateSource(source);
+            if (_showLibraryPanel)
+            {
+                UpdateLibraryPanel();
+            }
+            UpdateLibraryInfoText();
         }
 
         private async Task<bool> ProbeCoreServerVersionAsync(bool updateStatus = false)
@@ -7636,7 +6973,10 @@ namespace ReelRoulette
             {
                 EnsureCoreEventStreamStarted();
                 _ = SyncTagCatalogToCoreAsync();
+                _ = SyncPresetsFromCoreAsync();
+                _ = SyncSourcesFromCoreAsync();
                 _ = SyncRefreshSettingsFromCoreAsync();
+                _ = SyncWebRuntimeSettingsFromCoreAsync();
                 _ = SyncRefreshStatusFromCoreAsync();
                 return true;
             }
@@ -7653,7 +6993,10 @@ namespace ReelRoulette
             {
                 EnsureCoreEventStreamStarted();
                 _ = SyncTagCatalogToCoreAsync();
+                _ = SyncPresetsFromCoreAsync();
+                _ = SyncSourcesFromCoreAsync();
                 _ = SyncRefreshSettingsFromCoreAsync();
+                _ = SyncWebRuntimeSettingsFromCoreAsync();
                 _ = SyncRefreshStatusFromCoreAsync();
             }
 
@@ -7709,6 +7052,46 @@ namespace ReelRoulette
             catch (Exception ex)
             {
                 Log($"CoreTagCatalog: Failed to sync catalog ({ex.Message})");
+            }
+        }
+
+        private async Task SyncFilterDialogCatalogFromCoreAsync()
+        {
+            if (!_isCoreApiReachable || _libraryIndex == null)
+            {
+                return;
+            }
+
+            try
+            {
+                var model = await _coreServerApiClient.GetTagEditorModelAsync(_coreServerBaseUrl, []);
+                if (model == null)
+                {
+                    return;
+                }
+
+                _libraryIndex.Categories = (model.Categories ?? [])
+                    .Where(c => !string.IsNullOrWhiteSpace(c.Name))
+                    .Select(c => new TagCategory
+                    {
+                        Id = c.Id ?? string.Empty,
+                        Name = c.Name ?? string.Empty,
+                        SortOrder = c.SortOrder
+                    })
+                    .ToList();
+
+                _libraryIndex.Tags = (model.Tags ?? [])
+                    .Where(t => !string.IsNullOrWhiteSpace(t.Name))
+                    .Select(t => new Tag
+                    {
+                        Name = t.Name ?? string.Empty,
+                        CategoryId = t.CategoryId ?? "uncategorized"
+                    })
+                    .ToList();
+            }
+            catch (Exception ex)
+            {
+                Log($"FilterDialog: Failed to sync tag catalog from core ({ex.Message})");
             }
         }
 
@@ -7923,6 +7306,27 @@ namespace ReelRoulette
                         ApplyTagCatalogProjection(tagCatalog);
                     });
                     break;
+                case "sourceStateChanged":
+                    CoreSourceStateChangedPayload? sourceState = null;
+                    try
+                    {
+                        sourceState = envelope.Payload.Deserialize<CoreSourceStateChangedPayload>(eventPayloadOptions);
+                    }
+                    catch
+                    {
+                        // Ignore malformed payloads and keep stream alive.
+                    }
+
+                    if (sourceState == null || string.IsNullOrWhiteSpace(sourceState.SourceId))
+                    {
+                        return;
+                    }
+
+                    await Dispatcher.UIThread.InvokeAsync(() =>
+                    {
+                        ApplySourceStateProjection(sourceState);
+                    });
+                    break;
                 case "refreshStatusChanged":
                     CoreRefreshStatusChangedPayload? refreshStatusChanged = null;
                     try
@@ -8099,33 +7503,269 @@ namespace ReelRoulette
             }
         }
 
-        private async Task SyncFilterSessionToCoreAsync()
+        private async Task SyncWebRuntimeSettingsFromCoreAsync()
         {
-            if (!_isCoreApiReachable || _currentFilterState == null)
+            if (!_isCoreApiReachable)
             {
                 return;
             }
 
             try
             {
-                var snapshot = new CoreFilterSessionSnapshot
-                {
-                    ActivePresetName = _activePresetName,
-                    CurrentFilterState = JsonSerializer.SerializeToElement(_currentFilterState),
-                    Presets = (_filterPresets ?? new List<FilterPreset>())
-                        .Select(p => new CoreFilterPresetSnapshot
-                        {
-                            Name = p.Name,
-                            FilterState = JsonSerializer.SerializeToElement(p.FilterState)
-                        })
-                        .ToList()
-                };
+                var previousEnabled = _webRemoteEnabled;
+                var previousPort = _webRemotePort;
+                var previousBindOnLan = _webRemoteBindOnLan;
+                var previousLanHostname = _webRemoteLanHostname;
+                var previousAuthMode = _webRemoteAuthMode;
+                var previousSharedToken = _webRemoteSharedToken;
 
-                await _coreServerApiClient.SyncFilterSessionAsync(_coreServerBaseUrl, snapshot);
+                var settings = await _coreServerApiClient.GetWebRuntimeSettingsAsync(_coreServerBaseUrl);
+                if (settings == null)
+                {
+                    return;
+                }
+
+                _webRemoteEnabled = settings.Enabled;
+                _webRemotePort = settings.Port > 0 ? settings.Port : 51234;
+                _webRemoteBindOnLan = settings.BindOnLan;
+                _webRemoteLanHostname = NormalizeWebRemoteLanHostname(settings.LanHostname);
+                _webRemoteAuthMode = string.Equals(settings.AuthMode, "Off", StringComparison.OrdinalIgnoreCase)
+                    ? WebUiAuthMode.Off
+                    : WebUiAuthMode.TokenRequired;
+                _webRemoteSharedToken = settings.SharedToken;
+
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    if (OpenWebUiMenuItem != null)
+                    {
+                        OpenWebUiMenuItem.IsEnabled = _webRemoteEnabled;
+                    }
+                });
+
+                var changed =
+                    previousEnabled != _webRemoteEnabled ||
+                    previousPort != _webRemotePort ||
+                    previousBindOnLan != _webRemoteBindOnLan ||
+                    !string.Equals(previousLanHostname, _webRemoteLanHostname, StringComparison.OrdinalIgnoreCase) ||
+                    previousAuthMode != _webRemoteAuthMode ||
+                    !string.Equals(previousSharedToken ?? string.Empty, _webRemoteSharedToken ?? string.Empty, StringComparison.Ordinal);
+
+                if (changed)
+                {
+                    Log("CoreRuntimeSettings: Web UI settings changed and are now core-owned; worker runtime applies lifecycle updates.");
+                }
             }
             catch (Exception ex)
             {
-                Log($"CoreFilterSession: Failed to sync filter session ({ex.Message})");
+                Log($"CoreRuntimeSettings: Failed to fetch web runtime settings ({ex.Message})");
+            }
+        }
+
+        private async Task SyncPresetsFromCoreAsync()
+        {
+            if (!_isCoreApiReachable)
+            {
+                return;
+            }
+
+            try
+            {
+                var presets = await _coreServerApiClient.GetPresetsAsync(_coreServerBaseUrl);
+                if (presets == null)
+                {
+                    return;
+                }
+
+                var mapped = presets
+                    .Where(p => !string.IsNullOrWhiteSpace(p.Name))
+                    .Select(p => new FilterPreset
+                    {
+                        Name = p.Name.Trim(),
+                        FilterState = ParseCorePresetFilterState(p.FilterState)
+                    })
+                    .GroupBy(p => p.Name, StringComparer.OrdinalIgnoreCase)
+                    .Select(group => group.First())
+                    .ToList();
+
+                _filterPresets = mapped;
+                _activePresetName = await MatchPresetNameFromCoreAsync(_currentFilterState) ??
+                                    ResolveMatchingPresetName(_currentFilterState, _filterPresets);
+                _filterSessionStateService.Set(
+                    _currentFilterState ?? new FilterState(),
+                    _filterPresets.Cast<object>(),
+                    _activePresetName);
+
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    UpdateLibraryPresetComboBox();
+                    if (_showLibraryPanel)
+                    {
+                        UpdateLibraryPanel();
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                Log($"CorePresetSync: Failed to fetch presets ({ex.Message})");
+            }
+        }
+
+        private async Task<string?> MatchPresetNameFromCoreAsync(FilterState? filterState)
+        {
+            if (!_isCoreApiReachable || filterState == null)
+            {
+                return null;
+            }
+
+            try
+            {
+                var response = await _coreServerApiClient.MatchPresetAsync(_coreServerBaseUrl, new CorePresetMatchRequest
+                {
+                    FilterState = JsonSerializer.SerializeToElement(filterState)
+                });
+
+                if (response?.Matched == true && !string.IsNullOrWhiteSpace(response.PresetName))
+                {
+                    return response.PresetName.Trim();
+                }
+            }
+            catch (Exception ex)
+            {
+                Log($"CorePresetSync: Failed to match preset ({ex.Message})");
+            }
+
+            return null;
+        }
+
+        private static FilterState ParseCorePresetFilterState(JsonElement? filterState)
+        {
+            if (!filterState.HasValue ||
+                filterState.Value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+            {
+                return new FilterState();
+            }
+
+            try
+            {
+                var parsed = JsonSerializer.Deserialize<FilterState>(filterState.Value.GetRawText());
+                return parsed ?? new FilterState();
+            }
+            catch
+            {
+                return new FilterState();
+            }
+        }
+
+        private static string? ResolveMatchingPresetName(FilterState? currentFilterState, IReadOnlyList<FilterPreset>? presets)
+        {
+            if (currentFilterState == null || presets == null || presets.Count == 0)
+            {
+                return null;
+            }
+
+            var currentJson = JsonSerializer.Serialize(currentFilterState);
+            foreach (var preset in presets)
+            {
+                if (string.IsNullOrWhiteSpace(preset.Name))
+                {
+                    continue;
+                }
+
+                var presetJson = JsonSerializer.Serialize(preset.FilterState ?? new FilterState());
+                if (string.Equals(currentJson, presetJson, StringComparison.Ordinal))
+                {
+                    return preset.Name.Trim();
+                }
+            }
+
+            return null;
+        }
+
+        private static string? ResolvePlaybackPathFromApiRandomResponse(CoreRandomResponse response)
+        {
+            if (!string.IsNullOrWhiteSpace(response.Id) && File.Exists(response.Id))
+            {
+                return response.Id;
+            }
+
+            if (!string.IsNullOrWhiteSpace(response.MediaUrl) && File.Exists(response.MediaUrl))
+            {
+                return response.MediaUrl;
+            }
+
+            return null;
+        }
+
+        private async Task SyncPresetsToCoreAsync()
+        {
+            if (!_isCoreApiReachable)
+            {
+                return;
+            }
+
+            try
+            {
+                var presets = (_filterPresets ?? new List<FilterPreset>())
+                    .Select(p => new CoreFilterPresetSnapshot
+                    {
+                        Name = p.Name,
+                        FilterState = JsonSerializer.SerializeToElement(p.FilterState)
+                    })
+                    .ToList();
+
+                await _coreServerApiClient.SyncPresetsAsync(_coreServerBaseUrl, presets);
+            }
+            catch (Exception ex)
+            {
+                Log($"CorePresetSync: Failed to sync presets ({ex.Message})");
+            }
+        }
+
+        private async Task SyncSourcesFromCoreAsync()
+        {
+            if (!_isCoreApiReachable || _libraryIndex == null)
+            {
+                return;
+            }
+
+            try
+            {
+                var sources = await _coreServerApiClient.GetSourcesAsync(_coreServerBaseUrl);
+                if (sources == null)
+                {
+                    return;
+                }
+
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    var sourceById = _libraryIndex.Sources.ToDictionary(s => s.Id, StringComparer.OrdinalIgnoreCase);
+                    foreach (var source in sources)
+                    {
+                        if (string.IsNullOrWhiteSpace(source.Id))
+                        {
+                            continue;
+                        }
+
+                        if (sourceById.TryGetValue(source.Id, out var local))
+                        {
+                            local.IsEnabled = source.IsEnabled;
+                            if (!string.IsNullOrWhiteSpace(source.DisplayName))
+                            {
+                                local.DisplayName = source.DisplayName;
+                            }
+                        }
+                    }
+
+                    if (_showLibraryPanel)
+                    {
+                        UpdateLibraryPanel();
+                    }
+                    UpdateLibraryInfoText();
+                });
+            }
+            catch (Exception ex)
+            {
+                Log($"CoreSourceSync: Failed to fetch sources ({ex.Message})");
             }
         }
 
@@ -8199,8 +7839,6 @@ namespace ReelRoulette
             return null;
         }
 
-        #endregion
-
         #region View Preferences
 
         private class AppSettings
@@ -8272,23 +7910,13 @@ namespace ReelRoulette
             public int MinimumSettingsBackupGapMinutes { get; set; } = 15;
             public int NumberOfSettingsBackups { get; set; } = 10;
             
-            // Auto-refresh settings
-            public bool AutoRefreshSourcesEnabled { get; set; } = true;
-            public int AutoRefreshIntervalMinutes { get; set; } = 60;
-            public bool AutoRefreshOnlyWhenIdle { get; set; } = false;
-            public int AutoRefreshIdleThresholdMinutes { get; set; } = 1;
+            // Library view settings
             public bool LibraryGridViewEnabled { get; set; } = false;
             
             // Filter state
             public FilterState? FilterState { get; set; }
             
-            // Filter presets
-            public List<FilterPreset>? FilterPresets { get; set; }
-            public string? ActivePresetName { get; set; } // Track which preset is currently active
             public bool AutoTagScanFullLibrary { get; set; } = true;
-
-            // Web Remote settings
-            public WebRemote.WebRemoteSettings? WebRemote { get; set; }
             public string CoreServerBaseUrl { get; set; } = "http://localhost:51301";
         }
 
@@ -8368,15 +7996,7 @@ namespace ReelRoulette
             {
             var settingsStorage = CreateSettingsStorageService();
             var settings = settingsStorage.Load();
-            var settingsPath = AppDataManager.GetSettingsPath();
 
-            // If unified settings don't exist, try loading from legacy files and migrate
-            if (!File.Exists(settingsPath))
-            {
-                settings = new AppSettings();
-                MigrateLegacySettings(settings);
-            }
-            
             // Apply view preferences from settings
             _showMenu = settings.ShowMenu;
             _showStatusLine = settings.ShowStatusLine;
@@ -8525,28 +8145,17 @@ namespace ReelRoulette
             _numberOfSettingsBackups = settings.NumberOfSettingsBackups > 0 ? settings.NumberOfSettingsBackups : 10;
             Log($"LoadSettings: Restored backup settings - LibraryEnabled: {_backupLibraryEnabled}, LibraryMinGap: {_minimumBackupGapMinutes} minutes, LibraryCount: {_numberOfBackups}, SettingsEnabled: {_backupSettingsEnabled}, SettingsMinGap: {_minimumSettingsBackupGapMinutes} minutes, SettingsCount: {_numberOfSettingsBackups}");
             
-            // Load auto-refresh settings
-            _autoRefreshSourcesEnabled = settings.AutoRefreshSourcesEnabled;
-            _autoRefreshIntervalMinutes = settings.AutoRefreshIntervalMinutes >= 5 ? settings.AutoRefreshIntervalMinutes : 60;
+            // Refresh settings are core-owned and loaded via API.
+            _autoRefreshSourcesEnabled = true;
+            _autoRefreshIntervalMinutes = 60;
             _autoRefreshOnlyWhenIdle = false;
             _autoRefreshIdleThresholdMinutes = 1;
             _libraryGridViewEnabled = settings.LibraryGridViewEnabled;
-            Log($"LoadSettings: Restored auto-refresh settings - Enabled: {_autoRefreshSourcesEnabled}, Interval: {_autoRefreshIntervalMinutes}m (idle options disabled; core-owned refresh pipeline)");
+            Log("LoadSettings: Using core-owned refresh settings defaults until API sync.");
 
-            // Load Web Remote settings
-            var wr = settings.WebRemote;
-            if (wr != null)
-            {
-                _webRemoteEnabled = wr.Enabled;
-                _webRemotePort = wr.Port > 0 ? wr.Port : 51234;
-                _webRemoteBindOnLan = wr.BindOnLan;
-                _webRemoteLanHostname = NormalizeWebRemoteLanHostname(wr.LanHostname);
-                _webRemoteAuthMode = wr.AuthMode;
-                _webRemoteSharedToken = wr.SharedToken;
-                Log($"LoadSettings: Restored Web Remote settings - Enabled: {_webRemoteEnabled}, Port: {_webRemotePort}, BindOnLan: {_webRemoteBindOnLan}, LanHostname: {_webRemoteLanHostname}, AuthMode: {_webRemoteAuthMode}");
-            }
-            if (OpenWebRemoteMenuItem != null)
-                OpenWebRemoteMenuItem.IsEnabled = _webRemoteEnabled;
+            Log("LoadSettings: Web runtime settings are core-owned; desktop will sync them via API.");
+            if (OpenWebUiMenuItem != null)
+                OpenWebUiMenuItem.IsEnabled = _webRemoteEnabled;
 
             _coreServerBaseUrl = string.IsNullOrWhiteSpace(settings.CoreServerBaseUrl)
                 ? "http://localhost:51301"
@@ -8598,17 +8207,15 @@ namespace ReelRoulette
                 Log($"STATE CHANGE: Filter state loaded from settings - FavoritesOnly={_currentFilterState.FavoritesOnly}, ExcludeBlacklisted={_currentFilterState.ExcludeBlacklisted}, AudioFilter={_currentFilterState.AudioFilter}");
             }
             
-            // Load filter presets and active preset name
-            var persistedPresetCount = settings.FilterPresets?.Count ?? 0;
-            _filterPresets = settings.FilterPresets;
-            _activePresetName = settings.ActivePresetName;
+            // Preset catalog is API-owned; no local preset fallback.
+            _filterPresets = [];
+            _activePresetName = null;
             _autoTagScanFullLibrary = settings.AutoTagScanFullLibrary;
             _filterSessionStateService.Set(
                 _currentFilterState,
                 (_filterPresets ?? new List<FilterPreset>()).Cast<object>(),
                 _activePresetName);
-            Log($"LoadSettings: Loaded {_filterPresets?.Count ?? 0} filter presets, active preset name: {_activePresetName ?? "None"}");
-            Log($"LoadSettings: Preset guardrail - persistedCount={persistedPresetCount}, inMemoryCount={_filterPresets?.Count ?? 0}, loadingInProgress={_isLoadingSettings}");
+            Log("LoadSettings: Presets will be loaded from API; active preset will be derived from filter state.");
             
             // Update filter summary after loading (to show preset name if active)
             UpdateFilterSummaryText();
@@ -8647,121 +8254,6 @@ namespace ReelRoulette
             finally
             {
                 _isLoadingSettings = false;
-            }
-        }
-        
-        /// <summary>
-        /// Migrates legacy settings files (view_prefs.json and playback_settings.json) into the unified settings structure.
-        /// </summary>
-        private void MigrateLegacySettings(AppSettings settings)
-        {
-            // Load view preferences from legacy file
-            try
-            {
-                var viewPrefsPath = AppDataManager.GetViewPreferencesPath();
-                if (File.Exists(viewPrefsPath))
-                {
-                    var json = File.ReadAllText(viewPrefsPath);
-                    var jsonDoc = JsonDocument.Parse(json);
-                    var root = jsonDoc.RootElement;
-                    
-                    if (root.TryGetProperty("ShowMenu", out var showMenu))
-                        settings.ShowMenu = showMenu.GetBoolean();
-                    if (root.TryGetProperty("ShowStatusLine", out var showStatus))
-                        settings.ShowStatusLine = showStatus.GetBoolean();
-                    if (root.TryGetProperty("ShowControls", out var showControls))
-                        settings.ShowControls = showControls.GetBoolean();
-                    
-                    // Handle migration from old panel flags to Library panel
-                    bool hasLibraryPanel = root.TryGetProperty("ShowLibraryPanel", out var showLibrary);
-                    if (hasLibraryPanel)
-                    {
-                        settings.ShowLibraryPanel = showLibrary.GetBoolean();
-                    }
-                    else
-                    {
-                        // Migrate from old panel flags - if any old panel was shown, show Library panel
-                        bool hadOldPanel = false;
-                        if (root.TryGetProperty("ShowBlacklistPanel", out var showBlacklist))
-                            hadOldPanel = hadOldPanel || showBlacklist.GetBoolean();
-                        if (root.TryGetProperty("ShowFavoritesPanel", out var showFavorites))
-                            hadOldPanel = hadOldPanel || showFavorites.GetBoolean();
-                        if (root.TryGetProperty("ShowRecentlyPlayedPanel", out var showRecent))
-                            hadOldPanel = hadOldPanel || showRecent.GetBoolean();
-                        settings.ShowLibraryPanel = hadOldPanel;
-                    }
-                    
-                    if (root.TryGetProperty("ShowStatsPanel", out var showStats))
-                        settings.ShowStatsPanel = showStats.GetBoolean();
-                    if (root.TryGetProperty("AlwaysOnTop", out var alwaysOnTop))
-                        settings.AlwaysOnTop = alwaysOnTop.GetBoolean();
-                    if (root.TryGetProperty("IsPlayerViewMode", out var playerMode))
-                        settings.IsPlayerViewMode = playerMode.GetBoolean();
-                    if (root.TryGetProperty("RememberLastFolder", out var remember))
-                        settings.RememberLastFolder = remember.GetBoolean();
-                    if (root.TryGetProperty("LastFolderPath", out var lastPath))
-                        settings.LastFolderPath = lastPath.GetString();
-                }
-            }
-            catch
-            {
-                // Ignore errors loading legacy view prefs
-            }
-            
-            // Load playback settings from legacy file
-            try
-            {
-                var playbackSettingsPath = AppDataManager.GetPlaybackSettingsPath();
-                if (File.Exists(playbackSettingsPath))
-                {
-                    var json = File.ReadAllText(playbackSettingsPath);
-                    var playbackSettings = JsonSerializer.Deserialize<PlaybackSettings>(json);
-                    if (playbackSettings != null)
-                    {
-                        if (!string.IsNullOrEmpty(playbackSettings.SeekStep))
-                            settings.SeekStep = playbackSettings.SeekStep;
-                        if (playbackSettings.VolumeStep != 0)
-                            settings.VolumeStep = playbackSettings.VolumeStep;
-                        if (playbackSettings.IntervalSeconds.HasValue)
-                            settings.IntervalSeconds = playbackSettings.IntervalSeconds;
-                        settings.VolumeNormalizationEnabled = playbackSettings.VolumeNormalizationEnabled;
-                        settings.AudioFilterMode = playbackSettings.AudioFilterMode;
-                    }
-                }
-            }
-            catch
-            {
-                // Ignore errors loading legacy playback settings
-            }
-            
-            // Load filter state from legacy file
-            try
-            {
-                var filterStatePath = AppDataManager.GetFilterStatePath();
-                if (File.Exists(filterStatePath))
-                {
-                    var json = File.ReadAllText(filterStatePath);
-                    var filterState = JsonSerializer.Deserialize<FilterState>(json);
-                    if (filterState != null)
-                    {
-                        settings.FilterState = filterState;
-                    }
-                }
-            }
-            catch
-            {
-                // Ignore errors loading legacy filter state
-            }
-            
-            // Save unified settings after migration
-            try
-            {
-                var storage = CreateSettingsStorageService();
-                storage.Save(settings);
-            }
-            catch
-            {
-                // Ignore save errors during migration
             }
         }
 
@@ -8867,23 +8359,8 @@ namespace ReelRoulette
                 settings.MinimumSettingsBackupGapMinutes = _minimumSettingsBackupGapMinutes;
                 settings.NumberOfSettingsBackups = _numberOfSettingsBackups;
                 
-                // Auto-refresh settings
-                settings.AutoRefreshSourcesEnabled = _autoRefreshSourcesEnabled;
-                settings.AutoRefreshIntervalMinutes = _autoRefreshIntervalMinutes;
-                settings.AutoRefreshOnlyWhenIdle = false;
-                settings.AutoRefreshIdleThresholdMinutes = 1;
                 settings.LibraryGridViewEnabled = _libraryGridViewEnabled;
 
-                // Web Remote settings
-                settings.WebRemote = new WebRemote.WebRemoteSettings
-                {
-                    Enabled = _webRemoteEnabled,
-                    Port = _webRemotePort,
-                    BindOnLan = _webRemoteBindOnLan,
-                    LanHostname = NormalizeWebRemoteLanHostname(_webRemoteLanHostname),
-                    AuthMode = _webRemoteAuthMode,
-                    SharedToken = _webRemoteSharedToken
-                };
                 settings.CoreServerBaseUrl = _coreServerBaseUrl;
 
                 // Filter state (always save an object, never null)
@@ -8894,16 +8371,6 @@ namespace ReelRoulette
                 var filterSession = _filterSessionStateService.GetSnapshot();
                 settings.FilterState = filterSession.CurrentFilterState as FilterState ?? new FilterState();
                 
-                // Filter presets
-                if (filterSession.FilterPresets.Count > 0)
-                {
-                    settings.FilterPresets = filterSession.FilterPresets.OfType<FilterPreset>().ToList();
-                }
-                else
-                {
-                    Log("SaveSettings: Preserving existing filter presets because in-memory presets are not initialized");
-                }
-                settings.ActivePresetName = filterSession.ActivePresetName;
                 settings.AutoTagScanFullLibrary = _autoTagScanFullLibrary;
                 
                 // Dialog bounds are preserved from existing settings (not updated here)
@@ -9287,7 +8754,6 @@ namespace ReelRoulette
                     _libraryIndex = _libraryService.LibraryIndex;
                     
                     // Update Library panel UI
-                    UpdateLibrarySourceComboBox();
                     if (_showLibraryPanel)
                     {
                         UpdateLibraryPanel();
@@ -9640,12 +9106,13 @@ namespace ReelRoulette
         private async void ManageSourcesMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
             Log("UI ACTION: ManageSourcesMenuItem clicked");
-            var dialog = new ManageSourcesDialog(_libraryService, RequestCoreRefreshAsync);
+            await SyncSourcesFromCoreAsync();
+            var dialog = new ManageSourcesDialog(_libraryService, RequestCoreRefreshAsync, UpdateSourceEnabledViaCoreAsync);
             await dialog.ShowDialog(this);
             
             Log("ManageSourcesMenuItem_Click: Dialog closed, refreshing UI");
+            await SyncSourcesFromCoreAsync();
             // Refresh UI after dialog closes
-            UpdateLibrarySourceComboBox();
             if (_showLibraryPanel)
             {
                 UpdateLibraryPanel();
@@ -9655,6 +9122,25 @@ namespace ReelRoulette
             
             // Rebuild queue to respect any source enable/disable changes
             RebuildPlayQueueIfNeeded();
+        }
+
+        private async Task<bool> UpdateSourceEnabledViaCoreAsync(string sourceId, bool isEnabled)
+        {
+            if (!_isCoreApiReachable || string.IsNullOrWhiteSpace(sourceId))
+            {
+                return false;
+            }
+
+            try
+            {
+                var updated = await _coreServerApiClient.UpdateSourceEnabledAsync(_coreServerBaseUrl, sourceId, isEnabled);
+                return updated != null;
+            }
+            catch (Exception ex)
+            {
+                Log($"CoreSourceSync: Failed to update source '{sourceId}' ({ex.Message})");
+                return false;
+            }
         }
 
         private async System.Threading.Tasks.Task ShowTagMigrationDialog()
@@ -9735,6 +9221,13 @@ namespace ReelRoulette
 
         private async void SettingsMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
+            if (_isSettingsApplyInProgress)
+            {
+                Log("Settings: Open request ignored (apply already in progress)");
+                SetStatusMessage("Settings are still applying. Please wait...", 0);
+                return;
+            }
+
             if (_isSettingsDialogOpen)
             {
                 Log("Settings: Open request ignored (dialog already open)");
@@ -9791,6 +9284,7 @@ namespace ReelRoulette
                     _autoRefreshIntervalMinutes,
                     _autoRefreshOnlyWhenIdle,
                     _autoRefreshIdleThresholdMinutes,
+                    _coreServerBaseUrl,
                     _webRemoteEnabled,
                     _webRemotePort,
                     _webRemoteBindOnLan,
@@ -9824,11 +9318,12 @@ namespace ReelRoulette
                 
                 if (dialog.WasApplied)
                 {
-                    Log("Settings: User clicked Apply/OK, applying settings");
+                    Log("Settings: User clicked Apply, applying settings");
                     var applyStopwatch = Stopwatch.StartNew();
                     
                     // Set flag to prevent recursive SaveSettings calls
                     _isApplyingSettings = true;
+                    _isSettingsApplyInProgress = true;
                     
                     try
                     {
@@ -9905,16 +9400,17 @@ namespace ReelRoulette
                     _autoRefreshIntervalMinutes = Math.Clamp(dialog.GetAutoRefreshIntervalMinutes(), 5, 1440);
                     _autoRefreshOnlyWhenIdle = false;
                     _autoRefreshIdleThresholdMinutes = 1;
+                    _coreServerBaseUrl = dialog.GetCoreServerBaseUrl();
                     Log($"Settings: Auto-refresh settings changed - Enabled: {oldAutoRefreshEnabled} -> {_autoRefreshSourcesEnabled}, Interval: {oldAutoRefreshInterval} -> {_autoRefreshIntervalMinutes} minutes (idle settings are core-owned and disabled)");
 
-                    // Update Web Remote settings
+                    // Update Web UI settings
                     _webRemoteEnabled = dialog.GetWebRemoteEnabled();
                     _webRemotePort = dialog.GetWebRemotePort();
                     _webRemoteBindOnLan = dialog.GetWebRemoteBindOnLan();
                     _webRemoteLanHostname = NormalizeWebRemoteLanHostname(dialog.GetWebRemoteLanHostname());
                     _webRemoteAuthMode = dialog.GetWebRemoteAuthMode();
                     _webRemoteSharedToken = dialog.GetWebRemoteSharedToken();
-                    Log($"Settings: Web Remote settings changed - Enabled: {_webRemoteEnabled}, Port: {_webRemotePort}, BindOnLan: {_webRemoteBindOnLan}, LanHostname: {_webRemoteLanHostname}, AuthMode: {_webRemoteAuthMode}");
+                    Log($"Settings: Web UI settings changed - Enabled: {_webRemoteEnabled}, Port: {_webRemotePort}, BindOnLan: {_webRemoteBindOnLan}, LanHostname: {_webRemoteLanHostname}, AuthMode: {_webRemoteAuthMode}");
 
                         var settingsChanged =
                             oldLoopEnabled != _isLoopEnabled ||
@@ -9962,16 +9458,18 @@ namespace ReelRoulette
                             !string.Equals(oldWebRemoteLanHostname, _webRemoteLanHostname, StringComparison.OrdinalIgnoreCase) ||
                             oldWebRemoteAuthMode != _webRemoteAuthMode ||
                             !string.Equals(oldWebRemoteSharedToken ?? string.Empty, _webRemoteSharedToken ?? string.Empty, StringComparison.Ordinal);
+                        var webRuntimeApplyFailed = false;
 
                         if (autoRefreshChanged && _isCoreApiReachable)
                         {
                             try
                             {
+                                using var refreshSettingsTimeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(8));
                                 var updated = await _coreServerApiClient.UpdateRefreshSettingsAsync(_coreServerBaseUrl, new CoreRefreshSettingsSnapshot
                                 {
                                     AutoRefreshEnabled = _autoRefreshSourcesEnabled,
                                     AutoRefreshIntervalMinutes = _autoRefreshIntervalMinutes
-                                });
+                                }, refreshSettingsTimeoutCts.Token);
 
                                 if (updated != null)
                                 {
@@ -9994,13 +9492,85 @@ namespace ReelRoulette
 
                         if (webRemoteChanged)
                         {
-                            var webRemoteRestartStopwatch = Stopwatch.StartNew();
-                            await RestartWebRemoteServerAsync();
-                            Log($"Settings: Web Remote restart flow completed in {webRemoteRestartStopwatch.ElapsedMilliseconds}ms");
+                            if (!_isCoreApiReachable)
+                            {
+                                webRuntimeApplyFailed = true;
+                                _webRemoteEnabled = oldWebRemoteEnabled;
+                                _webRemotePort = oldWebRemotePort;
+                                _webRemoteBindOnLan = oldWebRemoteBindOnLan;
+                                _webRemoteLanHostname = oldWebRemoteLanHostname;
+                                _webRemoteAuthMode = oldWebRemoteAuthMode;
+                                _webRemoteSharedToken = oldWebRemoteSharedToken;
+                                SetStatusMessage("Failed to apply Web UI runtime settings: core API is unavailable. Changes were reverted.", 0);
+                                Log("Settings: Core API unavailable while applying Web UI runtime settings. Reverted local values.");
+                            }
+                            else
+                            {
+                                try
+                                {
+                                    using var webRuntimeTimeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(8));
+                                    var updated = await _coreServerApiClient.UpdateWebRuntimeSettingsAsync(_coreServerBaseUrl, new CoreWebRuntimeSettingsSnapshot
+                                    {
+                                        Enabled = _webRemoteEnabled,
+                                        Port = _webRemotePort,
+                                        BindOnLan = _webRemoteBindOnLan,
+                                        LanHostname = _webRemoteLanHostname,
+                                        AuthMode = _webRemoteAuthMode == WebUiAuthMode.Off ? "Off" : "TokenRequired",
+                                        SharedToken = _webRemoteSharedToken
+                                    }, webRuntimeTimeoutCts.Token);
+
+                                    if (updated != null)
+                                    {
+                                        _webRemoteEnabled = updated.Enabled;
+                                        _webRemotePort = updated.Port > 0 ? updated.Port : 51234;
+                                        _webRemoteBindOnLan = updated.BindOnLan;
+                                        _webRemoteLanHostname = NormalizeWebRemoteLanHostname(updated.LanHostname);
+                                        _webRemoteAuthMode = string.Equals(updated.AuthMode, "Off", StringComparison.OrdinalIgnoreCase)
+                                            ? WebUiAuthMode.Off
+                                            : WebUiAuthMode.TokenRequired;
+                                        _webRemoteSharedToken = updated.SharedToken;
+                                        Log("Settings: Core web runtime settings updated via API.");
+                                    }
+                                    else
+                                    {
+                                        webRuntimeApplyFailed = true;
+                                        _webRemoteEnabled = oldWebRemoteEnabled;
+                                        _webRemotePort = oldWebRemotePort;
+                                        _webRemoteBindOnLan = oldWebRemoteBindOnLan;
+                                        _webRemoteLanHostname = oldWebRemoteLanHostname;
+                                        _webRemoteAuthMode = oldWebRemoteAuthMode;
+                                        _webRemoteSharedToken = oldWebRemoteSharedToken;
+                                        SetStatusMessage("Failed to apply Web UI runtime settings (empty API response). Changes were reverted.", 0);
+                                        Log("Settings: Core web runtime settings update returned no payload; reverted local values.");
+                                    }
+                                }
+                                catch (Exception ex)
+                                {
+                                    webRuntimeApplyFailed = true;
+                                    _webRemoteEnabled = oldWebRemoteEnabled;
+                                    _webRemotePort = oldWebRemotePort;
+                                    _webRemoteBindOnLan = oldWebRemoteBindOnLan;
+                                    _webRemoteLanHostname = oldWebRemoteLanHostname;
+                                    _webRemoteAuthMode = oldWebRemoteAuthMode;
+                                    _webRemoteSharedToken = oldWebRemoteSharedToken;
+                                    SetStatusMessage("Failed to apply Web UI runtime settings. Changes were reverted.", 0);
+                                    Log($"Settings: Failed to push core web runtime settings ({ex.Message}); reverted local values.");
+                                }
+                            }
+
+                            if (!webRuntimeApplyFailed)
+                            {
+                                Log("Settings: Web UI runtime update sent to core; worker runtime applies lifecycle updates.");
+                                if (_webRemoteBindOnLan && IsLoopbackCoreServerBaseUrl(_coreServerBaseUrl))
+                                {
+                                    SetStatusMessage("Web UI LAN is enabled, but CoreServerBaseUrl is loopback. Start worker with --CoreServer:BindOnLan=true for LAN device API access.", 0);
+                                    Log("Settings: Web UI LAN enabled while CoreServerBaseUrl is loopback; LAN clients may fail to reach API endpoints.");
+                                }
+                            }
                         }
 
-                        if (OpenWebRemoteMenuItem != null)
-                            OpenWebRemoteMenuItem.IsEnabled = _webRemoteEnabled;
+                        if (OpenWebUiMenuItem != null)
+                            OpenWebUiMenuItem.IsEnabled = _webRemoteEnabled;
 
                         // Update UI controls (these will trigger change handlers, but won't save due to flag)
                         Dispatcher.UIThread.Post(() =>
@@ -10085,6 +9655,7 @@ namespace ReelRoulette
                     {
                         // Always clear the flag
                         _isApplyingSettings = false;
+                        _isSettingsApplyInProgress = false;
                     }
                 }
                 else
@@ -10110,72 +9681,69 @@ namespace ReelRoulette
             }
         }
 
-        private async Task RestartWebRemoteServerAsync()
-        {
-            var restartStopwatch = Stopwatch.StartNew();
-
-            // Stop existing instance first (if running) before applying new settings.
-            if (_webRemoteServer != null)
-            {
-                var stopStopwatch = Stopwatch.StartNew();
-                await _webRemoteServer.StopAsync();
-                Log($"Settings: Web Remote stop completed in {stopStopwatch.ElapsedMilliseconds}ms");
-                _webRemoteServer.Dispose();
-                _webRemoteServer = null;
-            }
-
-            if (!_webRemoteEnabled)
-            {
-                Log("Settings: Web Remote disabled; server remains stopped.");
-                Log($"Settings: Web Remote restart flow completed in {restartStopwatch.ElapsedMilliseconds}ms");
-                return;
-            }
-
-            EnsureWebRemoteToken();
-            _webRemoteServer = new WebRemote.WebRemoteServer();
-            var wrSettings = new WebRemote.WebRemoteSettings
-            {
-                Enabled = true,
-                Port = _webRemotePort,
-                BindOnLan = _webRemoteBindOnLan,
-                LanHostname = _webRemoteLanHostname,
-                AuthMode = _webRemoteAuthMode,
-                SharedToken = _webRemoteSharedToken
-            };
-            var startStopwatch = Stopwatch.StartNew();
-            await _webRemoteServer.StartAsync(wrSettings, this, Log);
-            Log($"Settings: Web Remote start completed in {startStopwatch.ElapsedMilliseconds}ms");
-            Log($"Settings: Web Remote server restarted with new settings (total {restartStopwatch.ElapsedMilliseconds}ms).");
-        }
-
-        private void OpenWebRemoteMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        private void OpenWebUiMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
             if (!_webRemoteEnabled)
             {
-                StatusTextBlock.Text = "Enable Web Remote in Settings first.";
+                StatusTextBlock.Text = "Enable Web UI in Settings first.";
                 return;
             }
-            var url = $"http://localhost:{_webRemotePort}/";
+            var host = _webRemoteBindOnLan
+                ? NormalizeWebRemoteLanHostname(_webRemoteLanHostname) + ".local"
+                : "localhost";
+            var preferredUrl = BuildPreferredWebUiUrl(host);
+            var fallbackUrl = $"http://localhost:{_webRemotePort}/";
             try
             {
                 var processInfo = new System.Diagnostics.ProcessStartInfo
                 {
-                    FileName = url,
+                    FileName = preferredUrl,
                     UseShellExecute = true
                 };
                 System.Diagnostics.Process.Start(processInfo);
-                Log($"OpenWebRemote: Opened {url}");
+                Log($"OpenWebUi: Opened {preferredUrl}");
                 if (_webRemoteBindOnLan)
                 {
-                    var host = NormalizeWebRemoteLanHostname(_webRemoteLanHostname);
-                    Log($"OpenWebRemote: LAN hostname hint http://{host}.local:{_webRemotePort}/ (network mDNS/DNS support required)");
+                    var lanHost = NormalizeWebRemoteLanHostname(_webRemoteLanHostname);
+                    Log($"OpenWebUi: LAN hostname hint http://{lanHost}.local:{_webRemotePort}/");
                 }
             }
             catch (Exception ex)
             {
-                Log($"OpenWebRemote: ERROR - {ex.Message}");
-                StatusTextBlock.Text = $"Could not open browser: {ex.Message}";
+                Log($"OpenWebUi: Preferred URL open failed ({preferredUrl}) - {ex.Message}; trying fallback {fallbackUrl}.");
+                try
+                {
+                    var fallbackProcessInfo = new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = fallbackUrl,
+                        UseShellExecute = true
+                    };
+                    System.Diagnostics.Process.Start(fallbackProcessInfo);
+                    Log($"OpenWebUi: Opened fallback {fallbackUrl}");
+                }
+                catch (Exception fallbackEx)
+                {
+                    Log($"OpenWebUi: ERROR - {fallbackEx.Message}");
+                    StatusTextBlock.Text = $"Could not open browser: {fallbackEx.Message}";
+                }
             }
+        }
+
+        private string BuildPreferredWebUiUrl(string host)
+        {
+            if (Uri.TryCreate(_independentWebUiBaseUrl, UriKind.Absolute, out var configured))
+            {
+                var scheme = string.IsNullOrWhiteSpace(configured.Scheme) ? "http" : configured.Scheme;
+                var builder = new UriBuilder(configured)
+                {
+                    Host = host,
+                    Scheme = scheme,
+                    Port = _webRemotePort
+                };
+                return builder.Uri.ToString();
+            }
+
+            return $"http://{host}:{_webRemotePort}/";
         }
 
         private static string NormalizeWebRemoteLanHostname(string? value)
@@ -10188,6 +9756,24 @@ namespace ReelRoulette
             if (normalized.Length > 63)
                 normalized = normalized.Substring(0, 63).Trim('-');
             return string.IsNullOrWhiteSpace(normalized) ? "reel" : normalized;
+        }
+
+        private static bool IsLoopbackCoreServerBaseUrl(string? baseUrl)
+        {
+            if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri))
+            {
+                return true;
+            }
+
+            if (uri.IsLoopback)
+            {
+                return true;
+            }
+
+            var host = uri.Host;
+            return string.Equals(host, "localhost", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(host, "127.0.0.1", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(host, "::1", StringComparison.OrdinalIgnoreCase);
         }
 
 
@@ -10530,6 +10116,9 @@ namespace ReelRoulette
         private async void FilterMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
             Log("UI ACTION: FilterMenuItem/FilterButton clicked - opening FilterDialog");
+            await SyncPresetsFromCoreAsync();
+            await SyncFilterDialogCatalogFromCoreAsync();
+
             if (_currentFilterState == null)
             {
                 _currentFilterState = new FilterState();
@@ -10547,10 +10136,11 @@ namespace ReelRoulette
                 
                 // Save presets and active preset name to local fields
                 _filterPresets = dialog.GetPresets();
-                _activePresetName = dialog.GetActivePresetName();
+                _activePresetName = await MatchPresetNameFromCoreAsync(_currentFilterState) ??
+                                    ResolveMatchingPresetName(_currentFilterState, _filterPresets);
                 
                 Log($"FilterMenuItem: Saved {_filterPresets?.Count ?? 0} presets, active preset: {_activePresetName ?? "None"}");
-                _ = SyncFilterSessionToCoreAsync();
+                _ = SyncPresetsToCoreAsync();
                 
                 // Update preset dropdown in library panel
                 UpdateLibraryPresetComboBox();
@@ -12077,25 +11667,6 @@ namespace ReelRoulette
         }
 
         #endregion
-    }
-
-    // Settings classes for persistence
-    public class PlaybackSettings
-    {
-        public string? SeekStep { get; set; }
-        public int VolumeStep { get; set; }
-        public string? MinDuration { get; set; }
-        public string? MaxDuration { get; set; }
-        public double? IntervalSeconds { get; set; }
-        public bool VolumeNormalizationEnabled { get; set; } = false;
-        public AudioFilterMode AudioFilterMode { get; set; } = AudioFilterMode.PlayAll;
-    }
-
-    // Playback stats data model
-    public class FilePlaybackStats
-    {
-        public int PlayCount { get; set; }
-        public DateTime? LastPlayedUtc { get; set; }
     }
 
     // Loudness data model

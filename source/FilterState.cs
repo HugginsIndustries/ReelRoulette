@@ -96,6 +96,12 @@ namespace ReelRoulette
         /// </summary>
         [JsonPropertyName("mediaTypeFilter")]
         public MediaTypeFilter MediaTypeFilter { get; set; } = MediaTypeFilter.All;
+
+        /// <summary>
+        /// Optional per-client source filter. Empty means all globally enabled sources.
+        /// </summary>
+        [JsonPropertyName("includedSourceIds")]
+        public List<string> IncludedSourceIds { get; set; } = new List<string>();
     }
 }
 

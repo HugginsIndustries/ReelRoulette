@@ -1,144 +1,91 @@
 import type { RuntimeConfig } from "./types/runtimeConfig";
-import { bootstrapAuthSession } from "./auth/authBootstrap";
-import { createSseClient } from "./events/sseClient";
-
-function renderConfigSummary(config: RuntimeConfig): string {
-  const pairTokenSummary = config.pairToken ? "provided (runtime config)" : "not set";
-
-  return `
-    <section class="card">
-      <h2>Runtime Configuration</h2>
-      <dl class="grid">
-        <dt>API Base URL</dt>
-        <dd><code>${config.apiBaseUrl}</code></dd>
-        <dt>SSE URL</dt>
-        <dd><code>${config.sseUrl}</code></dd>
-        <dt>Pair Token</dt>
-        <dd><code>${pairTokenSummary}</code></dd>
-      </dl>
-    </section>
-  `;
-}
+import { startLegacyApp } from "./legacyApp";
 
 export function renderApp(container: HTMLElement, config: RuntimeConfig): void {
   container.innerHTML = `
-    <main>
-      <h1>ReelRoulette WebUI</h1>
-      <p>
-        Direct web-to-core auth/session and SSE reliability bootstrap for M7b.
-      </p>
-      ${renderConfigSummary(config)}
-      <section class="card">
-        <h2>Auth Session</h2>
-        <p id="auth-status">Not paired</p>
-        <div class="inline-controls">
-          <input id="pair-token-input" placeholder="Pair token" />
-          <button id="pair-button" type="button">Pair + Connect</button>
+    <header class="top-bar">
+      <div class="top-bar-title">
+        <h1>ReelRoulette</h1>
+        <div id="pair-section" class="pair-section" style="display:none">
+          <label>Pairing token: <input type="text" id="pair-token" placeholder="Enter token"></label>
+          <button id="pair-btn">Pair</button>
         </div>
-      </section>
-      <section class="card">
-        <h2>SSE Connection</h2>
-        <p id="connection-status">Disconnected</p>
-      </section>
-      <section class="card">
-        <h2>Refresh Status</h2>
-        <p id="refresh-status">Not synced</p>
-      </section>
-      <section class="card">
-        <h2>Health Check</h2>
-        <p id="health-output">Not started</p>
-        <button id="health-button" type="button">Check /health</button>
-      </section>
+      </div>
+      <select id="preset-select" aria-label="Choose preset">
+        <option value="">Loading...</option>
+      </select>
+      <select id="randomization-mode-select" aria-label="Choose randomization mode">
+        <option value="SmartShuffle">Smart Shuffle</option>
+        <option value="PureRandom">Pure Random</option>
+        <option value="WeightedRandom">Weighted Random</option>
+        <option value="SpreadMode">Spread Mode</option>
+        <option value="WeightedWithSpread">Weighted with Spread</option>
+      </select>
+      <div class="photo-duration-wrap">
+        <label>Photo Duration: <input type="number" id="photo-duration" min="1" max="300" step="1" value="15" aria-label="Photo duration in seconds"><span class="unit">s</span></label>
+      </div>
+      <div id="now-playing" class="now-playing" style="display:none">
+        <span id="now-playing-name"></span>
+        <span id="now-playing-duration" class="muted"></span>
+      </div>
+    </header>
+    <main>
+      <div id="media-container" class="media-container">
+        <video id="video" playsinline preload="auto" style="display:none"></video>
+        <img id="photo" alt="Photo" style="display:none">
+        <div id="empty-state" class="empty-state">Select a preset and click here</div>
+        <div id="overlay-controls" class="overlay-controls">
+          <button id="favorite-btn" class="overlay-btn overlay-toggle overlay-corner-btn" aria-label="Favorite" title="Favorite">★</button>
+          <button id="blacklist-btn" class="overlay-btn overlay-toggle overlay-corner-btn" aria-label="Blacklist" title="Blacklist">👎</button>
+          <div class="overlay-controls-row">
+            <button id="prev-btn" class="overlay-btn" aria-label="Previous" title="Previous">⏮</button>
+            <button id="play-btn" class="overlay-btn overlay-btn-play" aria-label="Play/Pause" title="Play/Pause">⏯</button>
+            <button id="next-btn" class="overlay-btn" aria-label="Next" title="Next">⏭</button>
+            <button id="tag-edit-btn" class="overlay-btn" aria-label="Edit Tags" title="Edit Tags">🏷️</button>
+            <button id="loop-btn" class="overlay-btn overlay-toggle" aria-label="Loop" title="Loop">🔂</button>
+            <button id="autoplay-btn" class="overlay-btn overlay-toggle" aria-label="Autoplay" title="Autoplay">➡️</button>
+            <button id="fullscreen-btn" class="overlay-btn" aria-label="Fullscreen" title="Fullscreen">⛶</button>
+          </div>
+          <div id="seek-row" class="overlay-seek-row" style="display:none">
+            <input type="range" id="seek-slider" min="0" max="100" value="0" aria-label="Seek">
+            <span id="time-display">0:00 / 0:00</span>
+          </div>
+        </div>
+      </div>
     </main>
+    <div id="tag-editor" class="tag-editor" style="display:none">
+      <div class="tag-editor-header">
+        <h2>Tag Editor</h2>
+        <div class="tag-editor-actions">
+          <button id="tag-editor-add-category-btn">➕ Category</button>
+          <button id="tag-editor-refresh-btn" title="Refresh" aria-label="Refresh">🔄</button>
+          <button id="tag-editor-close-btn" title="Close" aria-label="Close">❌</button>
+        </div>
+      </div>
+      <div id="tag-editor-body" class="tag-editor-body"></div>
+      <div class="tag-editor-footer">
+        <select id="tag-editor-category-select"></select>
+        <input id="tag-editor-new-tag" type="text" placeholder="New tag name">
+        <button id="tag-editor-add-tag-btn">➕ Tag</button>
+        <button id="tag-editor-apply-btn" title="Apply" aria-label="Apply">✅️</button>
+      </div>
+      <div id="tag-edit-modal" class="tag-edit-modal" style="display:none">
+        <div class="tag-edit-modal-card">
+          <h3>Edit Tag</h3>
+          <label for="tag-edit-name">Tag Name</label>
+          <input id="tag-edit-name" type="text" autocomplete="off">
+          <label for="tag-edit-category">Category</label>
+          <select id="tag-edit-category"></select>
+          <div class="tag-edit-modal-actions">
+            <button id="tag-edit-cancel-btn" type="button">Cancel</button>
+            <button id="tag-edit-save-btn" type="button">Save</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="status" class="status status-bottom"></div>
   `;
-
-  const healthButton = container.querySelector<HTMLButtonElement>("#health-button");
-  const healthOutput = container.querySelector<HTMLParagraphElement>("#health-output");
-  const pairButton = container.querySelector<HTMLButtonElement>("#pair-button");
-  const pairTokenInput = container.querySelector<HTMLInputElement>("#pair-token-input");
-  const authStatus = container.querySelector<HTMLParagraphElement>("#auth-status");
-  const connectionStatus = container.querySelector<HTMLParagraphElement>("#connection-status");
-  const refreshStatus = container.querySelector<HTMLParagraphElement>("#refresh-status");
-  if (
-    !healthButton ||
-    !healthOutput ||
-    !pairButton ||
-    !pairTokenInput ||
-    !authStatus ||
-    !connectionStatus ||
-    !refreshStatus
-  ) {
-    return;
-  }
-
-  pairTokenInput.value = config.pairToken ?? "";
-  const sseClient = createSseClient(config, {
-    setConnectionStatus: (message) => {
-      connectionStatus.textContent = message;
-    },
-    setRefreshStatus: (message) => {
-      refreshStatus.textContent = message;
-    }
-  });
-
-  const connectFromLifecycle = (): void => {
-    if (authStatus.textContent?.startsWith("Authorized")) {
-      sseClient.connect("lifecycle");
-    }
-  };
-
-  document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible") {
-      connectFromLifecycle();
-    }
-  });
-  window.addEventListener("focus", connectFromLifecycle);
-  window.addEventListener("pageshow", connectFromLifecycle);
-  window.addEventListener("online", connectFromLifecycle);
-  window.addEventListener("beforeunload", () => sseClient.stop());
-
-  pairButton.addEventListener("click", async () => {
-    pairButton.disabled = true;
-    authStatus.textContent = "Authorizing...";
-    try {
-      const token = pairTokenInput.value.trim();
-      const result = await bootstrapAuthSession(config, token.length > 0 ? token : undefined);
-      if (!result.authorized) {
-        authStatus.textContent = result.message;
-        return;
-      }
-
-      const version = result.version ? `API ${result.version.apiVersion}` : "API unknown";
-      authStatus.textContent = `Authorized (${version}). ${result.message}`;
-      sseClient.connect("pair");
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown auth error";
-      authStatus.textContent = `Auth failed: ${message}`;
-    } finally {
-      pairButton.disabled = false;
-    }
-  });
-
-  healthButton.addEventListener("click", async () => {
-    healthOutput.textContent = "Checking...";
-    try {
-      const url = new URL("/health", config.apiBaseUrl).toString();
-      const response = await fetch(url, { method: "GET", credentials: "include" });
-      if (!response.ok) {
-        healthOutput.textContent = `Health endpoint returned HTTP ${response.status}.`;
-        return;
-      }
-
-      const body = await response.text();
-      healthOutput.textContent = `OK: ${body}`;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown error";
-      healthOutput.textContent = `Health check failed: ${message}`;
-    }
-  });
-
-  // Attempt first auth/bootstrap pass with runtime-provided token.
-  void pairButton.click();
+  startLegacyApp(config);
 }
 
 export function renderStartupError(container: HTMLElement, message: string): void {

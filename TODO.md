@@ -29,6 +29,21 @@ No open P1 TODO items.
 
 ## Completed Features
 
+### M7d - Controlled Cutover and Legacy Bridge Retirement ✅
+
+- **Milestone Link**: `M7d - Controlled Cutover and Legacy Bridge Retirement` in `MILESTONES.md`
+- **Impact**: High - Completes independent Web UI cutover while preserving user-facing parity and removing legacy embedded bridge ownership.
+- **Final State**:
+  - Migrated legacy WebRemote UX to `src/clients/web/ReelRoulette.WebUI` with parity flows for media controls, touch navigation, status projection, and tag-editor behavior.
+  - Switched core ownership for web runtime settings and lifecycle to API/worker paths (`CoreSettingsService`, worker-hosted WebHost supervisor + mDNS service).
+  - Retired legacy embedded WebRemote runtime/resources under `source/WebRemote/` and removed legacy migration/compatibility flags tied to embedded bridge fallback.
+  - Canonicalized presets/random/filter API behavior for desktop + WebUI parity (`/api/presets`, `/api/presets/match`, `/api/random` with filter-state-first semantics).
+  - Added host-aware runtime config + dynamic CORS origin allowlisting to support localhost, `*.local`, and LAN-IP client access on independent WebHost.
+  - Added user-facing M7d manual verification guide/checklist at `m7d-gate-b-guide-checklist.md` and completed gate sequence (automated gate, user-executed manual gate, explicit approval before legacy removal).
+  - Deferred post-cutover runtime stabilization bugs (settings dialog reopen lockout, LAN apply edge consistency, worker/WebHost orphan shutdown hardening) to `M8b`.
+
+---
+
 ### M7c - Zero-Restart Web Deployment, Caching, and Rollback ✅
 
 - **Milestone Link**: `M7c - Zero-Restart Web Deployment, Caching, and Rollback` in `MILESTONES.md`

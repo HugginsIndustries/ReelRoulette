@@ -47,6 +47,57 @@ public sealed class CoreServerApiClient
         return await JsonSerializer.DeserializeAsync<CoreRandomResponse>(stream, _serializerOptions, cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<List<CorePresetResponse>?> GetPresetsAsync(string baseUrl, CancellationToken cancellationToken = default)
+    {
+        using var response = await _httpClient.GetAsync($"{baseUrl.TrimEnd('/')}/api/presets", cancellationToken).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        return await JsonSerializer.DeserializeAsync<List<CorePresetResponse>>(stream, _serializerOptions, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<CorePresetMatchResponse?> MatchPresetAsync(string baseUrl, CorePresetMatchRequest request, CancellationToken cancellationToken = default)
+    {
+        using var content = SerializeJson(request);
+        using var response = await _httpClient.PostAsync($"{baseUrl.TrimEnd('/')}/api/presets/match", content, cancellationToken).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        return await JsonSerializer.DeserializeAsync<CorePresetMatchResponse>(stream, _serializerOptions, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<List<CoreSourceResponse>?> GetSourcesAsync(string baseUrl, CancellationToken cancellationToken = default)
+    {
+        using var response = await _httpClient.GetAsync($"{baseUrl.TrimEnd('/')}/api/sources", cancellationToken).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        return await JsonSerializer.DeserializeAsync<List<CoreSourceResponse>>(stream, _serializerOptions, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<CoreSourceResponse?> UpdateSourceEnabledAsync(string baseUrl, string sourceId, bool isEnabled, CancellationToken cancellationToken = default)
+    {
+        var request = new CoreUpdateSourceEnabledRequest { IsEnabled = isEnabled };
+        using var content = SerializeJson(request);
+        using var response = await _httpClient.PostAsync($"{baseUrl.TrimEnd('/')}/api/sources/{Uri.EscapeDataString(sourceId)}/enabled", content, cancellationToken).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        return await JsonSerializer.DeserializeAsync<CoreSourceResponse>(stream, _serializerOptions, cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task<bool> SetFavoriteAsync(string baseUrl, string path, bool isFavorite, CancellationToken cancellationToken = default)
     {
         var request = new { path, isFavorite };
@@ -71,10 +122,10 @@ public sealed class CoreServerApiClient
         return response.IsSuccessStatusCode;
     }
 
-    public async Task<bool> SyncFilterSessionAsync(string baseUrl, CoreFilterSessionSnapshot snapshot, CancellationToken cancellationToken = default)
+    public async Task<bool> SyncPresetsAsync(string baseUrl, List<CoreFilterPresetSnapshot> presets, CancellationToken cancellationToken = default)
     {
-        using var content = SerializeJson(snapshot);
-        using var response = await _httpClient.PostAsync($"{baseUrl.TrimEnd('/')}/api/filter-session", content, cancellationToken).ConfigureAwait(false);
+        using var content = SerializeJson(presets ?? []);
+        using var response = await _httpClient.PostAsync($"{baseUrl.TrimEnd('/')}/api/presets", content, cancellationToken).ConfigureAwait(false);
         return response.IsSuccessStatusCode;
     }
 
@@ -203,6 +254,31 @@ public sealed class CoreServerApiClient
         return await JsonSerializer.DeserializeAsync<CoreRefreshSettingsSnapshot>(stream, _serializerOptions, cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<CoreWebRuntimeSettingsSnapshot?> GetWebRuntimeSettingsAsync(string baseUrl, CancellationToken cancellationToken = default)
+    {
+        using var response = await _httpClient.GetAsync($"{baseUrl.TrimEnd('/')}/api/web-runtime/settings", cancellationToken).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        return await JsonSerializer.DeserializeAsync<CoreWebRuntimeSettingsSnapshot>(stream, _serializerOptions, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<CoreWebRuntimeSettingsSnapshot?> UpdateWebRuntimeSettingsAsync(string baseUrl, CoreWebRuntimeSettingsSnapshot snapshot, CancellationToken cancellationToken = default)
+    {
+        using var content = SerializeJson(snapshot);
+        using var response = await _httpClient.PostAsync($"{baseUrl.TrimEnd('/')}/api/web-runtime/settings", content, cancellationToken).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        return await JsonSerializer.DeserializeAsync<CoreWebRuntimeSettingsSnapshot>(stream, _serializerOptions, cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task ListenToEventsAsync(
         string baseUrl,
         string clientId,
@@ -281,7 +357,8 @@ public sealed class CoreVersionResponse
 
 public sealed class CoreRandomRequest
 {
-    public string PresetId { get; set; } = "all-media";
+    public string PresetId { get; set; } = string.Empty;
+    public JsonElement? FilterState { get; set; }
     public string? ClientId { get; set; }
     public bool IncludeVideos { get; set; } = true;
     public bool IncludePhotos { get; set; } = true;
@@ -297,6 +374,39 @@ public sealed class CoreRandomResponse
     public string MediaUrl { get; set; } = string.Empty;
     public bool IsFavorite { get; set; }
     public bool IsBlacklisted { get; set; }
+}
+
+public sealed class CorePresetResponse
+{
+    public string Id { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string? Summary { get; set; }
+    public JsonElement? FilterState { get; set; }
+}
+
+public sealed class CorePresetMatchRequest
+{
+    public JsonElement? FilterState { get; set; }
+}
+
+public sealed class CorePresetMatchResponse
+{
+    public bool Matched { get; set; }
+    public string? PresetId { get; set; }
+    public string? PresetName { get; set; }
+}
+
+public sealed class CoreSourceResponse
+{
+    public string Id { get; set; } = string.Empty;
+    public string RootPath { get; set; } = string.Empty;
+    public string? DisplayName { get; set; }
+    public bool IsEnabled { get; set; } = true;
+}
+
+public sealed class CoreUpdateSourceEnabledRequest
+{
+    public bool IsEnabled { get; set; }
 }
 
 public sealed class CoreServerEventEnvelope
@@ -325,13 +435,6 @@ public sealed class CoreFilterPresetSnapshot
 {
     public string Name { get; set; } = string.Empty;
     public JsonElement FilterState { get; set; }
-}
-
-public sealed class CoreFilterSessionSnapshot
-{
-    public string? ActivePresetName { get; set; }
-    public JsonElement? CurrentFilterState { get; set; }
-    public List<CoreFilterPresetSnapshot>? Presets { get; set; }
 }
 
 public sealed class CoreTagEditorModelRequest
@@ -406,6 +509,12 @@ public sealed class CoreTagCatalogChangedPayload
     public List<CoreTagSnapshot> Tags { get; set; } = [];
 }
 
+public sealed class CoreSourceStateChangedPayload
+{
+    public string SourceId { get; set; } = string.Empty;
+    public bool IsEnabled { get; set; }
+}
+
 public sealed class CoreSyncTagCatalogRequest
 {
     public List<CoreTagCategorySnapshot> Categories { get; set; } = [];
@@ -433,6 +542,16 @@ public sealed class CoreRefreshSettingsSnapshot
 {
     public bool AutoRefreshEnabled { get; set; } = true;
     public int AutoRefreshIntervalMinutes { get; set; } = 15;
+}
+
+public sealed class CoreWebRuntimeSettingsSnapshot
+{
+    public bool Enabled { get; set; }
+    public int Port { get; set; } = 51234;
+    public bool BindOnLan { get; set; }
+    public string LanHostname { get; set; } = "reel";
+    public string AuthMode { get; set; } = "TokenRequired";
+    public string? SharedToken { get; set; }
 }
 
 public sealed class CoreRefreshStageProgress

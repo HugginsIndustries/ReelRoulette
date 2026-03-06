@@ -100,7 +100,8 @@ namespace ReelRoulette
                 GlobalMatchMode = filterState.GlobalMatchMode,
                 OnlyKnownDuration = filterState.OnlyKnownDuration,
                 OnlyKnownLoudness = filterState.OnlyKnownLoudness,
-                MediaTypeFilter = (MediaTypeFilterValue)(int)filterState.MediaTypeFilter
+                MediaTypeFilter = (MediaTypeFilterValue)(int)filterState.MediaTypeFilter,
+                IncludedSourceIds = filterState.IncludedSourceIds?.ToList() ?? new List<string>()
             };
         }
 
