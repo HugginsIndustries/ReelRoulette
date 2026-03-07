@@ -383,77 +383,119 @@ Status legend: `✅ Complete` | `⏳ Planned`
     - `dotnet test ReelRoulette.sln`
   - Manual gate checklist/instructions prepared at `m7e-final-verification-checklist.md` for direct web-connect, refresh-status parity, and auth/reconnect continuity sign-off.
 
-### M8a - Core Control App and Runtime Ownership Cutover
+### M8a - ReelRoulette Server App Consolidation (Single Process, Single Origin)
 
 - **Status**: ⏳ Planned
-- **Goal**: Introduce a dedicated core control app/service that owns runtime settings and lifecycle orchestration for worker + WebHost, and remove desktop direct process control.
+- **Goal**: Consolidate runtime hosting into one user-facing `ReelRoulette Server` app (UI + core runtime + API/SSE + Web UI static serving) with no separate WebHost process and no atomic deployment switching.
 - **Scope**:
-  - Add a small Core Control App (or equivalent hosted control-plane) as the single authority for:
-    - core runtime settings persistence,
-    - worker/WebHost start/stop/restart,
-    - LAN/mDNS runtime coordination.
-  - Define and document the control-plane command contract used by desktop:
-    - `start`, `stop`, `restart`, `status`, and `apply settings`.
-  - Choose and document the desktop-to-control-plane transport (HTTP local endpoint or IPC), including auth/trust assumptions for local-only control paths.
-  - Remove desktop app direct control paths for worker/WebHost lifecycle.
-  - Replace desktop lifecycle actions with control-plane commands.
-  - Consolidate process ownership/cleanup semantics so owned process trees are deterministic on shutdown/restart.
-  - Define clear ownership boundaries across control-plane, worker, WebHost, and desktop client.
-  - Boundary guardrail: this milestone focuses on ownership/orchestration cutover; unrelated UX bug-fix polish belongs to `M8b` unless it blocks control-plane adoption.
+  - Create the server control app as `ReelRoulette Server` (operator UI app).
+  - Host all runtime responsibilities inside this app/process:
+    - core domain runtime,
+    - API endpoints,
+    - SSE endpoint,
+    - media streaming endpoints,
+    - WebUI static asset serving.
+  - Remove separate `WebHost` process dependency from runtime architecture.
+  - Retire manifest-based atomic web deployment switching (`active-manifest`, version pointer switching) from active runtime behavior.
+  - Enforce single browser-visible origin/port for WebUI + API + SSE + media.
+  - Serve WebUI, API, SSE, and media streaming from the same scheme/host/port (one origin and one port).
+  - Keep deployment model simple: current active web assets served directly by `ReelRoulette Server`.
 - **Acceptance criteria**:
-  - Desktop app no longer starts/stops/restarts worker/WebHost directly.
-  - Core Control App is the sole runtime lifecycle owner in supported flows.
-  - Runtime settings that affect host lifecycle are single-writer and apply deterministically via control-plane commands.
-  - Failure behavior is deterministic and documented for start/restart/apply-settings paths (including partial-failure handling and operator-visible status).
-  - Shutdown/restart paths leave no orphan owned runtime processes in normal and interrupted flows.
-  - Role boundaries and control-plane contract are documented and validated with targeted lifecycle tests.
+  - `ReelRoulette Server` runs as a single app/process and serves WebUI/API/SSE/media on one origin.
+  - `ReelRoulette Server` exposes runtime metadata/health endpoints (`/health`, `/api/version`, `/api/capabilities`) for clients and operator diagnostics.
+  - No separate WebHost process is required for normal runtime.
+  - Atomic web version switching is removed from required runtime path.
+  - Web client works without CORS for normal operation (same-origin by design).
+  - Operator can manage runtime settings and service state from the `ReelRoulette Server` UI.
+  - `ReelRoulette Server` app self-restart paths (settings changes or host failures) are graceful and deterministic (clean shutdown, no orphaned listeners/ports).
 
-### M8b - Settings and Post-M7 Runtime Stabilization
+### M8b - Control-Plane UI + API for Runtime Operations
 
 - **Status**: ⏳ Planned
-- **Goal**: Fix high-impact settings/runtime bugs discovered during M7d validation and stabilize operator UX.
+- **Goal**: Provide first-class control-plane operations in `ReelRoulette Server` UI and APIs for status/settings/lifecycle management.
 - **Scope**:
-  - Fix settings dialog lifecycle issue (reopen/apply repeatedly in one session).
-  - Fix LAN/runtime apply consistency regressions and related false-warning scenarios.
-  - Fix remaining worker/WebHost shutdown edge cases found in manual validation.
-  - Address additional user-reported post-M7 bugs needed for stable day-to-day usage, triaged against an explicit baseline bug list/checklist for this milestone.
-  - Add focused regression tests for settings open/apply cycles and runtime transition paths.
-  - Add manual verification checklist coverage for known operator regressions:
-    - repeated settings open/apply/close/reopen in a single session,
-    - LAN toggle behavior (localhost/LAN/mDNS),
-    - worker stop/restart and orphan-process checks.
+  - Add operator UI for:
+    - runtime status/health,
+    - settings editing/apply,
+    - start/stop/restart operations,
+    - operation result/error visibility.
+  - Expose control-plane API endpoints for trusted clients/tools:
+    - `get status`,
+    - `get settings`,
+    - `apply settings`,
+    - runtime restart operations.
+  - Reserve `/control/*` namespace for control-plane/admin runtime operations, separate from media/client API routes.
+  - Define transport/auth/trust model for control-plane APIs (local-first, optional LAN exposure with explicit safeguards).
+  - Keep control-plane endpoints local-only by default (`127.0.0.1` bind); LAN exposure is opt-in.
+  - Define deterministic operation semantics:
+    - idempotent command behavior,
+    - conflicting-operation handling,
+    - partial-failure reporting.
 - **Acceptance criteria**:
-  - Settings dialog can be opened/applied/closed/reopened repeatedly without hang or lockout.
-  - LAN enable/disable transitions behave consistently for localhost/LAN/mDNS access expectations.
-  - Worker stop/restart is reliable and does not leave owned runtime process leaks.
-  - User-facing status/warning messaging accurately reflects runtime state.
-  - Build/tests remain green with new stability regressions covered.
-  - Baseline M8b bug checklist is resolved or each remaining item is explicitly deferred with owner/follow-up milestone.
+  - Control-plane UI and API both function and are documented.
+  - Control-plane endpoints bind to `127.0.0.1` by default.
+  - LAN exposure for control-plane endpoints requires explicit enablement plus pairing/auth and clear operator warnings.
+  - Settings apply/restart behavior is deterministic and observable.
+  - Control-plane auth/trust policy is implemented and enforced.
+  - No orphan child/runtime process behavior remains in supported restart/shutdown flows.
 
-### M8c - Hardening, Packaging, and Migration Cleanup
+### M8c - Desktop Client Thin-Client Cutover
 
 - **Status**: ⏳ Planned
-- **Goal**: Complete production hardening, thin-client migration cleanup, and packaging/distribution readiness.
+- **Goal**: Convert desktop `ReelRoulette` app to strict thin-client behavior against `ReelRoulette Server`.
 - **Scope**:
-  - Add integration tests:
-    - API command/query
-    - SSE ordering/reconnect
-    - background refresh pipeline
-  - Finalize config/state migration strategy.
-  - Reduce remaining legacy in-process paths from desktop to zero (or maintain an explicit temporary exceptions list with removal targets).
-  - Migrate stats aggregation/query logic to core services and expose API endpoints/contracts used by desktop/web clients.
-  - Add packaging/distribution strategy for worker + clients.
-  - Produce migration/upgrade playbook and release-readiness checklist for post-M8 rollout.
+  - Remove remaining desktop direct runtime/process control of `ReelRoulette Server` functionality.
+  - Remove remaining desktop direct authoritative JSON mutation paths for migrated domains.
+  - Ensure desktop commands/queries go through shared APIs only.
+  - Ensure desktop sync/projection uses API + SSE paths only.
+  - Keep desktop-local persistence limited to client-side UI/preferences in `desktop-settings.json`.
+  - Desktop connect UX defaults to localhost `ReelRoulette Server`; if unavailable, show clear Connect/Start guidance without hosting/supervising server runtime.
 - **Acceptance criteria**:
-  - Stable multi-client operation (desktop + web at minimum).
-  - No critical state divergence between clients.
-  - Source CRUD + enable/disable and operational settings that affect domain behavior are core-owned API commands/queries, with desktop/web as orchestration/render only.
-  - All migrated domains (state/tag/random/filter/etc.) have zero direct desktop JSON mutation paths; exceptions list is empty or explicitly documented.
-  - Library panel dataset composition (filters/sources/search/sort/paging/result shaping) is executed via core/server query paths; desktop/web clients are render/orchestration only for migrated views.
-  - Library refresh completion is thin-client projected: clients observe core refresh status/events and re-query core API datasets (no authoritative local JSON reload/path scanning to discover new or removed items).
-  - Global library stats and current-file stats panel data are retrieved via core/server API query paths; desktop/web clients do not compute or persist authoritative stats locally for migrated views.
-  - Migration and upgrade path documented.
-  - Full regression suite (unit + integration + reconnect/ordering checks) is part of the default CI `dotnet test` gate and remains green.
+  - Desktop is a pure API/SSE consumer for authoritative core state.
+  - Desktop writes only `desktop-settings.json` for client-side UI/preferences.
+  - Desktop never writes core state files (for example `library.json` and core settings files) directly.
+  - Desktop no longer directly controls, hosts, or supervises `ReelRoulette Server` runtime responsibilities.
+  - Desktop functionality remains stable using API/SSE-only migrated flows.
+
+### M8d - WebUI and Mobile Thin-Client Contract Standardization
+
+- **Status**: ⏳ Planned
+- **Goal**: Make WebUI and future mobile clients consume the same stable API contracts from `ReelRoulette Server`.
+- **Scope**:
+  - Standardize client-facing API contracts/capabilities for desktop/web/mobile parity.
+  - Ensure WebUI uses the same API semantics as desktop for migrated behaviors.
+  - Define session/reconnect rules on the shared contract surface:
+    - persistent per-device `clientId`,
+    - optional `sessionId` for future shared-session features,
+    - SSE reconnect behavior with missed-revision recovery (replay when available, otherwise authoritative state refetch).
+  - Define mobile-ready auth expectations (pairing/session continuity, reconnect continuity) using the same server contracts.
+  - Keep client responsibilities strictly orchestration/render (no duplicated domain logic).
+- **Acceptance criteria**:
+  - WebUI and desktop are behaviorally aligned via shared server APIs.
+  - Session/reconnect rules (`clientId`, optional `sessionId`, SSE missed-revision recovery) are documented and validated in client/server behavior.
+  - Mobile bootstrap path is contract-ready with no new domain-logic duplication in clients and with documented auth/reconnect expectations.
+  - Version/capability compatibility expectations are documented for client evolution.
+
+### M8e - Hardening, Packaging, and Release Readiness
+
+- **Status**: ⏳ Planned
+- **Goal**: Finalize reliability, packaging, and migration cleanup for the new server-thin-client architecture.
+- **Scope**:
+  - Add/expand integration tests for API/SSE/runtime transitions and refresh pipeline behavior.
+  - Complete migration cleanup of temporary compatibility paths.
+  - Finalize packaging/distribution for:
+    - `ReelRoulette Server` app,
+    - thin desktop client,
+    - WebUI assets served by server.
+  - Produce migration/upgrade playbook and release-readiness checklist.
+- **Acceptance criteria**:
+  - Stable multi-client operation (desktop + web minimum) against `ReelRoulette Server`.
+  - No critical cross-client state divergence.
+  - If `ReelRoulette Server` crashes or is unavailable, thin clients show friendly reconnect/start guidance and recover without state corruption.
+  - Core JSON persistence uses atomic write semantics (write temp then replace) and is resilient to partial-write failures.
+  - Web assets are served with cache-correct behavior (hashed filenames/cache-busting) to prevent stale UI after updates.
+  - Full regression suite is part of default CI `dotnet test` gate and remains green.
+  - Migration and upgrade documentation is complete and actionable.
 
 ### M9 - Android Client Bootstrap
 
