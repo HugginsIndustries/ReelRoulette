@@ -4,18 +4,22 @@ This file contains guidelines and instructions for AI agents working on this cod
 
 ## Planning and Execution
 
-- When the user provides an attached milestone plan, execute it without editing the plan file itself (agents may edit the plan file to mark milestones as complete)
+- When the user provides an attached milestone plan, execute it without editing the plan file itself
 - Reuse existing plan TODO items and do not create duplicates when TODOs already exist
 - Update TODO status in execution order (`in_progress` when starting, `completed` when done)
 - Before sign-off, explicitly verify milestone acceptance criteria and call out any unmet items
+- For milestone planning/verification requests, read `AGENTS.md` and `CONTEXT.md` first, then `MILESTONES.md` and `TODO.md`
+- Keep scope locked to the requested milestone/TODO slice; leave unrelated work untouched unless the user expands scope
 
 ## Architecture and Code Boundaries
 
 - Follow existing code style/patterns and keep architecture consistent
 - Keep desktop/web clients as orchestration/render layers; place domain/business logic in `ReelRoulette.Core`/server paths
 - Preserve strict API-first behavior for migrated flows; do not add local-mutation fallback paths once migrated to core/server
+- Preserve API-authoritative random selection/playback eligibility decisions for migrated clients; do not add client-local fallback execution paths
 - Add logging to new code where appropriate, using the last.log system
 - Test changes thoroughly and fix linter errors introduced by changes
+- For migrated Web UI flows, preserve visual and functional parity with the current user experience unless the user explicitly approves UX changes
 
 ## Commit and Documentation Discipline
 
@@ -24,6 +28,7 @@ This file contains guidelines and instructions for AI agents working on this cod
 - If the user says nothing has been committed yet, keep the existing Mx entry style in `COMMIT_MESSAGE.txt` and update/append it in place unless they explicitly ask to replace the whole message
 - Check `CONTEXT.md` for repo context before major planning/implementation, and update it whenever structure, workflows, architecture ownership, or milestone-driven runtime behavior changes.
 - Update `CHANGELOG.md` for significant changes and reflect only final delta from the previous commit (no intermediate attempts)
+- If no commit has occurred yet, update existing `CHANGELOG.md` and `COMMIT_MESSAGE.txt` entries in place for the current scope instead of creating replacement historical entries
 - After user-confirmed commit, start a new `COMMIT_MESSAGE.txt` and a new changelog entry for subsequent changes
 - Apply the same “final state only” rule to `TODO.md` updates/moves to Completed Features
 - Keep `MILESTONES.md` and `TODO.md` links/scope language aligned when milestone scope changes
@@ -35,3 +40,4 @@ This file contains guidelines and instructions for AI agents working on this cod
 - If a command is needed, explain what it does and why, then ask the user to run it
 - Be proactive with improvements, explain reasoning, and ask clarifying questions when requirements are ambiguous
 - When asking the user for clarifications (or when asked to provide clarification choices), always use this exact format: a numbered list of questions with numbered options for each; and for each question include (1) description of the decision, (2) recommendation, (3) reasoning, (4) at least 2-3 alternative choices, and (5) detailed pros/cons of each choice.
+- For phase-gated milestone work, stop after automated verification, provide copy/paste manual verification commands plus a PASS/FAIL checklist, and wait for explicit user approval before continuing gated removal/cutover steps
