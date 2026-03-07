@@ -18,11 +18,10 @@ Run the desktop app:
 dotnet run --project .\source\ReelRoulette.csproj
 ```
 
-Optional: run additional hosts/scaffolds:
+Run the consolidated M8a server app (single-process runtime):
 
 ```bash
-dotnet run --project .\src\core\ReelRoulette.Server\ReelRoulette.Server.csproj
-dotnet run --project .\src\core\ReelRoulette.Worker\ReelRoulette.Worker.csproj
+dotnet run --project .\src\core\ReelRoulette.ServerApp\ReelRoulette.ServerApp.csproj
 ```
 
 Run web client (M7a foundation):
@@ -33,25 +32,30 @@ npm install
 npm run dev
 ```
 
-Or run worker via helper scripts:
+Or run the server app via helper scripts:
 
 ```bash
 .\tools\scripts\run-core.ps1
 ./tools/scripts/run-core.sh
 ```
 
-All-in-one: publish WebUI, activate latest version, and run worker.
+All-in-one: build WebUI and run server app.
 
 ```powershell
 .\tools\scripts\publish-activate-run-worker.ps1
 ```
 
-M4/M5/M6a runtime notes:
+Runtime notes:
 
-- `ReelRoulette.Worker` hosts the API/SSE runtime using shared server endpoint composition.
+- `ReelRoulette.ServerApp` is the default runtime host and serves:
+  - API endpoints (`/api/*`)
+  - SSE endpoint (`/api/events`)
+  - media streaming (`/api/media/{idOrToken}`)
+  - WebUI static assets
+  - operator UI (`/operator`)
 - Pairing/auth primitive is available through `/api/pair` with optional localhost trust and token/cookie enforcement for paired clients.
 - SSE reconnect supports `Last-Event-ID` replay and `POST /api/library-states` authoritative resync when history gaps are detected.
-- Desktop migrated M5 state flows now call the worker/server API first (favorite/blacklist/playback/random command), then project updates from SSE.
+- Desktop migrated M5 state flows call the server API first (favorite/blacklist/playback/random command), then project updates from SSE.
 - Preset catalog sync is API-first through `GET/POST /api/presets`.
 - Migrated M5 state writes are API-required (no local mutation fallback for those flows when core runtime is unavailable).
 - M6a tag/category/item-tag edits are API-first through `/api/tag-editor/*` (desktop dialogs + web tag editor share the same mutation seam).
@@ -82,20 +86,17 @@ M4/M5/M6a runtime notes:
   - pair-token bootstrap to HTTP-only session-cookie auth (`/api/pair`)
   - explicit CORS/cookie runtime policy controls in `CoreServer` options
   - direct credentialed SSE status projection (`/api/events`) with reconnect/resync fallback (`/api/library-states` + `/api/refresh/status`)
-- M7c adds zero-restart web deployment and rollback:
-  - independent static host at `src/clients/web/ReelRoulette.WebHost`
-  - immutable versioned artifacts under `.web-deploy/versions/{versionId}`
-  - atomic `active-manifest.json` activation/rollback pointer flow
-  - split cache policy (`index.html`/`runtime-config.json` no-store; hashed assets immutable)
 - M7d completes controlled cutover and legacy bridge retirement:
   - legacy embedded `source/WebRemote` runtime/resources are retired from active runtime behavior
-  - worker now supervises WebHost lifecycle and mDNS advertisement from core-owned web runtime settings
-  - WebHost serves host-aware runtime config and core uses dynamic CORS origin registration for localhost/LAN hostname/LAN-IP access
   - desktop/web preset + random selection behavior is API-authoritative (server-owned preset catalog and random eligibility semantics)
 - M7e adds contract compatibility and final M7 sign-off guardrails:
   - WebUI TS contracts are generated from `shared/api/openapi.yaml` (`npm run generate:contracts`)
   - `npm run verify` now validates generated contract freshness (`npm run verify:contracts`) before typecheck/tests/build
   - `/api/version` exposes compatibility/capability metadata and WebUI blocks unsupported server contracts/capability sets
+- M8a consolidates runtime hosting:
+  - single `ReelRoulette.ServerApp` process and single browser origin for WebUI/API/SSE/media
+  - explicit `/api/capabilities` endpoint for runtime diagnostics/client checks
+  - no separate `ReelRoulette.WebHost` process required in normal runtime path
 
 ## Testing
 
@@ -127,51 +128,25 @@ npm run generate:contracts
 npm run verify:contracts
 ```
 
-M7b direct auth/SSE smoke checks:
+Direct auth/SSE smoke checks:
 
 ```bash
-# Start worker (auth enabled by default in worker appsettings)
-dotnet run --project .\src\core\ReelRoulette.Worker\ReelRoulette.Worker.csproj
+# Start server app (auth enabled by default in server app appsettings)
+dotnet run --project .\src\core\ReelRoulette.ServerApp\ReelRoulette.ServerApp.csproj
 
 # In another terminal, start web UI
 cd .\src\clients\web\ReelRoulette.WebUI
 npm run dev
 ```
 
-M7c zero-restart web deploy smoke checks:
+M8a single-origin smoke checks:
 
 ```bash
-# Publish and activate versioned web artifacts
-.\tools\scripts\publish-web.ps1
-.\tools\scripts\activate-web-version.ps1 -VersionId <versionId>
-
-# Run independent web host against deployment root
-dotnet run --project .\src\clients\web\ReelRoulette.WebHost\ReelRoulette.WebHost.csproj -- --WebDeployment:DeployRootPath=.\.web-deploy
-
-# Full activation/cache/rollback smoke gate
+# Build WebUI + run consolidated server app smoke verification
 .\tools\scripts\verify-web-deploy.ps1
 # or
 ./tools/scripts/verify-web-deploy.sh
 ```
-
-Worker runtime independence check (desktop close should not stop worker):
-
-```bash
-# 1) Start desktop (it auto-starts core runtime if needed)
-# 2) Verify worker health while desktop is open
-Invoke-WebRequest -UseBasicParsing http://localhost:51301/health | Select-Object -ExpandProperty Content
-
-# 3) Close desktop, then verify worker still responds
-Invoke-WebRequest -UseBasicParsing http://localhost:51301/health | Select-Object -ExpandProperty Content
-
-# 4) Optional stronger check
-Invoke-WebRequest -UseBasicParsing http://localhost:51301/api/version | Select-Object -ExpandProperty Content
-```
-
-Expected results:
-
-- `/health` returns `{"status":"ok"}` before and after desktop closes.
-- `/api/version` remains reachable after desktop closes (worker keeps running independently).
 
 ## Third-Party Components
 

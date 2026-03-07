@@ -23,6 +23,11 @@
 - M7e adds contract compatibility guardrails:
   - WebUI TS contracts are generated from OpenAPI and validated in verify gates.
   - `GET /api/version` now carries compatibility/capability metadata used by web startup checks.
+- M8a consolidates runtime hosting in `ReelRoulette.ServerApp`:
+  - same-origin WebUI/API/SSE/media serving is now the normal runtime path.
+  - explicit runtime capability endpoint is available at `GET /api/capabilities`.
+  - web-runtime apply semantics are two-step: update persisted settings via `POST /api/web-runtime/settings`, then restart via `POST /control/restart` for listen/auth/WebUI-availability changes to take effect.
+  - `WebRuntimeSettingsSnapshot.enabled` controls WebUI route availability only (API/SSE/media remain available when disabled).
 
 ## Eventing Direction
 
@@ -71,6 +76,7 @@
 - `GET /api/pair`
 - `POST /api/pair`
 - `GET /api/version`
+- `GET /api/capabilities`
 - `GET /api/presets`
 - `POST /api/presets`
 - `POST /api/presets/match`
@@ -98,6 +104,7 @@
 - `POST /api/refresh/settings`
 - `GET /api/thumbnail/{itemId}`
 - `GET /api/events` (`text/event-stream`)
+- `POST /control/restart` (localhost-only operator control path exposed by `ReelRoulette.ServerApp`)
 
 ## M7e Version/Capability Contract
 

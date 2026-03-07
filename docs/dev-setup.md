@@ -5,6 +5,7 @@
 - Existing desktop runtime: `source/ReelRoulette.csproj`
 - Core library: `src/core/ReelRoulette.Core/ReelRoulette.Core.csproj`
 - Server host: `src/core/ReelRoulette.Server/ReelRoulette.Server.csproj`
+- Server app host (M8a default runtime): `src/core/ReelRoulette.ServerApp/ReelRoulette.ServerApp.csproj`
 - Worker host: `src/core/ReelRoulette.Worker/ReelRoulette.Worker.csproj`
 - Windows target location: `src/clients/windows/ReelRoulette.WindowsApp/ReelRoulette.WindowsApp.csproj`
 - Web target location: `src/clients/web/ReelRoulette.WebUI/ReelRoulette.WebUI.csproj`
@@ -36,7 +37,7 @@
 
 - Console-first worker host:
   - `dotnet run --project .\\src\\core\\ReelRoulette.Worker\\ReelRoulette.Worker.csproj`
-  - or `tools/scripts/run-core.ps1` / `tools/scripts/run-core.sh`.
+  - (legacy compatibility path; M8a default runtime is `ReelRoulette.ServerApp`)
 - Worker and server runtime options are configured through `CoreServer` settings (`ListenUrl`, `RequireAuth`, `TrustLocalhost`, `BindOnLan`, `PairingToken`).
 - Pairing/auth primitive:
   - pair via `GET /api/pair?token=...` or `POST /api/pair`
@@ -153,12 +154,30 @@
   - `tools/scripts/verify-web-deploy.ps1`
   - `tools/scripts/verify-web-deploy.sh`
 
+## M8a Server App Consolidation Notes
+
+- Default runtime host is now `ReelRoulette.ServerApp`:
+  - `dotnet run --project .\\src\\core\\ReelRoulette.ServerApp\\ReelRoulette.ServerApp.csproj`
+  - or `tools/scripts/run-core.ps1` / `tools/scripts/run-core.sh`
+- Single-origin serving:
+  - WebUI + API + SSE + media are served from one origin/port.
+  - dynamic runtime config is served at `/runtime-config.json` from the server app host.
+- Runtime diagnostics/control:
+  - metadata endpoints: `/health`, `/api/version`, `/api/capabilities`
+  - operator UI path: `/operator`
+  - restart endpoint: `POST /control/restart` (localhost-only)
+  - settings apply is two-step: update settings first, then restart for listen/auth/WebUI-enable changes.
+- WebUI enable semantics:
+  - `enabled=true` -> WebUI static routes + `/runtime-config.json` are served.
+  - `enabled=false` (after restart) -> WebUI routes return `404`, while API/SSE/media/operator endpoints remain available.
+- `ReelRoulette.WebHost` and `active-manifest` switching are no longer required runtime dependencies.
+- `tools/scripts/verify-web-deploy.*` now validate the M8a single-origin server path (WebUI build + server app smoke checks).
+
 ## M7d Controlled Cutover Notes
 
 - Legacy embedded `source/WebRemote` runtime is retired; use independent WebUI + WebHost paths.
-- Worker now supervises WebHost lifecycle and mDNS advertisement from core-owned web runtime settings:
-  - `WebUiHostSupervisorService`
-  - `WebUiMdnsService`
+- During M7d transition, worker-supervised WebHost lifecycle/mDNS paths were used for compatibility.
+- In M8a final runtime, normal operation is consolidated under `ReelRoulette.ServerApp`; Worker startup no longer supervises `ReelRoulette.WebHost`.
 - Core web runtime settings API:
   - `GET /api/web-runtime/settings`
   - `POST /api/web-runtime/settings`

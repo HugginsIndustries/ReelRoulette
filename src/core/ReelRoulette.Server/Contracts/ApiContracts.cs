@@ -209,7 +209,7 @@ public sealed class RefreshSettingsSnapshot
 
 public sealed class WebRuntimeSettingsSnapshot
 {
-    public bool Enabled { get; set; }
+    public bool Enabled { get; set; } = true;
     public int Port { get; set; } = 51234;
     public bool BindOnLan { get; set; }
     public string LanHostname { get; set; } = "reel";

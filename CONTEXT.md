@@ -19,6 +19,7 @@ As of current milestones:
 - `M0`-`M7e` are complete in `MILESTONES.md`.
 - Desktop runtime is still `source/ReelRoulette.csproj`.
 - Core/server/worker runtime exists under `src/core/*`.
+- M8a server-app consolidation is complete: `src/core/ReelRoulette.ServerApp` now hosts API/SSE/media/WebUI/operator UI in one process and one origin.
 - API contract source of truth is `shared/api/openapi.yaml` (currently `0.8.0`).
 - M6a tag editing migration is API-first and shared across desktop/web seams.
 - M6b refresh pipeline/thumbnails/grid are core-owned; desktop consumes API/SSE projection.
@@ -32,7 +33,7 @@ As of current milestones:
 
 Near-term planned milestones:
 
-- `M8a`-`M8c`: core control-plane/runtime ownership cutover, post-M7 stabilization fixes, and hardening/packaging/migration cleanup.
+- `M8b`-`M8c`: control-plane expansion and thin-client runtime ownership cleanup after M8a server-app consolidation.
 - `M9`: Android client bootstrap on stable API seam.
 
 Detailed M7 decisions and rollout strategy: `docs/m7-clarifications.md`.
@@ -45,6 +46,7 @@ Detailed M7 decisions and rollout strategy: `docs/m7-clarifications.md`.
 - `src/core/`
   - `ReelRoulette.Core`: domain logic, storage/state services, verification helpers.
   - `ReelRoulette.Server`: thin HTTP/SSE/auth composition and contracts.
+  - `ReelRoulette.ServerApp`: operator-facing single-process host for API/SSE/media/WebUI and runtime restart/settings operations.
   - `ReelRoulette.Worker`: headless runtime host for core/server APIs and jobs.
   - `ReelRoulette.Core.Tests`: xUnit regression and contract tests.
   - `ReelRoulette.Core.SystemChecks`: console harness for scenario/system checks.
@@ -57,10 +59,11 @@ Detailed M7 decisions and rollout strategy: `docs/m7-clarifications.md`.
 - `docs/`
   - Architecture, API baseline, dev setup, milestone domain inventories, and clarification records.
 - `tools/scripts/`
-  - Core runtime helper scripts (`run-core.ps1`, `run-core.sh`).
+  - Core runtime helper scripts (`run-core.ps1`, `run-core.sh`) now target `ReelRoulette.ServerApp`.
   - Web verification helper scripts (`verify-web.ps1`, `verify-web.sh`).
-  - M7c web deployment scripts (`publish-web.*`, `activate-web-version.*`, `rollback-web-version.*`, `verify-web-deploy.*`).
-  - M7d helper script (`publish-activate-run-worker.ps1`) for local publish/activate/worker startup workflow.
+  - M7c web deployment scripts (`publish-web.*`, `activate-web-version.*`, `rollback-web-version.*`) remain for compatibility tooling only (not required runtime path in M8a).
+  - `verify-web-deploy.*` now runs M8a single-origin smoke verification against `ReelRoulette.ServerApp`.
+  - `publish-activate-run-worker.ps1` is retained as a compatibility-named helper but now builds WebUI and runs `ReelRoulette.ServerApp`.
 - `licenses/`
   - Third-party license texts (VLC, FFmpeg licensing artifacts).
 
@@ -82,7 +85,11 @@ Detailed M7 decisions and rollout strategy: `docs/m7-clarifications.md`.
 
 ## Runtime Architecture (Current)
 
-- `ReelRoulette.Worker` hosts server composition (API + SSE + auth/pairing) plus Web UI runtime supervision (WebHost lifecycle + mDNS).
+- `ReelRoulette.ServerApp` is the default runtime host:
+  - serves API, SSE, and media endpoints;
+  - serves WebUI static assets and dynamic `runtime-config.json`;
+  - exposes operator UI at `/operator`;
+  - exposes metadata endpoints (`/health`, `/api/version`, `/api/capabilities`).
 - Desktop acts as thin client for migrated flows:
   - Commands/queries via API
   - Live projection via SSE
@@ -92,7 +99,8 @@ Detailed M7 decisions and rollout strategy: `docs/m7-clarifications.md`.
   3. loudness scan (new/unscanned)
   4. thumbnail generation
 - Event envelope includes revision metadata and supports reconnect replay semantics (`Last-Event-ID`, `resyncRequired` + authoritative requery).
-- Legacy embedded `source/WebRemote` runtime bridge is retired; Web UI traffic runs through independent `ReelRoulette.WebHost` + direct core API paths.
+- Legacy embedded `source/WebRemote` runtime bridge is retired.
+- Separate `ReelRoulette.WebHost` process and manifest pointer switching are not required for normal runtime in M8a.
 
 ## Development Workflows (Current)
 
@@ -106,6 +114,8 @@ From repo root:
   - `dotnet run --project .\src\core\ReelRoulette.Server\ReelRoulette.Server.csproj`
 - Run worker (headless runtime):
   - `dotnet run --project .\src\core\ReelRoulette.Worker\ReelRoulette.Worker.csproj`
+- Run server app (single-process runtime, recommended):
+  - `dotnet run --project .\src\core\ReelRoulette.ServerApp\ReelRoulette.ServerApp.csproj`
   - or `.\tools\scripts\run-core.ps1` / `./tools/scripts/run-core.sh`
 - Primary test gate:
   - `dotnet test ReelRoulette.sln`
@@ -120,8 +130,9 @@ For M7 web separation:
 - Runtime endpoint resolution now comes from runtime config (not compile-time constants).
 - Web auth/session and SSE reconnect/resync now run through direct web-to-core paths (M7b complete).
 - Web deployment now supports immutable versioned artifacts with atomic activation/rollback and split cache policy (M7c complete).
-- M7d cutover is complete: parity WebUI migrated, legacy bridge retired, worker-owned WebHost/mDNS/CORS runtime paths active.
+- M7d cutover is complete: parity WebUI migrated and legacy bridge retired.
 - M7e is complete: OpenAPI-driven TS contract generation is enforced in web verify and version/capability compatibility checks gate unsupported server contracts.
+- M8a is complete: server app consolidation to one process/one origin, with WebHost/manifest switching removed from required runtime behavior.
 
 See `docs/m7-clarifications.md` for chosen options and sequencing.
 

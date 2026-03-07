@@ -25,8 +25,6 @@ builder.Services.AddCors(options =>
 builder.Services.AddSingleton(runtimeOptions);
 builder.Services.AddReelRouletteServer();
 builder.Services.AddHostedService<WorkerLifecycleService>();
-builder.Services.AddHostedService<WebUiHostSupervisorService>();
-builder.Services.AddHostedService<WebUiMdnsService>();
 
 var app = builder.Build();
 app.MapReelRouletteEndpoints(runtimeOptions);
@@ -37,7 +35,7 @@ app.Lifetime.ApplicationStopping.Register(corsOrigins.Stop);
 
 app.Lifetime.ApplicationStarted.Register(() =>
 {
-    app.Logger.LogInformation("ReelRoulette.Worker started on {ListenUrl}", runtimeOptions.ListenUrl);
+    app.Logger.LogInformation("ReelRoulette.Worker started on {ListenUrl} (legacy host compatibility mode).", runtimeOptions.ListenUrl);
 });
 
 app.Lifetime.ApplicationStopping.Register(() =>

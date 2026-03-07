@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- **Implement M8a server app consolidation (single process, single origin)** (2026-03-06):
+  - Add `src/core/ReelRoulette.ServerApp` as the default runtime host serving API, SSE, media, WebUI static assets, dynamic `/runtime-config.json`, and operator UI (`/operator`) in one process.
+  - Add explicit capability endpoint `GET /api/capabilities` plus OpenAPI contract updates (`CapabilitiesResponse`, `RestartResponse`, and `POST /control/restart`).
+  - Add minimal operator control surface with runtime status/settings apply and localhost-only deterministic restart action.
+  - Update core runtime scripts (`run-core.ps1`, `run-core.sh`) to launch `ReelRoulette.ServerApp` and update compatibility helper `publish-activate-run-worker.ps1` to build WebUI and run server app.
+  - Repurpose `verify-web-deploy.ps1` / `verify-web-deploy.sh` into M8a single-origin smoke checks instead of WebHost manifest-switch validation.
+  - Remove WebHost supervision from Worker startup path and synchronize milestone/docs/tracking artifacts for final M8a state (`MILESTONES.md`, `TODO.md`, `CONTEXT.md`, `README.md`, `docs/api.md`, `docs/architecture.md`, `docs/dev-setup.md`, `docs/m8-domain-inventory.md`).
+  - Follow-up hardening for operator/runtime behavior:
+    - keep default server-app runtime port at `51234`,
+    - make WebUI `enabled` semantics explicit (WebUI-only gating with `404` when disabled, API/SSE/media still available),
+    - enforce two-step settings apply + restart expectations for listen/auth/WebUI changes,
+    - improve operator status panel text wrapping/scroll behavior to prevent card overlap,
+    - harden `verify-web-deploy.ps1` with fail-fast timeouts and startup log diagnostics so failures are actionable instead of appearing stuck.
+
 - **Implement M7e contract compatibility guards and final M7 verification gate** (2026-03-06):
   - Add OpenAPI-driven TS contract generation for WebUI (`openapi-typescript`) with committed generated artifact (`src/types/openapi.generated.ts`).
   - Add generated-contract freshness verification (`npm run verify:contracts`) and make it part of default WebUI verify gate.

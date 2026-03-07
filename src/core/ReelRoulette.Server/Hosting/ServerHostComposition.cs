@@ -66,6 +66,14 @@ public static class ServerHostComposition
             return Results.Ok(state.GetVersion());
         });
 
+        app.MapGet("/api/capabilities", (ServerStateService state) =>
+        {
+            return Results.Ok(new
+            {
+                capabilities = state.GetVersion().Capabilities
+            });
+        });
+
         app.MapGet("/api/presets", (ServerStateService state, LibraryPlaybackService playback) =>
         {
             return Results.Ok(playback.GetPresets(state.GetPresetCatalogSnapshot()));

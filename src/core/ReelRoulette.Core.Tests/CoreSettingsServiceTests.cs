@@ -19,7 +19,7 @@ public sealed class CoreSettingsServiceTests : IDisposable
 
         Assert.True(refresh.AutoRefreshEnabled);
         Assert.Equal(15, refresh.AutoRefreshIntervalMinutes);
-        Assert.False(web.Enabled);
+        Assert.True(web.Enabled);
         Assert.Equal(51234, web.Port);
         Assert.False(web.BindOnLan);
         Assert.Equal("reel", web.LanHostname);

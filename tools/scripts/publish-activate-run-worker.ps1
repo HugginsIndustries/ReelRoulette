@@ -10,17 +10,28 @@ if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 Push-Location $repoRoot
 try {
-    $versionId = "reel-webui-" + [DateTimeOffset]::UtcNow.ToString("yyyyMMddHHmmss")
-    Write-Host "Publishing and activating WebUI version: $versionId"
+    $distPath = Join-Path $repoRoot "src\clients\web\ReelRoulette.WebUI\dist"
+    Write-Host "Building WebUI for ServerApp static serving..."
 
-    .\tools\scripts\publish-web.ps1 -VersionId $versionId
-    .\tools\scripts\activate-web-version.ps1 -VersionId $versionId
+    Push-Location "src\clients\web\ReelRoulette.WebUI"
+    try {
+        npm install
+        npm run build
+    }
+    finally {
+        Pop-Location
+    }
 
-    Get-Content ".\.web-deploy\active-manifest.json"
+    if (-not (Test-Path $distPath)) {
+        Write-Error "WebUI build output was not found at $distPath."
+        exit 1
+    }
 
-    dotnet run --project ".\src\core\ReelRoulette.Worker\ReelRoulette.Worker.csproj" -- --CoreServer:BindOnLan=true
+    $env:CoreServer__BindOnLan = "true"
+    $env:ServerApp__WebUiStaticRootPath = $distPath
+    dotnet run --project ".\src\core\ReelRoulette.ServerApp\ReelRoulette.ServerApp.csproj"
     if ($LASTEXITCODE -ne 0) {
-        Write-Error "Worker exited with code $LASTEXITCODE."
+        Write-Error "ServerApp exited with code $LASTEXITCODE."
         exit $LASTEXITCODE
     }
 }

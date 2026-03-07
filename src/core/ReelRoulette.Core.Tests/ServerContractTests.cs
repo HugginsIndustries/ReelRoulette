@@ -45,6 +45,8 @@ public sealed class ServerContractTests
         var yaml = File.ReadAllText(openApiPath);
 
         Assert.Contains("VersionResponse:", yaml, StringComparison.Ordinal);
+        Assert.Contains("/api/capabilities:", yaml, StringComparison.Ordinal);
+        Assert.Contains("/control/restart:", yaml, StringComparison.Ordinal);
         Assert.Contains("minimumCompatibleApiVersion:", yaml, StringComparison.Ordinal);
         Assert.Contains("supportedApiVersions:", yaml, StringComparison.Ordinal);
         Assert.Contains("capabilities:", yaml, StringComparison.Ordinal);

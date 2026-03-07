@@ -29,6 +29,23 @@ No open P1 TODO items.
 
 ## Completed Features
 
+### M8a - ReelRoulette Server App Consolidation (Single Process, Single Origin) ✅
+
+- **Milestone Link**: `M8a - ReelRoulette Server App Consolidation (Single Process, Single Origin)` in `MILESTONES.md`
+- **Impact**: High - Simplifies runtime ownership to one app/one origin and removes required multi-process web-host deployment switching for normal operation.
+- **Final State**:
+  - Added consolidated server host project at `src/core/ReelRoulette.ServerApp` to serve API/SSE/media/WebUI/operator UI in one process.
+  - Added explicit capability metadata endpoint `GET /api/capabilities` and OpenAPI contract coverage (`shared/api/openapi.yaml`).
+  - Added dynamic same-origin runtime config serving (`/runtime-config.json`) so WebUI API/SSE bootstrap targets the active server origin.
+  - Added minimal operator UI at `/operator` for runtime status, web runtime settings apply, and localhost-only restart action (`POST /control/restart`) with explicit two-step apply-then-restart semantics.
+  - Web runtime `enabled` flag now governs WebUI availability only (after restart): WebUI routes are disabled with `404` while API/SSE/media/operator flows remain available.
+  - Operator status panel layout now wraps/scrolls long payload text and no longer overlaps settings controls.
+  - Updated default core runtime scripts (`tools/scripts/run-core.ps1`, `tools/scripts/run-core.sh`) to launch `ReelRoulette.ServerApp`.
+  - Removed external WebHost supervision from Worker startup path (`ReelRoulette.Worker` no longer requires a separate WebHost process in normal runtime).
+  - Repurposed `tools/scripts/verify-web-deploy.ps1` and `verify-web-deploy.sh` into M8a single-origin smoke checks, with fail-fast request timeouts and server startup log diagnostics.
+
+---
+
 ### M7e - Contract Compatibility and Final M7 Verification Gate ✅
 
 - **Milestone Link**: `M7e - Contract Compatibility and Final M7 Verification Gate` in `MILESTONES.md`

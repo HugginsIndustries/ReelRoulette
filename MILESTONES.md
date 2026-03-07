@@ -385,7 +385,7 @@ Status legend: `✅ Complete` | `⏳ Planned`
 
 ### M8a - ReelRoulette Server App Consolidation (Single Process, Single Origin)
 
-- **Status**: ⏳ Planned
+- **Status**: ✅ Complete
 - **Goal**: Consolidate runtime hosting into one user-facing `ReelRoulette Server` app (UI + core runtime + API/SSE + Web UI static serving) with no separate WebHost process and no atomic deployment switching.
 - **Scope**:
   - Create the server control app as `ReelRoulette Server` (operator UI app).
@@ -408,6 +408,17 @@ Status legend: `✅ Complete` | `⏳ Planned`
   - Web client works without CORS for normal operation (same-origin by design).
   - Operator can manage runtime settings and service state from the `ReelRoulette Server` UI.
   - `ReelRoulette Server` app self-restart paths (settings changes or host failures) are graceful and deterministic (clean shutdown, no orphaned listeners/ports).
+- **Verification evidence**:
+  - Added new consolidated host project: `src/core/ReelRoulette.ServerApp` (single process serving API/SSE/media/static WebUI/operator UI).
+  - `ReelRoulette.Server` endpoint composition now includes `GET /api/capabilities` and OpenAPI contract updates in `shared/api/openapi.yaml`.
+  - Dynamic same-origin runtime config is served from server app (`/runtime-config.json`) and WebUI static content is served by the same host/port as API/SSE/media.
+  - Web runtime `enabled` now controls WebUI availability only: when disabled and after restart, WebUI entry routes return `404` while API/SSE/media/operator paths remain available.
+  - Web runtime settings apply follows explicit two-step semantics: apply persists settings, then operator triggers restart (`POST /control/restart`) for listen/auth/WebUI gating changes to take effect.
+  - Operator UI now shows next operator URL hints after apply and runtime status content wraps/scrolls without overlap.
+  - `tools/scripts/run-core.ps1` and `tools/scripts/run-core.sh` now start `ReelRoulette.ServerApp` by default.
+  - `ReelRoulette.Worker` no longer supervises external `ReelRoulette.WebHost` in its startup path.
+  - M7c version-switch runtime dependency is removed from required runtime behavior; `verify-web-deploy.*` now executes M8a single-origin smoke checks.
+  - Operator UI path `/operator` provides status visibility, runtime settings apply (`/api/web-runtime/settings`), and restart control (`POST /control/restart`, localhost-only).
 
 ### M8b - Control-Plane UI + API for Runtime Operations
 

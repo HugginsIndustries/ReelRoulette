@@ -83,6 +83,48 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/capabilities:
+    get:
+      summary: Get server capability list
+      operationId: getCapabilities
+      responses:
+        "200":
+          description: Capability response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CapabilitiesResponse"
+        "401":
+          description: Unauthorized when auth is required and localhost trust is disabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /control/restart:
+    post:
+      summary: Request graceful runtime restart (localhost only)
+      operationId: postControlRestart
+      responses:
+        "200":
+          description: Restart accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RestartResponse"
+        "403":
+          description: Forbidden (non-localhost request)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Restart already in progress
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RestartResponse"
+
   /api/presets:
     get:
       summary: Get available presets
@@ -717,6 +759,27 @@ components:
           type: array
           items:
             type: string
+
+    CapabilitiesResponse:
+      type: object
+      required:
+        - capabilities
+      properties:
+        capabilities:
+          type: array
+          items:
+            type: string
+
+    RestartResponse:
+      type: object
+      required:
+        - accepted
+        - message
+      properties:
+        accepted:
+          type: boolean
+        message:
+          type: string
 
     PresetResponse:
       type: object

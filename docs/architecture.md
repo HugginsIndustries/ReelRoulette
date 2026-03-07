@@ -281,3 +281,25 @@ flowchart TD
 - OpenAPI is now the direct source for generated WebUI TS contract models.
 - Web verify gate enforces generated-contract freshness to prevent schema drift.
 - Server version payload includes compatibility/capability metadata, and WebUI blocks unsupported server contracts before normal execution.
+
+## M8a Server App Consolidation (Single Process, Single Origin)
+
+```mermaid
+flowchart TD
+    serverApp["ReelRoulette.ServerApp"]
+    apiSseMedia["API + SSE + Media Endpoints"]
+    webUiStatic["WebUI Static Assets + Runtime Config"]
+    operatorUi["Operator UI (/operator)"]
+    metadata["Metadata Endpoints (/health, /api/version, /api/capabilities)"]
+    clients["Desktop + Web Clients"]
+
+    serverApp --> apiSseMedia
+    serverApp --> webUiStatic
+    serverApp --> operatorUi
+    serverApp --> metadata
+    clients --> serverApp
+```
+
+- Runtime serving is consolidated into one process and one browser-visible origin.
+- `ReelRoulette.WebHost` and `active-manifest` switching are no longer required in the normal runtime path.
+- Operator controls (status/settings/restart) are surfaced from the server app, while domain logic remains in `ReelRoulette.Core` and server composition remains in `ReelRoulette.Server`.
