@@ -171,3 +171,13 @@
   - `POST /api/random`
 - Local bootstrap helper for publish+activate+worker:
   - `tools/scripts/publish-activate-run-worker.ps1`
+
+## M7e Contract Compatibility Notes
+
+- WebUI contract generation:
+  - `npm run generate:contracts` generates `src/types/openapi.generated.ts` from `shared/api/openapi.yaml`.
+  - `npm run verify:contracts` verifies generated contract freshness and fails when output is stale.
+- `npm run verify` now runs contract freshness checks before typecheck/tests/build.
+- Version compatibility/capability checks:
+  - `GET /api/version` includes `minimumCompatibleApiVersion`, `supportedApiVersions[]`, and `capabilities[]`.
+  - WebUI startup/auth bootstrap validates N/N-1 API compatibility and required capability presence before enabling normal flows.

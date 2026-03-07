@@ -1,43 +1,14 @@
-export interface VersionResponse {
-  appVersion: string;
-  apiVersion: string;
-  assetsVersion?: string | null;
-}
+import type { components } from "./openapi.generated";
 
-export interface PairResponse {
-  paired: boolean;
-  message: string;
-}
+export type VersionResponse = components["schemas"]["VersionResponse"];
+export type PairResponse = components["schemas"]["PairResponse"];
+export type RefreshStageProgress = components["schemas"]["RefreshStageProgress"];
+export type RefreshStatusSnapshot = components["schemas"]["RefreshStatusSnapshot"];
+export type RefreshStatusChangedPayload = components["schemas"]["RefreshStatusChangedPayload"];
+export type ResyncRequiredPayload = components["schemas"]["ResyncRequiredPayload"];
 
-export interface RefreshStageProgress {
-  stage: string;
-  percent: number;
-  message: string;
-  isComplete: boolean;
-}
-
-export interface RefreshStatusSnapshot {
-  isRunning: boolean;
-  runId?: string | null;
-  trigger?: string | null;
-  startedUtc?: string | null;
-  completedUtc?: string | null;
-  currentStage?: string | null;
-  lastError?: string | null;
-  stages: RefreshStageProgress[];
-}
-
-export interface RefreshStatusChangedPayload {
-  snapshot: RefreshStatusSnapshot;
-}
-
-export interface ResyncRequiredPayload {
-  reason: string;
-  lastEventId: number;
-  currentRevision: number;
-}
-
-export interface ServerEventEnvelope<TPayload = unknown> {
+export interface ServerEventEnvelope<TPayload = unknown>
+  extends Omit<components["schemas"]["ServerEventEnvelope"], "payload"> {
   revision: number;
   eventType: string;
   timestamp: string;

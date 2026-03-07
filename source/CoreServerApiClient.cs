@@ -353,6 +353,9 @@ public sealed class CoreVersionResponse
     public string AppVersion { get; set; } = string.Empty;
     public string ApiVersion { get; set; } = string.Empty;
     public string? AssetsVersion { get; set; }
+    public string MinimumCompatibleApiVersion { get; set; } = string.Empty;
+    public List<string> SupportedApiVersions { get; set; } = [];
+    public List<string> Capabilities { get; set; } = [];
 }
 
 public sealed class CoreRandomRequest

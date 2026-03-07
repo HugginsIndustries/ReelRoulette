@@ -140,3 +140,30 @@
   - parity control/tag/touch behaviors retained on independent WebUI runtime.
 - Legacy bridge retirement:
   - embedded `source/WebRemote/*` runtime/resources removed from active runtime and project wiring.
+
+## M7e - Contract Compatibility and Final M7 Verification Gate
+
+## Pure Domain Logic (compatibility contract metadata)
+
+- Version compatibility contract:
+  - `shared/api/openapi.yaml` (`VersionResponse` with compatibility/capability fields).
+  - `src/core/ReelRoulette.Server/Contracts/ApiContracts.cs` (`VersionResponse` DTO).
+  - `src/core/ReelRoulette.Server/Contracts/ApiContractMapper.cs` (version mapping defaults + capability projection).
+  - `src/core/ReelRoulette.Server/Services/ServerStateService.cs` (current API version window and capability list source).
+
+## IO / Service Adapters (OpenAPI->TS generation + guardrail scripts)
+
+- WebUI generation/check scripts:
+  - `src/clients/web/ReelRoulette.WebUI/scripts/verify-openapi-contracts-fresh.mjs`
+  - `src/clients/web/ReelRoulette.WebUI/package.json` (`generate:contracts`, `verify:contracts`, `verify` integration).
+- Generated contract artifact:
+  - `src/clients/web/ReelRoulette.WebUI/src/types/openapi.generated.ts`
+
+## UI Orchestration (compatibility gating in web client)
+
+- Web client compatibility checks:
+  - `src/clients/web/ReelRoulette.WebUI/src/auth/authBootstrap.ts`
+  - `src/clients/web/ReelRoulette.WebUI/src/legacyApp.js`
+  - blocks unsupported API versions/capability sets before enabling normal flows.
+- Contract type consumption:
+  - `src/clients/web/ReelRoulette.WebUI/src/types/serverContracts.ts` (bridges generated OpenAPI schema types).

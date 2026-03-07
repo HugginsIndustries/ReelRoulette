@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: ReelRoulette API
-  version: 0.7.0
+  version: 0.8.0
   description: Contract-first API with M6b refresh pipeline, status/settings APIs, and thumbnail artifact retrieval endpoints.
 paths:
   /health:
@@ -696,6 +696,9 @@ components:
       required:
         - appVersion
         - apiVersion
+        - minimumCompatibleApiVersion
+        - supportedApiVersions
+        - capabilities
       properties:
         appVersion:
           type: string
@@ -704,6 +707,16 @@ components:
         assetsVersion:
           type: string
           nullable: true
+        minimumCompatibleApiVersion:
+          type: string
+        supportedApiVersions:
+          type: array
+          items:
+            type: string
+        capabilities:
+          type: array
+          items:
+            type: string
 
     PresetResponse:
       type: object

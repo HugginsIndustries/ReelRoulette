@@ -257,3 +257,27 @@ flowchart TD
 - Served cache policy is split:
   - `index.html` and runtime config are always fresh (`no-store`).
   - fingerprinted assets are long-lived immutable for fast repeat loads.
+
+## M7e Contract Compatibility + Final M7 Guardrails
+
+```mermaid
+flowchart TD
+    openApi["shared/api/openapi.yaml"]
+    tsGen["openapi-typescript generation"]
+    generatedTs["openapi.generated.ts"]
+    webVerify["WebUI verify gate"]
+    versionApi["GET /api/version"]
+    capabilityGate["WebUI version/capability gate"]
+    webRuntime["WebUI runtime flows"]
+
+    openApi --> tsGen
+    tsGen --> generatedTs
+    generatedTs --> webVerify
+    openApi --> webVerify
+    versionApi --> capabilityGate
+    capabilityGate --> webRuntime
+```
+
+- OpenAPI is now the direct source for generated WebUI TS contract models.
+- Web verify gate enforces generated-contract freshness to prevent schema drift.
+- Server version payload includes compatibility/capability metadata, and WebUI blocks unsupported server contracts before normal execution.

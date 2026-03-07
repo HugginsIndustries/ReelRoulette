@@ -92,6 +92,10 @@ M4/M5/M6a runtime notes:
   - worker now supervises WebHost lifecycle and mDNS advertisement from core-owned web runtime settings
   - WebHost serves host-aware runtime config and core uses dynamic CORS origin registration for localhost/LAN hostname/LAN-IP access
   - desktop/web preset + random selection behavior is API-authoritative (server-owned preset catalog and random eligibility semantics)
+- M7e adds contract compatibility and final M7 sign-off guardrails:
+  - WebUI TS contracts are generated from `shared/api/openapi.yaml` (`npm run generate:contracts`)
+  - `npm run verify` now validates generated contract freshness (`npm run verify:contracts`) before typecheck/tests/build
+  - `/api/version` exposes compatibility/capability metadata and WebUI blocks unsupported server contracts/capability sets
 
 ## Testing
 
@@ -113,6 +117,14 @@ M7a web verification gate:
 .\tools\scripts\verify-web.ps1
 # or
 ./tools/scripts/verify-web.sh
+```
+
+M7e contract generation/check commands:
+
+```bash
+cd .\src\clients\web\ReelRoulette.WebUI
+npm run generate:contracts
+npm run verify:contracts
 ```
 
 M7b direct auth/SSE smoke checks:

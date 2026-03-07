@@ -16,23 +16,22 @@ Primary outcome: new clients can be added without reimplementing domain logic.
 
 As of current milestones:
 
-- `M0`-`M7d` are complete in `MILESTONES.md`.
+- `M0`-`M7e` are complete in `MILESTONES.md`.
 - Desktop runtime is still `source/ReelRoulette.csproj`.
 - Core/server/worker runtime exists under `src/core/*`.
-- API contract source of truth is `shared/api/openapi.yaml` (currently `0.7.0`).
+- API contract source of truth is `shared/api/openapi.yaml` (currently `0.8.0`).
 - M6a tag editing migration is API-first and shared across desktop/web seams.
 - M6b refresh pipeline/thumbnails/grid are core-owned; desktop consumes API/SSE projection.
 - M7a web foundation is complete: independent Vite+TypeScript web bootstrap with runtime endpoint config contract and verification gates.
 - M7b direct web auth/SSE reliability is complete: pair-token bootstrap to session-cookie auth, direct web SSE status projection, replay-gap resync fallback, and explicit CORS/cookie runtime policy controls.
 - M7c zero-restart web deployment is complete: independent `ReelRoulette.WebHost` static host, immutable versioned web artifacts, atomic `active-manifest.json` activation/rollback, and split shell-vs-asset cache policy.
-- Contract compatibility and final M7 sign-off gates remain in `M7e`.
 - Post-cutover runtime stabilization items identified during M7d validation are deferred to `M8b`.
+- M7e compatibility guardrails are complete: TS OpenAPI-generated contracts are part of WebUI verify, and web startup enforces version/capability checks for N/N-1 safety.
 
 ## Planned State (Upcoming)
 
 Near-term planned milestones:
 
-- `M7e`: contract compatibility and final M7 verification gate.
 - `M8a`-`M8c`: core control-plane/runtime ownership cutover, post-M7 stabilization fixes, and hardening/packaging/migration cleanup.
 - `M9`: Android client bootstrap on stable API seam.
 
@@ -122,6 +121,7 @@ For M7 web separation:
 - Web auth/session and SSE reconnect/resync now run through direct web-to-core paths (M7b complete).
 - Web deployment now supports immutable versioned artifacts with atomic activation/rollback and split cache policy (M7c complete).
 - M7d cutover is complete: parity WebUI migrated, legacy bridge retired, worker-owned WebHost/mDNS/CORS runtime paths active.
+- M7e is complete: OpenAPI-driven TS contract generation is enforced in web verify and version/capability compatibility checks gate unsupported server contracts.
 
 See `docs/m7-clarifications.md` for chosen options and sequencing.
 

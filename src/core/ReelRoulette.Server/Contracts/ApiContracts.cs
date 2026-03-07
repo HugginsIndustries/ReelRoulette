@@ -7,6 +7,9 @@ public sealed class VersionResponse
     public string AppVersion { get; set; } = "dev";
     public string ApiVersion { get; set; } = "1";
     public string? AssetsVersion { get; set; }
+    public string MinimumCompatibleApiVersion { get; set; } = "0";
+    public List<string> SupportedApiVersions { get; set; } = ["1", "0"];
+    public List<string> Capabilities { get; set; } = [];
 }
 
 public sealed class PresetResponse

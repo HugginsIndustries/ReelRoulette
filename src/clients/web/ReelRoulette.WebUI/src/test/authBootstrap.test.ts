@@ -17,12 +17,24 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 describe("bootstrapAuthSession", () => {
+  const compatibleVersion = {
+    appVersion: "dev",
+    apiVersion: "1",
+    assetsVersion: "m7",
+    minimumCompatibleApiVersion: "0",
+    supportedApiVersions: ["1", "0"],
+    capabilities: [
+      "auth.sessionCookie",
+      "events.refreshStatusChanged",
+      "events.resyncRequired",
+      "api.random.filterState",
+      "api.presets.match"
+    ]
+  };
+
   it("returns authorized when version endpoint succeeds", async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce(
-      jsonResponse({
-        appVersion: "dev",
-        apiVersion: "1"
-      })
+      jsonResponse(compatibleVersion)
     ) as unknown as typeof fetch;
 
     const result = await bootstrapAuthSession(CONFIG, undefined, fetchMock);
@@ -35,10 +47,37 @@ describe("bootstrapAuthSession", () => {
       .fn()
       .mockResolvedValueOnce(jsonResponse({ error: "Unauthorized" }, 401))
       .mockResolvedValueOnce(jsonResponse({ paired: true, message: "ok" }))
-      .mockResolvedValueOnce(jsonResponse({ appVersion: "dev", apiVersion: "1" })) as unknown as typeof fetch;
+      .mockResolvedValueOnce(jsonResponse(compatibleVersion)) as unknown as typeof fetch;
 
     const result = await bootstrapAuthSession(CONFIG, "dev-token", fetchMock);
     expect(result.authorized).toBe(true);
     expect(result.paired).toBe(true);
+  });
+
+  it("rejects unsupported server api version", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      jsonResponse({
+        ...compatibleVersion,
+        apiVersion: "3",
+        supportedApiVersions: ["3", "2"]
+      })
+    ) as unknown as typeof fetch;
+
+    const result = await bootstrapAuthSession(CONFIG, undefined, fetchMock);
+    expect(result.authorized).toBe(false);
+    expect(result.message).toContain("not supported");
+  });
+
+  it("rejects missing required capabilities", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      jsonResponse({
+        ...compatibleVersion,
+        capabilities: ["events.refreshStatusChanged"]
+      })
+    ) as unknown as typeof fetch;
+
+    const result = await bootstrapAuthSession(CONFIG, undefined, fetchMock);
+    expect(result.authorized).toBe(false);
+    expect(result.message).toContain("missing required capabilities");
   });
 });

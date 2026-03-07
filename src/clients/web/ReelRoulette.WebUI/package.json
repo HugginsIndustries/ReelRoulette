@@ -7,13 +7,16 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "generate:contracts": "openapi-typescript ../../../../shared/api/openapi.yaml -o ./src/types/openapi.generated.ts",
+    "verify:contracts": "node ./scripts/verify-openapi-contracts-fresh.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
     "test": "vitest run",
     "verify:build-output": "node ./scripts/verify-build-output.mjs",
-    "verify": "npm run typecheck && npm run test && npm run build && npm run verify:build-output"
+    "verify": "npm run verify:contracts && npm run typecheck && npm run test && npm run build && npm run verify:build-output"
   },
   "devDependencies": {
     "@types/node": "^24.5.2",
+    "openapi-typescript": "^7.10.1",
     "typescript": "^5.9.2",
     "vite": "^7.1.5",
     "vitest": "^3.2.4"

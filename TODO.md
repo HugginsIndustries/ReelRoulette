@@ -29,6 +29,20 @@ No open P1 TODO items.
 
 ## Completed Features
 
+### M7e - Contract Compatibility and Final M7 Verification Gate ✅
+
+- **Milestone Link**: `M7e - Contract Compatibility and Final M7 Verification Gate` in `MILESTONES.md`
+- **Impact**: High - Adds contract drift protection and compatibility guardrails for independent web/core release cadence.
+- **Final State**:
+  - Added OpenAPI-driven TS contract generation for WebUI (`openapi-typescript`) with committed generated artifact (`src/types/openapi.generated.ts`).
+  - Added contract freshness guardrail (`npm run verify:contracts`) and integrated it into default WebUI verify gate (`npm run verify`).
+  - Extended `VersionResponse` contract with compatibility/capability metadata (`minimumCompatibleApiVersion`, `supportedApiVersions`, `capabilities`) in OpenAPI and server DTO mapping.
+  - Implemented web compatibility checks (N/N-1 API versions plus required capabilities) in startup/auth/runtime paths.
+  - Added C# contract compatibility regression checks for version compatibility fields and OpenAPI property presence.
+  - Added final M7 manual verification checklist artifact (`m7e-final-verification-checklist.md`) for direct web-connect, refresh-status parity, and auth/reconnect continuity sign-off.
+
+---
+
 ### M7d - Controlled Cutover and Legacy Bridge Retirement ✅
 
 - **Milestone Link**: `M7d - Controlled Cutover and Legacy Bridge Retirement` in `MILESTONES.md`

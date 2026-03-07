@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **Implement M7e contract compatibility guards and final M7 verification gate** (2026-03-06):
+  - Add OpenAPI-driven TS contract generation for WebUI (`openapi-typescript`) with committed generated artifact (`src/types/openapi.generated.ts`).
+  - Add generated-contract freshness verification (`npm run verify:contracts`) and make it part of default WebUI verify gate.
+  - Extend `VersionResponse` contract with compatibility metadata (`minimumCompatibleApiVersion`, `supportedApiVersions`) and explicit `capabilities[]`.
+  - Add server-side version/capability mapping defaults and web-side compatibility gating for unsupported API versions/capability sets.
+  - Add compatibility regression coverage in WebUI (`authBootstrap` capability/version checks) and core tests (`ServerContractTests` contract/OpenAPI invariants).
+  - Add M7e manual verification checklist artifact (`m7e-final-verification-checklist.md`) and update milestone/docs context for final M7 sign-off.
+
 - **Implement M7d controlled cutover, legacy WebRemote retirement, and worker-owned web runtime** (2026-03-06):
   - Migrate the legacy WebRemote UX into `ReelRoulette.WebUI` with parity for player controls, touch gestures, refresh-status projection, and tag-editor workflows.
   - Remove legacy embedded WebRemote runtime/resources (`source/WebRemote/*`) and desktop bridge contracts after gate approvals.

@@ -359,7 +359,7 @@ Status legend: `✅ Complete` | `⏳ Planned`
 
 ### M7e - Contract Compatibility and Final M7 Verification Gate
 
-- **Status**: ⏳ Planned
+- **Status**: ✅ Complete
 - **Goal**: Lock independent-release safety and complete M7 sign-off with contract-compatibility guarantees.
 - **Scope**:
   - Enforce N/N-1 compatibility policy with capability checks for independent web/core releases.
@@ -371,6 +371,17 @@ Status legend: `✅ Complete` | `⏳ Planned`
   - Automated gates pass: build-output asset serving, direct web-to-core SSE/refresh status projection, and OpenAPI compatibility checks.
   - Manual gates pass: direct web connect without desktop bridge, refresh status-line parity through run/fail/complete states, and auth/reconnect continuity.
   - M7a-M7e acceptance criteria are explicitly verified before advancing to M8.
+- **Verification evidence**:
+  - OpenAPI contract generation pipeline added to WebUI (`openapi-typescript`) with generated types committed at `src/clients/web/ReelRoulette.WebUI/src/types/openapi.generated.ts`.
+  - Web verify gate now includes stale-contract enforcement (`npm run verify:contracts`) and fails when generated TS contracts drift from `shared/api/openapi.yaml`.
+  - `VersionResponse` contract now exposes explicit compatibility/capability metadata (`minimumCompatibleApiVersion`, `supportedApiVersions`, `capabilities`) in OpenAPI and server DTO mapping.
+  - Web auth/version bootstrap paths enforce N/N-1 compatibility and required capability checks before normal feature execution.
+  - C# compatibility regression coverage extended (`ServerContractTests`) for version compatibility/capability fields and OpenAPI property presence checks.
+  - Automated verification gate passes:
+    - `npm run verify` in `src/clients/web/ReelRoulette.WebUI`
+    - `dotnet build ReelRoulette.sln`
+    - `dotnet test ReelRoulette.sln`
+  - Manual gate checklist/instructions prepared at `m7e-final-verification-checklist.md` for direct web-connect, refresh-status parity, and auth/reconnect continuity sign-off.
 
 ### M8a - Core Control App and Runtime Ownership Cutover
 

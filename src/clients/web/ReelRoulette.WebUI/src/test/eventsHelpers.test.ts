@@ -25,11 +25,13 @@ describe("event helpers", () => {
   it("builds refresh status messages", () => {
     const running = buildRefreshStatusMessage({
       isRunning: true,
+      trigger: "manual",
       currentStage: "thumbnailGeneration",
       stages: [{ stage: "thumbnailGeneration", percent: 52, message: "generating", isComplete: false }]
     });
     const failed = buildRefreshStatusMessage({
       isRunning: false,
+      trigger: "manual",
       lastError: "boom",
       stages: []
     });

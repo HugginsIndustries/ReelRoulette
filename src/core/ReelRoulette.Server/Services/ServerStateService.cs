@@ -10,6 +10,17 @@ namespace ReelRoulette.Server.Services;
 // and move business-rule expansion to ReelRoulette.Core services as migrations continue.
 public sealed class ServerStateService
 {
+    private static readonly string[] SupportedApiVersions = ["1", "0"];
+    private static readonly string[] Capabilities =
+    [
+        "auth.sessionCookie",
+        "events.refreshStatusChanged",
+        "events.resyncRequired",
+        "api.random.filterState",
+        "api.presets.match",
+        "api.webRuntime.settings"
+    ];
+
     private const string UncategorizedCategoryId = "uncategorized";
     private const string UncategorizedCategoryName = "Uncategorized";
     private readonly object _revisionLock = new();
@@ -54,7 +65,12 @@ public sealed class ServerStateService
 
     public VersionResponse GetVersion()
     {
-        return ApiContractMapper.MapVersion("1", assetsVersion: "m4");
+        return ApiContractMapper.MapVersion(
+            "1",
+            assetsVersion: "m7",
+            minimumCompatibleApiVersion: "0",
+            supportedApiVersions: SupportedApiVersions,
+            capabilities: Capabilities);
     }
 
     public void SetFavorite(FavoriteRequest request)

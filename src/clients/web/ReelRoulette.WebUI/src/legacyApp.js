@@ -5,6 +5,15 @@ const TAG_EDITOR_COLLAPSED_KEY = "rr_tagEditorCollapsed";
 const UNCATEGORIZED_CATEGORY_ID = "uncategorized";
 const SWIPE_THRESHOLD = 50;
 const TAP_THRESHOLD = 10;
+const WEBUI_API_VERSION = "1";
+const SUPPORTED_SERVER_API_VERSIONS = new Set(["1", "0"]);
+const REQUIRED_SERVER_CAPABILITIES = [
+  "auth.sessionCookie",
+  "events.refreshStatusChanged",
+  "events.resyncRequired",
+  "api.random.filterState",
+  "api.presets.match"
+];
 
 function getClientId() {
   let id = localStorage.getItem(CLIENT_ID_KEY);
@@ -73,6 +82,32 @@ function getElement(id) {
   return document.getElementById(id);
 }
 
+function parseApiVersion(value) {
+  const parsed = Number.parseInt(String(value || "").trim(), 10);
+  return Number.isFinite(parsed) ? parsed : Number.NaN;
+}
+
+function validateServerCompatibility(version) {
+  const apiVersion = String(version?.apiVersion || "").trim();
+  if (!SUPPORTED_SERVER_API_VERSIONS.has(apiVersion)) {
+    return `Unsupported server API version: ${apiVersion || "unknown"}.`;
+  }
+
+  const minimumCompatible = parseApiVersion(version?.minimumCompatibleApiVersion);
+  const webUiVersion = parseApiVersion(WEBUI_API_VERSION);
+  if (Number.isFinite(minimumCompatible) && Number.isFinite(webUiVersion) && webUiVersion < minimumCompatible) {
+    return `Server requires client API version ${version.minimumCompatibleApiVersion} or newer.`;
+  }
+
+  const capabilitySet = new Set(Array.isArray(version?.capabilities) ? version.capabilities.map((x) => String(x)) : []);
+  const missing = REQUIRED_SERVER_CAPABILITIES.filter((key) => !capabilitySet.has(key));
+  if (missing.length > 0) {
+    return `Server missing required capabilities: ${missing.join(", ")}.`;
+  }
+
+  return null;
+}
+
 export function startLegacyApp(config) {
   const apiBaseUrl = String(config.apiBaseUrl || "").replace(/\/+$/, "");
   const sseUrl = config.sseUrl;
@@ -97,7 +132,8 @@ export function startLegacyApp(config) {
     tagEditorItemIds: [],
     tagEditContext: null,
     tagEditorWasPlaying: false,
-    tagEditorPhotoTimerRunning: false
+    tagEditorPhotoTimerRunning: false,
+    compatibilityBlocked: false
   };
 
   const video = getElement("video");
@@ -173,6 +209,23 @@ export function startLegacyApp(config) {
 
   function setStatus(message) {
     statusEl.textContent = message;
+  }
+
+  function blockForCompatibility(message) {
+    state.compatibilityBlocked = true;
+    if (eventSource) {
+      try {
+        eventSource.close();
+      } catch {
+        // ignored
+      }
+      eventSource = null;
+    }
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
+    setStatus(message);
   }
 
   function buildApiUrl(path) {
@@ -316,6 +369,11 @@ export function startLegacyApp(config) {
   }
 
   async function loadPresets() {
+    if (state.compatibilityBlocked) {
+      presetSelect.innerHTML = "<option value=\"\">Server compatibility check failed</option>";
+      return;
+    }
+
     try {
       const presets = await fetchJson("/api/presets");
       state.presets = Array.isArray(presets) ? presets : [];
@@ -335,13 +393,26 @@ export function startLegacyApp(config) {
   async function loadVersion() {
     try {
       const version = await fetchJson("/api/version");
+      const compatibilityError = validateServerCompatibility(version);
+      if (compatibilityError) {
+        blockForCompatibility(compatibilityError);
+        return false;
+      }
+      state.compatibilityBlocked = false;
       setStatus(`Ready (API ${version.apiVersion || "unknown"})`);
+      return true;
     } catch {
       setStatus("Ready (API offline)");
+      return false;
     }
   }
 
   async function getRandom() {
+    if (state.compatibilityBlocked) {
+      setStatus("Cannot play: server compatibility check failed.");
+      return;
+    }
+
     const presetId = presetSelect.value;
     if (!presetId) {
       setStatus("Select a preset.");
@@ -1089,6 +1160,10 @@ export function startLegacyApp(config) {
   }
 
   function connectEvents() {
+    if (state.compatibilityBlocked) {
+      return;
+    }
+
     if (eventSource) {
       try {
         eventSource.close();
@@ -1157,6 +1232,11 @@ export function startLegacyApp(config) {
   }
 
   async function pairAndConnect() {
+    if (state.compatibilityBlocked) {
+      setStatus("Pairing blocked by server compatibility check.");
+      return;
+    }
+
     const token = String(pairToken.value || "").trim();
     if (!token) {
       setStatus("Pair token required.");
@@ -1174,6 +1254,10 @@ export function startLegacyApp(config) {
     }
     pairSection.style.display = "none";
     setStatus("Paired.");
+    const versionOk = await loadVersion();
+    if (!versionOk) {
+      return;
+    }
     await loadPresets();
     connectEvents();
   }

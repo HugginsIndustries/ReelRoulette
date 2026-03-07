@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using System.Text.Json;
 
@@ -5,13 +7,21 @@ namespace ReelRoulette.Server.Contracts;
 
 public static class ApiContractMapper
 {
-    public static VersionResponse MapVersion(string apiVersion, string? assetsVersion = null)
+    public static VersionResponse MapVersion(
+        string apiVersion,
+        string? assetsVersion = null,
+        string? minimumCompatibleApiVersion = null,
+        IReadOnlyCollection<string>? supportedApiVersions = null,
+        IReadOnlyCollection<string>? capabilities = null)
     {
         return new VersionResponse
         {
             AppVersion = Assembly.GetEntryAssembly()?.GetName().Version?.ToString() ?? "dev",
             ApiVersion = apiVersion,
-            AssetsVersion = assetsVersion
+            AssetsVersion = assetsVersion,
+            MinimumCompatibleApiVersion = string.IsNullOrWhiteSpace(minimumCompatibleApiVersion) ? "0" : minimumCompatibleApiVersion,
+            SupportedApiVersions = supportedApiVersions?.Where(v => !string.IsNullOrWhiteSpace(v)).Distinct(StringComparer.Ordinal).ToList() ?? [apiVersion, "0"],
+            Capabilities = capabilities?.Where(v => !string.IsNullOrWhiteSpace(v)).Distinct(StringComparer.Ordinal).ToList() ?? []
         };
     }
 

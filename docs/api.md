@@ -20,6 +20,9 @@
   - legacy embedded WebRemote bridge routes are retired.
   - web runtime settings are core-owned and updated via API (`GET/POST /api/web-runtime/settings`).
   - presets/random/source flows are canonical API paths consumed by desktop and web.
+- M7e adds contract compatibility guardrails:
+  - WebUI TS contracts are generated from OpenAPI and validated in verify gates.
+  - `GET /api/version` now carries compatibility/capability metadata used by web startup checks.
 
 ## Eventing Direction
 
@@ -95,6 +98,19 @@
 - `POST /api/refresh/settings`
 - `GET /api/thumbnail/{itemId}`
 - `GET /api/events` (`text/event-stream`)
+
+## M7e Version/Capability Contract
+
+- `VersionResponse` includes:
+  - `appVersion`
+  - `apiVersion`
+  - `assetsVersion`
+  - `minimumCompatibleApiVersion`
+  - `supportedApiVersions[]`
+  - `capabilities[]`
+- Web compatibility policy:
+  - WebUI accepts N/N-1 API versions (`1` and `0` in current contract policy).
+  - WebUI blocks startup usage when required server capabilities are missing.
 
 ## M7a Runtime Config Keys (Web Client)
 
