@@ -392,16 +392,21 @@ Status legend: `✅ Complete` | `⏳ Planned`
     - core runtime settings persistence,
     - worker/WebHost start/stop/restart,
     - LAN/mDNS runtime coordination.
+  - Define and document the control-plane command contract used by desktop:
+    - `start`, `stop`, `restart`, `status`, and `apply settings`.
+  - Choose and document the desktop-to-control-plane transport (HTTP local endpoint or IPC), including auth/trust assumptions for local-only control paths.
   - Remove desktop app direct control paths for worker/WebHost lifecycle.
-  - Replace desktop lifecycle actions with API/IPC control commands to the Core Control App.
+  - Replace desktop lifecycle actions with control-plane commands.
   - Consolidate process ownership/cleanup semantics so owned process trees are deterministic on shutdown/restart.
   - Define clear ownership boundaries across control-plane, worker, WebHost, and desktop client.
+  - Boundary guardrail: this milestone focuses on ownership/orchestration cutover; unrelated UX bug-fix polish belongs to `M8b` unless it blocks control-plane adoption.
 - **Acceptance criteria**:
   - Desktop app no longer starts/stops/restarts worker/WebHost directly.
   - Core Control App is the sole runtime lifecycle owner in supported flows.
-  - Runtime settings that affect host lifecycle are single-writer and apply deterministically.
+  - Runtime settings that affect host lifecycle are single-writer and apply deterministically via control-plane commands.
+  - Failure behavior is deterministic and documented for start/restart/apply-settings paths (including partial-failure handling and operator-visible status).
   - Shutdown/restart paths leave no orphan owned runtime processes in normal and interrupted flows.
-  - Role boundaries are documented and validated with targeted lifecycle tests.
+  - Role boundaries and control-plane contract are documented and validated with targeted lifecycle tests.
 
 ### M8b - Settings and Post-M7 Runtime Stabilization
 
@@ -411,14 +416,19 @@ Status legend: `✅ Complete` | `⏳ Planned`
   - Fix settings dialog lifecycle issue (reopen/apply repeatedly in one session).
   - Fix LAN/runtime apply consistency regressions and related false-warning scenarios.
   - Fix remaining worker/WebHost shutdown edge cases found in manual validation.
-  - Address additional user-reported post-M7 bugs needed for stable day-to-day usage.
+  - Address additional user-reported post-M7 bugs needed for stable day-to-day usage, triaged against an explicit baseline bug list/checklist for this milestone.
   - Add focused regression tests for settings open/apply cycles and runtime transition paths.
+  - Add manual verification checklist coverage for known operator regressions:
+    - repeated settings open/apply/close/reopen in a single session,
+    - LAN toggle behavior (localhost/LAN/mDNS),
+    - worker stop/restart and orphan-process checks.
 - **Acceptance criteria**:
   - Settings dialog can be opened/applied/closed/reopened repeatedly without hang or lockout.
   - LAN enable/disable transitions behave consistently for localhost/LAN/mDNS access expectations.
   - Worker stop/restart is reliable and does not leave owned runtime process leaks.
   - User-facing status/warning messaging accurately reflects runtime state.
   - Build/tests remain green with new stability regressions covered.
+  - Baseline M8b bug checklist is resolved or each remaining item is explicitly deferred with owner/follow-up milestone.
 
 ### M8c - Hardening, Packaging, and Migration Cleanup
 
@@ -430,9 +440,10 @@ Status legend: `✅ Complete` | `⏳ Planned`
     - SSE ordering/reconnect
     - background refresh pipeline
   - Finalize config/state migration strategy.
-  - Reduce remaining legacy in-process paths from desktop.
+  - Reduce remaining legacy in-process paths from desktop to zero (or maintain an explicit temporary exceptions list with removal targets).
   - Migrate stats aggregation/query logic to core services and expose API endpoints/contracts used by desktop/web clients.
   - Add packaging/distribution strategy for worker + clients.
+  - Produce migration/upgrade playbook and release-readiness checklist for post-M8 rollout.
 - **Acceptance criteria**:
   - Stable multi-client operation (desktop + web at minimum).
   - No critical state divergence between clients.
