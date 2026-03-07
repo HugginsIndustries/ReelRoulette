@@ -467,12 +467,16 @@ Status legend: `✅ Complete` | `⏳ Planned`
   - Remove remaining desktop direct authoritative JSON mutation paths for migrated domains.
   - Ensure desktop commands/queries go through shared APIs only.
   - Ensure desktop sync/projection uses API + SSE paths only.
+  - Route source import (`Import Folder`) through core API and remove desktop-local import path now that refresh pipeline ownership is server-side.
   - Keep desktop-local persistence limited to client-side UI/preferences in `desktop-settings.json`.
+  - Move `last.log` ownership fully to `ReelRoulette.ServerApp`: clients send logs through API; `last.log` is overwritten/reset on ServerApp startup/restart.
   - Desktop connect UX defaults to localhost `ReelRoulette Server`; if unavailable, show clear Connect/Start guidance without hosting/supervising server runtime.
 - **Acceptance criteria**:
   - Desktop is a pure API/SSE consumer for authoritative core state.
   - Desktop writes only `desktop-settings.json` for client-side UI/preferences.
   - Desktop never writes core state files (for example `library.json` and core settings files) directly.
+  - Import Folder executes through core API only and does not use a desktop-local source import path.
+  - Desktop does not write `last.log` directly; ServerApp owns `last.log` lifecycle and resets it on startup/restart while ingesting client logs via API.
   - Desktop no longer directly controls, hosts, or supervises `ReelRoulette Server` runtime responsibilities.
   - Desktop functionality remains stable using API/SSE-only migrated flows.
 
