@@ -217,6 +217,48 @@ public sealed class WebRuntimeSettingsSnapshot
     public string? SharedToken { get; set; }
 }
 
+public sealed class ControlRuntimeSettingsSnapshot
+{
+    public string AdminAuthMode { get; set; } = "Off";
+    public string? AdminSharedToken { get; set; }
+}
+
+public sealed class ControlApplyResult
+{
+    public bool Accepted { get; set; } = true;
+    public bool RestartRequired { get; set; }
+    public string Message { get; set; } = "Applied";
+    public List<string> Errors { get; set; } = [];
+}
+
+public sealed class ApiEventTelemetryEntry
+{
+    public DateTimeOffset TimestampUtc { get; set; }
+    public string Direction { get; set; } = "incoming";
+    public string Method { get; set; } = string.Empty;
+    public string Path { get; set; } = string.Empty;
+    public int? StatusCode { get; set; }
+    public string? EventType { get; set; }
+}
+
+public sealed class ConnectedClientsSnapshot
+{
+    public int ApiPairedSessions { get; set; }
+    public int ControlPairedSessions { get; set; }
+    public int SseSubscribers { get; set; }
+}
+
+public sealed class ControlStatusResponse
+{
+    public DateTimeOffset ServerTimeUtc { get; set; } = DateTimeOffset.UtcNow;
+    public bool IsHealthy { get; set; } = true;
+    public string ListenUrl { get; set; } = string.Empty;
+    public bool LanExposed { get; set; }
+    public ConnectedClientsSnapshot ConnectedClients { get; set; } = new();
+    public List<ApiEventTelemetryEntry> IncomingApiEvents { get; set; } = [];
+    public List<ApiEventTelemetryEntry> OutgoingApiEvents { get; set; } = [];
+}
+
 public sealed class RefreshStageProgress
 {
     public string Stage { get; set; } = string.Empty;

@@ -422,13 +422,13 @@ Status legend: `✅ Complete` | `⏳ Planned`
 
 ### M8b - Control-Plane UI + API for Runtime Operations
 
-- **Status**: ⏳ Planned
+- **Status**: ✅ Complete
 - **Goal**: Provide first-class control-plane operations in `ReelRoulette Server` UI and APIs for status/settings/lifecycle management.
 - **Scope**:
   - Add operator UI for:
     - runtime status/health,
     - settings editing/apply,
-    - start/stop/restart operations,
+    - stop/restart operations (with start handled by external launch flow),
     - operation result/error visibility.
   - Expose control-plane API endpoints for trusted clients/tools:
     - `get status`,
@@ -437,18 +437,26 @@ Status legend: `✅ Complete` | `⏳ Planned`
     - runtime restart operations.
   - Reserve `/control/*` namespace for control-plane/admin runtime operations, separate from media/client API routes.
   - Define transport/auth/trust model for control-plane APIs (local-first, optional LAN exposure with explicit safeguards).
-  - Keep control-plane endpoints local-only by default (`127.0.0.1` bind); LAN exposure is opt-in.
+  - Keep control-plane access local-first (localhost always available on the shared listener); LAN exposure is opt-in via runtime settings with explicit safeguards.
   - Define deterministic operation semantics:
     - idempotent command behavior,
     - conflicting-operation handling,
     - partial-failure reporting.
 - **Acceptance criteria**:
   - Control-plane UI and API both function and are documented.
-  - Control-plane endpoints bind to `127.0.0.1` by default.
+  - Control-plane access is localhost-available by default on the shared listener, with LAN control access disabled unless explicitly enabled by runtime settings.
   - LAN exposure for control-plane endpoints requires explicit enablement plus pairing/auth and clear operator warnings.
   - Settings apply/restart behavior is deterministic and observable.
   - Control-plane auth/trust policy is implemented and enforced.
   - No orphan child/runtime process behavior remains in supported restart/shutdown flows.
+- **Verification evidence**:
+  - Added control-plane APIs under `/control/*`: `GET /control/status`, `GET/POST /control/settings`, `GET/POST /control/pair`, `POST /control/restart`, and `POST /control/stop`.
+  - Added control-plane settings persistence and deterministic apply result reporting (`accepted`, `restartRequired`, `message`, `errors[]`) in core settings service.
+  - Added control-plane auth/trust enforcement with localhost-available default and explicit LAN gating tied to runtime bind settings plus optional admin token auth.
+  - Expanded operator UI to a responsive dark-theme layout with runtime status, lifecycle controls, incoming/outgoing API telemetry panels, and connected-client visibility.
+  - Added control telemetry and connected-client status projection (`paired sessions` and `SSE subscribers`) through `/control/status`.
+  - Extended OpenAPI contract and server contract tests for new control-plane endpoints/schemas.
+  - Extended smoke verification (`verify-web-deploy.ps1/.sh`) to validate control-plane status/settings endpoints in the consolidated runtime flow.
 
 ### M8c - Desktop Client Thin-Client Cutover
 

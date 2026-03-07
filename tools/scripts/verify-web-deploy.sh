@@ -54,6 +54,9 @@ ASSET_CACHE="$(grep -i '^Cache-Control:' "${ASSET_HEADERS}" | awk '{$1=""; print
 [[ "${ASSET_CACHE}" == *"immutable"* ]] || { echo "Expected immutable asset cache policy, got '${ASSET_CACHE}'" >&2; exit 1; }
 
 curl -fsS "${BASE_URL}/api/capabilities" >/dev/null
+curl -fsS "${BASE_URL}/control/status" >/dev/null
+curl -fsS "${BASE_URL}/control/settings" >/dev/null
+curl -fsS -X POST "${BASE_URL}/control/settings" -H "Content-Type: application/json" -d '{"adminAuthMode":"Off","adminSharedToken":null}' >/dev/null
 kill -0 "${SERVER_PID}" >/dev/null 2>&1 || { echo "Server exited during smoke checks" >&2; exit 1; }
 
-echo "M8a single-origin server smoke verification passed."
+echo "M8a/M8b single-origin + control-plane server smoke verification passed."

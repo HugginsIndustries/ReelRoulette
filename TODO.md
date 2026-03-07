@@ -29,6 +29,26 @@ No open P1 TODO items.
 
 ## Completed Features
 
+### M8b - Control-Plane UI + API for Runtime Operations ✅
+
+- **Milestone Link**: `M8b - Control-Plane UI + API for Runtime Operations` in `MILESTONES.md`
+- **Impact**: High - Adds first-class runtime operations and operator diagnostics on the consolidated server host.
+- **Final State**:
+  - Added control-plane API surface under `/control/*`: status, settings read/apply, control pairing, restart, and stop.
+  - Added control settings persistence with deterministic apply results (`accepted`, `restartRequired`, `message`, `errors[]`).
+  - Added control auth/trust enforcement:
+    - localhost control access is always available on the shared listener,
+    - LAN control access is only available when LAN bind is enabled,
+    - optional admin token pairing/auth is supported via `/control/pair`.
+  - Expanded operator UI to responsive dark theme with:
+    - runtime status + lifecycle control visibility,
+    - incoming/outgoing API telemetry feed,
+    - connected client/session panel.
+  - Added control telemetry and connected-client snapshots to `/control/status`.
+  - Extended contract/tests/smoke checks (`openapi.yaml`, core tests, `verify-web-deploy.ps1/.sh`) for new control-plane behavior.
+
+---
+
 ### M8a - ReelRoulette Server App Consolidation (Single Process, Single Origin) ✅
 
 - **Milestone Link**: `M8a - ReelRoulette Server App Consolidation (Single Process, Single Origin)` in `MILESTONES.md`

@@ -9,4 +9,9 @@
     <ProjectReference Include="..\ReelRoulette.Core\ReelRoulette.Core.csproj" />
     <ProjectReference Include="..\ReelRoulette.Server\ReelRoulette.Server.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Makaretu.Dns.Multicast">
+      <Version>0.27.0</Version>
+    </PackageReference>
+  </ItemGroup>
 </Project>

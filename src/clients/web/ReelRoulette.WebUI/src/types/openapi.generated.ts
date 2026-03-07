@@ -86,8 +86,78 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Request graceful runtime restart (localhost only) */
+        /** Request graceful runtime restart (local-first, LAN opt-in) */
         post: operations["postControlRestart"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/control/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Request graceful runtime stop */
+        post: operations["postControlStop"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/control/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get control-plane runtime status and telemetry */
+        get: operations["getControlStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/control/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get control-plane settings */
+        get: operations["getControlSettings"];
+        put?: never;
+        /** Apply control-plane settings */
+        post: operations["postControlSettings"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/control/pair": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Pair control-plane session and issue admin cookie */
+        get: operations["getControlPair"];
+        put?: never;
+        /** Pair control-plane session and issue admin cookie */
+        post: operations["postControlPair"];
         delete?: never;
         options?: never;
         head?: never;
@@ -533,6 +603,49 @@ export interface components {
             accepted: boolean;
             message: string;
         };
+        ControlRuntimeSettingsSnapshot: {
+            /** @enum {string} */
+            adminAuthMode: "Off" | "TokenRequired";
+            adminSharedToken?: string | null;
+        };
+        ControlApplyResult: {
+            accepted: boolean;
+            restartRequired: boolean;
+            message: string;
+            errors?: string[];
+        };
+        ControlSettingsApplyResponse: {
+            settings: components["schemas"]["ControlRuntimeSettingsSnapshot"];
+            result: components["schemas"]["ControlApplyResult"];
+        };
+        ApiEventTelemetryEntry: {
+            /** Format: date-time */
+            timestampUtc: string;
+            direction: string;
+            method: string;
+            path: string;
+            /** Format: int32 */
+            statusCode?: number | null;
+            eventType?: string | null;
+        };
+        ConnectedClientsSnapshot: {
+            /** Format: int32 */
+            apiPairedSessions: number;
+            /** Format: int32 */
+            controlPairedSessions: number;
+            /** Format: int32 */
+            sseSubscribers: number;
+        };
+        ControlStatusResponse: {
+            /** Format: date-time */
+            serverTimeUtc: string;
+            isHealthy: boolean;
+            listenUrl: string;
+            lanExposed: boolean;
+            connectedClients: components["schemas"]["ConnectedClientsSnapshot"];
+            incomingApiEvents?: components["schemas"]["ApiEventTelemetryEntry"][];
+            outgoingApiEvents?: components["schemas"]["ApiEventTelemetryEntry"][];
+        };
         PresetResponse: {
             id: string;
             name: string;
@@ -912,7 +1025,16 @@ export interface operations {
                     "application/json": components["schemas"]["RestartResponse"];
                 };
             };
-            /** @description Forbidden (non-localhost request) */
+            /** @description Unauthorized when control admin auth is required and request is not paired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden when request is non-local and LAN control access is disabled */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -928,6 +1050,253 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RestartResponse"];
+                };
+            };
+        };
+    };
+    postControlStop: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Stop accepted */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RestartResponse"];
+                };
+            };
+            /** @description Unauthorized when control admin auth is required and request is not paired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden when request is non-local and LAN control access is disabled */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Lifecycle operation already in progress */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RestartResponse"];
+                };
+            };
+        };
+    };
+    getControlStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Control status snapshot */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ControlStatusResponse"];
+                };
+            };
+            /** @description Unauthorized when control admin auth is required and request is not paired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden when request is non-local and LAN control access is disabled */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getControlSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Control settings */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ControlRuntimeSettingsSnapshot"];
+                };
+            };
+            /** @description Unauthorized when control admin auth is required and request is not paired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden when request is non-local and LAN control access is disabled */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    postControlSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ControlRuntimeSettingsSnapshot"];
+            };
+        };
+        responses: {
+            /** @description Settings apply result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ControlSettingsApplyResponse"];
+                };
+            };
+            /** @description Unauthorized when control admin auth is required and request is not paired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden when request is non-local and LAN control access is disabled */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getControlPair: {
+        parameters: {
+            query?: {
+                token?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Control pairing succeeded or admin auth disabled */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PairResponse"];
+                };
+            };
+            /** @description Invalid token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Control LAN access disabled */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    postControlPair: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PairRequest"];
+            };
+        };
+        responses: {
+            /** @description Control pairing succeeded or admin auth disabled */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PairResponse"];
+                };
+            };
+            /** @description Invalid token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Control LAN access disabled */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
         };

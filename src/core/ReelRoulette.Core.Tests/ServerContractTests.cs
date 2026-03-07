@@ -47,6 +47,10 @@ public sealed class ServerContractTests
         Assert.Contains("VersionResponse:", yaml, StringComparison.Ordinal);
         Assert.Contains("/api/capabilities:", yaml, StringComparison.Ordinal);
         Assert.Contains("/control/restart:", yaml, StringComparison.Ordinal);
+        Assert.Contains("/control/stop:", yaml, StringComparison.Ordinal);
+        Assert.Contains("/control/status:", yaml, StringComparison.Ordinal);
+        Assert.Contains("/control/settings:", yaml, StringComparison.Ordinal);
+        Assert.Contains("/control/pair:", yaml, StringComparison.Ordinal);
         Assert.Contains("minimumCompatibleApiVersion:", yaml, StringComparison.Ordinal);
         Assert.Contains("supportedApiVersions:", yaml, StringComparison.Ordinal);
         Assert.Contains("capabilities:", yaml, StringComparison.Ordinal);
@@ -67,6 +71,8 @@ public sealed class ServerContractTests
         Assert.Contains("events.resyncRequired", version.Capabilities);
         Assert.Contains("api.random.filterState", version.Capabilities);
         Assert.Contains("api.presets.match", version.Capabilities);
+        Assert.Contains("control.status", version.Capabilities);
+        Assert.Contains("control.settings", version.Capabilities);
     }
 
     [Fact]

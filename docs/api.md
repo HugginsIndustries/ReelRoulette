@@ -28,6 +28,11 @@
   - explicit runtime capability endpoint is available at `GET /api/capabilities`.
   - web-runtime apply semantics are two-step: update persisted settings via `POST /api/web-runtime/settings`, then restart via `POST /control/restart` for listen/auth/WebUI-availability changes to take effect.
   - `WebRuntimeSettingsSnapshot.enabled` controls WebUI route availability only (API/SSE/media remain available when disabled).
+- M8b adds control-plane API expansion:
+  - control operations are exposed under `/control/*` (`/control/status`, `/control/settings`, `/control/pair`, `/control/restart`, `/control/stop`).
+  - localhost access to control-plane routes is always available; LAN control access is only available when runtime LAN bind is enabled.
+  - control settings apply returns deterministic apply result metadata (`accepted`, `restartRequired`, `message`, `errors[]`).
+  - control status now includes incoming/outgoing API telemetry and connected-client snapshots.
 
 ## Eventing Direction
 
@@ -104,7 +109,13 @@
 - `POST /api/refresh/settings`
 - `GET /api/thumbnail/{itemId}`
 - `GET /api/events` (`text/event-stream`)
-- `POST /control/restart` (localhost-only operator control path exposed by `ReelRoulette.ServerApp`)
+- `GET /control/status`
+- `GET /control/settings`
+- `POST /control/settings`
+- `GET /control/pair`
+- `POST /control/pair`
+- `POST /control/restart`
+- `POST /control/stop`
 
 ## M7e Version/Capability Contract
 

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Net;
 using Microsoft.AspNetCore.StaticFiles;
 using ReelRoulette.Server.Auth;
 using ReelRoulette.Server.Contracts;
@@ -30,11 +31,29 @@ public static class ServerHostComposition
         services.AddSingleton<LibraryPlaybackService>();
         services.AddSingleton<RefreshPipelineService>();
         services.AddSingleton<ServerSessionStore>();
+        services.AddSingleton<ApiTelemetryService>();
         services.AddHostedService(sp => sp.GetRequiredService<RefreshPipelineService>());
     }
 
     public static void MapReelRouletteEndpoints(this WebApplication app, ServerRuntimeOptions options)
     {
+        app.Use(async (context, next) =>
+        {
+            var path = context.Request.Path.Value ?? string.Empty;
+            var isApiRequest = path.StartsWith("/api", StringComparison.OrdinalIgnoreCase);
+            var isControlRequest = path.StartsWith("/control", StringComparison.OrdinalIgnoreCase);
+            if (isApiRequest || isControlRequest)
+            {
+                var telemetry = context.RequestServices.GetRequiredService<ApiTelemetryService>();
+                telemetry.RecordIncoming(context.Request.Method, path);
+                await next();
+                telemetry.RecordOutgoing(context.Request.Method, path, context.Response.StatusCode);
+                return;
+            }
+
+            await next();
+        });
+
         if (options.EnableCors)
         {
             app.UseCors(WebClientCorsPolicyName);
@@ -45,7 +64,8 @@ public static class ServerHostComposition
             app.Use((context, next) =>
             {
                 var sessions = context.RequestServices.GetRequiredService<ServerSessionStore>();
-                return new ServerPairingAuthMiddleware(next, options, sessions).InvokeAsync(context);
+                var settings = context.RequestServices.GetRequiredService<CoreSettingsService>();
+                return new ServerPairingAuthMiddleware(next, options, sessions, settings).InvokeAsync(context);
             });
         }
 
@@ -61,6 +81,16 @@ public static class ServerHostComposition
             return HandlePairRequest(context, request?.Token, options, sessions);
         });
 
+        app.MapGet("/control/pair", (HttpContext context, string? token, ServerSessionStore sessions, CoreSettingsService settings) =>
+        {
+            return HandleControlPairRequest(context, token, options, settings, sessions);
+        });
+
+        app.MapPost("/control/pair", (HttpContext context, PairRequest? request, ServerSessionStore sessions, CoreSettingsService settings) =>
+        {
+            return HandleControlPairRequest(context, request?.Token, options, settings, sessions);
+        });
+
         app.MapGet("/api/version", (ServerStateService state) =>
         {
             return Results.Ok(state.GetVersion());
@@ -71,6 +101,43 @@ public static class ServerHostComposition
             return Results.Ok(new
             {
                 capabilities = state.GetVersion().Capabilities
+            });
+        });
+
+        app.MapGet("/control/status", (ServerRuntimeOptions runtime, CoreSettingsService settings, ServerSessionStore sessions, ServerStateService state, ApiTelemetryService telemetry) =>
+        {
+            var webSettings = settings.GetWebRuntimeSettings();
+            var connected = new ConnectedClientsSnapshot
+            {
+                ApiPairedSessions = sessions.GetActiveSessionCount(ServerSessionStore.ApiScope, DateTimeOffset.UtcNow),
+                ControlPairedSessions = sessions.GetActiveSessionCount(ServerSessionStore.ControlScope, DateTimeOffset.UtcNow),
+                SseSubscribers = state.GetSubscriberCount()
+            };
+
+            return Results.Ok(new ControlStatusResponse
+            {
+                ServerTimeUtc = DateTimeOffset.UtcNow,
+                IsHealthy = true,
+                ListenUrl = runtime.ListenUrl,
+                LanExposed = webSettings.BindOnLan,
+                ConnectedClients = connected,
+                IncomingApiEvents = telemetry.GetIncoming(100),
+                OutgoingApiEvents = telemetry.GetOutgoing(100)
+            });
+        });
+
+        app.MapGet("/control/settings", (CoreSettingsService settings) =>
+        {
+            return Results.Ok(settings.GetControlRuntimeSettings());
+        });
+
+        app.MapPost("/control/settings", (ControlRuntimeSettingsSnapshot snapshot, CoreSettingsService settings) =>
+        {
+            var (appliedSettings, applyResult) = settings.UpdateControlRuntimeSettings(snapshot);
+            return Results.Ok(new
+            {
+                settings = appliedSettings,
+                result = applyResult
             });
         });
 
@@ -413,6 +480,45 @@ public static class ServerHostComposition
         return Results.Ok(new { paired = true, message = "Paired successfully" });
     }
 
+    private static IResult HandleControlPairRequest(
+        HttpContext context,
+        string? token,
+        ServerRuntimeOptions options,
+        CoreSettingsService settings,
+        ServerSessionStore sessions)
+    {
+        if (!IsLocalRequest(context) && !settings.GetWebRuntimeSettings().BindOnLan)
+        {
+            return Results.Json(new { error = "Forbidden. Control-plane LAN access is disabled." }, statusCode: StatusCodes.Status403Forbidden);
+        }
+
+        var control = settings.GetControlRuntimeSettings();
+        if (!string.Equals(control.AdminAuthMode, "TokenRequired", StringComparison.OrdinalIgnoreCase))
+        {
+            return Results.Ok(new { paired = true, message = "Control admin auth disabled" });
+        }
+
+        var effectiveToken = token ?? context.Request.Query["token"].ToString();
+        if (string.IsNullOrWhiteSpace(control.AdminSharedToken) ||
+            string.IsNullOrWhiteSpace(effectiveToken) ||
+            !string.Equals(control.AdminSharedToken, effectiveToken, StringComparison.Ordinal))
+        {
+            return Results.Json(new { error = "Unauthorized" }, statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        var sessionId = sessions.CreateSession(
+            ServerSessionStore.ControlScope,
+            DateTimeOffset.UtcNow,
+            TimeSpan.FromHours(options.PairingSessionDurationHours));
+
+        context.Response.Cookies.Append(
+            options.ControlAdminCookieName,
+            sessionId,
+            PairingCookiePolicy.BuildCookieOptions(options, context.Request.IsHttps));
+
+        return Results.Ok(new { paired = true, message = "Control paired successfully" });
+    }
+
     private static async Task WriteSseEnvelopeAsync(
         HttpContext context,
         ServerEventEnvelope envelope,
@@ -420,9 +526,22 @@ public static class ServerHostComposition
         CancellationToken cancellationToken)
     {
         var json = JsonSerializer.Serialize(envelope, serializerOptions);
+        var telemetry = context.RequestServices.GetRequiredService<ApiTelemetryService>();
+        telemetry.RecordOutgoingServerEvent(envelope.EventType);
         await context.Response.WriteAsync($"id: {envelope.Revision}\n", cancellationToken);
         await context.Response.WriteAsync($"event: {envelope.EventType}\n", cancellationToken);
         await context.Response.WriteAsync($"data: {json}\n\n", cancellationToken);
         await context.Response.Body.FlushAsync(cancellationToken);
+    }
+
+    private static bool IsLocalRequest(HttpContext context)
+    {
+        var remote = context.Connection.RemoteIpAddress;
+        if (remote is null)
+        {
+            return true;
+        }
+
+        return IPAddress.IsLoopback(remote) || remote.Equals(context.Connection.LocalIpAddress);
     }
 }

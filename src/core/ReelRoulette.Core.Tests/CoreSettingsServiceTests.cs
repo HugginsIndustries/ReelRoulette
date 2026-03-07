@@ -16,6 +16,7 @@ public sealed class CoreSettingsServiceTests : IDisposable
         var service = CreateService();
         var refresh = service.GetRefreshSettings();
         var web = service.GetWebRuntimeSettings();
+        var control = service.GetControlRuntimeSettings();
 
         Assert.True(refresh.AutoRefreshEnabled);
         Assert.Equal(15, refresh.AutoRefreshIntervalMinutes);
@@ -25,6 +26,8 @@ public sealed class CoreSettingsServiceTests : IDisposable
         Assert.Equal("reel", web.LanHostname);
         Assert.Equal("TokenRequired", web.AuthMode);
         Assert.Null(web.SharedToken);
+        Assert.Equal("Off", control.AdminAuthMode);
+        Assert.Null(control.AdminSharedToken);
     }
 
     [Fact]
@@ -47,10 +50,17 @@ public sealed class CoreSettingsServiceTests : IDisposable
             AuthMode = "Off",
             SharedToken = null
         });
+        var controlApply = service.UpdateControlRuntimeSettings(new ReelRoulette.Server.Contracts.ControlRuntimeSettingsSnapshot
+        {
+            AdminAuthMode = "TokenRequired",
+            AdminSharedToken = "admin-token"
+        });
+        Assert.True(controlApply.Result.Accepted);
 
         var reload = CreateService();
         var refresh = reload.GetRefreshSettings();
         var web = reload.GetWebRuntimeSettings();
+        var control = reload.GetControlRuntimeSettings();
 
         Assert.True(refresh.AutoRefreshEnabled);
         Assert.Equal(19, refresh.AutoRefreshIntervalMinutes);
@@ -60,6 +70,8 @@ public sealed class CoreSettingsServiceTests : IDisposable
         Assert.Equal("reeltest", web.LanHostname);
         Assert.Equal("Off", web.AuthMode);
         Assert.Null(web.SharedToken);
+        Assert.Equal("TokenRequired", control.AdminAuthMode);
+        Assert.Equal("admin-token", control.AdminSharedToken);
     }
 
     private CoreSettingsService CreateService()

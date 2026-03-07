@@ -17,6 +17,7 @@ public sealed class CoreSettingsService
     private readonly string _settingsPath;
     private readonly RefreshSettingsSnapshot _refreshSettings;
     private readonly WebRuntimeSettingsSnapshot _webRuntimeSettings;
+    private readonly ControlRuntimeSettingsSnapshot _controlRuntimeSettings;
     public event Action<WebRuntimeSettingsSnapshot>? WebRuntimeSettingsChanged;
 
     public CoreSettingsService(
@@ -29,7 +30,7 @@ public sealed class CoreSettingsService
                              Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ReelRoulette");
         Directory.CreateDirectory(roamingAppData);
         _settingsPath = Path.Combine(roamingAppData, "core-settings.json");
-        (_refreshSettings, _webRuntimeSettings) = LoadSettings(options);
+        (_refreshSettings, _webRuntimeSettings, _controlRuntimeSettings) = LoadSettings(options);
     }
 
     public RefreshSettingsSnapshot GetRefreshSettings()
@@ -111,7 +112,59 @@ public sealed class CoreSettingsService
         return updated;
     }
 
-    private (RefreshSettingsSnapshot Refresh, WebRuntimeSettingsSnapshot WebRuntime) LoadSettings(ServerRuntimeOptions options)
+    public ControlRuntimeSettingsSnapshot GetControlRuntimeSettings()
+    {
+        lock (_lock)
+        {
+            return new ControlRuntimeSettingsSnapshot
+            {
+                AdminAuthMode = _controlRuntimeSettings.AdminAuthMode,
+                AdminSharedToken = _controlRuntimeSettings.AdminSharedToken
+            };
+        }
+    }
+
+    public (ControlRuntimeSettingsSnapshot Settings, ControlApplyResult Result) UpdateControlRuntimeSettings(ControlRuntimeSettingsSnapshot snapshot)
+    {
+        lock (_lock)
+        {
+            var normalizedAuthMode = NormalizeAuthMode(snapshot.AdminAuthMode);
+            var normalizedSharedToken = string.IsNullOrWhiteSpace(snapshot.AdminSharedToken) ? null : snapshot.AdminSharedToken.Trim();
+            var errors = new List<string>();
+            var restartRequired = false;
+
+            if (string.Equals(normalizedAuthMode, "TokenRequired", StringComparison.OrdinalIgnoreCase) &&
+                string.IsNullOrWhiteSpace(normalizedSharedToken))
+            {
+                errors.Add("adminSharedToken is required when adminAuthMode is TokenRequired.");
+            }
+
+            if (errors.Count == 0)
+            {
+                restartRequired =
+                    !string.Equals(_controlRuntimeSettings.AdminAuthMode, normalizedAuthMode, StringComparison.Ordinal) ||
+                    !string.Equals(_controlRuntimeSettings.AdminSharedToken, normalizedSharedToken, StringComparison.Ordinal);
+
+                _controlRuntimeSettings.AdminAuthMode = normalizedAuthMode;
+                _controlRuntimeSettings.AdminSharedToken = normalizedSharedToken;
+                PersistSettings();
+            }
+
+            return (
+                GetControlRuntimeSettings(),
+                new ControlApplyResult
+                {
+                    Accepted = errors.Count == 0,
+                    RestartRequired = restartRequired,
+                    Message = errors.Count == 0
+                        ? (restartRequired ? "Applied. Restart required to take effect." : "Applied. No restart required.")
+                        : "Validation failed.",
+                    Errors = errors
+                });
+        }
+    }
+
+    private (RefreshSettingsSnapshot Refresh, WebRuntimeSettingsSnapshot WebRuntime, ControlRuntimeSettingsSnapshot ControlRuntime) LoadSettings(ServerRuntimeOptions options)
     {
         var refresh = new RefreshSettingsSnapshot
         {
@@ -119,6 +172,11 @@ public sealed class CoreSettingsService
             AutoRefreshIntervalMinutes = options.AutoRefreshIntervalMinutes
         };
         var webRuntime = new WebRuntimeSettingsSnapshot();
+        var controlRuntime = new ControlRuntimeSettingsSnapshot
+        {
+            AdminAuthMode = NormalizeAuthMode(options.ControlAdminAuthMode),
+            AdminSharedToken = string.IsNullOrWhiteSpace(options.ControlAdminSharedToken) ? null : options.ControlAdminSharedToken.Trim()
+        };
         try
         {
             if (File.Exists(_settingsPath))
@@ -142,7 +200,15 @@ public sealed class CoreSettingsService
                         webRuntime.SharedToken = string.IsNullOrWhiteSpace(parsed.WebRuntime.SharedToken) ? null : parsed.WebRuntime.SharedToken.Trim();
                     }
 
-                    return (refresh, webRuntime);
+                    if (parsed.ControlRuntime != null)
+                    {
+                        controlRuntime.AdminAuthMode = NormalizeAuthMode(parsed.ControlRuntime.AdminAuthMode);
+                        controlRuntime.AdminSharedToken = string.IsNullOrWhiteSpace(parsed.ControlRuntime.AdminSharedToken)
+                            ? null
+                            : parsed.ControlRuntime.AdminSharedToken.Trim();
+                    }
+
+                    return (refresh, webRuntime, controlRuntime);
                 }
             }
         }
@@ -151,7 +217,7 @@ public sealed class CoreSettingsService
             // fall back to runtime defaults
         }
 
-        return (refresh, webRuntime);
+        return (refresh, webRuntime, controlRuntime);
     }
 
     private void PersistSettings()
@@ -162,13 +228,25 @@ public sealed class CoreSettingsService
             JsonSerializer.Serialize(new CoreSettingsDocument
             {
                 Refresh = _refreshSettings,
-                WebRuntime = _webRuntimeSettings
+                WebRuntime = _webRuntimeSettings,
+                ControlRuntime = _controlRuntimeSettings
             }, JsonOptions));
+    }
+
+    private static string NormalizeAuthMode(string? value)
+    {
+        if (string.Equals(value, "TokenRequired", StringComparison.OrdinalIgnoreCase))
+        {
+            return "TokenRequired";
+        }
+
+        return "Off";
     }
 
     private sealed class CoreSettingsDocument
     {
         public RefreshSettingsSnapshot? Refresh { get; set; }
         public WebRuntimeSettingsSnapshot? WebRuntime { get; set; }
+        public ControlRuntimeSettingsSnapshot? ControlRuntime { get; set; }
     }
 }

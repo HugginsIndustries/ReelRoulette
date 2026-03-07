@@ -95,11 +95,26 @@ try {
         throw "Expected /api/capabilities to return 200."
     }
 
+    $controlStatusResponse = Invoke-WebRequest -Uri "$listenUrl/control/status" -UseBasicParsing -TimeoutSec 5
+    if ($controlStatusResponse.StatusCode -ne 200) {
+        throw "Expected /control/status to return 200."
+    }
+
+    $controlSettingsGet = Invoke-WebRequest -Uri "$listenUrl/control/settings" -UseBasicParsing -TimeoutSec 5
+    if ($controlSettingsGet.StatusCode -ne 200) {
+        throw "Expected /control/settings GET to return 200."
+    }
+
+    $controlSettingsPost = Invoke-WebRequest -Uri "$listenUrl/control/settings" -UseBasicParsing -TimeoutSec 5 -Method Post -ContentType "application/json" -Body '{"adminAuthMode":"Off","adminSharedToken":null}'
+    if ($controlSettingsPost.StatusCode -ne 200) {
+        throw "Expected /control/settings POST to return 200."
+    }
+
     if ($serverProcess.HasExited) {
         throw "Server process exited unexpectedly during validation."
     }
 
-    Write-Output "M8a single-origin server smoke verification passed."
+    Write-Output "M8a/M8b single-origin + control-plane server smoke verification passed."
 }
 finally {
     if (-not $serverProcess.HasExited) {

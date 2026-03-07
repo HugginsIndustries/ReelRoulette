@@ -18,7 +18,12 @@ public sealed class ServerStateService
         "events.resyncRequired",
         "api.random.filterState",
         "api.presets.match",
-        "api.webRuntime.settings"
+        "api.webRuntime.settings",
+        "control.status",
+        "control.settings",
+        "control.lifecycle.stopRestart",
+        "control.telemetry.events",
+        "control.clients.connected"
     ];
 
     private const string UncategorizedCategoryId = "uncategorized";
@@ -559,6 +564,14 @@ public sealed class ServerStateService
         }, CancellationToken.None);
 
         return channel.Reader;
+    }
+
+    public int GetSubscriberCount()
+    {
+        lock (_subscribersLock)
+        {
+            return _subscribers.Count;
+        }
     }
 
     public ServerEventEnvelope PublishExternal(string eventType, object payload)

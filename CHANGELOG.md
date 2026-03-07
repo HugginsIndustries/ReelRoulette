@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+- **Implement M8b control-plane UI + API runtime operations expansion** (2026-03-07):
+  - Add control-plane API namespace under `/control/*` with status/settings/pair/restart/stop operations (`/control/status`, `GET/POST /control/settings`, `GET/POST /control/pair`, `POST /control/restart`, `POST /control/stop`).
+  - Add control settings persistence and deterministic apply-result contract (`accepted`, `restartRequired`, `message`, `errors[]`) with optional admin token auth policy.
+  - Add control auth/trust enforcement model for shared-listener runtime:
+    - localhost control access remains available,
+    - LAN control access is blocked unless runtime LAN bind is enabled,
+    - control pairing uses scoped session cookies and optional token requirement.
+  - Expand operator UI to responsive dark theme with runtime lifecycle controls, incoming/outgoing API telemetry feed, and connected-client visibility.
+  - Add telemetry service + control status snapshot projection for API event activity and active paired-session/SSE subscriber counts.
+  - Extend verification coverage:
+    - OpenAPI contract + core test assertions for control endpoints/capabilities,
+    - auth/settings/runtime option regressions for control policy behavior,
+    - `verify-web-deploy.ps1/.sh` checks for control status/settings endpoints in the consolidated runtime smoke path.
+  - Sync M8b milestone/docs/domain inventory/tracking artifacts (`MILESTONES.md`, `TODO.md`, `CONTEXT.md`, `README.md`, `docs/api.md`, `docs/architecture.md`, `docs/dev-setup.md`, `docs/m8-domain-inventory.md`, `COMMIT_MESSAGE.txt`).
+  - Follow-up runtime hardening:
+    - add ServerApp-owned mDNS advertisement for LAN WebUI hostname (`{LanHostname}.local`) in the consolidated runtime path,
+    - harden restart/stop single-flight behavior to avoid repeated lifecycle-trigger duplication,
+    - make replacement launch deterministic under `dotnet run` by relaunching explicit entry assembly path.
+
 - **Implement M8a server app consolidation (single process, single origin)** (2026-03-06):
   - Add `src/core/ReelRoulette.ServerApp` as the default runtime host serving API, SSE, media, WebUI static assets, dynamic `/runtime-config.json`, and operator UI (`/operator`) in one process.
   - Add explicit capability endpoint `GET /api/capabilities` plus OpenAPI contract updates (`CapabilitiesResponse`, `RestartResponse`, and `POST /control/restart`).

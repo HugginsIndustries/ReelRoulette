@@ -16,24 +16,24 @@ Primary outcome: new clients can be added without reimplementing domain logic.
 
 As of current milestones:
 
-- `M0`-`M7e` are complete in `MILESTONES.md`.
+- `M0`-`M8b` are complete in `MILESTONES.md`.
 - Desktop runtime is still `source/ReelRoulette.csproj`.
 - Core/server/worker runtime exists under `src/core/*`.
 - M8a server-app consolidation is complete: `src/core/ReelRoulette.ServerApp` now hosts API/SSE/media/WebUI/operator UI in one process and one origin.
+- M8b control-plane expansion is complete: `/control/*` now provides status/settings/pair/restart/stop operations, with control auth/trust policy and operator telemetry/connected-client visibility.
 - API contract source of truth is `shared/api/openapi.yaml` (currently `0.8.0`).
 - M6a tag editing migration is API-first and shared across desktop/web seams.
 - M6b refresh pipeline/thumbnails/grid are core-owned; desktop consumes API/SSE projection.
 - M7a web foundation is complete: independent Vite+TypeScript web bootstrap with runtime endpoint config contract and verification gates.
 - M7b direct web auth/SSE reliability is complete: pair-token bootstrap to session-cookie auth, direct web SSE status projection, replay-gap resync fallback, and explicit CORS/cookie runtime policy controls.
 - M7c zero-restart web deployment is complete: independent `ReelRoulette.WebHost` static host, immutable versioned web artifacts, atomic `active-manifest.json` activation/rollback, and split shell-vs-asset cache policy.
-- Post-cutover runtime stabilization items identified during M7d validation are deferred to `M8b`.
 - M7e compatibility guardrails are complete: TS OpenAPI-generated contracts are part of WebUI verify, and web startup enforces version/capability checks for N/N-1 safety.
 
 ## Planned State (Upcoming)
 
 Near-term planned milestones:
 
-- `M8b`-`M8c`: control-plane expansion and thin-client runtime ownership cleanup after M8a server-app consolidation.
+- `M8c`: thin-client runtime ownership cleanup after M8a/M8b server-app control-plane completion.
 - `M9`: Android client bootstrap on stable API seam.
 
 Detailed M7 decisions and rollout strategy: `docs/m7-clarifications.md`.
@@ -89,7 +89,9 @@ Detailed M7 decisions and rollout strategy: `docs/m7-clarifications.md`.
   - serves API, SSE, and media endpoints;
   - serves WebUI static assets and dynamic `runtime-config.json`;
   - exposes operator UI at `/operator`;
-  - exposes metadata endpoints (`/health`, `/api/version`, `/api/capabilities`).
+  - exposes metadata endpoints (`/health`, `/api/version`, `/api/capabilities`);
+  - exposes control-plane endpoints (`/control/status`, `/control/settings`, `/control/pair`, `/control/restart`, `/control/stop`).
+  - advertises LAN WebUI hostname via mDNS (`{LanHostname}.local`) when WebUI is enabled and LAN bind is active.
 - Desktop acts as thin client for migrated flows:
   - Commands/queries via API
   - Live projection via SSE
@@ -133,6 +135,7 @@ For M7 web separation:
 - M7d cutover is complete: parity WebUI migrated and legacy bridge retired.
 - M7e is complete: OpenAPI-driven TS contract generation is enforced in web verify and version/capability compatibility checks gate unsupported server contracts.
 - M8a is complete: server app consolidation to one process/one origin, with WebHost/manifest switching removed from required runtime behavior.
+- M8b is complete: control-plane API/UI expansion with deterministic settings/lifecycle operations, control auth policy, and operator telemetry/connected-client diagnostics.
 
 See `docs/m7-clarifications.md` for chosen options and sequencing.
 

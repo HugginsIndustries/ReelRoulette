@@ -303,3 +303,19 @@ flowchart TD
 - Runtime serving is consolidated into one process and one browser-visible origin.
 - `ReelRoulette.WebHost` and `active-manifest` switching are no longer required in the normal runtime path.
 - Operator controls (status/settings/restart) are surfaced from the server app, while domain logic remains in `ReelRoulette.Core` and server composition remains in `ReelRoulette.Server`.
+
+## M8b Control-Plane Expansion
+
+- Control-plane APIs are formalized under `/control/*`:
+  - status (`/control/status`),
+  - settings read/apply (`/control/settings`),
+  - control pairing (`/control/pair`),
+  - lifecycle operations (`/control/restart`, `/control/stop`).
+- Control-plane trust/auth policy is local-first on the shared listener:
+  - localhost requests always allowed,
+  - LAN control access requires runtime LAN bind exposure and (optionally) admin token pairing auth.
+- Operator UI now includes control diagnostics:
+  - incoming/outgoing API telemetry feed,
+  - connected client/session snapshot,
+  - responsive dark-theme layout for desktop/mobile operator usage.
+- ServerApp is now responsible for LAN mDNS advertisement (`{LanHostname}.local`) for the consolidated WebUI host when WebUI is enabled and LAN binding is active.

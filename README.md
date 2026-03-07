@@ -97,6 +97,11 @@ Runtime notes:
   - single `ReelRoulette.ServerApp` process and single browser origin for WebUI/API/SSE/media
   - explicit `/api/capabilities` endpoint for runtime diagnostics/client checks
   - no separate `ReelRoulette.WebHost` process required in normal runtime path
+- M8b adds first-class control-plane operations in the same host:
+  - `/control/*` API surface for status/settings/pair/lifecycle (`/control/status`, `/control/settings`, `/control/pair`, `/control/restart`, `/control/stop`)
+  - localhost-available control access by default, with LAN control exposure gated by runtime LAN bind plus optional admin token auth
+  - operator UI upgraded to responsive dark theme with incoming/outgoing API telemetry and connected-client visibility
+  - ServerApp now performs mDNS advertisement for LAN-enabled WebUI (`http://{lanHostname}.local:{port}/`) when WebUI is enabled and LAN bind is on
 
 ## Testing
 

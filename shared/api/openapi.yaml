@@ -103,7 +103,7 @@ paths:
 
   /control/restart:
     post:
-      summary: Request graceful runtime restart (localhost only)
+      summary: Request graceful runtime restart (local-first, LAN opt-in)
       operationId: postControlRestart
       responses:
         "200":
@@ -112,8 +112,14 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/RestartResponse"
+        "401":
+          description: Unauthorized when control admin auth is required and request is not paired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "403":
-          description: Forbidden (non-localhost request)
+          description: Forbidden when request is non-local and LAN control access is disabled
           content:
             application/json:
               schema:
@@ -124,6 +130,170 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/RestartResponse"
+
+  /control/stop:
+    post:
+      summary: Request graceful runtime stop
+      operationId: postControlStop
+      responses:
+        "200":
+          description: Stop accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RestartResponse"
+        "401":
+          description: Unauthorized when control admin auth is required and request is not paired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden when request is non-local and LAN control access is disabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Lifecycle operation already in progress
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RestartResponse"
+
+  /control/status:
+    get:
+      summary: Get control-plane runtime status and telemetry
+      operationId: getControlStatus
+      responses:
+        "200":
+          description: Control status snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlStatusResponse"
+        "401":
+          description: Unauthorized when control admin auth is required and request is not paired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden when request is non-local and LAN control access is disabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /control/settings:
+    get:
+      summary: Get control-plane settings
+      operationId: getControlSettings
+      responses:
+        "200":
+          description: Control settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlRuntimeSettingsSnapshot"
+        "401":
+          description: Unauthorized when control admin auth is required and request is not paired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden when request is non-local and LAN control access is disabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      summary: Apply control-plane settings
+      operationId: postControlSettings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ControlRuntimeSettingsSnapshot"
+      responses:
+        "200":
+          description: Settings apply result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlSettingsApplyResponse"
+        "401":
+          description: Unauthorized when control admin auth is required and request is not paired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden when request is non-local and LAN control access is disabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /control/pair:
+    get:
+      summary: Pair control-plane session and issue admin cookie
+      operationId: getControlPair
+      parameters:
+        - name: token
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Control pairing succeeded or admin auth disabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PairResponse"
+        "401":
+          description: Invalid token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Control LAN access disabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      summary: Pair control-plane session and issue admin cookie
+      operationId: postControlPair
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PairRequest"
+      responses:
+        "200":
+          description: Control pairing succeeded or admin auth disabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PairResponse"
+        "401":
+          description: Invalid token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Control LAN access disabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /api/presets:
     get:
@@ -780,6 +950,120 @@ components:
           type: boolean
         message:
           type: string
+
+    ControlRuntimeSettingsSnapshot:
+      type: object
+      required:
+        - adminAuthMode
+      properties:
+        adminAuthMode:
+          type: string
+          enum:
+            - Off
+            - TokenRequired
+        adminSharedToken:
+          type: string
+          nullable: true
+
+    ControlApplyResult:
+      type: object
+      required:
+        - accepted
+        - restartRequired
+        - message
+      properties:
+        accepted:
+          type: boolean
+        restartRequired:
+          type: boolean
+        message:
+          type: string
+        errors:
+          type: array
+          items:
+            type: string
+
+    ControlSettingsApplyResponse:
+      type: object
+      required:
+        - settings
+        - result
+      properties:
+        settings:
+          $ref: "#/components/schemas/ControlRuntimeSettingsSnapshot"
+        result:
+          $ref: "#/components/schemas/ControlApplyResult"
+
+    ApiEventTelemetryEntry:
+      type: object
+      required:
+        - timestampUtc
+        - direction
+        - method
+        - path
+      properties:
+        timestampUtc:
+          type: string
+          format: date-time
+        direction:
+          type: string
+        method:
+          type: string
+        path:
+          type: string
+        statusCode:
+          type: integer
+          format: int32
+          nullable: true
+        eventType:
+          type: string
+          nullable: true
+
+    ConnectedClientsSnapshot:
+      type: object
+      required:
+        - apiPairedSessions
+        - controlPairedSessions
+        - sseSubscribers
+      properties:
+        apiPairedSessions:
+          type: integer
+          format: int32
+        controlPairedSessions:
+          type: integer
+          format: int32
+        sseSubscribers:
+          type: integer
+          format: int32
+
+    ControlStatusResponse:
+      type: object
+      required:
+        - serverTimeUtc
+        - isHealthy
+        - listenUrl
+        - lanExposed
+        - connectedClients
+      properties:
+        serverTimeUtc:
+          type: string
+          format: date-time
+        isHealthy:
+          type: boolean
+        listenUrl:
+          type: string
+        lanExposed:
+          type: boolean
+        connectedClients:
+          $ref: "#/components/schemas/ConnectedClientsSnapshot"
+        incomingApiEvents:
+          type: array
+          items:
+            $ref: "#/components/schemas/ApiEventTelemetryEntry"
+        outgoingApiEvents:
+          type: array
+          items:
+            $ref: "#/components/schemas/ApiEventTelemetryEntry"
 
     PresetResponse:
       type: object

@@ -21,6 +21,9 @@ public sealed class ServerRuntimeOptions
     ];
     public bool AutoRefreshEnabled { get; set; } = true;
     public int AutoRefreshIntervalMinutes { get; set; } = 15;
+    public string ControlAdminAuthMode { get; set; } = "Off";
+    public string? ControlAdminSharedToken { get; set; }
+    public string ControlAdminCookieName { get; set; } = "rr_admin";
 
     public static ServerRuntimeOptions FromConfiguration(IConfiguration configuration)
     {
@@ -56,6 +59,22 @@ public sealed class ServerRuntimeOptions
         }
 
         options.AutoRefreshIntervalMinutes = Math.Clamp(options.AutoRefreshIntervalMinutes, 5, 1440);
+        options.ControlAdminAuthMode = NormalizeControlAuthMode(options.ControlAdminAuthMode);
+        if (string.IsNullOrWhiteSpace(options.ControlAdminSharedToken))
+        {
+            options.ControlAdminSharedToken = null;
+        }
+
+        if (string.Equals(options.ControlAdminAuthMode, "TokenRequired", StringComparison.Ordinal) &&
+            string.IsNullOrWhiteSpace(options.ControlAdminSharedToken))
+        {
+            options.ControlAdminSharedToken = Guid.NewGuid().ToString("N");
+        }
+
+        if (string.IsNullOrWhiteSpace(options.ControlAdminCookieName))
+        {
+            options.ControlAdminCookieName = "rr_admin";
+        }
 
         return options;
     }
@@ -98,5 +117,15 @@ public sealed class ServerRuntimeOptions
         }
 
         return "Request";
+    }
+
+    private static string NormalizeControlAuthMode(string? value)
+    {
+        if (string.Equals(value, "TokenRequired", StringComparison.OrdinalIgnoreCase))
+        {
+            return "TokenRequired";
+        }
+
+        return "Off";
     }
 }

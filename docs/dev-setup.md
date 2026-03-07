@@ -165,8 +165,17 @@
 - Runtime diagnostics/control:
   - metadata endpoints: `/health`, `/api/version`, `/api/capabilities`
   - operator UI path: `/operator`
-  - restart endpoint: `POST /control/restart` (localhost-only)
+  - control-plane endpoints:
+    - `GET /control/status`
+    - `GET/POST /control/settings`
+    - `GET/POST /control/pair`
+    - `POST /control/restart`
+    - `POST /control/stop`
   - settings apply is two-step: update settings first, then restart for listen/auth/WebUI-enable changes.
+  - control-plane localhost access is always available; LAN control access is available only when runtime LAN bind is enabled.
+  - control settings include optional admin token auth with deterministic apply result reporting.
+  - operator UI is dark-theme and responsive, with incoming/outgoing API telemetry and connected-client diagnostics.
+  - when WebUI is enabled and LAN bind is on, ServerApp advertises `http://{lanHostname}.local:{port}/` via mDNS.
 - WebUI enable semantics:
   - `enabled=true` -> WebUI static routes + `/runtime-config.json` are served.
   - `enabled=false` (after restart) -> WebUI routes return `404`, while API/SSE/media/operator endpoints remain available.
