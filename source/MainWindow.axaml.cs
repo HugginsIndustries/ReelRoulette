@@ -95,10 +95,13 @@ namespace ReelRoulette
 
         // Current video tracking
         private string? _currentVideoPath;
+        private string? _currentPlaybackSource;
+        private FromType _currentPlaybackSourceType = FromType.FromPath;
         // Store the previous LastPlayedUtc for the current video (before current play) for display purposes
         private DateTime? _previousLastPlayedUtc;
         private bool _isLoopEnabled = true;
         private bool _autoPlayNext = true;
+        private bool _forceApiPlayback;
         private bool _isMuted = false; // Track mute state for persistence
 
         // Photo playback
@@ -775,6 +778,13 @@ namespace ReelRoulette
         private int _timelineIndex = -1;
         private bool _isNavigatingTimeline = false; // Flag to prevent adding to timeline when navigating
 
+        private sealed record PlaybackTarget(
+            string StatsPath,
+            string PlaybackSource,
+            FromType PlaybackSourceType,
+            bool IsLocallyAccessible,
+            bool UsedApiPath);
+
         // Volume and mute
         private int _lastNonZeroVolume = 100;
 
@@ -1241,7 +1251,7 @@ namespace ReelRoulette
                                     _isNavigatingTimeline = true;
                                     _timelineIndex++;
                                     var nextVideo = _playbackTimeline[_timelineIndex];
-                                    PlayVideo(nextVideo, addToHistory: false);
+                                    _ = PlayFromPathAsync(nextVideo, addToHistory: false);
                                     PreviousButton.IsEnabled = _timelineIndex > 0;
                                     NextButton.IsEnabled = _playbackTimeline.Count > 0;
                                 }
@@ -1315,7 +1325,7 @@ namespace ReelRoulette
                             _isNavigatingTimeline = true;
                             _timelineIndex++;
                             var nextVideo = _playbackTimeline[_timelineIndex];
-                            PlayVideo(nextVideo, addToHistory: false);
+                            _ = PlayFromPathAsync(nextVideo, addToHistory: false);
                             PreviousButton.IsEnabled = _timelineIndex > 0;
                             NextButton.IsEnabled = _playbackTimeline.Count > 0;
                         }
@@ -5190,41 +5200,113 @@ namespace ReelRoulette
 
         #region Video Playback
 
-        private async Task PlayFromPathAsync(string videoPath)
+        private async Task PlayFromPathAsync(string videoPath, bool addToHistory = true)
         {
             Log($"PlayFromPath: Starting - videoPath: {videoPath ?? "null"}");
-            
-            // Central helper to play a video from any panel
-            // Validates path and ensures it's in the current library (or safely handles if not)
-            // Sets the current video path selection
-            // Starts playback via MediaPlayer
-            // Updates history/timeline and stats (if already implemented)
-            // Respects existing favorite/blacklist status (no automatic changes)
-            if (string.IsNullOrEmpty(videoPath) || !File.Exists(videoPath))
+
+            if (string.IsNullOrWhiteSpace(videoPath))
             {
-                Log($"PlayFromPath: ERROR - File not found or path is empty. Path: {videoPath ?? "null"}, Exists: {(!string.IsNullOrEmpty(videoPath) && File.Exists(videoPath))}");
-                
-                // Determine if it's a photo or video based on file extension
-                bool isPhoto = false;
-                if (!string.IsNullOrEmpty(videoPath))
-                {
-                    var extension = Path.GetExtension(videoPath).ToLowerInvariant();
-                    isPhoto = _photoExtensions.Contains(extension);
-                }
-                
-                // Handle missing file (works for both videos and photos)
-                await HandleMissingFileAsync(videoPath, isPhoto: isPhoto);
+                Log("PlayFromPath: ERROR - Path is empty");
+                SetStatusMessage("Manual playback unavailable: no media path was provided.");
+                _isNavigatingTimeline = false;
                 return;
             }
 
-            Log($"PlayFromPath: File exists, calling PlayVideo - addToHistory: true");
-            PlayVideo(videoPath, addToHistory: true);
+            var manualTarget = ResolveManualPlaybackTarget(videoPath);
+            if (manualTarget == null)
+            {
+                SetStatusMessage("Manual playback unavailable: selected item is missing stable API identity. Refresh sources and retry.");
+                Log($"PlayFromPath: ERROR - Could not resolve manual playback target for path '{videoPath}'");
+                _isNavigatingTimeline = false;
+                return;
+            }
+
+            if (!manualTarget.IsLocallyAccessible && !manualTarget.UsedApiPath)
+            {
+                var extension = Path.GetExtension(videoPath).ToLowerInvariant();
+                var isPhoto = _photoExtensions.Contains(extension);
+                await HandleMissingFileAsync(videoPath, isPhoto: isPhoto);
+                _isNavigatingTimeline = false;
+                return;
+            }
+
+            Log($"PlayFromPath: Resolved manual playback target (ApiPath={manualTarget.UsedApiPath}, LocalAccessible={manualTarget.IsLocallyAccessible})");
+            PlayVideo(manualTarget, addToHistory: addToHistory);
         }
 
-        private void PlayFromPath(string videoPath)
+        private PlaybackTarget? ResolveManualPlaybackTarget(string videoPath)
+        {
+            var item = _libraryService.FindItemByPath(videoPath);
+            if (item == null || string.IsNullOrWhiteSpace(item.Id))
+            {
+                return null;
+            }
+
+            var localAccessible = IsLocalMediaReadable(videoPath);
+            var shouldUseApiPath = _forceApiPlayback || !localAccessible;
+            if (!shouldUseApiPath)
+            {
+                return new PlaybackTarget(
+                    StatsPath: videoPath,
+                    PlaybackSource: videoPath,
+                    PlaybackSourceType: FromType.FromPath,
+                    IsLocallyAccessible: true,
+                    UsedApiPath: false);
+            }
+
+            if (!TryBuildApiMediaUrl(item.Id, out var apiMediaUrl))
+            {
+                return null;
+            }
+
+            return new PlaybackTarget(
+                StatsPath: videoPath,
+                PlaybackSource: apiMediaUrl,
+                PlaybackSourceType: FromType.FromLocation,
+                IsLocallyAccessible: localAccessible,
+                UsedApiPath: true);
+        }
+
+        private bool TryBuildApiMediaUrl(string idOrToken, out string apiMediaUrl)
+        {
+            apiMediaUrl = string.Empty;
+            if (string.IsNullOrWhiteSpace(idOrToken))
+            {
+                return false;
+            }
+
+            if (!Uri.TryCreate(_coreServerBaseUrl, UriKind.Absolute, out var baseUri))
+            {
+                return false;
+            }
+
+            var escaped = Uri.EscapeDataString(idOrToken.Trim());
+            apiMediaUrl = new Uri(baseUri, $"/api/media/{escaped}").ToString();
+            return true;
+        }
+
+        private bool IsLocalMediaReadable(string? path)
+        {
+            if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+            {
+                return false;
+            }
+
+            try
+            {
+                using var stream = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                return stream.CanRead;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private void PlayFromPath(string videoPath, bool addToHistory = true)
         {
             // Synchronous wrapper for backward compatibility
-            _ = PlayFromPathAsync(videoPath);
+            _ = PlayFromPathAsync(videoPath, addToHistory);
         }
 
         private async Task<MissingFileDialogResult> ShowMissingFileDialogAsync(string? missingPath)
@@ -5326,7 +5408,7 @@ namespace ReelRoulette
                 {
                     // Retry playback with new path
                     Log($"HandleMissingFileAsync: File located, retrying playback with new path: {newPath}");
-                    PlayVideo(newPath);
+                    PlayFromPath(newPath);
                 }
                 else
                 {
@@ -5928,7 +6010,22 @@ namespace ReelRoulette
 
         private void PlayVideo(string videoPath, bool addToHistory = true)
         {
-            Log($"PlayVideo: Starting - videoPath: {videoPath ?? "null"}, addToHistory: {addToHistory}");
+            var localTarget = new PlaybackTarget(
+                StatsPath: videoPath,
+                PlaybackSource: videoPath,
+                PlaybackSourceType: FromType.FromPath,
+                IsLocallyAccessible: IsLocalMediaReadable(videoPath),
+                UsedApiPath: false);
+            PlayVideo(localTarget, addToHistory);
+        }
+
+        private void PlayVideo(PlaybackTarget target, bool addToHistory = true)
+        {
+            var statsPath = target.StatsPath;
+            var playbackSource = target.PlaybackSource;
+            var playbackSourceType = target.PlaybackSourceType;
+
+            Log($"PlayVideo: Starting - statsPath: {statsPath ?? "null"}, playbackSourceType: {playbackSourceType}, addToHistory: {addToHistory}");
             
             if (_mediaPlayer == null || _libVLC == null)
             {
@@ -5952,31 +6049,33 @@ namespace ReelRoulette
                 _isCurrentlyPlayingPhoto = false;
 
                 var previousPath = _currentVideoPath;
-                _currentVideoPath = videoPath;
-                Log($"PlayVideo: Current video path set - Previous: {previousPath ?? "null"}, New: {videoPath ?? "null"}");
+                _currentVideoPath = statsPath;
+                _currentPlaybackSource = playbackSource;
+                _currentPlaybackSourceType = playbackSourceType;
+                Log($"PlayVideo: Current video path set - Previous: {previousPath ?? "null"}, New: {statsPath ?? "null"}");
 
                 // Determine if this is a photo or video
-                var extension = Path.GetExtension(videoPath ?? "").ToLowerInvariant();
-                var isPhoto = _photoExtensions.Contains(extension);
+                var extension = Path.GetExtension(statsPath ?? string.Empty).ToLowerInvariant();
+                var isPhoto = _photoExtensions.Contains(extension) && playbackSourceType == FromType.FromPath;
                 _isCurrentlyPlayingPhoto = isPhoto;
                 Log($"PlayVideo: Detected media type - Extension: {extension}, IsPhoto: {isPhoto}");
 
                 if (isPhoto)
                 {
-                    StatusTextBlock.Text = $"Photo: {System.IO.Path.GetFileName(videoPath)}";
-                    Log($"PlayVideo: Setting status text for photo: {System.IO.Path.GetFileName(videoPath)}");
+                    StatusTextBlock.Text = $"Photo: {System.IO.Path.GetFileName(statsPath)}";
+                    Log($"PlayVideo: Setting status text for photo: {System.IO.Path.GetFileName(statsPath)}");
                 }
                 else
                 {
-                    StatusTextBlock.Text = $"Playing: {System.IO.Path.GetFileName(videoPath)}";
-                    Log($"PlayVideo: Setting status text for video: {System.IO.Path.GetFileName(videoPath)}");
+                    StatusTextBlock.Text = $"Playing: {System.IO.Path.GetFileName(statsPath)}";
+                    Log($"PlayVideo: Setting status text for video: {System.IO.Path.GetFileName(statsPath)}");
                 }
 
                 // Record playback stats
-                if (videoPath != null)
+                if (!string.IsNullOrWhiteSpace(statsPath))
                 {
                     Log("PlayVideo: Recording playback stats");
-                    RecordPlayback(videoPath);
+                    RecordPlayback(statsPath);
                 }
 
                 // Update per-video toggle UI
@@ -6004,7 +6103,7 @@ namespace ReelRoulette
                 }
 
                 // Create and play new media
-                if (videoPath != null)
+                if (!string.IsNullOrWhiteSpace(playbackSource))
                 {
                     // Store user volume preference before normalization
                     _userVolumePreference = (int)VolumeSlider.Value;
@@ -6063,11 +6162,11 @@ namespace ReelRoulette
                         // Check if file exists before loading
                         // Note: File.Exists on network drives can be slow, but we'll proceed anyway
                         // If the file doesn't exist, we'll catch it during loading
-                        Log($"PlayVideo: Checking if photo file exists: {videoPath}");
+                        Log($"PlayVideo: Checking if photo file exists: {playbackSource}");
                         bool fileExists = false;
                         try
                         {
-                            fileExists = File.Exists(videoPath);
+                            fileExists = File.Exists(playbackSource);
                             Log($"PlayVideo: File exists check completed: {fileExists}");
                         }
                         catch (Exception ex)
@@ -6079,8 +6178,8 @@ namespace ReelRoulette
                         
                         if (!fileExists)
                         {
-                            Log($"PlayVideo: Photo file not found: {videoPath}");
-                            _ = HandleMissingFileAsync(videoPath, isPhoto: true);
+                            Log($"PlayVideo: Photo file not found: {playbackSource}");
+                            _ = HandleMissingFileAsync(statsPath, isPhoto: true);
                             return;
                         }
                         Log("PlayVideo: Photo file exists, proceeding with load");
@@ -6093,7 +6192,7 @@ namespace ReelRoulette
                             Avalonia.Media.Imaging.Bitmap? bitmap = null;
                             try
                             {
-                                Log($"PlayVideo: Task.Run started - Loading photo: {videoPath}");
+                                Log($"PlayVideo: Task.Run started - Loading photo: {playbackSource}");
                                 
                                 // Calculate max dimensions based on scaling settings
                                 int maxWidth = int.MaxValue;
@@ -6142,7 +6241,7 @@ namespace ReelRoulette
                                 }
                                 
                                 // Load and decode image efficiently
-                                using (var stream = File.OpenRead(videoPath))
+                                using (var stream = File.OpenRead(playbackSource))
                                 {
                                     if (_imageScalingMode != ImageScalingMode.Off && maxWidth < int.MaxValue && maxHeight < int.MaxValue)
                                     {
@@ -6177,9 +6276,9 @@ namespace ReelRoulette
                                             {
                                                 // Validate that this photo is still the current one before updating UI
                                                 // Prevents race condition where multiple photo loads complete out of order
-                                                if (_currentVideoPath != videoPath)
+                                                if (_currentVideoPath != statsPath)
                                                 {
-                                                    Log($"PlayVideo: Photo load completed but is no longer current - Current: {_currentVideoPath ?? "null"}, Loaded: {videoPath}");
+                                                    Log($"PlayVideo: Photo load completed but is no longer current - Current: {_currentVideoPath ?? "null"}, Loaded: {statsPath}");
                                                     bitmap?.Dispose();
                                                     bitmap = null;
                                                     return;
@@ -6245,13 +6344,13 @@ namespace ReelRoulette
                             {
                                 Log($"PlayVideo: Photo file not found: {ex.Message}");
                                 // Only handle missing file if this photo is still current
-                                if (_currentVideoPath == videoPath)
+                                if (_currentVideoPath == statsPath)
                                 {
-                                    await HandleMissingFileAsync(videoPath, isPhoto: true);
+                                    await HandleMissingFileAsync(statsPath, isPhoto: true);
                                 }
                                 else
                                 {
-                                    Log($"PlayVideo: Photo file not found but photo is no longer current - Current: {_currentVideoPath ?? "null"}, Missing: {videoPath}");
+                                    Log($"PlayVideo: Photo file not found but photo is no longer current - Current: {_currentVideoPath ?? "null"}, Missing: {statsPath}");
                                 }
                             }
                             catch (Exception ex)
@@ -6271,9 +6370,9 @@ namespace ReelRoulette
                                 await Dispatcher.UIThread.InvokeAsync(() =>
                                 {
                                     // Validate that this photo is still the current one before showing error
-                                    if (_currentVideoPath != videoPath)
+                                    if (_currentVideoPath != statsPath)
                                     {
-                                        Log($"PlayVideo: Photo error occurred but photo is no longer current - Current: {_currentVideoPath ?? "null"}, Failed: {videoPath}");
+                                        Log($"PlayVideo: Photo error occurred but photo is no longer current - Current: {_currentVideoPath ?? "null"}, Failed: {statsPath}");
                                         return;
                                     }
                                     
@@ -6336,8 +6435,8 @@ namespace ReelRoulette
                         }
                         
                         // Videos: Create Media object and use VLC
-                        Log($"PlayVideo: Creating new Media object from path");
-                        _currentMedia = new Media(_libVLC, videoPath, FromType.FromPath);
+                        Log($"PlayVideo: Creating new Media object from source ({playbackSourceType})");
+                        _currentMedia = new Media(_libVLC, playbackSource, playbackSourceType);
                         
                         // Videos: Use existing logic
                         // Set input-repeat option for seamless looping when loop is enabled
@@ -6379,7 +6478,7 @@ namespace ReelRoulette
                 }
                 else
                 {
-                    Log("PlayVideo: ERROR - videoPath is null, returning");
+                    Log("PlayVideo: ERROR - playbackSource is null, returning");
                     return;
                 }
 
@@ -6416,7 +6515,7 @@ namespace ReelRoulette
                         Log($"PlayVideo: Removed {removedCount} entries from timeline after index {_timelineIndex}");
                     }
                     // Add new video to timeline
-                    _playbackTimeline.Add(videoPath);
+                    _playbackTimeline.Add(statsPath ?? string.Empty);
                     _timelineIndex = _playbackTimeline.Count - 1;
                     Log($"PlayVideo: Added video to timeline - Index: {_timelineIndex}, Timeline count: {_playbackTimeline.Count}");
                     // Note: UpdateCurrentFileStatsUi() is already called by RecordPlayback()
@@ -6457,6 +6556,7 @@ namespace ReelRoulette
             }
             catch (Exception ex)
             {
+                _isNavigatingTimeline = false;
                 Log($"PlayVideo: ERROR - Exception: {ex.GetType().Name}, Message: {ex.Message}");
                 Log($"PlayVideo: ERROR - Stack trace: {ex.StackTrace}");
                 if (ex.InnerException != null)
@@ -6495,7 +6595,7 @@ namespace ReelRoulette
                 activePresetName = _activePresetName;
             }
 
-            string? randomPick = null;
+            PlaybackTarget? randomTarget = null;
             try
             {
                 var randomResponse = await _coreServerApiClient.RequestRandomAsync(
@@ -6512,7 +6612,7 @@ namespace ReelRoulette
 
                 if (randomResponse != null)
                 {
-                    randomPick = ResolvePlaybackPathFromApiRandomResponse(randomResponse);
+                    randomTarget = ResolvePlaybackTargetFromApiRandomResponse(randomResponse);
                 }
             }
             catch (Exception ex)
@@ -6520,9 +6620,9 @@ namespace ReelRoulette
                 Log($"PlayRandomVideoAsync: API random call failed ({ex.Message}).");
             }
 
-            if (string.IsNullOrWhiteSpace(randomPick))
+            if (randomTarget == null)
             {
-                Log("PlayRandomVideoAsync: API random selection returned no playable path");
+                Log("PlayRandomVideoAsync: API random selection returned no playable target");
                 await Dispatcher.UIThread.InvokeAsync(() =>
                 {
                     StatusTextBlock.Text = "No eligible media found from core API. Check preset filters.";
@@ -6530,8 +6630,8 @@ namespace ReelRoulette
                 return;
             }
 
-            Log($"PlayRandomVideoAsync: Selected ({_randomizationMode}) {Path.GetFileName(randomPick)}");
-            await Dispatcher.UIThread.InvokeAsync(() => PlayVideo(randomPick));
+            Log($"PlayRandomVideoAsync: Selected ({_randomizationMode}) {Path.GetFileName(randomTarget.StatsPath)} (ApiPath={randomTarget.UsedApiPath})");
+            await Dispatcher.UIThread.InvokeAsync(() => PlayVideo(randomTarget));
         }
 
         #endregion
@@ -6574,7 +6674,7 @@ namespace ReelRoulette
             
             // If media is currently playing, update the input-repeat option
             // Note: This requires recreating the media, which may cause a brief reset
-            if (_currentMedia != null && _mediaPlayer != null && _libVLC != null && _currentVideoPath != null)
+            if (_currentMedia != null && _mediaPlayer != null && _libVLC != null && !string.IsNullOrWhiteSpace(_currentPlaybackSource))
             {
                 try
                 {
@@ -6590,7 +6690,7 @@ namespace ReelRoulette
                     mediaToDispose?.Dispose();
                     
                     // Create new media with updated loop option
-                    _currentMedia = new Media(_libVLC, _currentVideoPath, FromType.FromPath);
+                    _currentMedia = new Media(_libVLC, _currentPlaybackSource!, _currentPlaybackSourceType);
                     
                     if (_isLoopEnabled)
                     {
@@ -7754,19 +7854,71 @@ namespace ReelRoulette
             return null;
         }
 
-        private static string? ResolvePlaybackPathFromApiRandomResponse(CoreRandomResponse response)
+        private PlaybackTarget? ResolvePlaybackTargetFromApiRandomResponse(CoreRandomResponse response)
         {
-            if (!string.IsNullOrWhiteSpace(response.Id) && File.Exists(response.Id))
+            if (response == null)
             {
-                return response.Id;
+                return null;
             }
 
-            if (!string.IsNullOrWhiteSpace(response.MediaUrl) && File.Exists(response.MediaUrl))
+            var statsPath = response.Id?.Trim();
+            if (string.IsNullOrWhiteSpace(statsPath))
             {
-                return response.MediaUrl;
+                return null;
             }
 
-            return null;
+            var localAccessible = IsLocalMediaReadable(statsPath);
+            var shouldUseApiPath = _forceApiPlayback || !localAccessible;
+            if (!shouldUseApiPath)
+            {
+                return new PlaybackTarget(
+                    StatsPath: statsPath,
+                    PlaybackSource: statsPath,
+                    PlaybackSourceType: FromType.FromPath,
+                    IsLocallyAccessible: true,
+                    UsedApiPath: false);
+            }
+
+            var absoluteMediaUrl = ResolveAbsoluteMediaUrl(response.MediaUrl);
+            if (string.IsNullOrWhiteSpace(absoluteMediaUrl))
+            {
+                if (!TryBuildApiMediaUrl(statsPath, out var builtApiMediaUrl))
+                {
+                    return null;
+                }
+
+                absoluteMediaUrl = builtApiMediaUrl;
+            }
+
+            return new PlaybackTarget(
+                StatsPath: statsPath,
+                PlaybackSource: absoluteMediaUrl!,
+                PlaybackSourceType: FromType.FromLocation,
+                IsLocallyAccessible: localAccessible,
+                UsedApiPath: true);
+        }
+
+        private string? ResolveAbsoluteMediaUrl(string? mediaUrl)
+        {
+            if (string.IsNullOrWhiteSpace(mediaUrl))
+            {
+                return null;
+            }
+
+            if (Uri.TryCreate(mediaUrl, UriKind.Absolute, out var absolute))
+            {
+                return absolute.ToString();
+            }
+
+            if (!Uri.TryCreate(_coreServerBaseUrl, UriKind.Absolute, out var baseUri))
+            {
+                return null;
+            }
+
+            var normalizedRelative = mediaUrl.StartsWith("/", StringComparison.Ordinal)
+                ? mediaUrl
+                : "/" + mediaUrl;
+            return new Uri(baseUri, normalizedRelative).ToString();
         }
 
         private async Task SyncPresetsToCoreAsync()
@@ -7891,6 +8043,7 @@ namespace ReelRoulette
             // Playback preferences (now persisted)
             public bool LoopEnabled { get; set; } = true;
             public bool AutoPlayNext { get; set; } = true;
+            public bool ForceApiPlayback { get; set; } = false;
             public bool IsMuted { get; set; } = false; // Persist mute state
             public int VolumeLevel { get; set; } = 100; // Persist volume level (0-200)
             public RandomizationMode RandomizationMode { get; set; } = RandomizationMode.SmartShuffle;
@@ -8087,6 +8240,7 @@ namespace ReelRoulette
             // Apply playback preferences (now persisted)
             _isLoopEnabled = settings.LoopEnabled;
             _autoPlayNext = settings.AutoPlayNext;
+            _forceApiPlayback = settings.ForceApiPlayback;
             _isMuted = settings.IsMuted;
             _userVolumePreference = settings.VolumeLevel; // Restore saved volume level
             _playbackSessionStateService.Set(new PlaybackSessionState
@@ -8201,7 +8355,7 @@ namespace ReelRoulette
                 }
             }
             
-            Log($"LoadSettings: Restored playback preferences - Loop={_isLoopEnabled}, AutoPlay={_autoPlayNext}, Muted={_isMuted}, RandomizationMode={_randomizationMode}");
+            Log($"LoadSettings: Restored playback preferences - Loop={_isLoopEnabled}, AutoPlay={_autoPlayNext}, ForceApiPlayback={_forceApiPlayback}, Muted={_isMuted}, RandomizationMode={_randomizationMode}");
             
             // Apply filter state
             var previousFilterState = _currentFilterState;
@@ -8341,6 +8495,7 @@ namespace ReelRoulette
                 var playbackState = _playbackSessionStateService.GetSnapshot();
                 settings.LoopEnabled = playbackState.LoopEnabled;
                 settings.AutoPlayNext = playbackState.AutoPlayNext;
+                settings.ForceApiPlayback = _forceApiPlayback;
                 settings.IsMuted = playbackState.IsMuted;
                 settings.VolumeLevel = playbackState.VolumeLevel;
                 settings.RandomizationMode = _randomizationMode;
@@ -9338,6 +9493,7 @@ namespace ReelRoulette
                 dialog.LoadFromSettings(
                     _isLoopEnabled,
                     _autoPlayNext,
+                    _forceApiPlayback,
                     (double)intervalValue,
                     _seekStep,
                     _volumeStep,
@@ -9406,6 +9562,7 @@ namespace ReelRoulette
                     {
                         var oldLoopEnabled = _isLoopEnabled;
                         var oldAutoPlayNext = _autoPlayNext;
+                        var oldForceApiPlayback = _forceApiPlayback;
                         var oldRandomizationMode = _randomizationMode;
                         var oldSeekStep = _seekStep;
                         var oldVolumeStep = _volumeStep;
@@ -9439,6 +9596,7 @@ namespace ReelRoulette
                     // Apply settings from dialog
                     _isLoopEnabled = dialog.LoopEnabled;
                     _autoPlayNext = dialog.AutoPlayNext;
+                    _forceApiPlayback = dialog.ForceApiPlayback;
                     _seekStep = dialog.GetSeekStep();
                     _volumeStep = dialog.GetVolumeStep();
                     _volumeNormalizationEnabled = dialog.GetVolumeNormalizationEnabled();
@@ -9493,6 +9651,7 @@ namespace ReelRoulette
                         var settingsChanged =
                             oldLoopEnabled != _isLoopEnabled ||
                             oldAutoPlayNext != _autoPlayNext ||
+                            oldForceApiPlayback != _forceApiPlayback ||
                             oldRandomizationMode != _randomizationMode ||
                             !string.Equals(oldSeekStep, _seekStep, StringComparison.OrdinalIgnoreCase) ||
                             oldVolumeStep != _volumeStep ||
@@ -9680,7 +9839,11 @@ namespace ReelRoulette
                                 mediaToDispose?.Dispose();
                                 
                                 // Create new media with updated loop option
-                                _currentMedia = new Media(_libVLC, _currentVideoPath, FromType.FromPath);
+                                if (string.IsNullOrWhiteSpace(_currentPlaybackSource))
+                                {
+                                    throw new InvalidOperationException("Current playback source is unavailable.");
+                                }
+                                _currentMedia = new Media(_libVLC, _currentPlaybackSource!, _currentPlaybackSourceType);
                                 
                                 if (_isLoopEnabled)
                                 {
@@ -9720,7 +9883,7 @@ namespace ReelRoulette
                             var saveSettingsStopwatch = Stopwatch.StartNew();
                             SaveSettings();
                             Log($"Settings: SaveSettings completed in {saveSettingsStopwatch.ElapsedMilliseconds}ms");
-                            Log($"Settings: Applied and saved - Loop={_isLoopEnabled}, AutoPlay={_autoPlayNext}, RandomizationMode={_randomizationMode}, SeekStep={_seekStep}, VolumeStep={_volumeStep}, VolumeNorm={_volumeNormalizationEnabled}");
+                            Log($"Settings: Applied and saved - Loop={_isLoopEnabled}, AutoPlay={_autoPlayNext}, ForceApiPlayback={_forceApiPlayback}, RandomizationMode={_randomizationMode}, SeekStep={_seekStep}, VolumeStep={_volumeStep}, VolumeNorm={_volumeNormalizationEnabled}");
                         }
                         else
                         {
@@ -10418,7 +10581,7 @@ namespace ReelRoulette
             _isNavigatingTimeline = true;
             _timelineIndex--;
             var previousVideo = _playbackTimeline[_timelineIndex];
-            PlayVideo(previousVideo, addToHistory: false);
+            _ = PlayFromPathAsync(previousVideo, addToHistory: false);
             PreviousButton.IsEnabled = _timelineIndex > 0;
             NextButton.IsEnabled = true;
         }
@@ -10435,7 +10598,7 @@ namespace ReelRoulette
                 _isNavigatingTimeline = true;
                 _timelineIndex++;
                 var nextVideo = _playbackTimeline[_timelineIndex];
-                PlayVideo(nextVideo, addToHistory: false);
+                _ = PlayFromPathAsync(nextVideo, addToHistory: false);
                 PreviousButton.IsEnabled = _timelineIndex > 0;
                 NextButton.IsEnabled = _playbackTimeline.Count > 0;
             }

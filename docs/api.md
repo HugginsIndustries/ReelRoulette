@@ -42,6 +42,7 @@
 - M8d keeps desktop playback policy as local-first + API fallback:
   - local playback allowed when desktop can access the media path directly,
   - API playback used when local path access fails,
+  - manual library-panel play resolves API-routable media identity first and fails explicitly (with guidance) when stable identity mapping is unavailable,
   - desktop setting `ForceApiPlayback` forces API path for validation and user preference.
 - M9 introduces incremental playback-session pipeline milestones (`M9a`-`M9f`) to evolve from M8d compromise to robust server-authoritative session/streaming behavior.
 

@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- **Implement M8d desktop playback policy compromise (local-first playback + API fallback with deterministic manual identity routing)** (2026-03-08):
+  - Add deterministic desktop playback target selection in `MainWindow`:
+    - local playback when media path is readable and `ForceApiPlayback=false`,
+    - API media playback (`/api/media/...`) when local access fails or `ForceApiPlayback=true`.
+  - Route manual library-panel playback through stable identity resolution before playback-path selection and show explicit user guidance when mapping fails (no silent substitute/random reroute).
+  - Update random playback target handling to accept API media URLs (absolute or relative) and resolve relative API media paths against configured core base URL.
+  - Track playback source type (`FromPath` vs `FromLocation`) so loop-toggle media recreation and timeline navigation preserve the selected playback path semantics.
+  - Add persisted desktop setting `ForceApiPlayback` (default `false`) and wire it through settings load/save + Settings dialog playback tab.
+  - Add API client regression coverage ensuring random-response absolute `mediaUrl` values are preserved for playback target resolution.
+  - Synchronize M8d milestone/docs/tracking artifacts (`MILESTONES.md`, `CONTEXT.md`, `README.md`, `docs/api.md`, `docs/architecture.md`, `docs/dev-setup.md`, `docs/m8-domain-inventory.md`, `COMMIT_MESSAGE.txt`).
+
 - **Implement M8c desktop thin-client cutover (API-first ownership + centralized logging)** (2026-03-07):
   - Remove desktop auto-start/supervision of core runtime and switch to guidance-only availability behavior.
   - Switch desktop default core endpoint to `http://localhost:51234` (`MainWindow` + `SettingsDialog` defaults/hints).

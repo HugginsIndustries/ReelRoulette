@@ -16,7 +16,7 @@ Primary outcome: new clients can be added without reimplementing domain logic.
 
 As of current milestones:
 
-- `M0`-`M8c` are complete in `MILESTONES.md`.
+- `M0`-`M8d` are complete in `MILESTONES.md`.
 - Desktop runtime is still `source/ReelRoulette.csproj`.
 - Core/server/worker runtime exists under `src/core/*`.
 - M8a server-app consolidation is complete: `src/core/ReelRoulette.ServerApp` now hosts API/SSE/media/WebUI/operator UI in one process and one origin.
@@ -26,6 +26,10 @@ As of current milestones:
   - desktop defaults core endpoint to `http://localhost:51234`,
   - source import, duplicate detection, auto-tag scan/apply, and playback-stats clear execute through server API commands,
   - client logs are centralized to server via `/api/logs/client`, and desktop no longer writes local `last.log`.
+- M8d is complete on current branch:
+  - desktop playback policy is local-first with deterministic API media fallback,
+  - `ForceApiPlayback` is persisted in desktop settings (default `false`) and forces API playback path when enabled,
+  - manual library-panel play resolves stable API identity first and now fails with explicit guidance when identity mapping is unavailable (no silent substitute playback path).
 - API contract source of truth is `shared/api/openapi.yaml` (currently `0.8.0`).
 - M6a tag editing migration is API-first and shared across desktop/web seams.
 - M6b refresh pipeline/thumbnails/grid are core-owned; desktop consumes API/SSE projection.
@@ -38,7 +42,6 @@ As of current milestones:
 
 Near-term planned milestones:
 
-- `M8d`: desktop playback policy compromise (local-first playback when media is locally accessible, API fallback otherwise, plus `ForceApiPlayback` toggle for deterministic API-path validation).
 - `M8e`: WebUI and mobile thin-client contract standardization.
 - `M8f`: hardening, packaging, and release readiness.
 - `M9`: Plex-style playback pipeline (incremental `M9a`-`M9g` rollout for playback sessions, decision + delivery selection, direct-stream baseline, HLS/fMP4 transcode path, client cutovers, and hardening).

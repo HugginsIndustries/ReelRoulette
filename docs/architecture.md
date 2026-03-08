@@ -340,6 +340,9 @@ flowchart TD
   - if media path is locally accessible on desktop, playback can run locally,
   - if local access fails, desktop falls back to API media playback path.
 - Desktop setting `ForceApiPlayback` allows deterministic API-only playback validation while preserving local-first default behavior.
+- Manual desktop library-panel play is API identity-orchestrated before playback-path selection:
+  - playback target resolves stable item identity first,
+  - if identity mapping is unavailable, desktop shows explicit user guidance and does not silently substitute another playback path.
 - "Locally accessible" is deterministic:
   - file exists at expected path,
   - desktop has read access,

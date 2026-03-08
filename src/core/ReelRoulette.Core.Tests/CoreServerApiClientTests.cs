@@ -137,6 +137,33 @@ public sealed class CoreServerApiClientTests
     }
 
     [Fact]
+    public async Task RequestRandomAsync_ShouldPreserveAbsoluteMediaUrl()
+    {
+        var handler = new DelegatingStubHandler(_ =>
+        {
+            var response = new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    "{\"id\":\"C:/media/movie.mp4\",\"displayName\":\"movie.mp4\",\"mediaType\":\"video\",\"mediaUrl\":\"http://localhost:51301/api/media/token-123\"}",
+                    Encoding.UTF8,
+                    "application/json")
+            };
+            return Task.FromResult(response);
+        });
+        var apiClient = new CoreServerApiClient(new HttpClient(handler));
+
+        var response = await apiClient.RequestRandomAsync("http://localhost:51301", new CoreRandomRequest
+        {
+            PresetId = "Any",
+            ClientId = "desktop"
+        });
+
+        Assert.NotNull(response);
+        Assert.Equal("http://localhost:51301/api/media/token-123", response!.MediaUrl);
+        Assert.Equal("C:/media/movie.mp4", response.Id);
+    }
+
+    [Fact]
     public async Task ApplyItemTagsAsync_ShouldPostBatchItemIdsAndDeltas()
     {
         string? capturedJson = null;

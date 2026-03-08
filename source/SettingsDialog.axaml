@@ -187,6 +187,9 @@
                                       IsChecked="{Binding LoopEnabled}"/>
                             <CheckBox Content="Auto-play next video"
                                       IsChecked="{Binding AutoPlayNext}"/>
+                            <CheckBox Content="Force API playback (disable local-first playback)"
+                                      IsChecked="{Binding ForceApiPlayback}"
+                                      ToolTip.Tip="When enabled, desktop always plays through /api/media even if local file access is available."/>
                         </StackPanel>
                         
                         <!-- Timer Interval Section -->

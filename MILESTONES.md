@@ -60,36 +60,6 @@ These run in parallel across milestones:
 
 ## Milestone Board
 
-### M8d - Desktop Playback Policy Compromise (Local-First with API Fallback)
-
-- **Status**: ⏳ Planned
-- **Goal**: Keep desktop playback performant for local/shared-storage scenarios while preserving API-first orchestration and M9 playback-pipeline readiness.
-- **Scope**:
-  - Introduce desktop playback policy:
-    - local playback first when the selected media path is accessible on the desktop machine,
-    - automatic API media playback fallback when local path access fails.
-  - Route desktop manual library-panel play through API identity orchestration:
-    - resolve stable media identity (`itemId`/API-routable identity) before playback-path selection so playback stats remain API-authoritative and deterministic,
-    - if manual target cannot be mapped to stable identity, surface explicit user-facing error + guidance (no silent substitute/random reroute).
-  - Add desktop setting `ForceApiPlayback` (boolean, default `false`):
-    - when enabled, desktop always uses API playback even if local file access is available.
-  - Preserve strict desktop thin-client boundaries for non-playback domains:
-    - desktop may read/write only `desktop-settings.json`,
-    - desktop may read local media files for playback/accessibility checks only,
-    - no reintroduction of local authoritative state reads/writes (library/settings/log/domain mutations).
-  - Keep this policy compatible with M9 incremental playback-pipeline work so API-only playback can be forced during M9 validation.
-- **Acceptance criteria**:
-  - Desktop playback selection is deterministic:
-    - uses local playback when file path is locally accessible and `ForceApiPlayback=false`,
-    - otherwise uses API media playback path.
-  - Desktop manual library-panel play is deterministic and API-orchestrated:
-    - manual play target is identity-resolved through API path first,
-    - unmappable manual targets fail with explicit error + guidance (no implicit substitute playback path).
-  - `ForceApiPlayback` is persisted in desktop settings, defaults to `false`, and is respected across restarts.
-  - Desktop running on LAN clients can still play local files from shared/NAS mappings when accessible, with seamless API fallback when not accessible.
-  - Outside allowed exceptions (desktop settings + media-read playback), no additional local file access is introduced in desktop app.
-  - M8c API-first/thin-client guarantees remain intact for source import, duplicates, auto-tag, playback-stats clear, and logging ownership.
-
 ### M8e - WebUI and Mobile Thin-Client Contract Standardization
 
 - **Status**: ⏳ Planned
@@ -474,6 +444,46 @@ These run in parallel across milestones:
 ## Completed Milestones
 
 Latest completions first:
+
+### M8d - Desktop Playback Policy Compromise (Local-First with API Fallback)
+
+- **Status**: ✅ Complete
+- **Goal**: Keep desktop playback performant for local/shared-storage scenarios while preserving API-first orchestration and M9 playback-pipeline readiness.
+- **Scope**:
+  - Introduce desktop playback policy:
+    - local playback first when the selected media path is accessible on the desktop machine,
+    - automatic API media playback fallback when local path access fails.
+  - Route desktop manual library-panel play through API identity orchestration:
+    - resolve stable media identity (`itemId`/API-routable identity) before playback-path selection so playback stats remain API-authoritative and deterministic,
+    - if manual target cannot be mapped to stable identity, surface explicit user-facing error + guidance (no silent substitute/random reroute).
+  - Add desktop setting `ForceApiPlayback` (boolean, default `false`):
+    - when enabled, desktop always uses API playback even if local file access is available.
+  - Preserve strict desktop thin-client boundaries for non-playback domains:
+    - desktop may read/write only `desktop-settings.json`,
+    - desktop may read local media files for playback/accessibility checks only,
+    - no reintroduction of local authoritative state reads/writes (library/settings/log/domain mutations).
+  - Keep this policy compatible with M9 incremental playback-pipeline work so API-only playback can be forced during M9 validation.
+- **Acceptance criteria**:
+  - Desktop playback selection is deterministic:
+    - uses local playback when file path is locally accessible and `ForceApiPlayback=false`,
+    - otherwise uses API media playback path.
+  - Desktop manual library-panel play is deterministic and API-orchestrated:
+    - manual play target is identity-resolved through API path first,
+    - unmappable manual targets fail with explicit error + guidance (no implicit substitute playback path).
+  - `ForceApiPlayback` is persisted in desktop settings, defaults to `false`, and is respected across restarts.
+  - Desktop running on LAN clients can still play local files from shared/NAS mappings when accessible, with seamless API fallback when not accessible.
+  - Outside allowed exceptions (desktop settings + media-read playback), no additional local file access is introduced in desktop app.
+  - M8c API-first/thin-client guarantees remain intact for source import, duplicates, auto-tag, playback-stats clear, and logging ownership.
+- **Verification evidence**:
+  - Desktop manual playback entry points now resolve stable API media identity first and surface explicit guidance when a manual target cannot be mapped.
+  - Desktop playback target policy now deterministically selects local playback when media is readable and `ForceApiPlayback=false`, otherwise routes playback through API media URLs.
+  - `ForceApiPlayback` is persisted in desktop settings (`desktop-settings.json`), defaults to `false`, and is wired through settings load/apply/save plus settings dialog toggle UX.
+  - Random playback target handling now accepts API media URLs (absolute or relative) and resolves relative API media routes against configured core base URL.
+  - Playback source type is tracked (`FromPath` vs `FromLocation`) so loop-toggle media recreation and timeline navigation preserve chosen playback-path semantics.
+  - Automated verification passes:
+    - `dotnet build ReelRoulette.sln`
+    - `dotnet test ReelRoulette.sln`
+  - Documentation/tracking updates are synchronized for final M8d state: `README.md`, `CONTEXT.md`, `docs/api.md`, `docs/architecture.md`, `docs/dev-setup.md`, `docs/m8-domain-inventory.md`, `CHANGELOG.md`, `COMMIT_MESSAGE.txt`.
 
 ### M8c - Desktop Client Thin-Client Cutover
 

@@ -107,6 +107,11 @@ Runtime notes:
   - source import, duplicate scan/apply, and auto-tag scan/apply are routed through new core APIs
   - playback stats clear now routes through `POST /api/playback/clear-stats` (desktop no longer clears stats through local-only mutation path)
   - desktop local `last.log` writes are removed; client log events are centralized through `POST /api/logs/client` while server-side logic writes directly to ServerApp `last.log`
+- M8d desktop playback policy compromise updates:
+  - desktop playback is local-first with deterministic API media fallback when local access fails
+  - manual library-panel play now resolves stable API media identity first; unmappable manual targets fail with explicit guidance instead of silent substitute playback
+  - new `ForceApiPlayback` desktop setting persists in `desktop-settings.json` (default `false`) and forces API playback path for validation/preference scenarios
+  - playback source selection remains deterministic across random/manual/timeline navigation flows while preserving M8c API-first ownership boundaries for non-playback domains
 
 ## Testing
 

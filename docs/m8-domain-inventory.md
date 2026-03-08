@@ -6,6 +6,8 @@
 
 ## M8c - Desktop Client Thin-Client Cutover
 
+## M8d - Desktop Playback Policy Compromise
+
 ## Pure Domain Logic (unchanged ownership boundaries)
 
 - Domain and persistence logic remain in core/server services:
@@ -62,6 +64,13 @@
   - `source/MainWindow.axaml.cs` routes source import + duplicate/autotag + playback-stats-clear operations through API client calls.
   - `source/ManageSourcesDialog.axaml.cs`, `source/DuplicatesDialog.axaml.cs`, `source/AutoTagDialog.axaml.cs` consume duplicate/autotag API orchestration instead of desktop-local authority.
   - desktop log call sites route through `source/ClientLogRelay.cs` to centralized server logging API.
+- Desktop playback-orchestration changes in M8d:
+  - `source/MainWindow.axaml.cs` adds deterministic playback-target policy resolution (local-first, API fallback, `ForceApiPlayback` override) and source-type aware LibVLC playback handling (`FromPath` vs `FromLocation`).
+  - `source/MainWindow.axaml.cs` routes manual library-panel play through stable identity resolution prior to playback-path selection and surfaces explicit guidance when identity mapping is unavailable.
+  - `source/MainWindow.axaml.cs` updates random playback target resolution to accept API media URLs and convert relative API media paths to absolute runtime URLs.
+  - `source/MainWindow.axaml.cs` persists `ForceApiPlayback` in desktop settings and applies it across manual/random/timeline playback entry points.
+  - `source/SettingsDialog.axaml` and `source/SettingsDialog.axaml.cs` add playback-policy toggle UI binding for `ForceApiPlayback`.
+  - `src/core/ReelRoulette.Core.Tests/CoreServerApiClientTests.cs` adds random-response media URL preservation coverage used by API playback-path handling.
 
 ## Tooling and Verification Surfaces
 
