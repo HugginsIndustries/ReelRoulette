@@ -72,6 +72,26 @@ These run in parallel across milestones:
     - thin desktop client,
     - WebUI assets served by server.
   - Produce migration/upgrade playbook and release-readiness checklist.
+  - Add an **Operator Testing Suite** to `/operator` so desktop/web/server validation can be run from UI without ad-hoc shell workflows.
+  - Add **connected client/session visibility** in Operator UI (client/session identity and related diagnostics in appropriate sections).
+  - Add a dedicated **Server Logs** section in Operator UI for `last.log` with practical triage features.
+  - Add **Testing Mode** gate for test/fault controls:
+    - testing controls are available only when Testing Mode is enabled,
+    - existing control admin auth mode remains authoritative:
+      - if admin auth is `Off`, no auth required,
+      - if admin auth requires auth, testing actions require auth.
+  - Add safe, operator-driven fault/testing scenarios for client UX/error-handling validation, including:
+    - API version/capability mismatch simulation,
+    - client disconnect/reconnect behavior checks,
+    - SSE replay/resync-required recovery checks,
+    - missing/invalid media and related API-error path checks.
+  - Produce full repo-wide manual testing artifacts linked to Operator test sections:
+    - `docs/testing-manual.md` (workflow + scenario instructions),
+    - `docs/testing-checklist.md` (execution checklist + PASS/FAIL capture).
+  - Include Operator-assisted evidence capture quality-of-life features:
+    - per-scenario PASS/FAIL + note + timestamp recording,
+    - copy/export test evidence bundle (status + relevant log snippets),
+    - per-scenario reset/cleanup actions for repeatable reruns.
 - **Acceptance criteria**:
   - Stable multi-client operation (desktop + web minimum) against `ReelRoulette Server`.
   - No critical cross-client state divergence.
@@ -80,6 +100,48 @@ These run in parallel across milestones:
   - Web assets are served with cache-correct behavior (hashed filenames/cache-busting) to prevent stale UI after updates.
   - Full regression suite is part of default CI `dotnet test` gate and remains green.
   - Migration and upgrade documentation is complete and actionable.
+  - Operator UI exposes connected client/session identity details sufficient for troubleshooting and correlation.
+  - Operator UI includes a dedicated Server Logs section for `last.log` with tail/filter/search/copy-export workflows.
+  - Operator Testing Suite can execute key client/server error-handling scenarios from UI when Testing Mode is enabled.
+  - Testing controls obey Testing Mode and existing admin auth policy exactly.
+  - Repo-wide manual testing manual/checklist is complete, actionable, and mapped to Operator test sections plus common app/server workflows.
+  - End-to-end manual verification for desktop/web/server can be executed by a user without requiring ad-hoc command sequences.
+
+#### M8f Testing Matrix (Operator-Driven + Repo-Wide Manual Verification)
+
+- **Purpose**: Define deterministic manual verification scenarios executable primarily from Operator UI, with expected client/server outcomes and evidence capture requirements.
+
+| Scenario ID | Scenario | Operator action(s) | Expected desktop/web behavior | PASS criteria | Evidence to capture |
+| --- | --- | --- | --- | --- | --- |
+| M8f-T01 | Connected client/session visibility | Open Operator `Connected Clients` section | Desktop/web sessions appear with client/session identifiers and status metadata | Client/session identity is visible, current, and distinguishable per connection | Screenshot of Connected Clients panel |
+| M8f-T02 | Server logs visibility | Open Operator `Server Logs` section; tail/filter/search `last.log` | Logs stream/update without external shell usage | Tail/filter/search/copy/export all function and are responsive | Screenshot + exported/copy sample |
+| M8f-T03 | Testing Mode gate enforcement | Attempt test controls with Testing Mode off, then on | Controls blocked when off, enabled when on | No disruptive action executes while Testing Mode is off | Screenshot before/after toggle |
+| M8f-T04 | Admin auth policy enforcement for testing controls | With admin auth `Off`: run test action; with admin auth required: run same action unauthenticated then authenticated | `Off` mode allows testing action; auth-required mode blocks until authenticated | Behavior matches policy exactly; no policy bypass | Screenshots/log entries for both modes |
+| M8f-T05 | API capability mismatch simulation | Run Operator test scenario for capability mismatch | Desktop/web show deterministic, user-visible compatibility error handling | Both clients surface expected mismatch UX and avoid undefined partial state | Screenshot from each client + operator event entry |
+| M8f-T06 | API version mismatch simulation | Run Operator test scenario for version incompatibility | Desktop/web block or warn per compatibility policy | Version mismatch path is deterministic and recoverable after reset | Screenshot + reset confirmation |
+| M8f-T07 | Client disconnect/reconnect recovery | Trigger controlled disconnect/reconnect from Operator test controls | Clients show reconnect guidance, then recover | Recovery occurs without state corruption; UX is user-friendly | Screenshot sequence + relevant log excerpt |
+| M8f-T08 | SSE replay path validation | Trigger short disconnect with recoverable replay window | Clients reconnect and replay missing events | Missing updates are replayed and applied without manual repair | Operator event/log excerpt + client state proof |
+| M8f-T09 | SSE resync-required path validation | Trigger/force replay-gap-resync scenario | Clients execute authoritative refetch path | Final state converges with server authority after resync | Screenshot/log excerpt showing resync + converged state |
+| M8f-T10 | Missing/invalid media error-handling | Trigger missing file / invalid media route scenario from Operator controls | Client surfaces clear error guidance and remains usable | No crash; recovery path and status messaging are clear | Screenshot + log excerpt |
+| M8f-T11 | Core unavailable/crash handling | Use Operator lifecycle controls to stop/restart runtime | Clients show friendly unavailable guidance, then recover after restart | No orphaned broken state; post-restart functionality restored | Screenshot before/after + operator lifecycle status |
+| M8f-T12 | Common workflow regression sweep | Execute baseline user flows (pair/auth, random playback, favorites/blacklist, tags, refresh/source operations) guided by manual/checklist | Flows remain functional and consistent across clients | All checklist items pass with no critical divergence | Completed checklist artifact |
+
+- **Execution notes**:
+  - Prefer Operator UI controls first; use shell only for initial host startup or where explicitly required by the manual.
+  - Each scenario should include a **Reset/Cleanup** path to return runtime to baseline.
+  - Record results in `docs/testing-checklist.md` with: `Scenario ID`, `PASS/FAIL`, `notes`, `timestamp`, and linked evidence.
+
+- **Failure handling**:
+  - If a scenario fails, capture:
+    - failing step,
+    - expected vs actual behavior,
+    - client(s) affected,
+    - relevant `Server Logs` snippet,
+    - whether failure is deterministic or intermittent.
+  - Block milestone sign-off on unresolved failures in: compatibility mismatch handling, reconnect/resync recovery, auth policy enforcement, or state convergence.
+
+- **Sign-off gate**:
+  - `M8f` manual sign-off requires all `M8f-T01`..`M8f-T12` marked PASS, or explicitly documented waivers with owner + follow-up milestone/TODO reference.
 
 ### M9a - Playback Session Contracts and Capability Surface
 
