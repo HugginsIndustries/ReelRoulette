@@ -68,6 +68,9 @@ These run in parallel across milestones:
   - Introduce desktop playback policy:
     - local playback first when the selected media path is accessible on the desktop machine,
     - automatic API media playback fallback when local path access fails.
+  - Route desktop manual library-panel play through API identity orchestration:
+    - resolve stable media identity (`itemId`/API-routable identity) before playback-path selection so playback stats remain API-authoritative and deterministic,
+    - if manual target cannot be mapped to stable identity, surface explicit user-facing error + guidance (no silent substitute/random reroute).
   - Add desktop setting `ForceApiPlayback` (boolean, default `false`):
     - when enabled, desktop always uses API playback even if local file access is available.
   - Preserve strict desktop thin-client boundaries for non-playback domains:
@@ -79,6 +82,9 @@ These run in parallel across milestones:
   - Desktop playback selection is deterministic:
     - uses local playback when file path is locally accessible and `ForceApiPlayback=false`,
     - otherwise uses API media playback path.
+  - Desktop manual library-panel play is deterministic and API-orchestrated:
+    - manual play target is identity-resolved through API path first,
+    - unmappable manual targets fail with explicit error + guidance (no implicit substitute playback path).
   - `ForceApiPlayback` is persisted in desktop settings, defaults to `false`, and is respected across restarts.
   - Desktop running on LAN clients can still play local files from shared/NAS mappings when accessible, with seamless API fallback when not accessible.
   - Outside allowed exceptions (desktop settings + media-read playback), no additional local file access is introduced in desktop app.
