@@ -468,15 +468,19 @@ Status legend: `✅ Complete` | `⏳ Planned`
   - Ensure desktop commands/queries go through shared APIs only.
   - Ensure desktop sync/projection uses API + SSE paths only.
   - Route source import (`Import Folder`) through core API and remove desktop-local import path now that refresh pipeline ownership is server-side.
+  - Route duplicate detection (scan + resolve/delete) through reusable core/server APIs and remove desktop-local duplicate execution paths.
+  - Route auto-tag scan/suggestion + apply through reusable core/server APIs so the same logic can be consumed by desktop/web/operator/mobile clients.
   - Keep desktop-local persistence limited to client-side UI/preferences in `desktop-settings.json`.
-  - Move `last.log` ownership fully to `ReelRoulette.ServerApp`: clients send logs through API; `last.log` is overwritten/reset on ServerApp startup/restart.
+  - Move `last.log` ownership fully to `ReelRoulette.ServerApp`: server-owned logic writes directly to server-side `last.log`, clients send client-event logs through API, and `last.log` is overwritten/reset on ServerApp startup/restart.
   - Desktop connect UX defaults to localhost `ReelRoulette Server`; if unavailable, show clear Connect/Start guidance without hosting/supervising server runtime.
 - **Acceptance criteria**:
   - Desktop is a pure API/SSE consumer for authoritative core state.
   - Desktop writes only `desktop-settings.json` for client-side UI/preferences.
   - Desktop never writes core state files (for example `library.json` and core settings files) directly.
   - Import Folder executes through core API only and does not use a desktop-local source import path.
-  - Desktop does not write `last.log` directly; ServerApp owns `last.log` lifecycle and resets it on startup/restart while ingesting client logs via API.
+  - Duplicate detection executes through core API only; desktop has no local authoritative duplicate scan/delete path.
+  - Auto-tag scan/suggestion and apply execute through core API only; logic is reusable across clients.
+  - Desktop does not write `last.log` directly; ServerApp owns `last.log` lifecycle/reset, server-originated logs are written directly by server components, and client-originated logs are ingested via API into the centralized server log.
   - Desktop no longer directly controls, hosts, or supervises `ReelRoulette Server` runtime responsibilities.
   - Desktop functionality remains stable using API/SSE-only migrated flows.
 
