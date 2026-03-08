@@ -501,29 +501,29 @@ Status legend: `✅ Complete` | `⏳ Planned`
   - ServerApp now resets centralized `last.log` at startup, preserving server-owned log lifecycle ownership.
   - OpenAPI updated for M8c endpoints/schemas and WebUI generated contracts refreshed (`openapi.generated.ts`).
 
-### M8d - Plex-Style Playback Pipeline
+### M8d - Desktop Playback Policy Compromise (Local-First with API Fallback)
 
 - **Status**: ⏳ Planned
-- **Goal**: Deliver server-authoritative, Plex-style media playback so desktop and WebUI stream via `ReelRoulette Server` URLs only.
+- **Goal**: Keep desktop playback performant for local/shared-storage scenarios while preserving API-first orchestration and M9 playback-pipeline readiness.
 - **Scope**:
-  - Introduce server-managed playback session APIs used by desktop and WebUI before media playback begins.
-  - Implement server playback decisioning per request:
-    - direct stream when client/media compatibility allows,
-    - remux/transmux when container/protocol conversion is sufficient,
-    - transcode when codec/format compatibility requires re-encoding.
-  - Add robust long-form playback path (segment-based streaming) for web client buffering/seek stability on movie-length media.
-  - Add session lifecycle and resource management (TTL cleanup, temp artifact cleanup, transcode process cleanup).
-  - Add playback diagnostics/telemetry for mode decisions and playback pipeline failures.
-  - Keep client behavior thin:
-    - no direct local-path playback authority,
-    - no client-side fallback that bypasses server playback session routing.
-  - Sequencing guardrail: finish `M8c` acceptance and stabilization before starting `M8d` implementation changes.
+  - Introduce desktop playback policy:
+    - local playback first when the selected media path is accessible on the desktop machine,
+    - automatic API media playback fallback when local path access fails.
+  - Add desktop setting `ForceApiPlayback` (boolean, default `false`):
+    - when enabled, desktop always uses API playback even if local file access is available.
+  - Preserve strict desktop thin-client boundaries for non-playback domains:
+    - desktop may read/write only `desktop-settings.json`,
+    - desktop may read local media files for playback/accessibility checks only,
+    - no reintroduction of local authoritative state reads/writes (library/settings/log/domain mutations).
+  - Keep this policy compatible with M9 incremental playback-pipeline work so API-only playback can be forced during M9 validation.
 - **Acceptance criteria**:
-  - Desktop and WebUI request playback sessions from server and play server-issued stream URLs only.
-  - Server deterministically selects `direct`/`remux`/`transcode` mode based on media metadata and declared client playback capabilities.
-  - WebUI long-form playback is reliable for supported test corpus with stable buffering, seek, and reconnect behavior.
-  - Playback failures expose actionable diagnostics (decision reason + pipeline failure reason) for operator troubleshooting.
-  - No regression of thin-client boundary: clients remain orchestration/render-only for playback decisions and pipeline execution.
+  - Desktop playback selection is deterministic:
+    - uses local playback when file path is locally accessible and `ForceApiPlayback=false`,
+    - otherwise uses API media playback path.
+  - `ForceApiPlayback` is persisted in desktop settings, defaults to `false`, and is respected across restarts.
+  - Desktop running on LAN clients can still play local files from shared/NAS mappings when accessible, with seamless API fallback when not accessible.
+  - Outside allowed exceptions (desktop settings + media-read playback), no additional local file access is introduced in desktop app.
+  - M8c API-first/thin-client guarantees remain intact for source import, duplicates, auto-tag, playback-stats clear, and logging ownership.
 
 ### M8e - WebUI and Mobile Thin-Client Contract Standardization
 
@@ -532,6 +532,7 @@ Status legend: `✅ Complete` | `⏳ Planned`
 - **Scope**:
   - Standardize client-facing API contracts/capabilities for desktop/web/mobile parity.
   - Ensure WebUI uses the same API semantics as desktop for migrated behaviors.
+  - Scope boundary: playback-session pipeline contracts/capabilities are owned by `M9a` and are out of scope for `M8e`.
   - Define session/reconnect rules on the shared contract surface:
     - persistent per-device `clientId`,
     - optional `sessionId` for future shared-session features,
@@ -565,7 +566,136 @@ Status legend: `✅ Complete` | `⏳ Planned`
   - Full regression suite is part of default CI `dotnet test` gate and remains green.
   - Migration and upgrade documentation is complete and actionable.
 
-### M9 - Android Client Bootstrap
+### M9 - Plex-Style Playback Pipeline (Incremental)
+
+- **Status**: ⏳ Planned
+- **Goal**: Deliver server-authoritative, Plex-style playback incrementally while preserving the M8d desktop compromise baseline (local-first playback with API fallback and optional forced API playback).
+- **Scope**:
+  - Split playback migration into sub-milestones (`M9a`-`M9g`) to reduce blast radius and keep each slice shippable.
+  - Keep execution sequencing strict: complete M8 stabilization before starting M9 implementation.
+  - Preserve thin-client boundaries while introducing direct/remux/transcode playback decisions in server.
+  - Maintain desktop local-first + API-fallback behavior during migration, with `ForceApiPlayback` available for deterministic API-path validation.
+  - Preserve seamless looping behavior across playback paths:
+    - no audible/visual gap during loop transitions,
+    - do not increment playback stats on each loop iteration (retain current behavior).
+- **Acceptance criteria**:
+  - Each sub-milestone (`M9a`-`M9g`) is independently verifiable and shippable.
+  - No non-approved local authority is introduced beyond M8d compromise boundaries.
+  - Server playback-session contract is authoritative for API playback paths across desktop and WebUI.
+  - Seamless looping remains parity-safe: loop transitions remain gapless and loop iterations do not inflate playback stats.
+
+#### M9a - Playback Session Contracts and Capability Surface
+
+- **Status**: ⏳ Planned
+- **Goal**: Establish contract-first playback-session APIs and capability signaling.
+- **Scope**:
+  - Define OpenAPI contracts for playback-session create/read and stream URL contracts.
+  - Add server capability markers for playback-session and transcode support in `/api/version`.
+  - Regenerate/refresh generated client contracts used by desktop and WebUI.
+- **Acceptance criteria**:
+  - OpenAPI includes playback-session surfaces and validates.
+  - Generated desktop/web client contracts are in sync with OpenAPI.
+  - Version/capability checks can detect missing playback features deterministically.
+
+#### M9b - Server Playback Decision Engine
+
+- **Status**: ⏳ Planned
+- **Goal**: Make server the sole decision point for direct/remux/transcode mode selection.
+- **Scope**:
+  - Implement playback-session decision service using media probe metadata and client capability hints.
+  - Add probe-cache strategy keyed by file path + mtime to avoid repeated ffprobe cost.
+  - Decision output includes:
+    - playback mode (`direct`/`remux`/`transcode`),
+    - delivery type (`progressive` or `hls-fmp4`),
+    - explicit decision reason diagnostics for troubleshooting.
+- **Acceptance criteria**:
+  - Server deterministically selects `direct`, `remux/transmux`, or `transcode` for each session request.
+  - Decision outputs are stable/repeatable for identical inputs.
+  - Session responses include delivery type (`progressive` or `hls-fmp4`) and actionable reason fields.
+
+#### M9c - Direct-Stream Session URL Baseline
+
+- **Status**: ⏳ Planned
+- **Goal**: Ship direct-stream playback-session URL path first as the initial playback foundation.
+- **Scope**:
+  - Implement direct-stream session URL issuance and guarded token/session mapping.
+  - Add session TTL lifecycle cleanup for direct-stream sessions.
+- **Acceptance criteria**:
+  - Direct-stream playback-session URLs are issued/validated deterministically.
+  - Session token/session mapping is guarded against invalid/expired use.
+  - Direct-stream sessions are cleaned up reliably after TTL expiry.
+
+#### M9d - Remux/Transcode and Segmented Streaming (HLS fMP4 Baseline)
+
+- **Status**: ⏳ Planned
+- **Goal**: Add resilient compatibility streaming for unsupported formats and long-form playback.
+- **Scope**:
+  - Implement remux/transmux and transcode orchestration using ffmpeg.
+  - Segmented streaming uses **HLS with fMP4 segments** as the single baseline profile.
+  - Add lifecycle cleanup for ffmpeg workers and temporary segment/transcode artifacts.
+- **Acceptance criteria**:
+  - When API playback is selected, incompatible media is served through remux/transcode pipeline (no client-side format workarounds).
+  - Segmented streaming baseline is explicitly HLS with fMP4 segments and is validated in playback paths.
+  - No orphan ffmpeg processes or segment/transcode artifacts remain after session expiry or runtime shutdown.
+
+#### M9e - Desktop Thin-Client Playback Cutover
+
+- **Status**: ⏳ Planned
+- **Goal**: Integrate desktop with playback-session APIs while preserving local-first performance semantics from M8d.
+- **Scope**:
+  - Add playback-session orchestration path for desktop API playback mode.
+  - Keep local-first playback behavior for locally accessible media paths when `ForceApiPlayback=false`.
+  - Define "locally accessible" deterministically:
+    - file exists at expected path,
+    - desktop has read access,
+    - path is not a server-issued token/virtual playback path,
+    - quick open-read preflight succeeds.
+  - Ensure automatic fallback to API playback when local path is inaccessible.
+  - Ensure `ForceApiPlayback=true` always routes desktop through API playback path (for M9 validation and advanced-user preference).
+  - Desktop loop parity requirement:
+    - toggling loop must not reload media,
+    - loop transitions remain gapless,
+    - loop iterations do not increment playback stats (same playback session semantics).
+  - Preserve reconnect/status UX with deterministic behavior across local/API path selection.
+- **Acceptance criteria**:
+  - Desktop path selection is deterministic:
+    - local playback when locally accessible and `ForceApiPlayback=false`,
+    - API playback when local path is inaccessible or `ForceApiPlayback=true`.
+  - Desktop API playback mode uses server playback-session contract successfully.
+  - Outside allowed M8d exceptions (`desktop-settings.json`, media-read for playback), no new local file authority paths are introduced.
+  - Desktop looping parity is preserved: loop toggling/iteration semantics remain gapless without per-loop stat increments.
+  - Disconnect/reconnect behavior remains user-friendly and deterministic.
+
+#### M9f - WebUI Playback Cutover and Format Resilience
+
+- **Status**: ⏳ Planned
+- **Goal**: Align WebUI playback with server playback-session contract and robust format handling, while preserving parity with desktop API playback mode.
+- **Scope**:
+  - Route WebUI playback startup through playback-session API flow.
+  - Prefer direct playback when supported; fallback to HLS with fMP4 segmented/transcoded stream path when needed.
+  - Preserve current WebUI seamless loop behavior for both progressive and HLS playback paths after cutover.
+  - Validate long-form behavior for buffering, seek, reconnect, and format compatibility edge cases.
+- **Acceptance criteria**:
+  - WebUI uses server-issued playback sessions for playback start.
+  - Format incompatibilities are handled by server pipeline path rather than client failure/local workaround.
+  - Movie-length playback reliability issues are resolved for supported validation corpus.
+  - Looping parity is preserved: WebUI behavior remains unchanged across progressive and HLS playback paths.
+
+#### M9g - Hardening, Operations, and Final Verification
+
+- **Status**: ⏳ Planned
+- **Goal**: Stabilize playback pipeline for multi-client operation and operational visibility.
+- **Scope**:
+  - Add concurrency/backpressure controls (max concurrent transcodes + queueing policy).
+  - Add operator diagnostics for active sessions, mode decisions, and failure reasons.
+  - Execute full automated/manual verification matrix and finalize docs/tracking updates for M9.
+- **Acceptance criteria**:
+  - Multi-client playback remains stable under constrained transcode capacity.
+  - Operator-facing diagnostics are sufficient to troubleshoot playback failures.
+  - Automated gates and manual playback matrix pass before M9 sign-off.
+  - After server shutdown, no ffmpeg workers remain, and temporary playback/transcode directories are cleaned or explicitly TTL-managed.
+
+### M10 - Android Client Bootstrap
 
 - **Status**: ⏳ Planned
 - **Goal**: Enable initial Android app development on stable API seam after desktop/web client migration is functionally complete.

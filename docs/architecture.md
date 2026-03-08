@@ -333,3 +333,31 @@ flowchart TD
   - server-side logic writes directly to server `last.log`,
   - clients emit log events via `POST /api/logs/client`,
   - desktop no longer writes a local `last.log` file.
+
+## M8d Desktop Playback Policy Compromise
+
+- Desktop playback policy is local-first with API fallback:
+  - if media path is locally accessible on desktop, playback can run locally,
+  - if local access fails, desktop falls back to API media playback path.
+- Desktop setting `ForceApiPlayback` allows deterministic API-only playback validation while preserving local-first default behavior.
+- "Locally accessible" is deterministic:
+  - file exists at expected path,
+  - desktop has read access,
+  - path is not a server-issued token/virtual path,
+  - quick open-read preflight succeeds.
+- Thin-client guardrails remain unchanged for non-playback domains:
+  - desktop local persistence remains limited to `desktop-settings.json`,
+  - no reintroduction of local authoritative core-state file ownership.
+
+## M9 Plex-Style Playback Pipeline (Incremental)
+
+- M9 introduces incremental server-authoritative playback-session architecture (`M9a`-`M9g`) without violating M8d compromise baseline.
+- Desktop and WebUI progressively converge on shared playback-session contract semantics:
+  - server-side mode decisions (`direct`/`remux`/`transcode`) plus delivery type (`progressive`/`hls-fmp4`) with explicit diagnostics,
+  - direct-stream session URL baseline before remux/transcode rollout,
+  - resilient long-form buffering/seek behavior via HLS with fMP4 segmented streaming.
+- Looping parity is an explicit migration guardrail:
+  - preserve current WebUI loop behavior across progressive and HLS paths,
+  - keep desktop loop transitions gapless, avoid media reload on loop toggle, and do not inflate playback stats per loop iteration.
+- Hardening exit includes shutdown hygiene:
+  - no orphan ffmpeg workers after shutdown and temp playback/transcode artifacts cleaned or TTL-managed.

@@ -39,6 +39,11 @@
   - auto-tag scan/apply via `POST /api/autotag/scan` and `POST /api/autotag/apply`,
   - client log ingestion via `POST /api/logs/client` for centralized server-side logging,
   - playback stats clear via `POST /api/playback/clear-stats`.
+- M8d keeps desktop playback policy as local-first + API fallback:
+  - local playback allowed when desktop can access the media path directly,
+  - API playback used when local path access fails,
+  - desktop setting `ForceApiPlayback` forces API path for validation and user preference.
+- M9 introduces incremental playback-session pipeline milestones (`M9a`-`M9f`) to evolve from M8d compromise to robust server-authoritative session/streaming behavior.
 
 ## Eventing Direction
 

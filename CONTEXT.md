@@ -38,10 +38,11 @@ As of current milestones:
 
 Near-term planned milestones:
 
-- `M8d`: Plex-style playback pipeline (server-authoritative direct/remux/transcode playback sessions).
+- `M8d`: desktop playback policy compromise (local-first playback when media is locally accessible, API fallback otherwise, plus `ForceApiPlayback` toggle for deterministic API-path validation).
 - `M8e`: WebUI and mobile thin-client contract standardization.
 - `M8f`: hardening, packaging, and release readiness.
-- `M9`: Android client bootstrap on stable API seam.
+- `M9`: Plex-style playback pipeline (incremental `M9a`-`M9g` rollout for playback sessions, decision + delivery selection, direct-stream baseline, HLS/fMP4 transcode path, client cutovers, and hardening).
+- `M10`: Android client bootstrap on stable API seam.
 
 Detailed M7 decisions and rollout strategy: `docs/m7-clarifications.md`.
 
