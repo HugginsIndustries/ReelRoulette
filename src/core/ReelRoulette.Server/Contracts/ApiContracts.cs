@@ -84,6 +84,16 @@ public sealed class RecordPlaybackRequest
     public string Path { get; set; } = string.Empty;
 }
 
+public sealed class ClearPlaybackStatsRequest
+{
+    public List<string>? ItemPaths { get; set; }
+}
+
+public sealed class ClearPlaybackStatsResponse
+{
+    public int ClearedCount { get; set; }
+}
+
 public sealed class LibraryStatesRequest
 {
     public List<string>? Paths { get; set; }
@@ -324,4 +334,123 @@ public sealed class TagCatalogChangedPayload
 public sealed class RefreshStatusChangedPayload
 {
     public RefreshStatusSnapshot Snapshot { get; set; } = new();
+}
+
+public sealed class SourceImportRequest
+{
+    public string RootPath { get; set; } = string.Empty;
+    public string? DisplayName { get; set; }
+}
+
+public sealed class SourceImportResponse
+{
+    public bool Accepted { get; set; }
+    public string Message { get; set; } = string.Empty;
+    public string? SourceId { get; set; }
+    public int ImportedCount { get; set; }
+    public int UpdatedCount { get; set; }
+}
+
+public sealed class DuplicateScanRequest
+{
+    public string Scope { get; set; } = "CurrentSource";
+    public string? SourceId { get; set; }
+}
+
+public sealed class DuplicateScanResponse
+{
+    public List<DuplicateGroupResponse> Groups { get; set; } = [];
+    public int ExcludedPending { get; set; }
+    public int ExcludedFailed { get; set; }
+    public int ExcludedStale { get; set; }
+}
+
+public sealed class DuplicateGroupResponse
+{
+    public string Fingerprint { get; set; } = string.Empty;
+    public List<DuplicateGroupItemResponse> Items { get; set; } = [];
+}
+
+public sealed class DuplicateGroupItemResponse
+{
+    public string ItemId { get; set; } = string.Empty;
+    public string FullPath { get; set; } = string.Empty;
+    public string SourceId { get; set; } = string.Empty;
+    public bool IsFavorite { get; set; }
+    public bool IsBlacklisted { get; set; }
+    public int PlayCount { get; set; }
+}
+
+public sealed class DuplicateApplyRequest
+{
+    public List<DuplicateApplySelection> Selections { get; set; } = [];
+}
+
+public sealed class DuplicateApplySelection
+{
+    public string KeepItemId { get; set; } = string.Empty;
+    public List<string> ItemIds { get; set; } = [];
+}
+
+public sealed class DuplicateApplyResponse
+{
+    public int DeletedOnDisk { get; set; }
+    public int RemovedFromLibrary { get; set; }
+    public List<DuplicateApplyFailure> Failures { get; set; } = [];
+}
+
+public sealed class DuplicateApplyFailure
+{
+    public string FullPath { get; set; } = string.Empty;
+    public string Reason { get; set; } = string.Empty;
+}
+
+public sealed class AutoTagScanRequest
+{
+    public bool ScanFullLibrary { get; set; } = true;
+    public List<string> ItemIds { get; set; } = [];
+}
+
+public sealed class AutoTagScanResponse
+{
+    public List<AutoTagMatchRowResponse> Rows { get; set; } = [];
+}
+
+public sealed class AutoTagMatchRowResponse
+{
+    public string TagName { get; set; } = string.Empty;
+    public int TotalMatchedCount { get; set; }
+    public int WouldChangeCount { get; set; }
+    public List<AutoTagMatchedFileResponse> Files { get; set; } = [];
+}
+
+public sealed class AutoTagMatchedFileResponse
+{
+    public string FullPath { get; set; } = string.Empty;
+    public string DisplayPath { get; set; } = string.Empty;
+    public bool NeedsChange { get; set; }
+}
+
+public sealed class AutoTagApplyRequest
+{
+    public List<AutoTagAssignment> Assignments { get; set; } = [];
+}
+
+public sealed class AutoTagAssignment
+{
+    public string TagName { get; set; } = string.Empty;
+    public List<string> ItemPaths { get; set; } = [];
+}
+
+public sealed class AutoTagApplyResponse
+{
+    public int AssignmentsAdded { get; set; }
+    public List<string> ChangedItemPaths { get; set; } = [];
+}
+
+public sealed class ClientLogRequest
+{
+    public string Source { get; set; } = "desktop";
+    public string Level { get; set; } = "info";
+    public string Message { get; set; } = string.Empty;
 }

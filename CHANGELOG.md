@@ -2,6 +2,34 @@
 
 ## Unreleased
 
+- **Implement M8c desktop thin-client cutover (API-first ownership + centralized logging)** (2026-03-07):
+  - Remove desktop auto-start/supervision of core runtime and switch to guidance-only availability behavior.
+  - Switch desktop default core endpoint to `http://localhost:51234` (`MainWindow` + `SettingsDialog` defaults/hints).
+  - Add server-side reusable API surfaces for migrated desktop operations:
+    - `POST /api/sources/import`
+    - `POST /api/duplicates/scan`, `POST /api/duplicates/apply`
+    - `POST /api/autotag/scan`, `POST /api/autotag/apply`
+    - `POST /api/playback/clear-stats`
+    - `POST /api/logs/client`
+  - Add `LibraryOperationsService` in server for source import, duplicate scan/apply, auto-tag scan/apply, and client-log ingestion.
+  - Rewire desktop UI orchestration:
+    - import flow in `MainWindow`,
+    - duplicate flows in `ManageSourcesDialog` + `DuplicatesDialog`,
+    - auto-tag scan/apply via API in `AutoTagDialog` + `MainWindow`,
+    - playback-stats clear now routed through API command path in `MainWindow` instead of local-only mutation.
+  - Centralize logging to server:
+    - desktop local `last.log` writes removed from dialog/app/service call sites,
+    - new `ClientLogRelay` routes client log events to server API,
+    - ServerApp resets centralized `last.log` on startup.
+  - Extend OpenAPI contract and regenerate WebUI generated contracts for new M8c endpoints/schemas.
+  - Harden API-required desktop behavior:
+    - disable local `library.json` load/write paths unconditionally in desktop service layer,
+    - add server-backed library projection endpoint (`GET /api/library/projection`) and hydrate desktop library/stats from API snapshot instead of local fallback,
+    - remove local-to-core tag-catalog/item-tag push paths from desktop startup/tag-editor prep.
+  - Harden connectivity diagnostics:
+    - increase desktop version-probe timeout/retry behavior,
+    - include explicit HTTP/timeout diagnostic reasons in unavailable status message.
+
 - **Implement M8b control-plane UI + API runtime operations expansion** (2026-03-07):
   - Add control-plane API namespace under `/control/*` with status/settings/pair/restart/stop operations (`/control/status`, `GET/POST /control/settings`, `GET/POST /control/pair`, `POST /control/restart`, `POST /control/stop`).
   - Add control settings persistence and deterministic apply-result contract (`accepted`, `restartRequired`, `message`, `errors[]`) with optional admin token auth policy.

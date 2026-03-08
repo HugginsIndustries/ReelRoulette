@@ -30,6 +30,7 @@ public static class ServerHostComposition
         services.AddSingleton<ServerMediaTokenStore>();
         services.AddSingleton<LibraryPlaybackService>();
         services.AddSingleton<RefreshPipelineService>();
+        services.AddSingleton<LibraryOperationsService>();
         services.AddSingleton<ServerSessionStore>();
         services.AddSingleton<ApiTelemetryService>();
         services.AddHostedService(sp => sp.GetRequiredService<RefreshPipelineService>());
@@ -151,6 +152,22 @@ public static class ServerHostComposition
             return Results.Ok(state.GetSourcesSnapshot());
         });
 
+        app.MapPost("/api/sources/import", (SourceImportRequest request, LibraryOperationsService operations) =>
+        {
+            var response = operations.ImportSource(request);
+            if (!response.Accepted)
+            {
+                return Results.BadRequest(new { error = response.Message });
+            }
+
+            return Results.Ok(response);
+        });
+
+        app.MapGet("/api/library/projection", (LibraryOperationsService operations) =>
+        {
+            return Results.Json(operations.GetLibraryProjection());
+        });
+
         app.MapPost("/api/sources/{sourceId}/enabled", (string sourceId, UpdateSourceEnabledRequest request, ServerStateService state) =>
         {
             if (string.IsNullOrWhiteSpace(sourceId))
@@ -248,6 +265,11 @@ public static class ServerHostComposition
 
             state.RecordPlayback(request);
             return Results.Ok();
+        });
+
+        app.MapPost("/api/playback/clear-stats", (ClearPlaybackStatsRequest request, LibraryOperationsService operations) =>
+        {
+            return Results.Ok(operations.ClearPlaybackStats(request));
         });
 
         app.MapPost("/api/library-states", (LibraryStatesRequest request, ServerStateService state) =>
@@ -364,6 +386,47 @@ public static class ServerHostComposition
         app.MapPost("/api/refresh/settings", (RefreshSettingsSnapshot snapshot, CoreSettingsService settings) =>
         {
             return Results.Ok(settings.UpdateRefreshSettings(snapshot));
+        });
+
+        app.MapPost("/api/duplicates/scan", (DuplicateScanRequest request, LibraryOperationsService operations) =>
+        {
+            return Results.Ok(operations.ScanDuplicates(request));
+        });
+
+        app.MapPost("/api/duplicates/apply", (DuplicateApplyRequest request, LibraryOperationsService operations) =>
+        {
+            return Results.Ok(operations.ApplyDuplicateSelection(request));
+        });
+
+        app.MapPost("/api/autotag/scan", (AutoTagScanRequest request, LibraryOperationsService operations) =>
+        {
+            return Results.Ok(operations.ScanAutoTags(request));
+        });
+
+        app.MapPost("/api/autotag/apply", (AutoTagApplyRequest request, LibraryOperationsService operations, ServerStateService state) =>
+        {
+            foreach (var assignment in request.Assignments)
+            {
+                if (string.IsNullOrWhiteSpace(assignment.TagName) || assignment.ItemPaths.Count == 0)
+                {
+                    continue;
+                }
+
+                state.ApplyItemTags(new ApplyItemTagsRequest
+                {
+                    ItemIds = assignment.ItemPaths,
+                    AddTags = [assignment.TagName],
+                    RemoveTags = []
+                });
+            }
+
+            return Results.Ok(operations.ApplyAutoTags(request));
+        });
+
+        app.MapPost("/api/logs/client", (ClientLogRequest request, LibraryOperationsService operations) =>
+        {
+            operations.AppendClientLog(request);
+            return Results.Ok(new { accepted = true });
         });
 
         app.MapGet("/api/web-runtime/settings", (CoreSettingsService settings) =>

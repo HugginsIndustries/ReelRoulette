@@ -16,6 +16,7 @@ ServerAppRuntimeHelpers.ApplyWebRuntimeSettingsToRuntimeOptions(runtimeOptions, 
 var webUiEnabledAtStartup = startupWebRuntime.Enabled;
 var corsOrigins = new DynamicCorsOriginRegistry(runtimeOptions);
 var serverAppOptions = ServerAppOptions.FromConfiguration(builder.Configuration);
+ServerAppRuntimeHelpers.ResetServerLastLog();
 
 builder.WebHost.UseUrls(runtimeOptions.ListenUrl);
 builder.Services.AddSingleton(runtimeOptions);
@@ -859,6 +860,21 @@ file sealed record RestartResult(bool Accepted, string Message);
 
 file static class ServerAppRuntimeHelpers
 {
+    public static void ResetServerLastLog()
+    {
+        try
+        {
+            var appData = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ReelRoulette");
+            Directory.CreateDirectory(appData);
+            var logPath = Path.Combine(appData, "last.log");
+            File.WriteAllText(logPath, string.Empty);
+        }
+        catch
+        {
+            // Reset failures must not block startup.
+        }
+    }
+
     public static void ApplyWebRuntimeSettingsToRuntimeOptions(ServerRuntimeOptions options, WebRuntimeSettingsSnapshot webRuntime)
     {
         if (ShouldApplyPersistedListenUrl(options.ListenUrl))

@@ -355,6 +355,42 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/sources/import:
+    post:
+      summary: Import a media source folder into library.json
+      operationId: postSourceImport
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SourceImportRequest"
+      responses:
+        "200":
+          description: Source import completed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SourceImportResponse"
+        "400":
+          description: Invalid import request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/library/projection:
+    get:
+      summary: Get current library projection snapshot
+      operationId: getLibraryProjection
+      responses:
+        "200":
+          description: Library projection JSON
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LibraryProjectionResponse"
+
   /api/sources/{sourceId}/enabled:
     post:
       summary: Update global enabled state for a source
@@ -522,6 +558,30 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized when auth is required and request is not paired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/playback/clear-stats:
+    post:
+      summary: Clear playback stats
+      operationId: postClearPlaybackStats
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClearPlaybackStatsRequest"
+      responses:
+        "200":
+          description: Playback stats cleared
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClearPlaybackStatsResponse"
         "401":
           description: Unauthorized when auth is required and request is not paired
           content:
@@ -807,6 +867,123 @@ paths:
               schema:
                 $ref: "#/components/schemas/RefreshSettingsSnapshot"
 
+  /api/duplicates/scan:
+    post:
+      summary: Scan for fingerprint-based duplicate groups
+      operationId: postDuplicateScan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DuplicateScanRequest"
+      responses:
+        "200":
+          description: Duplicate scan results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DuplicateScanResponse"
+        "400":
+          description: Invalid duplicate scan request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/duplicates/apply:
+    post:
+      summary: Apply duplicate keep/delete selections
+      operationId: postDuplicateApply
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DuplicateApplyRequest"
+      responses:
+        "200":
+          description: Duplicate apply results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DuplicateApplyResponse"
+        "400":
+          description: Invalid duplicate apply request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/autotag/scan:
+    post:
+      summary: Scan for auto-tag suggestions
+      operationId: postAutoTagScan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AutoTagScanRequest"
+      responses:
+        "200":
+          description: Auto-tag scan results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutoTagScanResponse"
+        "400":
+          description: Invalid auto-tag scan request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/autotag/apply:
+    post:
+      summary: Apply auto-tag assignments
+      operationId: postAutoTagApply
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AutoTagApplyRequest"
+      responses:
+        "200":
+          description: Auto-tag apply results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutoTagApplyResponse"
+        "400":
+          description: Invalid auto-tag apply request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/logs/client:
+    post:
+      summary: Ingest client-originated log events to centralized server log
+      operationId: postClientLog
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClientLogRequest"
+      responses:
+        "200":
+          description: Log accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [accepted]
+                properties:
+                  accepted:
+                    type: boolean
   /api/thumbnail/{itemId}:
     get:
       summary: Get generated thumbnail by item id
@@ -1108,6 +1285,38 @@ components:
         isEnabled:
           type: boolean
 
+    SourceImportRequest:
+      type: object
+      required: [rootPath]
+      properties:
+        rootPath:
+          type: string
+        displayName:
+          type: string
+          nullable: true
+
+    SourceImportResponse:
+      type: object
+      required: [accepted, message, importedCount, updatedCount]
+      properties:
+        accepted:
+          type: boolean
+        message:
+          type: string
+        sourceId:
+          type: string
+          nullable: true
+        importedCount:
+          type: integer
+          format: int32
+        updatedCount:
+          type: integer
+          format: int32
+
+    LibraryProjectionResponse:
+      type: object
+      additionalProperties: true
+
     RandomRequest:
       type: object
       properties:
@@ -1214,6 +1423,24 @@ components:
           nullable: true
         path:
           type: string
+
+    ClearPlaybackStatsRequest:
+      type: object
+      properties:
+        itemPaths:
+          type: array
+          nullable: true
+          items:
+            type: string
+
+    ClearPlaybackStatsResponse:
+      type: object
+      required:
+        - clearedCount
+      properties:
+        clearedCount:
+          type: integer
+          format: int32
 
     ServerEventEnvelope:
       type: object
@@ -1503,6 +1730,197 @@ components:
         autoRefreshIntervalMinutes:
           type: integer
           format: int32
+
+    DuplicateScanRequest:
+      type: object
+      properties:
+        scope:
+          type: string
+          enum: [CurrentSource, AllEnabledSources, AllSources]
+        sourceId:
+          type: string
+          nullable: true
+
+    DuplicateScanResponse:
+      type: object
+      required: [groups, excludedPending, excludedFailed, excludedStale]
+      properties:
+        groups:
+          type: array
+          items:
+            $ref: "#/components/schemas/DuplicateGroupResponse"
+        excludedPending:
+          type: integer
+          format: int32
+        excludedFailed:
+          type: integer
+          format: int32
+        excludedStale:
+          type: integer
+          format: int32
+
+    DuplicateGroupResponse:
+      type: object
+      required: [fingerprint, items]
+      properties:
+        fingerprint:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/DuplicateGroupItemResponse"
+
+    DuplicateGroupItemResponse:
+      type: object
+      required: [itemId, fullPath, sourceId, isFavorite, isBlacklisted, playCount]
+      properties:
+        itemId:
+          type: string
+        fullPath:
+          type: string
+        sourceId:
+          type: string
+        isFavorite:
+          type: boolean
+        isBlacklisted:
+          type: boolean
+        playCount:
+          type: integer
+          format: int32
+
+    DuplicateApplyRequest:
+      type: object
+      required: [selections]
+      properties:
+        selections:
+          type: array
+          items:
+            $ref: "#/components/schemas/DuplicateApplySelection"
+
+    DuplicateApplySelection:
+      type: object
+      required: [keepItemId, itemIds]
+      properties:
+        keepItemId:
+          type: string
+        itemIds:
+          type: array
+          items:
+            type: string
+
+    DuplicateApplyResponse:
+      type: object
+      required: [deletedOnDisk, removedFromLibrary, failures]
+      properties:
+        deletedOnDisk:
+          type: integer
+          format: int32
+        removedFromLibrary:
+          type: integer
+          format: int32
+        failures:
+          type: array
+          items:
+            $ref: "#/components/schemas/DuplicateApplyFailure"
+
+    DuplicateApplyFailure:
+      type: object
+      required: [fullPath, reason]
+      properties:
+        fullPath:
+          type: string
+        reason:
+          type: string
+
+    AutoTagScanRequest:
+      type: object
+      properties:
+        scanFullLibrary:
+          type: boolean
+        itemIds:
+          type: array
+          items:
+            type: string
+
+    AutoTagScanResponse:
+      type: object
+      required: [rows]
+      properties:
+        rows:
+          type: array
+          items:
+            $ref: "#/components/schemas/AutoTagMatchRowResponse"
+
+    AutoTagMatchRowResponse:
+      type: object
+      required: [tagName, totalMatchedCount, wouldChangeCount, files]
+      properties:
+        tagName:
+          type: string
+        totalMatchedCount:
+          type: integer
+          format: int32
+        wouldChangeCount:
+          type: integer
+          format: int32
+        files:
+          type: array
+          items:
+            $ref: "#/components/schemas/AutoTagMatchedFileResponse"
+
+    AutoTagMatchedFileResponse:
+      type: object
+      required: [fullPath, displayPath, needsChange]
+      properties:
+        fullPath:
+          type: string
+        displayPath:
+          type: string
+        needsChange:
+          type: boolean
+
+    AutoTagApplyRequest:
+      type: object
+      required: [assignments]
+      properties:
+        assignments:
+          type: array
+          items:
+            $ref: "#/components/schemas/AutoTagAssignment"
+
+    AutoTagAssignment:
+      type: object
+      required: [tagName, itemPaths]
+      properties:
+        tagName:
+          type: string
+        itemPaths:
+          type: array
+          items:
+            type: string
+
+    AutoTagApplyResponse:
+      type: object
+      required: [assignmentsAdded, changedItemPaths]
+      properties:
+        assignmentsAdded:
+          type: integer
+          format: int32
+        changedItemPaths:
+          type: array
+          items:
+            type: string
+
+    ClientLogRequest:
+      type: object
+      required: [source, level, message]
+      properties:
+        source:
+          type: string
+        level:
+          type: string
+        message:
+          type: string
 
     RefreshStageProgress:
       type: object

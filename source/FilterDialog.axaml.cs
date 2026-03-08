@@ -39,13 +39,7 @@ namespace ReelRoulette
 
         private static void Log(string message)
         {
-            try
-            {
-                var logPath = Path.Combine(AppDataManager.AppDataDirectory, "last.log");
-                var sanitized = LogSanitizer.Sanitize(message);
-                File.AppendAllText(logPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {sanitized}\n");
-            }
-            catch { }
+            ClientLogRelay.Log("desktop-filter-dialog", message);
         }
 
         public FilterDialog(FilterState filterState, LibraryIndex? libraryIndex, 

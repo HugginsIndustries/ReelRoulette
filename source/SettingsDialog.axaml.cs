@@ -345,7 +345,7 @@ namespace ReelRoulette
         private int _autoRefreshIntervalMinutes = 60;
         private bool _autoRefreshOnlyWhenIdle = true;
         private int _autoRefreshIdleThresholdMinutes = 3;
-        private string _coreServerBaseUrl = "http://localhost:51301";
+        private string _coreServerBaseUrl = "http://localhost:51234";
 
         // Web UI settings
         private bool _webRemoteEnabled = false;
@@ -600,7 +600,7 @@ namespace ReelRoulette
             get => _coreServerBaseUrl;
             set
             {
-                var next = string.IsNullOrWhiteSpace(value) ? "http://localhost:51301" : value.Trim();
+                var next = string.IsNullOrWhiteSpace(value) ? "http://localhost:51234" : value.Trim();
                 if (_coreServerBaseUrl != next)
                 {
                     _coreServerBaseUrl = next;
@@ -733,7 +733,7 @@ namespace ReelRoulette
             int autoRefreshIntervalMinutes = 60,
             bool autoRefreshOnlyWhenIdle = true,
             int autoRefreshIdleThresholdMinutes = 3,
-            string? coreServerBaseUrl = "http://localhost:51301",
+            string? coreServerBaseUrl = "http://localhost:51234",
             bool webRemoteEnabled = false,
             int webRemotePort = 51234,
             bool webRemoteBindOnLan = false,
@@ -870,7 +870,7 @@ namespace ReelRoulette
             OnPropertyChanged(nameof(AutoRefreshOnlyWhenIdle));
             OnPropertyChanged(nameof(AutoRefreshIdleThresholdMinutes));
             OnPropertyChanged(nameof(AutoRefreshIdleThresholdEnabled));
-            _coreServerBaseUrl = string.IsNullOrWhiteSpace(coreServerBaseUrl) ? "http://localhost:51301" : coreServerBaseUrl.Trim();
+            _coreServerBaseUrl = string.IsNullOrWhiteSpace(coreServerBaseUrl) ? "http://localhost:51234" : coreServerBaseUrl.Trim();
             OnPropertyChanged(nameof(CoreServerBaseUrl));
 
             // Web UI settings
@@ -924,7 +924,7 @@ namespace ReelRoulette
         public int GetAutoRefreshIntervalMinutes() => _autoRefreshIntervalMinutes;
         public bool GetAutoRefreshOnlyWhenIdle() => _autoRefreshOnlyWhenIdle;
         public int GetAutoRefreshIdleThresholdMinutes() => _autoRefreshIdleThresholdMinutes;
-        public string GetCoreServerBaseUrl() => string.IsNullOrWhiteSpace(_coreServerBaseUrl) ? "http://localhost:51301" : _coreServerBaseUrl.Trim();
+        public string GetCoreServerBaseUrl() => string.IsNullOrWhiteSpace(_coreServerBaseUrl) ? "http://localhost:51234" : _coreServerBaseUrl.Trim();
 
         public bool GetWebRemoteEnabled() => _webRemoteEnabled;
         public int GetWebRemotePort() => _webRemotePort;

@@ -2,7 +2,6 @@ using Avalonia.Controls;
 using Avalonia.Interactivity;
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 
 namespace ReelRoulette
@@ -11,13 +10,7 @@ namespace ReelRoulette
     {
         private static void Log(string message)
         {
-            try
-            {
-                var logPath = Path.Combine(AppDataManager.AppDataDirectory, "last.log");
-                var sanitized = LogSanitizer.Sanitize(message);
-                File.AppendAllText(logPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {sanitized}\n");
-            }
-            catch { }
+            ClientLogRelay.Log("desktop-edit-tag-dialog", message);
         }
 
         private List<TagCategory> _categories;

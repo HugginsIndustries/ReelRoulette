@@ -2,7 +2,6 @@ using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using System;
-using System.IO;
 
 namespace ReelRoulette;
 
@@ -15,18 +14,7 @@ public partial class App : Application
 
     private static void Log(string message)
     {
-        try
-        {
-            var appDataDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ReelRoulette");
-            if (!Directory.Exists(appDataDir))
-            {
-                Directory.CreateDirectory(appDataDir);
-            }
-            var logPath = Path.Combine(appDataDir, "last.log");
-            var sanitized = LogSanitizer.Sanitize(message);
-            File.AppendAllText(logPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {sanitized}\n");
-        }
-        catch { }
+        ClientLogRelay.Log("desktop-app", message);
     }
 
     public override void OnFrameworkInitializationCompleted()

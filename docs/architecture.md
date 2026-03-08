@@ -319,3 +319,17 @@ flowchart TD
   - connected client/session snapshot,
   - responsive dark-theme layout for desktop/mobile operator usage.
 - ServerApp is now responsible for LAN mDNS advertisement (`{LanHostname}.local`) for the consolidated WebUI host when WebUI is enabled and LAN binding is active.
+
+## M8c Desktop Thin-Client Cutover
+
+- Desktop runtime ownership is guidance-only:
+  - desktop probes server availability but no longer starts/supervises runtime scripts.
+- Desktop migrated operations are API-first:
+  - source import uses `POST /api/sources/import`,
+  - duplicate detection uses `POST /api/duplicates/scan` + `POST /api/duplicates/apply`,
+  - auto-tag suggestion/apply uses `POST /api/autotag/scan` + `POST /api/autotag/apply`,
+  - playback stats clear uses `POST /api/playback/clear-stats`.
+- Logging is centralized in ServerApp:
+  - server-side logic writes directly to server `last.log`,
+  - clients emit log events via `POST /api/logs/client`,
+  - desktop no longer writes a local `last.log` file.

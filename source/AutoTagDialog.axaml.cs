@@ -7,6 +7,7 @@ using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Threading.Tasks;
 
 namespace ReelRoulette
 {
@@ -195,6 +196,7 @@ namespace ReelRoulette
     {
         private readonly LibraryIndex? _libraryIndex;
         private readonly Func<bool, List<LibraryItem>> _getScopeItems;
+        private readonly Func<bool, List<string>, Task<CoreAutoTagScanResponse?>>? _scanViaApiAsync;
         private bool _scanFullLibrary;
         private bool _viewAllMatches;
         private bool _scanHasRun;
@@ -235,22 +237,19 @@ namespace ReelRoulette
 
         private static void Log(string message)
         {
-            try
-            {
-                var logPath = Path.Combine(AppDataManager.AppDataDirectory, "last.log");
-                var sanitized = LogSanitizer.Sanitize(message);
-                File.AppendAllText(logPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {sanitized}\n");
-            }
-            catch
-            {
-            }
+            ClientLogRelay.Log("desktop-auto-tag", message);
         }
 
-        public AutoTagDialog(LibraryIndex? libraryIndex, bool scanFullLibraryDefault, Func<bool, List<LibraryItem>> getScopeItems)
+        public AutoTagDialog(
+            LibraryIndex? libraryIndex,
+            bool scanFullLibraryDefault,
+            Func<bool, List<LibraryItem>> getScopeItems,
+            Func<bool, List<string>, Task<CoreAutoTagScanResponse?>>? scanViaApiAsync = null)
         {
             InitializeComponent();
             _libraryIndex = libraryIndex;
             _getScopeItems = getScopeItems;
+            _scanViaApiAsync = scanViaApiAsync;
             _scanFullLibrary = scanFullLibraryDefault;
             DataContext = this;
             Log($"AutoTagDialog: Opened with ScanFullLibrary default={_scanFullLibrary}");
@@ -268,11 +267,66 @@ namespace ReelRoulette
                 .ToList();
         }
 
-        private void ScanFilesButton_Click(object? sender, RoutedEventArgs e)
+        private async void ScanFilesButton_Click(object? sender, RoutedEventArgs e)
         {
             Results.Clear();
             _allResults.Clear();
             _scanHasRun = true;
+
+            if (_scanViaApiAsync != null)
+            {
+                var scopedPaths = _getScopeItems(ScanFullLibrary)
+                    .Select(item => item.FullPath)
+                    .Where(path => !string.IsNullOrWhiteSpace(path))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+
+                var response = await _scanViaApiAsync(ScanFullLibrary, scopedPaths);
+                if (response == null)
+                {
+                    StatusTextBlock.Text = "Auto-tag scan failed (API required).";
+                    return;
+                }
+
+                foreach (var apiRow in response.Rows)
+                {
+                    var row = new AutoTagMatchRow
+                    {
+                        TagName = apiRow.TagName,
+                        TotalMatchedCount = apiRow.TotalMatchedCount,
+                        WouldChangeCount = apiRow.WouldChangeCount,
+                        IsExpanded = false
+                    };
+
+                    foreach (var file in apiRow.Files)
+                    {
+                        row.Files.Add(new AutoTagMatchedFile
+                        {
+                            FullPath = file.FullPath,
+                            DisplayPath = file.DisplayPath,
+                            NeedsChange = file.NeedsChange,
+                            IsSelected = false
+                        });
+                    }
+
+                    if (row.Files.Count > 0)
+                    {
+                        row.InitializeSubscriptions();
+                        row.SelectionChanged += HandleRowSelectionChanged;
+                        _allResults.Add(row);
+                    }
+                }
+
+                RefreshVisibleResults();
+                if (Results.Count == 0)
+                {
+                    StatusTextBlock.Text = "Scan complete: no matching tags found.";
+                    return;
+                }
+
+                UpdateStatusText();
+                return;
+            }
 
             if (_libraryIndex?.Tags == null || _libraryIndex.Tags.Count == 0)
             {

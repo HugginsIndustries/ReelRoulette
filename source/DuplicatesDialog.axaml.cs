@@ -13,7 +13,8 @@ namespace ReelRoulette
 {
     public partial class DuplicatesDialog : Window, INotifyPropertyChanged
     {
-        private readonly LibraryService _libraryService;
+        private readonly Func<List<CoreDuplicateApplySelection>, Task<CoreDuplicateApplyResponse?>> _applyDuplicatesAsync;
+        private readonly Func<DuplicateScanScope, string?, Task<CoreDuplicateScanResponse?>> _scanDuplicatesAsync;
         private readonly DuplicateScanResult _scanResult;
         private readonly DuplicateScanScope _scope;
         private readonly string? _sourceId;
@@ -26,14 +27,21 @@ namespace ReelRoulette
         {
             InitializeComponent();
             DataContext = this;
-            _libraryService = new LibraryService();
+            _applyDuplicatesAsync = _ => Task.FromResult<CoreDuplicateApplyResponse?>(null);
+            _scanDuplicatesAsync = (_, _) => Task.FromResult<CoreDuplicateScanResponse?>(null);
             _scanResult = new DuplicateScanResult();
             _scope = DuplicateScanScope.AllSources;
         }
 
-        public DuplicatesDialog(LibraryService libraryService, DuplicateScanResult scanResult, DuplicateScanScope scope, string? sourceId)
+        public DuplicatesDialog(
+            Func<List<CoreDuplicateApplySelection>, Task<CoreDuplicateApplyResponse?>> applyDuplicatesAsync,
+            Func<DuplicateScanScope, string?, Task<CoreDuplicateScanResponse?>> scanDuplicatesAsync,
+            DuplicateScanResult scanResult,
+            DuplicateScanScope scope,
+            string? sourceId)
         {
-            _libraryService = libraryService;
+            _applyDuplicatesAsync = applyDuplicatesAsync;
+            _scanDuplicatesAsync = scanDuplicatesAsync;
             _scanResult = scanResult;
             _scope = scope;
             _sourceId = sourceId;
@@ -74,28 +82,47 @@ namespace ReelRoulette
                 return;
             }
 
-            var selections = Groups.Select(group => new DuplicateDeletionSelection
+            var selections = Groups.Select(group => new CoreDuplicateApplySelection
             {
                 KeepItemId = group.SelectedKeepOption.ItemId,
                 ItemIds = group.KeepOptions.Select(option => option.ItemId).ToList()
             }).ToList();
 
-            var result = _libraryService.DeleteDuplicateFiles(selections);
-            _libraryService.SaveLibrary();
+            var result = await _applyDuplicatesAsync(selections);
+            if (result == null)
+            {
+                await ShowMessage("Duplicate Delete Results", "Duplicate delete failed (API required).");
+                return;
+            }
 
-            var updatedScan = _libraryService.ScanDuplicates(_scope, _sourceId);
-            _scanResult.Groups = updatedScan.Groups;
-            _scanResult.ExcludedPending = updatedScan.ExcludedPending;
-            _scanResult.ExcludedStale = updatedScan.ExcludedStale;
-            _scanResult.ExcludedFailed = updatedScan.ExcludedFailed;
-            LoadGroups();
+            var updatedScan = await _scanDuplicatesAsync(_scope, _sourceId);
+            if (updatedScan != null)
+            {
+                _scanResult.Groups = updatedScan.Groups.Select(group => new DuplicateGroup
+                {
+                    Fingerprint = group.Fingerprint,
+                    Items = group.Items.Select(item => new DuplicateGroupItem
+                    {
+                        ItemId = item.ItemId,
+                        FullPath = item.FullPath,
+                        SourceId = item.SourceId,
+                        IsFavorite = item.IsFavorite,
+                        IsBlacklisted = item.IsBlacklisted,
+                        PlayCount = item.PlayCount
+                    }).ToList()
+                }).ToList();
+                _scanResult.ExcludedPending = updatedScan.ExcludedPending;
+                _scanResult.ExcludedStale = updatedScan.ExcludedStale;
+                _scanResult.ExcludedFailed = updatedScan.ExcludedFailed;
+                LoadGroups();
+            }
 
             var summary = $"Deleted: {result.DeletedOnDisk}\n" +
                           $"Removed from library: {result.RemovedFromLibrary}\n" +
-                          $"Failed: {result.Failed.Count} (kept in library)";
-            if (result.Failed.Count > 0)
+                          $"Failed: {result.Failures.Count} (kept in library)";
+            if (result.Failures.Count > 0)
             {
-                summary += "\n\nFailed paths:\n" + string.Join("\n", result.Failed.Select(f => $"{f.FullPath} ({f.Reason})"));
+                summary += "\n\nFailed paths:\n" + string.Join("\n", result.Failures.Select(f => $"{f.FullPath} ({f.Reason})"));
             }
 
             await ShowMessage("Duplicate Delete Results", summary);

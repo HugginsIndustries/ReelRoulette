@@ -17,13 +17,7 @@ namespace ReelRoulette
     {
         private static void Log(string message)
         {
-            try
-            {
-                var logPath = Path.Combine(AppDataManager.AppDataDirectory, "last.log");
-                var sanitized = LogSanitizer.Sanitize(message);
-                File.AppendAllText(logPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {sanitized}\n");
-            }
-            catch { }
+            ClientLogRelay.Log("desktop-library-service", message);
         }
         private static readonly string[] VideoExtensions = 
         {
@@ -110,6 +104,15 @@ namespace ReelRoulette
                 {
                     return _libraryIndex;
                 }
+            }
+        }
+
+        public void ReplaceProjection(LibraryIndex? projection)
+        {
+            lock (_lock)
+            {
+                _libraryIndex = projection ?? new LibraryIndex();
+                _requiresTagMigration = false;
             }
         }
 
@@ -360,64 +363,14 @@ namespace ReelRoulette
         /// </summary>
         public void LoadLibrary()
         {
-            Log("LibraryService.LoadLibrary: Starting...");
-            try
+            Log("LibraryService.LoadLibrary: Local library.json load is disabled (desktop is API-required).");
+            lock (_lock)
             {
-                var index = _libraryStorage.Load();
-                bool needsSaveAfterMigration = false;
-                lock (_lock)
-                {
-                    _libraryIndex = index;
-
-                    foreach (var item in _libraryIndex.Items)
-                    {
-                        var hadId = !string.IsNullOrWhiteSpace(item.Id);
-                        var oldStatus = item.FingerprintStatus;
-                        EnsureIdentityAndFingerprintDefaults(item);
-
-                        if (!hadId || oldStatus != item.FingerprintStatus)
-                        {
-                            needsSaveAfterMigration = true;
-                        }
-                    }
-
-                    RebuildFingerprintIndex();
-
-                    _requiresTagMigration = (index.AvailableTags != null && index.AvailableTags.Count > 0) &&
-                                            (index.Categories == null || index.Categories.Count == 0) &&
-                                            (index.Tags == null || index.Tags.Count == 0);
-
-                    if (_requiresTagMigration)
-                    {
-                        Log($"LibraryService.LoadLibrary: Migration required - Found {index.AvailableTags?.Count ?? 0} flat tags that need to be categorized");
-                    }
-                    else if (index.Categories != null && index.Tags != null)
-                    {
-                        Log($"LibraryService.LoadLibrary: Using new tag format - {index.Categories.Count} categories, {index.Tags.Count} tags");
-                    }
-                    else
-                    {
-                        Log("LibraryService.LoadLibrary: No tags found in library");
-                    }
-                }
-                Log($"LibraryService.LoadLibrary: Successfully loaded library - {index.Items.Count} items, {index.Sources.Count} sources");
-
-                if (needsSaveAfterMigration)
-                {
-                    Log("LibraryService.LoadLibrary: Migration updates detected; scheduling save for post-load background work");
-                    _needsPostLoadSave = true;
-                }
+                _libraryIndex = new LibraryIndex();
+                _requiresTagMigration = false;
             }
-            catch (Exception ex)
-            {
-                Log($"LibraryService.LoadLibrary: ERROR - Exception: {ex.GetType().Name}, Message: {ex.Message}");
-                Log($"LibraryService.LoadLibrary: ERROR - Stack trace: {ex.StackTrace}");
-                if (ex.InnerException != null)
-                {
-                    Log($"LibraryService.LoadLibrary: ERROR - Inner exception: {ex.InnerException.Message}");
-                }
-                // Continue with empty library
-            }
+
+            return;
         }
 
         /// <summary>
@@ -425,33 +378,8 @@ namespace ReelRoulette
         /// </summary>
         public void SaveLibrary()
         {
-            Log("LibraryService.SaveLibrary: Starting...");
-            
-            // Use a dedicated lock for file I/O to prevent concurrent writes
-            lock (_saveLock)
-            {
-                try
-                {
-                    LibraryIndex indexToSave;
-                    lock (_lock)
-                    {
-                        indexToSave = _libraryIndex;
-                    }
-
-                    _libraryStorage.Save(indexToSave);
-                    Log($"LibraryService.SaveLibrary: Saved {indexToSave.Items.Count} items, {indexToSave.Sources.Count} sources");
-                }
-                catch (Exception ex)
-                {
-                    Log($"LibraryService.SaveLibrary: ERROR - Exception: {ex.GetType().Name}, Message: {ex.Message}");
-                    Log($"LibraryService.SaveLibrary: ERROR - Stack trace: {ex.StackTrace}");
-                    if (ex.InnerException != null)
-                    {
-                        Log($"LibraryService.SaveLibrary: ERROR - Inner exception: {ex.InnerException.Message}");
-                    }
-                    throw;
-                }
-            }
+            Log("LibraryService.SaveLibrary: Local library.json write is disabled (desktop is API-required).");
+            return;
         }
 
         /// <summary>

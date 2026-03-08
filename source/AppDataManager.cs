@@ -9,13 +9,7 @@ namespace ReelRoulette
         
         private static void Log(string message)
         {
-            try
-            {
-                var logPath = Path.Combine(AppDataDirectory ?? Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ReelRoulette", "last.log");
-                var sanitized = LogSanitizer.Sanitize(message);
-                File.AppendAllText(logPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {sanitized}\n");
-            }
-            catch { }
+            ClientLogRelay.Log("desktop-appdata", message);
         }
 
         public static string AppDataDirectory

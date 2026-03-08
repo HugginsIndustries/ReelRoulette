@@ -16,11 +16,16 @@ Primary outcome: new clients can be added without reimplementing domain logic.
 
 As of current milestones:
 
-- `M0`-`M8b` are complete in `MILESTONES.md`.
+- `M0`-`M8c` are complete in `MILESTONES.md`.
 - Desktop runtime is still `source/ReelRoulette.csproj`.
 - Core/server/worker runtime exists under `src/core/*`.
 - M8a server-app consolidation is complete: `src/core/ReelRoulette.ServerApp` now hosts API/SSE/media/WebUI/operator UI in one process and one origin.
 - M8b control-plane expansion is complete: `/control/*` now provides status/settings/pair/restart/stop operations, with control auth/trust policy and operator telemetry/connected-client visibility.
+- M8c is complete on current branch:
+  - desktop no longer auto-starts core runtime and now uses guidance-only reconnect behavior,
+  - desktop defaults core endpoint to `http://localhost:51234`,
+  - source import, duplicate detection, auto-tag scan/apply, and playback-stats clear execute through server API commands,
+  - client logs are centralized to server via `/api/logs/client`, and desktop no longer writes local `last.log`.
 - API contract source of truth is `shared/api/openapi.yaml` (currently `0.8.0`).
 - M6a tag editing migration is API-first and shared across desktop/web seams.
 - M6b refresh pipeline/thumbnails/grid are core-owned; desktop consumes API/SSE projection.
@@ -33,7 +38,9 @@ As of current milestones:
 
 Near-term planned milestones:
 
-- `M8c`: thin-client runtime ownership cleanup after M8a/M8b server-app control-plane completion.
+- `M8d`: Plex-style playback pipeline (server-authoritative direct/remux/transcode playback sessions).
+- `M8e`: WebUI and mobile thin-client contract standardization.
+- `M8f`: hardening, packaging, and release readiness.
 - `M9`: Android client bootstrap on stable API seam.
 
 Detailed M7 decisions and rollout strategy: `docs/m7-clarifications.md`.

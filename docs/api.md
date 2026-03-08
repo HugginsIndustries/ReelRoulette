@@ -33,6 +33,12 @@
   - localhost access to control-plane routes is always available; LAN control access is only available when runtime LAN bind is enabled.
   - control settings apply returns deterministic apply result metadata (`accepted`, `restartRequired`, `message`, `errors[]`).
   - control status now includes incoming/outgoing API telemetry and connected-client snapshots.
+- M8c adds API-first desktop cutover surfaces:
+  - source import via `POST /api/sources/import`,
+  - duplicate scan/apply via `POST /api/duplicates/scan` and `POST /api/duplicates/apply`,
+  - auto-tag scan/apply via `POST /api/autotag/scan` and `POST /api/autotag/apply`,
+  - client log ingestion via `POST /api/logs/client` for centralized server-side logging,
+  - playback stats clear via `POST /api/playback/clear-stats`.
 
 ## Eventing Direction
 
@@ -87,10 +93,13 @@
 - `POST /api/presets/match`
 - `POST /api/random`
 - `GET /api/sources`
+- `GET /api/library/projection`
+- `POST /api/sources/import`
 - `POST /api/sources/{sourceId}/enabled`
 - `POST /api/favorite`
 - `POST /api/blacklist`
 - `POST /api/record-playback`
+- `POST /api/playback/clear-stats`
 - `POST /api/library-states`
 - `GET /api/web-runtime/settings`
 - `POST /api/web-runtime/settings`
@@ -107,6 +116,11 @@
 - `GET /api/refresh/status`
 - `GET /api/refresh/settings`
 - `POST /api/refresh/settings`
+- `POST /api/duplicates/scan`
+- `POST /api/duplicates/apply`
+- `POST /api/autotag/scan`
+- `POST /api/autotag/apply`
+- `POST /api/logs/client`
 - `GET /api/thumbnail/{itemId}`
 - `GET /api/events` (`text/event-stream`)
 - `GET /control/status`
@@ -145,8 +159,7 @@
 
 - Tag editor query + mutation contracts are batch-ready (`itemIds[]`) from day one.
 - Desktop and web execute item-tag/tag/category mutations through API commands (no local-only mutation path for migrated flows).
-- Desktop synchronizes full local category/tag catalog to core via `POST /api/tag-editor/sync-catalog` after core reconnect/start so server-side tag model remains authoritative for all clients.
-- Before web tag-editor model reads for active items, desktop hydrates requested item-tag snapshots to core via `POST /api/tag-editor/sync-item-tags` so current tag-state styling reflects authoritative item tags.
+- `POST /api/tag-editor/sync-catalog` and `POST /api/tag-editor/sync-item-tags` remain available compatibility endpoints; current M8c desktop behavior no longer depends on startup-time local-to-core push fallback for authoritative tag state.
 - Deleting a category reassigns its tags to the canonical `uncategorized` category (fixed ID), and `Uncategorized` remains available in category dropdowns.
 - Web tag editor uses full-screen UX with touch-friendly controls, collapsible categories, and staged/batched apply semantics for tag/category actions while preserving playback/photo autoplay pause/resume behavior during editing.
 

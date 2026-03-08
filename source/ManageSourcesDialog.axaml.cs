@@ -2,6 +2,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Interactivity;
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
@@ -16,9 +17,11 @@ namespace ReelRoulette
         private readonly LibraryService _libraryService;
         private readonly Func<Task<bool>>? _requestRefreshAsync;
         private readonly Func<string, bool, Task<bool>>? _setSourceEnabledAsync;
+        private readonly Func<DuplicateScanScope, string?, Task<CoreDuplicateScanResponse?>>? _scanDuplicatesAsync;
+        private readonly Func<List<CoreDuplicateApplySelection>, Task<CoreDuplicateApplyResponse?>>? _applyDuplicatesAsync;
         private ObservableCollection<SourceViewModel> _sources = new();
 
-        public ManageSourcesDialog() : this(new LibraryService(), null, null)
+        public ManageSourcesDialog() : this(new LibraryService(), null, null, null, null)
         {
             // Design-time constructor
         }
@@ -26,11 +29,15 @@ namespace ReelRoulette
         public ManageSourcesDialog(
             LibraryService libraryService,
             Func<Task<bool>>? requestRefreshAsync = null,
-            Func<string, bool, Task<bool>>? setSourceEnabledAsync = null)
+            Func<string, bool, Task<bool>>? setSourceEnabledAsync = null,
+            Func<DuplicateScanScope, string?, Task<CoreDuplicateScanResponse?>>? scanDuplicatesAsync = null,
+            Func<List<CoreDuplicateApplySelection>, Task<CoreDuplicateApplyResponse?>>? applyDuplicatesAsync = null)
         {
             _libraryService = libraryService;
             _requestRefreshAsync = requestRefreshAsync;
             _setSourceEnabledAsync = setSourceEnabledAsync;
+            _scanDuplicatesAsync = scanDuplicatesAsync;
+            _applyDuplicatesAsync = applyDuplicatesAsync;
             InitializeComponent();
             DataContext = this;
             LoadSources();
@@ -102,13 +109,15 @@ namespace ReelRoulette
                             return;
                         }
                     }
+                    else
+                    {
+                        toggle.IsChecked = source.IsEnabled;
+                        await ShowApiRequiredMessageAsync("Source enable/disable requires core API connection.");
+                        return;
+                    }
 
                     source.IsEnabled = nextEnabled;
                     _libraryService.UpdateSource(source);
-                    if (_setSourceEnabledAsync == null)
-                    {
-                        _libraryService.SaveLibrary();
-                    }
                     
                     // Update the view model to reflect the change
                     var viewModel = _sources.FirstOrDefault(s => s.Id == sourceId);
@@ -132,10 +141,7 @@ namespace ReelRoulette
                 
                 if (!string.IsNullOrWhiteSpace(result))
                 {
-                    source.DisplayName = result;
-                    _libraryService.UpdateSource(source);
-                    _libraryService.SaveLibrary();
-                    LoadSources(); // Refresh display
+                    await ShowApiRequiredMessageAsync("Source rename is API-required and not available as a desktop-local operation.");
                 }
             }
         }
@@ -238,8 +244,37 @@ namespace ReelRoulette
                 return;
             }
 
-            var scan = _libraryService.ScanDuplicates(scope.Value, sourceId);
-            var dialog = new DuplicatesDialog(_libraryService, scan, scope.Value, sourceId);
+            if (_scanDuplicatesAsync == null || _applyDuplicatesAsync == null)
+            {
+                return;
+            }
+
+            var scanResponse = await _scanDuplicatesAsync(scope.Value, sourceId);
+            if (scanResponse == null)
+            {
+                return;
+            }
+
+            var scan = new DuplicateScanResult
+            {
+                Groups = scanResponse.Groups.Select(group => new DuplicateGroup
+                {
+                    Fingerprint = group.Fingerprint,
+                    Items = group.Items.Select(item => new DuplicateGroupItem
+                    {
+                        ItemId = item.ItemId,
+                        FullPath = item.FullPath,
+                        SourceId = item.SourceId,
+                        IsFavorite = item.IsFavorite,
+                        IsBlacklisted = item.IsBlacklisted,
+                        PlayCount = item.PlayCount
+                    }).ToList()
+                }).ToList(),
+                ExcludedPending = scanResponse.ExcludedPending,
+                ExcludedFailed = scanResponse.ExcludedFailed,
+                ExcludedStale = scanResponse.ExcludedStale
+            };
+            var dialog = new DuplicatesDialog(_applyDuplicatesAsync, _scanDuplicatesAsync, scan, scope.Value, sourceId);
             await dialog.ShowDialog(this);
             LoadSources();
         }
@@ -359,11 +394,46 @@ namespace ReelRoulette
 
                 if (result == true)
                 {
-                    _libraryService.RemoveSource(sourceId);
-                    _libraryService.SaveLibrary();
-                    LoadSources(); // Refresh display
+                    await ShowApiRequiredMessageAsync("Source removal is API-required and not available as a desktop-local operation.");
                 }
             }
+        }
+
+        private async Task ShowApiRequiredMessageAsync(string message)
+        {
+            var msg = new Window
+            {
+                Title = "API Required",
+                Width = 480,
+                Height = 170,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                Content = new StackPanel
+                {
+                    Margin = new Avalonia.Thickness(16),
+                    Spacing = 12,
+                    Children =
+                    {
+                        new TextBlock
+                        {
+                            Text = message,
+                            TextWrapping = Avalonia.Media.TextWrapping.Wrap
+                        },
+                        new Button
+                        {
+                            Content = "OK",
+                            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+                            MinWidth = 100
+                        }
+                    }
+                }
+            };
+
+            if (msg.Content is StackPanel panel && panel.Children[1] is Button ok)
+            {
+                ok.Click += (_, _) => msg.Close();
+            }
+
+            await msg.ShowDialog(this);
         }
 
         private void CloseButton_Click(object? sender, RoutedEventArgs e)

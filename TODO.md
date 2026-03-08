@@ -29,6 +29,22 @@ No open P1 TODO items.
 
 ## Completed Features
 
+### M8c - Desktop Client Thin-Client Cutover ✅
+
+- **Milestone Link**: `M8c - Desktop Client Thin-Client Cutover` in `MILESTONES.md`
+- **Impact**: High - Completes desktop thin-client ownership boundaries and centralizes runtime/logging behavior in ServerApp.
+- **Final State**:
+  - Desktop no longer auto-starts/supervises core runtime and now defaults to `http://localhost:51234` with guidance-only reconnect messaging.
+  - Source import now routes through core API (`POST /api/sources/import`) instead of desktop-local import path.
+  - Duplicate detection and apply now route through core APIs (`POST /api/duplicates/scan`, `POST /api/duplicates/apply`).
+  - Auto-tag scan/suggestion and apply now route through reusable core APIs (`POST /api/autotag/scan`, `POST /api/autotag/apply`).
+  - Playback stats clear now routes through core API (`POST /api/playback/clear-stats`) instead of desktop-local mutation.
+  - Added centralized client log ingestion endpoint (`POST /api/logs/client`) and removed desktop-local `last.log` writes.
+  - ServerApp now resets centralized `last.log` at startup; server-side logic writes directly while client events arrive through API ingestion.
+  - Extended OpenAPI + generated web contracts for the new M8c API surfaces.
+
+---
+
 ### M8b - Control-Plane UI + API for Runtime Operations ✅
 
 - **Milestone Link**: `M8b - Control-Plane UI + API for Runtime Operations` in `MILESTONES.md`

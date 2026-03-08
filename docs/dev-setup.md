@@ -176,6 +176,11 @@
   - control settings include optional admin token auth with deterministic apply result reporting.
   - operator UI is dark-theme and responsive, with incoming/outgoing API telemetry and connected-client diagnostics.
   - when WebUI is enabled and LAN bind is on, ServerApp advertises `http://{lanHostname}.local:{port}/` via mDNS.
+- Desktop thin-client cutover notes (M8c):
+  - desktop no longer auto-starts server runtime; reconnect guidance is shown when core is unavailable.
+  - desktop default core endpoint is `http://localhost:51234`.
+  - source import, duplicate scan/apply, auto-tag scan/apply, and playback-stats clear now have server API surfaces.
+  - desktop local `last.log` writes are removed; client events are centralized through `POST /api/logs/client`.
 - WebUI enable semantics:
   - `enabled=true` -> WebUI static routes + `/runtime-config.json` are served.
   - `enabled=false` (after restart) -> WebUI routes return `404`, while API/SSE/media/operator endpoints remain available.

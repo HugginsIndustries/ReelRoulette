@@ -10,41 +10,15 @@ class Program
     // Initialization code. Don't use any Avalonia, third-party APIs or any
     // SynchronizationContext-reliant code before AppMain is called: things aren't initialized
     // yet and stuff might break.
-    private static string GetLogPath()
-    {
-        var appDataDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ReelRoulette");
-        if (!Directory.Exists(appDataDir))
-        {
-            Directory.CreateDirectory(appDataDir);
-        }
-        return Path.Combine(appDataDir, "last.log");
-    }
-
     private static void Log(string message)
     {
-        try
-        {
-            var logPath = GetLogPath();
-            var sanitized = LogSanitizer.Sanitize(message);
-            File.AppendAllText(logPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {sanitized}\n");
-        }
-        catch { }
+        ClientLogRelay.Log("desktop-program", message);
     }
 
     [STAThread]
     public static void Main(string[] args)
     {
-        // Clear log file at startup
-        try
-        {
-            var logPath = GetLogPath();
-            if (File.Exists(logPath))
-            {
-                File.Delete(logPath);
-            }
-            Log("=== Application Startup ===");
-        }
-        catch { }
+        Log("=== Desktop Application Startup ===");
 
         // Add global exception handlers to capture crashes
         AppDomain.CurrentDomain.UnhandledException += (sender, e) =>

@@ -5,7 +5,6 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
-using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
 
@@ -73,13 +72,7 @@ namespace ReelRoulette
     {
         private static void Log(string message)
         {
-            try
-            {
-                var logPath = Path.Combine(AppDataManager.AppDataDirectory, "last.log");
-                var sanitized = LogSanitizer.Sanitize(message);
-                File.AppendAllText(logPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {sanitized}\n");
-            }
-            catch { }
+            ClientLogRelay.Log("desktop-migration-dialog", message);
         }
 
         private ObservableCollection<MigrationTagViewModel> _tagViewModels;

@@ -84,6 +84,18 @@ public sealed class CoreServerApiClient
         return await JsonSerializer.DeserializeAsync<List<CoreSourceResponse>>(stream, _serializerOptions, cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<JsonElement?> GetLibraryProjectionAsync(string baseUrl, CancellationToken cancellationToken = default)
+    {
+        using var response = await _httpClient.GetAsync($"{baseUrl.TrimEnd('/')}/api/library/projection", cancellationToken).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        return await JsonSerializer.DeserializeAsync<JsonElement>(stream, _serializerOptions, cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task<CoreSourceResponse?> UpdateSourceEnabledAsync(string baseUrl, string sourceId, bool isEnabled, CancellationToken cancellationToken = default)
     {
         var request = new CoreUpdateSourceEnabledRequest { IsEnabled = isEnabled };
@@ -120,6 +132,20 @@ public sealed class CoreServerApiClient
         using var content = SerializeJson(request);
         using var response = await _httpClient.PostAsync($"{baseUrl.TrimEnd('/')}/api/record-playback", content, cancellationToken).ConfigureAwait(false);
         return response.IsSuccessStatusCode;
+    }
+
+    public async Task<CoreClearPlaybackStatsResponse?> ClearPlaybackStatsAsync(string baseUrl, CoreClearPlaybackStatsRequest? request = null, CancellationToken cancellationToken = default)
+    {
+        var payload = request ?? new CoreClearPlaybackStatsRequest();
+        using var content = SerializeJson(payload);
+        using var response = await _httpClient.PostAsync($"{baseUrl.TrimEnd('/')}/api/playback/clear-stats", content, cancellationToken).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        return await JsonSerializer.DeserializeAsync<CoreClearPlaybackStatsResponse>(stream, _serializerOptions, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<bool> SyncPresetsAsync(string baseUrl, List<CoreFilterPresetSnapshot> presets, CancellationToken cancellationToken = default)
@@ -279,6 +305,78 @@ public sealed class CoreServerApiClient
         return await JsonSerializer.DeserializeAsync<CoreWebRuntimeSettingsSnapshot>(stream, _serializerOptions, cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<CoreSourceImportResponse?> ImportSourceAsync(string baseUrl, CoreSourceImportRequest request, CancellationToken cancellationToken = default)
+    {
+        using var content = SerializeJson(request);
+        using var response = await _httpClient.PostAsync($"{baseUrl.TrimEnd('/')}/api/sources/import", content, cancellationToken).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        return await JsonSerializer.DeserializeAsync<CoreSourceImportResponse>(stream, _serializerOptions, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<CoreDuplicateScanResponse?> ScanDuplicatesAsync(string baseUrl, CoreDuplicateScanRequest request, CancellationToken cancellationToken = default)
+    {
+        using var content = SerializeJson(request);
+        using var response = await _httpClient.PostAsync($"{baseUrl.TrimEnd('/')}/api/duplicates/scan", content, cancellationToken).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        return await JsonSerializer.DeserializeAsync<CoreDuplicateScanResponse>(stream, _serializerOptions, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<CoreDuplicateApplyResponse?> ApplyDuplicateSelectionAsync(string baseUrl, CoreDuplicateApplyRequest request, CancellationToken cancellationToken = default)
+    {
+        using var content = SerializeJson(request);
+        using var response = await _httpClient.PostAsync($"{baseUrl.TrimEnd('/')}/api/duplicates/apply", content, cancellationToken).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        return await JsonSerializer.DeserializeAsync<CoreDuplicateApplyResponse>(stream, _serializerOptions, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<CoreAutoTagScanResponse?> ScanAutoTagAsync(string baseUrl, CoreAutoTagScanRequest request, CancellationToken cancellationToken = default)
+    {
+        using var content = SerializeJson(request);
+        using var response = await _httpClient.PostAsync($"{baseUrl.TrimEnd('/')}/api/autotag/scan", content, cancellationToken).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        return await JsonSerializer.DeserializeAsync<CoreAutoTagScanResponse>(stream, _serializerOptions, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<CoreAutoTagApplyResponse?> ApplyAutoTagAsync(string baseUrl, CoreAutoTagApplyRequest request, CancellationToken cancellationToken = default)
+    {
+        using var content = SerializeJson(request);
+        using var response = await _httpClient.PostAsync($"{baseUrl.TrimEnd('/')}/api/autotag/apply", content, cancellationToken).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        return await JsonSerializer.DeserializeAsync<CoreAutoTagApplyResponse>(stream, _serializerOptions, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<bool> AppendClientLogAsync(string baseUrl, CoreClientLogRequest request, CancellationToken cancellationToken = default)
+    {
+        using var content = SerializeJson(request);
+        using var response = await _httpClient.PostAsync($"{baseUrl.TrimEnd('/')}/api/logs/client", content, cancellationToken).ConfigureAwait(false);
+        return response.IsSuccessStatusCode;
+    }
+
     public async Task ListenToEventsAsync(
         string baseUrl,
         string clientId,
@@ -410,6 +508,135 @@ public sealed class CoreSourceResponse
 public sealed class CoreUpdateSourceEnabledRequest
 {
     public bool IsEnabled { get; set; }
+}
+
+public sealed class CoreSourceImportRequest
+{
+    public string RootPath { get; set; } = string.Empty;
+    public string? DisplayName { get; set; }
+}
+
+public sealed class CoreSourceImportResponse
+{
+    public bool Accepted { get; set; }
+    public string Message { get; set; } = string.Empty;
+    public string? SourceId { get; set; }
+    public int ImportedCount { get; set; }
+    public int UpdatedCount { get; set; }
+}
+
+public sealed class CoreDuplicateScanRequest
+{
+    public string Scope { get; set; } = "CurrentSource";
+    public string? SourceId { get; set; }
+}
+
+public sealed class CoreDuplicateScanResponse
+{
+    public List<CoreDuplicateGroup> Groups { get; set; } = [];
+    public int ExcludedPending { get; set; }
+    public int ExcludedFailed { get; set; }
+    public int ExcludedStale { get; set; }
+}
+
+public sealed class CoreDuplicateGroup
+{
+    public string Fingerprint { get; set; } = string.Empty;
+    public List<CoreDuplicateGroupItem> Items { get; set; } = [];
+}
+
+public sealed class CoreDuplicateGroupItem
+{
+    public string ItemId { get; set; } = string.Empty;
+    public string FullPath { get; set; } = string.Empty;
+    public string SourceId { get; set; } = string.Empty;
+    public bool IsFavorite { get; set; }
+    public bool IsBlacklisted { get; set; }
+    public int PlayCount { get; set; }
+}
+
+public sealed class CoreDuplicateApplyRequest
+{
+    public List<CoreDuplicateApplySelection> Selections { get; set; } = [];
+}
+
+public sealed class CoreDuplicateApplySelection
+{
+    public string KeepItemId { get; set; } = string.Empty;
+    public List<string> ItemIds { get; set; } = [];
+}
+
+public sealed class CoreDuplicateApplyResponse
+{
+    public int DeletedOnDisk { get; set; }
+    public int RemovedFromLibrary { get; set; }
+    public List<CoreDuplicateApplyFailure> Failures { get; set; } = [];
+}
+
+public sealed class CoreDuplicateApplyFailure
+{
+    public string FullPath { get; set; } = string.Empty;
+    public string Reason { get; set; } = string.Empty;
+}
+
+public sealed class CoreAutoTagScanRequest
+{
+    public bool ScanFullLibrary { get; set; } = true;
+    public List<string> ItemIds { get; set; } = [];
+}
+
+public sealed class CoreAutoTagScanResponse
+{
+    public List<CoreAutoTagMatchRow> Rows { get; set; } = [];
+}
+
+public sealed class CoreAutoTagMatchRow
+{
+    public string TagName { get; set; } = string.Empty;
+    public int TotalMatchedCount { get; set; }
+    public int WouldChangeCount { get; set; }
+    public List<CoreAutoTagMatchedFile> Files { get; set; } = [];
+}
+
+public sealed class CoreAutoTagMatchedFile
+{
+    public string FullPath { get; set; } = string.Empty;
+    public string DisplayPath { get; set; } = string.Empty;
+    public bool NeedsChange { get; set; }
+}
+
+public sealed class CoreAutoTagApplyRequest
+{
+    public List<CoreAutoTagAssignment> Assignments { get; set; } = [];
+}
+
+public sealed class CoreAutoTagAssignment
+{
+    public string TagName { get; set; } = string.Empty;
+    public List<string> ItemPaths { get; set; } = [];
+}
+
+public sealed class CoreAutoTagApplyResponse
+{
+    public int AssignmentsAdded { get; set; }
+    public List<string> ChangedItemPaths { get; set; } = [];
+}
+
+public sealed class CoreClientLogRequest
+{
+    public string Source { get; set; } = "desktop";
+    public string Level { get; set; } = "info";
+    public string Message { get; set; } = string.Empty;
+}
+
+public sealed class CoreClearPlaybackStatsRequest
+{
+    public List<string>? ItemPaths { get; set; }
+}
+
+public sealed class CoreClearPlaybackStatsResponse
+{
+    public int ClearedCount { get; set; }
 }
 
 public sealed class CoreServerEventEnvelope

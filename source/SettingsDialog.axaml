@@ -162,7 +162,7 @@
                                 <TextBox Grid.Column="1"
                                          Text="{Binding CoreServerBaseUrl}"
                                          Width="320"
-                                         Watermark="http://localhost:51301"/>
+                                         Watermark="http://localhost:51234"/>
                             </Grid>
                             <TextBlock Text="Desktop uses this URL to call core APIs."
                                        FontSize="11"

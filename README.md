@@ -102,6 +102,11 @@ Runtime notes:
   - localhost-available control access by default, with LAN control exposure gated by runtime LAN bind plus optional admin token auth
   - operator UI upgraded to responsive dark theme with incoming/outgoing API telemetry and connected-client visibility
   - ServerApp now performs mDNS advertisement for LAN-enabled WebUI (`http://{lanHostname}.local:{port}/`) when WebUI is enabled and LAN bind is on
+- M8c desktop thin-client cutover updates:
+  - desktop no longer auto-starts core runtime and defaults core endpoint to `http://localhost:51234`
+  - source import, duplicate scan/apply, and auto-tag scan/apply are routed through new core APIs
+  - playback stats clear now routes through `POST /api/playback/clear-stats` (desktop no longer clears stats through local-only mutation path)
+  - desktop local `last.log` writes are removed; client log events are centralized through `POST /api/logs/client` while server-side logic writes directly to ServerApp `last.log`
 
 ## Testing
 

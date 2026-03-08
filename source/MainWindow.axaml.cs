@@ -16,6 +16,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -134,23 +135,26 @@ namespace ReelRoulette
         private string _webRemoteLanHostname = "reel";
         private WebUiAuthMode _webRemoteAuthMode = WebUiAuthMode.TokenRequired;
         private string? _webRemoteSharedToken;
-        private string _coreServerBaseUrl = "http://localhost:51301";
+        private string _coreServerBaseUrl = "http://localhost:51234";
         private string _independentWebUiBaseUrl = "http://localhost:51302";
-        private bool _isStartingCoreRuntime;
         private readonly string _coreClientId = Guid.NewGuid().ToString("N");
         private readonly CoreServerApiClient _coreServerApiClient;
         private CancellationTokenSource? _coreEventsCancellationSource;
         private Task? _coreEventsTask;
+        private CancellationTokenSource? _coreReconnectLoopCancellationSource;
+        private Task? _coreReconnectLoopTask;
         private volatile bool _isCoreApiReachable;
+        private DateTimeOffset? _lastCoreReconnectAttemptUtc;
         private bool _isApplyingCoreSync;
         private static readonly HttpClient _coreServerHttpClient = new()
         {
-            Timeout = TimeSpan.FromSeconds(2)
+            Timeout = TimeSpan.FromSeconds(8)
         };
         private static readonly HttpClient _coreServerEventsHttpClient = new()
         {
             Timeout = Timeout.InfiniteTimeSpan
         };
+        private const int CoreProbeMaxAttempts = 3;
 
         // Duration scanning
         private CancellationTokenSource? _scanCancellationSource;
@@ -893,8 +897,7 @@ namespace ReelRoulette
 
             // Initialize library system
             _libraryService.FingerprintProgressUpdated += OnFingerprintProgressUpdated;
-            _libraryService.LoadLibrary();
-            _libraryIndex = _libraryService.LibraryIndex;
+            _libraryIndex = new LibraryIndex();
 
             // Load persisted data (includes FilterState)
             LoadSettings();
@@ -919,12 +922,7 @@ namespace ReelRoulette
                     InitializeLibraryPanel();
                     Log("MainWindow Loaded event: Library panel initialized successfully.");
                     
-                    // Check if tag migration is required and show migration dialog
-                    if (_libraryService.RequiresTagMigration)
-                    {
-                        Log("MainWindow Loaded event: Tag migration required, showing migration dialog...");
-                        await ShowTagMigrationDialog();
-                    }
+                    // Legacy local tag migration dialog is disabled.
                     
                     // Apply saved library panel width if panel is visible on startup
                     // This ensures the width is applied after the Grid is fully initialized
@@ -957,6 +955,7 @@ namespace ReelRoulette
                         Log("MainWindow Loaded event: GridSplitter event handler set up.");
                     }
 
+                    StartCoreReconnectLoop();
                     await EnsureCoreRuntimeAvailableAsync();
                     if (_isCoreApiReachable)
                     {
@@ -1084,6 +1083,7 @@ namespace ReelRoulette
             _scanCancellationSource?.Cancel();
             _scanCancellationSource?.Dispose();
             _coreEventsCancellationSource?.Cancel();
+            StopCoreReconnectLoop();
 
             // Save data
             SaveSettings();
@@ -1170,6 +1170,8 @@ namespace ReelRoulette
 
             _coreEventsCancellationSource?.Dispose();
             _coreEventsCancellationSource = null;
+            _coreReconnectLoopCancellationSource?.Dispose();
+            _coreReconnectLoopCancellationSource = null;
 
             base.OnClosed(e);
         }
@@ -3396,33 +3398,9 @@ namespace ReelRoulette
 
         #region Library Panel
 
-        private static string GetLogPath()
-        {
-            return Path.Combine(AppDataManager.AppDataDirectory, "last.log");
-        }
-
         private static void Log(string message)
         {
-            try
-            {
-                var logPath = GetLogPath();
-                var sanitized = LogSanitizer.Sanitize(message);
-                File.AppendAllText(logPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {sanitized}\n");
-            }
-            catch { }
-        }
-
-        private static void ClearLog()
-        {
-            try
-            {
-                var logPath = GetLogPath();
-                if (File.Exists(logPath))
-                {
-                    File.Delete(logPath);
-                }
-            }
-            catch { }
+            ClientLogRelay.Log("desktop-main-window", message);
         }
 
         private void InitializeLibraryPanel()
@@ -3488,16 +3466,21 @@ namespace ReelRoulette
                     UpdateLibraryInfoText();
                     UpdateFilterSummaryText();
                     
-                    // Show startup message
-                    if (_libraryIndex.Items.Count > 0)
+                    // Show startup status based on connection + projection availability.
+                    if (!_isCoreApiReachable)
                     {
-                        StatusTextBlock.Text = "Ready: Library loaded.";
-                        Log("InitializeLibraryPanel: Library loaded, showing startup message");
+                        StatusTextBlock.Text = BuildCoreReconnectWaitingStatusText();
+                        Log("InitializeLibraryPanel: Waiting for core runtime reconnect.");
+                    }
+                    else if (_libraryIndex.Items.Count > 0)
+                    {
+                        StatusTextBlock.Text = "Core runtime connected. Library loaded.";
+                        Log("InitializeLibraryPanel: Connected with populated library projection.");
                     }
                     else
                     {
-                        StatusTextBlock.Text = "Import a folder to get started (Library → Import Folder).";
-                        Log("InitializeLibraryPanel: Library is empty, showing import message");
+                        StatusTextBlock.Text = "Core runtime connected. No media in server library.";
+                        Log("InitializeLibraryPanel: Connected with empty server library projection.");
                     }
                 }
                 else
@@ -3505,7 +3488,7 @@ namespace ReelRoulette
                     Log("  WARNING: _libraryIndex is null, skipping UpdateLibraryPanel()");
                     LibraryInfoText = "Library • 🎞️ 0 videos • 📷 0 photos";
                     UpdateFilterSummaryText();
-                    StatusTextBlock.Text = "Ready: No library loaded.";
+                    StatusTextBlock.Text = BuildCoreReconnectWaitingStatusText();
                 }
                 
                 _isInitializingLibraryPanel = false; // Re-enable event handlers after initialization
@@ -6679,7 +6662,6 @@ namespace ReelRoulette
                     return null;
                 }
 
-                SyncRequestedItemTagsToCore(itemIds ?? []);
                 return await _coreServerApiClient.GetTagEditorModelAsync(_coreServerBaseUrl, itemIds ?? []);
             }
             catch (Exception ex)
@@ -6929,41 +6911,197 @@ namespace ReelRoulette
 
         private async Task<bool> ProbeCoreServerVersionAsync(bool updateStatus = false)
         {
-            try
+            string? lastFailure = null;
+            for (var attempt = 1; attempt <= CoreProbeMaxAttempts; attempt++)
             {
-                var version = await _coreServerApiClient.GetVersionAsync(_coreServerBaseUrl);
-                if (version == null)
+                try
                 {
-                    Log("CoreServerProbe: /api/version probe failed");
-                    _isCoreApiReachable = false;
-                    StopCoreEventStream();
-                    if (updateStatus)
+                    using var response = await _coreServerHttpClient.GetAsync($"{_coreServerBaseUrl.TrimEnd('/')}/api/version");
+                    if (!response.IsSuccessStatusCode)
                     {
-                        SetStatusMessage("Core runtime unavailable; attempting startup...", 0);
+                        var snippet = await SafeReadResponseSnippetAsync(response);
+                        lastFailure = BuildCoreProbeFailureMessage(response.StatusCode, snippet);
+                        Log($"CoreServerProbe: attempt {attempt}/{CoreProbeMaxAttempts} failed ({lastFailure})");
                     }
-                    return false;
+                    else
+                    {
+                        await using var stream = await response.Content.ReadAsStreamAsync();
+                        var version = await JsonSerializer.DeserializeAsync<CoreVersionResponse>(stream, new JsonSerializerOptions(JsonSerializerDefaults.Web)
+                        {
+                            PropertyNameCaseInsensitive = true
+                        });
+                        if (version == null)
+                        {
+                            lastFailure = "Version response was empty.";
+                            Log($"CoreServerProbe: attempt {attempt}/{CoreProbeMaxAttempts} failed ({lastFailure})");
+                        }
+                        else
+                        {
+                            _isCoreApiReachable = true;
+                            Log($"CoreServerProbe: /api/version success (api={version.ApiVersion}, app={version.AppVersion}, assets={version.AssetsVersion ?? "n/a"})");
+                            EnsureCoreEventStreamStarted();
+                            if (updateStatus)
+                            {
+                                SetStatusMessage("Core runtime connected.", 0);
+                            }
+                            return true;
+                        }
+                    }
+                }
+                catch (TaskCanceledException)
+                {
+                    lastFailure = $"Timed out after {_coreServerHttpClient.Timeout.TotalSeconds:0}s.";
+                    Log($"CoreServerProbe: attempt {attempt}/{CoreProbeMaxAttempts} timeout.");
+                }
+                catch (Exception ex)
+                {
+                    lastFailure = ex.Message;
+                    Log($"CoreServerProbe: attempt {attempt}/{CoreProbeMaxAttempts} unavailable ({ex.Message})");
                 }
 
-                _isCoreApiReachable = true;
-                Log($"CoreServerProbe: /api/version success (api={version.ApiVersion}, app={version.AppVersion}, assets={version.AssetsVersion ?? "n/a"})");
-                EnsureCoreEventStreamStarted();
-                if (updateStatus)
+                if (attempt < CoreProbeMaxAttempts)
                 {
-                    SetStatusMessage("Core runtime connected.", 0);
+                    await Task.Delay(TimeSpan.FromMilliseconds(350 * attempt));
                 }
-                return true;
             }
-            catch (Exception ex)
+
+            ApplyDisconnectedProjection();
+            if (updateStatus)
             {
-                Log($"CoreServerProbe: /api/version unavailable ({ex.Message})");
-                _isCoreApiReachable = false;
-                StopCoreEventStream();
-                if (updateStatus)
-                {
-                    SetStatusMessage("Core runtime unavailable; attempting startup...", 0);
-                }
-                return false;
+                var reason = string.IsNullOrWhiteSpace(lastFailure) ? "No response from /api/version." : lastFailure;
+                SetStatusMessage($"Core runtime unavailable ({reason}) Start ReelRoulette ServerApp and reconnect. {BuildCoreReconnectWaitingStatusText()}", 0);
             }
+            return false;
+        }
+
+        private async Task<string> SafeReadResponseSnippetAsync(HttpResponseMessage response)
+        {
+            try
+            {
+                var content = await response.Content.ReadAsStringAsync();
+                if (string.IsNullOrWhiteSpace(content))
+                {
+                    return string.Empty;
+                }
+
+                var singleLine = content.Replace(Environment.NewLine, " ").Trim();
+                return singleLine.Length > 140 ? singleLine[..140] : singleLine;
+            }
+            catch
+            {
+                return string.Empty;
+            }
+        }
+
+        private static string BuildCoreProbeFailureMessage(HttpStatusCode statusCode, string snippet)
+        {
+            var baseMessage = $"HTTP {(int)statusCode} ({statusCode})";
+            if (statusCode == HttpStatusCode.Unauthorized)
+            {
+                baseMessage += " - API auth required. Pair first (GET /api/pair?token=...).";
+            }
+            else if (statusCode == HttpStatusCode.Forbidden)
+            {
+                baseMessage += " - Request forbidden by server policy.";
+            }
+
+            if (!string.IsNullOrWhiteSpace(snippet))
+            {
+                baseMessage += $" Response: {snippet}";
+            }
+
+            return baseMessage;
+        }
+
+        private void ApplyDisconnectedProjection()
+        {
+            _isCoreApiReachable = false;
+            StopCoreEventStream();
+            _libraryIndex = new LibraryIndex();
+            _libraryService.ReplaceProjection(_libraryIndex);
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (_showLibraryPanel)
+                {
+                    UpdateLibraryPanel();
+                }
+
+                RecalculateGlobalStats();
+                UpdateLibraryInfoText();
+                UpdateFilterSummaryText();
+            });
+        }
+
+        private void StartCoreReconnectLoop()
+        {
+            if (_coreReconnectLoopTask != null && !_coreReconnectLoopTask.IsCompleted)
+            {
+                return;
+            }
+
+            _coreReconnectLoopCancellationSource?.Cancel();
+            _coreReconnectLoopCancellationSource?.Dispose();
+            _coreReconnectLoopCancellationSource = new CancellationTokenSource();
+            var token = _coreReconnectLoopCancellationSource.Token;
+
+            _coreReconnectLoopTask = Task.Run(async () =>
+            {
+                while (!token.IsCancellationRequested)
+                {
+                    try
+                    {
+                        if (!_isCoreApiReachable)
+                        {
+                            _lastCoreReconnectAttemptUtc = DateTimeOffset.UtcNow;
+                            SetStatusMessage(BuildCoreReconnectWaitingStatusText(), 0);
+                            var connected = await ProbeCoreServerVersionAsync(updateStatus: false);
+                            if (connected)
+                            {
+                                await SyncLibraryProjectionFromCoreAsync();
+                                _ = SyncPresetsFromCoreAsync();
+                                _ = SyncSourcesFromCoreAsync();
+                                _ = SyncRefreshSettingsFromCoreAsync();
+                                _ = SyncWebRuntimeSettingsFromCoreAsync();
+                                _ = SyncRefreshStatusFromCoreAsync();
+                                SetStatusMessage("Core runtime connected.", 0);
+                            }
+                            else
+                            {
+                                SetStatusMessage(BuildCoreReconnectWaitingStatusText(), 0);
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Log($"CoreReconnect: Background reconnect attempt failed ({ex.Message})");
+                    }
+
+                    try
+                    {
+                        await Task.Delay(TimeSpan.FromSeconds(3), token);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        break;
+                    }
+                }
+            }, token);
+        }
+
+        private void StopCoreReconnectLoop()
+        {
+            _coreReconnectLoopCancellationSource?.Cancel();
+            _coreReconnectLoopCancellationSource?.Dispose();
+            _coreReconnectLoopCancellationSource = null;
+            _coreReconnectLoopTask = null;
+        }
+
+        private string BuildCoreReconnectWaitingStatusText()
+        {
+            var attemptText = _lastCoreReconnectAttemptUtc.HasValue
+                ? _lastCoreReconnectAttemptUtc.Value.ToLocalTime().ToString("HH:mm:ss")
+                : "not yet";
+            return $"Core runtime unavailable. Waiting to reconnect... (last attempt {attemptText})";
         }
 
         private async Task<bool> EnsureCoreRuntimeAvailableAsync()
@@ -6972,7 +7110,7 @@ namespace ReelRoulette
             if (connected)
             {
                 EnsureCoreEventStreamStarted();
-                _ = SyncTagCatalogToCoreAsync();
+                await SyncLibraryProjectionFromCoreAsync();
                 _ = SyncPresetsFromCoreAsync();
                 _ = SyncSourcesFromCoreAsync();
                 _ = SyncRefreshSettingsFromCoreAsync();
@@ -6980,79 +7118,57 @@ namespace ReelRoulette
                 _ = SyncRefreshStatusFromCoreAsync();
                 return true;
             }
-
-            var started = await TryStartCoreRuntimeAsync();
-            if (!started)
-            {
-                return false;
-            }
-
-            await Task.Delay(TimeSpan.FromSeconds(2));
-            var connectedAfterStart = await ProbeCoreServerVersionAsync(updateStatus: true);
-            if (connectedAfterStart)
-            {
-                EnsureCoreEventStreamStarted();
-                _ = SyncTagCatalogToCoreAsync();
-                _ = SyncPresetsFromCoreAsync();
-                _ = SyncSourcesFromCoreAsync();
-                _ = SyncRefreshSettingsFromCoreAsync();
-                _ = SyncWebRuntimeSettingsFromCoreAsync();
-                _ = SyncRefreshStatusFromCoreAsync();
-            }
-
-            return connectedAfterStart;
+            return false;
         }
 
-        private async Task SyncTagCatalogToCoreAsync()
+        private async Task SyncLibraryProjectionFromCoreAsync()
         {
-            const string uncategorizedCategoryId = "uncategorized";
-            const string uncategorizedCategoryName = "Uncategorized";
-            if (!_isCoreApiReachable || _libraryIndex == null)
+            if (!_isCoreApiReachable)
             {
                 return;
             }
 
             try
             {
-                var request = new CoreSyncTagCatalogRequest
+                var payload = await _coreServerApiClient.GetLibraryProjectionAsync(_coreServerBaseUrl);
+                if (!payload.HasValue)
                 {
-                    Categories = (_libraryIndex.Categories ?? [])
-                        .Where(c => !string.IsNullOrWhiteSpace(c.Name))
-                        .Select(c => new CoreTagCategorySnapshot
-                        {
-                            Id = string.IsNullOrWhiteSpace(c.Id) ? uncategorizedCategoryId : c.Id,
-                            Name = string.Equals(c.Id, uncategorizedCategoryId, StringComparison.OrdinalIgnoreCase)
-                                ? uncategorizedCategoryName
-                                : c.Name,
-                            SortOrder = c.SortOrder
-                        })
-                        .GroupBy(c => c.Id, StringComparer.OrdinalIgnoreCase)
-                        .Select(g => g.OrderBy(c => c.SortOrder).First())
-                        .Append(new CoreTagCategorySnapshot
-                        {
-                            Id = uncategorizedCategoryId,
-                            Name = uncategorizedCategoryName,
-                            SortOrder = int.MaxValue
-                        })
-                        .GroupBy(c => c.Id, StringComparer.OrdinalIgnoreCase)
-                        .Select(g => g.First())
-                        .ToList(),
-                    Tags = (_libraryIndex.Tags ?? [])
-                        .Where(t => !string.IsNullOrWhiteSpace(t.Name))
-                        .Select(t => new CoreTagSnapshot
-                        {
-                            Name = t.Name,
-                            CategoryId = string.IsNullOrWhiteSpace(t.CategoryId) ? uncategorizedCategoryId : t.CategoryId
-                        })
-                        .ToList()
-                };
+                    Log("CoreProjection: /api/library/projection returned null payload.");
+                    return;
+                }
 
-                await _coreServerApiClient.SyncTagCatalogAsync(_coreServerBaseUrl, request);
+                var projection = JsonSerializer.Deserialize<LibraryIndex>(payload.Value.GetRawText());
+                if (projection == null)
+                {
+                    Log("CoreProjection: Failed to deserialize projection payload into LibraryIndex.");
+                    return;
+                }
+
+                _libraryIndex = projection;
+                _libraryService.ReplaceProjection(projection);
+
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    if (_showLibraryPanel)
+                    {
+                        UpdateLibraryPanel();
+                    }
+
+                    UpdateLibraryInfoText();
+                    UpdateFilterSummaryText();
+                    RecalculateGlobalStats();
+                });
             }
             catch (Exception ex)
             {
-                Log($"CoreTagCatalog: Failed to sync catalog ({ex.Message})");
+                Log($"CoreProjection: Failed to sync library projection ({ex.Message})");
             }
+        }
+
+        private async Task SyncTagCatalogToCoreAsync()
+        {
+            // Desktop is API-required and no longer pushes local authoritative tag catalog state.
+            await Task.CompletedTask;
         }
 
         private async Task SyncFilterDialogCatalogFromCoreAsync()
@@ -7097,43 +7213,8 @@ namespace ReelRoulette
 
         private void SyncRequestedItemTagsToCore(IReadOnlyList<string>? itemIds)
         {
-            if (!_isCoreApiReachable || _libraryService == null || itemIds == null || itemIds.Count == 0)
-            {
-                return;
-            }
-
-            try
-            {
-                var items = itemIds
-                    .Where(id => !string.IsNullOrWhiteSpace(id))
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .Select(id => _libraryService.FindItemByPath(id))
-                    .Where(item => item != null)
-                    .Select(item => new CoreItemTagsSnapshot
-                    {
-                        ItemId = item!.FullPath,
-                        Tags = (item.Tags ?? [])
-                            .Where(t => !string.IsNullOrWhiteSpace(t))
-                            .Distinct(StringComparer.OrdinalIgnoreCase)
-                            .OrderBy(t => t, StringComparer.OrdinalIgnoreCase)
-                            .ToList()
-                    })
-                    .ToList();
-
-                if (items.Count == 0)
-                {
-                    return;
-                }
-
-                _coreServerApiClient.SyncItemTagsAsync(_coreServerBaseUrl, new CoreSyncItemTagsRequest
-                {
-                    Items = items
-                }).GetAwaiter().GetResult();
-            }
-            catch (Exception ex)
-            {
-                Log($"CoreTagCatalog: Failed to sync requested item tags ({ex.Message})");
-            }
+            _ = itemIds;
+            // Desktop is API-required and no longer pushes local authoritative item-tag state.
         }
 
         private void EnsureCoreEventStreamStarted()
@@ -7370,23 +7451,15 @@ namespace ReelRoulette
                 if (!string.Equals(_lastAppliedRefreshCompletionRunId, completionRunId, StringComparison.Ordinal))
                 {
                     _lastAppliedRefreshCompletionRunId = completionRunId;
-                    try
+                    // Do not reload local library.json on refresh completion.
+                    _ = SyncLibraryProjectionFromCoreAsync();
+                    if (_showLibraryPanel)
                     {
-                        // Immediate parity fix: refresh desktop's local projection when core refresh completes.
-                        _libraryService.LoadLibrary();
-                        _libraryIndex = _libraryService.LibraryIndex;
-                        if (_showLibraryPanel)
-                        {
-                            UpdateLibraryPanel();
-                        }
-                        UpdateLibraryInfoText();
-                        UpdateFilterSummaryText();
-                        RecalculateGlobalStats();
+                        UpdateLibraryPanel();
                     }
-                    catch (Exception ex)
-                    {
-                        Log($"CoreRefresh: Failed to reload desktop library projection ({ex.Message})");
-                    }
+                    UpdateLibraryInfoText();
+                    UpdateFilterSummaryText();
+                    RecalculateGlobalStats();
                 }
             }
 
@@ -7769,76 +7842,6 @@ namespace ReelRoulette
             }
         }
 
-        private async Task<bool> TryStartCoreRuntimeAsync()
-        {
-            if (_isStartingCoreRuntime)
-            {
-                return false;
-            }
-
-            _isStartingCoreRuntime = true;
-            try
-            {
-                var repoRoot = FindRepositoryRoot();
-                if (repoRoot == null)
-                {
-                    Log("CoreRuntime: Unable to locate repository root; cannot run start script.");
-                    SetStatusMessage("Unable to locate run-core script.", 0);
-                    return false;
-                }
-
-                var scriptPath = Path.Combine(repoRoot, "tools", "scripts", "run-core.ps1");
-                if (!File.Exists(scriptPath))
-                {
-                    Log($"CoreRuntime: run-core script not found at {scriptPath}");
-                    SetStatusMessage("run-core.ps1 not found.", 0);
-                    return false;
-                }
-
-                var startInfo = new ProcessStartInfo
-                {
-                    FileName = "powershell",
-                    Arguments = $"-NoProfile -ExecutionPolicy Bypass -File \"{scriptPath}\"",
-                    WorkingDirectory = repoRoot,
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                };
-
-                Process.Start(startInfo);
-                Log("CoreRuntime: Start script launched from desktop.");
-                SetStatusMessage("Starting core runtime...", 0);
-                await Task.Delay(TimeSpan.FromMilliseconds(200));
-                return true;
-            }
-            catch (Exception ex)
-            {
-                Log($"CoreRuntime: Failed to launch start script ({ex.Message})");
-                SetStatusMessage("Failed to start core runtime.", 0);
-                return false;
-            }
-            finally
-            {
-                _isStartingCoreRuntime = false;
-            }
-        }
-
-        private string? FindRepositoryRoot()
-        {
-            var directory = new DirectoryInfo(AppContext.BaseDirectory);
-            while (directory != null)
-            {
-                var solutionPath = Path.Combine(directory.FullName, "ReelRoulette.sln");
-                if (File.Exists(solutionPath))
-                {
-                    return directory.FullName;
-                }
-
-                directory = directory.Parent;
-            }
-
-            return null;
-        }
-
         #region View Preferences
 
         private class AppSettings
@@ -7917,7 +7920,7 @@ namespace ReelRoulette
             public FilterState? FilterState { get; set; }
             
             public bool AutoTagScanFullLibrary { get; set; } = true;
-            public string CoreServerBaseUrl { get; set; } = "http://localhost:51301";
+            public string CoreServerBaseUrl { get; set; } = "http://localhost:51234";
         }
 
         private static SettingsStorageService<AppSettings> CreateSettingsStorageService()
@@ -8158,8 +8161,9 @@ namespace ReelRoulette
                 OpenWebUiMenuItem.IsEnabled = _webRemoteEnabled;
 
             _coreServerBaseUrl = string.IsNullOrWhiteSpace(settings.CoreServerBaseUrl)
-                ? "http://localhost:51301"
+                ? "http://localhost:51234"
                 : settings.CoreServerBaseUrl.Trim();
+            ClientLogRelay.SetBaseUrl(_coreServerBaseUrl);
             
             // Bug fix: Initialize _lastNonZeroVolume with saved volume level
             // This ensures unmuting restores the correct volume, not the default (100)
@@ -8741,32 +8745,29 @@ namespace ReelRoulette
                 try
                 {
                     StatusTextBlock.Text = "Importing folder...";
-                    
-                    // Import the folder with folder name as default display name
-                    var folderName = Path.GetFileName(path);
-                    int importedCount = _libraryService.ImportFolder(path, folderName);
-                    Log($"UI ACTION: ImportFolder completed, imported {importedCount} items with source name '{folderName}'");
-                    
-                    // Save the library
-                    _libraryService.SaveLibrary();
-                    
-                    // Update library index reference
-                    _libraryIndex = _libraryService.LibraryIndex;
-                    
-                    // Update Library panel UI
-                    if (_showLibraryPanel)
+
+                    if (!await EnsureCoreRuntimeAvailableAsync())
                     {
-                        UpdateLibraryPanel();
+                        StatusTextBlock.Text = "Core runtime unavailable. Start ReelRoulette ServerApp and retry import.";
+                        return;
                     }
-                    
-                    // Update library info text
-                    UpdateLibraryInfoText();
-                    
-                    // Show success message with source name
-                    var source = _libraryIndex?.Sources.FirstOrDefault(s => 
-                        string.Equals(s.RootPath, path, StringComparison.OrdinalIgnoreCase));
-                    var sourceName = source?.DisplayName ?? Path.GetFileName(path) ?? path;
-                    StatusTextBlock.Text = $"Imported {importedCount} files from {sourceName}";
+
+                    var folderName = Path.GetFileName(path);
+                    var response = await _coreServerApiClient.ImportSourceAsync(_coreServerBaseUrl, new CoreSourceImportRequest
+                    {
+                        RootPath = path,
+                        DisplayName = folderName
+                    });
+                    if (response == null || !response.Accepted)
+                    {
+                        StatusTextBlock.Text = "Import request failed (API required).";
+                        return;
+                    }
+
+                    Log($"UI ACTION: ImportFolder completed via API, imported {response.ImportedCount} items and updated {response.UpdatedCount} items");
+                    await SyncSourcesFromCoreAsync();
+                    _ = RequestCoreRefreshAsync();
+                    StatusTextBlock.Text = $"Imported {response.ImportedCount} files (updated {response.UpdatedCount}) via core API.";
                 }
                 catch (Exception ex)
                 {
@@ -8958,37 +8959,26 @@ namespace ReelRoulette
             var result = await dialog.ShowDialog<bool?>(this);
             if (result == true)
             {
-                Log("UI ACTION: ClearPlaybackStats confirmed, clearing stats");
-                // Clear playback stats from library items
-                if (_libraryIndex != null)
+                Log("UI ACTION: ClearPlaybackStats confirmed, clearing stats via API");
+                if (!await EnsureCoreRuntimeAvailableAsync())
                 {
-                    int cleared = 0;
-                    foreach (var item in _libraryIndex.Items.ToList())
-                    {
-                        if (item.PlayCount > 0 || item.LastPlayedUtc.HasValue)
-                        {
-                            item.PlayCount = 0;
-                            item.LastPlayedUtc = null;
-                            _libraryService.UpdateItem(item);
-                            cleared++;
-                        }
-                    }
-                    _ = Task.Run(() =>
-                    {
-                        try
-                        {
-                            _libraryService.SaveLibrary();
-                        }
-                        catch (Exception ex)
-                        {
-                            Log($"Error saving library after clearing playback stats: {ex.Message}");
-                        }
-                    });
-                    Log($"UI ACTION: ClearPlaybackStats completed, cleared {cleared} items");
-                    StatusTextBlock.Text = $"Playback stats cleared for {cleared} items.";
+                    StatusTextBlock.Text = "Core runtime unavailable. Start ReelRoulette ServerApp and retry clearing stats.";
+                    return;
                 }
+
+                var response = await _coreServerApiClient.ClearPlaybackStatsAsync(_coreServerBaseUrl);
+                if (response == null)
+                {
+                    Log("UI ACTION: ClearPlaybackStats failed (API required).");
+                    StatusTextBlock.Text = "Clear playback stats failed (API required).";
+                    return;
+                }
+
+                await SyncLibraryProjectionFromCoreAsync();
                 RecalculateGlobalStats();
                 UpdateCurrentFileStatsUi();
+                Log($"UI ACTION: ClearPlaybackStats completed via API, cleared {response.ClearedCount} items");
+                StatusTextBlock.Text = $"Playback stats cleared for {response.ClearedCount} items.";
             }
             else
             {
@@ -9014,7 +9004,7 @@ namespace ReelRoulette
                 return;
             }
 
-            var dialog = new AutoTagDialog(_libraryIndex, _autoTagScanFullLibrary, GetAutoTagScopeItems);
+            var dialog = new AutoTagDialog(_libraryIndex, _autoTagScanFullLibrary, GetAutoTagScopeItems, ScanAutoTagViaCoreAsync);
             var result = await dialog.ShowDialog<bool?>(this);
             if (result != true)
             {
@@ -9040,53 +9030,42 @@ namespace ReelRoulette
                 return;
             }
 
-            int assignmentsAdded = 0;
             var changedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var addTagByPath = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+            var assignments = new List<CoreAutoTagAssignment>();
 
             foreach (var row in acceptedRows)
             {
-                foreach (var path in row.SelectedItemPaths)
+                var itemPaths = row.SelectedItemPaths
+                    .Where(path => !string.IsNullOrWhiteSpace(path))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                if (itemPaths.Count == 0 || string.IsNullOrWhiteSpace(row.TagName))
                 {
-                    var item = _libraryService.FindItemByPath(path);
-                    if (item == null)
-                    {
-                        continue;
-                    }
+                    continue;
+                }
 
-                    item.Tags ??= new List<string>();
-                    if (ContainsTagCaseInsensitive(item.Tags, row.TagName))
-                    {
-                        continue;
-                    }
-
-                    if (!addTagByPath.TryGetValue(path, out var tags))
-                    {
-                        tags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                        addTagByPath[path] = tags;
-                    }
-
-                    tags.Add(row.TagName);
-                    assignmentsAdded++;
-                    changedPaths.Add(item.FullPath);
+                assignments.Add(new CoreAutoTagAssignment
+                {
+                    TagName = row.TagName,
+                    ItemPaths = itemPaths
+                });
+                foreach (var itemPath in itemPaths)
+                {
+                    changedPaths.Add(itemPath);
                 }
             }
 
-            if (assignmentsAdded == 0)
+            if (assignments.Count == 0)
             {
-                Log("AutoTagMenuItem_Click: No new tag assignments were needed");
-                StatusTextBlock.Text = "No new tags to apply.";
+                StatusTextBlock.Text = "No auto-tag matches selected.";
                 return;
             }
 
-            foreach (var entry in addTagByPath)
+            var applyResponse = await ApplyAutoTagViaCoreAsync(assignments);
+            if (applyResponse == null)
             {
-                var accepted = await ApplyItemTagDeltaAsync([entry.Key], entry.Value.ToList(), []);
-                if (!accepted)
-                {
-                    StatusTextBlock.Text = "Auto-tag apply failed (API required).";
-                    return;
-                }
+                StatusTextBlock.Text = "Auto-tag apply failed (API required).";
+                return;
             }
 
             if (_showLibraryPanel)
@@ -9099,15 +9078,20 @@ namespace ReelRoulette
                 UpdateCurrentFileStatsUi();
             }
 
-            Log($"AutoTagMenuItem_Click: Applied {assignmentsAdded} tag assignments to {changedPaths.Count} item(s) across {acceptedRows.Count} selected tag row(s)");
-            StatusTextBlock.Text = $"Applied {assignmentsAdded} tags to {changedPaths.Count} item(s).";
+            Log($"AutoTagMenuItem_Click: Applied {applyResponse.AssignmentsAdded} tag assignments to {applyResponse.ChangedItemPaths.Count} item(s) across {acceptedRows.Count} selected tag row(s)");
+            StatusTextBlock.Text = $"Applied {applyResponse.AssignmentsAdded} tags to {applyResponse.ChangedItemPaths.Count} item(s).";
         }
 
         private async void ManageSourcesMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
             Log("UI ACTION: ManageSourcesMenuItem clicked");
             await SyncSourcesFromCoreAsync();
-            var dialog = new ManageSourcesDialog(_libraryService, RequestCoreRefreshAsync, UpdateSourceEnabledViaCoreAsync);
+            var dialog = new ManageSourcesDialog(
+                _libraryService,
+                RequestCoreRefreshAsync,
+                UpdateSourceEnabledViaCoreAsync,
+                ScanDuplicatesViaCoreAsync,
+                ApplyDuplicatesViaCoreAsync);
             await dialog.ShowDialog(this);
             
             Log("ManageSourcesMenuItem_Click: Dialog closed, refreshing UI");
@@ -9140,6 +9124,99 @@ namespace ReelRoulette
             {
                 Log($"CoreSourceSync: Failed to update source '{sourceId}' ({ex.Message})");
                 return false;
+            }
+        }
+
+        private async Task<CoreDuplicateScanResponse?> ScanDuplicatesViaCoreAsync(DuplicateScanScope scope, string? sourceId)
+        {
+            if (!await EnsureCoreRuntimeAvailableAsync())
+            {
+                return null;
+            }
+
+            var scopeValue = scope switch
+            {
+                DuplicateScanScope.CurrentSource => "CurrentSource",
+                DuplicateScanScope.AllEnabledSources => "AllEnabledSources",
+                _ => "AllSources"
+            };
+
+            try
+            {
+                return await _coreServerApiClient.ScanDuplicatesAsync(_coreServerBaseUrl, new CoreDuplicateScanRequest
+                {
+                    Scope = scopeValue,
+                    SourceId = sourceId
+                });
+            }
+            catch (Exception ex)
+            {
+                Log($"CoreDuplicates: Scan failed ({ex.Message})");
+                return null;
+            }
+        }
+
+        private async Task<CoreDuplicateApplyResponse?> ApplyDuplicatesViaCoreAsync(List<CoreDuplicateApplySelection> selections)
+        {
+            if (!await EnsureCoreRuntimeAvailableAsync())
+            {
+                return null;
+            }
+
+            try
+            {
+                return await _coreServerApiClient.ApplyDuplicateSelectionAsync(_coreServerBaseUrl, new CoreDuplicateApplyRequest
+                {
+                    Selections = selections ?? []
+                });
+            }
+            catch (Exception ex)
+            {
+                Log($"CoreDuplicates: Apply failed ({ex.Message})");
+                return null;
+            }
+        }
+
+        private async Task<CoreAutoTagScanResponse?> ScanAutoTagViaCoreAsync(bool scanFullLibrary, List<string> scopedItemPaths)
+        {
+            if (!await EnsureCoreRuntimeAvailableAsync())
+            {
+                return null;
+            }
+
+            try
+            {
+                return await _coreServerApiClient.ScanAutoTagAsync(_coreServerBaseUrl, new CoreAutoTagScanRequest
+                {
+                    ScanFullLibrary = scanFullLibrary,
+                    ItemIds = scopedItemPaths ?? []
+                });
+            }
+            catch (Exception ex)
+            {
+                Log($"CoreAutoTag: Scan failed ({ex.Message})");
+                return null;
+            }
+        }
+
+        private async Task<CoreAutoTagApplyResponse?> ApplyAutoTagViaCoreAsync(List<CoreAutoTagAssignment> assignments)
+        {
+            if (!await EnsureCoreRuntimeAvailableAsync())
+            {
+                return null;
+            }
+
+            try
+            {
+                return await _coreServerApiClient.ApplyAutoTagAsync(_coreServerBaseUrl, new CoreAutoTagApplyRequest
+                {
+                    Assignments = assignments ?? []
+                });
+            }
+            catch (Exception ex)
+            {
+                Log($"CoreAutoTag: Apply failed ({ex.Message})");
+                return null;
             }
         }
 
@@ -9401,6 +9478,7 @@ namespace ReelRoulette
                     _autoRefreshOnlyWhenIdle = false;
                     _autoRefreshIdleThresholdMinutes = 1;
                     _coreServerBaseUrl = dialog.GetCoreServerBaseUrl();
+                    ClientLogRelay.SetBaseUrl(_coreServerBaseUrl);
                     Log($"Settings: Auto-refresh settings changed - Enabled: {oldAutoRefreshEnabled} -> {_autoRefreshSourcesEnabled}, Interval: {oldAutoRefreshInterval} -> {_autoRefreshIntervalMinutes} minutes (idle settings are core-owned and disabled)");
 
                     // Update Web UI settings

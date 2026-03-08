@@ -199,6 +199,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sources/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Import a media source folder into library.json */
+        post: operations["postSourceImport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/library/projection": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get current library projection snapshot */
+        get: operations["getLibraryProjection"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sources/{sourceId}/enabled": {
         parameters: {
             query?: never;
@@ -295,6 +329,23 @@ export interface paths {
         put?: never;
         /** Record playback for an item */
         post: operations["postRecordPlayback"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/playback/clear-stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Clear playback stats */
+        post: operations["postClearPlaybackStats"];
         delete?: never;
         options?: never;
         head?: never;
@@ -528,6 +579,91 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/duplicates/scan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Scan for fingerprint-based duplicate groups */
+        post: operations["postDuplicateScan"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/duplicates/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Apply duplicate keep/delete selections */
+        post: operations["postDuplicateApply"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/autotag/scan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Scan for auto-tag suggestions */
+        post: operations["postAutoTagScan"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/autotag/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Apply auto-tag assignments */
+        post: operations["postAutoTagApply"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/logs/client": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ingest client-originated log events to centralized server log */
+        post: operations["postClientLog"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/thumbnail/{itemId}": {
         parameters: {
             query?: never;
@@ -663,6 +799,22 @@ export interface components {
         UpdateSourceEnabledRequest: {
             isEnabled: boolean;
         };
+        SourceImportRequest: {
+            rootPath: string;
+            displayName?: string | null;
+        };
+        SourceImportResponse: {
+            accepted: boolean;
+            message: string;
+            sourceId?: string | null;
+            /** Format: int32 */
+            importedCount: number;
+            /** Format: int32 */
+            updatedCount: number;
+        };
+        LibraryProjectionResponse: {
+            [key: string]: unknown;
+        };
         RandomRequest: {
             presetId?: string;
             filterState?: {
@@ -707,6 +859,13 @@ export interface components {
         RecordPlaybackRequest: {
             clientId?: string | null;
             path: string;
+        };
+        ClearPlaybackStatsRequest: {
+            itemPaths?: string[] | null;
+        };
+        ClearPlaybackStatsResponse: {
+            /** Format: int32 */
+            clearedCount: number;
         };
         ServerEventEnvelope: {
             /** Format: int64 */
@@ -819,6 +978,88 @@ export interface components {
             autoRefreshEnabled: boolean;
             /** Format: int32 */
             autoRefreshIntervalMinutes: number;
+        };
+        DuplicateScanRequest: {
+            /** @enum {string} */
+            scope?: "CurrentSource" | "AllEnabledSources" | "AllSources";
+            sourceId?: string | null;
+        };
+        DuplicateScanResponse: {
+            groups: components["schemas"]["DuplicateGroupResponse"][];
+            /** Format: int32 */
+            excludedPending: number;
+            /** Format: int32 */
+            excludedFailed: number;
+            /** Format: int32 */
+            excludedStale: number;
+        };
+        DuplicateGroupResponse: {
+            fingerprint: string;
+            items: components["schemas"]["DuplicateGroupItemResponse"][];
+        };
+        DuplicateGroupItemResponse: {
+            itemId: string;
+            fullPath: string;
+            sourceId: string;
+            isFavorite: boolean;
+            isBlacklisted: boolean;
+            /** Format: int32 */
+            playCount: number;
+        };
+        DuplicateApplyRequest: {
+            selections: components["schemas"]["DuplicateApplySelection"][];
+        };
+        DuplicateApplySelection: {
+            keepItemId: string;
+            itemIds: string[];
+        };
+        DuplicateApplyResponse: {
+            /** Format: int32 */
+            deletedOnDisk: number;
+            /** Format: int32 */
+            removedFromLibrary: number;
+            failures: components["schemas"]["DuplicateApplyFailure"][];
+        };
+        DuplicateApplyFailure: {
+            fullPath: string;
+            reason: string;
+        };
+        AutoTagScanRequest: {
+            scanFullLibrary?: boolean;
+            itemIds?: string[];
+        };
+        AutoTagScanResponse: {
+            rows: components["schemas"]["AutoTagMatchRowResponse"][];
+        };
+        AutoTagMatchRowResponse: {
+            tagName: string;
+            /** Format: int32 */
+            totalMatchedCount: number;
+            /** Format: int32 */
+            wouldChangeCount: number;
+            files: components["schemas"]["AutoTagMatchedFileResponse"][];
+        };
+        AutoTagMatchedFileResponse: {
+            fullPath: string;
+            displayPath: string;
+            needsChange: boolean;
+        };
+        AutoTagApplyRequest: {
+            assignments: components["schemas"]["AutoTagAssignment"][];
+        };
+        AutoTagAssignment: {
+            tagName: string;
+            itemPaths: string[];
+        };
+        AutoTagApplyResponse: {
+            /** Format: int32 */
+            assignmentsAdded: number;
+            changedItemPaths: string[];
+        };
+        ClientLogRequest: {
+            source: string;
+            level: string;
+            message: string;
         };
         RefreshStageProgress: {
             stage: string;
@@ -1390,6 +1631,59 @@ export interface operations {
             };
         };
     };
+    postSourceImport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SourceImportRequest"];
+            };
+        };
+        responses: {
+            /** @description Source import completed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceImportResponse"];
+                };
+            };
+            /** @description Invalid import request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getLibraryProjection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Library projection JSON */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LibraryProjectionResponse"];
+                };
+            };
+        };
+    };
     postSourceEnabled: {
         parameters: {
             query?: never;
@@ -1625,6 +1919,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized when auth is required and request is not paired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    postClearPlaybackStats: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClearPlaybackStatsRequest"];
+            };
+        };
+        responses: {
+            /** @description Playback stats cleared */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClearPlaybackStatsResponse"];
                 };
             };
             /** @description Unauthorized when auth is required and request is not paired */
@@ -2045,6 +2372,164 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RefreshSettingsSnapshot"];
+                };
+            };
+        };
+    };
+    postDuplicateScan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DuplicateScanRequest"];
+            };
+        };
+        responses: {
+            /** @description Duplicate scan results */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DuplicateScanResponse"];
+                };
+            };
+            /** @description Invalid duplicate scan request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    postDuplicateApply: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DuplicateApplyRequest"];
+            };
+        };
+        responses: {
+            /** @description Duplicate apply results */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DuplicateApplyResponse"];
+                };
+            };
+            /** @description Invalid duplicate apply request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    postAutoTagScan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AutoTagScanRequest"];
+            };
+        };
+        responses: {
+            /** @description Auto-tag scan results */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutoTagScanResponse"];
+                };
+            };
+            /** @description Invalid auto-tag scan request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    postAutoTagApply: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AutoTagApplyRequest"];
+            };
+        };
+        responses: {
+            /** @description Auto-tag apply results */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutoTagApplyResponse"];
+                };
+            };
+            /** @description Invalid auto-tag apply request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    postClientLog: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClientLogRequest"];
+            };
+        };
+        responses: {
+            /** @description Log accepted */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        accepted: boolean;
+                    };
                 };
             };
         };

@@ -460,7 +460,7 @@ Status legend: `✅ Complete` | `⏳ Planned`
 
 ### M8c - Desktop Client Thin-Client Cutover
 
-- **Status**: ⏳ Planned
+- **Status**: ✅ Complete
 - **Goal**: Convert desktop `ReelRoulette` app to strict thin-client behavior against `ReelRoulette Server`.
 - **Scope**:
   - Remove remaining desktop direct runtime/process control of `ReelRoulette Server` functionality.
@@ -483,8 +483,49 @@ Status legend: `✅ Complete` | `⏳ Planned`
   - Desktop does not write `last.log` directly; ServerApp owns `last.log` lifecycle/reset, server-originated logs are written directly by server components, and client-originated logs are ingested via API into the centralized server log.
   - Desktop no longer directly controls, hosts, or supervises `ReelRoulette Server` runtime responsibilities.
   - Desktop functionality remains stable using API/SSE-only migrated flows.
+- **Verification evidence**:
+  - Desktop runtime auto-start/supervision path removed (`EnsureCoreRuntimeAvailableAsync` no longer launches `run-core.ps1`) and desktop core endpoint defaults to `http://localhost:51234`.
+  - Source import now executes through `POST /api/sources/import` with desktop API orchestration.
+  - Duplicate detection migrated to reusable server APIs:
+    - `POST /api/duplicates/scan`
+    - `POST /api/duplicates/apply`
+    and desktop duplicate dialogs now orchestrate through those endpoints.
+  - Auto-tag scan/suggestion + apply migrated to reusable server APIs:
+    - `POST /api/autotag/scan`
+    - `POST /api/autotag/apply`
+    and desktop auto-tag dialog now consumes API scan/apply flows.
+  - Playback stats clear migrated to reusable server API:
+    - `POST /api/playback/clear-stats`
+    and desktop ClearPlaybackStats action now executes through API command path.
+  - Client log ingestion endpoint added (`POST /api/logs/client`) and desktop local `last.log` file writes removed from app/dialog/service log call paths.
+  - ServerApp now resets centralized `last.log` at startup, preserving server-owned log lifecycle ownership.
+  - OpenAPI updated for M8c endpoints/schemas and WebUI generated contracts refreshed (`openapi.generated.ts`).
 
-### M8d - WebUI and Mobile Thin-Client Contract Standardization
+### M8d - Plex-Style Playback Pipeline
+
+- **Status**: ⏳ Planned
+- **Goal**: Deliver server-authoritative, Plex-style media playback so desktop and WebUI stream via `ReelRoulette Server` URLs only.
+- **Scope**:
+  - Introduce server-managed playback session APIs used by desktop and WebUI before media playback begins.
+  - Implement server playback decisioning per request:
+    - direct stream when client/media compatibility allows,
+    - remux/transmux when container/protocol conversion is sufficient,
+    - transcode when codec/format compatibility requires re-encoding.
+  - Add robust long-form playback path (segment-based streaming) for web client buffering/seek stability on movie-length media.
+  - Add session lifecycle and resource management (TTL cleanup, temp artifact cleanup, transcode process cleanup).
+  - Add playback diagnostics/telemetry for mode decisions and playback pipeline failures.
+  - Keep client behavior thin:
+    - no direct local-path playback authority,
+    - no client-side fallback that bypasses server playback session routing.
+  - Sequencing guardrail: finish `M8c` acceptance and stabilization before starting `M8d` implementation changes.
+- **Acceptance criteria**:
+  - Desktop and WebUI request playback sessions from server and play server-issued stream URLs only.
+  - Server deterministically selects `direct`/`remux`/`transcode` mode based on media metadata and declared client playback capabilities.
+  - WebUI long-form playback is reliable for supported test corpus with stable buffering, seek, and reconnect behavior.
+  - Playback failures expose actionable diagnostics (decision reason + pipeline failure reason) for operator troubleshooting.
+  - No regression of thin-client boundary: clients remain orchestration/render-only for playback decisions and pipeline execution.
+
+### M8e - WebUI and Mobile Thin-Client Contract Standardization
 
 - **Status**: ⏳ Planned
 - **Goal**: Make WebUI and future mobile clients consume the same stable API contracts from `ReelRoulette Server`.
@@ -503,7 +544,7 @@ Status legend: `✅ Complete` | `⏳ Planned`
   - Mobile bootstrap path is contract-ready with no new domain-logic duplication in clients and with documented auth/reconnect expectations.
   - Version/capability compatibility expectations are documented for client evolution.
 
-### M8e - Hardening, Packaging, and Release Readiness
+### M8f - Hardening, Packaging, and Release Readiness
 
 - **Status**: ⏳ Planned
 - **Goal**: Finalize reliability, packaging, and migration cleanup for the new server-thin-client architecture.
