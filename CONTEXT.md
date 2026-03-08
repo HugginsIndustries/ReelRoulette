@@ -172,7 +172,7 @@ See `docs/m7-clarifications.md` for chosen options and sequencing.
 ## Key Context Docs
 
 - Migration board: `MILESTONES.md`
-- Active/planned work items: `TODO.md`
+- Active/planned work items: `MILESTONES.md`
 - Architecture evolution: `docs/architecture.md`
 - API baseline and endpoint/event notes: `docs/api.md`
 - Dev setup and milestone runtime notes: `docs/dev-setup.md`

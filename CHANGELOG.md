@@ -43,7 +43,7 @@
     - OpenAPI contract + core test assertions for control endpoints/capabilities,
     - auth/settings/runtime option regressions for control policy behavior,
     - `verify-web-deploy.ps1/.sh` checks for control status/settings endpoints in the consolidated runtime smoke path.
-  - Sync M8b milestone/docs/domain inventory/tracking artifacts (`MILESTONES.md`, `TODO.md`, `CONTEXT.md`, `README.md`, `docs/api.md`, `docs/architecture.md`, `docs/dev-setup.md`, `docs/m8-domain-inventory.md`, `COMMIT_MESSAGE.txt`).
+  - Sync M8b milestone/docs/domain inventory/tracking artifacts (`MILESTONES.md`, `CONTEXT.md`, `README.md`, `docs/api.md`, `docs/architecture.md`, `docs/dev-setup.md`, `docs/m8-domain-inventory.md`, `COMMIT_MESSAGE.txt`).
   - Follow-up runtime hardening:
     - add ServerApp-owned mDNS advertisement for LAN WebUI hostname (`{LanHostname}.local`) in the consolidated runtime path,
     - harden restart/stop single-flight behavior to avoid repeated lifecycle-trigger duplication,
@@ -55,7 +55,7 @@
   - Add minimal operator control surface with runtime status/settings apply and localhost-only deterministic restart action.
   - Update core runtime scripts (`run-core.ps1`, `run-core.sh`) to launch `ReelRoulette.ServerApp` and update compatibility helper `publish-activate-run-worker.ps1` to build WebUI and run server app.
   - Repurpose `verify-web-deploy.ps1` / `verify-web-deploy.sh` into M8a single-origin smoke checks instead of WebHost manifest-switch validation.
-  - Remove WebHost supervision from Worker startup path and synchronize milestone/docs/tracking artifacts for final M8a state (`MILESTONES.md`, `TODO.md`, `CONTEXT.md`, `README.md`, `docs/api.md`, `docs/architecture.md`, `docs/dev-setup.md`, `docs/m8-domain-inventory.md`).
+  - Remove WebHost supervision from Worker startup path and synchronize milestone/docs/tracking artifacts for final M8a state (`MILESTONES.md`, `CONTEXT.md`, `README.md`, `docs/api.md`, `docs/architecture.md`, `docs/dev-setup.md`, `docs/m8-domain-inventory.md`).
   - Follow-up hardening for operator/runtime behavior:
     - keep default server-app runtime port at `51234`,
     - make WebUI `enabled` semantics explicit (WebUI-only gating with `404` when disabled, API/SSE/media still available),
@@ -88,7 +88,7 @@
   - Add deployment orchestration scripts for publish/activate/rollback across PowerShell and Bash (`publish-web.*`, `activate-web-version.*`, `rollback-web-version.*`).
   - Enforce split cache policy in the web host (`index.html` + runtime config as `no-store`; fingerprinted assets as long-lived `immutable`).
   - Add cross-platform deployment smoke verification scripts (`verify-web-deploy.ps1`, `verify-web-deploy.sh`) covering active version switch, cache headers, and rollback without host restart.
-  - Update milestone/context/docs/domain inventory artifacts for final M7c state (`MILESTONES.md`, `CONTEXT.md`, `README.md`, `docs/api.md`, `docs/architecture.md`, `docs/dev-setup.md`, `docs/m7-domain-inventory.md`, `TODO.md`).
+  - Update milestone/context/docs/domain inventory artifacts for final M7c state (`MILESTONES.md`, `CONTEXT.md`, `README.md`, `docs/api.md`, `docs/architecture.md`, `docs/dev-setup.md`, `docs/m7-domain-inventory.md`).
 
 - **Implement M7b direct web-to-core auth/session and SSE reliability** (2026-03-05):
   - Add direct WebUI auth bootstrap flow that pairs via `/api/pair`, verifies API authorization, and uses credentialed requests for ongoing API/SSE access.
@@ -97,7 +97,7 @@
   - Extend `/api/events` reconnect handling with `lastEventId` query fallback and replay/live dedupe guard based on delivered revision tracking.
   - Add WebUI SSE reconnect/watchdog/lifecycle reconnect flow with direct `refreshStatusChanged` status-line projection and `resyncRequired` authoritative requery fallback (`/api/library-states` + `/api/refresh/status`).
   - Add regression coverage for server auth middleware/session-cookie behavior, cookie/CORS policy normalization matrix, and WebUI auth/event helper modules (including `resyncRequired` requery handling).
-  - Update OpenAPI/docs/milestone inventory artifacts for final M7b state (`README`, `CONTEXT`, `docs/api.md`, `docs/dev-setup.md`, `docs/architecture.md`, `docs/m7-domain-inventory.md`, `TODO.md`, `MILESTONES.md`).
+  - Update OpenAPI/docs/milestone inventory artifacts for final M7b state (`README`, `CONTEXT`, `docs/api.md`, `docs/dev-setup.md`, `docs/architecture.md`, `docs/m7-domain-inventory.md`, `MILESTONES.md`).
 
 - **Implement M7a independent web client foundation and runtime endpoint bootstrap** (2026-03-05):
   - Replace `src/clients/web/ReelRoulette.WebUI` placeholder-only state with a canonical Vite + TypeScript web client project (real app bootstrap, styling, and runtime-config-aware startup flow).
@@ -105,7 +105,7 @@
   - Add web runtime-config schema regression tests and build-output validation gate (`npm run verify`) covering typecheck, tests, production build, and artifact assertions.
   - Add cross-platform helper scripts for repeatable web verification from repo root (`tools/scripts/verify-web.ps1`, `tools/scripts/verify-web.sh`).
   - Verify project health with automated gates (`npm run verify`, `dotnet build ReelRoulette.sln`, `dotnet test ReelRoulette.sln`) plus web dev bootstrap smoke (`npm run dev` startup).
-  - Mark M7a complete in `MILESTONES.md` and synchronize milestone-state docs (`README.md`, `CONTEXT.md`, `docs/api.md`, `docs/architecture.md`, `docs/dev-setup.md`, `docs/m7-domain-inventory.md`, `TODO.md`).
+  - Mark M7a complete in `MILESTONES.md` and synchronize milestone-state docs (`README.md`, `CONTEXT.md`, `docs/api.md`, `docs/architecture.md`, `docs/dev-setup.md`, `docs/m7-domain-inventory.md`).
 
 - **Implement M6b unified refresh pipeline and desktop grid/thumbnail API flow** (2026-03-01):
   - Add M6b contract surface to OpenAPI and server contracts for refresh start/status/settings plus thumbnail retrieval.
@@ -121,7 +121,7 @@
   - Add M6b regression coverage for refresh overlap rejection, stage sequencing, loudness scan semantics, thumbnail invalidation/regeneration/metadata backfill behavior, and refresh API client request/response shapes.
   - Keep direct web-to-core refresh-status SSE parity scoped to M7 web/desktop decoupling; M6b finalizes desktop projection + core status contracts.
   - Mark M6b milestone as complete and normalize docs to the final projection scope (desktop in M6b; direct web-to-core parity in M7).
-  - Update M6b documentation (`README`, `docs/api.md`, `docs/architecture.md`, `docs/dev-setup.md`, `docs/m6b-domain-inventory.md`, `TODO.md`, `MILESTONES.md`) to reflect final-state contracts and behavior.
+  - Update M6b documentation (`README`, `docs/api.md`, `docs/architecture.md`, `docs/dev-setup.md`, `docs/m6b-domain-inventory.md`, `MILESTONES.md`) to reflect final-state contracts and behavior.
 
 - **Implement M6a API-first tag editing parity (desktop + web)** (2026-03-01):
   - Add batch-ready tag editor contract surface (`/api/tag-editor/*`) to OpenAPI and server endpoint composition for item-tag deltas plus tag/category CRUD flows.
@@ -585,7 +585,7 @@
   - Update SaveSettings() to capture and save panel width at hide/show time, not just on exit
   - Apply same MinWidth clearing logic to player view mode for consistent behavior
 
-- **Restructure and expand TODO.md**:
+- **Restructure and expand task tracking**:
   - Add comprehensive priority system (P1/P2/P3) with clear impact definitions
   - Reorganize all TODO items by priority level for better planning
   - Standardize entry format: Title, Priority, Impact, Description, Implementation, Notes

@@ -216,7 +216,7 @@ Status legend: `✅ Complete` | `⏳ Planned`
 
 - **Status**: ✅ Complete
 - **Goal**: Deliver API-backed grid/thumbnails and refresh pipeline refactor as a separate milestone.
-- **Linked TODO**: `Grid View for Library Panel with Thumbnail Generation (Unified Refresh Pipeline)` in `TODO.md`.
+- **Linked milestone note**: `Grid View for Library Panel with Thumbnail Generation (Unified Refresh Pipeline)` is tracked directly in this document.
 - **Scope**:
   - Implement API-backed **Grid View with Thumbnail Generation** pipeline:
     - list/grid toggle persistence
@@ -695,6 +695,24 @@ Status legend: `✅ Complete` | `⏳ Planned`
   - Automated gates and manual playback matrix pass before M9 sign-off.
   - After server shutdown, no ffmpeg workers remain, and temporary playback/transcode directories are cleaned or explicitly TTL-managed.
 
+#### M9h - Resume Position and Session Continuity
+
+- **Status**: ⏳ Planned
+- **Goal**: Deliver server-authoritative remember-position behavior across desktop and WebUI playback paths.
+- **Scope**:
+  - Add server-owned resume-position contract and persistence for playback sessions.
+  - Record playback position updates with throttled writes and deterministic completion/clear rules.
+  - Provide resume-position query/clear APIs so desktop and WebUI can present consistent resume UX.
+  - Add policy settings for resume behavior (enable/disable, threshold windows, retention/auto-clear) through server-authoritative settings flows.
+  - Preserve looping semantics while tracking resume state:
+    - loop iterations do not inflate playback stats,
+    - looping does not create false resume checkpoints.
+- **Acceptance criteria**:
+  - Resume position persists across reconnects/restarts through server state (not client-local authoritative persistence).
+  - Desktop and WebUI resume behavior is consistent for API playback paths.
+  - Clear-resume operations are deterministic and observable.
+  - Resume policy settings are documented, persisted, and enforced by server.
+
 ### M10 - Android Client Bootstrap
 
 - **Status**: ⏳ Planned
@@ -709,3 +727,197 @@ Status legend: `✅ Complete` | `⏳ Planned`
   - Event sync works for favorite/blacklist/tag updates.
   - Mobile resume/reconnect auth continuity is verified (pairing/auth state survives app background/resume and SSE reconnect paths).
   - Regression tests validate Android client API/SSE compatibility expectations (schema, event envelope handling, and reconnect behavior) and pass in `dotnet test`.
+
+### M11 - File Metadata Sync and Extended Metadata
+
+- **Status**: ⏳ Planned
+- **Goal**: Add server-authoritative metadata sync so tags/metadata can be imported from and exported to media files, while preserving thin-client boundaries and cross-client parity.
+- **Scope**:
+  - Implement metadata sync in core/server domain services (not client-local mutation paths):
+    - import tags from supported file formats during import/refresh,
+    - export tags/metadata back to file metadata on demand (and optional auto-export policy),
+    - keep merge/conflict policy explicit and configurable.
+  - Introduce metadata sync settings through server-authoritative settings APIs:
+    - auto-import enable/disable,
+    - auto-export enable/disable,
+    - merge strategy policy,
+    - write-warning/confirmation behavior.
+  - Add extended metadata support in core model and APIs:
+    - genre, year, artist/creator, title, album/series, comment, rating.
+  - Expose metadata in client projections and filtering surfaces:
+    - library presentation fields (sortable where applicable),
+    - filter/query support for selected metadata dimensions,
+    - batch metadata edit support through API commands.
+  - Add operational safety:
+    - unsupported format handling,
+    - read-only/locked/network-path failure handling,
+    - clear result summaries and structured logging.
+- **Acceptance criteria**:
+  - Metadata import/export executes through core/server APIs/services only (no client-authoritative metadata file mutation path).
+  - Supported format matrix and field mappings are documented and covered by verification.
+  - Merge policy behavior is deterministic and validated.
+  - Extended metadata persists through server-owned state and is visible/usable in desktop and WebUI without behavior divergence.
+  - Batch metadata operations work through API contracts and respect conflict/error policies.
+  - Error reporting is actionable (success/failure counts + reasons), and logging follows centralized server logging ownership.
+
+### M12 - Customizable Keyboard Shortcuts (Desktop)
+
+- **Status**: ⏳ Planned
+- **Goal**: Enable user-configurable desktop keyboard shortcuts while preserving reliable input handling and existing default behavior.
+- **Scope**:
+  - Add keyboard-shortcuts configuration UX in desktop client:
+    - open shortcuts editor dialog from menu,
+    - list actions with current bindings,
+    - capture/rebind keys including modifier combinations (`Ctrl`, `Shift`, `Alt`),
+    - detect conflicts and require explicit resolution,
+    - reset selected/all bindings to defaults.
+  - Add read-only shortcut reference entry in Help menu.
+  - Persist shortcut bindings in desktop client preferences (`desktop-settings.json`) only.
+  - Refactor desktop key-dispatch path to resolve actions from configurable binding map instead of hardcoded key checks.
+  - Define reserved/system key policy and menu-accelerator conflict policy.
+- **Acceptance criteria**:
+  - Users can rebind supported actions and changes persist across restarts.
+  - Conflict detection prevents ambiguous active bindings.
+  - Default shortcut set is available and can be restored deterministically.
+  - System-reserved shortcuts are protected from unsafe overrides.
+  - Existing playback/control workflows remain stable with both default and customized bindings.
+
+### M13 - Playback Analytics and Visualization
+
+- **Status**: ⏳ Planned
+- **Goal**: Provide server-authoritative playback analytics with rich client-side visualization for desktop/WebUI parity.
+- **Scope**:
+  - Add server-side analytics query surfaces over playback history/library stats:
+    - time-series aggregates (day/week/month),
+    - top-played items,
+    - favorites ratio and completion-oriented aggregates,
+    - distribution metrics (duration/source/time-of-day),
+    - tag usage/play weighting aggregates.
+  - Support analytics query parameters:
+    - date ranges (`7d`, `30d`, `90d`, `1y`, `all`),
+    - optional grouping/bucketing controls.
+  - Add client-side analytics UI surfaces (desktop first, WebUI parity path):
+    - chart views and summary metrics panel,
+    - date-range selector,
+    - export support (chart image + CSV/JSON data exports).
+  - Keep role boundaries explicit:
+    - server computes/owns analytics data contracts,
+    - clients render/visualize only (no duplicated analytics business logic).
+- **Acceptance criteria**:
+  - Analytics data is produced via server APIs only and is consistent across clients for the same query window.
+  - Desktop analytics view renders required chart/summary categories from server query results.
+  - Export outputs (image/data) are generated deterministically from current visualization/query state.
+  - Date-range filters produce correct aggregate differences and are validated by tests.
+  - Client visualizations do not introduce local authoritative analytics calculations that diverge from server semantics.
+
+### M14 - Desktop Confirmation Dialog Standardization
+
+- **Status**: ⏳ Planned
+- **Goal**: Reduce desktop UI duplication and improve consistency by standardizing confirmation dialogs behind a reusable component.
+- **Scope**:
+  - Introduce a reusable `ConfirmDialog` component for desktop UI with configurable:
+    - title,
+    - message/body content,
+    - button sets (`OK/Cancel`, `Yes/No`, `Remove/Cancel`, etc.),
+    - default/cancel action behavior.
+  - Refactor existing desktop confirmation flows to use the shared component incrementally.
+  - Preserve current UX semantics (wording, destructive-action emphasis, default button intent) unless explicitly changed.
+  - Keep compatibility-safe rollout:
+    - allow legacy dialog implementations to coexist during migration,
+    - remove obsolete dialog variants only after parity validation.
+- **Acceptance criteria**:
+  - New confirmation dialog component supports required button/action patterns used by current desktop flows.
+  - Migrated dialog flows preserve existing behavior and outcomes.
+  - Duplicate confirmation-dialog code paths are reduced with no functional regressions.
+  - Desktop UI tests/manual checks confirm parity for destructive and non-destructive confirmation actions.
+
+### M15 - Advanced Runtime and Cache Controls
+
+- **Status**: ⏳ Planned
+- **Goal**: Provide controlled, server-authoritative cache/performance tuning for varied hardware and storage environments, with safe defaults and clear operator observability.
+- **Scope**:
+  - Define server-owned advanced settings domains:
+    - cache policies (thumbnail/metadata/preview where applicable),
+    - concurrency limits (ffmpeg/ffprobe/transcode/thumbnail workers),
+    - network-storage tuning (timeouts/retries/check cadence),
+    - runtime throttling policies (background/battery/priority where supported).
+  - Expose settings via server APIs and apply semantics consistent with runtime policy model:
+    - immediate-apply vs restart-required classification,
+    - validation/normalization and deterministic apply-result reporting.
+  - Add management UX surfaces (operator first; desktop/web parity where appropriate):
+    - advanced settings section,
+    - current cache stats and last cleanup time,
+    - explicit cleanup actions (targeted + clear-all with confirmation),
+    - reset-to-defaults action.
+  - Add presets/profile model:
+    - `LowEnd`, `Balanced` (default), `HighPerformance`, `Custom`.
+  - Keep thin-client boundaries:
+    - clients do not directly mutate authoritative runtime/cache state outside server APIs.
+- **Acceptance criteria**:
+  - Advanced settings are persisted and enforced by server-owned configuration/state flows.
+  - Safe defaults are preserved; invalid values are rejected or normalized with explicit feedback.
+  - Cache cleanup operations are observable and report deterministic outcomes (freed space/counts/failures).
+  - Concurrency/throttling settings measurably affect runtime behavior without regressions.
+  - Desktop/WebUI/operator surfaces show consistent effective settings and apply results.
+  - No client-local authoritative settings drift is introduced.
+
+  ### M16 - Face Detection and Face-Aware Media Organization
+
+- **Status**: ⏳ Planned
+- **Goal**: Add server-authoritative face detection capabilities for media organization, starting with photos and then extending to video.
+- **Scope**:
+  - Introduce a face-analysis domain in core/server:
+    - detection job orchestration,
+    - result persistence/caching,
+    - API query/projection surfaces for clients.
+  - Keep clients as orchestration/render layers:
+    - no client-local detection authority,
+    - clients display overlays/results and invoke server jobs/queries.
+  - Roll out incrementally through `M16a` (photo) then `M16b` (video).
+- **Acceptance criteria**:
+  - Face detection outputs are produced and owned by server-side workflows.
+  - Desktop/WebUI can consume face metadata through APIs without local business-logic duplication.
+  - Performance guardrails and opt-in controls are in place before broad enablement.
+
+#### M16a - Photo Face Detection Baseline
+
+- **Status**: ⏳ Planned
+- **Goal**: Deliver reliable face detection for photos with practical UX and performance controls.
+- **Scope**:
+  - Select and integrate a .NET-compatible detection stack (OpenCV/ML.NET/other) for photo inputs.
+  - Add detection execution modes:
+    - import-time and/or on-demand scan jobs.
+  - Persist detection outputs per item:
+    - bounding boxes, confidence, metadata versioning.
+  - Add client UX surfaces:
+    - optional bounding box overlays in preview,
+    - face-aware filter/search entry points where applicable.
+  - Add operational controls:
+    - enable/disable setting (default off),
+    - async/background execution,
+    - cached result reuse and invalidation strategy.
+- **Acceptance criteria**:
+  - Photo detection runs asynchronously and does not block core playback/import UX.
+  - Detection results are queryable and consistently projected to clients.
+  - Overlay/filter behavior works for detected photo faces with deterministic result semantics.
+  - Performance impact is bounded and documented.
+
+#### M16b - Video Face Detection Expansion
+
+- **Status**: ⏳ Planned
+- **Goal**: Extend face detection to video with sampling/throughput strategies suitable for long-form media.
+- **Scope**:
+  - Define video frame-sampling strategy (interval/keyframe/scene-aware options as needed).
+  - Run detection as background jobs with queueing/concurrency controls.
+  - Persist timeline-aware face detection outputs for video items.
+  - Add client UX surfaces for video results:
+    - timeline/segment-aware overlays or markers,
+    - filter/search hooks aligned with photo semantics where practical.
+  - Optional extension path:
+    - identity/recognition layer only after detection baseline stability.
+- **Acceptance criteria**:
+  - Video detection pipeline runs within configured resource limits and does not destabilize playback/transcode workloads.
+  - Results are available through server APIs and align with photo detection contract shape where possible.
+  - Long-duration media processing is resumable/retry-safe and operationally observable.
+  - Recognition/identity features remain explicitly out of scope unless separately approved.
+  

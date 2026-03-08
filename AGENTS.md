@@ -8,7 +8,7 @@ This file contains guidelines and instructions for AI agents working on this cod
 - Reuse existing plan TODO items and do not create duplicates when TODOs already exist
 - Update TODO status in execution order (`in_progress` when starting, `completed` when done)
 - Before sign-off, explicitly verify milestone acceptance criteria and call out any unmet items
-- For milestone planning/verification requests, read `AGENTS.md` and `CONTEXT.md` first, then `MILESTONES.md` and `TODO.md`
+- For milestone planning/verification requests, read `AGENTS.md` and `CONTEXT.md` first, then `MILESTONES.md`
 - Keep scope locked to the requested milestone/TODO slice; leave unrelated work untouched unless the user expands scope
 
 ## Architecture and Code Boundaries
@@ -30,8 +30,8 @@ This file contains guidelines and instructions for AI agents working on this cod
 - Update `CHANGELOG.md` for significant changes and reflect only final delta from the previous commit (no intermediate attempts)
 - If no commit has occurred yet, update existing `CHANGELOG.md` and `COMMIT_MESSAGE.txt` entries in place for the current scope instead of creating replacement historical entries
 - After user-confirmed commit, start a new `COMMIT_MESSAGE.txt` and a new changelog entry for subsequent changes
-- Apply the same “final state only” rule to `TODO.md` updates/moves to Completed Features
-- Keep `MILESTONES.md` and `TODO.md` links/scope language aligned when milestone scope changes
+- Apply the same “final state only” rule to milestone tracking updates in `MILESTONES.md`
+- Keep milestone links/scope language aligned in `MILESTONES.md` when scope changes
 - Keep affected docs in sync with final milestone state (`README.md`, `docs/architecture.md`, `docs/api.md`, `docs/dev-setup.md`) and automatically add/update `docs/mX-domain-inventory.md` for milestone work
 
 ## Commands and Communication
