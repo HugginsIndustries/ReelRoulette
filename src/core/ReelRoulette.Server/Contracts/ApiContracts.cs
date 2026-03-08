@@ -38,6 +38,7 @@ public sealed class RandomRequest
     public string PresetId { get; set; } = string.Empty;
     public JsonElement? FilterState { get; set; }
     public string? ClientId { get; set; }
+    public string? SessionId { get; set; }
     public bool IncludeVideos { get; set; } = true;
     public bool IncludePhotos { get; set; } = true;
     public string? RandomizationMode { get; set; }
@@ -81,6 +82,7 @@ public sealed class BlacklistRequest
 public sealed class RecordPlaybackRequest
 {
     public string? ClientId { get; set; }
+    public string? SessionId { get; set; }
     public string Path { get; set; } = string.Empty;
 }
 
@@ -96,6 +98,8 @@ public sealed class ClearPlaybackStatsResponse
 
 public sealed class LibraryStatesRequest
 {
+    public string? ClientId { get; set; }
+    public string? SessionId { get; set; }
     public List<string>? Paths { get; set; }
 }
 
@@ -309,6 +313,7 @@ public sealed class PlaybackRecordedPayload
 {
     public string Path { get; set; } = string.Empty;
     public string? ClientId { get; set; }
+    public string? SessionId { get; set; }
 }
 
 public sealed class ItemTagsChangedPayload

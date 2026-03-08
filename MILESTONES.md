@@ -60,26 +60,6 @@ These run in parallel across milestones:
 
 ## Milestone Board
 
-### M8e - WebUI and Mobile Thin-Client Contract Standardization
-
-- **Status**: ⏳ Planned
-- **Goal**: Make WebUI and future mobile clients consume the same stable API contracts from `ReelRoulette Server`.
-- **Scope**:
-  - Standardize client-facing API contracts/capabilities for desktop/web/mobile parity.
-  - Ensure WebUI uses the same API semantics as desktop for migrated behaviors.
-  - Scope boundary: playback-session pipeline contracts/capabilities are owned by `M9a` and are out of scope for `M8e`.
-  - Define session/reconnect rules on the shared contract surface:
-    - persistent per-device `clientId`,
-    - optional `sessionId` for future shared-session features,
-    - SSE reconnect behavior with missed-revision recovery (replay when available, otherwise authoritative state refetch).
-  - Define mobile-ready auth expectations (pairing/session continuity, reconnect continuity) using the same server contracts.
-  - Keep client responsibilities strictly orchestration/render (no duplicated domain logic).
-- **Acceptance criteria**:
-  - WebUI and desktop are behaviorally aligned via shared server APIs.
-  - Session/reconnect rules (`clientId`, optional `sessionId`, SSE missed-revision recovery) are documented and validated in client/server behavior.
-  - Mobile bootstrap path is contract-ready with no new domain-logic duplication in clients and with documented auth/reconnect expectations.
-  - Version/capability compatibility expectations are documented for client evolution.
-
 ### M8f - Hardening, Packaging, and Release Readiness
 
 - **Status**: ⏳ Planned
@@ -444,6 +424,37 @@ These run in parallel across milestones:
 ## Completed Milestones
 
 Latest completions first:
+
+### M8e - WebUI and Mobile Thin-Client Contract Standardization
+
+- **Status**: ✅ Complete
+- **Goal**: Make WebUI and future mobile clients consume the same stable API contracts from `ReelRoulette Server`.
+- **Scope**:
+  - Standardize client-facing API contracts/capabilities for desktop/web/mobile parity.
+  - Ensure WebUI uses the same API semantics as desktop for migrated behaviors.
+  - Scope boundary: playback-session pipeline contracts/capabilities are owned by `M9a` and are out of scope for `M8e`.
+  - Define session/reconnect rules on the shared contract surface:
+    - persistent per-device `clientId`,
+    - optional `sessionId` for future shared-session features,
+    - SSE reconnect behavior with missed-revision recovery (replay when available, otherwise authoritative state refetch).
+  - Define mobile-ready auth expectations (pairing/session continuity, reconnect continuity) using the same server contracts.
+  - Keep client responsibilities strictly orchestration/render (no duplicated domain logic).
+- **Acceptance criteria**:
+  - WebUI and desktop are behaviorally aligned via shared server APIs.
+  - Session/reconnect rules (`clientId`, optional `sessionId`, SSE missed-revision recovery) are documented and validated in client/server behavior.
+  - Mobile bootstrap path is contract-ready with no new domain-logic duplication in clients and with documented auth/reconnect expectations.
+  - Version/capability compatibility expectations are documented for client evolution.
+- **Verification evidence**:
+  - OpenAPI contract now documents optional `sessionId` for request/event surfaces and explicit SSE identity/reconnect expectations.
+  - Server DTO/contracts now accept and propagate optional `sessionId`, and `/api/version` capabilities now include `identity.sessionId`.
+  - Desktop now persists stable `CoreClientId`, generates per-runtime `CoreSessionId`, and propagates both through random/playback/SSE calls with reconnect `lastEventId`.
+  - WebUI (legacy + modular seams) now propagates stable `clientId` plus runtime `sessionId` through random/requery/SSE paths and enforces capability checks including `identity.sessionId`.
+  - Automated verification passes:
+    - `dotnet build ReelRoulette.sln`
+    - `dotnet test ReelRoulette.sln`
+    - `npm run verify` (`src/clients/web/ReelRoulette.WebUI`)
+    - `tools/scripts/verify-web-deploy.ps1`
+  - Manual verification matrix prepared for desktop+web parity checks (session continuity, reconnect replay/resync, capability-mismatch UX) and ready for operator sign-off.
 
 ### M8d - Desktop Playback Policy Compromise (Local-First with API Fallback)
 

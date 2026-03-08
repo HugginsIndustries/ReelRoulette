@@ -32,6 +32,7 @@ const CONFIG: RuntimeConfig = {
 describe("sseClient", () => {
   it("handles resyncRequired by requerying and syncing refresh status", async () => {
     const fakeSource = new FakeEventSource();
+    let connectedUrl = "";
     const setConnectionStatus = vi.fn();
     const setRefreshStatus = vi.fn();
     const requery = vi.fn().mockResolvedValue(undefined);
@@ -48,7 +49,10 @@ describe("sseClient", () => {
       { setConnectionStatus, setRefreshStatus },
       fetch,
       {
-        createEventSource: () => fakeSource,
+        createEventSource: (url) => {
+          connectedUrl = url;
+          return fakeSource;
+        },
         requeryAuthoritativeState: requery,
         getRefreshStatus: getRefresh
       }
@@ -68,6 +72,8 @@ describe("sseClient", () => {
     expect(getRefresh).toHaveBeenCalledTimes(1);
     expect(setConnectionStatus).toHaveBeenCalledWith("SSE resync completed.");
     expect(setRefreshStatus).toHaveBeenCalled();
+    expect(connectedUrl).toContain("clientId=");
+    expect(connectedUrl).toContain("sessionId=");
     client.stop();
   });
 });

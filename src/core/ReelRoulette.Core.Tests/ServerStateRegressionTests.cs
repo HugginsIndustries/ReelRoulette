@@ -32,7 +32,8 @@ public sealed class ServerStateRegressionTests
         service.RecordPlayback(new RecordPlaybackRequest
         {
             Path = "movie.mp4",
-            ClientId = "desktop-client"
+            ClientId = "desktop-client",
+            SessionId = "session-1"
         });
 
         var replay = service.GetReplayAfter(0);
@@ -42,6 +43,7 @@ public sealed class ServerStateRegressionTests
         var payload = Assert.IsType<PlaybackRecordedPayload>(envelope.Payload);
         Assert.Equal("movie.mp4", payload.Path);
         Assert.Equal("desktop-client", payload.ClientId);
+        Assert.Equal("session-1", payload.SessionId);
     }
 
     [Fact]

@@ -8,12 +8,73 @@
 
 ## M8d - Desktop Playback Policy Compromise
 
+## M8e - WebUI and Mobile Thin-Client Contract Standardization
+
+## API Contract and Server Transport Surfaces (M8e)
+
+- Contract source-of-truth updates:
+  - `shared/api/openapi.yaml`
+    - optional `sessionId` surfaces added to random/playback/library-state request schemas and playback event payload schema.
+    - `/api/events` documentation now includes `clientId`/`sessionId` continuity parameters plus reconnect semantics.
+- Server DTO/composition updates:
+  - `src/core/ReelRoulette.Server/Contracts/ApiContracts.cs`
+    - add `SessionId` on `RandomRequest`, `RecordPlaybackRequest`, `LibraryStatesRequest`, and `PlaybackRecordedPayload`.
+  - `src/core/ReelRoulette.Server/Services/ServerStateService.cs`
+    - propagate `sessionId` into `playbackRecorded` event payloads.
+    - add capability marker `identity.sessionId`.
+  - `src/core/ReelRoulette.Server/Hosting/ServerHostComposition.cs`
+    - normalize optional identity fields (`clientId`/`sessionId`) on random/playback/library-state request paths.
+    - accept optional `clientId`/`sessionId` query parameters on SSE endpoint contract path.
+
+## Desktop Thin-Client Orchestration Updates (M8e)
+
+- `source/MainWindow.axaml.cs`
+  - persist stable `CoreClientId` in settings-backed state.
+  - generate per-runtime `CoreSessionId` and propagate it on random/playback/SSE operations.
+  - track last SSE revision and reconnect with replay hints (`lastEventId`) for deterministic recovery.
+  - suppress self-originated playback projections by matching session-aware playback payload identity.
+- `source/CoreServerApiClient.cs`
+  - add optional `sessionId` propagation for `record-playback`.
+  - add `sessionId` + optional `lastEventId` support for SSE connect URL/header construction.
+  - update DTOs (`CoreRandomRequest`, `CorePlaybackRecordedPayload`) to include optional `sessionId`.
+
+## WebUI Runtime Alignment (M8e)
+
+- `src/clients/web/ReelRoulette.WebUI/src/legacyApp.js`
+  - persist stable `clientId` and per-tab/per-session `sessionId`.
+  - propagate both values through random request payloads, SSE URL query, and authoritative requery payloads.
+  - require capability `identity.sessionId` in startup compatibility checks.
+- `src/clients/web/ReelRoulette.WebUI/src/api/coreApi.ts`
+  - centralize client/session identity helpers used by modular web seams.
+  - include `clientId` + `sessionId` in authoritative requery payload.
+- `src/clients/web/ReelRoulette.WebUI/src/events/eventEnvelope.ts`
+  - extend SSE URL builder to include optional `clientId` and `sessionId` query hints.
+- `src/clients/web/ReelRoulette.WebUI/src/events/sseClient.ts`
+  - use shared identity helpers and pass session-aware identity on SSE reconnect URLs.
+- `src/clients/web/ReelRoulette.WebUI/src/auth/authBootstrap.ts`
+  - include `identity.sessionId` in required capability gate.
+- `src/clients/web/ReelRoulette.WebUI/src/types/openapi.generated.ts`
+  - regenerated from updated OpenAPI contract.
+
+## Verification and Regression Surfaces (M8e)
+
+- Core tests:
+  - `src/core/ReelRoulette.Core.Tests/ServerContractTests.cs`
+  - `src/core/ReelRoulette.Core.Tests/ServerStateRegressionTests.cs`
+  - `src/core/ReelRoulette.Core.Tests/CoreServerApiClientTests.cs`
+- Web tests:
+  - `src/clients/web/ReelRoulette.WebUI/src/test/authBootstrap.test.ts`
+  - `src/clients/web/ReelRoulette.WebUI/src/test/coreApi.test.ts`
+  - `src/clients/web/ReelRoulette.WebUI/src/test/eventsHelpers.test.ts`
+  - `src/clients/web/ReelRoulette.WebUI/src/test/sseClient.test.ts`
+
 ## Pure Domain Logic (unchanged ownership boundaries)
 
 - Domain and persistence logic remain in core/server services:
   - `src/core/ReelRoulette.Core/*`
   - `src/core/ReelRoulette.Server/Services/*`
 - M8a keeps server layer thin while extending metadata exposure (`/api/capabilities`) through existing server composition.
+- M8e keeps server thin-client boundaries intact by limiting identity/session updates to transport-contract fields and projection metadata only.
 
 ## IO / Service Adapters (runtime-host consolidation)
 

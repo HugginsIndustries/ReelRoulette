@@ -14,6 +14,7 @@ public sealed class ServerStateService
     private static readonly string[] Capabilities =
     [
         "auth.sessionCookie",
+        "identity.sessionId",
         "events.refreshStatusChanged",
         "events.resyncRequired",
         "api.random.filterState",
@@ -115,7 +116,8 @@ public sealed class ServerStateService
         var payload = new PlaybackRecordedPayload
         {
             Path = request.Path,
-            ClientId = request.ClientId
+            ClientId = request.ClientId,
+            SessionId = request.SessionId
         };
         Publish("playbackRecorded", payload);
     }

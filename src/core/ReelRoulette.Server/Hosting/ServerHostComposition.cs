@@ -201,6 +201,8 @@ public static class ServerHostComposition
 
         app.MapPost("/api/random", (RandomRequest request, ServerStateService state, LibraryPlaybackService playback) =>
         {
+            request.ClientId = NormalizeOptionalIdentity(request.ClientId);
+            request.SessionId = NormalizeOptionalIdentity(request.SessionId);
             if (!playback.TrySelectRandom(
                     request,
                     state.GetPresetCatalogSnapshot(),
@@ -263,6 +265,8 @@ public static class ServerHostComposition
                 return Results.BadRequest(new { error = "path is required" });
             }
 
+            request.ClientId = NormalizeOptionalIdentity(request.ClientId);
+            request.SessionId = NormalizeOptionalIdentity(request.SessionId);
             state.RecordPlayback(request);
             return Results.Ok();
         });
@@ -274,6 +278,8 @@ public static class ServerHostComposition
 
         app.MapPost("/api/library-states", (LibraryStatesRequest request, ServerStateService state) =>
         {
+            request.ClientId = NormalizeOptionalIdentity(request.ClientId);
+            request.SessionId = NormalizeOptionalIdentity(request.SessionId);
             var states = state.GetLibraryStates(request);
             return Results.Ok(states);
         });
@@ -465,6 +471,8 @@ public static class ServerHostComposition
             var serializerOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
             var lastEventHeader = context.Request.Headers["Last-Event-ID"].ToString();
             var lastEventQuery = context.Request.Query["lastEventId"].ToString();
+            _ = NormalizeOptionalIdentity(context.Request.Query["clientId"].ToString());
+            _ = NormalizeOptionalIdentity(context.Request.Query["sessionId"].ToString());
             var hasLastEvent = long.TryParse(lastEventHeader, out var lastEventRevision) ||
                                long.TryParse(lastEventQuery, out lastEventRevision);
             long lastDeliveredRevision = 0;
@@ -606,5 +614,15 @@ public static class ServerHostComposition
         }
 
         return IPAddress.IsLoopback(remote) || remote.Equals(context.Connection.LocalIpAddress);
+    }
+
+    private static string? NormalizeOptionalIdentity(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        return value.Trim();
     }
 }

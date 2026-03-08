@@ -140,7 +140,9 @@ namespace ReelRoulette
         private string? _webRemoteSharedToken;
         private string _coreServerBaseUrl = "http://localhost:51234";
         private string _independentWebUiBaseUrl = "http://localhost:51302";
-        private readonly string _coreClientId = Guid.NewGuid().ToString("N");
+        private string _coreClientId = Guid.NewGuid().ToString("N");
+        private readonly string _coreSessionId = Guid.NewGuid().ToString("N");
+        private long _coreLastEventRevision;
         private readonly CoreServerApiClient _coreServerApiClient;
         private CancellationTokenSource? _coreEventsCancellationSource;
         private Task? _coreEventsTask;
@@ -1585,7 +1587,7 @@ namespace ReelRoulette
             {
                 try
                 {
-                    var success = await _coreServerApiClient.RecordPlaybackAsync(_coreServerBaseUrl, path, _coreClientId);
+                    var success = await _coreServerApiClient.RecordPlaybackAsync(_coreServerBaseUrl, path, _coreClientId, _coreSessionId);
                     if (success)
                     {
                         await Dispatcher.UIThread.InvokeAsync(() => RecordPlaybackProjection(path, persistLibrary: false));
@@ -6605,6 +6607,7 @@ namespace ReelRoulette
                         PresetId = activePresetName ?? string.Empty,
                         FilterState = _currentFilterState == null ? null : JsonSerializer.SerializeToElement(_currentFilterState),
                         ClientId = _coreClientId,
+                        SessionId = _coreSessionId,
                         IncludeVideos = true,
                         IncludePhotos = true,
                         RandomizationMode = _randomizationMode.ToString()
@@ -7334,12 +7337,14 @@ namespace ReelRoulette
             {
                 while (!token.IsCancellationRequested)
                 {
-                    Log("CoreEvents: Connecting SSE stream...");
+                    Log($"CoreEvents: Connecting SSE stream (lastEventId={_coreLastEventRevision})...");
                     try
                     {
                         await sseApiClient.ListenToEventsAsync(
                             _coreServerBaseUrl,
                             _coreClientId,
+                            _coreSessionId,
+                            _coreLastEventRevision > 0 ? _coreLastEventRevision : null,
                             HandleCoreServerEnvelopeAsync,
                             Log,
                             token);
@@ -7390,6 +7395,7 @@ namespace ReelRoulette
             {
                 return;
             }
+            _coreLastEventRevision = Math.Max(_coreLastEventRevision, envelope.Revision);
             var eventPayloadOptions = new JsonSerializerOptions
             {
                 PropertyNameCaseInsensitive = true
@@ -7435,7 +7441,10 @@ namespace ReelRoulette
                         return;
                     }
 
-                    if (string.Equals(playback.ClientId, _coreClientId, StringComparison.Ordinal))
+                    var isSameClient = string.Equals(playback.ClientId, _coreClientId, StringComparison.Ordinal);
+                    var isSameSession = !string.IsNullOrWhiteSpace(playback.SessionId) &&
+                        string.Equals(playback.SessionId, _coreSessionId, StringComparison.Ordinal);
+                    if (isSameSession || (isSameClient && string.IsNullOrWhiteSpace(playback.SessionId)))
                     {
                         return;
                     }
@@ -8074,6 +8083,7 @@ namespace ReelRoulette
             
             public bool AutoTagScanFullLibrary { get; set; } = true;
             public string CoreServerBaseUrl { get; set; } = "http://localhost:51234";
+            public string? CoreClientId { get; set; }
         }
 
         private static SettingsStorageService<AppSettings> CreateSettingsStorageService()
@@ -8236,6 +8246,9 @@ namespace ReelRoulette
             _baselineAutoMode = settings.BaselineAutoMode;
             _baselineOverrideLUFS = settings.BaselineOverrideLUFS;
             _audioFilterMode = settings.AudioFilterMode;
+            _coreClientId = string.IsNullOrWhiteSpace(settings.CoreClientId)
+                ? Guid.NewGuid().ToString("N")
+                : settings.CoreClientId.Trim();
             
             // Apply playback preferences (now persisted)
             _isLoopEnabled = settings.LoopEnabled;
@@ -8355,7 +8368,7 @@ namespace ReelRoulette
                 }
             }
             
-            Log($"LoadSettings: Restored playback preferences - Loop={_isLoopEnabled}, AutoPlay={_autoPlayNext}, ForceApiPlayback={_forceApiPlayback}, Muted={_isMuted}, RandomizationMode={_randomizationMode}");
+            Log($"LoadSettings: Restored playback preferences - Loop={_isLoopEnabled}, AutoPlay={_autoPlayNext}, ForceApiPlayback={_forceApiPlayback}, Muted={_isMuted}, RandomizationMode={_randomizationMode}, CoreClientId={_coreClientId}, CoreSessionId={_coreSessionId}");
             
             // Apply filter state
             var previousFilterState = _currentFilterState;
@@ -8521,6 +8534,7 @@ namespace ReelRoulette
                 settings.LibraryGridViewEnabled = _libraryGridViewEnabled;
 
                 settings.CoreServerBaseUrl = _coreServerBaseUrl;
+                settings.CoreClientId = _coreClientId;
 
                 // Filter state (always save an object, never null)
                 _filterSessionStateService.Set(

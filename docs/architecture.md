@@ -352,6 +352,24 @@ flowchart TD
   - desktop local persistence remains limited to `desktop-settings.json`,
   - no reintroduction of local authoritative core-state file ownership.
 
+## M8e WebUI + Mobile Thin-Client Contract Standardization
+
+- Desktop and WebUI now align on shared identity/reconnect contract semantics for migrated flows:
+  - stable per-install `clientId`,
+  - optional per-runtime `sessionId`,
+  - revision-aware SSE reconnect (`Last-Event-ID` + `lastEventId` fallback) with authoritative requery when `resyncRequired` is emitted.
+- Server contract surface remains thin-transport only:
+  - server DTOs accept/propagate optional `sessionId`,
+  - no new domain logic moved into server composition handlers.
+- Desktop runtime alignment:
+  - `CoreClientId` is now persisted in desktop settings for continuity across restarts,
+  - per-runtime `CoreSessionId` is propagated through random/playback/SSE requests.
+- WebUI runtime alignment (legacy + modular seams):
+  - random/requery/SSE paths now propagate `clientId` + `sessionId`,
+  - startup compatibility checks include required capability `identity.sessionId`.
+- Mobile bootstrap readiness:
+  - contract surfaces now explicitly encode identity/session/reconnect expectations without introducing client-side domain-logic duplication.
+
 ## M9 Plex-Style Playback Pipeline (Incremental)
 
 - M9 introduces incremental server-authoritative playback-session architecture (`M9a`-`M9g`) without violating M8d compromise baseline.

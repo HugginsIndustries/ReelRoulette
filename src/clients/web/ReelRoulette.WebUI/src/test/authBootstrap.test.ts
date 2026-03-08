@@ -25,6 +25,7 @@ describe("bootstrapAuthSession", () => {
     supportedApiVersions: ["1", "0"],
     capabilities: [
       "auth.sessionCookie",
+      "identity.sessionId",
       "events.refreshStatusChanged",
       "events.resyncRequired",
       "api.random.filterState",

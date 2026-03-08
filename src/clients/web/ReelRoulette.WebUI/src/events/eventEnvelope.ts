@@ -9,10 +9,20 @@ export function parseEventEnvelope<TPayload>(raw: string): ServerEventEnvelope<T
   return parsed;
 }
 
-export function buildEventsUrl(sseUrl: string, lastRevision: number): string {
+export function buildEventsUrl(
+  sseUrl: string,
+  lastRevision: number,
+  options?: { clientId?: string; sessionId?: string }
+): string {
   const url = new URL(sseUrl);
   if (lastRevision > 0) {
     url.searchParams.set("lastEventId", String(lastRevision));
+  }
+  if (options?.clientId) {
+    url.searchParams.set("clientId", options.clientId);
+  }
+  if (options?.sessionId) {
+    url.searchParams.set("sessionId", options.sessionId);
   }
 
   return url.toString();

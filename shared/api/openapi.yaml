@@ -1016,6 +1016,10 @@ paths:
         - Server replays buffered events newer than that revision when available.
         - If the revision gap exceeds replay buffer retention, server emits a
           `resyncRequired` event and client must call `/api/library-states`.
+        Identity/session continuity:
+        - Clients should provide a stable `clientId` per installation/device.
+        - Clients may provide an optional `sessionId` per runtime session to
+          correlate reconnect attempts and playback-originated events.
       parameters:
         - name: Last-Event-ID
           in: header
@@ -1029,6 +1033,20 @@ paths:
           schema:
             type: string
           description: Query-string reconnect revision fallback for browser EventSource clients.
+        - name: clientId
+          in: query
+          required: false
+          schema:
+            type: string
+            nullable: true
+          description: Stable client identity for cross-request correlation.
+        - name: sessionId
+          in: query
+          required: false
+          schema:
+            type: string
+            nullable: true
+          description: Optional runtime session identity for reconnect/playback correlation.
       responses:
         "200":
           description: Event stream (SSE)
@@ -1329,6 +1347,9 @@ components:
         clientId:
           type: string
           nullable: true
+        sessionId:
+          type: string
+          nullable: true
         includeVideos:
           type: boolean
           default: true
@@ -1421,6 +1442,9 @@ components:
         clientId:
           type: string
           nullable: true
+        sessionId:
+          type: string
+          nullable: true
         path:
           type: string
 
@@ -1495,6 +1519,9 @@ components:
         clientId:
           type: string
           nullable: true
+        sessionId:
+          type: string
+          nullable: true
 
     ResyncRequiredPayload:
       type: object
@@ -1516,6 +1543,12 @@ components:
     LibraryStatesRequest:
       type: object
       properties:
+        clientId:
+          type: string
+          nullable: true
+        sessionId:
+          type: string
+          nullable: true
         paths:
           type: array
           items:

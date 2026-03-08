@@ -126,9 +126,9 @@ public sealed class CoreServerApiClient
         return response.IsSuccessStatusCode;
     }
 
-    public async Task<bool> RecordPlaybackAsync(string baseUrl, string path, string clientId, CancellationToken cancellationToken = default)
+    public async Task<bool> RecordPlaybackAsync(string baseUrl, string path, string clientId, string? sessionId = null, CancellationToken cancellationToken = default)
     {
-        var request = new { path, clientId };
+        var request = new { path, clientId, sessionId };
         using var content = SerializeJson(request);
         using var response = await _httpClient.PostAsync($"{baseUrl.TrimEnd('/')}/api/record-playback", content, cancellationToken).ConfigureAwait(false);
         return response.IsSuccessStatusCode;
@@ -380,13 +380,30 @@ public sealed class CoreServerApiClient
     public async Task ListenToEventsAsync(
         string baseUrl,
         string clientId,
+        string? sessionId,
+        long? lastEventId,
         Func<CoreServerEventEnvelope, Task> onEnvelope,
         Action<string>? log,
         CancellationToken cancellationToken)
     {
-        var endpoint = $"{baseUrl.TrimEnd('/')}/api/events?clientId={Uri.EscapeDataString(clientId)}";
+        var endpointBuilder = new StringBuilder($"{baseUrl.TrimEnd('/')}/api/events?clientId={Uri.EscapeDataString(clientId)}");
+        if (!string.IsNullOrWhiteSpace(sessionId))
+        {
+            endpointBuilder.Append("&sessionId=").Append(Uri.EscapeDataString(sessionId));
+        }
+
+        if (lastEventId.HasValue && lastEventId.Value > 0)
+        {
+            endpointBuilder.Append("&lastEventId=").Append(lastEventId.Value);
+        }
+
+        var endpoint = endpointBuilder.ToString();
         using var request = new HttpRequestMessage(HttpMethod.Get, endpoint);
         request.Headers.Accept.ParseAdd("text/event-stream");
+        if (lastEventId.HasValue && lastEventId.Value > 0)
+        {
+            request.Headers.TryAddWithoutValidation("Last-Event-ID", lastEventId.Value.ToString());
+        }
 
         using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
@@ -461,6 +478,7 @@ public sealed class CoreRandomRequest
     public string PresetId { get; set; } = string.Empty;
     public JsonElement? FilterState { get; set; }
     public string? ClientId { get; set; }
+    public string? SessionId { get; set; }
     public bool IncludeVideos { get; set; } = true;
     public bool IncludePhotos { get; set; } = true;
     public string? RandomizationMode { get; set; }
@@ -659,6 +677,7 @@ public sealed class CorePlaybackRecordedPayload
 {
     public string Path { get; set; } = string.Empty;
     public string? ClientId { get; set; }
+    public string? SessionId { get; set; }
 }
 
 public sealed class CoreFilterPresetSnapshot

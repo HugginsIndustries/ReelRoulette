@@ -4,8 +4,13 @@ import { buildRefreshStatusMessage } from "../events/refreshStatusProjection";
 
 describe("event helpers", () => {
   it("builds SSE URL with last revision query", () => {
-    const url = buildEventsUrl("http://localhost:51301/api/events", 123);
+    const url = buildEventsUrl("http://localhost:51301/api/events", 123, {
+      clientId: "web-client",
+      sessionId: "web-session"
+    });
     expect(url).toContain("lastEventId=123");
+    expect(url).toContain("clientId=web-client");
+    expect(url).toContain("sessionId=web-session");
   });
 
   it("parses event envelope JSON", () => {

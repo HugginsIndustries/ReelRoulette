@@ -1,4 +1,5 @@
 const CLIENT_ID_KEY = "rr_clientId";
+const SESSION_ID_KEY = "rr_sessionId";
 const PHOTO_DURATION_KEY = "rr_photoDuration";
 const RANDOMIZATION_MODE_KEY = "rr_randomizationMode";
 const TAG_EDITOR_COLLAPSED_KEY = "rr_tagEditorCollapsed";
@@ -9,6 +10,7 @@ const WEBUI_API_VERSION = "1";
 const SUPPORTED_SERVER_API_VERSIONS = new Set(["1", "0"]);
 const REQUIRED_SERVER_CAPABILITIES = [
   "auth.sessionCookie",
+  "identity.sessionId",
   "events.refreshStatusChanged",
   "events.resyncRequired",
   "api.random.filterState",
@@ -20,6 +22,16 @@ function getClientId() {
   if (!id) {
     id = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
     localStorage.setItem(CLIENT_ID_KEY, id);
+  }
+
+  return id;
+}
+
+function getSessionId() {
+  let id = sessionStorage.getItem(SESSION_ID_KEY);
+  if (!id) {
+    id = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
+    sessionStorage.setItem(SESSION_ID_KEY, id);
   }
 
   return id;
@@ -113,6 +125,7 @@ export function startLegacyApp(config) {
   const sseUrl = config.sseUrl;
   const state = {
     clientId: getClientId(),
+    sessionId: getSessionId(),
     presets: [],
     currentPresetId: "",
     history: [],
@@ -428,6 +441,7 @@ export function startLegacyApp(config) {
         body: JSON.stringify({
           presetId,
           clientId: state.clientId,
+          sessionId: state.sessionId,
           includeVideos: true,
           includePhotos: true,
           randomizationMode: state.randomizationMode
@@ -1179,6 +1193,7 @@ export function startLegacyApp(config) {
 
     const streamUrl = new URL(sseUrl);
     streamUrl.searchParams.set("clientId", state.clientId);
+    streamUrl.searchParams.set("sessionId", state.sessionId);
     eventSource = new EventSource(streamUrl.toString(), { withCredentials: true });
     eventSource.onopen = () => {
       setStatus("SSE connected");
@@ -1223,7 +1238,7 @@ export function startLegacyApp(config) {
         await fetchJson("/api/library-states", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ paths: [] })
+          body: JSON.stringify({ clientId: state.clientId, sessionId: state.sessionId, paths: [] })
         });
       } catch {
         // best effort

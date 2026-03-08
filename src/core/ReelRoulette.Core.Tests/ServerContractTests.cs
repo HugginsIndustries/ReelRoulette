@@ -16,7 +16,7 @@ public sealed class ServerContractTests
             assetsVersion: "m7",
             minimumCompatibleApiVersion: "0",
             supportedApiVersions: ["1", "0"],
-            capabilities: ["events.refreshStatusChanged", "events.resyncRequired"]);
+            capabilities: ["identity.sessionId", "events.refreshStatusChanged", "events.resyncRequired"]);
 
         Assert.False(string.IsNullOrWhiteSpace(response.AppVersion));
         Assert.Equal("1", response.ApiVersion);
@@ -26,6 +26,7 @@ public sealed class ServerContractTests
         Assert.Contains("0", response.SupportedApiVersions);
         Assert.Contains("events.refreshStatusChanged", response.Capabilities);
         Assert.Contains("events.resyncRequired", response.Capabilities);
+        Assert.Contains("identity.sessionId", response.Capabilities);
     }
 
     [Fact]
@@ -67,6 +68,7 @@ public sealed class ServerContractTests
         Assert.Contains("1", version.SupportedApiVersions);
         Assert.Contains("0", version.SupportedApiVersions);
         Assert.Contains("auth.sessionCookie", version.Capabilities);
+        Assert.Contains("identity.sessionId", version.Capabilities);
         Assert.Contains("events.refreshStatusChanged", version.Capabilities);
         Assert.Contains("events.resyncRequired", version.Capabilities);
         Assert.Contains("api.random.filterState", version.Capabilities);

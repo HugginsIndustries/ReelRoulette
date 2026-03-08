@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **Implement M8e WebUI/mobile thin-client contract standardization (identity/session/reconnect parity)** (2026-03-08):
+  - Extend OpenAPI contract surfaces with optional `sessionId` and explicit identity/reconnect expectations for `GET /api/events`, random requests, playback-record requests, and authoritative requery payloads.
+  - Regenerate WebUI OpenAPI-derived contracts and align server DTOs/composition to accept/propagate `sessionId` without adding new domain logic in `ReelRoulette.Server`.
+  - Add `identity.sessionId` capability marker and enforce it in WebUI startup compatibility checks for deterministic contract/version gating.
+  - Align desktop identity/session behavior by persisting stable `CoreClientId`, generating per-runtime `CoreSessionId`, propagating both on random/playback/SSE calls, and reconnecting SSE with revision replay hints.
+  - Align WebUI legacy + modular seams to propagate `clientId`/`sessionId` through random, requery, and SSE reconnect paths.
+  - Add regression coverage across core and web tests for session propagation, capability gating, and SSE reconnect URL/header behavior.
+  - Verify end-to-end gates pass: `dotnet build`, `dotnet test`, WebUI `npm run verify`, and `tools/scripts/verify-web-deploy.ps1`.
+
 - **Implement M8d desktop playback policy compromise (local-first playback + API fallback with deterministic manual identity routing)** (2026-03-08):
   - Add deterministic desktop playback target selection in `MainWindow`:
     - local playback when media path is readable and `ForceApiPlayback=false`,

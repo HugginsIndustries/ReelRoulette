@@ -1,8 +1,45 @@
 import type { RuntimeConfig } from "../types/runtimeConfig";
 import type { PairResponse, RefreshStatusSnapshot, VersionResponse } from "../types/serverContracts";
 
+const CLIENT_ID_KEY = "rr_clientId";
+const SESSION_ID_KEY = "rr_sessionId";
+let fallbackClientId: string | null = null;
+let fallbackSessionId: string | null = null;
+
 function buildApiUrl(config: RuntimeConfig, path: string): string {
   return new URL(path, `${config.apiBaseUrl}/`).toString();
+}
+
+function createGuidFallback(): string {
+  return `${Date.now()}-${Math.random()}`;
+}
+
+export function getClientId(): string {
+  let id = typeof localStorage === "undefined" ? fallbackClientId : localStorage.getItem(CLIENT_ID_KEY);
+  if (!id) {
+    id = crypto.randomUUID ? crypto.randomUUID() : createGuidFallback();
+    if (typeof localStorage === "undefined") {
+      fallbackClientId = id;
+    } else {
+      localStorage.setItem(CLIENT_ID_KEY, id);
+    }
+  }
+
+  return id;
+}
+
+export function getSessionId(): string {
+  let id = typeof sessionStorage === "undefined" ? fallbackSessionId : sessionStorage.getItem(SESSION_ID_KEY);
+  if (!id) {
+    id = crypto.randomUUID ? crypto.randomUUID() : createGuidFallback();
+    if (typeof sessionStorage === "undefined") {
+      fallbackSessionId = id;
+    } else {
+      sessionStorage.setItem(SESSION_ID_KEY, id);
+    }
+  }
+
+  return id;
 }
 
 export async function getVersion(
@@ -55,13 +92,15 @@ export async function requeryAuthoritativeState(
   config: RuntimeConfig,
   fetchImpl: typeof fetch = fetch
 ): Promise<void> {
+  const clientId = getClientId();
+  const sessionId = getSessionId();
   const response = await fetchImpl(buildApiUrl(config, "/api/library-states"), {
     method: "POST",
     credentials: "include",
     headers: {
       "Content-Type": "application/json"
     },
-    body: JSON.stringify({ paths: [] })
+    body: JSON.stringify({ clientId, sessionId, paths: [] })
   });
   if (!response.ok) {
     throw new Error(`Authoritative requery failed with HTTP ${response.status}.`);

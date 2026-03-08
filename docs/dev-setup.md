@@ -185,6 +185,11 @@
   - desktop playback source selection is local-first with deterministic API media fallback when local access fails.
   - `ForceApiPlayback` (desktop settings) forces API media playback path and persists in `desktop-settings.json` (`false` default).
   - manual library-panel play requires stable item identity mapping before playback; unmappable targets return explicit user guidance instead of silent fallback substitution.
+- WebUI/mobile thin-client contract standardization notes (M8e):
+  - desktop and web now use stable `clientId` + optional runtime `sessionId` semantics across random/playback/requery/SSE surfaces.
+  - desktop persists `CoreClientId` in `desktop-settings.json` and uses per-runtime `CoreSessionId` for SSE and playback-origin correlation.
+  - web startup compatibility checks require server capability `identity.sessionId` in addition to existing auth/events/random/preset capabilities.
+  - SSE reconnect continuity now consistently uses revision replay hints (`Last-Event-ID` / `lastEventId`) plus `clientId`/`sessionId` query hints where event-source headers are limited.
 - WebUI enable semantics:
   - `enabled=true` -> WebUI static routes + `/runtime-config.json` are served.
   - `enabled=false` (after restart) -> WebUI routes return `404`, while API/SSE/media/operator endpoints remain available.

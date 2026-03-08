@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { RuntimeConfig } from "../types/runtimeConfig";
-import { getVersion, pairWithToken } from "../api/coreApi";
+import { getVersion, pairWithToken, requeryAuthoritativeState } from "../api/coreApi";
 
 const CONFIG: RuntimeConfig = {
   apiBaseUrl: "http://localhost:51301",
@@ -24,5 +24,18 @@ describe("coreApi endpoint composition", () => {
     const fetchSpy = fetchMock as unknown as ReturnType<typeof vi.fn>;
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     expect(fetchSpy.mock.calls[0]?.[0]).toBe("http://localhost:51301/api/pair");
+  });
+
+  it("sends client/session identity for authoritative requery", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response("{}", { status: 200 })) as unknown as typeof fetch;
+    await requeryAuthoritativeState(CONFIG, fetchMock);
+    const fetchSpy = fetchMock as unknown as ReturnType<typeof vi.fn>;
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(fetchSpy.mock.calls[0]?.[0]).toBe("http://localhost:51301/api/library-states");
+    const requestInit = fetchSpy.mock.calls[0]?.[1] as RequestInit;
+    const body = JSON.parse(String(requestInit.body));
+    expect(body.clientId).toBeTruthy();
+    expect(body.sessionId).toBeTruthy();
+    expect(body.paths).toEqual([]);
   });
 });

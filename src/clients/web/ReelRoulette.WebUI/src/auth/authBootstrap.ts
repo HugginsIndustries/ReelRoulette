@@ -6,6 +6,7 @@ const WEBUI_API_VERSION = "1";
 const SUPPORTED_SERVER_API_VERSIONS = new Set(["1", "0"]);
 const REQUIRED_SERVER_CAPABILITIES = [
   "auth.sessionCookie",
+  "identity.sessionId",
   "events.refreshStatusChanged",
   "events.resyncRequired",
   "api.random.filterState",

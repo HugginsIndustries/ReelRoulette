@@ -44,6 +44,11 @@
   - API playback used when local path access fails,
   - manual library-panel play resolves API-routable media identity first and fails explicitly (with guidance) when stable identity mapping is unavailable,
   - desktop setting `ForceApiPlayback` forces API path for validation and user preference.
+- M8e standardizes thin-client identity/session/reconnect contracts:
+  - request surfaces now include persistent `clientId` plus optional `sessionId` for cross-client continuity semantics.
+  - `/api/events` contract now explicitly documents `clientId`/`sessionId` query hints in addition to `Last-Event-ID` / `lastEventId` replay semantics.
+  - playback event payloads include optional `sessionId` so clients can suppress self-originated event projections deterministically.
+  - `/api/version` capability set now includes `identity.sessionId` for compatibility gating.
 - M9 introduces incremental playback-session pipeline milestones (`M9a`-`M9f`) to evolve from M8d compromise to robust server-authoritative session/streaming behavior.
 
 ## Eventing Direction
@@ -58,6 +63,7 @@
 - Desktop event consumption now uses a long-lived SSE client with reconnect behavior; payload parsing is case-insensitive to avoid projection drops from JSON casing differences.
 - Reconnect/resync contract:
   - Client reconnects to `GET /api/events` with `Last-Event-ID`.
+  - Browser/event-source reconnect may pass `lastEventId` query fallback plus optional `clientId`/`sessionId` continuity hints.
   - Server replays buffered events newer than that revision when available.
   - If the gap exceeds replay retention, server emits `resyncRequired`.
   - Client then re-fetches authoritative state via `POST /api/library-states`.

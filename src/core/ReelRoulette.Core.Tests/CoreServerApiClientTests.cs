@@ -122,7 +122,8 @@ public sealed class CoreServerApiClientTests
         {
             PresetId = "Favorites",
             FilterState = JsonSerializer.SerializeToElement(new { favoritesOnly = true }),
-            ClientId = "desktop"
+            ClientId = "desktop",
+            SessionId = "session-a"
         });
 
         Assert.NotNull(capturedRequest);
@@ -133,6 +134,7 @@ public sealed class CoreServerApiClientTests
         using var doc = JsonDocument.Parse(capturedJson!);
         Assert.Equal("Favorites", doc.RootElement.GetProperty("presetId").GetString());
         Assert.Equal("desktop", doc.RootElement.GetProperty("clientId").GetString());
+        Assert.Equal("session-a", doc.RootElement.GetProperty("sessionId").GetString());
         Assert.True(doc.RootElement.GetProperty("filterState").GetProperty("favoritesOnly").GetBoolean());
     }
 
@@ -223,9 +225,11 @@ public sealed class CoreServerApiClientTests
     {
         var payloadJson = "{\"revision\":42,\"eventType\":\"itemStateChanged\",\"timestamp\":\"2026-03-01T00:00:00Z\",\"payload\":{\"path\":\"movie.mp4\",\"isFavorite\":true,\"isBlacklisted\":false}}";
         var sseBody = $"data: {payloadJson}\n\n";
+        HttpRequestMessage? capturedRequest = null;
 
-        var handler = new DelegatingStubHandler(async _ =>
+        var handler = new DelegatingStubHandler(async request =>
         {
+            capturedRequest = request;
             var response = new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent(sseBody, Encoding.UTF8, "text/event-stream")
@@ -238,6 +242,8 @@ public sealed class CoreServerApiClientTests
         await apiClient.ListenToEventsAsync(
             "http://localhost:51301",
             "desktop-client",
+            "desktop-session",
+            42,
             envelope =>
             {
                 received.Add(envelope);
@@ -249,6 +255,11 @@ public sealed class CoreServerApiClientTests
         var envelope = Assert.Single(received);
         Assert.Equal(42, envelope.Revision);
         Assert.Equal("itemStateChanged", envelope.EventType);
+        Assert.NotNull(capturedRequest);
+        Assert.Contains("clientId=desktop-client", capturedRequest!.RequestUri!.ToString(), StringComparison.Ordinal);
+        Assert.Contains("sessionId=desktop-session", capturedRequest.RequestUri!.ToString(), StringComparison.Ordinal);
+        Assert.Contains("lastEventId=42", capturedRequest.RequestUri!.ToString(), StringComparison.Ordinal);
+        Assert.Equal("42", Assert.Single(capturedRequest.Headers.GetValues("Last-Event-ID")));
     }
 
     [Fact]
@@ -272,6 +283,8 @@ public sealed class CoreServerApiClientTests
         await apiClient.ListenToEventsAsync(
             "http://localhost:51301",
             "desktop-client",
+            "desktop-session",
+            0,
             envelope =>
             {
                 received.Add(envelope);

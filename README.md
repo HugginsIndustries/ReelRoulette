@@ -112,6 +112,10 @@ Runtime notes:
   - manual library-panel play now resolves stable API media identity first; unmappable manual targets fail with explicit guidance instead of silent substitute playback
   - new `ForceApiPlayback` desktop setting persists in `desktop-settings.json` (default `false`) and forces API playback path for validation/preference scenarios
   - playback source selection remains deterministic across random/manual/timeline navigation flows while preserving M8c API-first ownership boundaries for non-playback domains
+- M8e web/mobile thin-client contract standardization updates:
+  - desktop and web now share the same identity/reconnect contract semantics: stable `clientId`, optional runtime `sessionId`, and SSE reconnect replay hints via `lastEventId`
+  - desktop persists `CoreClientId` in `desktop-settings.json`, generates per-runtime `CoreSessionId`, and propagates both through random/playback/SSE calls
+  - WebUI (legacy and modular SSE/requery paths) now propagates `clientId` + `sessionId` consistently and validates required server capabilities including `identity.sessionId`
 
 ## Testing
 

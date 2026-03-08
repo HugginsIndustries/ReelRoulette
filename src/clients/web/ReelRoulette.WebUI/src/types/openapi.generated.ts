@@ -696,6 +696,10 @@ export interface paths {
          *     - Server replays buffered events newer than that revision when available.
          *     - If the revision gap exceeds replay buffer retention, server emits a
          *       `resyncRequired` event and client must call `/api/library-states`.
+         *     Identity/session continuity:
+         *     - Clients should provide a stable `clientId` per installation/device.
+         *     - Clients may provide an optional `sessionId` per runtime session to
+         *       correlate reconnect attempts and playback-originated events.
          */
         get: operations["getEventsSse"];
         put?: never;
@@ -821,6 +825,7 @@ export interface components {
                 [key: string]: unknown;
             } | null;
             clientId?: string | null;
+            sessionId?: string | null;
             /** @default true */
             includeVideos: boolean;
             /** @default true */
@@ -858,6 +863,7 @@ export interface components {
         };
         RecordPlaybackRequest: {
             clientId?: string | null;
+            sessionId?: string | null;
             path: string;
         };
         ClearPlaybackStatsRequest: {
@@ -884,6 +890,7 @@ export interface components {
         PlaybackRecordedPayload: {
             path: string;
             clientId?: string | null;
+            sessionId?: string | null;
         };
         ResyncRequiredPayload: {
             /** @example revisionGap */
@@ -894,6 +901,8 @@ export interface components {
             currentRevision: number;
         };
         LibraryStatesRequest: {
+            clientId?: string | null;
+            sessionId?: string | null;
             paths?: string[] | null;
         };
         LibraryStateResponse: {
@@ -2568,6 +2577,10 @@ export interface operations {
             query?: {
                 /** @description Query-string reconnect revision fallback for browser EventSource clients. */
                 lastEventId?: string;
+                /** @description Stable client identity for cross-request correlation. */
+                clientId?: string | null;
+                /** @description Optional runtime session identity for reconnect/playback correlation. */
+                sessionId?: string | null;
             };
             header?: {
                 /** @description Last acknowledged SSE revision from the previous connection. */

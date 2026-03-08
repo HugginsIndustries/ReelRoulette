@@ -16,7 +16,7 @@ Primary outcome: new clients can be added without reimplementing domain logic.
 
 As of current milestones:
 
-- `M0`-`M8d` are complete in `MILESTONES.md`.
+- `M0`-`M8e` are complete in `MILESTONES.md`.
 - Desktop runtime is still `source/ReelRoulette.csproj`.
 - Core/server/worker runtime exists under `src/core/*`.
 - M8a server-app consolidation is complete: `src/core/ReelRoulette.ServerApp` now hosts API/SSE/media/WebUI/operator UI in one process and one origin.
@@ -30,6 +30,10 @@ As of current milestones:
   - desktop playback policy is local-first with deterministic API media fallback,
   - `ForceApiPlayback` is persisted in desktop settings (default `false`) and forces API playback path when enabled,
   - manual library-panel play resolves stable API identity first and now fails with explicit guidance when identity mapping is unavailable (no silent substitute playback path).
+- M8e is complete on current branch:
+  - API contracts now standardize persistent `clientId` and optional `sessionId` across desktop/web request and SSE reconnect surfaces,
+  - desktop now persists stable `CoreClientId`, uses per-runtime `CoreSessionId`, and reconnects SSE with revision-aware replay hints,
+  - web runtime aligns legacy/modular seams on the same identity/reconnect semantics and enforces capability compatibility including `identity.sessionId`.
 - API contract source of truth is `shared/api/openapi.yaml` (currently `0.8.0`).
 - M6a tag editing migration is API-first and shared across desktop/web seams.
 - M6b refresh pipeline/thumbnails/grid are core-owned; desktop consumes API/SSE projection.
@@ -42,7 +46,6 @@ As of current milestones:
 
 Near-term planned milestones:
 
-- `M8e`: WebUI and mobile thin-client contract standardization.
 - `M8f`: hardening, packaging, and release readiness.
 - `M9`: Plex-style playback pipeline (incremental `M9a`-`M9g` rollout for playback sessions, decision + delivery selection, direct-stream baseline, HLS/fMP4 transcode path, client cutovers, and hardening).
 - `M10`: Android client bootstrap on stable API seam.
