@@ -126,6 +126,8 @@ Packaging notes:
 
 - Server packaging scripts auto-detect version from `src/core/ReelRoulette.ServerApp/ReelRoulette.ServerApp.csproj` when `-Version` is not passed.
 - Desktop packaging scripts auto-detect version from `source/ReelRoulette.csproj` when `-Version` is not passed.
+- Desktop packaging scripts stage native desktop runtime dependencies into publish output (`runtimes/win-x64/native`) at package time.
+- Desktop native dependency staging prefers local repo runtimes when available; otherwise scripts acquire dependencies via Chocolatey (`ffmpeg` for `ffprobe.exe`, `vlc` for LibVLC files).
 - Server packaging scripts run WebUI build and bundle static assets into ServerApp publish output (`wwwroot`) so packaged runtime includes WebUI and Operator favicon.
 - Shared app/installer/web icon source is `assets/HI.ico`.
 - Inno script auto-detects `ISCC.exe` from PATH/common install locations/registry.

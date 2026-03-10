@@ -12,6 +12,123 @@ if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
     exit 1
 }
 
+function Install-ChocoPackageIfMissing {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$PackageName
+    )
+
+    if (-not (Get-Command choco -ErrorAction SilentlyContinue)) {
+        Write-Error "choco is required to acquire native dependencies when runtimes are not present in the repo."
+        exit 1
+    }
+
+    $installedOutput = choco list --local-only --exact $PackageName 2>$null
+    if ($LASTEXITCODE -eq 0 -and ($installedOutput | Select-String -Pattern "^$PackageName\s")) {
+        return
+    }
+
+    choco install $PackageName -y --no-progress
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "choco install $PackageName failed with code $LASTEXITCODE"
+        exit $LASTEXITCODE
+    }
+}
+
+function Resolve-FFprobeSourcePath {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$RepoRoot
+    )
+
+    $repoPath = Join-Path $RepoRoot "runtimes\win-x64\native\ffprobe.exe"
+    if (Test-Path $repoPath) {
+        return $repoPath
+    }
+
+    Install-ChocoPackageIfMissing -PackageName "ffmpeg"
+    $chocoRoot = if ([string]::IsNullOrWhiteSpace($env:ChocolateyInstall)) { "C:\ProgramData\chocolatey" } else { $env:ChocolateyInstall }
+    $candidates = @()
+    $ffmpegLibRoot = Join-Path $chocoRoot "lib"
+    if (Test-Path $ffmpegLibRoot) {
+        $candidates += Get-ChildItem -Path $ffmpegLibRoot -Recurse -Filter "ffprobe.exe" -File -ErrorAction SilentlyContinue |
+            Sort-Object Length -Descending |
+            Select-Object -ExpandProperty FullName
+    }
+    $candidates += (Join-Path $chocoRoot "bin\ffprobe.exe")
+
+    foreach ($candidate in ($candidates | Select-Object -Unique)) {
+        if (Test-Path $candidate) {
+            return $candidate
+        }
+    }
+
+    Write-Error "ffprobe.exe could not be resolved from repo runtimes or chocolatey install."
+    exit 1
+}
+
+function Resolve-LibVlcSourceDir {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$RepoRoot
+    )
+
+    $repoDir = Join-Path $RepoRoot "runtimes\win-x64\native\libvlc"
+    if (Test-Path (Join-Path $repoDir "libvlc.dll")) {
+        return $repoDir
+    }
+
+    Install-ChocoPackageIfMissing -PackageName "vlc"
+    $chocoRoot = if ([string]::IsNullOrWhiteSpace($env:ChocolateyInstall)) { "C:\ProgramData\chocolatey" } else { $env:ChocolateyInstall }
+    $candidates = @(
+        (Join-Path $env:ProgramFiles "VideoLAN\VLC"),
+        (Join-Path ${env:ProgramFiles(x86)} "VideoLAN\VLC"),
+        (Join-Path $chocoRoot "lib\vlc\tools\VLC")
+    ) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+
+    foreach ($candidate in ($candidates | Select-Object -Unique)) {
+        if (Test-Path (Join-Path $candidate "libvlc.dll")) {
+            return $candidate
+        }
+    }
+
+    Write-Error "VLC native files could not be resolved from repo runtimes or chocolatey install."
+    exit 1
+}
+
+function Ensure-WinDesktopNativeAssets {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$RepoRoot,
+        [Parameter(Mandatory = $true)]
+        [string]$PublishDir
+    )
+
+    $nativeDir = Join-Path $PublishDir "runtimes\win-x64\native"
+    $libVlcTargetDir = Join-Path $nativeDir "libvlc"
+    New-Item -ItemType Directory -Force -Path $nativeDir | Out-Null
+    New-Item -ItemType Directory -Force -Path $libVlcTargetDir | Out-Null
+
+    $ffprobeSourcePath = Resolve-FFprobeSourcePath -RepoRoot $RepoRoot
+    Copy-Item -Force $ffprobeSourcePath (Join-Path $nativeDir "ffprobe.exe")
+
+    $libVlcSourceDir = Resolve-LibVlcSourceDir -RepoRoot $RepoRoot
+    Copy-Item -Recurse -Force (Join-Path $libVlcSourceDir "*") $libVlcTargetDir
+
+    if (-not (Test-Path (Join-Path $nativeDir "ffprobe.exe"))) {
+        Write-Error "Desktop package is missing ffprobe.exe after native asset staging."
+        exit 1
+    }
+    if (-not (Test-Path (Join-Path $libVlcTargetDir "libvlc.dll"))) {
+        Write-Error "Desktop package is missing libvlc.dll after native asset staging."
+        exit 1
+    }
+    if (-not (Test-Path (Join-Path $libVlcTargetDir "plugins"))) {
+        Write-Error "Desktop package is missing libvlc plugins after native asset staging."
+        exit 1
+    }
+}
+
 function Resolve-IsccPath {
     $fromPath = Get-Command iscc -ErrorAction SilentlyContinue
     if ($fromPath) {
@@ -93,6 +210,10 @@ try {
     if ($LASTEXITCODE -ne 0) {
         Write-Error "dotnet publish failed with code $LASTEXITCODE"
         exit $LASTEXITCODE
+    }
+
+    if ($Runtime -eq "win-x64") {
+        Ensure-WinDesktopNativeAssets -RepoRoot $repoRoot -PublishDir $publishDir
     }
 
     & $isccPath `

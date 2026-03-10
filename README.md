@@ -116,6 +116,8 @@ Manual test guide:
   - server packaging scripts auto-use `src/core/ReelRoulette.ServerApp/ReelRoulette.ServerApp.csproj` `<Version>`,
   - desktop packaging scripts auto-use `source/ReelRoulette.csproj` `<Version>`.
 - Server packaging scripts rebuild and bundle WebUI static assets into published output (`wwwroot`), including `/HI.ico`.
+- Desktop packaging scripts stage native desktop dependencies into published output (`runtimes/win-x64/native`) during packaging.
+- Desktop native staging prefers local repo runtimes when present; otherwise scripts acquire dependencies via Chocolatey (`ffmpeg` + `vlc`).
 - Installer metadata (setup/start-menu/uninstall display) uses shared `assets/HI.ico`.
 
 Simple release flow (example `0.9.0`):

@@ -4,9 +4,9 @@ Use this single guide for full-regression passes and milestone validation. Check
 
 ## Test Run Metadata
 
-- Test date/time: 2026-03-08
+- Test date/time: 2026-03-09
 - Tester: Christian Huggins
-- Branch/commit: M8f: add operator testing suite, packaging, and release gates
+- Branch/commit: main / Bugfix: stage desktop native dependencies during packaging
 - Release version (if-applicable): v0.9.0
 - Environment (OS + device(s) + browser(s)): Windows-PC (desktop app + Firefox browser), Android (Chrome Browser), iPad (Chrome Browser)
 - Test mode:

@@ -18,6 +18,13 @@ This file follows a Keep a Changelog style format.
 
 ## v0.9.0 - Initial Release
 
+- **Stabilize desktop packaging with native dependency staging** (2026-03-09):
+  - Remove hard publish-time runtime file includes from `source/ReelRoulette.csproj` so desktop publish no longer fails when large native files are absent from CI checkouts.
+  - Update `package-desktop-win-portable.ps1` and `package-desktop-win-inno.ps1` to stage `ffprobe.exe` and LibVLC files into `runtimes/win-x64/native` after publish.
+  - Prefer local repo runtime assets when available, and fall back to Chocolatey acquisition (`ffmpeg`, `vlc`) when packaging on clean CI/agent hosts.
+  - Add post-stage validation for required desktop native payload (`ffprobe.exe`, `libvlc.dll`, `plugins`) before creating zip/installer artifacts.
+  - Update packaging documentation in `README.md` and `docs/dev-setup.md` to reflect native staging behavior.
+
 - **Stabilize Windows packaging workflow version inputs** (2026-03-09):
   - Fix Windows package workflow version handling by normalizing v-prefixed tag values (for example `v0.9.0`) to semver before invoking packaging scripts.
   - Update manual package workflow default version to `0.9.0` to avoid invalid `dotnet publish -p:Version=...` inputs.
