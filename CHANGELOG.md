@@ -18,6 +18,11 @@ This file follows a Keep a Changelog style format.
 
 ## v0.9.0 - Initial Release
 
+- **Add Linux distribution roadmap and fix Linux CI thumbnail-stage test failures** (2026-03-09):
+  - Add planned `M17a`-`M17e` milestones for full Linux distribution readiness covering runtime baseline, packaging, CI gates, documentation, and release sign-off for server + desktop.
+  - Fix Linux test-runtime dependency gap by adding `SkiaSharp.NativeAssets.Linux.NoDependencies` to `ReelRoulette.Server`.
+  - Validate thumbnail-stage regressions pass in Release test runs (`RefreshPipelineServiceTests.ThumbnailStage*`) and keep the full CI-equivalent Release test gate green.
+
 - **Finalize release-aligned versioning/tooling and documentation cleanup** (2026-03-09):
   - Add `tools/scripts/set-release-version.ps1` to fan out one release version across OpenAPI (`info.version`), runtime `assetsVersion`, release fixtures, and server app project version metadata.
   - Add desktop version participation in the simple release flow (`-UpdateDesktopVersion`) and set desktop project version metadata for release-aligned packaging.

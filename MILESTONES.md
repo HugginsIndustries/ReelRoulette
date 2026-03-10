@@ -467,6 +467,114 @@ Do not use this file for detailed architecture explanation or current capability
   - Long-duration media processing is resumable/retry-safe and operationally observable.
   - Recognition/identity features remain explicitly out of scope unless separately approved.
 
+### M17a - Linux Runtime Baseline (Server + Desktop)
+
+- **Status**: ⏳ Planned
+- **Goal**: Establish a supported Linux runtime baseline for both `ReelRoulette Server` and desktop client with deterministic startup/playback behavior.
+- **Scope**:
+  - Define and document initial support target:
+    - `linux-x64` first (single baseline distro family/version for sign-off).
+  - Validate consolidated server runtime on Linux:
+    - API/SSE/media/WebUI/Operator surfaces start and respond.
+  - Validate desktop runtime on Linux:
+    - app launch, connect to server, random/manual playback, and control interactions.
+  - Validate native dependency expectations on Linux:
+    - ffprobe/ffmpeg availability,
+    - LibVLC runtime dependency behavior and startup prerequisites.
+  - Keep existing API-first/thin-client ownership boundaries unchanged.
+- **Acceptance criteria**:
+  - Server starts on Linux and serves `/health`, `/api/version`, `/api/events`, `/api/media/{idOrToken}`, `/operator`.
+  - Desktop launches on Linux and completes core playback/control workflows against Linux server runtime.
+  - Linux runtime dependency prerequisites are explicit and reproducible.
+  - No new client-local authoritative mutation paths are introduced.
+- **Verification evidence**:
+  - Linux runtime smoke checks pass for server surfaces and desktop connect/playback flows.
+  - Automated gate pass includes:
+    - `dotnet build ReelRoulette.sln`
+    - `dotnet test ReelRoulette.sln`
+    - `npm run verify` (`src/clients/web/ReelRoulette.WebUI`)
+    - Linux run/smoke command evidence for server + desktop startup.
+
+### M17b - Linux Packaging (Server + Desktop)
+
+- **Status**: ⏳ Planned
+- **Goal**: Produce distributable Linux artifacts for both server and desktop using repo-owned packaging scripts.
+- **Scope**:
+  - Add Linux packaging scripts (portable first):
+    - server portable package (`tar.gz`),
+    - desktop portable package (`tar.gz`).
+  - Ensure server Linux package includes built WebUI assets in `wwwroot`.
+  - Ensure packaging preserves version metadata and release naming conventions.
+  - Ensure executable bits and launch scripts are correctly staged for Linux artifacts.
+  - Keep Windows packaging behavior unchanged.
+- **Acceptance criteria**:
+  - Linux server and desktop portable artifacts are produced deterministically by scripts.
+  - Server package includes API/SSE/media/WebUI/Operator runtime assets.
+  - Artifact naming/version metadata align with release version.
+  - Packaged apps launch successfully on the supported Linux baseline.
+- **Verification evidence**:
+  - Packaging scripts produce expected Linux artifacts under `artifacts/packages/`.
+  - Install/run smoke checks from packaged artifacts pass on Linux baseline host.
+  - `docs/testing-guide.md` packaging checklist includes Linux package checks.
+
+### M17c - CI Linux Distribution Gates
+
+- **Status**: ⏳ Planned
+- **Goal**: Add Linux build/test/package verification to CI so Linux distribution quality is continuously enforced.
+- **Scope**:
+  - Add Linux CI jobs for build/test/web verify parity.
+  - Add Linux packaging jobs for server + desktop artifact generation.
+  - Add Linux smoke checks for packaged runtime startup and key endpoint reachability.
+  - Publish Linux artifacts from CI packaging workflow.
+- **Acceptance criteria**:
+  - CI runs Linux build/test/web verify successfully on default branch/PR paths.
+  - Linux package workflow produces downloadable server + desktop artifacts.
+  - Linux smoke checks fail deterministically on runtime/package regressions.
+  - Windows CI/package gates remain green and unchanged in intent.
+- **Verification evidence**:
+  - Workflow files include Linux jobs and artifact upload steps.
+  - CI run evidence shows passing Linux gates and generated artifacts.
+
+### M17d - Linux Documentation and Operator Runbook
+
+- **Status**: ⏳ Planned
+- **Goal**: Make Linux setup, packaging, and troubleshooting workflows first-class and self-serve for contributors/operators.
+- **Scope**:
+  - Update `README.md` with Linux run/package command paths.
+  - Update `docs/dev-setup.md` with Linux prerequisites, runtime notes, and packaging flow.
+  - Update `docs/testing-guide.md` with Linux-specific validation checklist entries.
+  - Update `docs/domain-inventory.md` to include Linux packaging/runtime surfaces.
+  - Add Linux troubleshooting guidance:
+    - native dependency resolution,
+    - permissions/executable-bit issues,
+    - display/audio/runtime edge cases.
+- **Acceptance criteria**:
+  - Linux setup and packaging instructions are complete and executable without ad-hoc tribal knowledge.
+  - Testing guide includes Linux validation paths for server + desktop distribution.
+  - Domain inventory reflects Linux ownership/tooling surfaces accurately.
+- **Verification evidence**:
+  - Doc set updates merged and internally consistent with scripts/workflows.
+  - Manual dry-run of documented Linux commands succeeds on baseline host.
+
+### M17e - Linux Release Readiness and Sign-off
+
+- **Status**: ⏳ Planned
+- **Goal**: Complete release-quality Linux validation for server + desktop and capture final evidence for sign-off.
+- **Scope**:
+  - Execute full automated + manual Linux validation matrix.
+  - Validate server/web/desktop parity on migrated API/SSE flows.
+  - Validate packaged artifact install/run behavior end-to-end.
+  - Capture evidence and finalize release-tracking docs.
+- **Acceptance criteria**:
+  - Linux automated gates pass (build/test/web verify/package/smoke).
+  - Linux manual validation checklist is completed with PASS/FAIL evidence.
+  - No critical Linux-only runtime regressions remain for server or desktop.
+  - Release tracking docs are synchronized to final Linux-ready state.
+- **Verification evidence**:
+  - Completed Linux checklist entries in `docs/testing-guide.md`.
+  - CI evidence for Linux packaging + smoke checks.
+  - Updated `MILESTONES.md`, `CHANGELOG.md`, and `COMMIT_MESSAGE.txt` entries reflecting final M17 state.
+
 ---
 
 ## Completed Milestones
