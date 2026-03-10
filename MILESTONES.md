@@ -70,6 +70,7 @@ Do not use this file for detailed architecture explanation or current capability
   - Define and enforce canonical JSONL log schema (one JSON object per line) with required core fields:
     - required on every entry: `ts`, `lvl`, `svc`, `comp`, `op`, `msg`,
     - conditional/optional fields: `traceId`, `spanId`, `reqId`, `clientId`, `sessionId`, `ver`, `build`, `clientTs`, `srcIp`, `userAgent`.
+    - example: {"ts":"2026-03-10T20:30:35.355Z","lvl":"info","svc":"desktop","comp":"ui.main-window","op":"UpdateLibraryPanel","msg":"Got 38833 items from library."}
   - Centralize all writes through one server log writer path used by:
     - server runtime logging pipeline (`ILogger` sink/provider),
     - client ingestion endpoint (`POST /api/logs/client`).
