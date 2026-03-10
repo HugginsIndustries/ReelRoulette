@@ -6,7 +6,7 @@ Use this single guide for full-regression passes and milestone validation. Check
 
 - Test date/time: 2026-03-09
 - Tester: Christian Huggins
-- Branch/commit: main / Bugfix: stage desktop native dependencies during packaging
+- Branch/commit: main / Bugfix: harden desktop packaging path safety for CI
 - Release version (if-applicable): v0.9.0
 - Environment (OS + device(s) + browser(s)): Windows-PC (desktop app + Firefox browser), Android (Chrome Browser), iPad (Chrome Browser)
 - Test mode:

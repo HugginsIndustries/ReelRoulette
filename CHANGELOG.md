@@ -18,6 +18,12 @@ This file follows a Keep a Changelog style format.
 
 ## v0.9.0 - Initial Release
 
+- **Harden desktop packaging path validation for CI edge cases** (2026-03-09):
+  - Add shared non-empty/unique candidate-path filtering in desktop portable and installer packaging scripts before probe resolution loops.
+  - Add explicit validation guards for resolved ffprobe and LibVLC source paths prior to copy operations to prevent empty-path argument binding failures.
+  - Use `-LiteralPath` checks where applicable during native dependency and Inno candidate probing for safer CI path handling.
+  - Strengthen desktop packaging behavior for partially populated CI environment variables without changing the packaging output contract.
+
 - **Fix desktop packaging env-var path handling in CI** (2026-03-09):
   - Fix desktop native dependency resolution for CI runners where one or more Windows Program Files environment variables may be empty.
   - Update desktop portable and installer packaging scripts to guard `Join-Path` candidate creation before probing VLC install locations.

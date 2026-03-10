@@ -35,6 +35,20 @@ function Install-ChocoPackageIfMissing {
     }
 }
 
+function Get-UniqueNonEmptyPaths {
+    param(
+        [Parameter(Mandatory = $true)]
+        [AllowNull()]
+        [AllowEmptyCollection()]
+        [object[]]$Paths
+    )
+
+    return @($Paths |
+        Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } |
+        ForEach-Object { [string]$_ } |
+        Select-Object -Unique)
+}
+
 function Resolve-FFprobeSourcePath {
     param(
         [Parameter(Mandatory = $true)]
@@ -57,8 +71,8 @@ function Resolve-FFprobeSourcePath {
     }
     $candidates += (Join-Path $chocoRoot "bin\ffprobe.exe")
 
-    foreach ($candidate in ($candidates | Select-Object -Unique)) {
-        if (Test-Path $candidate) {
+    foreach ($candidate in (Get-UniqueNonEmptyPaths -Paths $candidates)) {
+        if (Test-Path -LiteralPath $candidate) {
             return $candidate
         }
     }
@@ -92,8 +106,8 @@ function Resolve-LibVlcSourceDir {
         $candidates += (Join-Path $chocoRoot "lib\vlc\tools\VLC")
     }
 
-    foreach ($candidate in ($candidates | Select-Object -Unique)) {
-        if (Test-Path (Join-Path $candidate "libvlc.dll")) {
+    foreach ($candidate in (Get-UniqueNonEmptyPaths -Paths $candidates)) {
+        if (Test-Path -LiteralPath (Join-Path $candidate "libvlc.dll")) {
             return $candidate
         }
     }
@@ -116,9 +130,17 @@ function Ensure-WinDesktopNativeAssets {
     New-Item -ItemType Directory -Force -Path $libVlcTargetDir | Out-Null
 
     $ffprobeSourcePath = Resolve-FFprobeSourcePath -RepoRoot $RepoRoot
-    Copy-Item -Force $ffprobeSourcePath (Join-Path $nativeDir "ffprobe.exe")
+    if ([string]::IsNullOrWhiteSpace($ffprobeSourcePath)) {
+        Write-Error "ffprobe source path resolved to empty value."
+        exit 1
+    }
+    Copy-Item -Force -LiteralPath $ffprobeSourcePath (Join-Path $nativeDir "ffprobe.exe")
 
     $libVlcSourceDir = Resolve-LibVlcSourceDir -RepoRoot $RepoRoot
+    if ([string]::IsNullOrWhiteSpace($libVlcSourceDir)) {
+        Write-Error "LibVLC source directory resolved to empty value."
+        exit 1
+    }
     Copy-Item -Recurse -Force (Join-Path $libVlcSourceDir "*") $libVlcTargetDir
 
     if (-not (Test-Path (Join-Path $nativeDir "ffprobe.exe"))) {
