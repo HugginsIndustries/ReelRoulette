@@ -6,7 +6,7 @@ on:
       version:
         description: "Package version label"
         required: true
-        default: "dev"
+        default: "0.9.0"
   push:
     tags:
       - "v*"
@@ -33,6 +33,17 @@ jobs:
       - name: Setup Inno Setup
         shell: pwsh
         run: choco install innosetup -y
+
+      - name: Normalize package version
+        shell: pwsh
+        run: |
+          $version = "$env:PACKAGE_VERSION".Trim()
+          if ($version.StartsWith("v")) { $version = $version.Substring(1) }
+          if ([string]::IsNullOrWhiteSpace($version)) {
+            throw "PACKAGE_VERSION is empty after normalization."
+          }
+          "PACKAGE_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Host "Normalized PACKAGE_VERSION=$version"
 
       - name: Build portable package
         shell: pwsh

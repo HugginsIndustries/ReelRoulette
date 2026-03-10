@@ -18,6 +18,10 @@ This file follows a Keep a Changelog style format.
 
 ## v0.9.0 - Initial Release
 
+- **Stabilize Windows packaging workflow version inputs** (2026-03-09):
+  - Fix Windows package workflow version handling by normalizing v-prefixed tag values (for example `v0.9.0`) to semver before invoking packaging scripts.
+  - Update manual package workflow default version to `0.9.0` to avoid invalid `dotnet publish -p:Version=...` inputs.
+
 - **Add Linux distribution roadmap and fix Linux CI thumbnail-stage test failures** (2026-03-09):
   - Add planned `M17a`-`M17e` milestones for full Linux distribution readiness covering runtime baseline, packaging, CI gates, documentation, and release sign-off for server + desktop.
   - Fix Linux test-runtime dependency gap by adding `SkiaSharp.NativeAssets.Linux.NoDependencies` to `ReelRoulette.Server`.
