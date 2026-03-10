@@ -80,11 +80,17 @@ function Resolve-LibVlcSourceDir {
 
     Install-ChocoPackageIfMissing -PackageName "vlc"
     $chocoRoot = if ([string]::IsNullOrWhiteSpace($env:ChocolateyInstall)) { "C:\ProgramData\chocolatey" } else { $env:ChocolateyInstall }
-    $candidates = @(
-        (Join-Path $env:ProgramFiles "VideoLAN\VLC"),
-        (Join-Path ${env:ProgramFiles(x86)} "VideoLAN\VLC"),
-        (Join-Path $chocoRoot "lib\vlc\tools\VLC")
-    ) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+    $candidates = @()
+    if (-not [string]::IsNullOrWhiteSpace($env:ProgramFiles)) {
+        $candidates += (Join-Path $env:ProgramFiles "VideoLAN\VLC")
+    }
+    $programFilesX86 = ${env:ProgramFiles(x86)}
+    if (-not [string]::IsNullOrWhiteSpace($programFilesX86)) {
+        $candidates += (Join-Path $programFilesX86 "VideoLAN\VLC")
+    }
+    if (-not [string]::IsNullOrWhiteSpace($chocoRoot)) {
+        $candidates += (Join-Path $chocoRoot "lib\vlc\tools\VLC")
+    }
 
     foreach ($candidate in ($candidates | Select-Object -Unique)) {
         if (Test-Path (Join-Path $candidate "libvlc.dll")) {
@@ -135,10 +141,14 @@ function Resolve-IsccPath {
         return $fromPath.Source
     }
 
-    $candidates = @(
-        (Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"),
-        (Join-Path $env:ProgramFiles "Inno Setup 6\ISCC.exe")
-    ) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+    $candidates = @()
+    $programFilesX86 = ${env:ProgramFiles(x86)}
+    if (-not [string]::IsNullOrWhiteSpace($programFilesX86)) {
+        $candidates += (Join-Path $programFilesX86 "Inno Setup 6\ISCC.exe")
+    }
+    if (-not [string]::IsNullOrWhiteSpace($env:ProgramFiles)) {
+        $candidates += (Join-Path $env:ProgramFiles "Inno Setup 6\ISCC.exe")
+    }
 
     $regKeys = @(
         "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Inno Setup 6_is1",

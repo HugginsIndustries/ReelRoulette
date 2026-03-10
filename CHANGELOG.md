@@ -18,6 +18,12 @@ This file follows a Keep a Changelog style format.
 
 ## v0.9.0 - Initial Release
 
+- **Fix desktop packaging env-var path handling in CI** (2026-03-09):
+  - Fix desktop native dependency resolution for CI runners where one or more Windows Program Files environment variables may be empty.
+  - Update desktop portable and installer packaging scripts to guard `Join-Path` candidate creation before probing VLC install locations.
+  - Harden desktop Inno `ISCC.exe` candidate probing to avoid `Join-Path` with empty Program Files base paths.
+  - Prevent `Cannot bind argument to parameter 'Path' because it is an empty string` failures during native staging on GitHub Actions.
+
 - **Stabilize desktop packaging with native dependency staging** (2026-03-09):
   - Remove hard publish-time runtime file includes from `source/ReelRoulette.csproj` so desktop publish no longer fails when large native files are absent from CI checkouts.
   - Update `package-desktop-win-portable.ps1` and `package-desktop-win-inno.ps1` to stage `ffprobe.exe` and LibVLC files into `runtimes/win-x64/native` after publish.
