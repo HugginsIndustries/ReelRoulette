@@ -28,7 +28,7 @@ function Install-ChocoPackageIfMissing {
         return
     }
 
-    choco install $PackageName -y --no-progress
+    choco install $PackageName -y --no-progress | Out-Null
     if ($LASTEXITCODE -ne 0) {
         Write-Error "choco install $PackageName failed with code $LASTEXITCODE"
         exit $LASTEXITCODE
@@ -73,7 +73,7 @@ function Resolve-FFprobeSourcePath {
 
     foreach ($candidate in (Get-UniqueNonEmptyPaths -Paths $candidates)) {
         if (Test-Path -LiteralPath $candidate) {
-            return $candidate
+            return [string]$candidate
         }
     }
 
@@ -108,7 +108,7 @@ function Resolve-LibVlcSourceDir {
 
     foreach ($candidate in (Get-UniqueNonEmptyPaths -Paths $candidates)) {
         if (Test-Path -LiteralPath (Join-Path $candidate "libvlc.dll")) {
-            return $candidate
+            return [string]$candidate
         }
     }
 
@@ -130,18 +130,18 @@ function Ensure-WinDesktopNativeAssets {
     New-Item -ItemType Directory -Force -Path $libVlcTargetDir | Out-Null
 
     $ffprobeSourcePath = Resolve-FFprobeSourcePath -RepoRoot $RepoRoot
-    if ([string]::IsNullOrWhiteSpace($ffprobeSourcePath)) {
+    if (($ffprobeSourcePath -is [array]) -or [string]::IsNullOrWhiteSpace([string]$ffprobeSourcePath)) {
         Write-Error "ffprobe source path resolved to empty value."
         exit 1
     }
-    Copy-Item -Force -LiteralPath $ffprobeSourcePath (Join-Path $nativeDir "ffprobe.exe")
+    Copy-Item -Force -LiteralPath ([string]$ffprobeSourcePath) (Join-Path $nativeDir "ffprobe.exe")
 
     $libVlcSourceDir = Resolve-LibVlcSourceDir -RepoRoot $RepoRoot
-    if ([string]::IsNullOrWhiteSpace($libVlcSourceDir)) {
+    if (($libVlcSourceDir -is [array]) -or [string]::IsNullOrWhiteSpace([string]$libVlcSourceDir)) {
         Write-Error "LibVLC source directory resolved to empty value."
         exit 1
     }
-    Copy-Item -Recurse -Force (Join-Path $libVlcSourceDir "*") $libVlcTargetDir
+    Copy-Item -Recurse -Force (Join-Path ([string]$libVlcSourceDir) "*") $libVlcTargetDir
 
     if (-not (Test-Path (Join-Path $nativeDir "ffprobe.exe"))) {
         Write-Error "Desktop package is missing ffprobe.exe after native asset staging."

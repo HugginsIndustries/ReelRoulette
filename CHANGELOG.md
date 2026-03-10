@@ -18,6 +18,11 @@ This file follows a Keep a Changelog style format.
 
 ## v0.9.0 - Initial Release
 
+- **Fix desktop package resolver output-stream binding in CI** (2026-03-09):
+  - Prevent Chocolatey install command output from leaking into resolver return values during native dependency acquisition.
+  - Normalize resolver returns to single-string paths and add array/empty-value guards before `Copy-Item -LiteralPath` operations.
+  - Eliminate remaining `Cannot bind argument to parameter 'LiteralPath' because it is an empty string` failures in desktop packaging CI runs.
+
 - **Harden desktop packaging path validation for CI edge cases** (2026-03-09):
   - Add shared non-empty/unique candidate-path filtering in desktop portable and installer packaging scripts before probe resolution loops.
   - Add explicit validation guards for resolved ffprobe and LibVLC source paths prior to copy operations to prevent empty-path argument binding failures.
