@@ -11,13 +11,11 @@ This guide covers local setup, run paths, verification gates, packaging, and rel
 
 ## Key Projects
 
-- Desktop app: `source/ReelRoulette.csproj`
+- Desktop app: `src/clients/windows/ReelRoulette.WindowsApp/ReelRoulette.WindowsApp.csproj`
 - Core domain: `src/core/ReelRoulette.Core/ReelRoulette.Core.csproj`
 - Server transport: `src/core/ReelRoulette.Server/ReelRoulette.Server.csproj`
 - Default runtime host: `src/core/ReelRoulette.ServerApp/ReelRoulette.ServerApp.csproj`
-- Legacy/compat host project (non-default runtime path): `src/core/ReelRoulette.Worker/ReelRoulette.Worker.csproj`
 - WebUI client: `src/clients/web/ReelRoulette.WebUI/ReelRoulette.WebUI.csproj`
-- WebHost compat project (non-default runtime path): `src/clients/web/ReelRoulette.WebHost/ReelRoulette.WebHost.csproj`
 - Core tests: `src/core/ReelRoulette.Core.Tests/ReelRoulette.Core.Tests.csproj`
 - System-check harness: `src/core/ReelRoulette.Core.SystemChecks/ReelRoulette.Core.SystemChecks.csproj`
 
@@ -36,6 +34,7 @@ Runtime notes:
 - API, SSE, media, and WebUI are served from the same host.
 - Operator UI is available at `/operator`.
 - Runtime config for WebUI is served at `/runtime-config.json` when WebUI is enabled.
+- Default listen URL/port is `http://localhost:45123` unless overridden by runtime settings or script parameters.
 
 ### Run ServerApp with WebUI rebuild
 
@@ -46,7 +45,7 @@ Use when you want to ensure web assets are freshly rebuilt before startup:
 
 ### Run Desktop app
 
-- `dotnet run --project .\source\ReelRoulette.csproj`
+- `dotnet run --project .\src\clients\windows\ReelRoulette.WindowsApp\ReelRoulette.WindowsApp.csproj`
 
 Desktop behavior notes:
 
@@ -125,7 +124,7 @@ Optional helper scripts:
 Packaging notes:
 
 - Server packaging scripts auto-detect version from `src/core/ReelRoulette.ServerApp/ReelRoulette.ServerApp.csproj` when `-Version` is not passed.
-- Desktop packaging scripts auto-detect version from `source/ReelRoulette.csproj` when `-Version` is not passed.
+- Desktop packaging scripts auto-detect version from `src/clients/windows/ReelRoulette.WindowsApp/ReelRoulette.WindowsApp.csproj` when `-Version` is not passed.
 - Desktop packaging scripts stage native desktop runtime dependencies into publish output (`runtimes/win-x64/native`) at package time.
 - Desktop native dependency staging prefers local repo runtimes when available; otherwise scripts acquire dependencies via Chocolatey (`ffmpeg` for `ffprobe.exe`, `vlc` for LibVLC files).
 - Server packaging scripts run WebUI build and bundle static assets into ServerApp publish output (`wwwroot`) so packaged runtime includes WebUI and Operator favicon.
@@ -136,7 +135,9 @@ Packaging notes:
 
 Use one command to align release-version surfaces:
 
-- `tools/scripts/set-release-version.ps1 -Version 0.9.0 -UpdateDesktopVersion -RegenerateContracts -RunVerify`
+- `tools/scripts/set-release-version.ps1 -Version 0.9.1-dev -UpdateDesktopVersion -RegenerateContracts -RunVerify`
+- By default, this script also updates release command examples in `README.md` and `docs/dev-setup.md`.
+- Use `-NoDocUpdates` to skip those docs updates when needed.
 
 This updates:
 
@@ -153,7 +154,13 @@ Then package server and desktop as needed:
 - `tools/scripts/package-desktop-win-portable.ps1`
 - `tools/scripts/package-desktop-win-inno.ps1`
 - or run the chained flow:
-  - `tools/scripts/full-release.ps1 -Version 0.9.0`
+  - `tools/scripts/full-release.ps1 -Version 0.9.1-dev`
+
+Reset manual testing checklist state for a fresh run:
+
+- `tools/scripts/reset-checklist.ps1`
+- `tools/scripts/reset-checklist.ps1 -KeepMetadata`
+- `tools/scripts/reset-checklist.ps1 -RemoveWaived`
 
 GitHub release asset upload flow:
 

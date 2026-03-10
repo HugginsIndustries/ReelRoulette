@@ -10,7 +10,7 @@ public static class ClientLogRelay
 {
     private static readonly HttpClient HttpClient = new();
     private static readonly object Lock = new();
-    private static string _baseUrl = "http://localhost:51234";
+    private static string _baseUrl = "http://localhost:45123";
 
     public static void SetBaseUrl(string? baseUrl)
     {

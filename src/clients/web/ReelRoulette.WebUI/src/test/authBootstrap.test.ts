@@ -20,7 +20,7 @@ describe("bootstrapAuthSession", () => {
   const compatibleVersion = {
     appVersion: "dev",
     apiVersion: "1",
-    assetsVersion: "0.9.0",
+    assetsVersion: "0.9.1-dev",
     minimumCompatibleApiVersion: "0",
     supportedApiVersions: ["1", "0"],
     capabilities: [

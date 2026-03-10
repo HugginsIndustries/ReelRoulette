@@ -104,7 +104,7 @@ Do not use this file for detailed architecture explanation or current capability
     - server lifecycle logs,
     - desktop action/error logs,
     - web/mobile SSE/auth/error logs,
-    - source-separated evidence snippets in `docs/testing-guide.md`.
+    - source-separated evidence snippets in `docs/testing-checklist.md`.
 
 ### M8h - UX/UI Polish Follow-up (Post-M8f Reliability Closeout)
 
@@ -515,7 +515,7 @@ Do not use this file for detailed architecture explanation or current capability
 - **Verification evidence**:
   - Packaging scripts produce expected Linux artifacts under `artifacts/packages/`.
   - Install/run smoke checks from packaged artifacts pass on Linux baseline host.
-  - `docs/testing-guide.md` packaging checklist includes Linux package checks.
+  - `docs/testing-checklist.md` packaging checklist includes Linux package checks.
 
 ### M17c - CI Linux Distribution Gates
 
@@ -542,7 +542,7 @@ Do not use this file for detailed architecture explanation or current capability
 - **Scope**:
   - Update `README.md` with Linux run/package command paths.
   - Update `docs/dev-setup.md` with Linux prerequisites, runtime notes, and packaging flow.
-  - Update `docs/testing-guide.md` with Linux-specific validation checklist entries.
+  - Update `docs/testing-checklist.md` with Linux-specific validation checklist entries.
   - Update `docs/domain-inventory.md` to include Linux packaging/runtime surfaces.
   - Add Linux troubleshooting guidance:
     - native dependency resolution,
@@ -571,7 +571,7 @@ Do not use this file for detailed architecture explanation or current capability
   - No critical Linux-only runtime regressions remain for server or desktop.
   - Release tracking docs are synchronized to final Linux-ready state.
 - **Verification evidence**:
-  - Completed Linux checklist entries in `docs/testing-guide.md`.
+  - Completed Linux checklist entries in `docs/testing-checklist.md`.
   - CI evidence for Linux packaging + smoke checks.
   - Updated `MILESTONES.md`, `CHANGELOG.md`, and `COMMIT_MESSAGE.txt` entries reflecting final M17 state.
 
@@ -607,7 +607,7 @@ Latest completions first:
     - SSE replay/resync-required recovery checks,
     - missing/invalid media and related API-error path checks.
   - Produce full repo-wide manual testing artifacts linked to Operator test sections:
-    - `docs/testing-guide.md` (workflow + inline checklist + PASS/FAIL evidence capture).
+    - `docs/testing-checklist.md` (workflow + inline checklist + PASS/FAIL evidence capture).
   - Include Operator-assisted evidence capture quality-of-life features:
     - per-scenario PASS/FAIL + note + timestamp recording,
     - copy/export test evidence bundle (status + relevant log snippets),
@@ -641,14 +641,14 @@ Latest completions first:
     - `.github/workflows/ci.yml`,
     - `.github/workflows/package-windows.yml`.
   - Manual validation artifacts added:
-    - `docs/testing-guide.md`.
+    - `docs/testing-checklist.md`.
   - Automated verification passes on current branch:
     - `dotnet build ReelRoulette.sln`
     - `dotnet test ReelRoulette.sln`
     - `npm run verify` (`src/clients/web/ReelRoulette.WebUI`)
     - `tools/scripts/verify-web-deploy.ps1`
   - Manual checklist waiver applied per user direction:
-    - remaining `NOT TESTED` items in `docs/testing-guide.md` are accepted as pass/deferred for M8f closeout.
+    - remaining `NOT TESTED` items in `docs/testing-checklist.md` are accepted as pass/deferred for M8f closeout.
   - High/medium reliability fix slice (post-manual test feedback) is implemented:
     - duplicate scan now shows deterministic API-recovery guidance instead of silent no-op,
     - auto-tag scan now reports runtime recovery state accurately and no longer relies on a false version-only health signal,

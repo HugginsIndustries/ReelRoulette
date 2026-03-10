@@ -36,7 +36,7 @@ dotnet run --project .\src\core\ReelRoulette.ServerApp\ReelRoulette.ServerApp.cs
 Run the desktop client:
 
 ```bash
-dotnet run --project .\source\ReelRoulette.csproj
+dotnet run --project .\src\clients\windows\ReelRoulette.WindowsApp\ReelRoulette.WindowsApp.csproj
 ```
 
 Run the WebUI dev server:
@@ -59,6 +59,8 @@ Run server app directly:
 ./tools/scripts/run-server.sh
 ```
 
+Default listen URL: `http://localhost:45123`.
+
 Build WebUI and run server app:
 
 ```bash
@@ -70,7 +72,7 @@ Build WebUI and run server app:
 Set release-aligned version surfaces in one step:
 
 ```powershell
-.\tools\scripts\set-release-version.ps1 -Version 0.9.0 -UpdateDesktopVersion -RegenerateContracts -RunVerify
+.\tools\scripts\set-release-version.ps1 -Version 0.9.1-dev -UpdateDesktopVersion -RegenerateContracts -RunVerify
 ```
 
 ## Verification
@@ -104,7 +106,8 @@ dotnet run --project .\src\core\ReelRoulette.Core.SystemChecks\ReelRoulette.Core
 
 Manual test guide:
 
-- `docs/testing-guide.md`
+- `docs/testing-checklist.md`
+- `tools/scripts/reset-checklist.ps1` resets testing-checklist metadata/checklist state for a new pass.
 
 ## Packaging (Windows)
 
@@ -114,16 +117,16 @@ Manual test guide:
 - Desktop Inno installer package: `tools/scripts/package-desktop-win-inno.ps1`
 - If `-Version` is omitted:
   - server packaging scripts auto-use `src/core/ReelRoulette.ServerApp/ReelRoulette.ServerApp.csproj` `<Version>`,
-  - desktop packaging scripts auto-use `source/ReelRoulette.csproj` `<Version>`.
+  - desktop packaging scripts auto-use `src/clients/windows/ReelRoulette.WindowsApp/ReelRoulette.WindowsApp.csproj` `<Version>`.
 - Server packaging scripts rebuild and bundle WebUI static assets into published output (`wwwroot`), including `/HI.ico`.
 - Desktop packaging scripts stage native desktop dependencies into published output (`runtimes/win-x64/native`) during packaging.
 - Desktop native staging prefers local repo runtimes when present; otherwise scripts acquire dependencies via Chocolatey (`ffmpeg` + `vlc`).
 - Installer metadata (setup/start-menu/uninstall display) uses shared `assets/HI.ico`.
 
-Simple release flow (example `0.9.0`):
+Simple release flow (example `0.9.1-dev`):
 
 ```powershell
-.\tools\scripts\full-release.ps1 -Version 0.9.0
+.\tools\scripts\full-release.ps1 -Version 0.9.1-dev
 ```
 
 GitHub release asset flow:

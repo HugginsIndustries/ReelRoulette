@@ -124,12 +124,12 @@ namespace ReelRoulette
 
         // Web UI settings
         private bool _webRemoteEnabled = false;
-        private int _webRemotePort = 51234;
+        private int _webRemotePort = 45123;
         private bool _webRemoteBindOnLan = false;
         private string _webRemoteLanHostname = "reel";
         private WebUiAuthMode _webRemoteAuthMode = WebUiAuthMode.TokenRequired;
         private string? _webRemoteSharedToken;
-        private string _coreServerBaseUrl = "http://localhost:51234";
+        private string _coreServerBaseUrl = "http://localhost:45123";
         private string _independentWebUiBaseUrl = "http://localhost:51302";
         private string _coreClientId = Guid.NewGuid().ToString("N");
         private readonly string _coreSessionId = Guid.NewGuid().ToString("N");
@@ -7538,7 +7538,7 @@ namespace ReelRoulette
                 }
 
                 _webRemoteEnabled = settings.Enabled;
-                _webRemotePort = settings.Port > 0 ? settings.Port : 51234;
+                _webRemotePort = settings.Port > 0 ? settings.Port : 45123;
                 _webRemoteBindOnLan = settings.BindOnLan;
                 _webRemoteLanHostname = NormalizeWebRemoteLanHostname(settings.LanHostname);
                 _webRemoteAuthMode = string.Equals(settings.AuthMode, "Off", StringComparison.OrdinalIgnoreCase)
@@ -7909,7 +7909,7 @@ namespace ReelRoulette
             public FilterState? FilterState { get; set; }
             
             public bool AutoTagScanFullLibrary { get; set; } = true;
-            public string CoreServerBaseUrl { get; set; } = "http://localhost:51234";
+            public string CoreServerBaseUrl { get; set; } = "http://localhost:45123";
             public string? CoreClientId { get; set; }
         }
 
@@ -8151,7 +8151,7 @@ namespace ReelRoulette
                 OpenWebUiMenuItem.IsEnabled = _webRemoteEnabled;
 
             _coreServerBaseUrl = string.IsNullOrWhiteSpace(settings.CoreServerBaseUrl)
-                ? "http://localhost:51234"
+                ? "http://localhost:45123"
                 : settings.CoreServerBaseUrl.Trim();
             ClientLogRelay.SetBaseUrl(_coreServerBaseUrl);
             
@@ -9586,7 +9586,7 @@ namespace ReelRoulette
                                     if (updated != null)
                                     {
                                         _webRemoteEnabled = updated.Enabled;
-                                        _webRemotePort = updated.Port > 0 ? updated.Port : 51234;
+                                        _webRemotePort = updated.Port > 0 ? updated.Port : 45123;
                                         _webRemoteBindOnLan = updated.BindOnLan;
                                         _webRemoteLanHostname = NormalizeWebRemoteLanHostname(updated.LanHostname);
                                         _webRemoteAuthMode = string.Equals(updated.AuthMode, "Off", StringComparison.OrdinalIgnoreCase)

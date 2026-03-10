@@ -2,7 +2,7 @@ namespace ReelRoulette.Server.Hosting;
 
 public sealed class ServerRuntimeOptions
 {
-    public string ListenUrl { get; set; } = "http://localhost:51301";
+    public string ListenUrl { get; set; } = "http://localhost:45123";
     public bool RequireAuth { get; set; }
     public bool TrustLocalhost { get; set; } = true;
     public bool BindOnLan { get; set; }

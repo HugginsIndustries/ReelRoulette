@@ -2,7 +2,7 @@
 
 Canonical web client project for M7a (`Vite + TypeScript`).
 
-For M7c deployment, this app is served by `ReelRoulette.WebHost` from immutable versioned artifacts (not directly from the WebUI source tree).
+This app is served by `ReelRoulette.ServerApp` as part of the consolidated runtime.
 
 ## Runtime Config
 
@@ -12,7 +12,7 @@ Config shape (required):
 
 ```json
 {
-  "apiBaseUrl": "http://localhost:51301/api",
+  "apiBaseUrl": "http://localhost:51301",
   "sseUrl": "http://localhost:51301/api/events",
   "pairToken": "reelroulette-dev-token"
 }

@@ -78,7 +78,7 @@ public sealed class CoreSettingsService
         var changed = false;
         lock (_lock)
         {
-            var normalizedPort = snapshot.Port > 0 ? snapshot.Port : 51234;
+            var normalizedPort = snapshot.Port > 0 ? snapshot.Port : 45123;
             var normalizedHost = string.IsNullOrWhiteSpace(snapshot.LanHostname) ? "reel" : snapshot.LanHostname.Trim();
             var normalizedAuthMode = string.IsNullOrWhiteSpace(snapshot.AuthMode) ? "TokenRequired" : snapshot.AuthMode.Trim();
             var normalizedSharedToken = string.IsNullOrWhiteSpace(snapshot.SharedToken) ? null : snapshot.SharedToken.Trim();
@@ -193,7 +193,7 @@ public sealed class CoreSettingsService
                     if (parsed.WebRuntime != null)
                     {
                         webRuntime.Enabled = parsed.WebRuntime.Enabled;
-                        webRuntime.Port = parsed.WebRuntime.Port > 0 ? parsed.WebRuntime.Port : 51234;
+                        webRuntime.Port = parsed.WebRuntime.Port > 0 ? parsed.WebRuntime.Port : 45123;
                         webRuntime.BindOnLan = parsed.WebRuntime.BindOnLan;
                         webRuntime.LanHostname = string.IsNullOrWhiteSpace(parsed.WebRuntime.LanHostname) ? "reel" : parsed.WebRuntime.LanHostname.Trim();
                         webRuntime.AuthMode = string.IsNullOrWhiteSpace(parsed.WebRuntime.AuthMode) ? "TokenRequired" : parsed.WebRuntime.AuthMode.Trim();

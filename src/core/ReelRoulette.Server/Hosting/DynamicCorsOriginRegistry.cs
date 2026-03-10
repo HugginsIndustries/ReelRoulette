@@ -130,7 +130,7 @@ public sealed class DynamicCorsOriginRegistry : IDisposable
 
         if (snapshot.Enabled)
         {
-            var webPort = snapshot.Port > 0 ? snapshot.Port : 51234;
+            var webPort = snapshot.Port > 0 ? snapshot.Port : 45123;
             _allowedOrigins.Add(BuildOrigin("localhost", webPort));
             _allowedOrigins.Add(BuildOrigin("127.0.0.1", webPort));
 

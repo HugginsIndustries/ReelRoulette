@@ -60,7 +60,7 @@ flowchart LR
 
 ### Client Layers
 
-- Desktop client (`source/`) and WebUI (`src/clients/web/ReelRoulette.WebUI`) are orchestration/render layers.
+- Desktop client (`src/clients/windows/ReelRoulette.WindowsApp/`) and WebUI (`src/clients/web/ReelRoulette.WebUI`) are orchestration/render layers.
 - Clients issue command/query calls through APIs and project state from API plus SSE.
 - Clients must not reintroduce local authoritative mutation fallbacks for migrated domains.
 
@@ -132,11 +132,11 @@ Operator UI is an operational surface and does not own domain logic.
 
 ## Repository Map
 
-- `source/`: desktop client orchestration and rendering.
 - `src/core/ReelRoulette.Core`: domain logic and storage abstractions.
 - `src/core/ReelRoulette.Server`: transport/composition layer.
 - `src/core/ReelRoulette.ServerApp`: default runtime host and operator surface.
 - `src/clients/web/ReelRoulette.WebUI`: web client orchestration.
+- `src/clients/windows/ReelRoulette.WindowsApp/`: desktop client orchestration and rendering.
 - `shared/api/openapi.yaml`: canonical API contract source.
 
 ## Guardrails

@@ -2,6 +2,7 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$Version,
     [switch]$UpdateDesktopVersion,
+    [switch]$NoDocUpdates,
     [switch]$RegenerateContracts,
     [switch]$RunVerify
 )
@@ -80,6 +81,49 @@ function Update-WebAuthBootstrapTestAssetsVersion {
     Set-FileContentIfChanged -Path $path -NewContent $next | Out-Null
 }
 
+function Update-ReadmeVersionExamples {
+    $path = Join-Path $repoRoot "README.md"
+    $raw = Get-Content -Path $path -Raw
+
+    if (-not [regex]::IsMatch($raw, 'set-release-version\.ps1 -Version [^\s`]+')) {
+        throw "Failed to find set-release-version command version in $path"
+    }
+    if (-not [regex]::IsMatch($raw, 'full-release\.ps1 -Version [^\s`]+')) {
+        throw "Failed to find full-release command version in $path"
+    }
+    if (-not [regex]::IsMatch($raw, 'Simple release flow \(example `[^`]+`\):')) {
+        throw "Failed to find simple release flow example line in $path"
+    }
+
+    $next = $raw
+    $next = [regex]::Replace($next, 'set-release-version\.ps1 -Version [^\s`]+', "set-release-version.ps1 -Version $Version", 1)
+    $next = [regex]::Replace($next, 'full-release\.ps1 -Version [^\s`]+', "full-release.ps1 -Version $Version", 1)
+    $next = [regex]::Replace($next, 'Simple release flow \(example `[^`]+`\):', ('Simple release flow (example `' + $Version + '`):'), 1)
+    Set-FileContentIfChanged -Path $path -NewContent $next | Out-Null
+}
+
+function Update-DevSetupVersionExamples {
+    $path = Join-Path $repoRoot "docs\dev-setup.md"
+    $raw = Get-Content -Path $path -Raw
+
+    if (-not [regex]::IsMatch($raw, 'set-release-version\.ps1 -Version [^\s`]+')) {
+        throw "Failed to find set-release-version command version in $path"
+    }
+    if (-not [regex]::IsMatch($raw, 'full-release\.ps1 -Version [^\s`]+')) {
+        throw "Failed to find full-release command version in $path"
+    }
+
+    $next = $raw
+    $next = [regex]::Replace($next, 'set-release-version\.ps1 -Version [^\s`]+', "set-release-version.ps1 -Version $Version", 1)
+    $next = [regex]::Replace($next, 'full-release\.ps1 -Version [^\s`]+', "full-release.ps1 -Version $Version", 1)
+    Set-FileContentIfChanged -Path $path -NewContent $next | Out-Null
+}
+
+function Update-ReleaseDocsVersion {
+    Update-ReadmeVersionExamples
+    Update-DevSetupVersionExamples
+}
+
 function Set-ProjectVersion {
     param(
         [Parameter(Mandatory = $true)]
@@ -125,7 +169,10 @@ try {
 
     Set-ProjectVersion -ProjectPath (Join-Path $repoRoot "src\core\ReelRoulette.ServerApp\ReelRoulette.ServerApp.csproj")
     if ($UpdateDesktopVersion.IsPresent) {
-        Set-ProjectVersion -ProjectPath (Join-Path $repoRoot "source\ReelRoulette.csproj")
+        Set-ProjectVersion -ProjectPath (Join-Path $repoRoot "src\clients\windows\ReelRoulette.WindowsApp\ReelRoulette.WindowsApp.csproj")
+    }
+    if (-not $NoDocUpdates.IsPresent) {
+        Update-ReleaseDocsVersion
     }
 
     if ($RegenerateContracts.IsPresent) {

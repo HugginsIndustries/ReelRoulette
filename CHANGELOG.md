@@ -6,17 +6,24 @@ This file follows a Keep a Changelog style format.
 
 ### Added
 
-- None yet.
+- Add `tools/scripts/reset-checklist.ps1` to reset `docs/testing-checklist.md` metadata/checklist state using the current server app version, with default waived-item preservation and optional `-RemoveWaived` cleanup.
 
 ### Changed
 
-- None yet.
+- Move desktop app runtime from `source/` to `src/clients/windows/ReelRoulette.WindowsApp/` while preserving behavior.
+- Replace placeholder windows-client project files with the shipping desktop app project, source files, and assets.
+- Update solution, test-project compile links, desktop packaging scripts, and release-version script to target `ReelRoulette.WindowsApp.csproj` in the new path.
+- Synchronize desktop run/package path references in docs (`README.md`, `CONTEXT.md`, `docs/dev-setup.md`, `docs/architecture.md`, `docs/domain-inventory.md`).
+- Update `set-release-version.ps1` to sync release command examples in `README.md` and `docs/dev-setup.md` by default, with docs opt-out via `-NoDocUpdates`.
+- Remove legacy compatibility projects `ReelRoulette.Worker` and `ReelRoulette.WebHost` from the solution and repository.
+- Remove the legacy `source/` desktop runtime tree after path cutover.
+- Change default server/web runtime port from `51234` to `45123` and add desktop settings guidance to avoid ephemeral ports (`49152-65535`) when choosing Web UI ports.
 
 ### Fixed
 
 - None yet.
 
-## v0.9.0 - Initial Release
+## v0.9.0 - Initial Release (2026-03-09)
 
 - **Attach Windows package artifacts to existing GitHub releases** (2026-03-09):
   - Update `package-windows.yml` with `contents: write` permission so workflow can upload release assets.
@@ -68,7 +75,7 @@ This file follows a Keep a Changelog style format.
   - Add `tools/scripts/full-release.ps1` as an all-in-one release command that chains version fan-out, verification, and server/desktop packaging in canonical order.
   - Add desktop Windows packaging scripts for portable zip and Inno installer (`package-desktop-win-portable.ps1`, `package-desktop-win-inno.ps1`, `tools/installer/ReelRoulette.Desktop.iss`) and extend `package-windows.yml` to publish both server and desktop artifacts.
   - Add Inno Setup auto-detection in `package-serverapp-win-inno.ps1` (PATH, common install paths, registry lookups), removing the strict PATH-only requirement.
-  - Consolidate domain inventory references to `docs/domain-inventory.md` and synchronize docs (`README.md`, `CONTEXT.md`, `docs/dev-setup.md`, `docs/testing-guide.md`) with current scripts and release flow.
+  - Consolidate domain inventory references to `docs/domain-inventory.md` and synchronize docs (`README.md`, `CONTEXT.md`, `docs/dev-setup.md`, `docs/testing-checklist.md`) with current scripts and release flow.
 
 - **Implement M8f hardening/packaging/release-readiness operator testing suite + Windows packaging/CI gates** (2026-03-08):
   - Extend control-plane contracts/endpoints for operator testing + diagnostics (`/control/logs/server`, `/control/testing`, `/control/testing/update`, `/control/testing/reset`) and richer connected client/session/SSE identity status.
@@ -77,7 +84,7 @@ This file follows a Keep a Changelog style format.
   - Add Windows packaging assets for both portable self-contained zip and Inno installer (`tools/scripts/package-serverapp-win-*.ps1`, `tools/installer/ReelRoulette.ServerApp.iss`).
   - Add GitHub Actions workflows for default solution/web verification and Windows packaging artifact publishing.
   - Add regression coverage for operator testing service behavior and OpenAPI control-surface assertions.
-  - Add canonical repo-wide manual testing artifact (`docs/testing-guide.md`).
+  - Add canonical repo-wide manual testing artifact (`docs/testing-checklist.md`).
   - Apply high/medium post-matrix reliability fixes:
     - desktop compatibility gating now blocks API/capability mismatches during runtime probe/reconnect,
     - duplicate/auto-tag scan failures now surface deterministic runtime-recovery guidance instead of silent/noisy false API-required behavior,

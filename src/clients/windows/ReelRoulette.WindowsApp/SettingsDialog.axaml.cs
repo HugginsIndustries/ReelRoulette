@@ -357,11 +357,11 @@ namespace ReelRoulette
         private int _autoRefreshIntervalMinutes = 60;
         private bool _autoRefreshOnlyWhenIdle = true;
         private int _autoRefreshIdleThresholdMinutes = 3;
-        private string _coreServerBaseUrl = "http://localhost:51234";
+        private string _coreServerBaseUrl = "http://localhost:45123";
 
         // Web UI settings
         private bool _webRemoteEnabled = false;
-        private int _webRemotePort = 51234;
+        private int _webRemotePort = 45123;
         private bool _webRemoteBindOnLan = false;
         private string _webRemoteLanHostname = "reel";
         private WebUiAuthMode _webRemoteAuthMode = WebUiAuthMode.TokenRequired;
@@ -581,7 +581,7 @@ namespace ReelRoulette
             get => _coreServerBaseUrl;
             set
             {
-                var next = string.IsNullOrWhiteSpace(value) ? "http://localhost:51234" : value.Trim();
+                var next = string.IsNullOrWhiteSpace(value) ? "http://localhost:45123" : value.Trim();
                 if (_coreServerBaseUrl != next)
                 {
                     _coreServerBaseUrl = next;
@@ -714,9 +714,9 @@ namespace ReelRoulette
             int autoRefreshIntervalMinutes = 60,
             bool autoRefreshOnlyWhenIdle = true,
             int autoRefreshIdleThresholdMinutes = 3,
-            string? coreServerBaseUrl = "http://localhost:51234",
+            string? coreServerBaseUrl = "http://localhost:45123",
             bool webRemoteEnabled = false,
-            int webRemotePort = 51234,
+            int webRemotePort = 45123,
             bool webRemoteBindOnLan = false,
             string? webRemoteLanHostname = "reel",
             WebUiAuthMode webRemoteAuthMode = WebUiAuthMode.TokenRequired,
@@ -848,12 +848,12 @@ namespace ReelRoulette
             OnPropertyChanged(nameof(AutoRefreshOnlyWhenIdle));
             OnPropertyChanged(nameof(AutoRefreshIdleThresholdMinutes));
             OnPropertyChanged(nameof(AutoRefreshIdleThresholdEnabled));
-            _coreServerBaseUrl = string.IsNullOrWhiteSpace(coreServerBaseUrl) ? "http://localhost:51234" : coreServerBaseUrl.Trim();
+            _coreServerBaseUrl = string.IsNullOrWhiteSpace(coreServerBaseUrl) ? "http://localhost:45123" : coreServerBaseUrl.Trim();
             OnPropertyChanged(nameof(CoreServerBaseUrl));
 
             // Web UI settings
             _webRemoteEnabled = webRemoteEnabled;
-            _webRemotePort = webRemotePort > 0 ? webRemotePort : 51234;
+            _webRemotePort = webRemotePort > 0 ? webRemotePort : 45123;
             _webRemoteBindOnLan = webRemoteBindOnLan;
             _webRemoteLanHostname = string.IsNullOrWhiteSpace(webRemoteLanHostname) ? "reel" : webRemoteLanHostname.Trim();
             _webRemoteAuthMode = webRemoteAuthMode;
@@ -902,7 +902,7 @@ namespace ReelRoulette
         public int GetAutoRefreshIntervalMinutes() => _autoRefreshIntervalMinutes;
         public bool GetAutoRefreshOnlyWhenIdle() => _autoRefreshOnlyWhenIdle;
         public int GetAutoRefreshIdleThresholdMinutes() => _autoRefreshIdleThresholdMinutes;
-        public string GetCoreServerBaseUrl() => string.IsNullOrWhiteSpace(_coreServerBaseUrl) ? "http://localhost:51234" : _coreServerBaseUrl.Trim();
+        public string GetCoreServerBaseUrl() => string.IsNullOrWhiteSpace(_coreServerBaseUrl) ? "http://localhost:45123" : _coreServerBaseUrl.Trim();
 
         public bool GetWebRemoteEnabled() => _webRemoteEnabled;
         public int GetWebRemotePort() => _webRemotePort;

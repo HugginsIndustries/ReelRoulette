@@ -158,7 +158,7 @@ function Ensure-WinDesktopNativeAssets {
 }
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
-$projectPath = Join-Path $repoRoot "source\ReelRoulette.csproj"
+$projectPath = Join-Path $repoRoot "src\clients\windows\ReelRoulette.WindowsApp\ReelRoulette.WindowsApp.csproj"
 
 if ([string]::IsNullOrWhiteSpace($Version)) {
     [xml]$projectXml = Get-Content -Path $projectPath -Raw

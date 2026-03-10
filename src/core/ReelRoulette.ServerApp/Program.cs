@@ -443,7 +443,7 @@ static void MapOperatorUi(WebApplication app, ServerAppOptions options, bool web
     function buildNextOperatorUrls(settings) {
       const protocol = window.location.protocol;
       const path = window.location.pathname || "/operator";
-      const port = Number(settings.port || 51234);
+      const port = Number(settings.port || 45123);
       const local = `${protocol}//localhost:${port}${path}`;
       const lan = settings.bindOnLan
         ? `${protocol}//${(settings.lanHostname || window.location.hostname || "localhost")}:${port}${path}`
@@ -617,7 +617,7 @@ static void MapOperatorUi(WebApplication app, ServerAppOptions options, bool web
       lastLoadedSettings = settings;
       document.getElementById("webEnabled").checked = !!settings.enabled;
       document.getElementById("bindOnLan").checked = !!settings.bindOnLan;
-      document.getElementById("webPort").value = settings.port ?? 51234;
+      document.getElementById("webPort").value = settings.port ?? 45123;
       document.getElementById("lanHostname").value = settings.lanHostname ?? "reel";
       document.getElementById("authMode").value = settings.authMode ?? "TokenRequired";
       document.getElementById("sharedToken").value = settings.sharedToken ?? "";
@@ -628,7 +628,7 @@ static void MapOperatorUi(WebApplication app, ServerAppOptions options, bool web
       const payload = {
         enabled: document.getElementById("webEnabled").checked,
         bindOnLan: document.getElementById("bindOnLan").checked,
-        port: Number(document.getElementById("webPort").value || "51234"),
+        port: Number(document.getElementById("webPort").value || "45123"),
         lanHostname: document.getElementById("lanHostname").value || "reel",
         authMode: document.getElementById("authMode").value || "TokenRequired",
         sharedToken: document.getElementById("sharedToken").value || null
@@ -1101,7 +1101,7 @@ file static class ServerAppRuntimeHelpers
             return true;
         }
 
-        var isDefaultPort = uri.Port == 51234;
+        var isDefaultPort = uri.Port == 45123;
         var isDefaultHost =
             uri.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase) ||
             uri.Host.Equals("127.0.0.1", StringComparison.OrdinalIgnoreCase) ||
@@ -1114,7 +1114,7 @@ file static class ServerAppRuntimeHelpers
     public static string BuildListenUrlFromWebRuntime(WebRuntimeSettingsSnapshot webRuntime, string fallbackListenUrl)
     {
         var scheme = "http";
-        var fallbackPort = 51234;
+        var fallbackPort = 45123;
         if (Uri.TryCreate(fallbackListenUrl, UriKind.Absolute, out var fallbackUri))
         {
             scheme = fallbackUri.Scheme;

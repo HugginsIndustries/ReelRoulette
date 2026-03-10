@@ -93,7 +93,7 @@ public sealed class WebUiMdnsService : IHostedService, IDisposable
             }
 
             var hostLabel = NormalizeMdnsHostLabel(snapshot.LanHostname);
-            var port = snapshot.Port > 0 ? snapshot.Port : 51234;
+            var port = snapshot.Port > 0 ? snapshot.Port : 45123;
             if (_mdns != null &&
                 string.Equals(_advertisedHostLabel, hostLabel, StringComparison.OrdinalIgnoreCase) &&
                 _advertisedPort == port)

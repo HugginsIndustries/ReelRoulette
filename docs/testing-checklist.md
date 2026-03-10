@@ -1,13 +1,14 @@
-# ReelRoulette Testing Guide
+# ReelRoulette Testing Checklist
 
-Use this single guide for full-regression passes and milestone validation. Check boxes inline as you go.
+Use this checklist for full-regression passes and milestone validation. Check boxes inline as you go.
+Use `tools/scripts/reset-checklist.ps1` to reset metadata/check states before starting a new validation pass.
 
 ## Test Run Metadata
 
-- Test date/time: 2026-03-09
+- Test date/time: 2026-03-10
 - Tester: Christian Huggins
-- Branch/commit: main / Chore: auto-attach package artifacts to manual GitHub releases
-- Release version (if-applicable): v0.9.0
+- Branch/commit: main / Refactor: move desktop app to windows client path and streamline release flows
+- Release version: v0.9.1-dev
 - Environment (OS + device(s) + browser(s)): Windows-PC (desktop app + Firefox browser), Android (Chrome Browser), iPad (Chrome Browser)
 - Test mode:
   - [x] Full regression sweep
@@ -38,7 +39,7 @@ Use this single guide for full-regression passes and milestone validation. Check
 
 ## Desktop Library + Tagging + Sources
 
-- [x] Import folder works (or fails with clear guidance). (waived for sign-off)
+- [x] Import folder works (or fails with clear guidance). (waived)
 - [x] Manage Sources opens and source enable/disable persists.
 - [x] Duplicate scan + apply flow works (if test data exists).
 - [x] Auto Tag scan + apply works (if test data exists).
@@ -50,7 +51,7 @@ Use this single guide for full-regression passes and milestone validation. Check
 ## WebUI Core UX (Localhost)
 
 - [x] WebUI bootstraps without runtime-config errors.
-- [x] Pair/auth flow works for current auth mode. (waived for sign-off)
+- [x] Pair/auth flow works for current auth mode. (waived)
 - [x] Random play works.
 - [x] Manual controls (prev/play-next) work.
 - [x] Loop/autoplay toggles work.
@@ -80,14 +81,14 @@ Use this single guide for full-regression passes and milestone validation. Check
 - [x] Server Logs refresh works without changing filters.
 - [x] Server Logs copy works.
 - [x] Incoming/outgoing event tables update during activity.
-- [x] Control settings apply flow behaves correctly. (waived for sign-off)
+- [x] Control settings apply flow behaves correctly. (waived)
 - [x] Restart/stop lifecycle buttons behave correctly.
 
 ## Operator Testing Suite Scenarios
 
 - [x] Testing Mode OFF blocks scenario/fault actions.
 - [x] Testing Mode ON enables scenario/fault actions.
-- [x] Admin auth policy enforcement matches mode: (waived for sign-off)
+- [x] Admin auth policy enforcement matches mode: (waived)
   - `AdminAuthMode=Off` allows testing actions unauthenticated.
   - `AdminAuthMode=TokenRequired` requires control auth.
 - [x] API version mismatch scenario produces deterministic client UX.
@@ -107,27 +108,27 @@ Use this single guide for full-regression passes and milestone validation. Check
 
 ## Logging + Diagnostics (Unified last.log Validation) deferred to M8g
 
-- [x] Operator Server Logs shows non-empty log data during active test run. (waived for sign-off)
-- [x] Entries contain clear timestamp/level/source identity. (waived for sign-off)
-- [x] Desktop-originated events appear in server log stream. (waived for sign-off)
-- [x] Web/mobile-originated events appear in server log stream. (waived for sign-off)
-- [x] Server-originated operational logs appear in server log stream. (waived for sign-off)
-- [x] No obvious sensitive values (tokens/secrets/cookies) are logged. (waived for sign-off)
+- [x] Operator Server Logs shows non-empty log data during active test run. (waived)
+- [x] Entries contain clear timestamp/level/source identity. (waived)
+- [x] Desktop-originated events appear in server log stream. (waived)
+- [x] Web/mobile-originated events appear in server log stream. (waived)
+- [x] Server-originated operational logs appear in server log stream. (waived)
+- [x] No obvious sensitive values (tokens/secrets/cookies) are logged. (waived)
 
 ## Packaging + Deployment Smoke
 
-- [x] Portable packaging script runs (Windows): `tools/scripts/package-serverapp-win-portable.ps1`. (waived for sign-off)
-- [x] Inno packaging script runs when `iscc` is available: (waived for sign-off)
+- [x] Portable packaging script runs (Windows): `tools/scripts/package-serverapp-win-portable.ps1`. (waived)
+- [x] Inno packaging script runs when `iscc` is available: (waived)
   - `tools/scripts/package-serverapp-win-inno.ps1`.
-- [x] Desktop portable packaging script runs (Windows): `tools/scripts/package-desktop-win-portable.ps1`. (waived for sign-off)
-- [x] Desktop Inno packaging script runs when `iscc` is available: (waived for sign-off)
+- [x] Desktop portable packaging script runs (Windows): `tools/scripts/package-desktop-win-portable.ps1`. (waived)
+- [x] Desktop Inno packaging script runs when `iscc` is available: (waived)
   - `tools/scripts/package-desktop-win-inno.ps1`.
-- [x] Packaged server runtime includes WebUI static assets (root `/` serves WebUI, not missing-assets text). (waived for sign-off)
-- [x] Shared icon appears consistently across installer UI, installed shortcuts/apps, and `/HI.ico` for WebUI/Operator. (waived for sign-off)
-- [x] WebUI dev/build auto-syncs shared icon (`assets/HI.ico` -> `src/clients/web/ReelRoulette.WebUI/public/HI.ico`). (waived for sign-off)
+- [x] Packaged server runtime includes WebUI static assets (root `/` serves WebUI, not missing-assets text). (waived)
+- [x] Shared icon appears consistently across installer UI, installed shortcuts/apps, and `/HI.ico` for WebUI/Operator. (waived)
+- [x] WebUI dev/build auto-syncs shared icon (`assets/HI.ico` -> `src/clients/web/ReelRoulette.WebUI/public/HI.ico`). (waived)
 - [x] Web deploy verify script passes:
   - `tools/scripts/verify-web-deploy.ps1`.
-- [x] Generated artifacts follow expected naming/location conventions. (waived for sign-off)
+- [x] Generated artifacts follow expected naming/location conventions. (waived)
 
 ## CI/Workflow Readiness
 
@@ -146,20 +147,20 @@ Use this single guide for full-regression passes and milestone validation. Check
 - [x] `docs/architecture.md` reflects current architecture/runtime boundaries.
 - [x] `docs/dev-setup.md` reflects current local setup/run/verify workflows.
 - [x] `docs/domain-inventory.md` reflects current ownership-first implementation surfaces.
-- [x] `docs/testing-guide.md` checklist sections/items match current feature/workflow reality.
+- [x] `docs/testing-checklist.md` checklist sections/items match current feature/workflow reality.
 
-## Optional Release Flow
+## Optional Release Flow SKIPPED
 
-- [x] Release validation gates pass:
+- [ ] Release validation gates pass:
   - `dotnet build ReelRoulette.sln`
   - `dotnet test ReelRoulette.sln`
   - `npm run verify` (`src/clients/web/ReelRoulette.WebUI`)
   - `tools/scripts/verify-web-deploy.ps1`
-- [x] Windows server+desktop packages created (portable + installer) via `tools/scripts/full-release.ps1 -Version <x.y.z>`.
-- [x] Expected artifacts exist under `artifacts/packages/`
-- [x] Package output names/version metadata match the release version.
-- [x] Installed server and desktop apps launch and function properly after installation.
-- [x] `CHANGELOG.md`: cut `Unreleased` into the new release section, then initialize a fresh `Unreleased` block.
+- [ ] Windows server+desktop packages created (portable + installer) via `tools/scripts/full-release.ps1 -Version 0.9.1-dev`.
+- [ ] Expected artifacts exist under `artifacts/packages/`
+- [ ] Package output names/version metadata match the release version.
+- [ ] Installed server and desktop apps launch and function properly after installation.
+- [ ] `CHANGELOG.md`: cut `Unreleased` into the new release section, then initialize a fresh `Unreleased` block.
 
 ## Evidence Capture SKIPPED
 

@@ -204,7 +204,7 @@ if (-not $isccPath) {
 }
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
-$projectPath = Join-Path $repoRoot "source\ReelRoulette.csproj"
+$projectPath = Join-Path $repoRoot "src\clients\windows\ReelRoulette.WindowsApp\ReelRoulette.WindowsApp.csproj"
 $sharedIconPath = Join-Path $repoRoot "assets\HI.ico"
 
 if ([string]::IsNullOrWhiteSpace($Version)) {

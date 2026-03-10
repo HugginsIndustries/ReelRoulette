@@ -1,5 +1,5 @@
 param(
-    [int]$Port = 51234,
+    [int]$Port = 45123,
     [switch]$RequireAuth,
     [switch]$BindOnLan,
     [switch]$DisableLocalhostTrust,

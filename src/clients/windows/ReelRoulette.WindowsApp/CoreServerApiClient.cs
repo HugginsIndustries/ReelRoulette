@@ -827,7 +827,7 @@ public sealed class CoreRefreshSettingsSnapshot
 public sealed class CoreWebRuntimeSettingsSnapshot
 {
     public bool Enabled { get; set; }
-    public int Port { get; set; } = 51234;
+    public int Port { get; set; } = 45123;
     public bool BindOnLan { get; set; }
     public string LanHostname { get; set; } = "reel";
     public string AuthMode { get; set; } = "TokenRequired";

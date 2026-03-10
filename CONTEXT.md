@@ -24,7 +24,7 @@ ReelRoulette is migrating from a monolithic desktop app to a thin-client, API-fi
   - Unified refresh pipeline with stage/status projection and thumbnail generation.
   - Replay-aware SSE envelope with reconnect recovery (`Last-Event-ID`, `resyncRequired`, authoritative requery).
 
-- **Desktop client (`source/`)**
+- **Desktop client (`src/clients/windows/ReelRoulette.WindowsApp/`)**
   - Thin-client for migrated flows: API command/query + SSE projection (no dual-writer core-state mutation).
   - Local-first playback with deterministic API fallback (`ForceApiPlayback` option).
   - Server version/capability compatibility gating with reconnect/resync guidance.
@@ -36,7 +36,7 @@ ReelRoulette is migrating from a monolithic desktop app to a thin-client, API-fi
   - Core playback/control/tag workflows aligned with server-authoritative behavior.
 
 - **Operational surfaces**
-  - Manual validation guide/checklist at `docs/testing-guide.md`.
+  - Manual validation guide/checklist at `docs/testing-checklist.md`.
   - Windows packaging scripts and CI workflows are present for build/verify/package gates.
 
 ## Near-Term Planned Work
@@ -50,20 +50,17 @@ Authoritative roadmap details live in `MILESTONES.md`. Near-term focus areas:
 
 ## Repository Map (High Signal)
 
-- `source/`: shipping desktop application (Avalonia).
 - `src/core/`:
   - `ReelRoulette.Core`: domain + storage/state logic.
   - `ReelRoulette.Server`: thin transport/composition layer.
   - `ReelRoulette.ServerApp`: default host/runtime + operator surfaces.
-  - `ReelRoulette.Worker`: headless host project (non-default runtime path).
   - `ReelRoulette.Core.Tests` and `ReelRoulette.Core.SystemChecks`.
 - `src/clients/`:
   - `web/ReelRoulette.WebUI`: active web client.
-  - `web/ReelRoulette.WebHost`: legacy/compat static host project (not default runtime path).
-  - `windows/ReelRoulette.WindowsApp`: migration target location.
+  - `windows/ReelRoulette.WindowsApp`: shipping desktop client location (Avalonia).
 - `shared/api/openapi.yaml`: API contract source of truth.
 - `tools/scripts/`: runtime/verify/package scripts (`run-server*`, `verify-web*`, `verify-web-deploy*`, `publish-web*`, packaging scripts).
-  - includes `set-release-version.ps1` for release-aligned version fan-out across OpenAPI/runtime/tests/project metadata.
+  - includes `set-release-version.ps1` for release-aligned version fan-out (with optional docs update skip via `-NoDocUpdates`) and `reset-checklist.ps1` for testing-guide reset workflows.
 
 ## Working Commands (Canonical Set)
 
@@ -72,7 +69,7 @@ For full setup/run details use `README.md` and `docs/dev-setup.md`. Core command
 - `dotnet build ReelRoulette.sln`
 - `dotnet test ReelRoulette.sln`
 - `dotnet run --project .\src\core\ReelRoulette.ServerApp\ReelRoulette.ServerApp.csproj`
-- `dotnet run --project .\source\ReelRoulette.csproj`
+- `dotnet run --project .\src\clients\windows\ReelRoulette.WindowsApp\ReelRoulette.WindowsApp.csproj`
 - `.\tools\scripts\run-server.ps1` / `.\tools\scripts\run-server-rebuild.ps1`
 - `npm run verify` (in `src/clients/web/ReelRoulette.WebUI`)
 

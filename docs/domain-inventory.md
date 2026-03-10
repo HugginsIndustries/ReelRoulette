@@ -74,21 +74,21 @@ Includes:
 
 ---
 
-## Desktop Client Orchestration (`source/`)
+## Desktop Client Orchestration (`src/clients/windows/ReelRoulette.WindowsApp/`)
 
 Desktop is orchestration/render for migrated flows.
 
-- `source/MainWindow.axaml.cs`
+- `src/clients/windows/ReelRoulette.WindowsApp/MainWindow.axaml.cs`
   - API/SSE lifecycle orchestration, reconnect/resync guidance, compatibility gating, playback orchestration.
-- `source/CoreServerApiClient.cs`
+- `src/clients/windows/ReelRoulette.WindowsApp/CoreServerApiClient.cs`
   - typed desktop API adapter (commands/queries/SSE wiring).
-- `source/ManageSourcesDialog.axaml.cs`
+- `src/clients/windows/ReelRoulette.WindowsApp/ManageSourcesDialog.axaml.cs`
   - API-backed source/duplicate orchestration behavior.
-- `source/AutoTagDialog.axaml.cs`
+- `src/clients/windows/ReelRoulette.WindowsApp/AutoTagDialog.axaml.cs`
   - API-backed auto-tag scan/apply orchestration.
-- `source/SettingsDialog.axaml(.cs)`
+- `src/clients/windows/ReelRoulette.WindowsApp/SettingsDialog.axaml(.cs)`
   - client-side settings orchestration including playback policy toggle UX.
-- `source/ClientLogRelay.cs`
+- `src/clients/windows/ReelRoulette.WindowsApp/ClientLogRelay.cs`
   - client log relay to server-side log ingestion API.
 
 Boundary:
@@ -147,7 +147,7 @@ Boundary:
 - WebUI tests:
   - `src/clients/web/ReelRoulette.WebUI/src/test/*`
 - Manual test guide/checklist:
-  - `docs/testing-guide.md`
+  - `docs/testing-checklist.md`
 
 Canonical gates:
 
@@ -164,8 +164,9 @@ Runtime scripts:
 
 - `tools/scripts/run-server.ps1` / `.sh`
 - `tools/scripts/run-server-rebuild.ps1` / `.sh`
-- `tools/scripts/set-release-version.ps1` (release-aligned version fan-out for OpenAPI/runtime/tests/project metadata)
+- `tools/scripts/set-release-version.ps1` (release-aligned version fan-out for OpenAPI/runtime/tests/project metadata plus README/dev-setup release command examples; use `-NoDocUpdates` to skip docs updates)
 - `tools/scripts/full-release.ps1` (chained release flow: version fan-out + verify + server/desktop packaging)
+- `tools/scripts/reset-checklist.ps1` (resets `docs/testing-checklist.md` metadata/checklist state; preserves waived checks by default, supports `-RemoveWaived`)
 
 Web verification:
 
@@ -187,12 +188,3 @@ CI:
 
 - `.github/workflows/ci.yml`
 - `.github/workflows/package-windows.yml`
-
----
-
-## Non-Default / Compatibility Paths
-
-- `src/core/ReelRoulette.Worker/*`
-  - retained as headless host project but not the default runtime path.
-- `src/clients/web/ReelRoulette.WebHost/*`
-  - retained for compatibility tooling/deployment paths; not required in normal consolidated runtime.
