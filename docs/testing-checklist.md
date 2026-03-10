@@ -5,70 +5,70 @@ Use `tools/scripts/reset-checklist.ps1` to reset metadata/check states before st
 
 ## Test Run Metadata
 
-- Test date/time: 2026-03-10
+- Test date/time: 2026-03-10 14:51:23
 - Tester: Christian Huggins
-- Branch/commit: main / Refactor: move desktop app to windows client path and streamline release flows
+- Branch/commit: main / pending
 - Release version: v0.9.1-dev
 - Environment (OS + device(s) + browser(s)): Windows-PC (desktop app + Firefox browser), Android (Chrome Browser), iPad (Chrome Browser)
 - Test mode:
-  - [x] Full regression sweep
+  - [ ] Full regression sweep
   - [ ] Targeted regression (list impacted areas):
 
 ## Global Preconditions
 
-- [x] `dotnet build ReelRoulette.sln` passes.
-- [x] `dotnet test ReelRoulette.sln` passes.
-- [x] WebUI verify passes (`npm run verify` in `src/clients/web/ReelRoulette.WebUI`).
-- [x] `ReelRoulette.ServerApp` starts without fatal startup errors.
-- [x] Desktop app can connect to server.
-- [x] WebUI reachable from localhost.
-- [x] Mobile web reachable from LAN (if LAN scenario is in scope).
+- [ ] `dotnet build ReelRoulette.sln` passes.
+- [ ] `dotnet test ReelRoulette.sln` passes.
+- [ ] WebUI verify passes (`npm run verify` in `src/clients/web/ReelRoulette.WebUI`).
+- [ ] `ReelRoulette.ServerApp` starts without fatal startup errors.
+- [ ] Desktop app can connect to server.
+- [ ] WebUI reachable from localhost.
+- [ ] Mobile web reachable from LAN (if LAN scenario is in scope).
 
 ## Desktop Core UX
 
-- [x] Desktop loads and shows current runtime status without crash.
-- [x] Random play works from active preset.
-- [x] Manual library play works.
-- [x] Previous/next timeline navigation works.
-- [x] Loop toggle works.
-- [x] Autoplay toggle works.
-- [x] Volume/mute controls work.
-- [x] Fullscreen/player-view transitions work.
-- [x] No stale/incorrect status text after playback actions.
-- [x] `View -> Diagnostics` opens and shows `CoreClientId`/`CoreSessionId`.
+- [ ] Desktop loads and shows current runtime status without crash.
+- [ ] Random play works from active preset.
+- [ ] Manual library play works.
+- [ ] Previous/next timeline navigation works.
+- [ ] Loop toggle works.
+- [ ] Autoplay toggle works.
+- [ ] Volume/mute controls work.
+- [ ] Fullscreen/player-view transitions work.
+- [ ] No stale/incorrect status text after playback actions.
+- [ ] `View -> Diagnostics` opens and shows `CoreClientId`/`CoreSessionId`.
 
 ## Desktop Library + Tagging + Sources
 
 - [x] Import folder works (or fails with clear guidance). (waived)
-- [x] Manage Sources opens and source enable/disable persists.
-- [x] Duplicate scan + apply flow works (if test data exists).
-- [x] Auto Tag scan + apply works (if test data exists).
-- [x] Favorites toggle updates item state.
-- [x] Blacklist toggle updates item state.
-- [x] Tag editor apply/remove updates item tags as expected.
-- [x] Clear playback stats flow works with confirmation.
+- [ ] Manage Sources opens and source enable/disable persists.
+- [ ] Duplicate scan + apply flow works (if test data exists).
+- [ ] Auto Tag scan + apply works (if test data exists).
+- [ ] Favorites toggle updates item state.
+- [ ] Blacklist toggle updates item state.
+- [ ] Tag editor apply/remove updates item tags as expected.
+- [ ] Clear playback stats flow works with confirmation.
 
 ## WebUI Core UX (Localhost)
 
-- [x] WebUI bootstraps without runtime-config errors.
+- [ ] WebUI bootstraps without runtime-config errors.
 - [x] Pair/auth flow works for current auth mode. (waived)
-- [x] Random play works.
-- [x] Manual controls (prev/play-next) work.
-- [x] Loop/autoplay toggles work.
-- [x] Favorite/blacklist actions work.
-- [x] Tag editor flows work (open/edit/apply/close).
-- [x] SSE status transitions are user-friendly (`connected`, `reconnecting`, `resync` paths).
+- [ ] Random play works.
+- [ ] Manual controls (prev/play-next) work.
+- [ ] Loop/autoplay toggles work.
+- [ ] Favorite/blacklist actions work.
+- [ ] Tag editor flows work (open/edit/apply/close).
+- [ ] SSE status transitions are user-friendly (`connected`, `reconnecting`, `resync` paths).
 
 ## Mobile Web UX (LAN)
 
-- [x] Mobile web can connect and play media.
-- [x] Core controls are usable on touch.
-- [x] Tiny diagnostics panel appears below status line.
-- [x] Mobile `clientType`/identity appears in Operator Connected Clients.
+- [ ] Mobile web can connect and play media.
+- [ ] Core controls are usable on touch.
+- [ ] Tiny diagnostics panel appears below status line.
+- [ ] Mobile `clientType`/identity appears in Operator Connected Clients.
 
 ## Operator UI Core
 
-- [x] Page layout renders in expected order:
+- [ ] Page layout renders in expected order:
   - ReelRoulette Server
   - Web Runtime Settings
   - Control Settings
@@ -76,35 +76,35 @@ Use `tools/scripts/reset-checklist.ps1` to reset metadata/check states before st
   - Connected Clients
   - Server Logs
   - Incoming/Outgoing API Events
-- [x] Connected Clients panel shows differentiated rows (`clientType`, `deviceName`, `clientId`, `sessionId`, `remoteAddress`, `connected`).
-- [x] Connected Clients `Copy` button works.
-- [x] Server Logs refresh works without changing filters.
-- [x] Server Logs copy works.
-- [x] Incoming/outgoing event tables update during activity.
+- [ ] Connected Clients panel shows differentiated rows (`clientType`, `deviceName`, `clientId`, `sessionId`, `remoteAddress`, `connected`).
+- [ ] Connected Clients `Copy` button works.
+- [ ] Server Logs refresh works without changing filters.
+- [ ] Server Logs copy works.
+- [ ] Incoming/outgoing event tables update during activity.
 - [x] Control settings apply flow behaves correctly. (waived)
-- [x] Restart/stop lifecycle buttons behave correctly.
+- [ ] Restart/stop lifecycle buttons behave correctly.
 
 ## Operator Testing Suite Scenarios
 
-- [x] Testing Mode OFF blocks scenario/fault actions.
-- [x] Testing Mode ON enables scenario/fault actions.
+- [ ] Testing Mode OFF blocks scenario/fault actions.
+- [ ] Testing Mode ON enables scenario/fault actions.
 - [x] Admin auth policy enforcement matches mode: (waived)
   - `AdminAuthMode=Off` allows testing actions unauthenticated.
   - `AdminAuthMode=TokenRequired` requires control auth.
-- [x] API version mismatch scenario produces deterministic client UX.
-- [x] Capability mismatch scenario produces deterministic client UX.
-- [x] API unavailable scenario produces recoverable client behavior.
-- [x] Missing media scenario shows clear playback guidance (no crash).
-- [x] SSE disconnect scenario triggers reconnect/resync behavior.
-- [x] Reset scenario flags returns system to baseline behavior.
+- [ ] API version mismatch scenario produces deterministic client UX.
+- [ ] Capability mismatch scenario produces deterministic client UX.
+- [ ] API unavailable scenario produces recoverable client behavior.
+- [ ] Missing media scenario shows clear playback guidance (no crash).
+- [ ] SSE disconnect scenario triggers reconnect/resync behavior.
+- [ ] Reset scenario flags returns system to baseline behavior.
 
 ## Cross-Client Parity + Sync
 
-- [x] Favorite/blacklist changes on desktop reflect in web/mobile.
-- [x] Favorite/blacklist changes on web/mobile reflect in desktop.
-- [x] Tag edits converge across clients.
-- [x] Refresh status projection is consistent across clients.
-- [x] No critical cross-client state divergence observed.
+- [ ] Favorite/blacklist changes on desktop reflect in web/mobile.
+- [ ] Favorite/blacklist changes on web/mobile reflect in desktop.
+- [ ] Tag edits converge across clients.
+- [ ] Refresh status projection is consistent across clients.
+- [ ] No critical cross-client state divergence observed.
 
 ## Logging + Diagnostics (Unified last.log Validation) deferred to M8g
 
@@ -126,28 +126,28 @@ Use `tools/scripts/reset-checklist.ps1` to reset metadata/check states before st
 - [x] Packaged server runtime includes WebUI static assets (root `/` serves WebUI, not missing-assets text). (waived)
 - [x] Shared icon appears consistently across installer UI, installed shortcuts/apps, and `/HI.ico` for WebUI/Operator. (waived)
 - [x] WebUI dev/build auto-syncs shared icon (`assets/HI.ico` -> `src/clients/web/ReelRoulette.WebUI/public/HI.ico`). (waived)
-- [x] Web deploy verify script passes:
+- [ ] Web deploy verify script passes:
   - `tools/scripts/verify-web-deploy.ps1`.
 - [x] Generated artifacts follow expected naming/location conventions. (waived)
 
 ## CI/Workflow Readiness
 
-- [x] Workflow YAML files are valid and committed in `.github/workflows`.
-- [x] Default CI gates map to required checks (`build`, `test`, web verify).
-- [x] Packaging workflow path is defined and runnable.
+- [ ] Workflow YAML files are valid and committed in `.github/workflows`.
+- [ ] Default CI gates map to required checks (`build`, `test`, web verify).
+- [ ] Packaging workflow path is defined and runnable.
 
 ## Documentation Sync
 
-- [x] `AGENTS.md` reflects current agent workflow/document ownership rules.
-- [x] `README.md` reflects current runtime scripts/commands and practical onboarding info.
-- [x] `CONTEXT.md` reflects current implemented capability/ownership map.
-- [x] `CHANGELOG.md` follows Keep a Changelog format and reflects only current unreleased delta.
-- [x] `MILESTONES.md` reflects current scope/status/acceptance evidence and deferrals.
-- [x] `docs/api.md` reflects current API/error-path contract behavior.
-- [x] `docs/architecture.md` reflects current architecture/runtime boundaries.
-- [x] `docs/dev-setup.md` reflects current local setup/run/verify workflows.
-- [x] `docs/domain-inventory.md` reflects current ownership-first implementation surfaces.
-- [x] `docs/testing-checklist.md` checklist sections/items match current feature/workflow reality.
+- [ ] `AGENTS.md` reflects current agent workflow/document ownership rules.
+- [ ] `README.md` reflects current runtime scripts/commands and practical onboarding info.
+- [ ] `CONTEXT.md` reflects current implemented capability/ownership map.
+- [ ] `CHANGELOG.md` follows Keep a Changelog format and reflects only current unreleased delta.
+- [ ] `MILESTONES.md` reflects current scope/status/acceptance evidence and deferrals.
+- [ ] `docs/api.md` reflects current API/error-path contract behavior.
+- [ ] `docs/architecture.md` reflects current architecture/runtime boundaries.
+- [ ] `docs/dev-setup.md` reflects current local setup/run/verify workflows.
+- [ ] `docs/domain-inventory.md` reflects current ownership-first implementation surfaces.
+- [ ] `docs/testing-checklist.md` checklist sections/items match current feature/workflow reality.
 
 ## Optional Release Flow SKIPPED
 
@@ -174,8 +174,8 @@ Use `tools/scripts/reset-checklist.ps1` to reset metadata/check states before st
 ## Sign-Off
 
 - Overall result:
-  - [x] PASS
+  - [ ] PASS
   - [ ] FAIL
-- [x] Waivers (if any) documented:
+- [ ] Waivers (if any) documented:
 - [ ] Follow-up tasks/milestones created and linked:
-- [x] Ready for commit/sign-off:
+- [ ] Ready for commit/sign-off:

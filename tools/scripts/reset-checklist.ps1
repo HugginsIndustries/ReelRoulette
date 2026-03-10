@@ -45,8 +45,9 @@ function Update-MetadataLine {
         [string]$Value
     )
 
-    if ($Line -match "^- $Prefix:") {
-        return "- $Prefix: $Value"
+    $escapedPrefix = [regex]::Escape($Prefix)
+    if ($Line -match "^- ${escapedPrefix}:") {
+        return "- ${Prefix}: $Value"
     }
     return $Line
 }
