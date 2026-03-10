@@ -18,6 +18,12 @@ This file follows a Keep a Changelog style format.
 
 ## v0.9.0 - Initial Release
 
+- **Attach Windows package artifacts to existing GitHub releases** (2026-03-09):
+  - Update `package-windows.yml` with `contents: write` permission so workflow can upload release assets.
+  - Add tag-release safety check (`gh release view`) before upload to enforce manual release-first workflow.
+  - Upload package outputs (`artifacts/packages/**/*.zip`, `artifacts/packages/**/*.exe`) to the existing tag release via `gh release upload --clobber`.
+  - Document final release flow in `README.md` and `docs/dev-setup.md` (manual release notes + automatic asset attachment).
+
 - **Fix desktop package resolver output-stream binding in CI** (2026-03-09):
   - Prevent Chocolatey install command output from leaking into resolver return values during native dependency acquisition.
   - Normalize resolver returns to single-string paths and add array/empty-value guards before `Copy-Item -LiteralPath` operations.

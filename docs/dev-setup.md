@@ -155,6 +155,13 @@ Then package server and desktop as needed:
 - or run the chained flow:
   - `tools/scripts/full-release.ps1 -Version 0.9.0`
 
+GitHub release asset upload flow:
+
+- Push your final release commit.
+- Manually create/publish the tag release on GitHub with your own release notes.
+- `package-windows.yml` runs on `v*` tag push, builds packages, verifies the release exists for that tag, and uploads generated `.zip`/`.exe` files to that release.
+- Re-runs replace matching asset names via `gh release upload --clobber`.
+
 ## Troubleshooting
 
 - WebUI changes not appearing:

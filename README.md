@@ -126,6 +126,13 @@ Simple release flow (example `0.9.0`):
 .\tools\scripts\full-release.ps1 -Version 0.9.0
 ```
 
+GitHub release asset flow:
+
+- Push your final release commit.
+- Manually create the GitHub tag/release and publish your own release notes.
+- Tag push triggers `package-windows.yml`, which builds server + desktop packages.
+- Workflow verifies the release already exists for that tag, then uploads `artifacts/packages/**/*.zip` and `artifacts/packages/**/*.exe` to that release (`--clobber` on reruns).
+
 ## Documentation Map
 
 - Current implemented capability inventory: `CONTEXT.md`
