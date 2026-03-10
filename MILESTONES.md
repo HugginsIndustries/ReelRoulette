@@ -65,37 +65,46 @@ Do not use this file for detailed architecture explanation or current capability
 ### M8g - Unified last.log Pipeline (Server + Client Logging Consolidation)
 
 - **Status**: ⏳ Planned
-- **Goal**: Make `last.log` the single reliable diagnostics stream for server runtime logs plus desktop/web client logs, with clear source/time/level metadata and operator-friendly filtering.
+- **Goal**: Make server-owned `last.log` the single diagnostics stream for server + client logs using structured JSONL entries, with reliable correlation/filtering across services and sessions.
 - **Scope**:
-  - Define and enforce a canonical `last.log` entry shape (timestamp, level, sourceType/source, message, optional client/session/device metadata).
-  - Add server-side centralized log writer service used by:
+  - Define and enforce canonical JSONL log schema (one JSON object per line) with required core fields:
+    - required on every entry: `ts`, `lvl`, `svc`, `comp`, `op`, `msg`,
+    - conditional/optional fields: `traceId`, `spanId`, `reqId`, `clientId`, `sessionId`, `ver`, `build`, `clientTs`, `srcIp`, `userAgent`.
+  - Centralize all writes through one server log writer path used by:
     - server runtime logging pipeline (`ILogger` sink/provider),
-    - client log ingestion endpoint (`POST /api/logs/client`).
-  - Ensure all server runtime logs are written to `last.log` (not only client-ingested logs).
-  - Extend client log ingestion contracts to support correlation metadata:
-    - `clientType`, `clientId`, `sessionId`, `deviceName`, optional structured `meta`.
-  - Ensure desktop logging relay always sends stable client/session metadata with source labels.
-  - Add WebUI log relay to `POST /api/logs/client` for startup/auth/SSE/error and major UX failure paths.
-  - Keep logging best-effort and non-blocking for clients (no user-facing failures on log-post errors).
-  - Add log safety controls:
-    - sensitive-value redaction (tokens/cookies/secrets),
-    - bounded retention/rotation policy (or explicit documented reset policy with guardrails).
-  - Improve Operator `Server Logs` panel usability for unified stream triage:
-    - reliable refresh behavior,
-    - source/level search/filter ergonomics for mixed server+client entries.
+    - client ingestion endpoint (`POST /api/logs/client`).
+  - Preserve two-time semantics for client-originated events:
+    - `ts` = server ingestion/write UTC time (authoritative ordering),
+    - `clientTs` = client-reported event time (diagnostic context).
+  - Require W3C trace context (`traceId`/`spanId`) for HTTP/SSE request-scoped logs; keep it optional for background/local-only client events.
+  - Keep optional human-readable rendering as a *view* over structured fields (Operator panel/console), not as the source-of-truth persisted format.
+  - Enforce privacy-by-default message policy for all emitters using safe templates by construction:
+    - never log filenames/filepaths, tag/category names, preset/source names, token/cookie/secret values,
+    - prefer generic structured status/count wording (for example: `"Saved 2 tags to 2 media"`).
+  - Add final server-side safety rewrite fallback before writing `last.log` to prevent unsafe payload leakage from any caller.
+  - Keep logging best-effort and non-blocking for clients:
+    - client relay failures must not block/interrupt user actions,
+    - retries are asynchronous and bounded.
+  - Define deterministic size-based rotation/retention for `last.log`:
+    - rotate at 25 MB per file,
+    - keep current file + 10 archives,
+    - no compression for rotated files.
+  - Scope for M8g implementation is `server`, `desktop`, and `webui`; `android`/`ios` remain schema-reserved `svc` values for later milestones.
 - **Acceptance criteria**:
-  - `last.log` consistently contains both server runtime logs and desktop/web client logs during normal operation.
-  - Each entry is clearly attributable by source and level with readable timestamps.
-  - Desktop and WebUI both emit meaningful client logs to `/api/logs/client` with identity/session context.
-  - Operator `Server Logs` section shows actionable combined diagnostics without requiring shell access.
-  - Sensitive values are not written to `last.log`.
-  - Log lifecycle behavior (reset and/or rotation) is deterministic and documented.
-  - Automated tests cover server sink behavior, ingestion mapping, and redaction/retention expectations.
+  - `last.log` is JSONL and every entry includes required core fields (`ts`, `lvl`, `svc`, `comp`, `op`, `msg`) with consistent optional-field shapes when emitted.
+  - `last.log` includes both server runtime logs and ingested desktop/web client logs through the same writer path.
+  - Client-originated entries preserve both server time (`ts`) and client time (`clientTs` where provided); ordering uses server-side `ts`.
+  - Request-scoped HTTP/SSE flows include `traceId`/`spanId` and can be filtered end-to-end across server and client events for the same operation flow.
+  - Privacy-by-default constraints are enforced in emitted content (no banned sensitive/domain-identifying values), including server-side fallback rewrite protection.
+  - Operator diagnostics view can filter/search by `svc`, `lvl`, `clientId`, `sessionId`, `traceId`, `comp`, and `op` without requiring shell access.
+  - Client log ingestion failures are non-blocking in user flows and bounded retry behavior is deterministic/tested.
+  - Lifecycle behavior is deterministic and documented with size-based rotation limit (25 MB) and archive cap (10, uncompressed).
+  - Automated tests cover schema validation, ingestion mapping, timestamp semantics, request-scoped trace correlation fields, privacy guardrails (including fallback rewrite), lifecycle behavior, and non-blocking relay behavior.
 - **Verification evidence**:
-  - Server logging sink/provider wired into centralized `last.log` writer.
-  - `/api/logs/client` ingestion writes through same centralized path with source metadata.
-  - Desktop + WebUI log emission paths verified with identity/session fields.
-  - Operator log panel validates mixed-source visibility and filtering behavior.
+  - Centralized server writer emits JSONL entries for both server and client-ingested events.
+  - `/api/logs/client` maps to canonical schema and preserves client/session/trace metadata.
+  - Desktop + WebUI relays verified with stable `svc`, `clientId`, `sessionId`; request-scoped paths include trace fields.
+  - Operator log view validates mixed-source filtering/search by structured fields (`svc`, `lvl`, `clientId`, `sessionId`, `traceId`, `comp`, `op`) plus message text search.
   - Automated verification passes:
     - `dotnet build ReelRoulette.sln`
     - `dotnet test ReelRoulette.sln`
@@ -103,8 +112,10 @@ Do not use this file for detailed architecture explanation or current capability
   - Manual verification captures:
     - server lifecycle logs,
     - desktop action/error logs,
-    - web/mobile SSE/auth/error logs,
-    - source-separated evidence snippets in `docs/testing-checklist.md`.
+    - web SSE/auth/error logs,
+    - combined trace-level evidence across server + client for at least one end-to-end flow,
+    - one explicit `/api/logs/client` failure simulation proving user actions remain non-blocking,
+    - field-level evidence snippets in `docs/testing-checklist.md`.
 
 ### M8h - UX/UI Polish Follow-up (Post-M8f Reliability Closeout)
 
