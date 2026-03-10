@@ -200,33 +200,31 @@ public sealed class LibraryOperationsService
             if (request.Scope == "CurrentSource" && !string.IsNullOrWhiteSpace(request.SourceId))
             {
                 scopeItems = scopeItems.Where(item =>
-                    string.Equals(item["sourceId"]?.GetValue<string>(), request.SourceId, StringComparison.OrdinalIgnoreCase));
+                    string.Equals(GetNodeString(item["sourceId"]), request.SourceId, StringComparison.OrdinalIgnoreCase));
             }
             else if (request.Scope == "AllEnabledSources")
             {
                 var enabledIds = sources
-                    .Where(source => source["isEnabled"]?.GetValue<bool?>() != false)
-                    .Select(source => source["id"]?.GetValue<string>())
+                    .Where(source => GetNodeBool(source["isEnabled"], defaultValue: true))
+                    .Select(source => GetNodeString(source["id"]))
                     .Where(id => !string.IsNullOrWhiteSpace(id))
                     .ToHashSet(StringComparer.OrdinalIgnoreCase);
-                scopeItems = scopeItems.Where(item => enabledIds.Contains(item["sourceId"]?.GetValue<string>() ?? string.Empty));
+                scopeItems = scopeItems.Where(item => enabledIds.Contains(GetNodeString(item["sourceId"])));
             }
 
             var list = scopeItems.ToList();
-            var excludedPending = list.Count(item => string.Equals(item["fingerprintStatus"]?.GetValue<string>(), "Pending", StringComparison.OrdinalIgnoreCase));
-            var excludedFailed = list.Count(item => string.Equals(item["fingerprintStatus"]?.GetValue<string>(), "Failed", StringComparison.OrdinalIgnoreCase));
-            var excludedStale = list.Count(item => string.Equals(item["fingerprintStatus"]?.GetValue<string>(), "Stale", StringComparison.OrdinalIgnoreCase));
+            var excludedPending = list.Count(item => string.Equals(GetNodeString(item["fingerprintStatus"]), "Pending", StringComparison.OrdinalIgnoreCase));
+            var excludedFailed = list.Count(item => string.Equals(GetNodeString(item["fingerprintStatus"]), "Failed", StringComparison.OrdinalIgnoreCase));
+            var excludedStale = list.Count(item => string.Equals(GetNodeString(item["fingerprintStatus"]), "Stale", StringComparison.OrdinalIgnoreCase));
 
             var readyItems = list
-                .Where(item =>
-                    string.Equals(item["fingerprintStatus"]?.GetValue<string>(), "Ready", StringComparison.OrdinalIgnoreCase) &&
-                    !string.IsNullOrWhiteSpace(item["fingerprint"]?.GetValue<string>()))
+                .Where(IsFingerprintReadyForDuplicateScan)
                 .ToList();
 
             var candidateItems = readyItems.Select(item => new FingerprintDuplicateItem
             {
-                ItemId = item["id"]?.GetValue<string>() ?? string.Empty,
-                Fingerprint = item["fingerprint"]?.GetValue<string>() ?? string.Empty,
+                ItemId = GetNodeString(item["id"]),
+                Fingerprint = GetNodeString(item["fingerprint"]),
                 IsReady = true
             });
             var groups = FingerprintDuplicateHelper.BuildExactDuplicateGroups(candidateItems);
@@ -241,7 +239,7 @@ public sealed class LibraryOperationsService
                 foreach (var itemId in group.ItemIds)
                 {
                     var item = readyItems.FirstOrDefault(entry =>
-                        string.Equals(entry["id"]?.GetValue<string>(), itemId, StringComparison.OrdinalIgnoreCase));
+                        string.Equals(GetNodeString(entry["id"]), itemId, StringComparison.OrdinalIgnoreCase));
                     if (item == null)
                     {
                         continue;
@@ -250,11 +248,11 @@ public sealed class LibraryOperationsService
                     responseGroup.Items.Add(new DuplicateGroupItemResponse
                     {
                         ItemId = itemId,
-                        FullPath = item["fullPath"]?.GetValue<string>() ?? string.Empty,
-                        SourceId = item["sourceId"]?.GetValue<string>() ?? string.Empty,
-                        IsFavorite = item["isFavorite"]?.GetValue<bool?>() ?? false,
-                        IsBlacklisted = item["isBlacklisted"]?.GetValue<bool?>() ?? false,
-                        PlayCount = item["playCount"]?.GetValue<int?>() ?? 0
+                        FullPath = GetNodeString(item["fullPath"]),
+                        SourceId = GetNodeString(item["sourceId"]),
+                        IsFavorite = GetNodeBool(item["isFavorite"], defaultValue: false),
+                        IsBlacklisted = GetNodeBool(item["isBlacklisted"], defaultValue: false),
+                        PlayCount = GetNodeInt(item["playCount"], defaultValue: 0)
                     });
                 }
 
@@ -597,6 +595,112 @@ public sealed class LibraryOperationsService
         }
 
         return tags.Any(tag => string.Equals(tag?.GetValue<string>(), tagName, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static string GetNodeString(JsonNode? node)
+    {
+        if (node is null)
+        {
+            return string.Empty;
+        }
+
+        try
+        {
+            return node.GetValue<string>()?.Trim() ?? string.Empty;
+        }
+        catch
+        {
+            var raw = node.ToJsonString().Trim();
+            if (raw.Length >= 2 && raw[0] == '"' && raw[^1] == '"')
+            {
+                raw = raw[1..^1];
+            }
+
+            return raw;
+        }
+    }
+
+    private static bool GetNodeBool(JsonNode? node, bool defaultValue)
+    {
+        if (node is null)
+        {
+            return defaultValue;
+        }
+
+        try
+        {
+            return node.GetValue<bool>();
+        }
+        catch
+        {
+            var text = GetNodeString(node);
+            if (bool.TryParse(text, out var parsed))
+            {
+                return parsed;
+            }
+
+            if (int.TryParse(text, out var numeric))
+            {
+                return numeric != 0;
+            }
+
+            return defaultValue;
+        }
+    }
+
+    private static int GetNodeInt(JsonNode? node, int defaultValue)
+    {
+        if (node is null)
+        {
+            return defaultValue;
+        }
+
+        try
+        {
+            return node.GetValue<int>();
+        }
+        catch
+        {
+            var text = GetNodeString(node);
+            if (int.TryParse(text, out var parsedInt))
+            {
+                return parsedInt;
+            }
+
+            if (long.TryParse(text, out var parsedLong))
+            {
+                return (int)Math.Clamp(parsedLong, int.MinValue, int.MaxValue);
+            }
+
+            return defaultValue;
+        }
+    }
+
+    private static bool IsFingerprintReadyForDuplicateScan(JsonObject item)
+    {
+        var fingerprint = GetNodeString(item["fingerprint"]);
+        if (string.IsNullOrWhiteSpace(fingerprint))
+        {
+            return false;
+        }
+
+        var status = GetNodeString(item["fingerprintStatus"]);
+        if (string.Equals(status, "Pending", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(status, "Failed", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(status, "Stale", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (string.Equals(status, "Ready", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        // Backward-compat path for legacy libraries that predate fingerprintStatus.
+        var algorithm = GetNodeString(item["fingerprintAlgorithm"]);
+        var version = GetNodeInt(item["fingerprintVersion"], defaultValue: 1);
+        return string.Equals(algorithm, "SHA-256", StringComparison.OrdinalIgnoreCase) && version == 1;
     }
 
     private static void EnsureTagExists(JsonArray tags, string tagName)

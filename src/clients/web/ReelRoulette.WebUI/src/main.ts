@@ -1,4 +1,4 @@
-import { renderApp, renderStartupError } from "./app";
+import { renderApp, renderStartupError } from "./shell";
 import { loadRuntimeConfig } from "./config/runtimeConfig";
 import "./styles.css";
 

@@ -42,6 +42,25 @@ export function getSessionId(): string {
   return id;
 }
 
+export function getClientType(): string {
+  if (typeof navigator === "undefined") {
+    return "web";
+  }
+
+  return /Android|iPhone|iPad|iPod|Mobi/i.test(navigator.userAgent || "") ? "mobile-web" : "web";
+}
+
+export function getDeviceName(): string {
+  if (typeof navigator === "undefined") {
+    return "Web Browser";
+  }
+
+  const platform = navigator.platform || "unknown-platform";
+  const ua = navigator.userAgent || "";
+  const prefix = getClientType() === "mobile-web" ? "Mobile Browser" : "Web Browser";
+  return `${prefix} (${platform}${ua ? `; ${ua.slice(0, 40)}` : ""})`;
+}
+
 export async function getVersion(
   config: RuntimeConfig,
   fetchImpl: typeof fetch = fetch

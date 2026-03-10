@@ -1,198 +1,104 @@
 # ReelRoulette Repository Context
 
-This document is the operational context map for this repo. It is intended for both contributors and agents, and should be kept current as milestones land.
+This document is the high-level capability and ownership map for contributors and agents.
+Keep it concise and current. Do not use it as a milestone changelog.
 
-## Purpose and Migration Goal
+## Purpose and Architecture Direction
 
-ReelRoulette is being migrated from a monolithic desktop app into a thin-client, API-first architecture:
+ReelRoulette is migrating from a monolithic desktop app to a thin-client, API-first system:
 
-- Core/server owns business logic and authoritative state.
-- Clients (desktop, web, future mobile) are orchestration/render layers.
-- Shared API contracts and SSE eventing provide cross-client parity.
+- Core/server owns domain logic and authoritative state.
+- Desktop/WebUI are orchestration/render clients over API + SSE.
+- Shared contracts (`shared/api/openapi.yaml`) drive cross-client behavior parity.
 
-Primary outcome: new clients can be added without reimplementing domain logic.
+## Current Implemented Capabilities
 
-## Current State (Implemented)
+- **Server host (`src/core/ReelRoulette.ServerApp`)**
+  - Default single-process runtime serving API, SSE, media, WebUI assets, and Operator UI.
+  - Control-plane surfaces under `/control/*` for runtime status/settings/pairing/lifecycle/testing/logs.
+  - Operator testing mode supports deterministic fault simulation (version/capability mismatch, API unavailable, media missing, SSE disconnect).
+  - mDNS LAN hostname advertisement for WebUI when enabled.
 
-As of current milestones:
+- **Domain execution (`src/core/ReelRoulette.Core` + server services)**
+  - API-authoritative library operations (import, duplicates, auto-tag, playback stats, refresh pipeline).
+  - Unified refresh pipeline with stage/status projection and thumbnail generation.
+  - Replay-aware SSE envelope with reconnect recovery (`Last-Event-ID`, `resyncRequired`, authoritative requery).
 
-- `M0`-`M8e` are complete in `MILESTONES.md`.
-- Desktop runtime is still `source/ReelRoulette.csproj`.
-- Core/server/worker runtime exists under `src/core/*`.
-- M8a server-app consolidation is complete: `src/core/ReelRoulette.ServerApp` now hosts API/SSE/media/WebUI/operator UI in one process and one origin.
-- M8b control-plane expansion is complete: `/control/*` now provides status/settings/pair/restart/stop operations, with control auth/trust policy and operator telemetry/connected-client visibility.
-- M8c is complete on current branch:
-  - desktop no longer auto-starts core runtime and now uses guidance-only reconnect behavior,
-  - desktop defaults core endpoint to `http://localhost:51234`,
-  - source import, duplicate detection, auto-tag scan/apply, and playback-stats clear execute through server API commands,
-  - client logs are centralized to server via `/api/logs/client`, and desktop no longer writes local `last.log`.
-- M8d is complete on current branch:
-  - desktop playback policy is local-first with deterministic API media fallback,
-  - `ForceApiPlayback` is persisted in desktop settings (default `false`) and forces API playback path when enabled,
-  - manual library-panel play resolves stable API identity first and now fails with explicit guidance when identity mapping is unavailable (no silent substitute playback path).
-- M8e is complete on current branch:
-  - API contracts now standardize persistent `clientId` and optional `sessionId` across desktop/web request and SSE reconnect surfaces,
-  - desktop now persists stable `CoreClientId`, uses per-runtime `CoreSessionId`, and reconnects SSE with revision-aware replay hints,
-  - web runtime aligns legacy/modular seams on the same identity/reconnect semantics and enforces capability compatibility including `identity.sessionId`.
-- API contract source of truth is `shared/api/openapi.yaml` (currently `0.8.0`).
-- M6a tag editing migration is API-first and shared across desktop/web seams.
-- M6b refresh pipeline/thumbnails/grid are core-owned; desktop consumes API/SSE projection.
-- M7a web foundation is complete: independent Vite+TypeScript web bootstrap with runtime endpoint config contract and verification gates.
-- M7b direct web auth/SSE reliability is complete: pair-token bootstrap to session-cookie auth, direct web SSE status projection, replay-gap resync fallback, and explicit CORS/cookie runtime policy controls.
-- M7c zero-restart web deployment is complete: independent `ReelRoulette.WebHost` static host, immutable versioned web artifacts, atomic `active-manifest.json` activation/rollback, and split shell-vs-asset cache policy.
-- M7e compatibility guardrails are complete: TS OpenAPI-generated contracts are part of WebUI verify, and web startup enforces version/capability checks for N/N-1 safety.
+- **Desktop client (`source/`)**
+  - Thin-client for migrated flows: API command/query + SSE projection (no dual-writer core-state mutation).
+  - Local-first playback with deterministic API fallback (`ForceApiPlayback` option).
+  - Server version/capability compatibility gating with reconnect/resync guidance.
+  - API-backed source import, duplicate scan/apply, auto-tag scan/apply, and playback-stats clear.
 
-## Planned State (Upcoming)
+- **WebUI client (`src/clients/web/ReelRoulette.WebUI`)**
+  - Runtime-config bootstrap, direct API/SSE integration, and startup compatibility/capability checks.
+  - Session-aware identity propagation (`clientId`/`sessionId`) through API + SSE paths.
+  - Core playback/control/tag workflows aligned with server-authoritative behavior.
 
-Near-term planned milestones:
+- **Operational surfaces**
+  - Manual validation guide/checklist at `docs/testing-guide.md`.
+  - Windows packaging scripts and CI workflows are present for build/verify/package gates.
 
-- `M8f`: hardening, packaging, and release readiness.
-- `M9`: Plex-style playback pipeline (incremental `M9a`-`M9g` rollout for playback sessions, decision + delivery selection, direct-stream baseline, HLS/fMP4 transcode path, client cutovers, and hardening).
-- `M10`: Android client bootstrap on stable API seam.
+## Near-Term Planned Work
 
-Detailed M7 decisions and rollout strategy: `docs/m7-clarifications.md`.
+Authoritative roadmap details live in `MILESTONES.md`. Near-term focus areas:
 
-## Repository Structure (Top-Level + Key Subtrees)
+- `M8g`: unified `last.log` pipeline (server + client logging consolidation).
+- `M8h`: UX/UI polish follow-up.
+- `M9*`: playback-session pipeline rollout.
+- `M10`: Android bootstrap on the existing API seam.
 
-- `source/`
-  - Current shipping desktop application (Avalonia).
-  - Contains desktop API client (`source/CoreServerApiClient.cs`) and UI orchestration.
-- `src/core/`
-  - `ReelRoulette.Core`: domain logic, storage/state services, verification helpers.
-  - `ReelRoulette.Server`: thin HTTP/SSE/auth composition and contracts.
-  - `ReelRoulette.ServerApp`: operator-facing single-process host for API/SSE/media/WebUI and runtime restart/settings operations.
-  - `ReelRoulette.Worker`: headless runtime host for core/server APIs and jobs.
-  - `ReelRoulette.Core.Tests`: xUnit regression and contract tests.
-  - `ReelRoulette.Core.SystemChecks`: console harness for scenario/system checks.
-- `src/clients/`
-  - `windows/ReelRoulette.WindowsApp`: target location for desktop client migration.
-  - `web/ReelRoulette.WebUI`: target location for decoupled web client migration.
-  - `web/ReelRoulette.WebHost`: independent static web host with manifest-based active-version switching.
-- `shared/api/`
-  - `openapi.yaml`: API contract source of truth.
-- `docs/`
-  - Architecture, API baseline, dev setup, milestone domain inventories, and clarification records.
-- `tools/scripts/`
-  - Core runtime helper scripts (`run-core.ps1`, `run-core.sh`) now target `ReelRoulette.ServerApp`.
-  - Web verification helper scripts (`verify-web.ps1`, `verify-web.sh`).
-  - M7c web deployment scripts (`publish-web.*`, `activate-web-version.*`, `rollback-web-version.*`) remain for compatibility tooling only (not required runtime path in M8a).
-  - `verify-web-deploy.*` now runs M8a single-origin smoke verification against `ReelRoulette.ServerApp`.
-  - `publish-activate-run-worker.ps1` is retained as a compatibility-named helper but now builds WebUI and runs `ReelRoulette.ServerApp`.
-- `licenses/`
-  - Third-party license texts (VLC, FFmpeg licensing artifacts).
+## Repository Map (High Signal)
 
-## Tech Stack
+- `source/`: shipping desktop application (Avalonia).
+- `src/core/`:
+  - `ReelRoulette.Core`: domain + storage/state logic.
+  - `ReelRoulette.Server`: thin transport/composition layer.
+  - `ReelRoulette.ServerApp`: default host/runtime + operator surfaces.
+  - `ReelRoulette.Worker`: headless host project (non-default runtime path).
+  - `ReelRoulette.Core.Tests` and `ReelRoulette.Core.SystemChecks`.
+- `src/clients/`:
+  - `web/ReelRoulette.WebUI`: active web client.
+  - `web/ReelRoulette.WebHost`: legacy/compat static host project (not default runtime path).
+  - `windows/ReelRoulette.WindowsApp`: migration target location.
+- `shared/api/openapi.yaml`: API contract source of truth.
+- `tools/scripts/`: runtime/verify/package scripts (`run-server*`, `verify-web*`, `verify-web-deploy*`, `publish-web*`, packaging scripts).
+  - includes `set-release-version.ps1` for release-aligned version fan-out across OpenAPI/runtime/tests/project metadata.
 
-- Runtime/platform:
-  - .NET (solution-based multi-project architecture)
-  - Avalonia (desktop UI)
-  - HTTP APIs + SSE for client synchronization
-- Media/processing:
-  - FFmpeg/FFprobe for media analysis/extraction
-  - SkiaSharp for photo thumbnail generation paths
-- Data/storage:
-  - JSON-backed state (`library.json`, `settings.json`) with migration toward core-owned access
-  - Thumbnail artifacts in `%LOCALAPPDATA%\\ReelRoulette\\thumbnails\\`
-- API/contracts:
-  - OpenAPI 3.1 (`shared/api/openapi.yaml`)
-  - Typed DTOs/contracts mirrored in server/desktop client layers
+## Working Commands (Canonical Set)
 
-## Runtime Architecture (Current)
+For full setup/run details use `README.md` and `docs/dev-setup.md`. Core commands:
 
-- `ReelRoulette.ServerApp` is the default runtime host:
-  - serves API, SSE, and media endpoints;
-  - serves WebUI static assets and dynamic `runtime-config.json`;
-  - exposes operator UI at `/operator`;
-  - exposes metadata endpoints (`/health`, `/api/version`, `/api/capabilities`);
-  - exposes control-plane endpoints (`/control/status`, `/control/settings`, `/control/pair`, `/control/restart`, `/control/stop`).
-  - advertises LAN WebUI hostname via mDNS (`{LanHostname}.local`) when WebUI is enabled and LAN bind is active.
-- Desktop acts as thin client for migrated flows:
-  - Commands/queries via API
-  - Live projection via SSE
-- Core refresh pipeline is unified and core-owned:
-  1. source refresh
-  2. duration scan
-  3. loudness scan (new/unscanned)
-  4. thumbnail generation
-- Event envelope includes revision metadata and supports reconnect replay semantics (`Last-Event-ID`, `resyncRequired` + authoritative requery).
-- Legacy embedded `source/WebRemote` runtime bridge is retired.
-- Separate `ReelRoulette.WebHost` process and manifest pointer switching are not required for normal runtime in M8a.
+- `dotnet build ReelRoulette.sln`
+- `dotnet test ReelRoulette.sln`
+- `dotnet run --project .\src\core\ReelRoulette.ServerApp\ReelRoulette.ServerApp.csproj`
+- `dotnet run --project .\source\ReelRoulette.csproj`
+- `.\tools\scripts\run-server.ps1` / `.\tools\scripts\run-server-rebuild.ps1`
+- `npm run verify` (in `src/clients/web/ReelRoulette.WebUI`)
 
-## Development Workflows (Current)
+## Guardrails for Contributors and Agents
 
-From repo root:
+- Keep `ReelRoulette.Server` thin (transport/auth/SSE/media composition only).
+- Do not reintroduce dual-writer behavior once a flow is migrated to core/server.
+- Keep client behavior aligned through OpenAPI + SSE semantics.
+- Treat this file as current-state capability context; keep milestone planning details in `MILESTONES.md`.
 
-- Build solution:
-  - `dotnet build ReelRoulette.sln`
-- Run desktop runtime:
-  - `dotnet run --project .\source\ReelRoulette.csproj`
-- Run server (optional directly):
-  - `dotnet run --project .\src\core\ReelRoulette.Server\ReelRoulette.Server.csproj`
-- Run worker (headless runtime):
-  - `dotnet run --project .\src\core\ReelRoulette.Worker\ReelRoulette.Worker.csproj`
-- Run server app (single-process runtime, recommended):
-  - `dotnet run --project .\src\core\ReelRoulette.ServerApp\ReelRoulette.ServerApp.csproj`
-  - or `.\tools\scripts\run-core.ps1` / `./tools/scripts/run-core.sh`
-- Primary test gate:
-  - `dotnet test ReelRoulette.sln`
-- Optional system checks:
-  - `dotnet run --project .\src\core\ReelRoulette.Core.SystemChecks\ReelRoulette.Core.SystemChecks.csproj -- --verbose`
+## Related Docs and Ownership
 
-## Development Workflows (Planned)
+- `MILESTONES.md`: roadmap, scope, acceptance criteria, verification evidence.
+- `README.md`: practical onboarding/run/test commands.
+- `docs/api.md`: endpoint/event/contract baseline.
+- `docs/dev-setup.md`: development setup and workflow details.
+- `docs/architecture.md`: architecture evolution and rationale.
+- `docs/domain-inventory.md`: canonical implementation surface and ownership inventory.
 
-For M7 web separation:
+## Maintenance Expectations
 
-- Web client builds/runs independently under `src/clients/web/ReelRoulette.WebUI` (M7a complete).
-- Runtime endpoint resolution now comes from runtime config (not compile-time constants).
-- Web auth/session and SSE reconnect/resync now run through direct web-to-core paths (M7b complete).
-- Web deployment now supports immutable versioned artifacts with atomic activation/rollback and split cache policy (M7c complete).
-- M7d cutover is complete: parity WebUI migrated and legacy bridge retired.
-- M7e is complete: OpenAPI-driven TS contract generation is enforced in web verify and version/capability compatibility checks gate unsupported server contracts.
-- M8a is complete: server app consolidation to one process/one origin, with WebHost/manifest switching removed from required runtime behavior.
-- M8b is complete: control-plane API/UI expansion with deterministic settings/lifecycle operations, control auth policy, and operator telemetry/connected-client diagnostics.
+Update this file when any of these change:
 
-See `docs/m7-clarifications.md` for chosen options and sequencing.
+- implemented runtime/client capabilities,
+- architecture ownership boundaries,
+- repository structure or canonical workflow commands,
+- API/eventing direction that affects contributor behavior.
 
-## Testing and Verification Model
-
-- Default quality gate: `dotnet test ReelRoulette.sln`.
-- Regression tests cover:
-  - contract compatibility
-  - state/replay behavior
-  - refresh pipeline sequencing/overlap/status
-  - thumbnail invalidation/metadata behaviors
-- System-check harness exists for scenario-heavy verification and verbose diagnostics.
-- Milestone sign-off requires explicit acceptance criteria verification in `MILESTONES.md`.
-
-## Core Guardrails and Non-Goals
-
-- Keep `ReelRoulette.Server` thin:
-  - HTTP/SSE/auth/streaming composition only
-  - no domain business logic and no direct JSON file I/O in server glue
-- No dual-writer state:
-  - once a flow is migrated to core/server, desktop must not directly mutate authoritative state for that flow
-- API-first discipline:
-  - update `shared/api/openapi.yaml` for endpoint contract changes
-  - keep client behavior aligned through shared contracts + SSE semantics
-
-## Key Context Docs
-
-- Migration board: `MILESTONES.md`
-- Active/planned work items: `MILESTONES.md`
-- Architecture evolution: `docs/architecture.md`
-- API baseline and endpoint/event notes: `docs/api.md`
-- Dev setup and milestone runtime notes: `docs/dev-setup.md`
-- M7 decisions: `docs/m7-clarifications.md`
-- Milestone domain inventories: `docs/m*-domain-inventory.md`
-
-## Maintenance Expectations for This Context Doc
-
-Update this file whenever any of the following change:
-
-- milestone status/scope that affects runtime or workflow reality
-- core architecture ownership boundaries
-- repo/project structure
-- build/run/test commands
-- API/eventing contract direction (including compatibility policy)
-
-When uncertain, prefer short factual updates over speculative detail.
+Prefer short factual updates over historical narration.

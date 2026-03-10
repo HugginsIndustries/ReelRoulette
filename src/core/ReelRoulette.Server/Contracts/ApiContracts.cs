@@ -260,6 +260,9 @@ public sealed class ConnectedClientsSnapshot
     public int ApiPairedSessions { get; set; }
     public int ControlPairedSessions { get; set; }
     public int SseSubscribers { get; set; }
+    public List<SessionInfoSnapshot> ApiSessions { get; set; } = [];
+    public List<SessionInfoSnapshot> ControlSessions { get; set; } = [];
+    public List<SseClientInfoSnapshot> ActiveSseClients { get; set; } = [];
 }
 
 public sealed class ControlStatusResponse
@@ -271,6 +274,62 @@ public sealed class ControlStatusResponse
     public ConnectedClientsSnapshot ConnectedClients { get; set; } = new();
     public List<ApiEventTelemetryEntry> IncomingApiEvents { get; set; } = [];
     public List<ApiEventTelemetryEntry> OutgoingApiEvents { get; set; } = [];
+    public OperatorTestingStateSnapshot Testing { get; set; } = new();
+}
+
+public sealed class SessionInfoSnapshot
+{
+    public string SessionId { get; set; } = string.Empty;
+    public DateTimeOffset CreatedUtc { get; set; }
+    public DateTimeOffset LastSeenUtc { get; set; }
+    public DateTimeOffset ExpiresUtc { get; set; }
+}
+
+public sealed class SseClientInfoSnapshot
+{
+    public string ConnectionId { get; set; } = string.Empty;
+    public string? ClientId { get; set; }
+    public string? SessionId { get; set; }
+    public string? ClientType { get; set; }
+    public string? DeviceName { get; set; }
+    public string? UserAgent { get; set; }
+    public DateTimeOffset ConnectedUtc { get; set; }
+    public string? RemoteAddress { get; set; }
+}
+
+public sealed class ServerLogResponse
+{
+    public string SourcePath { get; set; } = string.Empty;
+    public int TotalLinesRead { get; set; }
+    public List<string> Lines { get; set; } = [];
+}
+
+public sealed class OperatorTestingStateSnapshot
+{
+    public bool TestingModeEnabled { get; set; }
+    public bool ForceApiVersionMismatch { get; set; }
+    public bool ForceCapabilityMismatch { get; set; }
+    public bool ForceApiUnavailable { get; set; }
+    public bool ForceMediaMissing { get; set; }
+    public bool ForceSseDisconnect { get; set; }
+    public DateTimeOffset LastUpdatedUtc { get; set; } = DateTimeOffset.UtcNow;
+}
+
+public sealed class OperatorTestingUpdateRequest
+{
+    public bool? TestingModeEnabled { get; set; }
+    public bool? ForceApiVersionMismatch { get; set; }
+    public bool? ForceCapabilityMismatch { get; set; }
+    public bool? ForceApiUnavailable { get; set; }
+    public bool? ForceMediaMissing { get; set; }
+    public bool? ForceSseDisconnect { get; set; }
+}
+
+public sealed class OperatorTestingActionResponse
+{
+    public bool Accepted { get; set; } = true;
+    public string Message { get; set; } = "Applied";
+    public OperatorTestingStateSnapshot State { get; set; } = new();
 }
 
 public sealed class RefreshStageProgress

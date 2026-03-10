@@ -1,3 +1,3 @@
 import type { RuntimeConfig } from "./types/runtimeConfig";
 
-export function startLegacyApp(config: RuntimeConfig): void;
+export function startApp(config: RuntimeConfig): void;

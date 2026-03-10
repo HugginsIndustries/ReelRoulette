@@ -33,6 +33,9 @@ public static class ServerHostComposition
         services.AddSingleton<LibraryOperationsService>();
         services.AddSingleton<ServerSessionStore>();
         services.AddSingleton<ApiTelemetryService>();
+        services.AddSingleton<ConnectedClientTracker>();
+        services.AddSingleton<OperatorTestingService>();
+        services.AddSingleton<ServerLogService>();
         services.AddHostedService(sp => sp.GetRequiredService<RefreshPipelineService>());
     }
 
@@ -49,6 +52,35 @@ public static class ServerHostComposition
                 telemetry.RecordIncoming(context.Request.Method, path);
                 await next();
                 telemetry.RecordOutgoing(context.Request.Method, path, context.Response.StatusCode);
+                return;
+            }
+
+            await next();
+        });
+
+        app.Use(async (context, next) =>
+        {
+            var path = context.Request.Path.Value ?? string.Empty;
+            var isApiRequest = path.StartsWith("/api", StringComparison.OrdinalIgnoreCase);
+            if (!isApiRequest)
+            {
+                await next();
+                return;
+            }
+
+            if (path.StartsWith("/api/version", StringComparison.OrdinalIgnoreCase) ||
+                path.StartsWith("/api/capabilities", StringComparison.OrdinalIgnoreCase) ||
+                path.StartsWith("/api/pair", StringComparison.OrdinalIgnoreCase))
+            {
+                await next();
+                return;
+            }
+
+            var testing = context.RequestServices.GetRequiredService<OperatorTestingService>().GetSnapshot();
+            if (testing.TestingModeEnabled && testing.ForceApiUnavailable)
+            {
+                context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+                await context.Response.WriteAsJsonAsync(new { error = "Testing mode: API unavailable simulation active." });
                 return;
             }
 
@@ -92,38 +124,70 @@ public static class ServerHostComposition
             return HandleControlPairRequest(context, request?.Token, options, settings, sessions);
         });
 
-        app.MapGet("/api/version", (ServerStateService state) =>
+        app.MapGet("/api/version", (ServerStateService state, OperatorTestingService testingService) =>
         {
-            return Results.Ok(state.GetVersion());
+            var version = state.GetVersion();
+            var testing = testingService.GetSnapshot();
+            if (testing.TestingModeEnabled && testing.ForceApiVersionMismatch)
+            {
+                version.ApiVersion = "99";
+                version.SupportedApiVersions = ["99"];
+            }
+
+            if (testing.TestingModeEnabled && testing.ForceCapabilityMismatch)
+            {
+                version.Capabilities = version.Capabilities
+                    .Where(capability => !string.Equals(capability, "identity.sessionId", StringComparison.Ordinal))
+                    .ToList();
+            }
+
+            return Results.Ok(version);
         });
 
-        app.MapGet("/api/capabilities", (ServerStateService state) =>
+        app.MapGet("/api/capabilities", (ServerStateService state, OperatorTestingService testingService) =>
         {
+            var capabilities = state.GetVersion().Capabilities.ToList();
+            var testing = testingService.GetSnapshot();
+            if (testing.TestingModeEnabled && testing.ForceCapabilityMismatch)
+            {
+                capabilities = capabilities
+                    .Where(capability => !string.Equals(capability, "identity.sessionId", StringComparison.Ordinal))
+                    .ToList();
+            }
+
             return Results.Ok(new
             {
-                capabilities = state.GetVersion().Capabilities
+                capabilities
             });
         });
 
-        app.MapGet("/control/status", (ServerRuntimeOptions runtime, CoreSettingsService settings, ServerSessionStore sessions, ServerStateService state, ApiTelemetryService telemetry) =>
+        app.MapGet("/control/status", (ServerRuntimeOptions runtime, CoreSettingsService settings, ServerSessionStore sessions, ServerStateService state, ApiTelemetryService telemetry, ConnectedClientTracker clients, OperatorTestingService testingService) =>
         {
             var webSettings = settings.GetWebRuntimeSettings();
+            var nowUtc = DateTimeOffset.UtcNow;
+            var apiSessions = sessions.GetActiveSessions(ServerSessionStore.ApiScope, nowUtc);
+            var controlSessions = sessions.GetActiveSessions(ServerSessionStore.ControlScope, nowUtc);
+            var activeSseClients = clients.GetActiveSseClients();
             var connected = new ConnectedClientsSnapshot
             {
-                ApiPairedSessions = sessions.GetActiveSessionCount(ServerSessionStore.ApiScope, DateTimeOffset.UtcNow),
-                ControlPairedSessions = sessions.GetActiveSessionCount(ServerSessionStore.ControlScope, DateTimeOffset.UtcNow),
-                SseSubscribers = state.GetSubscriberCount()
+                ApiPairedSessions = apiSessions.Count,
+                ControlPairedSessions = controlSessions.Count,
+                SseSubscribers = activeSseClients.Count,
+                ApiSessions = apiSessions.Select(MapSessionSnapshot).ToList(),
+                ControlSessions = controlSessions.Select(MapSessionSnapshot).ToList(),
+                ActiveSseClients = activeSseClients.ToList()
             };
 
             return Results.Ok(new ControlStatusResponse
             {
-                ServerTimeUtc = DateTimeOffset.UtcNow,
+                ServerTimeUtc = nowUtc,
                 IsHealthy = true,
                 ListenUrl = runtime.ListenUrl,
                 LanExposed = webSettings.BindOnLan,
                 ConnectedClients = connected,
                 IncomingApiEvents = telemetry.GetIncoming(100),
-                OutgoingApiEvents = telemetry.GetOutgoing(100)
+                OutgoingApiEvents = telemetry.GetOutgoing(100),
+                Testing = testingService.GetSnapshot()
             });
         });
 
@@ -139,6 +203,62 @@ public static class ServerHostComposition
             {
                 settings = appliedSettings,
                 result = applyResult
+            });
+        });
+
+        app.MapGet("/control/logs/server", (int? tail, string? contains, string? level, ServerLogService logs) =>
+        {
+            var response = logs.Read(tail ?? 200, contains, level);
+            return Results.Ok(response);
+        });
+
+        app.MapGet("/control/testing", (OperatorTestingService testingService) =>
+        {
+            return Results.Ok(testingService.GetSnapshot());
+        });
+
+        app.MapPost("/control/testing/update", (HttpContext context, OperatorTestingUpdateRequest request, OperatorTestingService testingService, CoreSettingsService settings, ServerSessionStore sessions) =>
+        {
+            if (!IsTestingControlAuthorized(context, settings, options, sessions))
+            {
+                return Results.Json(new { error = "Unauthorized. Control testing actions require admin auth when AdminAuthMode=TokenRequired." }, statusCode: StatusCodes.Status401Unauthorized);
+            }
+
+            var current = testingService.GetSnapshot();
+            var mutatesFaultFlags =
+                request.ForceApiVersionMismatch.HasValue ||
+                request.ForceCapabilityMismatch.HasValue ||
+                request.ForceApiUnavailable.HasValue ||
+                request.ForceMediaMissing.HasValue ||
+                request.ForceSseDisconnect.HasValue;
+            var enablingTestingMode = request.TestingModeEnabled == true;
+            if (mutatesFaultFlags && !current.TestingModeEnabled && !enablingTestingMode)
+            {
+                return Results.Json(new { error = "Testing mode is required before enabling scenario/fault flags." }, statusCode: StatusCodes.Status409Conflict);
+            }
+
+            var updated = testingService.Apply(request);
+            return Results.Ok(new OperatorTestingActionResponse
+            {
+                Accepted = true,
+                Message = "Testing state updated.",
+                State = updated
+            });
+        });
+
+        app.MapPost("/control/testing/reset", (HttpContext context, OperatorTestingService testingService, CoreSettingsService settings, ServerSessionStore sessions) =>
+        {
+            if (!IsTestingControlAuthorized(context, settings, options, sessions))
+            {
+                return Results.Json(new { error = "Unauthorized. Control testing actions require admin auth when AdminAuthMode=TokenRequired." }, statusCode: StatusCodes.Status401Unauthorized);
+            }
+
+            var updated = testingService.Reset();
+            return Results.Ok(new OperatorTestingActionResponse
+            {
+                Accepted = true,
+                Message = "Testing scenario flags reset.",
+                State = updated
             });
         });
 
@@ -199,7 +319,7 @@ public static class ServerHostComposition
             return Results.Ok(response);
         });
 
-        app.MapPost("/api/random", (RandomRequest request, ServerStateService state, LibraryPlaybackService playback) =>
+        app.MapPost("/api/random", (RandomRequest request, ServerStateService state, LibraryPlaybackService playback, OperatorTestingService testingService) =>
         {
             request.ClientId = NormalizeOptionalIdentity(request.ClientId);
             request.SessionId = NormalizeOptionalIdentity(request.SessionId);
@@ -223,11 +343,17 @@ public static class ServerHostComposition
             return Results.Ok(response);
         });
 
-        app.MapGet("/api/media/{idOrToken}", (string idOrToken, LibraryPlaybackService playback) =>
+        app.MapGet("/api/media/{idOrToken}", (string idOrToken, LibraryPlaybackService playback, OperatorTestingService testingService) =>
         {
+            var testing = testingService.GetSnapshot();
+            if (testing.TestingModeEnabled && testing.ForceMediaMissing)
+            {
+                return Results.NotFound(new { error = "Media not found" });
+            }
+
             if (!playback.TryResolveMediaPath(idOrToken, out var fullPath) || !File.Exists(fullPath))
             {
-                return Results.NotFound("Media not found");
+                return Results.NotFound(new { error = "Media not found" });
             }
 
             var contentType = ContentTypeProvider.TryGetContentType(fullPath, out var resolvedType)
@@ -461,8 +587,16 @@ public static class ServerHostComposition
             return Results.File(path, "image/jpeg");
         });
 
-        app.MapGet("/api/events", async (HttpContext context, ServerStateService state) =>
+        app.MapGet("/api/events", async (HttpContext context, ServerStateService state, ConnectedClientTracker clients, OperatorTestingService testingService) =>
         {
+            var testing = testingService.GetSnapshot();
+            if (testing.TestingModeEnabled && testing.ForceSseDisconnect)
+            {
+                context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+                await context.Response.WriteAsJsonAsync(new { error = "Testing mode: SSE disconnect simulation active." }, context.RequestAborted);
+                return;
+            }
+
             context.Response.Headers.Append("Content-Type", "text/event-stream");
             context.Response.Headers.Append("Cache-Control", "no-cache");
             context.Response.Headers.Append("Connection", "keep-alive");
@@ -471,52 +605,69 @@ public static class ServerHostComposition
             var serializerOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
             var lastEventHeader = context.Request.Headers["Last-Event-ID"].ToString();
             var lastEventQuery = context.Request.Query["lastEventId"].ToString();
-            _ = NormalizeOptionalIdentity(context.Request.Query["clientId"].ToString());
-            _ = NormalizeOptionalIdentity(context.Request.Query["sessionId"].ToString());
+            var clientId = NormalizeOptionalIdentity(context.Request.Query["clientId"].ToString());
+            var sessionId = NormalizeOptionalIdentity(context.Request.Query["sessionId"].ToString());
+            var clientType = NormalizeOptionalIdentity(context.Request.Query["clientType"].ToString());
+            var deviceName = NormalizeOptionalIdentity(context.Request.Query["deviceName"].ToString());
+            var userAgent = context.Request.Headers["User-Agent"].ToString();
+            var connectionId = clients.RegisterSseClient(
+                clientId,
+                sessionId,
+                clientType,
+                deviceName,
+                userAgent,
+                context.Connection.RemoteIpAddress?.ToString());
             var hasLastEvent = long.TryParse(lastEventHeader, out var lastEventRevision) ||
                                long.TryParse(lastEventQuery, out lastEventRevision);
             long lastDeliveredRevision = 0;
 
-            await context.Response.WriteAsync("retry: 1000\n\n", cancellationToken);
-            await context.Response.Body.FlushAsync(cancellationToken);
-
-            var reader = state.Subscribe(cancellationToken);
-            if (hasLastEvent)
+            try
             {
-                var replay = state.GetReplayAfter(lastEventRevision);
-                if (replay.GapDetected)
-                {
-                    var resyncEnvelope = state.CreateEnvelope(
-                        "resyncRequired",
-                        new
-                        {
-                            reason = "revisionGap",
-                            lastEventId = lastEventRevision,
-                            currentRevision = replay.CurrentRevision
-                        });
-                    await WriteSseEnvelopeAsync(context, resyncEnvelope, serializerOptions, cancellationToken);
-                    lastDeliveredRevision = resyncEnvelope.Revision;
-                }
+                await context.Response.WriteAsync("retry: 1000\n\n", cancellationToken);
+                await context.Response.Body.FlushAsync(cancellationToken);
 
-                foreach (var missedEvent in replay.Events)
+                var reader = state.Subscribe(cancellationToken);
+                if (hasLastEvent)
                 {
-                    await WriteSseEnvelopeAsync(context, missedEvent, serializerOptions, cancellationToken);
-                    lastDeliveredRevision = Math.Max(lastDeliveredRevision, missedEvent.Revision);
-                }
-            }
-
-            while (await reader.WaitToReadAsync(cancellationToken))
-            {
-                while (reader.TryRead(out var envelope))
-                {
-                    if (envelope.Revision <= lastDeliveredRevision)
+                    var replay = state.GetReplayAfter(lastEventRevision);
+                    if (replay.GapDetected)
                     {
-                        continue;
+                        var resyncEnvelope = state.CreateEnvelope(
+                            "resyncRequired",
+                            new
+                            {
+                                reason = "revisionGap",
+                                lastEventId = lastEventRevision,
+                                currentRevision = replay.CurrentRevision
+                            });
+                        await WriteSseEnvelopeAsync(context, resyncEnvelope, serializerOptions, cancellationToken);
+                        lastDeliveredRevision = resyncEnvelope.Revision;
                     }
 
-                    await WriteSseEnvelopeAsync(context, envelope, serializerOptions, cancellationToken);
-                    lastDeliveredRevision = envelope.Revision;
+                    foreach (var missedEvent in replay.Events)
+                    {
+                        await WriteSseEnvelopeAsync(context, missedEvent, serializerOptions, cancellationToken);
+                        lastDeliveredRevision = Math.Max(lastDeliveredRevision, missedEvent.Revision);
+                    }
                 }
+
+                while (await reader.WaitToReadAsync(cancellationToken))
+                {
+                    while (reader.TryRead(out var envelope))
+                    {
+                        if (envelope.Revision <= lastDeliveredRevision)
+                        {
+                            continue;
+                        }
+
+                        await WriteSseEnvelopeAsync(context, envelope, serializerOptions, cancellationToken);
+                        lastDeliveredRevision = envelope.Revision;
+                    }
+                }
+            }
+            finally
+            {
+                clients.UnregisterSseClient(connectionId);
             }
         });
     }
@@ -624,5 +775,54 @@ public static class ServerHostComposition
         }
 
         return value.Trim();
+    }
+
+    private static SessionInfoSnapshot MapSessionSnapshot(SessionSnapshot snapshot)
+    {
+        return new SessionInfoSnapshot
+        {
+            SessionId = snapshot.SessionId,
+            CreatedUtc = snapshot.CreatedUtc,
+            LastSeenUtc = snapshot.LastSeenUtc,
+            ExpiresUtc = snapshot.ExpiresUtc
+        };
+    }
+
+    private static bool IsTestingControlAuthorized(
+        HttpContext context,
+        CoreSettingsService settings,
+        ServerRuntimeOptions options,
+        ServerSessionStore sessions)
+    {
+        var control = settings.GetControlRuntimeSettings();
+        if (!string.Equals(control.AdminAuthMode, "TokenRequired", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (context.Request.Cookies.TryGetValue(options.ControlAdminCookieName, out var cookieValue) &&
+            sessions.IsSessionValid(ServerSessionStore.ControlScope, cookieValue, DateTimeOffset.UtcNow))
+        {
+            return true;
+        }
+
+        if (string.IsNullOrWhiteSpace(control.AdminSharedToken) || !options.AllowLegacyTokenAuth)
+        {
+            return false;
+        }
+
+        var authHeader = context.Request.Headers.Authorization.ToString();
+        if (authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+        {
+            var token = authHeader["Bearer ".Length..].Trim();
+            if (string.Equals(token, control.AdminSharedToken, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        var queryToken = context.Request.Query["token"].ToString();
+        return !string.IsNullOrWhiteSpace(queryToken) &&
+               string.Equals(queryToken, control.AdminSharedToken, StringComparison.Ordinal);
     }
 }

@@ -30,7 +30,9 @@ public sealed class ServerStateService
         "control.settings",
         "control.lifecycle.stopRestart",
         "control.telemetry.events",
-        "control.clients.connected"
+        "control.clients.connected",
+        "control.logs.server",
+        "control.testing.suite"
     ];
 
     private const string UncategorizedCategoryId = "uncategorized";
@@ -79,7 +81,7 @@ public sealed class ServerStateService
     {
         return ApiContractMapper.MapVersion(
             "1",
-            assetsVersion: "m7",
+            assetsVersion: "0.9.0",
             minimumCompatibleApiVersion: "0",
             supportedApiVersions: SupportedApiVersions,
             capabilities: Capabilities);

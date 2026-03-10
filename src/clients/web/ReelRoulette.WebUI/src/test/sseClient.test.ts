@@ -74,6 +74,8 @@ describe("sseClient", () => {
     expect(setRefreshStatus).toHaveBeenCalled();
     expect(connectedUrl).toContain("clientId=");
     expect(connectedUrl).toContain("sessionId=");
+    expect(connectedUrl).toContain("clientType=");
+    expect(connectedUrl).toContain("deviceName=");
     client.stop();
   });
 });

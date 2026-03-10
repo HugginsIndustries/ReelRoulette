@@ -1,6 +1,55 @@
 # Changelog
 
-## Unreleased
+This file follows a Keep a Changelog style format.
+
+## [Unreleased]
+
+### Added
+
+- None yet.
+
+### Changed
+
+- None yet.
+
+### Fixed
+
+- None yet.
+
+## v0.9.0 - Initial Release
+
+- **Finalize release-aligned versioning/tooling and documentation cleanup** (2026-03-09):
+  - Add `tools/scripts/set-release-version.ps1` to fan out one release version across OpenAPI (`info.version`), runtime `assetsVersion`, release fixtures, and server app project version metadata.
+  - Add desktop version participation in the simple release flow (`-UpdateDesktopVersion`) and set desktop project version metadata for release-aligned packaging.
+  - Align release version surfaces to `0.9.0` (including OpenAPI version and server `/api/version` assets version semantics).
+  - Update Windows packaging scripts so `-Version` is optional and auto-derived from project metadata when omitted.
+  - Update server packaging scripts to rebuild WebUI and bundle static assets (`wwwroot`) into publish/install artifacts so packaged runtime includes both WebUI and Operator surfaces.
+  - Consolidate app icon usage to shared `assets/HI.ico` and apply it across server/desktop build metadata and installer presentation surfaces.
+  - Add WebUI script automation to sync shared icon into `public/HI.ico` on dev/build so favicon updates remain single-source.
+  - Add `tools/scripts/full-release.ps1` as an all-in-one release command that chains version fan-out, verification, and server/desktop packaging in canonical order.
+  - Add desktop Windows packaging scripts for portable zip and Inno installer (`package-desktop-win-portable.ps1`, `package-desktop-win-inno.ps1`, `tools/installer/ReelRoulette.Desktop.iss`) and extend `package-windows.yml` to publish both server and desktop artifacts.
+  - Add Inno Setup auto-detection in `package-serverapp-win-inno.ps1` (PATH, common install paths, registry lookups), removing the strict PATH-only requirement.
+  - Consolidate domain inventory references to `docs/domain-inventory.md` and synchronize docs (`README.md`, `CONTEXT.md`, `docs/dev-setup.md`, `docs/testing-guide.md`) with current scripts and release flow.
+
+- **Implement M8f hardening/packaging/release-readiness operator testing suite + Windows packaging/CI gates** (2026-03-08):
+  - Extend control-plane contracts/endpoints for operator testing + diagnostics (`/control/logs/server`, `/control/testing`, `/control/testing/update`, `/control/testing/reset`) and richer connected client/session/SSE identity status.
+  - Add server-side testing mode/fault simulation state handling for API version mismatch, capability mismatch, API unavailable, missing media, and SSE disconnect scenarios.
+  - Upgrade `/operator` UI with connected identity detail views, server log workbench (tail/filter/search/copy), and testing mode + scenario controls with reset.
+  - Add Windows packaging assets for both portable self-contained zip and Inno installer (`tools/scripts/package-serverapp-win-*.ps1`, `tools/installer/ReelRoulette.ServerApp.iss`).
+  - Add GitHub Actions workflows for default solution/web verification and Windows packaging artifact publishing.
+  - Add regression coverage for operator testing service behavior and OpenAPI control-surface assertions.
+  - Add canonical repo-wide manual testing artifact (`docs/testing-guide.md`).
+  - Apply high/medium post-matrix reliability fixes:
+    - desktop compatibility gating now blocks API/capability mismatches during runtime probe/reconnect,
+    - duplicate/auto-tag scan failures now surface deterministic runtime-recovery guidance instead of silent/noisy false API-required behavior,
+    - desktop reconnect/resync flow now reports SSE disconnect/reconnect state and treats projection-sync failures as disconnected runtime,
+    - missing-media simulation now preserves random selection and returns deterministic `404 { "error": "Media not found" }` responses on `/api/media/{idOrToken}`.
+    - removed desktop locate/remove missing-file dialog handling; desktop now surfaces standard missing-media guidance and relies on server-authoritative refresh/remediation.
+    - desktop playback entry points are renamed from `PlayVideo` to `PlayMedia`, and media-type detection now correctly handles API-backed photos.
+    - web app module naming is normalized from `legacyApp` to `app`, and web client log source labels are now `webui`.
+    - runtime helper scripts are renamed to `run-server` and `run-server-rebuild` (PowerShell and shell variants), replacing old `run-core` and publish-activate helpers.
+    - WebUI and Operator UI now load app favicon via `/HI.ico`, eliminating runtime favicon 404 noise.
+    - desktop reconnect guidance now preserves explicit API-version/capability mismatch reasons instead of collapsing to generic runtime-unavailable text.
 
 - **Implement M8e WebUI/mobile thin-client contract standardization (identity/session/reconnect parity)** (2026-03-08):
   - Extend OpenAPI contract surfaces with optional `sessionId` and explicit identity/reconnect expectations for `GET /api/events`, random requests, playback-record requests, and authoritative requery payloads.
@@ -20,7 +69,7 @@
   - Track playback source type (`FromPath` vs `FromLocation`) so loop-toggle media recreation and timeline navigation preserve the selected playback path semantics.
   - Add persisted desktop setting `ForceApiPlayback` (default `false`) and wire it through settings load/save + Settings dialog playback tab.
   - Add API client regression coverage ensuring random-response absolute `mediaUrl` values are preserved for playback target resolution.
-  - Synchronize M8d milestone/docs/tracking artifacts (`MILESTONES.md`, `CONTEXT.md`, `README.md`, `docs/api.md`, `docs/architecture.md`, `docs/dev-setup.md`, `docs/m8-domain-inventory.md`, `COMMIT_MESSAGE.txt`).
+  - Synchronize M8d milestone/docs/tracking artifacts (`MILESTONES.md`, `CONTEXT.md`, `README.md`, `docs/api.md`, `docs/architecture.md`, `docs/dev-setup.md`, `docs/domain-inventory.md`, `COMMIT_MESSAGE.txt`).
 
 - **Implement M8c desktop thin-client cutover (API-first ownership + centralized logging)** (2026-03-07):
   - Remove desktop auto-start/supervision of core runtime and switch to guidance-only availability behavior.
@@ -63,7 +112,7 @@
     - OpenAPI contract + core test assertions for control endpoints/capabilities,
     - auth/settings/runtime option regressions for control policy behavior,
     - `verify-web-deploy.ps1/.sh` checks for control status/settings endpoints in the consolidated runtime smoke path.
-  - Sync M8b milestone/docs/domain inventory/tracking artifacts (`MILESTONES.md`, `CONTEXT.md`, `README.md`, `docs/api.md`, `docs/architecture.md`, `docs/dev-setup.md`, `docs/m8-domain-inventory.md`, `COMMIT_MESSAGE.txt`).
+  - Sync M8b milestone/docs/domain inventory/tracking artifacts (`MILESTONES.md`, `CONTEXT.md`, `README.md`, `docs/api.md`, `docs/architecture.md`, `docs/dev-setup.md`, `docs/domain-inventory.md`, `COMMIT_MESSAGE.txt`).
   - Follow-up runtime hardening:
     - add ServerApp-owned mDNS advertisement for LAN WebUI hostname (`{LanHostname}.local`) in the consolidated runtime path,
     - harden restart/stop single-flight behavior to avoid repeated lifecycle-trigger duplication,
@@ -75,7 +124,7 @@
   - Add minimal operator control surface with runtime status/settings apply and localhost-only deterministic restart action.
   - Update core runtime scripts (`run-core.ps1`, `run-core.sh`) to launch `ReelRoulette.ServerApp` and update compatibility helper `publish-activate-run-worker.ps1` to build WebUI and run server app.
   - Repurpose `verify-web-deploy.ps1` / `verify-web-deploy.sh` into M8a single-origin smoke checks instead of WebHost manifest-switch validation.
-  - Remove WebHost supervision from Worker startup path and synchronize milestone/docs/tracking artifacts for final M8a state (`MILESTONES.md`, `CONTEXT.md`, `README.md`, `docs/api.md`, `docs/architecture.md`, `docs/dev-setup.md`, `docs/m8-domain-inventory.md`).
+  - Remove WebHost supervision from Worker startup path and synchronize milestone/docs/tracking artifacts for final M8a state (`MILESTONES.md`, `CONTEXT.md`, `README.md`, `docs/api.md`, `docs/architecture.md`, `docs/dev-setup.md`, `docs/domain-inventory.md`).
   - Follow-up hardening for operator/runtime behavior:
     - keep default server-app runtime port at `51234`,
     - make WebUI `enabled` semantics explicit (WebUI-only gating with `404` when disabled, API/SSE/media still available),
@@ -108,7 +157,7 @@
   - Add deployment orchestration scripts for publish/activate/rollback across PowerShell and Bash (`publish-web.*`, `activate-web-version.*`, `rollback-web-version.*`).
   - Enforce split cache policy in the web host (`index.html` + runtime config as `no-store`; fingerprinted assets as long-lived `immutable`).
   - Add cross-platform deployment smoke verification scripts (`verify-web-deploy.ps1`, `verify-web-deploy.sh`) covering active version switch, cache headers, and rollback without host restart.
-  - Update milestone/context/docs/domain inventory artifacts for final M7c state (`MILESTONES.md`, `CONTEXT.md`, `README.md`, `docs/api.md`, `docs/architecture.md`, `docs/dev-setup.md`, `docs/m7-domain-inventory.md`).
+  - Update milestone/context/docs/domain inventory artifacts for final M7c state (`MILESTONES.md`, `CONTEXT.md`, `README.md`, `docs/api.md`, `docs/architecture.md`, `docs/dev-setup.md`, `docs/domain-inventory.md`).
 
 - **Implement M7b direct web-to-core auth/session and SSE reliability** (2026-03-05):
   - Add direct WebUI auth bootstrap flow that pairs via `/api/pair`, verifies API authorization, and uses credentialed requests for ongoing API/SSE access.
@@ -117,7 +166,7 @@
   - Extend `/api/events` reconnect handling with `lastEventId` query fallback and replay/live dedupe guard based on delivered revision tracking.
   - Add WebUI SSE reconnect/watchdog/lifecycle reconnect flow with direct `refreshStatusChanged` status-line projection and `resyncRequired` authoritative requery fallback (`/api/library-states` + `/api/refresh/status`).
   - Add regression coverage for server auth middleware/session-cookie behavior, cookie/CORS policy normalization matrix, and WebUI auth/event helper modules (including `resyncRequired` requery handling).
-  - Update OpenAPI/docs/milestone inventory artifacts for final M7b state (`README`, `CONTEXT`, `docs/api.md`, `docs/dev-setup.md`, `docs/architecture.md`, `docs/m7-domain-inventory.md`, `MILESTONES.md`).
+  - Update OpenAPI/docs/milestone inventory artifacts for final M7b state (`README`, `CONTEXT`, `docs/api.md`, `docs/dev-setup.md`, `docs/architecture.md`, `docs/domain-inventory.md`, `MILESTONES.md`).
 
 - **Implement M7a independent web client foundation and runtime endpoint bootstrap** (2026-03-05):
   - Replace `src/clients/web/ReelRoulette.WebUI` placeholder-only state with a canonical Vite + TypeScript web client project (real app bootstrap, styling, and runtime-config-aware startup flow).
@@ -125,7 +174,7 @@
   - Add web runtime-config schema regression tests and build-output validation gate (`npm run verify`) covering typecheck, tests, production build, and artifact assertions.
   - Add cross-platform helper scripts for repeatable web verification from repo root (`tools/scripts/verify-web.ps1`, `tools/scripts/verify-web.sh`).
   - Verify project health with automated gates (`npm run verify`, `dotnet build ReelRoulette.sln`, `dotnet test ReelRoulette.sln`) plus web dev bootstrap smoke (`npm run dev` startup).
-  - Mark M7a complete in `MILESTONES.md` and synchronize milestone-state docs (`README.md`, `CONTEXT.md`, `docs/api.md`, `docs/architecture.md`, `docs/dev-setup.md`, `docs/m7-domain-inventory.md`).
+  - Mark M7a complete in `MILESTONES.md` and synchronize milestone-state docs (`README.md`, `CONTEXT.md`, `docs/api.md`, `docs/architecture.md`, `docs/dev-setup.md`, `docs/domain-inventory.md`).
 
 - **Implement M6b unified refresh pipeline and desktop grid/thumbnail API flow** (2026-03-01):
   - Add M6b contract surface to OpenAPI and server contracts for refresh start/status/settings plus thumbnail retrieval.
@@ -141,7 +190,7 @@
   - Add M6b regression coverage for refresh overlap rejection, stage sequencing, loudness scan semantics, thumbnail invalidation/regeneration/metadata backfill behavior, and refresh API client request/response shapes.
   - Keep direct web-to-core refresh-status SSE parity scoped to M7 web/desktop decoupling; M6b finalizes desktop projection + core status contracts.
   - Mark M6b milestone as complete and normalize docs to the final projection scope (desktop in M6b; direct web-to-core parity in M7).
-  - Update M6b documentation (`README`, `docs/api.md`, `docs/architecture.md`, `docs/dev-setup.md`, `docs/m6b-domain-inventory.md`, `MILESTONES.md`) to reflect final-state contracts and behavior.
+  - Update M6b documentation (`README`, `docs/api.md`, `docs/architecture.md`, `docs/dev-setup.md`, `docs/domain-inventory.md`, `MILESTONES.md`) to reflect final-state contracts and behavior.
 
 - **Implement M6a API-first tag editing parity (desktop + web)** (2026-03-01):
   - Add batch-ready tag editor contract surface (`/api/tag-editor/*`) to OpenAPI and server endpoint composition for item-tag deltas plus tag/category CRUD flows.
@@ -163,7 +212,7 @@
   - Add category inline `edit` control in both desktop and web (`up`, `down`, `edit`, `delete` order), prevent duplicate category names, and normalize web uncategorized grouping to avoid duplicate `Uncategorized` sections.
   - Isolate desktop tag-editor staged state from shared live library objects so category/tag staging no longer leaks into persisted library state before `Apply`.
   - Add M6a regression coverage for tag API request shapes and server-side tag mutation/event behavior.
-  - Update M6a docs/artifacts (`README`, `docs/api.md`, `docs/architecture.md`, `docs/dev-setup.md`, `docs/m6a-domain-inventory.md`).
+  - Update M6a docs/artifacts (`README`, `docs/api.md`, `docs/architecture.md`, `docs/dev-setup.md`, `docs/domain-inventory.md`).
 
 - **Implement M5 desktop API-client state migration flow** (2026-03-01):
   - Add a desktop `CoreServerApiClient` layer for worker/server query-command calls plus SSE event consumption.
@@ -189,7 +238,7 @@
   - Add SSE reconnect handling in `ReelRoulette.Server` for `Last-Event-ID` replay and emit `resyncRequired` when revision gaps exceed replay retention.
   - Extend server state service with bounded replay history and revision-aware library state projections.
   - Extend verification checks with replay/state-resync coverage in both xUnit contract tests and system-check harness.
-  - Update M3 documentation (`docs/api.md`, `docs/architecture.md`, `docs/dev-setup.md`, `docs/m3-domain-inventory.md`, `README.md`) to reflect final reconnect semantics.
+  - Update M3 documentation (`docs/api.md`, `docs/architecture.md`, `docs/dev-setup.md`, `docs/domain-inventory.md`, `README.md`) to reflect final reconnect semantics.
 
 - **Implement M3 contract-first server seam and initial API boundary proof** (2026-03-01):
   - Expand `shared/api/openapi.yaml` from health-only to initial M3 query/command endpoints and typed SSE envelope schema (`revision`, `eventType`, `timestamp`, `payload`).

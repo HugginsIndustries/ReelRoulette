@@ -6,11 +6,15 @@ describe("event helpers", () => {
   it("builds SSE URL with last revision query", () => {
     const url = buildEventsUrl("http://localhost:51301/api/events", 123, {
       clientId: "web-client",
-      sessionId: "web-session"
+      sessionId: "web-session",
+      clientType: "web",
+      deviceName: "Web Browser"
     });
     expect(url).toContain("lastEventId=123");
     expect(url).toContain("clientId=web-client");
     expect(url).toContain("sessionId=web-session");
+    expect(url).toContain("clientType=web");
+    expect(url).toContain("deviceName=Web+Browser");
   });
 
   it("parses event envelope JSON", () => {

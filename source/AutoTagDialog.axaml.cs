@@ -284,7 +284,7 @@ namespace ReelRoulette
                 var response = await _scanViaApiAsync(ScanFullLibrary, scopedPaths);
                 if (response == null)
                 {
-                    StatusTextBlock.Text = "Auto-tag scan failed (API required).";
+                    StatusTextBlock.Text = "Auto-tag scan failed. Core runtime is unavailable or still recovering.";
                     return;
                 }
 

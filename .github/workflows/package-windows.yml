@@ -1,0 +1,57 @@
+name: Package Windows
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Package version label"
+        required: true
+        default: "dev"
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  package:
+    runs-on: windows-latest
+    env:
+      PACKAGE_VERSION: ${{ inputs.version || github.ref_name }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "9.0.x"
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Setup Inno Setup
+        shell: pwsh
+        run: choco install innosetup -y
+
+      - name: Build portable package
+        shell: pwsh
+        run: ./tools/scripts/package-serverapp-win-portable.ps1 -Version "$env:PACKAGE_VERSION"
+
+      - name: Build installer package
+        shell: pwsh
+        run: ./tools/scripts/package-serverapp-win-inno.ps1 -Version "$env:PACKAGE_VERSION"
+
+      - name: Build desktop portable package
+        shell: pwsh
+        run: ./tools/scripts/package-desktop-win-portable.ps1 -Version "$env:PACKAGE_VERSION"
+
+      - name: Build desktop installer package
+        shell: pwsh
+        run: ./tools/scripts/package-desktop-win-inno.ps1 -Version "$env:PACKAGE_VERSION"
+
+      - name: Upload package artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: reelroulette-windows-packages
+          path: artifacts/packages/**

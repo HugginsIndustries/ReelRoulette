@@ -246,37 +246,60 @@ namespace ReelRoulette
 
             if (_scanDuplicatesAsync == null || _applyDuplicatesAsync == null)
             {
+                await ShowApiRequiredMessageAsync("Duplicate scan requires core API connection.");
                 return;
             }
 
-            var scanResponse = await _scanDuplicatesAsync(scope.Value, sourceId);
-            if (scanResponse == null)
+            button.IsEnabled = false;
+            var originalContent = button.Content;
+            button.Content = "Scanning...";
+            try
             {
-                return;
-            }
-
-            var scan = new DuplicateScanResult
-            {
-                Groups = scanResponse.Groups.Select(group => new DuplicateGroup
+                CoreDuplicateScanResponse? scanResponse;
+                try
                 {
-                    Fingerprint = group.Fingerprint,
-                    Items = group.Items.Select(item => new DuplicateGroupItem
+                    scanResponse = await _scanDuplicatesAsync(scope.Value, sourceId);
+                }
+                catch (Exception ex)
+                {
+                    await ShowApiRequiredMessageAsync($"Duplicate scan failed: {ex.Message}");
+                    return;
+                }
+
+                if (scanResponse == null)
+                {
+                    await ShowApiRequiredMessageAsync("Duplicate scan failed because the core API is unavailable or still recovering. Retry after reconnect.");
+                    return;
+                }
+
+                var scan = new DuplicateScanResult
+                {
+                    Groups = scanResponse.Groups.Select(group => new DuplicateGroup
                     {
-                        ItemId = item.ItemId,
-                        FullPath = item.FullPath,
-                        SourceId = item.SourceId,
-                        IsFavorite = item.IsFavorite,
-                        IsBlacklisted = item.IsBlacklisted,
-                        PlayCount = item.PlayCount
-                    }).ToList()
-                }).ToList(),
-                ExcludedPending = scanResponse.ExcludedPending,
-                ExcludedFailed = scanResponse.ExcludedFailed,
-                ExcludedStale = scanResponse.ExcludedStale
-            };
-            var dialog = new DuplicatesDialog(_applyDuplicatesAsync, _scanDuplicatesAsync, scan, scope.Value, sourceId);
-            await dialog.ShowDialog(this);
-            LoadSources();
+                        Fingerprint = group.Fingerprint,
+                        Items = group.Items.Select(item => new DuplicateGroupItem
+                        {
+                            ItemId = item.ItemId,
+                            FullPath = item.FullPath,
+                            SourceId = item.SourceId,
+                            IsFavorite = item.IsFavorite,
+                            IsBlacklisted = item.IsBlacklisted,
+                            PlayCount = item.PlayCount
+                        }).ToList()
+                    }).ToList(),
+                    ExcludedPending = scanResponse.ExcludedPending,
+                    ExcludedFailed = scanResponse.ExcludedFailed,
+                    ExcludedStale = scanResponse.ExcludedStale
+                };
+                var dialog = new DuplicatesDialog(_applyDuplicatesAsync, _scanDuplicatesAsync, scan, scope.Value, sourceId);
+                await dialog.ShowDialog(this);
+                LoadSources();
+            }
+            finally
+            {
+                button.IsEnabled = true;
+                button.Content = originalContent;
+            }
         }
 
         private async Task<DuplicateScanScope?> ShowDuplicateScopeDialog()

@@ -37,6 +37,22 @@ function getSessionId() {
   return id;
 }
 
+function isMobileBrowser() {
+  const ua = typeof navigator === "undefined" ? "" : navigator.userAgent || "";
+  return /Android|iPhone|iPad|iPod|Mobi/i.test(ua);
+}
+
+function getClientType() {
+  return isMobileBrowser() ? "mobile-web" : "web";
+}
+
+function getDeviceName() {
+  const ua = typeof navigator === "undefined" ? "" : navigator.userAgent || "";
+  const platform = typeof navigator === "undefined" ? "unknown-platform" : navigator.platform || "unknown-platform";
+  const label = isMobileBrowser() ? "Mobile Browser" : "Web Browser";
+  return `${label} (${platform}${ua ? `; ${ua.slice(0, 40)}` : ""})`;
+}
+
 function normalizePath(path) {
   return String(path || "").replace(/\//g, "\\").toLowerCase();
 }
@@ -120,7 +136,7 @@ function validateServerCompatibility(version) {
   return null;
 }
 
-export function startLegacyApp(config) {
+export function startApp(config) {
   const apiBaseUrl = String(config.apiBaseUrl || "").replace(/\/+$/, "");
   const sseUrl = config.sseUrl;
   const state = {
@@ -146,7 +162,8 @@ export function startLegacyApp(config) {
     tagEditContext: null,
     tagEditorWasPlaying: false,
     tagEditorPhotoTimerRunning: false,
-    compatibilityBlocked: false
+    compatibilityBlocked: false,
+    playAttemptId: 0
   };
 
   const video = getElement("video");
@@ -190,6 +207,7 @@ export function startLegacyApp(config) {
   const tagEditSaveBtn = getElement("tag-edit-save-btn");
   const photoDurationInput = getElement("photo-duration");
   const emptyState = getElement("empty-state");
+  const mobileDiagnosticsEl = getElement("mobile-diagnostics");
 
   if (
     !video || !photo || !statusEl || !presetSelect || !pairSection || !pairToken || !pairBtn ||
@@ -211,6 +229,8 @@ export function startLegacyApp(config) {
   let touchWasSwipe = false;
   let touchHandledTap = false;
   let ignoreSwipeTouch = false;
+  let lastLoggedStatusMessage = "";
+  let lastLoggedStatusAtMs = 0;
   function apiPost(path, payload) {
     return fetch(buildApiUrl(path), {
       method: "POST",
@@ -222,6 +242,54 @@ export function startLegacyApp(config) {
 
   function setStatus(message) {
     statusEl.textContent = message;
+    const now = Date.now();
+    const normalizedMessage = String(message || "");
+    const shouldLog = normalizedMessage !== lastLoggedStatusMessage || now - lastLoggedStatusAtMs > 1000;
+    if (shouldLog) {
+      lastLoggedStatusMessage = normalizedMessage;
+      lastLoggedStatusAtMs = now;
+      relayClientLog("info", `status=${normalizedMessage} currentId=${state.current?.id || "none"} attempt=${state.playAttemptId}`);
+    }
+  }
+
+  async function relayClientLog(level, message) {
+    try {
+      await fetch(buildApiUrl("/api/logs/client"), {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          source: "webui",
+          level: level || "info",
+          message: String(message || "")
+        })
+      });
+    } catch {
+      // Client logging is best-effort and must never break UX flow.
+    }
+  }
+
+  function tracePlayback(level, message, context = {}) {
+    const parts = [
+      `playback=${message}`,
+      `attempt=${state.playAttemptId}`,
+      `currentId=${state.current?.id || "none"}`
+    ];
+    for (const [key, value] of Object.entries(context)) {
+      parts.push(`${key}=${value == null ? "null" : String(value)}`);
+    }
+
+    relayClientLog(level, parts.join(" "));
+  }
+
+  function renderMobileDiagnostics() {
+    if (!mobileDiagnosticsEl || !isMobileBrowser()) {
+      return;
+    }
+
+    mobileDiagnosticsEl.style.display = "block";
+    mobileDiagnosticsEl.textContent =
+      `Diagnostics: clientId=${state.clientId.slice(0, 10)}..., sessionId=${state.sessionId.slice(0, 10)}..., type=${getClientType()}`;
   }
 
   function blockForCompatibility(message) {
@@ -339,14 +407,25 @@ export function startLegacyApp(config) {
     };
   }
 
-  function playCurrent() {
+  async function playCurrent() {
     const item = state.current;
     if (!item) return;
+    state.playAttemptId += 1;
+    const expectedPlayAttemptId = state.playAttemptId;
+    tracePlayback("info", "start", { expectedItemId: item.id, mediaType: item.mediaType });
 
     applyCachedState(item);
     clearPhotoTimer();
+    video.onplaying = null;
+    video.onerror = null;
+    video.onloadedmetadata = null;
+    video.ontimeupdate = null;
+    video.onended = null;
+    photo.onload = null;
+    photo.onerror = null;
     video.pause();
     video.src = "";
+    photo.src = "";
     video.style.display = "none";
     photo.style.display = "none";
     seekRow.style.display = "none";
@@ -356,9 +435,32 @@ export function startLegacyApp(config) {
     nowPlayingName.textContent = truncateName(fullName, 45);
     nowPlayingName.title = fullName;
     nowPlayingDuration.textContent = item.durationSeconds != null ? fmtTime(item.durationSeconds) : "";
+    const expectedItemId = item.id;
 
     if (item.mediaType === "photo") {
-      photo.src = absolutizeMediaUrl(apiBaseUrl, item.mediaUrl);
+      const mediaUrl = absolutizeMediaUrl(apiBaseUrl, item.mediaUrl);
+      if (!state.current || state.current.id !== expectedItemId || state.playAttemptId !== expectedPlayAttemptId) {
+        tracePlayback("info", "photo-preload-stale", { expectedItemId, expectedPlayAttemptId });
+        return;
+      }
+
+      photo.onload = () => {
+        if (!state.current || state.current.id !== expectedItemId || state.playAttemptId !== expectedPlayAttemptId) {
+          tracePlayback("info", "photo-onload-stale", { expectedItemId, expectedPlayAttemptId });
+          return;
+        }
+        tracePlayback("info", "photo-onload", { mediaUrl });
+        setStatus("Playing");
+      };
+      photo.onerror = () => {
+        if (!state.current || state.current.id !== expectedItemId || state.playAttemptId !== expectedPlayAttemptId) {
+          tracePlayback("info", "photo-onerror-stale", { expectedItemId, expectedPlayAttemptId });
+          return;
+        }
+        tracePlayback("warn", "photo-onerror", { mediaUrl });
+        setStatus("Photo file not found.");
+      };
+      photo.src = mediaUrl;
       photo.style.display = "block";
       if (state.loop || state.autoplay) {
         const timeoutMs = Math.max(1, Math.min(300, state.photoDurationSeconds)) * 1000;
@@ -371,10 +473,32 @@ export function startLegacyApp(config) {
         }, timeoutMs);
       }
     } else {
-      video.src = absolutizeMediaUrl(apiBaseUrl, item.mediaUrl);
+      const mediaUrl = absolutizeMediaUrl(apiBaseUrl, item.mediaUrl);
+      if (!state.current || state.current.id !== expectedItemId || state.playAttemptId !== expectedPlayAttemptId) {
+        tracePlayback("info", "video-preload-stale", { expectedItemId, expectedPlayAttemptId });
+        return;
+      }
+
+      video.src = mediaUrl;
       video.style.display = "block";
       seekRow.style.display = "flex";
       setupVideoEvents();
+      video.onplaying = () => {
+        if (!state.current || state.current.id !== expectedItemId || state.playAttemptId !== expectedPlayAttemptId) {
+          tracePlayback("info", "video-onplaying-stale", { expectedItemId, expectedPlayAttemptId });
+          return;
+        }
+        tracePlayback("info", "video-onplaying", { mediaUrl });
+        setStatus("Playing");
+      };
+      video.onerror = () => {
+        if (!state.current || state.current.id !== expectedItemId || state.playAttemptId !== expectedPlayAttemptId) {
+          tracePlayback("info", "video-onerror-stale", { expectedItemId, expectedPlayAttemptId });
+          return;
+        }
+        tracePlayback("warn", "video-onerror", { mediaUrl });
+        setStatus("Video file not found.");
+      };
       void video.play().catch(() => {});
     }
 
@@ -469,7 +593,6 @@ export function startLegacyApp(config) {
       state.history.push(state.current);
       state.historyIndex = state.history.length - 1;
       playCurrent();
-      setStatus("Playing");
     } catch (error) {
       setStatus(`Random selection failed: ${error?.message || error}`);
     }
@@ -1194,6 +1317,8 @@ export function startLegacyApp(config) {
     const streamUrl = new URL(sseUrl);
     streamUrl.searchParams.set("clientId", state.clientId);
     streamUrl.searchParams.set("sessionId", state.sessionId);
+    streamUrl.searchParams.set("clientType", getClientType());
+    streamUrl.searchParams.set("deviceName", getDeviceName());
     eventSource = new EventSource(streamUrl.toString(), { withCredentials: true });
     eventSource.onopen = () => {
       setStatus("SSE connected");
@@ -1557,6 +1682,7 @@ export function startLegacyApp(config) {
   updateToggleButtons();
   connectEvents();
   setStatus("Ready");
+  renderMobileDiagnostics();
 
   if (config.pairToken) {
     void pairAndConnect();

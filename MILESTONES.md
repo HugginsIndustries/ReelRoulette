@@ -1,147 +1,133 @@
-# ReelRoulette Migration Milestones
+# ReelRoulette Milestones
 
-This board defines a concrete migration path from the current monolithic desktop app to a headless core/server architecture with multiple clients (Windows, Web, Android) sharing one API contract.
+This document is the migration planning and verification board for ReelRoulette.
+It tracks scope, sequencing, acceptance criteria, and evidence by milestone.
 
-It is designed to be:
+## Document Purpose
 
-- **Incremental**: no big-bang rewrite
-- **Shippable each milestone**: app remains usable after every milestone
-- **Traceable**: each milestone has clear scope and acceptance criteria
+Use this file for:
 
----
+- milestone status (⏳ Planned | 🚧 In Progress | ✅ Complete),
+- scope and acceptance criteria,
+- verification evidence and explicit deferrals.
 
-## Guiding Rules
+Do not use this file for detailed architecture explanation or current capability inventory.
 
-- Keep existing desktop behavior functional while migrating.
-- Move business logic to core before moving UI behavior.
-- Keep `ReelRoulette.Server` thin; put domain logic in `ReelRoulette.Core`.
-- `ReelRoulette.Server` contains only HTTP/SSE/auth/streaming glue (no direct JSON file I/O).
-- Treat `shared/api/openapi.yaml` as API source of truth.
-- Use SSE revisions for cross-client consistency.
-- Prefer adapters during transition over hard cutovers.
-- No state mutation happens in two places: once a flow is migrated to core/server, desktop must not also write JSON directly for that same data.
+## Ownership Boundaries
 
----
+- `MILESTONES.md`: roadmap, milestone scope, acceptance gates, verification evidence.
+- `CONTEXT.md`: current implemented capabilities across server/desktop/web/operator.
+- `AGENTS.md`: agent workflow, boundaries, and doc-discipline rules.
+- `docs/domain-inventory.md`: ownership-first implementation surface map.
+- `README.md` + `docs/dev-setup.md`: run/setup/verify instructions.
+- `docs/api.md` + `shared/api/openapi.yaml`: API behavior and contract source of truth.
 
-## Cross-Cutting Workstreams
+## Maintenance Rules
 
-These run in parallel across milestones:
+- Keep entries **current-state accurate**: update statuses and evidence as work progresses.
+- Keep scope locked to milestone intent; record out-of-scope items as explicit deferrals.
+- When a milestone is completed, move it to `## Completed Milestones` as-is: keep all existing scope/acceptance/evidence detail unchanged, update only status to complete, and preserve newest completions first.
+- Keep acceptance criteria testable and outcome-focused (avoid implementation-narrative bloat).
+- Keep verification evidence concrete:
+  - commands/checks run,
+  - artifacts/docs updated,
+  - waivers/deferrals explicitly called out.
+- Avoid duplicating architecture/runtime detail already owned by `CONTEXT.md` and docs under `docs/`.
+- Prefer referencing owning docs instead of copying long explanatory sections into this file.
+- Keep historical entries intact except for final-state correction of inaccurate facts.
+- If script names/paths/contracts change, update milestone references to avoid stale guidance.
 
-- **Contract discipline**:
-  - Keep `openapi.yaml` current.
-  - Update OpenAPI whenever endpoint shape/behavior changes (do not require unrelated OpenAPI churn).
-  - Add change log section for API breaking/non-breaking changes.
+## Milestone Template
 
-- **Observability**:
-  - Standardize structured event and operation logging.
-  - Preserve privacy-safe log sanitization across all hosts/clients.
+### Mx - {Milestone Title}
 
-- **Concurrency and consistency**:
-  - Explicit conflict policy (currently last-write-wins).
-  - Idempotent commands where practical.
-
-- **Developer workflow**:
-  - Add scripts for build/run/test/generate-clients.
-  - Ensure one-command local setup for core + desktop + web.
-
----
-
-## Client-Only Responsibilities Checklist
-
-- **UI/Platform only in clients**: render screens, capture input, manage ephemeral UI state, handle local playback/rendering primitives, and project API/SSE data into view models.
-- **Core/Server authority**: own all domain logic and persistence (library state, sources, tags/categories/presets/filters, randomization, playback stats, refresh pipeline, thumbnails, and domain-affecting settings).
-- **No direct local mutation**: clients must not write authoritative domain state directly (no direct JSON mutation for migrated domains).
-- **API-first execution**: user actions invoke core/server commands/queries; clients orchestrate UX and display results.
-- **SSE + snapshot recovery**: clients consume SSE for live sync and use query re-fetch/resync when reconnect gaps occur.
-- **Cross-client parity**: desktop/web/mobile use the same contracts; behavior changes are made once in core and reflected through API/SSE.
-- **Thin-client end state**: after migration, adding new clients should primarily be UI integration over existing API contracts, not reimplementation of business logic.
+- **Status**: ⏳ Planned | 🚧 In Progress | ✅ Complete
+- **Goal**: {one concise outcome statement}
+- **Scope**:
+  - {key deliverable 1}
+  - {key deliverable 2}
+  - {key deliverable 3}
+- **Acceptance criteria**:
+  - {testable outcome 1}
+  - {testable outcome 2}
+  - {testable outcome 3}
+- **Verification evidence**:
+  - {automated checks run}
+  - {manual checks/evidence notes}
+  - {docs/artifacts updated}
+- **Deferrals / Follow-ups**:
+  - {deferred item -> target milestone}
 
 ---
 
 ## Milestone Board
 
-### M8f - Hardening, Packaging, and Release Readiness
+### M8g - Unified last.log Pipeline (Server + Client Logging Consolidation)
 
 - **Status**: ⏳ Planned
-- **Goal**: Finalize reliability, packaging, and migration cleanup for the new server-thin-client architecture.
+- **Goal**: Make `last.log` the single reliable diagnostics stream for server runtime logs plus desktop/web client logs, with clear source/time/level metadata and operator-friendly filtering.
 - **Scope**:
-  - Add/expand integration tests for API/SSE/runtime transitions and refresh pipeline behavior.
-  - Complete migration cleanup of temporary compatibility paths.
-  - Finalize packaging/distribution for:
-    - `ReelRoulette Server` app,
-    - thin desktop client,
-    - WebUI assets served by server.
-  - Produce migration/upgrade playbook and release-readiness checklist.
-  - Add an **Operator Testing Suite** to `/operator` so desktop/web/server validation can be run from UI without ad-hoc shell workflows.
-  - Add **connected client/session visibility** in Operator UI (client/session identity and related diagnostics in appropriate sections).
-  - Add a dedicated **Server Logs** section in Operator UI for `last.log` with practical triage features.
-  - Add **Testing Mode** gate for test/fault controls:
-    - testing controls are available only when Testing Mode is enabled,
-    - existing control admin auth mode remains authoritative:
-      - if admin auth is `Off`, no auth required,
-      - if admin auth requires auth, testing actions require auth.
-  - Add safe, operator-driven fault/testing scenarios for client UX/error-handling validation, including:
-    - API version/capability mismatch simulation,
-    - client disconnect/reconnect behavior checks,
-    - SSE replay/resync-required recovery checks,
-    - missing/invalid media and related API-error path checks.
-  - Produce full repo-wide manual testing artifacts linked to Operator test sections:
-    - `docs/testing-manual.md` (workflow + scenario instructions),
-    - `docs/testing-checklist.md` (execution checklist + PASS/FAIL capture).
-  - Include Operator-assisted evidence capture quality-of-life features:
-    - per-scenario PASS/FAIL + note + timestamp recording,
-    - copy/export test evidence bundle (status + relevant log snippets),
-    - per-scenario reset/cleanup actions for repeatable reruns.
+  - Define and enforce a canonical `last.log` entry shape (timestamp, level, sourceType/source, message, optional client/session/device metadata).
+  - Add server-side centralized log writer service used by:
+    - server runtime logging pipeline (`ILogger` sink/provider),
+    - client log ingestion endpoint (`POST /api/logs/client`).
+  - Ensure all server runtime logs are written to `last.log` (not only client-ingested logs).
+  - Extend client log ingestion contracts to support correlation metadata:
+    - `clientType`, `clientId`, `sessionId`, `deviceName`, optional structured `meta`.
+  - Ensure desktop logging relay always sends stable client/session metadata with source labels.
+  - Add WebUI log relay to `POST /api/logs/client` for startup/auth/SSE/error and major UX failure paths.
+  - Keep logging best-effort and non-blocking for clients (no user-facing failures on log-post errors).
+  - Add log safety controls:
+    - sensitive-value redaction (tokens/cookies/secrets),
+    - bounded retention/rotation policy (or explicit documented reset policy with guardrails).
+  - Improve Operator `Server Logs` panel usability for unified stream triage:
+    - reliable refresh behavior,
+    - source/level search/filter ergonomics for mixed server+client entries.
 - **Acceptance criteria**:
-  - Stable multi-client operation (desktop + web minimum) against `ReelRoulette Server`.
-  - No critical cross-client state divergence.
-  - If `ReelRoulette Server` crashes or is unavailable, thin clients show friendly reconnect/start guidance and recover without state corruption.
-  - Core JSON persistence uses atomic write semantics (write temp then replace) and is resilient to partial-write failures.
-  - Web assets are served with cache-correct behavior (hashed filenames/cache-busting) to prevent stale UI after updates.
-  - Full regression suite is part of default CI `dotnet test` gate and remains green.
-  - Migration and upgrade documentation is complete and actionable.
-  - Operator UI exposes connected client/session identity details sufficient for troubleshooting and correlation.
-  - Operator UI includes a dedicated Server Logs section for `last.log` with tail/filter/search/copy-export workflows.
-  - Operator Testing Suite can execute key client/server error-handling scenarios from UI when Testing Mode is enabled.
-  - Testing controls obey Testing Mode and existing admin auth policy exactly.
-  - Repo-wide manual testing manual/checklist is complete, actionable, and mapped to Operator test sections plus common app/server workflows.
-  - End-to-end manual verification for desktop/web/server can be executed by a user without requiring ad-hoc command sequences.
+  - `last.log` consistently contains both server runtime logs and desktop/web client logs during normal operation.
+  - Each entry is clearly attributable by source and level with readable timestamps.
+  - Desktop and WebUI both emit meaningful client logs to `/api/logs/client` with identity/session context.
+  - Operator `Server Logs` section shows actionable combined diagnostics without requiring shell access.
+  - Sensitive values are not written to `last.log`.
+  - Log lifecycle behavior (reset and/or rotation) is deterministic and documented.
+  - Automated tests cover server sink behavior, ingestion mapping, and redaction/retention expectations.
+- **Verification evidence**:
+  - Server logging sink/provider wired into centralized `last.log` writer.
+  - `/api/logs/client` ingestion writes through same centralized path with source metadata.
+  - Desktop + WebUI log emission paths verified with identity/session fields.
+  - Operator log panel validates mixed-source visibility and filtering behavior.
+  - Automated verification passes:
+    - `dotnet build ReelRoulette.sln`
+    - `dotnet test ReelRoulette.sln`
+    - `npm run verify` (`src/clients/web/ReelRoulette.WebUI`)
+  - Manual verification captures:
+    - server lifecycle logs,
+    - desktop action/error logs,
+    - web/mobile SSE/auth/error logs,
+    - source-separated evidence snippets in `docs/testing-guide.md`.
 
-#### M8f Testing Matrix (Operator-Driven + Repo-Wide Manual Verification)
+### M8h - UX/UI Polish Follow-up (Post-M8f Reliability Closeout)
 
-- **Purpose**: Define deterministic manual verification scenarios executable primarily from Operator UI, with expected client/server outcomes and evidence capture requirements.
-
-| Scenario ID | Scenario | Operator action(s) | Expected desktop/web behavior | PASS criteria | Evidence to capture |
-| --- | --- | --- | --- | --- | --- |
-| M8f-T01 | Connected client/session visibility | Open Operator `Connected Clients` section | Desktop/web sessions appear with client/session identifiers and status metadata | Client/session identity is visible, current, and distinguishable per connection | Screenshot of Connected Clients panel |
-| M8f-T02 | Server logs visibility | Open Operator `Server Logs` section; tail/filter/search `last.log` | Logs stream/update without external shell usage | Tail/filter/search/copy/export all function and are responsive | Screenshot + exported/copy sample |
-| M8f-T03 | Testing Mode gate enforcement | Attempt test controls with Testing Mode off, then on | Controls blocked when off, enabled when on | No disruptive action executes while Testing Mode is off | Screenshot before/after toggle |
-| M8f-T04 | Admin auth policy enforcement for testing controls | With admin auth `Off`: run test action; with admin auth required: run same action unauthenticated then authenticated | `Off` mode allows testing action; auth-required mode blocks until authenticated | Behavior matches policy exactly; no policy bypass | Screenshots/log entries for both modes |
-| M8f-T05 | API capability mismatch simulation | Run Operator test scenario for capability mismatch | Desktop/web show deterministic, user-visible compatibility error handling | Both clients surface expected mismatch UX and avoid undefined partial state | Screenshot from each client + operator event entry |
-| M8f-T06 | API version mismatch simulation | Run Operator test scenario for version incompatibility | Desktop/web block or warn per compatibility policy | Version mismatch path is deterministic and recoverable after reset | Screenshot + reset confirmation |
-| M8f-T07 | Client disconnect/reconnect recovery | Trigger controlled disconnect/reconnect from Operator test controls | Clients show reconnect guidance, then recover | Recovery occurs without state corruption; UX is user-friendly | Screenshot sequence + relevant log excerpt |
-| M8f-T08 | SSE replay path validation | Trigger short disconnect with recoverable replay window | Clients reconnect and replay missing events | Missing updates are replayed and applied without manual repair | Operator event/log excerpt + client state proof |
-| M8f-T09 | SSE resync-required path validation | Trigger/force replay-gap-resync scenario | Clients execute authoritative refetch path | Final state converges with server authority after resync | Screenshot/log excerpt showing resync + converged state |
-| M8f-T10 | Missing/invalid media error-handling | Trigger missing file / invalid media route scenario from Operator controls | Client surfaces clear error guidance and remains usable | No crash; recovery path and status messaging are clear | Screenshot + log excerpt |
-| M8f-T11 | Core unavailable/crash handling | Use Operator lifecycle controls to stop/restart runtime | Clients show friendly unavailable guidance, then recover after restart | No orphaned broken state; post-restart functionality restored | Screenshot before/after + operator lifecycle status |
-| M8f-T12 | Common workflow regression sweep | Execute baseline user flows (pair/auth, random playback, favorites/blacklist, tags, refresh/source operations) guided by manual/checklist | Flows remain functional and consistent across clients | All checklist items pass with no critical divergence | Completed checklist artifact |
-
-- **Execution notes**:
-  - Prefer Operator UI controls first; use shell only for initial host startup or where explicitly required by the manual.
-  - Each scenario should include a **Reset/Cleanup** path to return runtime to baseline.
-  - Record results in `docs/testing-checklist.md` with: `Scenario ID`, `PASS/FAIL`, `notes`, `timestamp`, and linked evidence.
-
-- **Failure handling**:
-  - If a scenario fails, capture:
-    - failing step,
-    - expected vs actual behavior,
-    - client(s) affected,
-    - relevant `Server Logs` snippet,
-    - whether failure is deterministic or intermittent.
-  - Block milestone sign-off on unresolved failures in: compatibility mismatch handling, reconnect/resync recovery, auth policy enforcement, or state convergence.
-
-- **Sign-off gate**:
-  - `M8f` manual sign-off requires all `M8f-T01`..`M8f-T12` marked PASS, or explicitly documented waivers with owner + follow-up milestone/TODO reference.
+- **Status**: ⏳ Planned
+- **Goal**: Apply UX polish improvements deferred from M8f reliability closeout without changing core API-first ownership boundaries.
+- **Scope**:
+  - Improve desktop tag-editor apply responsiveness (close/progress UX should feel immediate while apply completes).
+  - Expand WebUI refresh-status projection detail parity with desktop stage/progress visibility.
+  - Improve desktop duplicate-review UX in the duplicates dialog:
+    - for each duplicate group, render file thumbnails inline above each corresponding file info row for quick visual confirmation,
+    - target display order per group:
+      1. `x files share fingerprint...` header,
+      2. keep-selection dropdown,
+      3. file 1 thumbnail,
+      4. file 1 info row,
+      5. file 2 thumbnail,
+      6. file 2 info row,
+      7. continue for all files in that group.
+- **Acceptance criteria**:
+  - Tag apply interactions feel immediate and do not block UI unexpectedly.
+  - Web refresh-status projections provide actionable stage/progress detail comparable to desktop.
+  - Duplicate groups in desktop duplicates dialog show per-file thumbnails inline in the defined order, enabling quick visual validation before delete/apply actions.
+  - No regressions to M8f reliability fixes (compatibility gating, reconnect/resync, deterministic testing simulations).
 
 ### M9a - Playback Session Contracts and Capability Surface
 
@@ -487,6 +473,84 @@ These run in parallel across milestones:
 
 Latest completions first:
 
+### M8f - Hardening, Packaging, and Release Readiness
+
+- **Status**: ✅ Complete
+- **Goal**: Finalize reliability, packaging, and migration cleanup for the new server-thin-client architecture.
+- **Scope**:
+  - Add/expand integration tests for API/SSE/runtime transitions and refresh pipeline behavior.
+  - Complete migration cleanup of temporary compatibility paths.
+  - Finalize packaging/distribution for:
+    - `ReelRoulette Server` app,
+    - thin desktop client,
+    - WebUI assets served by server.
+  - Produce migration/upgrade playbook and release-readiness checklist.
+  - Add an **Operator Testing Suite** to `/operator` so desktop/web/server validation can be run from UI without ad-hoc shell workflows.
+  - Add **connected client/session visibility** in Operator UI (client/session identity and related diagnostics in appropriate sections).
+  - Add a dedicated **Server Logs** section in Operator UI for `last.log` with practical triage features.
+  - Add **Testing Mode** gate for test/fault controls:
+    - testing controls are available only when Testing Mode is enabled,
+    - existing control admin auth mode remains authoritative:
+      - if admin auth is `Off`, no auth required,
+      - if admin auth requires auth, testing actions require auth.
+  - Add safe, operator-driven fault/testing scenarios for client UX/error-handling validation, including:
+    - API version/capability mismatch simulation,
+    - client disconnect/reconnect behavior checks,
+    - SSE replay/resync-required recovery checks,
+    - missing/invalid media and related API-error path checks.
+  - Produce full repo-wide manual testing artifacts linked to Operator test sections:
+    - `docs/testing-guide.md` (workflow + inline checklist + PASS/FAIL evidence capture).
+  - Include Operator-assisted evidence capture quality-of-life features:
+    - per-scenario PASS/FAIL + note + timestamp recording,
+    - copy/export test evidence bundle (status + relevant log snippets),
+    - per-scenario reset/cleanup actions for repeatable reruns.
+- **Acceptance criteria**:
+  - Stable multi-client operation (desktop + web minimum) against `ReelRoulette Server`.
+  - No critical cross-client state divergence.
+  - If `ReelRoulette Server` crashes or is unavailable, thin clients show friendly reconnect/start guidance and recover without state corruption.
+  - Core JSON persistence uses atomic write semantics (write temp then replace) and is resilient to partial-write failures.
+  - Web assets are served with cache-correct behavior (hashed filenames/cache-busting) to prevent stale UI after updates.
+  - Full regression suite is part of default CI `dotnet test` gate and remains green.
+  - Migration and upgrade documentation is complete and actionable.
+  - Operator UI exposes connected client/session identity details sufficient for troubleshooting and correlation.
+  - Operator UI includes a dedicated Server Logs section for `last.log` with tail/filter/search/copy-export workflows.
+  - Operator Testing Suite can execute key client/server error-handling scenarios from UI when Testing Mode is enabled.
+  - Testing controls obey Testing Mode and existing admin auth policy exactly.
+  - Repo-wide manual testing manual/checklist is complete, actionable, and mapped to Operator test sections plus common app/server workflows.
+  - End-to-end manual verification for desktop/web/server can be executed by a user without requiring ad-hoc command sequences.
+- **Verification evidence (implementation + automated gate pass)**:
+  - Operator/server implementation now includes:
+    - connected client/session/SSE identity snapshots in `/control/status`,
+    - dedicated server log endpoint (`/control/logs/server`) and Operator log workbench,
+    - testing suite endpoints (`/control/testing`, `/control/testing/update`, `/control/testing/reset`) and Operator Testing Mode/fault controls.
+  - Testing policy enforcement implemented:
+    - scenario flags require Testing Mode ON,
+    - testing actions enforce existing control admin auth mode (`Off` vs `TokenRequired`) using control auth credentials.
+  - Windows packaging + CI deliverables implemented:
+    - `tools/scripts/package-serverapp-win-portable.ps1`,
+    - `tools/scripts/package-serverapp-win-inno.ps1`,
+    - `tools/installer/ReelRoulette.ServerApp.iss`,
+    - `.github/workflows/ci.yml`,
+    - `.github/workflows/package-windows.yml`.
+  - Manual validation artifacts added:
+    - `docs/testing-guide.md`.
+  - Automated verification passes on current branch:
+    - `dotnet build ReelRoulette.sln`
+    - `dotnet test ReelRoulette.sln`
+    - `npm run verify` (`src/clients/web/ReelRoulette.WebUI`)
+    - `tools/scripts/verify-web-deploy.ps1`
+  - Manual checklist waiver applied per user direction:
+    - remaining `NOT TESTED` items in `docs/testing-guide.md` are accepted as pass/deferred for M8f closeout.
+  - High/medium reliability fix slice (post-manual test feedback) is implemented:
+    - duplicate scan now shows deterministic API-recovery guidance instead of silent no-op,
+    - auto-tag scan now reports runtime recovery state accurately and no longer relies on a false version-only health signal,
+    - desktop now enforces API/capability compatibility gates and shows reconnect/resync SSE status guidance,
+    - missing-media simulation now preserves random selection and fails deterministically at media-fetch endpoints with explicit `Media not found` API errors.
+    - desktop legacy locate/remove missing-file dialog flow removed to keep missing-media remediation server-authoritative.
+  - Deferred to `M8h` (UX/UI polish only):
+    - tag-editor apply latency/close responsiveness polish,
+    - web refresh-status detail parity enhancements.
+
 ### M8e - WebUI and Mobile Thin-Client Contract Standardization
 
 - **Status**: ✅ Complete
@@ -556,7 +620,7 @@ Latest completions first:
   - Automated verification passes:
     - `dotnet build ReelRoulette.sln`
     - `dotnet test ReelRoulette.sln`
-  - Documentation/tracking updates are synchronized for final M8d state: `README.md`, `CONTEXT.md`, `docs/api.md`, `docs/architecture.md`, `docs/dev-setup.md`, `docs/m8-domain-inventory.md`, `CHANGELOG.md`, `COMMIT_MESSAGE.txt`.
+  - Documentation/tracking updates are synchronized for final M8d state: `README.md`, `CONTEXT.md`, `docs/api.md`, `docs/architecture.md`, `docs/dev-setup.md`, `docs/domain-inventory.md`, `CHANGELOG.md`, `COMMIT_MESSAGE.txt`.
 
 ### M8c - Desktop Client Thin-Client Cutover
 

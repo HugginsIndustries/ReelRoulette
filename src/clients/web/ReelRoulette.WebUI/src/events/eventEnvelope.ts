@@ -12,7 +12,7 @@ export function parseEventEnvelope<TPayload>(raw: string): ServerEventEnvelope<T
 export function buildEventsUrl(
   sseUrl: string,
   lastRevision: number,
-  options?: { clientId?: string; sessionId?: string }
+  options?: { clientId?: string; sessionId?: string; clientType?: string; deviceName?: string }
 ): string {
   const url = new URL(sseUrl);
   if (lastRevision > 0) {
@@ -23,6 +23,12 @@ export function buildEventsUrl(
   }
   if (options?.sessionId) {
     url.searchParams.set("sessionId", options.sessionId);
+  }
+  if (options?.clientType) {
+    url.searchParams.set("clientType", options.clientType);
+  }
+  if (options?.deviceName) {
+    url.searchParams.set("deviceName", options.deviceName);
   }
 
   return url.toString();

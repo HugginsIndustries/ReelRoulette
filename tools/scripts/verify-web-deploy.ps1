@@ -114,7 +114,7 @@ try {
         throw "Server process exited unexpectedly during validation."
     }
 
-    Write-Output "M8a/M8b single-origin + control-plane server smoke verification passed."
+    Write-Output "Single-origin and control-plane server smoke verification passed."
 }
 finally {
     if (-not $serverProcess.HasExited) {

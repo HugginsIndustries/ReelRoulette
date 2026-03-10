@@ -1,384 +1,157 @@
 # Architecture
 
-## Current State (M0 baseline)
+This document describes the current architecture of ReelRoulette and the boundaries contributors should preserve.
+It is intentionally current-state only and does not track milestone chronology.
+
+## Architecture Direction
+
+ReelRoulette is an API-first, thin-client system:
+
+- Core/server owns business logic and authoritative state.
+- Desktop and WebUI are orchestration and rendering clients over API plus SSE.
+- Shared contracts in `shared/api/openapi.yaml` align behavior across clients.
+
+## High-Level Runtime Topology
 
 ```mermaid
-flowchart TD
-    desktopApp["Desktop App"]
-    embeddedWebUi["Embedded Web Remote UI"]
-    localJsonState["Local JSON State"]
-    desktopApp --> embeddedWebUi
-    desktopApp --> localJsonState
+flowchart LR
+    desktop[Desktop Client]
+    web[WebUI Client]
+    operator[Operator UI]
+    host[ServerApp Host]
+    transport[Server Transport Layer]
+    domain[Core Domain Services]
+    data[Storage and Media Services]
+
+    desktop --> host
+    web --> host
+    operator --> host
+
+    host --> transport
+    transport --> domain
+    domain --> data
 ```
 
-## Target State
+## Runtime Ownership
 
-```mermaid
-flowchart TD
-    windowsClient["Windows Client"]
-    webClient["Web Client"]
-    androidClient["Android Client"]
-    serverApi["Server API"]
-    coreDomain["Core Domain"]
-    storageServices["Storage Services"]
-    windowsClient --> serverApi
-    webClient --> serverApi
-    androidClient --> serverApi
-    serverApi --> coreDomain
-    coreDomain --> storageServices
-```
+### ServerApp Host
 
-## M0/M1 Boundary
+`src/core/ReelRoulette.ServerApp` is the default runtime entrypoint.
 
-- M0 introduces the target repo layout and project stubs without changing runtime behavior.
-- M1 extracts pure domain logic into `ReelRoulette.Core` with desktop adapters calling into core.
-- Desktop UI remains the shipping runtime while core extraction happens by feature slice.
+- Hosts API, SSE, media, and static WebUI surfaces on a consolidated runtime path.
+- Serves Operator UI and control-plane endpoints.
+- Owns runtime lifecycle and settings apply/restart orchestration.
 
-## M2 Storage-State Layering
+### Server Transport Layer
 
-```mermaid
-flowchart TD
-    desktopAdapters["Desktop Adapters"]
-    coreState["Core State Services"]
-    coreStorage["Core Storage Services"]
-    fileAdapters["Desktop File Adapters"]
-    persistedJson["library.json / settings.json"]
-    dotnetTest["dotnet test gate"]
-    systemHarness["System-check harness"]
+`src/core/ReelRoulette.Server` is a thin composition boundary.
 
-    desktopAdapters --> coreState
-    coreState --> coreStorage
-    coreStorage --> fileAdapters
-    fileAdapters --> persistedJson
-    dotnetTest --> coreState
-    dotnetTest --> coreStorage
-    systemHarness --> coreState
-    systemHarness --> coreStorage
-```
+- Handles endpoint routing, auth middleware wiring, SSE/media transport, and DTO shaping.
+- Maps transport contracts to domain services.
+- Must not become the owner of business rules that belong in core services.
 
-- Core state services own randomization/filter/playback session primitives.
-- Core storage services own JSON load/save and atomic write semantics.
-- Desktop retains UI/media rendering concerns and uses adapters for persistence/state access.
+### Core Domain Layer
 
-## M3 Contract-First Server Seam
+`src/core/ReelRoulette.Core` and server-side domain services are authoritative for behavior and state semantics.
 
-```mermaid
-flowchart TD
-    desktopClient["Desktop Client"]
-    webClient["Web Client"]
-    serverHost["ReelRoulette.Server"]
-    openApi["OpenAPI Contract"]
-    handlers["Thin Endpoint Handlers"]
-    coreAndAdapters["Core + Adapter Services"]
-    sseStream["SSE Stream"]
+- Own domain mutation rules, projection inputs, and persistence semantics.
+- Execute library operations, refresh pipeline behavior, and randomization/filter logic.
+- Expose deterministic APIs for all migrated client flows.
 
-    desktopClient --> serverHost
-    webClient --> serverHost
-    openApi --> serverHost
-    serverHost --> handlers
-    handlers --> coreAndAdapters
-    serverHost --> sseStream
-    sseStream --> desktopClient
-    sseStream --> webClient
-```
+### Client Layers
 
-- `ReelRoulette.Server` now exposes initial query/command endpoints and an SSE event stream.
-- OpenAPI is expanded to document live M3 endpoint contracts and event envelope shape.
-- Desktop includes a local HTTP probe (`/api/version`) to prove the M3 integration boundary.
-- M3 reconnect semantics are explicit: `Last-Event-ID` replay is attempted first, and clients re-fetch state (`/api/library-states`) when a revision gap exceeds replay retention.
+- Desktop client (`source/`) and WebUI (`src/clients/web/ReelRoulette.WebUI`) are orchestration/render layers.
+- Clients issue command/query calls through APIs and project state from API plus SSE.
+- Clients must not reintroduce local authoritative mutation fallbacks for migrated domains.
 
-## M4 Worker Runtime + Pairing/Auth
+## Contracts and Compatibility
 
-```mermaid
-flowchart TD
-    desktopClient["Desktop Client"]
-    workerHost["ReelRoulette.Worker Console Host"]
-    serverComposition["Shared Server Endpoint Composition"]
-    authPairing["Pairing/Auth Primitive"]
-    coreServices["Core + Adapter Services"]
+- OpenAPI (`shared/api/openapi.yaml`) is the source of truth for endpoint and schema contracts.
+- `/api/version` and `/api/capabilities` provide compatibility and capability metadata used for client gating.
+- Generated client contracts should stay in sync with OpenAPI and be verified in normal gates.
 
-    desktopClient --> workerHost
-    workerHost --> serverComposition
-    serverComposition --> authPairing
-    serverComposition --> coreServices
-```
+## Eventing and Projection
 
-- `ReelRoulette.Worker` is now the headless runtime host for API/SSE in console-first mode.
-- Pairing/auth now exists on the core server seam (`/api/pair` + auth middleware with optional localhost trust).
-- Desktop auto-starts core runtime during launch when local probe fails.
-- Server-thin guardrail for M4+: keep HTTP/SSE/auth glue in server; avoid introducing new business rules in endpoint handlers.
+`GET /api/events` provides revisioned SSE envelopes used for client projection updates.
 
-## M5 Desktop API-Client Migration
+Envelope fields:
 
-```mermaid
-flowchart TD
-    desktopUi["Desktop UI"]
-    desktopApi["Desktop API Client Layer"]
-    workerApi["Worker/Server API"]
-    sse["SSE Event Stream"]
-    uiProjection["Desktop UI Projection State"]
+- `revision`
+- `eventType`
+- `timestamp`
+- `payload`
 
-    desktopUi --> desktopApi
-    desktopApi --> workerApi
-    workerApi --> sse
-    sse --> uiProjection
-    uiProjection --> desktopUi
-```
+Reconnect and recovery:
 
-- Desktop command flows (favorite/blacklist/playback/random command) now delegate to the worker/server seam first.
-- Desktop subscribes to SSE and applies projected item-state updates for cross-client sync.
-- Desktop keeps the SSE stream alive with reconnect behavior and applies case-insensitive payload projection to avoid dropped updates.
-- Legacy embedded web-remote mutation calls are contained by delegating through the same API-client path.
+- Clients reconnect with revision continuity hints (`Last-Event-ID` and fallback query semantics where applicable).
+- Server replays retained events when available.
+- On replay gaps, server emits `resyncRequired`, and clients must requery authoritative state via API.
 
-## M6a Web Tag Editing + Desktop Tag Migration
+## Auth and Access Model
 
-```mermaid
-flowchart TD
-    desktopDialogs["Desktop Tag Dialogs"]
-    webTagEditor["Web Full-Screen Tag Editor"]
-    tagApiClient["API Tag Mutation Client"]
-    tagEndpoints["Tag Editor API Endpoints"]
-    coreTagState["Core/Server Tag State + Events"]
-    sseTag["SSE Tag Events"]
-    desktopProjection["Desktop Tag Projection"]
-    webProjection["Web Tag Projection"]
+- Pairing and auth are enforced on the server boundary.
+- Session continuity is cookie-based for browser clients.
+- Runtime policy controls CORS and cookie behavior.
+- Localhost-friendly development access is supported by policy; LAN access remains explicitly policy-gated.
 
-    desktopDialogs --> tagApiClient
-    webTagEditor --> tagApiClient
-    tagApiClient --> tagEndpoints
-    tagEndpoints --> coreTagState
-    coreTagState --> sseTag
-    sseTag --> desktopProjection
-    sseTag --> webProjection
-```
+## Control Plane and Operator Surface
 
-- M6a routes migrated tag/category/item-tag mutations through shared API contracts (`itemIds[]` batch-ready).
-- Desktop dialogs remain UI orchestration while mutation authority moves to core/server API paths.
-- Web tag editing keeps a combined ItemTags/ManageTags full-screen layout with touch-first controls, collapsible categories, and batched apply behavior for staged tag/category operations.
-- Desktop seeds core tag catalog state on connect/start (`sync-catalog`) to prevent sparse server tag models and keep web/desktop tag views consistent.
-- Desktop hydrates requested item-tag snapshots (`sync-item-tags`) before web model fetches so tag state projections match current item assignments.
-- Category deletion no longer deletes tags; migrated flows always reassign category-owned tags to canonical `uncategorized` (fixed ID) for consistent multi-client behavior.
+Control-plane endpoints under `/control/*` provide:
 
-## M6b Grid/Thumbnails + Unified Refresh Pipeline
+- runtime status and settings operations,
+- pairing and lifecycle operations,
+- testing mode and fault simulation controls,
+- server log retrieval for diagnostics.
 
-```mermaid
-flowchart TD
-    desktopUi["Desktop UI (List/Grid Render)"]
-    refreshApi["Refresh API (`/api/refresh/*`)"]
-    thumbnailApi["Thumbnail API (`/api/thumbnail/{itemId}`)"]
-    refreshSvc["RefreshPipelineService"]
-    serverState["ServerStateService (SSE envelope)"]
-    sse["SSE `refreshStatusChanged`"]
-    libraryJson["library.json"]
-    thumbStore["LocalAppData thumbnails/{itemId}.jpg (+index metadata)"]
+Operator UI is an operational surface and does not own domain logic.
 
-    desktopUi --> refreshApi
-    desktopUi --> thumbnailApi
-    refreshApi --> refreshSvc
-    refreshSvc --> libraryJson
-    refreshSvc --> thumbStore
-    refreshSvc --> serverState
-    serverState --> sse
-    sse --> desktopUi
-```
+## Media, Playback, and Missing Media Behavior
 
-- Core runtime is the execution owner for refresh orchestration and scheduling.
-- Desktop no longer exposes standalone duration/loudness scan menu actions; refresh runs through core API.
-- Refresh settings ownership moved to core (`appsettings` + API updates), with client-side orchestration/render only.
-- Desktop library panel now supports persisted list/grid mode with a justified responsive thumbnail grid (aspect-ratio preserved, variable-size cards) while preserving existing list-mode behavior.
+- Clients request random/playback targets through server-authoritative APIs.
+- Media fetch paths and missing-media error semantics are contract-defined and consistent across clients.
+- Desktop playback policy can use local-first with API fallback where configured, while preserving server-authoritative flow contracts.
 
-## M7a Web Client Foundation + Independent Bootstrap
+## Refresh, Thumbnail, and Processing Pipeline
 
-```mermaid
-flowchart TD
-    runtimeConfig["Runtime Config (`window` or `/runtime-config.json`)"]
-    webUi["ReelRoulette.WebUI (Vite + TS)"]
-    apiBase["Core API Base URL"]
-    sseBase["Core SSE URL"]
-    independentLoop["Independent dev/build loop"]
+- Refresh orchestration and scheduling are core/server-owned.
+- Refresh state is exposed through API and SSE projection updates.
+- Thumbnail generation is pipeline-owned and retrieval is API-served.
+- Clients render status and results; they do not own processing authority.
 
-    runtimeConfig --> webUi
-    webUi --> apiBase
-    webUi --> sseBase
-    webUi --> independentLoop
-```
+## Logging and Diagnostics
 
-- Web client now boots as a standalone Vite+TypeScript project under `src/clients/web/ReelRoulette.WebUI`.
-- API and SSE endpoints are runtime-configured and validated at startup (no compile-time hardcoded service base URL values).
-- Web build/test/typecheck/build-output checks are independent from desktop app restart cycles.
+- Server runtime logging is centralized for operational diagnostics.
+- Clients can relay structured logs to server ingestion endpoints.
+- Connected-client/session diagnostics and testing controls are exposed through operator/control-plane APIs.
 
-## M7b Direct Web Auth + SSE Reliability
+## Packaging and Delivery
 
-```mermaid
-flowchart TD
-    webUi[WebUI]
-    pairApi["Pair API (/api/pair)"]
-    sessionCookie["Session Cookie (HttpOnly)"]
-    sseApi["SSE API (/api/events)"]
-    replayResync["Replay + resyncRequired"]
-    authoritativeRequery["Authoritative Requery (/api/library-states + /api/refresh/status)"]
+- Windows packaging supports portable and installer outputs through repository scripts.
+- CI/workflow gates validate build/test/contract/web checks and packaging paths.
+- Release version metadata should remain aligned across contract, runtime, project, and package surfaces.
 
-    webUi --> pairApi
-    pairApi --> sessionCookie
-    webUi --> sseApi
-    sseApi --> replayResync
-    replayResync --> authoritativeRequery
-    authoritativeRequery --> webUi
-```
+## Repository Map
 
-- Web UI now authenticates directly to core/server via pair-token bootstrap and cookie session continuity.
-- Server applies explicit runtime-configurable CORS/cookie policy controls for direct browser clients.
-- Web SSE path is direct core/server with reconnect, revision tracking, replay-gap `resyncRequired`, and authoritative recovery queries.
+- `source/`: desktop client orchestration and rendering.
+- `src/core/ReelRoulette.Core`: domain logic and storage abstractions.
+- `src/core/ReelRoulette.Server`: transport/composition layer.
+- `src/core/ReelRoulette.ServerApp`: default runtime host and operator surface.
+- `src/clients/web/ReelRoulette.WebUI`: web client orchestration.
+- `shared/api/openapi.yaml`: canonical API contract source.
 
-## M7c Zero-Restart Web Deployment + Rollback
+## Guardrails
 
-```mermaid
-flowchart TD
-    webUiBuild["WebUI Build Output (dist/)"]
-    publishScripts["Publish/Activate/Rollback Scripts"]
-    deployRoot["Deployment Root (.web-deploy)"]
-    versions["Immutable Versions (/versions/{versionId})"]
-    activeManifest["active-manifest.json"]
-    webHost["ReelRoulette.WebHost"]
-    browserClient["Browser Client"]
+- Keep server layer thin and move business rules into core services.
+- Preserve API-authoritative behavior for migrated flows.
+- Keep desktop and web behavior aligned through shared contracts and SSE semantics.
+- Avoid client-local authoritative fallback paths in migrated domains.
+- Keep this file current-state only; roadmap and milestone history live elsewhere.
 
-    webUiBuild --> publishScripts
-    publishScripts --> versions
-    publishScripts --> activeManifest
-    deployRoot --> versions
-    deployRoot --> activeManifest
-    webHost --> activeManifest
-    webHost --> versions
-    browserClient --> webHost
-```
+## Related Documents
 
-- `ReelRoulette.WebHost` is an independent static host process (no desktop/core restart coupling for web deploys).
-- Activation/rollback is pointer-based through atomic `active-manifest.json` updates.
-- Served cache policy is split:
-  - `index.html` and runtime config are always fresh (`no-store`).
-  - fingerprinted assets are long-lived immutable for fast repeat loads.
-
-## M7e Contract Compatibility + Final M7 Guardrails
-
-```mermaid
-flowchart TD
-    openApi["shared/api/openapi.yaml"]
-    tsGen["openapi-typescript generation"]
-    generatedTs["openapi.generated.ts"]
-    webVerify["WebUI verify gate"]
-    versionApi["GET /api/version"]
-    capabilityGate["WebUI version/capability gate"]
-    webRuntime["WebUI runtime flows"]
-
-    openApi --> tsGen
-    tsGen --> generatedTs
-    generatedTs --> webVerify
-    openApi --> webVerify
-    versionApi --> capabilityGate
-    capabilityGate --> webRuntime
-```
-
-- OpenAPI is now the direct source for generated WebUI TS contract models.
-- Web verify gate enforces generated-contract freshness to prevent schema drift.
-- Server version payload includes compatibility/capability metadata, and WebUI blocks unsupported server contracts before normal execution.
-
-## M8a Server App Consolidation (Single Process, Single Origin)
-
-```mermaid
-flowchart TD
-    serverApp["ReelRoulette.ServerApp"]
-    apiSseMedia["API + SSE + Media Endpoints"]
-    webUiStatic["WebUI Static Assets + Runtime Config"]
-    operatorUi["Operator UI (/operator)"]
-    metadata["Metadata Endpoints (/health, /api/version, /api/capabilities)"]
-    clients["Desktop + Web Clients"]
-
-    serverApp --> apiSseMedia
-    serverApp --> webUiStatic
-    serverApp --> operatorUi
-    serverApp --> metadata
-    clients --> serverApp
-```
-
-- Runtime serving is consolidated into one process and one browser-visible origin.
-- `ReelRoulette.WebHost` and `active-manifest` switching are no longer required in the normal runtime path.
-- Operator controls (status/settings/restart) are surfaced from the server app, while domain logic remains in `ReelRoulette.Core` and server composition remains in `ReelRoulette.Server`.
-
-## M8b Control-Plane Expansion
-
-- Control-plane APIs are formalized under `/control/*`:
-  - status (`/control/status`),
-  - settings read/apply (`/control/settings`),
-  - control pairing (`/control/pair`),
-  - lifecycle operations (`/control/restart`, `/control/stop`).
-- Control-plane trust/auth policy is local-first on the shared listener:
-  - localhost requests always allowed,
-  - LAN control access requires runtime LAN bind exposure and (optionally) admin token pairing auth.
-- Operator UI now includes control diagnostics:
-  - incoming/outgoing API telemetry feed,
-  - connected client/session snapshot,
-  - responsive dark-theme layout for desktop/mobile operator usage.
-- ServerApp is now responsible for LAN mDNS advertisement (`{LanHostname}.local`) for the consolidated WebUI host when WebUI is enabled and LAN binding is active.
-
-## M8c Desktop Thin-Client Cutover
-
-- Desktop runtime ownership is guidance-only:
-  - desktop probes server availability but no longer starts/supervises runtime scripts.
-- Desktop migrated operations are API-first:
-  - source import uses `POST /api/sources/import`,
-  - duplicate detection uses `POST /api/duplicates/scan` + `POST /api/duplicates/apply`,
-  - auto-tag suggestion/apply uses `POST /api/autotag/scan` + `POST /api/autotag/apply`,
-  - playback stats clear uses `POST /api/playback/clear-stats`.
-- Logging is centralized in ServerApp:
-  - server-side logic writes directly to server `last.log`,
-  - clients emit log events via `POST /api/logs/client`,
-  - desktop no longer writes a local `last.log` file.
-
-## M8d Desktop Playback Policy Compromise
-
-- Desktop playback policy is local-first with API fallback:
-  - if media path is locally accessible on desktop, playback can run locally,
-  - if local access fails, desktop falls back to API media playback path.
-- Desktop setting `ForceApiPlayback` allows deterministic API-only playback validation while preserving local-first default behavior.
-- Manual desktop library-panel play is API identity-orchestrated before playback-path selection:
-  - playback target resolves stable item identity first,
-  - if identity mapping is unavailable, desktop shows explicit user guidance and does not silently substitute another playback path.
-- "Locally accessible" is deterministic:
-  - file exists at expected path,
-  - desktop has read access,
-  - path is not a server-issued token/virtual path,
-  - quick open-read preflight succeeds.
-- Thin-client guardrails remain unchanged for non-playback domains:
-  - desktop local persistence remains limited to `desktop-settings.json`,
-  - no reintroduction of local authoritative core-state file ownership.
-
-## M8e WebUI + Mobile Thin-Client Contract Standardization
-
-- Desktop and WebUI now align on shared identity/reconnect contract semantics for migrated flows:
-  - stable per-install `clientId`,
-  - optional per-runtime `sessionId`,
-  - revision-aware SSE reconnect (`Last-Event-ID` + `lastEventId` fallback) with authoritative requery when `resyncRequired` is emitted.
-- Server contract surface remains thin-transport only:
-  - server DTOs accept/propagate optional `sessionId`,
-  - no new domain logic moved into server composition handlers.
-- Desktop runtime alignment:
-  - `CoreClientId` is now persisted in desktop settings for continuity across restarts,
-  - per-runtime `CoreSessionId` is propagated through random/playback/SSE requests.
-- WebUI runtime alignment (legacy + modular seams):
-  - random/requery/SSE paths now propagate `clientId` + `sessionId`,
-  - startup compatibility checks include required capability `identity.sessionId`.
-- Mobile bootstrap readiness:
-  - contract surfaces now explicitly encode identity/session/reconnect expectations without introducing client-side domain-logic duplication.
-
-## M9 Plex-Style Playback Pipeline (Incremental)
-
-- M9 introduces incremental server-authoritative playback-session architecture (`M9a`-`M9g`) without violating M8d compromise baseline.
-- Desktop and WebUI progressively converge on shared playback-session contract semantics:
-  - server-side mode decisions (`direct`/`remux`/`transcode`) plus delivery type (`progressive`/`hls-fmp4`) with explicit diagnostics,
-  - direct-stream session URL baseline before remux/transcode rollout,
-  - resilient long-form buffering/seek behavior via HLS with fMP4 segmented streaming.
-- Looping parity is an explicit migration guardrail:
-  - preserve current WebUI loop behavior across progressive and HLS paths,
-  - keep desktop loop transitions gapless, avoid media reload on loop toggle, and do not inflate playback stats per loop iteration.
-- Hardening exit includes shutdown hygiene:
-  - no orphan ffmpeg workers after shutdown and temp playback/transcode artifacts cleaned or TTL-managed.
+- `README.md`: onboarding and common run/test/package commands.
+- `docs/api.md`: endpoint and integration contract baseline.
+- `docs/dev-setup.md`: setup, local workflow, and verification details.
+- `docs/domain-inventory.md`: ownership-first implementation map.
+- `CONTEXT.md`: concise capability and repository context.
+- `MILESTONES.md`: planning, scope tracking, and acceptance evidence.

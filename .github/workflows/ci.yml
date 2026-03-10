@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "9.0.x"
+
+      - name: Build solution
+        run: dotnet build ReelRoulette.sln --configuration Release
+
+      - name: Test solution
+        run: dotnet test ReelRoulette.sln --configuration Release --no-build
+
+  web-verify:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/clients/web/ReelRoulette.WebUI
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: src/clients/web/ReelRoulette.WebUI/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify web client
+        run: npm run verify

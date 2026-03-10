@@ -1,43 +1,44 @@
 # Agent Instructions for ReelRoulette
 
-This file contains guidelines and instructions for AI agents working on this codebase.
+Keep this file short and enforceable. For details, use `CONTEXT.md`, `MILESTONES.md`, and docs under `docs/`.
 
-## Planning and Execution
+## Workflow Priorities
 
-- When the user provides an attached milestone plan, execute it without editing the plan file itself
-- Reuse existing plan TODO items and do not create duplicates when TODOs already exist
-- Update TODO status in execution order (`in_progress` when starting, `completed` when done)
-- Before sign-off, explicitly verify milestone acceptance criteria and call out any unmet items
-- For milestone planning/verification requests, read `AGENTS.md` and `CONTEXT.md` first, then `MILESTONES.md`
-- Keep scope locked to the requested milestone/TODO slice; leave unrelated work untouched unless the user expands scope
+- For milestone planning/verification: read `AGENTS.md`, then `CONTEXT.md`, then `MILESTONES.md`.
+- Stay within the requested milestone/TODO slice unless the user expands scope.
+- If the user provides a plan file, execute it without editing the plan file itself.
+- Reuse existing TODO items; do not duplicate. Update status in order (`in_progress` -> `completed`).
+- Before sign-off, explicitly verify acceptance criteria and call out any unmet items.
 
-## Architecture and Code Boundaries
+## Architecture Guardrails
 
-- Follow existing code style/patterns and keep architecture consistent
-- Keep desktop/web clients as orchestration/render layers; place domain/business logic in `ReelRoulette.Core`/server paths
-- Preserve strict API-first behavior for migrated flows; do not add local-mutation fallback paths once migrated to core/server
-- Preserve API-authoritative random selection/playback eligibility decisions for migrated clients; do not add client-local fallback execution paths
-- Add logging to new code where appropriate, using the last.log system
-- Test changes thoroughly and fix linter errors introduced by changes
-- For migrated Web UI flows, preserve visual and functional parity with the current user experience unless the user explicitly approves UX changes
+- Keep desktop/web as orchestration/render layers; keep domain logic in `ReelRoulette.Core`/server services.
+- Maintain API-first behavior for migrated flows; do not add client-local mutation/fallback authority.
+- Keep random selection/playback eligibility API-authoritative for migrated clients.
+- Preserve WebUI UX parity unless the user explicitly approves UX changes.
+- Add `last.log`-based logging where appropriate, and fix lints introduced by your changes.
 
-## Commit and Documentation Discipline
+## Commit + Docs Discipline
 
-- Assume no changes have been committed yet until the user explicitly confirms a commit occurred
-- Replace `COMMIT_MESSAGE.txt` with only the current diff since the last commit (concise, no historical context)
-- If the user says nothing has been committed yet, keep the existing Mx entry style in `COMMIT_MESSAGE.txt` and update/append it in place unless they explicitly ask to replace the whole message
-- Check `CONTEXT.md` for repo context before major planning/implementation, and update it whenever structure, workflows, architecture ownership, or milestone-driven runtime behavior changes.
-- Update `CHANGELOG.md` for significant changes and reflect only final delta from the previous commit (no intermediate attempts)
-- If no commit has occurred yet, update existing `CHANGELOG.md` and `COMMIT_MESSAGE.txt` entries in place for the current scope instead of creating replacement historical entries
-- After user-confirmed commit, start a new `COMMIT_MESSAGE.txt` and a new changelog entry for subsequent changes
-- Apply the same “final state only” rule to milestone tracking updates in `MILESTONES.md`
-- Keep milestone links/scope language aligned in `MILESTONES.md` when scope changes
-- Keep affected docs in sync with final milestone state (`README.md`, `docs/architecture.md`, `docs/api.md`, `docs/dev-setup.md`) and automatically add/update `docs/mX-domain-inventory.md` for milestone work
+- Assume nothing is committed until the user explicitly confirms a commit occurred.
+- If no commit yet: update existing `COMMIT_MESSAGE.txt` and `CHANGELOG.md` entries in place (final state only).
+- Keep existing `Mx` entry style in `COMMIT_MESSAGE.txt` unless user asks to replace it.
+- After a user-confirmed commit: start a new `COMMIT_MESSAGE.txt` entry and new changelog entry.
+- Keep milestone/docs synchronized with final state:
+  - `MILESTONES.md` = roadmap/tracking/evidence
+  - `CONTEXT.md` = current implemented capabilities
+  - update affected docs: `README.md`, `docs/architecture.md`, `docs/api.md`, `docs/dev-setup.md`, and `docs/domain-inventory.md` when applicable
+  - keep `docs/testing-guide.md` current: add/update/remove checklist sections/items as features and workflows are added, changed, or removed
+- Milestone naming hygiene:
+  - Do not add milestone IDs/references (for example `M8f`, `M9a`) in current-state docs or code artifacts (scripts, comments, log/status messages, user-facing copy).
+  - Milestone references are allowed only in `MILESTONES.md`, `CHANGELOG.md`, `COMMIT_MESSAGE.txt`, and the `## Near-Term Planned Work` section of `CONTEXT.md` unless the user explicitly requests an exception.
 
-## Commands and Communication
+## Commands + Communication
 
-- Do not run commands unless explicitly asked by the user
-- If a command is needed, explain what it does and why, then ask the user to run it
-- Be proactive with improvements, explain reasoning, and ask clarifying questions when requirements are ambiguous
-- When asking the user for clarifications (or when asked to provide clarification choices), always use this exact format: a numbered list of questions with numbered options for each; and for each question include (1) description of the decision, (2) recommendation, (3) reasoning, (4) at least 2-3 alternative choices, and (5) detailed pros/cons of each choice.
-- For phase-gated milestone work, stop after automated verification, provide copy/paste manual verification commands plus a PASS/FAIL checklist, and wait for explicit user approval before continuing gated removal/cutover steps
+- Do not run commands unless explicitly asked.
+- If a command is needed, explain what it does and why, then ask the user to run it.
+- Exception: you may run
+  `dotnet build ReelRoulette.sln; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; dotnet test ReelRoulette.sln`
+  without approval.
+- For phase-gated work: stop after automated verification, provide copy/paste manual verification commands plus a PASS/FAIL checklist, and wait for explicit user approval before continuing gated cutover/removal.
+- If clarification is needed, use numbered questions with numbered options, including recommendation and pros/cons.

@@ -243,6 +243,8 @@ public sealed class CoreServerApiClientTests
             "http://localhost:51301",
             "desktop-client",
             "desktop-session",
+            "desktop",
+            "MyDesktop",
             42,
             envelope =>
             {
@@ -258,6 +260,8 @@ public sealed class CoreServerApiClientTests
         Assert.NotNull(capturedRequest);
         Assert.Contains("clientId=desktop-client", capturedRequest!.RequestUri!.ToString(), StringComparison.Ordinal);
         Assert.Contains("sessionId=desktop-session", capturedRequest.RequestUri!.ToString(), StringComparison.Ordinal);
+        Assert.Contains("clientType=desktop", capturedRequest.RequestUri!.ToString(), StringComparison.Ordinal);
+        Assert.Contains("deviceName=MyDesktop", capturedRequest.RequestUri!.ToString(), StringComparison.Ordinal);
         Assert.Contains("lastEventId=42", capturedRequest.RequestUri!.ToString(), StringComparison.Ordinal);
         Assert.Equal("42", Assert.Single(capturedRequest.Headers.GetValues("Last-Event-ID")));
     }
@@ -284,6 +288,8 @@ public sealed class CoreServerApiClientTests
             "http://localhost:51301",
             "desktop-client",
             "desktop-session",
+            "desktop",
+            "MyDesktop",
             0,
             envelope =>
             {

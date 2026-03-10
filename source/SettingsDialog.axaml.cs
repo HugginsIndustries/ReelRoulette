@@ -344,9 +344,6 @@ namespace ReelRoulette
         private int _fixedImageMaxWidth = 3840;
         private int _fixedImageMaxHeight = 2160;
         
-        // Missing file behavior
-        private MissingFileBehavior _missingFileBehavior = MissingFileBehavior.AlwaysShowDialog;
-        
         // Backup settings
         private bool _backupLibraryEnabled = true;
         private int _minimumBackupGapMinutes = 15;
@@ -444,37 +441,6 @@ namespace ReelRoulette
         }
 
         public ImageScalingMode ImageScalingMode => _imageScalingMode;
-
-        // Missing file behavior properties
-        public bool MissingFileBehaviorAlwaysShowDialog
-        {
-            get => _missingFileBehavior == MissingFileBehavior.AlwaysShowDialog;
-            set
-            {
-                if (value)
-                {
-                    _missingFileBehavior = MissingFileBehavior.AlwaysShowDialog;
-                    OnPropertyChanged();
-                    OnPropertyChanged(nameof(MissingFileBehaviorAlwaysRemoveFromLibrary));
-                }
-            }
-        }
-
-        public bool MissingFileBehaviorAlwaysRemoveFromLibrary
-        {
-            get => _missingFileBehavior == MissingFileBehavior.AlwaysRemoveFromLibrary;
-            set
-            {
-                if (value)
-                {
-                    _missingFileBehavior = MissingFileBehavior.AlwaysRemoveFromLibrary;
-                    OnPropertyChanged();
-                    OnPropertyChanged(nameof(MissingFileBehaviorAlwaysShowDialog));
-                }
-            }
-        }
-
-        public MissingFileBehavior MissingFileBehavior => _missingFileBehavior;
 
         // Backup settings properties
         public bool BackupLibraryEnabled
@@ -738,7 +704,6 @@ namespace ReelRoulette
             ImageScalingMode imageScalingMode = ImageScalingMode.Auto,
             int fixedImageMaxWidth = 3840,
             int fixedImageMaxHeight = 2160,
-            MissingFileBehavior missingFileBehavior = MissingFileBehavior.AlwaysShowDialog,
             bool backupLibraryEnabled = true,
             int minimumBackupGapMinutes = 15,
             int numberOfBackups = 10,
@@ -858,11 +823,6 @@ namespace ReelRoulette
             OnPropertyChanged(nameof(ImageScalingFixed));
             OnPropertyChanged(nameof(FixedImageMaxWidth));
             OnPropertyChanged(nameof(FixedImageMaxHeight));
-            
-            // Missing file behavior
-            _missingFileBehavior = missingFileBehavior;
-            OnPropertyChanged(nameof(MissingFileBehaviorAlwaysShowDialog));
-            OnPropertyChanged(nameof(MissingFileBehaviorAlwaysRemoveFromLibrary));
             
             // Backup settings
             _backupLibraryEnabled = backupLibraryEnabled;

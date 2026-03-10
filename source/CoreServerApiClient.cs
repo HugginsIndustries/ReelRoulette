@@ -324,7 +324,9 @@ public sealed class CoreServerApiClient
         using var response = await _httpClient.PostAsync($"{baseUrl.TrimEnd('/')}/api/duplicates/scan", content, cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
         {
-            return null;
+            var snippet = await TryReadErrorSnippetAsync(response, cancellationToken).ConfigureAwait(false);
+            var suffix = string.IsNullOrWhiteSpace(snippet) ? string.Empty : $" Response: {snippet}";
+            throw new HttpRequestException($"Duplicate scan failed with HTTP {(int)response.StatusCode} ({response.StatusCode}).{suffix}");
         }
 
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
@@ -381,6 +383,8 @@ public sealed class CoreServerApiClient
         string baseUrl,
         string clientId,
         string? sessionId,
+        string? clientType,
+        string? deviceName,
         long? lastEventId,
         Func<CoreServerEventEnvelope, Task> onEnvelope,
         Action<string>? log,
@@ -390,6 +394,14 @@ public sealed class CoreServerApiClient
         if (!string.IsNullOrWhiteSpace(sessionId))
         {
             endpointBuilder.Append("&sessionId=").Append(Uri.EscapeDataString(sessionId));
+        }
+        if (!string.IsNullOrWhiteSpace(clientType))
+        {
+            endpointBuilder.Append("&clientType=").Append(Uri.EscapeDataString(clientType));
+        }
+        if (!string.IsNullOrWhiteSpace(deviceName))
+        {
+            endpointBuilder.Append("&deviceName=").Append(Uri.EscapeDataString(deviceName));
         }
 
         if (lastEventId.HasValue && lastEventId.Value > 0)
@@ -460,6 +472,25 @@ public sealed class CoreServerApiClient
     {
         var json = JsonSerializer.Serialize(value, _serializerOptions);
         return new StringContent(json, Encoding.UTF8, "application/json");
+    }
+
+    private static async Task<string> TryReadErrorSnippetAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var raw = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            if (string.IsNullOrWhiteSpace(raw))
+            {
+                return string.Empty;
+            }
+
+            var singleLine = raw.Replace(Environment.NewLine, " ").Trim();
+            return singleLine.Length > 220 ? singleLine[..220] : singleLine;
+        }
+        catch
+        {
+            return string.Empty;
+        }
     }
 }
 

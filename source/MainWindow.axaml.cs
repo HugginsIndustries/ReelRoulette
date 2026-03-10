@@ -37,12 +37,6 @@ namespace ReelRoulette
         Fixed = 2     // Scale to fixed maximum dimensions
     }
 
-    public enum MissingFileBehavior
-    {
-        AlwaysShowDialog = 0,      // Always show dialog when file is missing
-        AlwaysRemoveFromLibrary = 1 // Always remove from library without showing dialog
-    }
-
     public partial class MainWindow : Window, INotifyPropertyChanged, ITagMutationClient
     {
         private readonly string[] _videoExtensions =
@@ -114,9 +108,6 @@ namespace ReelRoulette
         private int _fixedImageMaxWidth = 3840;
         private int _fixedImageMaxHeight = 2160;
         
-        // Missing file behavior
-        private MissingFileBehavior _missingFileBehavior = MissingFileBehavior.AlwaysShowDialog;
-        
         // Backup settings
         private bool _backupLibraryEnabled = true;
         private int _minimumBackupGapMinutes = 15;
@@ -144,22 +135,40 @@ namespace ReelRoulette
         private readonly string _coreSessionId = Guid.NewGuid().ToString("N");
         private long _coreLastEventRevision;
         private readonly CoreServerApiClient _coreServerApiClient;
+        private readonly CoreServerApiClient _coreServerLongRunningApiClient;
         private CancellationTokenSource? _coreEventsCancellationSource;
         private Task? _coreEventsTask;
         private CancellationTokenSource? _coreReconnectLoopCancellationSource;
         private Task? _coreReconnectLoopTask;
         private volatile bool _isCoreApiReachable;
+        private bool _coreEventsReconnectPending;
         private DateTimeOffset? _lastCoreReconnectAttemptUtc;
+        private string? _lastCoreProbeFailureReason;
         private bool _isApplyingCoreSync;
         private static readonly HttpClient _coreServerHttpClient = new()
         {
             Timeout = TimeSpan.FromSeconds(8)
+        };
+        private static readonly HttpClient _coreServerLongRunningHttpClient = new()
+        {
+            Timeout = TimeSpan.FromMinutes(3)
         };
         private static readonly HttpClient _coreServerEventsHttpClient = new()
         {
             Timeout = Timeout.InfiniteTimeSpan
         };
         private const int CoreProbeMaxAttempts = 3;
+        private const int DesktopApiVersion = 1;
+        private static readonly HashSet<int> SupportedCoreApiVersions = [0, 1];
+        private static readonly string[] RequiredCoreCapabilities =
+        [
+            "auth.sessionCookie",
+            "identity.sessionId",
+            "events.refreshStatusChanged",
+            "events.resyncRequired",
+            "api.random.filterState",
+            "api.presets.match"
+        ];
 
         // Duration scanning
         private CancellationTokenSource? _scanCancellationSource;
@@ -816,6 +825,7 @@ namespace ReelRoulette
                 Log("MainWindow constructor: InitializeComponent completed.");
                 _desktopRandomizationState = new RandomizationRuntimeState(_randomizationStateService.GetOrCreate("desktop"));
                 _coreServerApiClient = new CoreServerApiClient(_coreServerHttpClient);
+                _coreServerLongRunningApiClient = new CoreServerApiClient(_coreServerLongRunningHttpClient);
             
             // Initialize window size tracking for aspect ratio locking
             _lastWindowSize = new Size(this.Width, this.Height);
@@ -904,6 +914,16 @@ namespace ReelRoulette
                 {
                     PlayPauseButton.IsChecked = false;
                     UpdateStatusTimeDisplay(0);
+                });
+            };
+
+            _mediaPlayer.EncounteredError += (s, e) =>
+            {
+                Dispatcher.UIThread.Post(() =>
+                {
+                    var message = _isCurrentlyPlayingPhoto ? "Photo file not found." : "Video file not found.";
+                    SetStatusMessage(message, 0);
+                    Log($"MediaPlayer.EncounteredError: {message} (sourceType={_currentPlaybackSourceType}, source={_currentPlaybackSource ?? "null"})");
                 });
             };
 
@@ -1668,7 +1688,7 @@ namespace ReelRoulette
                 Log("RecordPlayback: Library index is null, skipping playback recording");
             }
 
-            // Update UI immediately (we're already on UI thread when called from PlayVideo)
+            // Update UI immediately (we're already on UI thread when called from PlayMedia)
             // Call UpdateCurrentFileStatsUi first to show current file, then recalculate globals
             Log("RecordPlayback: Updating UI stats");
             UpdateCurrentFileStatsUi();
@@ -5227,13 +5247,13 @@ namespace ReelRoulette
             {
                 var extension = Path.GetExtension(videoPath).ToLowerInvariant();
                 var isPhoto = _photoExtensions.Contains(extension);
-                await HandleMissingFileAsync(videoPath, isPhoto: isPhoto);
+                SetStatusMessage(isPhoto ? "Photo file not found." : "Video file not found.");
                 _isNavigatingTimeline = false;
                 return;
             }
 
             Log($"PlayFromPath: Resolved manual playback target (ApiPath={manualTarget.UsedApiPath}, LocalAccessible={manualTarget.IsLocallyAccessible})");
-            PlayVideo(manualTarget, addToHistory: addToHistory);
+            PlayMedia(manualTarget, addToHistory: addToHistory);
         }
 
         private PlaybackTarget? ResolveManualPlaybackTarget(string videoPath)
@@ -5309,307 +5329,6 @@ namespace ReelRoulette
         {
             // Synchronous wrapper for backward compatibility
             _ = PlayFromPathAsync(videoPath, addToHistory);
-        }
-
-        private async Task<MissingFileDialogResult> ShowMissingFileDialogAsync(string? missingPath)
-        {
-            Log($"ShowMissingFileDialogAsync: Showing dialog for missing file: {missingPath ?? "null"}");
-            
-            // Ensure dialog is shown on UI thread
-            if (Dispatcher.UIThread.CheckAccess())
-            {
-                var dialog = new MissingFileDialog(missingPath ?? "");
-                var result = await dialog.ShowDialog<MissingFileDialogResult>(this);
-                Log($"ShowMissingFileDialogAsync: User selected: {result}");
-                return result;
-            }
-            else
-            {
-                // Marshal to UI thread - use TaskCompletionSource to properly await the async dialog
-                var tcs = new TaskCompletionSource<MissingFileDialogResult>();
-                Dispatcher.UIThread.Post(async () =>
-                {
-                    try
-                    {
-                        var dialog = new MissingFileDialog(missingPath ?? "");
-                        var result = await dialog.ShowDialog<MissingFileDialogResult>(this);
-                        Log($"ShowMissingFileDialogAsync: User selected: {result}");
-                        tcs.SetResult(result);
-                    }
-                    catch (Exception ex)
-                    {
-                        Log($"ShowMissingFileDialogAsync: ERROR - Exception: {ex.GetType().Name}, Message: {ex.Message}");
-                        tcs.SetResult(MissingFileDialogResult.Cancel);
-                    }
-                });
-                return await tcs.Task;
-            }
-        }
-
-        private async Task HandleMissingFileAsync(string? missingPath, bool isPhoto = false)
-        {
-            Log($"HandleMissingFileAsync: Handling missing file - Path: {missingPath ?? "null"}, IsPhoto: {isPhoto}");
-            
-            // Marshal to UI thread if needed - use Post with TaskCompletionSource to avoid deadlocks
-            if (!Dispatcher.UIThread.CheckAccess())
-            {
-                var tcs = new TaskCompletionSource<bool>();
-                Dispatcher.UIThread.Post(async () =>
-                {
-                    try
-                    {
-                        await HandleMissingFileAsync(missingPath, isPhoto);
-                        tcs.SetResult(true);
-                    }
-                    catch (Exception ex)
-                    {
-                        Log($"HandleMissingFileAsync: ERROR marshaling to UI thread - Exception: {ex.GetType().Name}, Message: {ex.Message}");
-                        tcs.SetException(ex);
-                    }
-                });
-                await tcs.Task;
-                return;
-            }
-            
-            if (string.IsNullOrEmpty(missingPath))
-            {
-                Log("HandleMissingFileAsync: Path is null or empty");
-                SetStatusMessage(isPhoto ? "Photo file not found." : "Video file not found.");
-                return;
-            }
-
-            MissingFileDialogResult result;
-            
-            // Check setting for default behavior
-            if (_missingFileBehavior == MissingFileBehavior.AlwaysRemoveFromLibrary)
-            {
-                Log("HandleMissingFileAsync: Setting is AlwaysRemoveFromLibrary - removing from library without dialog");
-                result = MissingFileDialogResult.RemoveFromLibrary;
-            }
-            else
-            {
-                // Show dialog (we're already on UI thread)
-                result = await ShowMissingFileDialogAsync(missingPath);
-            }
-
-            if (result == MissingFileDialogResult.RemoveFromLibrary)
-            {
-                // Remove from library and then continue playback with a new file
-                Log("HandleMissingFileAsync: Removing file from library, will continue playback after removal");
-                await RemoveLibraryItemAsync(missingPath);
-                // Status message is already set by RemoveLibraryItemAsync
-                
-                // Continue playback with a new random file
-                Log("HandleMissingFileAsync: File removed, continuing playback with new random file");
-                await PlayRandomVideoAsync();
-            }
-            else if (result == MissingFileDialogResult.LocateFile)
-            {
-                var newPath = await HandleLocateFileAsync(missingPath, isPhoto);
-                if (!string.IsNullOrEmpty(newPath) && File.Exists(newPath))
-                {
-                    // Retry playback with new path
-                    Log($"HandleMissingFileAsync: File located, retrying playback with new path: {newPath}");
-                    PlayFromPath(newPath);
-                }
-                else
-                {
-                    SetStatusMessage(isPhoto ? "Photo file not located." : "Video file not located.");
-                }
-            }
-            else
-            {
-                // Cancel - just show status
-                SetStatusMessage(isPhoto ? "Photo file not found." : "Video file not found.");
-            }
-        }
-
-        private async Task<string?> HandleLocateFileAsync(string? oldPath, bool isPhoto = false)
-        {
-            Log($"HandleLocateFileAsync: Opening file picker for missing file: {oldPath ?? "null"}, IsPhoto: {isPhoto}");
-            
-            try
-            {
-                var options = new FilePickerOpenOptions
-                {
-                    Title = isPhoto ? "Locate Photo File" : "Locate Video File",
-                    AllowMultiple = false,
-                    FileTypeFilter = isPhoto ? new[]
-                    {
-                        new FilePickerFileType("Image Files")
-                        {
-                            Patterns = new[] { "*.jpg", "*.jpeg", "*.png", "*.gif", "*.bmp", "*.webp", "*.tiff", "*.tif", "*.heic", "*.heif", "*.avif", "*.ico", "*.svg", "*.raw", "*.cr2", "*.nef", "*.orf", "*.sr2" }
-                        },
-                        new FilePickerFileType("All Files") { Patterns = new[] { "*" } }
-                    } : new[]
-                    {
-                        new FilePickerFileType("Video Files")
-                        {
-                            Patterns = new[] { "*.mp4", "*.mkv", "*.avi", "*.mov", "*.wmv", "*.mpg", "*.mpeg" }
-                        },
-                        new FilePickerFileType("All Files") { Patterns = new[] { "*" } }
-                    }
-                };
-
-                // Try to set initial directory to the old file's directory if it exists
-                if (!string.IsNullOrEmpty(oldPath))
-                {
-                    try
-                    {
-                        var oldDir = Path.GetDirectoryName(oldPath);
-                        if (!string.IsNullOrEmpty(oldDir) && Directory.Exists(oldDir))
-                        {
-                            var storageFolder = await StorageProvider.TryGetFolderFromPathAsync(oldDir);
-                            if (storageFolder != null)
-                            {
-                                options.SuggestedStartLocation = storageFolder;
-                            }
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Log($"HandleLocateFileAsync: Could not set suggested start location - {ex.Message}");
-                    }
-                }
-
-                var result = await StorageProvider.OpenFilePickerAsync(options);
-                
-                if (result.Count > 0 && result[0] != null)
-                {
-                    var newPath = result[0].Path.LocalPath;
-                    Log($"HandleLocateFileAsync: User selected file: {newPath}");
-                    
-                    // Verify it's a valid file
-                    var extension = Path.GetExtension(newPath).ToLowerInvariant();
-                    if (isPhoto)
-                    {
-                        if (!_photoExtensions.Contains(extension))
-                        {
-                            Log($"HandleLocateFileAsync: Selected file is not a valid photo file: {extension}");
-                            SetStatusMessage("Selected file is not a valid photo file.");
-                            return null;
-                        }
-                    }
-                    else
-                    {
-                        if (!_videoExtensions.Contains(extension))
-                        {
-                            Log($"HandleLocateFileAsync: Selected file is not a valid video file: {extension}");
-                            SetStatusMessage("Selected file is not a valid video file.");
-                            return null;
-                        }
-                    }
-                    
-                    // Update library item with new path
-                    if (_libraryIndex != null && !string.IsNullOrEmpty(oldPath))
-                    {
-                        var item = _libraryService.FindItemByPath(oldPath);
-                        if (item != null)
-                        {
-                            Log($"HandleLocateFileAsync: Updating library item path from {oldPath} to {newPath}");
-                            
-                            // Check if new path is in an existing source
-                            // Use normalized paths with separator validation to prevent false matches
-                            // (e.g., C:\VideoRecordings should not match C:\Videos)
-                            var newDir = Path.GetDirectoryName(newPath);
-                            var matchingSource = _libraryIndex.Sources.FirstOrDefault(s => 
-                            {
-                                if (string.IsNullOrEmpty(newDir) || string.IsNullOrEmpty(s.RootPath))
-                                    return false;
-                                
-                                // Normalize both paths for comparison
-                                var normalizedNewDir = Path.GetFullPath(newDir);
-                                var normalizedRoot = Path.GetFullPath(s.RootPath);
-                                
-                                // Check if newDir is exactly the root, or is a subdirectory of root
-                                if (normalizedNewDir.Equals(normalizedRoot, StringComparison.OrdinalIgnoreCase))
-                                    return true;
-                                
-                                // Check if newDir starts with root + separator (prevents false matches)
-                                var rootWithSeparator = normalizedRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
-                                return normalizedNewDir.StartsWith(rootWithSeparator, StringComparison.OrdinalIgnoreCase);
-                            });
-                            
-                            if (matchingSource != null)
-                            {
-                                item.SourceId = matchingSource.Id;
-                                // Calculate relative path
-                                var rootUri = new Uri(Path.GetFullPath(matchingSource.RootPath) + Path.DirectorySeparatorChar);
-                                var fileUri = new Uri(Path.GetFullPath(newPath));
-                                var relativeUri = rootUri.MakeRelativeUri(fileUri);
-                                item.RelativePath = Uri.UnescapeDataString(relativeUri.ToString().Replace('/', Path.DirectorySeparatorChar));
-                            }
-                            else
-                            {
-                                // File moved outside all sources - clear RelativePath to prevent inconsistency
-                                // RelativePath is invalid since file is no longer relative to any source
-                                // Keep SourceId as-is to avoid breaking code that expects it, but RelativePath must be cleared
-                                item.RelativePath = string.Empty;
-                                Log($"HandleLocateFileAsync: New file location is not within any existing source - RelativePath cleared, SourceId unchanged");
-                            }
-                            
-                            item.FullPath = newPath;
-                            item.FileName = Path.GetFileName(newPath);
-                            
-                            _libraryService.UpdateItem(item);
-                            
-                            // Save library asynchronously (await to ensure save completes before updating UI)
-                            await Task.Run(() =>
-                            {
-                                try
-                                {
-                                    _libraryService.SaveLibrary();
-                                    Log("HandleLocateFileAsync: Library saved successfully");
-                                }
-                                catch (Exception ex)
-                                {
-                                    Log($"HandleLocateFileAsync: ERROR saving library - Exception: {ex.GetType().Name}, Message: {ex.Message}");
-                                    throw; // Re-throw to be caught by outer try-catch
-                                }
-                            });
-                            
-                            // Update library index reference (after save completes)
-                            var updatedIndex = _libraryService.LibraryIndex;
-                            
-                            await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
-                            {
-                                _libraryIndex = updatedIndex;
-
-                                if (_showLibraryPanel)
-                                {
-                                    UpdateLibraryPanel();
-                                }
-
-                                SetStatusMessage($"File path updated: {Path.GetFileName(newPath)}");
-                            });
-                            return newPath;
-                        }
-                        else
-                        {
-                            Log($"HandleLocateFileAsync: Library item not found for old path: {oldPath}");
-                            SetStatusMessage("Library item not found.");
-                            return null;
-                        }
-                    }
-                    else
-                    {
-                        Log("HandleLocateFileAsync: Library index is null or old path is empty");
-                        return newPath; // Return path even if we can't update library
-                    }
-                }
-                else
-                {
-                    Log("HandleLocateFileAsync: User cancelled file picker");
-                    return null;
-                }
-            }
-            catch (Exception ex)
-            {
-                Log($"HandleLocateFileAsync: ERROR - Exception: {ex.GetType().Name}, Message: {ex.Message}");
-                Log($"HandleLocateFileAsync: ERROR - Stack trace: {ex.StackTrace}");
-                StatusTextBlock.Text = $"Error locating file: {ex.Message}";
-                return null;
-            }
         }
 
         private async Task RemoveLibraryItemAsync(string? path)
@@ -6010,7 +5729,7 @@ namespace ReelRoulette
             }
         }
 
-        private void PlayVideo(string videoPath, bool addToHistory = true)
+        private void PlayMedia(string videoPath, bool addToHistory = true)
         {
             var localTarget = new PlaybackTarget(
                 StatsPath: videoPath,
@@ -6018,20 +5737,20 @@ namespace ReelRoulette
                 PlaybackSourceType: FromType.FromPath,
                 IsLocallyAccessible: IsLocalMediaReadable(videoPath),
                 UsedApiPath: false);
-            PlayVideo(localTarget, addToHistory);
+            PlayMedia(localTarget, addToHistory);
         }
 
-        private void PlayVideo(PlaybackTarget target, bool addToHistory = true)
+        private void PlayMedia(PlaybackTarget target, bool addToHistory = true)
         {
             var statsPath = target.StatsPath;
             var playbackSource = target.PlaybackSource;
             var playbackSourceType = target.PlaybackSourceType;
 
-            Log($"PlayVideo: Starting - statsPath: {statsPath ?? "null"}, playbackSourceType: {playbackSourceType}, addToHistory: {addToHistory}");
+            Log($"PlayMedia: Starting - statsPath: {statsPath ?? "null"}, playbackSourceType: {playbackSourceType}, addToHistory: {addToHistory}");
             
             if (_mediaPlayer == null || _libVLC == null)
             {
-                Log("PlayVideo: ERROR - MediaPlayer or LibVLC is null");
+                Log("PlayMedia: ERROR - MediaPlayer or LibVLC is null");
                 return;
             }
 
@@ -6054,34 +5773,34 @@ namespace ReelRoulette
                 _currentVideoPath = statsPath;
                 _currentPlaybackSource = playbackSource;
                 _currentPlaybackSourceType = playbackSourceType;
-                Log($"PlayVideo: Current video path set - Previous: {previousPath ?? "null"}, New: {statsPath ?? "null"}");
+                Log($"PlayMedia: Current video path set - Previous: {previousPath ?? "null"}, New: {statsPath ?? "null"}");
 
                 // Determine if this is a photo or video
                 var extension = Path.GetExtension(statsPath ?? string.Empty).ToLowerInvariant();
-                var isPhoto = _photoExtensions.Contains(extension) && playbackSourceType == FromType.FromPath;
+                var isPhoto = _photoExtensions.Contains(extension);
                 _isCurrentlyPlayingPhoto = isPhoto;
-                Log($"PlayVideo: Detected media type - Extension: {extension}, IsPhoto: {isPhoto}");
+                Log($"PlayMedia: Detected media type - Extension: {extension}, IsPhoto: {isPhoto}");
 
                 if (isPhoto)
                 {
                     StatusTextBlock.Text = $"Photo: {System.IO.Path.GetFileName(statsPath)}";
-                    Log($"PlayVideo: Setting status text for photo: {System.IO.Path.GetFileName(statsPath)}");
+                    Log($"PlayMedia: Setting status text for photo: {System.IO.Path.GetFileName(statsPath)}");
                 }
                 else
                 {
                     StatusTextBlock.Text = $"Playing: {System.IO.Path.GetFileName(statsPath)}";
-                    Log($"PlayVideo: Setting status text for video: {System.IO.Path.GetFileName(statsPath)}");
+                    Log($"PlayMedia: Setting status text for video: {System.IO.Path.GetFileName(statsPath)}");
                 }
 
                 // Record playback stats
                 if (!string.IsNullOrWhiteSpace(statsPath))
                 {
-                    Log("PlayVideo: Recording playback stats");
+                    Log("PlayMedia: Recording playback stats");
                     RecordPlayback(statsPath);
                 }
 
                 // Update per-video toggle UI
-                Log("PlayVideo: Updating per-video toggle states");
+                Log("PlayMedia: Updating per-video toggle states");
                 UpdatePerVideoToggleStates();
 
                 // Dispose previous media
@@ -6090,18 +5809,18 @@ namespace ReelRoulette
                     var skipStopForEndReached = Interlocked.CompareExchange(ref _suppressStopForEndReachedTransition, 0, 0) == 1;
                     if (skipStopForEndReached)
                     {
-                        Log("PlayVideo: EndReached transition active - skipping MediaPlayer.Stop() before disposing previous media");
+                        Log("PlayMedia: EndReached transition active - skipping MediaPlayer.Stop() before disposing previous media");
                     }
                     else
                     {
-                        Log("PlayVideo: Stopping player before disposing previous media");
+                        Log("PlayMedia: Stopping player before disposing previous media");
                         _mediaPlayer.Stop(); // Stop playback cleanly before disposing to prevent audio spikes
-                        Log("PlayVideo: MediaPlayer.Stop() completed");
+                        Log("PlayMedia: MediaPlayer.Stop() completed");
                     }
-                    Log("PlayVideo: Disposing previous media");
+                    Log("PlayMedia: Disposing previous media");
                     _currentMedia.Dispose();
                     _currentMedia = null;
-                    Log("PlayVideo: Previous media disposed");
+                    Log("PlayMedia: Previous media disposed");
                 }
 
                 // Create and play new media
@@ -6109,12 +5828,12 @@ namespace ReelRoulette
                 {
                     // Store user volume preference before normalization
                     _userVolumePreference = (int)VolumeSlider.Value;
-                    Log($"PlayVideo: User volume preference: {_userVolumePreference}");
+                    Log($"PlayMedia: User volume preference: {_userVolumePreference}");
 
                     if (isPhoto)
                     {
                         // Photos: Use Avalonia Image control instead of VLC for better performance with large images
-                        Log("PlayVideo: This is a photo - loading with Avalonia Image control");
+                        Log("PlayMedia: This is a photo - loading with Avalonia Image control");
                         
                         // Hide VideoView and show Image control
                         try
@@ -6122,36 +5841,36 @@ namespace ReelRoulette
                             if (VideoView != null)
                             {
                                 VideoView.IsVisible = false;
-                                Log("PlayVideo: VideoView hidden");
+                                Log("PlayMedia: VideoView hidden");
                             }
                             if (PhotoImageView != null)
                             {
                                 PhotoImageView.IsVisible = true;
-                                Log("PlayVideo: PhotoImageView shown");
+                                Log("PlayMedia: PhotoImageView shown");
                             }
                         }
                         catch (Exception ex)
                         {
-                            Log($"PlayVideo: ERROR accessing UI elements - Exception: {ex.GetType().Name}, Message: {ex.Message}");
+                            Log($"PlayMedia: ERROR accessing UI elements - Exception: {ex.GetType().Name}, Message: {ex.Message}");
                         }
                         
                         // Stop media player and dispose media to clear VideoView content
-                        Log("PlayVideo: Stopping media player for photo");
+                        Log("PlayMedia: Stopping media player for photo");
                         if (_mediaPlayer != null)
                         {
                             try
                             {
                                 _mediaPlayer.Stop();
-                                Log("PlayVideo: Media player stopped successfully");
+                                Log("PlayMedia: Media player stopped successfully");
                             }
                             catch (Exception ex)
                             {
-                                Log($"PlayVideo: ERROR stopping media player - Exception: {ex.GetType().Name}, Message: {ex.Message}");
+                                Log($"PlayMedia: ERROR stopping media player - Exception: {ex.GetType().Name}, Message: {ex.Message}");
                             }
                         }
                         
                         // Dispose previous photo bitmap and media
-                        Log("PlayVideo: Disposing previous photo resources");
+                        Log("PlayMedia: Disposing previous photo resources");
                         _currentPhotoBitmap?.Dispose();
                         _currentPhotoBitmap = null;
                         if (_currentMedia != null)
@@ -6159,42 +5878,42 @@ namespace ReelRoulette
                             _currentMedia.Dispose();
                             _currentMedia = null;
                         }
-                        Log("PlayVideo: Previous photo resources disposed");
+                        Log("PlayMedia: Previous photo resources disposed");
                         
                         // Check if file exists before loading
                         // Note: File.Exists on network drives can be slow, but we'll proceed anyway
                         // If the file doesn't exist, we'll catch it during loading
-                        Log($"PlayVideo: Checking if photo file exists: {playbackSource}");
+                        Log($"PlayMedia: Checking if photo file exists: {playbackSource}");
                         bool fileExists = false;
                         try
                         {
                             fileExists = File.Exists(playbackSource);
-                            Log($"PlayVideo: File exists check completed: {fileExists}");
+                            Log($"PlayMedia: File exists check completed: {fileExists}");
                         }
                         catch (Exception ex)
                         {
-                            Log($"PlayVideo: ERROR checking file existence - Exception: {ex.GetType().Name}, Message: {ex.Message}");
+                            Log($"PlayMedia: ERROR checking file existence - Exception: {ex.GetType().Name}, Message: {ex.Message}");
                             // Assume file exists to avoid blocking - we'll catch the error during loading if it doesn't
                             fileExists = true;
                         }
                         
                         if (!fileExists)
                         {
-                            Log($"PlayVideo: Photo file not found: {playbackSource}");
-                            _ = HandleMissingFileAsync(statsPath, isPhoto: true);
+                            Log($"PlayMedia: Photo file not found: {playbackSource}");
+                            SetStatusMessage("Photo file not found.");
                             return;
                         }
-                        Log("PlayVideo: Photo file exists, proceeding with load");
+                        Log("PlayMedia: Photo file exists, proceeding with load");
                         
                         // Load image asynchronously with efficient decoding
-                        Log("PlayVideo: Starting Task.Run for photo loading");
+                        Log("PlayMedia: Starting Task.Run for photo loading");
                         _ = Task.Run(async () =>
                         {
                             // Declare bitmap at outer scope so it's accessible in catch blocks
                             Avalonia.Media.Imaging.Bitmap? bitmap = null;
                             try
                             {
-                                Log($"PlayVideo: Task.Run started - Loading photo: {playbackSource}");
+                                Log($"PlayMedia: Task.Run started - Loading photo: {playbackSource}");
                                 
                                 // Calculate max dimensions based on scaling settings
                                 int maxWidth = int.MaxValue;
@@ -6231,15 +5950,15 @@ namespace ReelRoulette
                                         }
                                         catch (Exception ex)
                                         {
-                                            Log($"PlayVideo: Could not get screen dimensions, using fixed max: {ex.Message}");
+                                            Log($"PlayMedia: Could not get screen dimensions, using fixed max: {ex.Message}");
                                         }
                                     }
                                     
-                                    Log($"PlayVideo: Decoding image with max dimensions: {maxWidth}x{maxHeight}");
+                                    Log($"PlayMedia: Decoding image with max dimensions: {maxWidth}x{maxHeight}");
                                 }
                                 else
                                 {
-                                    Log("PlayVideo: Image scaling is disabled - loading full resolution");
+                                    Log("PlayMedia: Image scaling is disabled - loading full resolution");
                                 }
                                 
                                 // Load and decode image efficiently
@@ -6267,7 +5986,7 @@ namespace ReelRoulette
                                 
                                 if (bitmap != null)
                                 {
-                                    Log($"PlayVideo: Image decoded successfully - Size: {bitmap.PixelSize.Width}x{bitmap.PixelSize.Height}");
+                                    Log($"PlayMedia: Image decoded successfully - Size: {bitmap.PixelSize.Width}x{bitmap.PixelSize.Height}");
                                     
                                     // Update UI on UI thread
                                     try
@@ -6280,7 +5999,7 @@ namespace ReelRoulette
                                                 // Prevents race condition where multiple photo loads complete out of order
                                                 if (_currentVideoPath != statsPath)
                                                 {
-                                                    Log($"PlayVideo: Photo load completed but is no longer current - Current: {_currentVideoPath ?? "null"}, Loaded: {statsPath}");
+                                                    Log($"PlayMedia: Photo load completed but is no longer current - Current: {_currentVideoPath ?? "null"}, Loaded: {statsPath}");
                                                     bitmap?.Dispose();
                                                     bitmap = null;
                                                     return;
@@ -6291,7 +6010,7 @@ namespace ReelRoulette
                                                 {
                                                     _currentPhotoBitmap = bitmap;
                                                     PhotoImageView.Source = bitmap;
-                                                    Log("PlayVideo: Photo displayed in Image control");
+                                                    Log("PlayMedia: Photo displayed in Image control");
                                                     
                                                     // Start photo display timer
                                                     if (_photoDisplayTimer != null)
@@ -6304,18 +6023,18 @@ namespace ReelRoulette
                                                     _photoDisplayTimer.Elapsed += PhotoDisplayTimer_Elapsed;
                                                     _photoDisplayTimer.AutoReset = false;
                                                     _photoDisplayTimer.Start();
-                                                    Log($"PlayVideo: Started photo display timer for {_photoDisplayDurationSeconds} seconds");
+                                                    Log($"PlayMedia: Started photo display timer for {_photoDisplayDurationSeconds} seconds");
                                                 }
                                                 else
                                                 {
                                                     bitmap.Dispose();
                                                     bitmap = null; // Prevent double-disposal in outer catch handler
-                                                    Log("PlayVideo: ERROR - PhotoImageView is null, disposed bitmap");
+                                                    Log("PlayMedia: ERROR - PhotoImageView is null, disposed bitmap");
                                                 }
                                             }
                                             catch (Exception ex)
                                             {
-                                                Log($"PlayVideo: ERROR updating UI with photo - Exception: {ex.GetType().Name}, Message: {ex.Message}");
+                                                Log($"PlayMedia: ERROR updating UI with photo - Exception: {ex.GetType().Name}, Message: {ex.Message}");
                                                 // Clear Image control reference before disposing bitmap
                                                 if (PhotoImageView != null)
                                                 {
@@ -6330,7 +6049,7 @@ namespace ReelRoulette
                                     catch (Exception ex)
                                     {
                                         // Exception during InvokeAsync setup - dispose bitmap
-                                        Log($"PlayVideo: ERROR during UI thread invocation - Exception: {ex.GetType().Name}, Message: {ex.Message}");
+                                        Log($"PlayMedia: ERROR during UI thread invocation - Exception: {ex.GetType().Name}, Message: {ex.Message}");
                                         bitmap?.Dispose();
                                         bitmap = null; // Prevent double-disposal in outer catch handler
                                         _currentPhotoBitmap = null;
@@ -6339,26 +6058,26 @@ namespace ReelRoulette
                                 }
                                 else
                                 {
-                                    Log("PlayVideo: ERROR - Failed to decode image");
+                                    Log("PlayMedia: ERROR - Failed to decode image");
                                 }
                             }
                             catch (FileNotFoundException ex)
                             {
-                                Log($"PlayVideo: Photo file not found: {ex.Message}");
+                                Log($"PlayMedia: Photo file not found: {ex.Message}");
                                 // Only handle missing file if this photo is still current
                                 if (_currentVideoPath == statsPath)
                                 {
-                                    await HandleMissingFileAsync(statsPath, isPhoto: true);
+                                    SetStatusMessage("Photo file not found.");
                                 }
                                 else
                                 {
-                                    Log($"PlayVideo: Photo file not found but photo is no longer current - Current: {_currentVideoPath ?? "null"}, Missing: {statsPath}");
+                                    Log($"PlayMedia: Photo file not found but photo is no longer current - Current: {_currentVideoPath ?? "null"}, Missing: {statsPath}");
                                 }
                             }
                             catch (Exception ex)
                             {
-                                Log($"PlayVideo: ERROR loading photo - Exception: {ex.GetType().Name}, Message: {ex.Message}");
-                                Log($"PlayVideo: ERROR - Stack trace: {ex.StackTrace}");
+                                Log($"PlayMedia: ERROR loading photo - Exception: {ex.GetType().Name}, Message: {ex.Message}");
+                                Log($"PlayMedia: ERROR - Stack trace: {ex.StackTrace}");
                                 
                                 // Dispose bitmap if it exists (in case exception occurred before InvokeAsync)
                                 // Note: bitmap variable is in scope here
@@ -6374,7 +6093,7 @@ namespace ReelRoulette
                                     // Validate that this photo is still the current one before showing error
                                     if (_currentVideoPath != statsPath)
                                     {
-                                        Log($"PlayVideo: Photo error occurred but photo is no longer current - Current: {_currentVideoPath ?? "null"}, Failed: {statsPath}");
+                                        Log($"PlayMedia: Photo error occurred but photo is no longer current - Current: {_currentVideoPath ?? "null"}, Failed: {statsPath}");
                                         return;
                                     }
                                     
@@ -6395,7 +6114,7 @@ namespace ReelRoulette
                         if (wasPlayingPhoto)
                         {
                             // Transitioning from photo to video: keep photo visible until video starts playing
-                            Log("PlayVideo: Transitioning from photo to video - keeping photo visible until video loads");
+                            Log("PlayMedia: Transitioning from photo to video - keeping photo visible until video loads");
                             
                             // Stop and clear any previous video to prevent showing old frame
                             if (_mediaPlayer != null)
@@ -6404,7 +6123,7 @@ namespace ReelRoulette
                             }
                             if (_currentMedia != null)
                             {
-                                Log("PlayVideo: Disposing previous media before transitioning from photo to video");
+                                Log("PlayMedia: Disposing previous media before transitioning from photo to video");
                                 _currentMedia.Dispose();
                                 _currentMedia = null;
                             }
@@ -6437,31 +6156,31 @@ namespace ReelRoulette
                         }
                         
                         // Videos: Create Media object and use VLC
-                        Log($"PlayVideo: Creating new Media object from source ({playbackSourceType})");
+                        Log($"PlayMedia: Creating new Media object from source ({playbackSourceType})");
                         _currentMedia = new Media(_libVLC, playbackSource, playbackSourceType);
                         
                         // Videos: Use existing logic
                         // Set input-repeat option for seamless looping when loop is enabled
                         if (_isLoopEnabled)
                         {
-                            Log("PlayVideo: Loop is enabled - adding input-repeat option");
+                            Log("PlayMedia: Loop is enabled - adding input-repeat option");
                             _currentMedia.AddOption(":input-repeat=65535");
                         }
                         
                         // Apply volume normalization (must be called before Parse/Play)
-                        Log($"PlayVideo: Applying volume normalization - Enabled: {_volumeNormalizationEnabled}");
+                        Log($"PlayMedia: Applying volume normalization - Enabled: {_volumeNormalizationEnabled}");
                         ApplyVolumeNormalization();
                         
                         // Parse media to get track information (including video dimensions)
-                        Log("PlayVideo: Parsing media to get track information");
+                        Log("PlayMedia: Parsing media to get track information");
                         _currentMedia.Parse();
                         
                         // Try to get video aspect ratio from tracks immediately
                         UpdateAspectRatioFromTracks();
                         
-                        Log("PlayVideo: Starting playback");
+                        Log("PlayMedia: Starting playback");
                         _mediaPlayer!.Play(_currentMedia!);
-                        Log("PlayVideo: Playback started successfully");
+                        Log("PlayMedia: Playback started successfully");
                         
                         // Also try again after a short delay in case tracks weren't available immediately
                         // This helps with files where Parse() doesn't immediately populate tracks
@@ -6471,7 +6190,7 @@ namespace ReelRoulette
                             {
                                 if (!_hasValidAspectRatio && _currentMedia != null)
                                 {
-                                    Log("PlayVideo: Retrying aspect ratio update after delay");
+                                    Log("PlayMedia: Retrying aspect ratio update after delay");
                                     UpdateAspectRatioFromTracks();
                                 }
                             });
@@ -6480,7 +6199,7 @@ namespace ReelRoulette
                 }
                 else
                 {
-                    Log("PlayVideo: ERROR - playbackSource is null, returning");
+                    Log("PlayMedia: ERROR - playbackSource is null, returning");
                     return;
                 }
 
@@ -6514,29 +6233,29 @@ namespace ReelRoulette
                     {
                         var removedCount = _playbackTimeline.Count - _timelineIndex - 1;
                         _playbackTimeline.RemoveRange(_timelineIndex + 1, removedCount);
-                        Log($"PlayVideo: Removed {removedCount} entries from timeline after index {_timelineIndex}");
+                        Log($"PlayMedia: Removed {removedCount} entries from timeline after index {_timelineIndex}");
                     }
                     // Add new video to timeline
                     _playbackTimeline.Add(statsPath ?? string.Empty);
                     _timelineIndex = _playbackTimeline.Count - 1;
-                    Log($"PlayVideo: Added video to timeline - Index: {_timelineIndex}, Timeline count: {_playbackTimeline.Count}");
+                    Log($"PlayMedia: Added video to timeline - Index: {_timelineIndex}, Timeline count: {_playbackTimeline.Count}");
                     // Note: UpdateCurrentFileStatsUi() is already called by RecordPlayback()
                 }
                 else
                 {
-                    Log($"PlayVideo: Skipping timeline update (navigating) - Index: {_timelineIndex}");
+                    Log($"PlayMedia: Skipping timeline update (navigating) - Index: {_timelineIndex}");
                 }
                 _isNavigatingTimeline = false;
 
                 // Update Previous/Next button states
                 PreviousButton.IsEnabled = _timelineIndex > 0;
                 NextButton.IsEnabled = _playbackTimeline.Count > 0;
-                Log($"PlayVideo: Previous button enabled: {PreviousButton.IsEnabled}, Next button enabled: {NextButton.IsEnabled}");
+                Log($"PlayMedia: Previous button enabled: {PreviousButton.IsEnabled}, Next button enabled: {NextButton.IsEnabled}");
 
                 // Initialize volume slider if first video
                 if (VolumeSlider.Value == 100 && _mediaPlayer!.Volume == 0)
                 {
-                    Log("PlayVideo: Initializing volume slider (first video)");
+                    Log("PlayMedia: Initializing volume slider (first video)");
                     _mediaPlayer.Volume = 100;
                     VolumeSlider.Value = 100;
                 }
@@ -6547,25 +6266,25 @@ namespace ReelRoulette
                 {
                     MuteButton.IsChecked = _isMuted;
                 }
-                Log($"PlayVideo: Applied saved mute state: {_isMuted}");
+                Log($"PlayMedia: Applied saved mute state: {_isMuted}");
 
                 // History is now tracked via LibraryItem.LastPlayedUtc (updated in RecordPlayback)
 
                 // Note: UpdateCurrentFileStatsUi() is already called by RecordPlayback()
                 // No need to call it again here
                 
-                Log("PlayVideo: Completed successfully");
+                Log("PlayMedia: Completed successfully");
             }
             catch (Exception ex)
             {
                 _isNavigatingTimeline = false;
-                Log($"PlayVideo: ERROR - Exception: {ex.GetType().Name}, Message: {ex.Message}");
-                Log($"PlayVideo: ERROR - Stack trace: {ex.StackTrace}");
+                Log($"PlayMedia: ERROR - Exception: {ex.GetType().Name}, Message: {ex.Message}");
+                Log($"PlayMedia: ERROR - Stack trace: {ex.StackTrace}");
                 if (ex.InnerException != null)
                 {
-                    Log($"PlayVideo: ERROR - Inner exception: {ex.InnerException.Message}");
+                    Log($"PlayMedia: ERROR - Inner exception: {ex.InnerException.Message}");
                 }
-                StatusTextBlock.Text = "Failed to play video: " + ex.Message;
+                StatusTextBlock.Text = "Failed to play media: " + ex.Message;
             }
         }
 
@@ -6634,7 +6353,7 @@ namespace ReelRoulette
             }
 
             Log($"PlayRandomVideoAsync: Selected ({_randomizationMode}) {Path.GetFileName(randomTarget.StatsPath)} (ApiPath={randomTarget.UsedApiPath})");
-            await Dispatcher.UIThread.InvokeAsync(() => PlayVideo(randomTarget));
+            await Dispatcher.UIThread.InvokeAsync(() => PlayMedia(randomTarget));
         }
 
         #endregion
@@ -7040,7 +6759,16 @@ namespace ReelRoulette
                         }
                         else
                         {
+                            var compatibilityError = ValidateCoreServerCompatibility(version);
+                            if (!string.IsNullOrWhiteSpace(compatibilityError))
+                            {
+                                lastFailure = compatibilityError;
+                                Log($"CoreServerProbe: attempt {attempt}/{CoreProbeMaxAttempts} incompatible ({compatibilityError})");
+                                break;
+                            }
+
                             _isCoreApiReachable = true;
+                            _lastCoreProbeFailureReason = null;
                             Log($"CoreServerProbe: /api/version success (api={version.ApiVersion}, app={version.AppVersion}, assets={version.AssetsVersion ?? "n/a"})");
                             EnsureCoreEventStreamStarted();
                             if (updateStatus)
@@ -7069,6 +6797,7 @@ namespace ReelRoulette
             }
 
             ApplyDisconnectedProjection();
+            _lastCoreProbeFailureReason = lastFailure;
             if (updateStatus)
             {
                 var reason = string.IsNullOrWhiteSpace(lastFailure) ? "No response from /api/version." : lastFailure;
@@ -7116,6 +6845,31 @@ namespace ReelRoulette
             return baseMessage;
         }
 
+        private static string? ValidateCoreServerCompatibility(CoreVersionResponse version)
+        {
+            if (!int.TryParse(version.ApiVersion?.Trim(), out var apiVersion) || !SupportedCoreApiVersions.Contains(apiVersion))
+            {
+                return $"Server API version '{version.ApiVersion}' is not supported by this desktop build.";
+            }
+
+            if (int.TryParse(version.MinimumCompatibleApiVersion?.Trim(), out var minimumCompatible) &&
+                DesktopApiVersion < minimumCompatible)
+            {
+                return $"Server requires desktop API version {version.MinimumCompatibleApiVersion} or newer.";
+            }
+
+            var capabilitySet = new HashSet<string>((version.Capabilities ?? []).Where(cap => !string.IsNullOrWhiteSpace(cap)), StringComparer.Ordinal);
+            var missing = RequiredCoreCapabilities
+                .Where(capability => !capabilitySet.Contains(capability))
+                .ToList();
+            if (missing.Count > 0)
+            {
+                return $"Server is missing required capabilities: {string.Join(", ", missing)}.";
+            }
+
+            return null;
+        }
+
         private void ApplyDisconnectedProjection()
         {
             _isCoreApiReachable = false;
@@ -7160,7 +6914,12 @@ namespace ReelRoulette
                             var connected = await ProbeCoreServerVersionAsync(updateStatus: false);
                             if (connected)
                             {
-                                await SyncLibraryProjectionFromCoreAsync();
+                                var projectionSynced = await SyncLibraryProjectionFromCoreAsync();
+                                if (!projectionSynced)
+                                {
+                                    SetStatusMessage(BuildCoreReconnectWaitingStatusText(), 0);
+                                    continue;
+                                }
                                 _ = SyncPresetsFromCoreAsync();
                                 _ = SyncSourcesFromCoreAsync();
                                 _ = SyncRefreshSettingsFromCoreAsync();
@@ -7201,10 +6960,13 @@ namespace ReelRoulette
 
         private string BuildCoreReconnectWaitingStatusText()
         {
+            var reasonText = string.IsNullOrWhiteSpace(_lastCoreProbeFailureReason)
+                ? "Core runtime unavailable."
+                : $"Core runtime unavailable ({_lastCoreProbeFailureReason}).";
             var attemptText = _lastCoreReconnectAttemptUtc.HasValue
                 ? _lastCoreReconnectAttemptUtc.Value.ToLocalTime().ToString("HH:mm:ss")
                 : "not yet";
-            return $"Core runtime unavailable. Waiting to reconnect... (last attempt {attemptText})";
+            return $"{reasonText} Waiting to reconnect... (last attempt {attemptText})";
         }
 
         private async Task<bool> EnsureCoreRuntimeAvailableAsync()
@@ -7213,7 +6975,12 @@ namespace ReelRoulette
             if (connected)
             {
                 EnsureCoreEventStreamStarted();
-                await SyncLibraryProjectionFromCoreAsync();
+                var projectionSynced = await SyncLibraryProjectionFromCoreAsync();
+                if (!projectionSynced)
+                {
+                    SetStatusMessage("Core runtime is connected but not ready. Waiting for reconnect...", 0);
+                    return false;
+                }
                 _ = SyncPresetsFromCoreAsync();
                 _ = SyncSourcesFromCoreAsync();
                 _ = SyncRefreshSettingsFromCoreAsync();
@@ -7224,11 +6991,23 @@ namespace ReelRoulette
             return false;
         }
 
-        private async Task SyncLibraryProjectionFromCoreAsync()
+        private async Task<bool> EnsureCoreCommandApiAvailableAsync()
+        {
+            var connected = await ProbeCoreServerVersionAsync(updateStatus: true);
+            if (connected)
+            {
+                EnsureCoreEventStreamStarted();
+                return true;
+            }
+
+            return false;
+        }
+
+        private async Task<bool> SyncLibraryProjectionFromCoreAsync()
         {
             if (!_isCoreApiReachable)
             {
-                return;
+                return false;
             }
 
             try
@@ -7237,14 +7016,16 @@ namespace ReelRoulette
                 if (!payload.HasValue)
                 {
                     Log("CoreProjection: /api/library/projection returned null payload.");
-                    return;
+                    ApplyDisconnectedProjection();
+                    return false;
                 }
 
                 var projection = JsonSerializer.Deserialize<LibraryIndex>(payload.Value.GetRawText());
                 if (projection == null)
                 {
                     Log("CoreProjection: Failed to deserialize projection payload into LibraryIndex.");
-                    return;
+                    ApplyDisconnectedProjection();
+                    return false;
                 }
 
                 _libraryIndex = projection;
@@ -7261,10 +7042,13 @@ namespace ReelRoulette
                     UpdateFilterSummaryText();
                     RecalculateGlobalStats();
                 });
+                return true;
             }
             catch (Exception ex)
             {
                 Log($"CoreProjection: Failed to sync library projection ({ex.Message})");
+                ApplyDisconnectedProjection();
+                return false;
             }
         }
 
@@ -7338,12 +7122,15 @@ namespace ReelRoulette
                 while (!token.IsCancellationRequested)
                 {
                     Log($"CoreEvents: Connecting SSE stream (lastEventId={_coreLastEventRevision})...");
+                    SetStatusMessage("Core events connecting...", 0);
                     try
                     {
                         await sseApiClient.ListenToEventsAsync(
                             _coreServerBaseUrl,
                             _coreClientId,
                             _coreSessionId,
+                            "desktop",
+                            Environment.MachineName,
                             _coreLastEventRevision > 0 ? _coreLastEventRevision : null,
                             HandleCoreServerEnvelopeAsync,
                             Log,
@@ -7355,6 +7142,9 @@ namespace ReelRoulette
                         }
 
                         Log("CoreEvents: SSE stream ended; scheduling reconnect.");
+                        _isCoreApiReachable = false;
+                        _coreEventsReconnectPending = true;
+                        SetStatusMessage("Core events disconnected. Reconnecting...", 0);
                     }
                     catch (OperationCanceledException)
                     {
@@ -7364,6 +7154,9 @@ namespace ReelRoulette
                     catch (Exception ex)
                     {
                         Log($"CoreEvents: SSE stream failed ({ex.Message}); scheduling reconnect.");
+                        _isCoreApiReachable = false;
+                        _coreEventsReconnectPending = true;
+                        SetStatusMessage("Core events disconnected. Reconnecting...", 0);
                     }
 
                     if (token.IsCancellationRequested)
@@ -7394,6 +7187,12 @@ namespace ReelRoulette
             if (string.IsNullOrWhiteSpace(envelope.EventType))
             {
                 return;
+            }
+
+            if (_coreEventsReconnectPending)
+            {
+                _coreEventsReconnectPending = false;
+                SetStatusMessage("Core events reconnected.", 0);
             }
             _coreLastEventRevision = Math.Max(_coreLastEventRevision, envelope.Revision);
             var eventPayloadOptions = new JsonSerializerOptions
@@ -7537,6 +7336,37 @@ namespace ReelRoulette
                     {
                         ApplyRefreshStatusProjection(refreshStatusChanged.Snapshot);
                     });
+                    break;
+                case "resyncRequired":
+                    string reason = "event stream gap detected";
+                    if (envelope.Payload.ValueKind == JsonValueKind.Object &&
+                        envelope.Payload.TryGetProperty("reason", out var reasonProperty))
+                    {
+                        var parsedReason = reasonProperty.GetString();
+                        if (!string.IsNullOrWhiteSpace(parsedReason))
+                        {
+                            reason = parsedReason;
+                        }
+                    }
+
+                    SetStatusMessage($"Core events resync requested ({reason}). Reloading projections...", 0);
+                    if (_isCoreApiReachable)
+                    {
+                        var projectionSynced = await SyncLibraryProjectionFromCoreAsync();
+                        if (projectionSynced)
+                        {
+                            _ = SyncPresetsFromCoreAsync();
+                            _ = SyncSourcesFromCoreAsync();
+                            _ = SyncRefreshSettingsFromCoreAsync();
+                            _ = SyncWebRuntimeSettingsFromCoreAsync();
+                            _ = SyncRefreshStatusFromCoreAsync();
+                            SetStatusMessage("Core events resync complete.", 0);
+                        }
+                        else
+                        {
+                            SetStatusMessage("Core events resync failed. Waiting for reconnect...", 0);
+                        }
+                    }
                     break;
             }
         }
@@ -8064,9 +7894,6 @@ namespace ReelRoulette
             public int FixedImageMaxWidth { get; set; } = 3840;
             public int FixedImageMaxHeight { get; set; } = 2160;
             
-            // Missing file behavior
-            public MissingFileBehavior MissingFileBehavior { get; set; } = MissingFileBehavior.AlwaysShowDialog;
-            
             // Backup settings
             public bool BackupLibraryEnabled { get; set; } = true;
             public int MinimumBackupGapMinutes { get; set; } = 15;
@@ -8302,10 +8129,6 @@ namespace ReelRoulette
             _fixedImageMaxHeight = settings.FixedImageMaxHeight > 0 ? settings.FixedImageMaxHeight : 2160;
             Log($"LoadSettings: Restored image scaling - Mode: {_imageScalingMode}, FixedMax: {_fixedImageMaxWidth}x{_fixedImageMaxHeight}");
             
-            // Load missing file behavior setting
-            _missingFileBehavior = settings.MissingFileBehavior;
-            Log($"LoadSettings: Restored missing file behavior: {_missingFileBehavior}");
-            
             // Load backup settings
             _backupLibraryEnabled = settings.BackupLibraryEnabled;
             _minimumBackupGapMinutes = settings.MinimumBackupGapMinutes > 0 ? settings.MinimumBackupGapMinutes : 15;
@@ -8519,9 +8342,6 @@ namespace ReelRoulette
                 settings.ImageScalingMode = _imageScalingMode;
                 settings.FixedImageMaxWidth = _fixedImageMaxWidth;
                 settings.FixedImageMaxHeight = _fixedImageMaxHeight;
-                
-                // Missing file behavior
-                settings.MissingFileBehavior = _missingFileBehavior;
                 
                 // Backup settings
                 settings.BackupLibraryEnabled = _backupLibraryEnabled;
@@ -9298,7 +9118,7 @@ namespace ReelRoulette
 
         private async Task<CoreDuplicateScanResponse?> ScanDuplicatesViaCoreAsync(DuplicateScanScope scope, string? sourceId)
         {
-            if (!await EnsureCoreRuntimeAvailableAsync())
+            if (!await EnsureCoreCommandApiAvailableAsync())
             {
                 return null;
             }
@@ -9312,7 +9132,7 @@ namespace ReelRoulette
 
             try
             {
-                return await _coreServerApiClient.ScanDuplicatesAsync(_coreServerBaseUrl, new CoreDuplicateScanRequest
+                return await _coreServerLongRunningApiClient.ScanDuplicatesAsync(_coreServerBaseUrl, new CoreDuplicateScanRequest
                 {
                     Scope = scopeValue,
                     SourceId = sourceId
@@ -9321,20 +9141,20 @@ namespace ReelRoulette
             catch (Exception ex)
             {
                 Log($"CoreDuplicates: Scan failed ({ex.Message})");
-                return null;
+                throw new InvalidOperationException(ex.Message, ex);
             }
         }
 
         private async Task<CoreDuplicateApplyResponse?> ApplyDuplicatesViaCoreAsync(List<CoreDuplicateApplySelection> selections)
         {
-            if (!await EnsureCoreRuntimeAvailableAsync())
+            if (!await EnsureCoreCommandApiAvailableAsync())
             {
                 return null;
             }
 
             try
             {
-                return await _coreServerApiClient.ApplyDuplicateSelectionAsync(_coreServerBaseUrl, new CoreDuplicateApplyRequest
+                return await _coreServerLongRunningApiClient.ApplyDuplicateSelectionAsync(_coreServerBaseUrl, new CoreDuplicateApplyRequest
                 {
                     Selections = selections ?? []
                 });
@@ -9348,14 +9168,14 @@ namespace ReelRoulette
 
         private async Task<CoreAutoTagScanResponse?> ScanAutoTagViaCoreAsync(bool scanFullLibrary, List<string> scopedItemPaths)
         {
-            if (!await EnsureCoreRuntimeAvailableAsync())
+            if (!await EnsureCoreCommandApiAvailableAsync())
             {
                 return null;
             }
 
             try
             {
-                return await _coreServerApiClient.ScanAutoTagAsync(_coreServerBaseUrl, new CoreAutoTagScanRequest
+                return await _coreServerLongRunningApiClient.ScanAutoTagAsync(_coreServerBaseUrl, new CoreAutoTagScanRequest
                 {
                     ScanFullLibrary = scanFullLibrary,
                     ItemIds = scopedItemPaths ?? []
@@ -9370,14 +9190,14 @@ namespace ReelRoulette
 
         private async Task<CoreAutoTagApplyResponse?> ApplyAutoTagViaCoreAsync(List<CoreAutoTagAssignment> assignments)
         {
-            if (!await EnsureCoreRuntimeAvailableAsync())
+            if (!await EnsureCoreCommandApiAvailableAsync())
             {
                 return null;
             }
 
             try
             {
-                return await _coreServerApiClient.ApplyAutoTagAsync(_coreServerBaseUrl, new CoreAutoTagApplyRequest
+                return await _coreServerLongRunningApiClient.ApplyAutoTagAsync(_coreServerBaseUrl, new CoreAutoTagApplyRequest
                 {
                     Assignments = assignments ?? []
                 });
@@ -9520,7 +9340,6 @@ namespace ReelRoulette
                     _imageScalingMode,
                     _fixedImageMaxWidth,
                     _fixedImageMaxHeight,
-                    _missingFileBehavior,
                     _backupLibraryEnabled,
                     _minimumBackupGapMinutes,
                     _numberOfBackups,
@@ -9589,7 +9408,6 @@ namespace ReelRoulette
                         var oldScalingMode = _imageScalingMode;
                         var oldFixedWidth = _fixedImageMaxWidth;
                         var oldFixedHeight = _fixedImageMaxHeight;
-                        var oldMissingFileBehavior = _missingFileBehavior;
                         var oldBackupEnabled = _backupLibraryEnabled;
                         var oldMinGap = _minimumBackupGapMinutes;
                         var oldBackupCount = _numberOfBackups;
@@ -9631,10 +9449,6 @@ namespace ReelRoulette
                     _fixedImageMaxWidth = dialog.FixedImageMaxWidth;
                     _fixedImageMaxHeight = dialog.FixedImageMaxHeight;
                     Log($"Settings: Image scaling changed - Mode: {_imageScalingMode}, FixedMax: {_fixedImageMaxWidth}x{_fixedImageMaxHeight}");
-                    
-                    // Update missing file behavior setting
-                    _missingFileBehavior = dialog.MissingFileBehavior;
-                    Log($"Settings: Missing file behavior changed from {oldMissingFileBehavior} to {_missingFileBehavior}");
                     
                     // Update backup settings
                     _backupLibraryEnabled = dialog.GetBackupLibraryEnabled();
@@ -9678,7 +9492,6 @@ namespace ReelRoulette
                             oldScalingMode != _imageScalingMode ||
                             oldFixedWidth != _fixedImageMaxWidth ||
                             oldFixedHeight != _fixedImageMaxHeight ||
-                            oldMissingFileBehavior != _missingFileBehavior ||
                             oldBackupEnabled != _backupLibraryEnabled ||
                             oldMinGap != _minimumBackupGapMinutes ||
                             oldBackupCount != _numberOfBackups ||
@@ -9934,6 +9747,73 @@ namespace ReelRoulette
                 _isSettingsDialogOpen = false;
                 Log($"Settings: Handler finished in {dialogStopwatch.ElapsedMilliseconds}ms");
             }
+        }
+
+        private async void DiagnosticsMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            var diagnosticsText =
+                $"Core server base URL: {_coreServerBaseUrl}\n" +
+                $"Core client ID: {_coreClientId}\n" +
+                $"Core session ID: {_coreSessionId}\n" +
+                $"Last SSE revision: {_coreLastEventRevision}\n" +
+                $"Core API reachable: {_isCoreApiReachable}";
+
+            var dialog = new Window
+            {
+                Title = "Diagnostics",
+                Width = 540,
+                Height = 300,
+                CanResize = true,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner
+            };
+
+            var diagnosticsBox = new TextBox
+            {
+                Text = diagnosticsText,
+                IsReadOnly = true,
+                AcceptsReturn = true,
+                TextWrapping = Avalonia.Media.TextWrapping.Wrap,
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                VerticalAlignment = VerticalAlignment.Stretch
+            };
+
+            var copy = new Button { Content = "Copy", MinWidth = 80, Margin = new Thickness(0, 0, 8, 0) };
+            var close = new Button { Content = "Close", MinWidth = 80 };
+            copy.Click += async (_, __) =>
+            {
+                try
+                {
+                    var clipboard = TopLevel.GetTopLevel(dialog)?.Clipboard;
+                    if (clipboard != null)
+                    {
+                        await clipboard.SetTextAsync(diagnosticsText);
+                        StatusTextBlock.Text = "Diagnostics copied to clipboard.";
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Log($"Diagnostics: Failed to copy to clipboard ({ex.Message})");
+                }
+            };
+            close.Click += (_, __) => dialog.Close();
+
+            dialog.Content = new StackPanel
+            {
+                Margin = new Thickness(12),
+                Spacing = 8,
+                Children =
+                {
+                    diagnosticsBox,
+                    new StackPanel
+                    {
+                        Orientation = Orientation.Horizontal,
+                        HorizontalAlignment = HorizontalAlignment.Right,
+                        Children = { copy, close }
+                    }
+                }
+            };
+
+            await dialog.ShowDialog(this);
         }
 
         private void OpenWebUiMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)

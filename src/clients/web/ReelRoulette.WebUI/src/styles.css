@@ -178,6 +178,9 @@ body {
   margin-top: 10px;
   min-height: 1.2em;
 }
+.diagnostics-mobile {
+  display: none;
+}
 .tag-editor {
   position: fixed;
   inset: 0;
@@ -373,5 +376,11 @@ main {
   .tag-editor-footer select {
     flex-basis: 120px;
     min-width: 96px;
+  }
+  .diagnostics-mobile {
+    display: block;
+    font-size: 0.75rem;
+    color: #7f8da3;
+    margin-top: 2px;
   }
 }

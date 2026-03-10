@@ -1,4 +1,4 @@
-import { getClientId, getRefreshStatus, getSessionId, requeryAuthoritativeState } from "../api/coreApi";
+import { getClientId, getClientType, getDeviceName, getRefreshStatus, getSessionId, requeryAuthoritativeState } from "../api/coreApi";
 import { buildEventsUrl, parseEventEnvelope } from "./eventEnvelope";
 import { buildRefreshStatusMessage } from "./refreshStatusProjection";
 import type { RuntimeConfig } from "../types/runtimeConfig";
@@ -50,6 +50,8 @@ export function createSseClient(
   let lastRevision = 0;
   const clientId = getClientId();
   const sessionId = getSessionId();
+  const clientType = getClientType();
+  const deviceName = getDeviceName();
 
   function clearReconnectTimer(): void {
     if (reconnectTimer) {
@@ -126,7 +128,7 @@ export function createSseClient(
       source = null;
     }
 
-    const url = buildEventsUrl(config.sseUrl, lastRevision, { clientId, sessionId });
+    const url = buildEventsUrl(config.sseUrl, lastRevision, { clientId, sessionId, clientType, deviceName });
     ui.setConnectionStatus(`Connecting SSE (${reason})...`);
     source = createEventSource(url);
     lastEventTimestamp = Date.now();

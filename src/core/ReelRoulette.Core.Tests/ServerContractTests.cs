@@ -13,14 +13,14 @@ public sealed class ServerContractTests
     {
         var response = ApiContractMapper.MapVersion(
             "1",
-            assetsVersion: "m7",
+            assetsVersion: "0.9.0",
             minimumCompatibleApiVersion: "0",
             supportedApiVersions: ["1", "0"],
             capabilities: ["identity.sessionId", "events.refreshStatusChanged", "events.resyncRequired"]);
 
         Assert.False(string.IsNullOrWhiteSpace(response.AppVersion));
         Assert.Equal("1", response.ApiVersion);
-        Assert.Equal("m7", response.AssetsVersion);
+        Assert.Equal("0.9.0", response.AssetsVersion);
         Assert.Equal("0", response.MinimumCompatibleApiVersion);
         Assert.Contains("1", response.SupportedApiVersions);
         Assert.Contains("0", response.SupportedApiVersions);
@@ -52,6 +52,10 @@ public sealed class ServerContractTests
         Assert.Contains("/control/status:", yaml, StringComparison.Ordinal);
         Assert.Contains("/control/settings:", yaml, StringComparison.Ordinal);
         Assert.Contains("/control/pair:", yaml, StringComparison.Ordinal);
+        Assert.Contains("/control/logs/server:", yaml, StringComparison.Ordinal);
+        Assert.Contains("/control/testing:", yaml, StringComparison.Ordinal);
+        Assert.Contains("/control/testing/update:", yaml, StringComparison.Ordinal);
+        Assert.Contains("/control/testing/reset:", yaml, StringComparison.Ordinal);
         Assert.Contains("minimumCompatibleApiVersion:", yaml, StringComparison.Ordinal);
         Assert.Contains("supportedApiVersions:", yaml, StringComparison.Ordinal);
         Assert.Contains("capabilities:", yaml, StringComparison.Ordinal);
@@ -75,6 +79,8 @@ public sealed class ServerContractTests
         Assert.Contains("api.presets.match", version.Capabilities);
         Assert.Contains("control.status", version.Capabilities);
         Assert.Contains("control.settings", version.Capabilities);
+        Assert.Contains("control.logs.server", version.Capabilities);
+        Assert.Contains("control.testing.suite", version.Capabilities);
     }
 
     [Fact]
@@ -115,5 +121,24 @@ public sealed class ServerContractTests
         Assert.False(state.IsFavorite);
         Assert.True(state.IsBlacklisted);
         Assert.True(state.Revision > 0);
+    }
+
+    [Fact]
+    public void M8fPackagingScripts_AndWorkflows_ShouldExist()
+    {
+        var repoRoot = Path.GetFullPath(Path.Combine(
+            AppContext.BaseDirectory,
+            "..",
+            "..",
+            "..",
+            "..",
+            "..",
+            ".."));
+
+        Assert.True(File.Exists(Path.Combine(repoRoot, "tools", "scripts", "package-serverapp-win-portable.ps1")));
+        Assert.True(File.Exists(Path.Combine(repoRoot, "tools", "scripts", "package-serverapp-win-inno.ps1")));
+        Assert.True(File.Exists(Path.Combine(repoRoot, "tools", "installer", "ReelRoulette.ServerApp.iss")));
+        Assert.True(File.Exists(Path.Combine(repoRoot, ".github", "workflows", "ci.yml")));
+        Assert.True(File.Exists(Path.Combine(repoRoot, ".github", "workflows", "package-windows.yml")));
     }
 }

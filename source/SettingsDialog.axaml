@@ -299,20 +299,6 @@
                             </Grid>
                         </StackPanel>
 
-                        <!-- Missing File Behavior Section -->
-                        <StackPanel Spacing="8">
-                            <TextBlock Text="Missing File Behavior" 
-                                       FontWeight="SemiBold" 
-                                       FontSize="13"
-                                       Margin="0,0,0,4"/>
-                            <RadioButton Content="Always show dialog"
-                                         GroupName="MissingFileBehavior"
-                                         IsChecked="{Binding MissingFileBehaviorAlwaysShowDialog}"/>
-                            <RadioButton Content="Always remove from library"
-                                         GroupName="MissingFileBehavior"
-                                         IsChecked="{Binding MissingFileBehaviorAlwaysRemoveFromLibrary}"/>
-                        </StackPanel>
-                        
                         <!-- Seek Step Section -->
                         <StackPanel Spacing="8">
                             <TextBlock Text="Seek Step" 

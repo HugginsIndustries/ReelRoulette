@@ -293,6 +293,8 @@
                 <Separator/>
                 <MenuItem Header="Settings (S)"
                           Click="SettingsMenuItem_Click"/>
+                <MenuItem Header="Diagnostics"
+                          Click="DiagnosticsMenuItem_Click"/>
                 <MenuItem x:Name="OpenWebUiMenuItem"
                           Header="Open Web UI"
                           Click="OpenWebUiMenuItem_Click"/>

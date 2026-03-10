@@ -59,4 +59,4 @@ curl -fsS "${BASE_URL}/control/settings" >/dev/null
 curl -fsS -X POST "${BASE_URL}/control/settings" -H "Content-Type: application/json" -d '{"adminAuthMode":"Off","adminSharedToken":null}' >/dev/null
 kill -0 "${SERVER_PID}" >/dev/null 2>&1 || { echo "Server exited during smoke checks" >&2; exit 1; }
 
-echo "M8a/M8b single-origin + control-plane server smoke verification passed."
+echo "Single-origin and control-plane server smoke verification passed."

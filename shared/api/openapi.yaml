@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: ReelRoulette API
-  version: 0.8.0
+  version: 0.9.0
   description: Contract-first API with M6b refresh pipeline, status/settings APIs, and thumbnail artifact retrieval endpoints.
 paths:
   /health:
@@ -237,6 +237,138 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /control/logs/server:
+    get:
+      summary: Read server last.log lines
+      operationId: getControlServerLogs
+      parameters:
+        - name: tail
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+            maximum: 5000
+          description: Number of trailing lines to return.
+        - name: contains
+          in: query
+          required: false
+          schema:
+            type: string
+            nullable: true
+          description: Optional case-insensitive contains filter.
+        - name: level
+          in: query
+          required: false
+          schema:
+            type: string
+            nullable: true
+          description: Optional level hint filter (for example info/warn/error).
+      responses:
+        "200":
+          description: Log snapshot response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServerLogResponse"
+        "401":
+          description: Unauthorized when control admin auth is required and request is not paired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden when request is non-local and LAN control access is disabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /control/testing:
+    get:
+      summary: Get current operator testing mode and fault flags
+      operationId: getControlTestingState
+      responses:
+        "200":
+          description: Operator testing state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperatorTestingStateSnapshot"
+        "401":
+          description: Unauthorized when control admin auth is required and request is not paired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden when request is non-local and LAN control access is disabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /control/testing/update:
+    post:
+      summary: Update testing mode and operator fault simulation flags
+      operationId: postControlTestingUpdate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OperatorTestingUpdateRequest"
+      responses:
+        "200":
+          description: Testing state update result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperatorTestingActionResponse"
+        "401":
+          description: Unauthorized for testing actions while control admin auth is required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden when request is non-local and LAN control access is disabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Testing mode is required before enabling fault simulation flags
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /control/testing/reset:
+    post:
+      summary: Reset all testing scenario flags while preserving testing mode state
+      operationId: postControlTestingReset
+      responses:
+        "200":
+          description: Testing reset result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperatorTestingActionResponse"
+        "401":
+          description: Unauthorized for testing actions while control admin auth is required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden when request is non-local and LAN control access is disabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /control/pair:
     get:
       summary: Pair control-plane session and issue admin cookie
@@ -310,6 +442,12 @@ paths:
                   $ref: "#/components/schemas/PresetResponse"
         "401":
           description: Unauthorized when auth is required and request is not paired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No playable media available for current request or testing scenario
           content:
             application/json:
               schema:
@@ -482,6 +620,37 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "401":
           description: Unauthorized when auth is required and request is not paired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/media/{idOrToken}:
+    get:
+      summary: Stream media by stable item id or issued playback token
+      operationId: getMediaByIdOrToken
+      parameters:
+        - name: idOrToken
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Media stream response with range support
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "401":
+          description: Unauthorized when auth is required and request is not paired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Media not found
           content:
             application/json:
               schema:
@@ -1047,6 +1216,20 @@ paths:
             type: string
             nullable: true
           description: Optional runtime session identity for reconnect/playback correlation.
+        - name: clientType
+          in: query
+          required: false
+          schema:
+            type: string
+            nullable: true
+          description: Optional client type hint (for example desktop/web/mobile-web/operator).
+        - name: deviceName
+          in: query
+          required: false
+          schema:
+            type: string
+            nullable: true
+          description: Optional friendly device/client label shown in operator diagnostics.
       responses:
         "200":
           description: Event stream (SSE)
@@ -1220,6 +1403,9 @@ components:
         - apiPairedSessions
         - controlPairedSessions
         - sseSubscribers
+        - apiSessions
+        - controlSessions
+        - activeSseClients
       properties:
         apiPairedSessions:
           type: integer
@@ -1230,6 +1416,18 @@ components:
         sseSubscribers:
           type: integer
           format: int32
+        apiSessions:
+          type: array
+          items:
+            $ref: "#/components/schemas/SessionInfoSnapshot"
+        controlSessions:
+          type: array
+          items:
+            $ref: "#/components/schemas/SessionInfoSnapshot"
+        activeSseClients:
+          type: array
+          items:
+            $ref: "#/components/schemas/SseClientInfoSnapshot"
 
     ControlStatusResponse:
       type: object
@@ -1259,6 +1457,138 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ApiEventTelemetryEntry"
+        testing:
+          $ref: "#/components/schemas/OperatorTestingStateSnapshot"
+
+    SessionInfoSnapshot:
+      type: object
+      required:
+        - sessionId
+        - createdUtc
+        - lastSeenUtc
+        - expiresUtc
+      properties:
+        sessionId:
+          type: string
+        createdUtc:
+          type: string
+          format: date-time
+        lastSeenUtc:
+          type: string
+          format: date-time
+        expiresUtc:
+          type: string
+          format: date-time
+
+    SseClientInfoSnapshot:
+      type: object
+      required:
+        - connectionId
+        - connectedUtc
+      properties:
+        connectionId:
+          type: string
+        clientId:
+          type: string
+          nullable: true
+        sessionId:
+          type: string
+          nullable: true
+        clientType:
+          type: string
+          nullable: true
+        deviceName:
+          type: string
+          nullable: true
+        userAgent:
+          type: string
+          nullable: true
+        connectedUtc:
+          type: string
+          format: date-time
+        remoteAddress:
+          type: string
+          nullable: true
+
+    ServerLogResponse:
+      type: object
+      required:
+        - sourcePath
+        - totalLinesRead
+        - lines
+      properties:
+        sourcePath:
+          type: string
+        totalLinesRead:
+          type: integer
+          format: int32
+        lines:
+          type: array
+          items:
+            type: string
+
+    OperatorTestingStateSnapshot:
+      type: object
+      required:
+        - testingModeEnabled
+        - forceApiVersionMismatch
+        - forceCapabilityMismatch
+        - forceApiUnavailable
+        - forceMediaMissing
+        - forceSseDisconnect
+        - lastUpdatedUtc
+      properties:
+        testingModeEnabled:
+          type: boolean
+        forceApiVersionMismatch:
+          type: boolean
+        forceCapabilityMismatch:
+          type: boolean
+        forceApiUnavailable:
+          type: boolean
+        forceMediaMissing:
+          type: boolean
+        forceSseDisconnect:
+          type: boolean
+        lastUpdatedUtc:
+          type: string
+          format: date-time
+
+    OperatorTestingUpdateRequest:
+      type: object
+      properties:
+        testingModeEnabled:
+          type: boolean
+          nullable: true
+        forceApiVersionMismatch:
+          type: boolean
+          nullable: true
+        forceCapabilityMismatch:
+          type: boolean
+          nullable: true
+        forceApiUnavailable:
+          type: boolean
+          nullable: true
+        forceMediaMissing:
+          type: boolean
+          nullable: true
+        forceSseDisconnect:
+          type: boolean
+          nullable: true
+
+    OperatorTestingActionResponse:
+      type: object
+      required:
+        - accepted
+        - message
+        - state
+      properties:
+        accepted:
+          type: boolean
+        message:
+          type: string
+        state:
+          $ref: "#/components/schemas/OperatorTestingStateSnapshot"
 
     PresetResponse:
       type: object

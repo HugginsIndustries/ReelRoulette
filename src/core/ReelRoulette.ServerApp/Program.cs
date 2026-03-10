@@ -108,6 +108,7 @@ static void MapOperatorUi(WebApplication app, ServerAppOptions options, bool web
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" href="/HI.ico" sizes="any" />
   <title>ReelRoulette Server</title>
   <style>
     :root {
@@ -152,10 +153,12 @@ static void MapOperatorUi(WebApplication app, ServerAppOptions options, bool web
     .card.two-col { grid-column: span 12; }
     .card.events { grid-column: span 12; }
     .card.clients { grid-column: span 12; }
+    .card.logs { grid-column: span 12; }
     @media (min-width: 980px) {
       .card.two-col { grid-column: span 6; }
-      .card.events { grid-column: span 8; }
-      .card.clients { grid-column: span 4; }
+      .card.events { grid-column: span 12; }
+      .card.clients { grid-column: span 12; }
+      .card.logs { grid-column: span 12; }
     }
     label {
       display: block;
@@ -251,6 +254,27 @@ static void MapOperatorUi(WebApplication app, ServerAppOptions options, bool web
     .ok { color: var(--ok); }
     .warn { color: var(--warn); }
     .error { color: var(--error); }
+    .btn-block {
+      width: 100%;
+      margin-top: 10px;
+    }
+    .clients-table table {
+      min-width: 0;
+    }
+    .clients-table {
+      max-height: 520px;
+    }
+    .clients-box {
+      max-height: none;
+      overflow: visible;
+      min-height: 220px;
+    }
+    .clients-table th,
+    .clients-table td {
+      white-space: normal;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
   </style>
 </head>
 <body>
@@ -308,9 +332,49 @@ static void MapOperatorUi(WebApplication app, ServerAppOptions options, bool web
       <div id="controlStatus" class="status-note"></div>
     </div>
 
+    <div class="card two-col">
+      <h2>Operator Testing Suite</h2>
+      <div id="testingBanner" class="status-note warn" style="display:none;">Testing Mode is ON. Fault simulation actions may disrupt client behavior.</div>
+      <div class="inline">
+        <input id="testingModeEnabled" type="checkbox" />
+        <label for="testingModeEnabled" style="margin-top:0;">Testing Mode (required for scenario/fault actions)</label>
+      </div>
+      <p class="muted">When control admin auth is required, testing actions also require control auth.</p>
+      <div class="row-actions">
+        <button id="saveTestingState">Apply testing state</button>
+        <button id="resetTestingState">Reset scenario flags</button>
+      </div>
+      <h3>Fault/Scenario Flags</h3>
+      <div class="inline"><input id="flagApiVersionMismatch" type="checkbox" /><label for="flagApiVersionMismatch" style="margin-top:0;">API version mismatch simulation</label></div>
+      <div class="inline"><input id="flagCapabilityMismatch" type="checkbox" /><label for="flagCapabilityMismatch" style="margin-top:0;">Capability mismatch simulation</label></div>
+      <div class="inline"><input id="flagApiUnavailable" type="checkbox" /><label for="flagApiUnavailable" style="margin-top:0;">API unavailable simulation</label></div>
+      <div class="inline"><input id="flagMediaMissing" type="checkbox" /><label for="flagMediaMissing" style="margin-top:0;">Missing media simulation</label></div>
+      <div class="inline"><input id="flagSseDisconnect" type="checkbox" /><label for="flagSseDisconnect" style="margin-top:0;">SSE disconnect simulation</label></div>
+      <div id="testingStatus" class="status-note"></div>
+      <pre id="testingSnapshot" class="status-box" style="max-height: 220px; overflow: auto;"></pre>
+    </div>
+
     <div class="card clients">
       <h2>Connected Clients</h2>
-      <div id="clients" class="status-box">Loading...</div>
+      <div id="clients" class="status-box clients-box">Loading...</div>
+      <button id="copyClients" class="btn-block">Copy</button>
+    </div>
+
+    <div class="card logs">
+      <h2>Server Logs</h2>
+      <label for="logTail">Tail lines</label>
+      <input id="logTail" type="number" min="1" max="5000" value="200" />
+      <label for="logLevel">Level filter (optional)</label>
+      <input id="logLevel" type="text" placeholder="info / warn / error" />
+      <label for="logContains">Contains filter (optional)</label>
+      <input id="logContains" type="text" placeholder="substring match" />
+      <div class="row-actions">
+        <button id="refreshLogs">Refresh logs</button>
+        <button id="copyLogs">Copy logs</button>
+      </div>
+      <div id="logsStatus" class="status-note"></div>
+      <div id="logsPath" class="status-note muted"></div>
+      <pre id="logsOutput" class="status-box" style="max-height: 260px; overflow: auto;"></pre>
     </div>
 
     <div class="card events">
@@ -334,6 +398,7 @@ static void MapOperatorUi(WebApplication app, ServerAppOptions options, bool web
   <script>
     let lastLoadedSettings = null;
     let lastLoadedControlSettings = null;
+    let latestConnectedClients = null;
     const webUiEnabledAtStartup = __WEBUI_ENABLED_AT_STARTUP__;
 
     async function getJson(url, init) {
@@ -405,11 +470,128 @@ static void MapOperatorUi(WebApplication app, ServerAppOptions options, bool web
         node.textContent = "No client data.";
         return;
       }
+      latestConnectedClients = connected;
 
-      node.innerHTML =
-        `API paired sessions: ${connected.apiPairedSessions ?? 0}\n` +
-        `Control paired sessions: ${connected.controlPairedSessions ?? 0}\n` +
-        `SSE subscribers: ${connected.sseSubscribers ?? 0}`;
+      const apiCount = connected.apiPairedSessions ?? 0;
+      const controlCount = connected.controlPairedSessions ?? 0;
+      const sseCount = connected.sseSubscribers ?? 0;
+      const sseClients = connected.activeSseClients || [];
+      const rows = sseClients.map(client => {
+        const connectedTs = client.connectedUtc ? new Date(client.connectedUtc).toLocaleString() : "-";
+        return `<tr>
+          <td>${escapeHtml(client.clientType || "unknown")}</td>
+          <td>${escapeHtml(client.deviceName || "-")}</td>
+          <td>${escapeHtml(client.clientId || "-")}</td>
+          <td>${escapeHtml(client.sessionId || "-")}</td>
+          <td>${escapeHtml(client.remoteAddress || "-")}</td>
+          <td>${escapeHtml(connectedTs)}</td>
+        </tr>`;
+      }).join("");
+
+      node.innerHTML = `
+        <div>
+          <span class="pill">API paired sessions: ${apiCount}</span>
+          <span class="pill">Control paired sessions: ${controlCount}</span>
+          <span class="pill">SSE subscribers: ${sseCount}</span>
+        </div>
+        <div class="table-wrap clients-table" style="margin-top:10px;">
+          <table>
+            <thead>
+              <tr>
+                <th>Type</th>
+                <th>Device</th>
+                <th>Client ID</th>
+                <th>Session ID</th>
+                <th>Remote</th>
+                <th>Connected</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows || "<tr><td colspan=\"6\">No active SSE clients.</td></tr>"}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll("\"", "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function setLogsStatus(message, isError = false) {
+      const node = document.getElementById("logsStatus");
+      node.className = isError ? "status-note error" : "status-note";
+      node.textContent = message;
+    }
+
+    function setTestingStatus(message, isError = false) {
+      const node = document.getElementById("testingStatus");
+      node.className = isError ? "status-note error" : "status-note";
+      node.textContent = message;
+    }
+
+    async function refreshLogs() {
+      const tail = Number(document.getElementById("logTail").value || "200");
+      const contains = document.getElementById("logContains").value || "";
+      const level = document.getElementById("logLevel").value || "";
+      const params = new URLSearchParams();
+      params.set("tail", String(tail));
+      params.set("_ts", String(Date.now()));
+      if (contains.trim().length > 0) {
+        params.set("contains", contains.trim());
+      }
+      if (level.trim().length > 0) {
+        params.set("level", level.trim());
+      }
+
+      const response = await getJson("/control/logs/server?" + params.toString());
+      document.getElementById("logsPath").textContent = response.sourcePath || "";
+      document.getElementById("logsOutput").textContent = (response.lines || []).join("\n");
+      setLogsStatus(`Loaded ${response.totalLinesRead ?? 0} line(s).`);
+    }
+
+    async function loadTestingState() {
+      const testing = await getJson("/control/testing");
+      document.getElementById("testingModeEnabled").checked = !!testing.testingModeEnabled;
+      document.getElementById("flagApiVersionMismatch").checked = !!testing.forceApiVersionMismatch;
+      document.getElementById("flagCapabilityMismatch").checked = !!testing.forceCapabilityMismatch;
+      document.getElementById("flagApiUnavailable").checked = !!testing.forceApiUnavailable;
+      document.getElementById("flagMediaMissing").checked = !!testing.forceMediaMissing;
+      document.getElementById("flagSseDisconnect").checked = !!testing.forceSseDisconnect;
+      document.getElementById("testingBanner").style.display = testing.testingModeEnabled ? "block" : "none";
+      document.getElementById("testingSnapshot").textContent = JSON.stringify(testing, null, 2);
+    }
+
+    async function saveTestingState() {
+      const payload = {
+        testingModeEnabled: document.getElementById("testingModeEnabled").checked,
+        forceApiVersionMismatch: document.getElementById("flagApiVersionMismatch").checked,
+        forceCapabilityMismatch: document.getElementById("flagCapabilityMismatch").checked,
+        forceApiUnavailable: document.getElementById("flagApiUnavailable").checked,
+        forceMediaMissing: document.getElementById("flagMediaMissing").checked,
+        forceSseDisconnect: document.getElementById("flagSseDisconnect").checked
+      };
+
+      const response = await getJson("/control/testing/update", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      setTestingStatus(response.message || "Testing state updated.");
+      await Promise.all([refreshStatus(), loadTestingState()]);
+    }
+
+    async function resetTestingState() {
+      const response = await getJson("/control/testing/reset", {
+        method: "POST"
+      });
+      setTestingStatus(response.message || "Testing state reset.");
+      await Promise.all([refreshStatus(), loadTestingState()]);
     }
 
     async function refreshStatus() {
@@ -528,8 +710,29 @@ static void MapOperatorUi(WebApplication app, ServerAppOptions options, bool web
     document.getElementById("pairControl").addEventListener("click", () => pairControl().catch(err => setControlStatus(err.message, true)));
     document.getElementById("restartRuntime").addEventListener("click", () => restartRuntime().catch(err => setStatus(err.message)));
     document.getElementById("stopRuntime").addEventListener("click", () => stopRuntime().catch(err => setStatus(err.message)));
-    Promise.all([refreshStatus(), loadWebRuntimeSettings(), loadControlSettings()]).catch(err => setStatus(err.message));
+    document.getElementById("refreshLogs").addEventListener("click", () => refreshLogs().catch(err => setLogsStatus(err.message, true)));
+    document.getElementById("copyLogs").addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(document.getElementById("logsOutput").textContent || "");
+        setLogsStatus("Log text copied.");
+      } catch (err) {
+        setLogsStatus(err.message || String(err), true);
+      }
+    });
+    document.getElementById("copyClients").addEventListener("click", async () => {
+      try {
+        const payload = latestConnectedClients ? JSON.stringify(latestConnectedClients, null, 2) : "No connected client data.";
+        await navigator.clipboard.writeText(payload);
+        setStatus("Connected clients copied to clipboard.");
+      } catch (err) {
+        setStatus(`Failed to copy connected clients: ${err.message || String(err)}`);
+      }
+    });
+    document.getElementById("saveTestingState").addEventListener("click", () => saveTestingState().catch(err => setTestingStatus(err.message, true)));
+    document.getElementById("resetTestingState").addEventListener("click", () => resetTestingState().catch(err => setTestingStatus(err.message, true)));
+    Promise.all([refreshStatus(), loadWebRuntimeSettings(), loadControlSettings(), refreshLogs(), loadTestingState()]).catch(err => setStatus(err.message));
     setInterval(() => refreshStatus().catch(() => {}), 3000);
+    setInterval(() => refreshLogs().catch(() => {}), 5000);
   </script>
 </body>
 </html>

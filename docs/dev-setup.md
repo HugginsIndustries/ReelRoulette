@@ -1,225 +1,163 @@
 # Development Setup
 
-## Projects
+This guide covers local setup, run paths, verification gates, packaging, and release-version workflow for the current ReelRoulette runtime.
 
-- Existing desktop runtime: `source/ReelRoulette.csproj`
-- Core library: `src/core/ReelRoulette.Core/ReelRoulette.Core.csproj`
-- Server host: `src/core/ReelRoulette.Server/ReelRoulette.Server.csproj`
-- Server app host (M8a default runtime): `src/core/ReelRoulette.ServerApp/ReelRoulette.ServerApp.csproj`
-- Worker host: `src/core/ReelRoulette.Worker/ReelRoulette.Worker.csproj`
-- Windows target location: `src/clients/windows/ReelRoulette.WindowsApp/ReelRoulette.WindowsApp.csproj`
-- Web target location: `src/clients/web/ReelRoulette.WebUI/ReelRoulette.WebUI.csproj`
-- Web deployment host: `src/clients/web/ReelRoulette.WebHost/ReelRoulette.WebHost.csproj`
-- Core test gate: `src/core/ReelRoulette.Core.Tests/ReelRoulette.Core.Tests.csproj`
-- Core system-check harness: `src/core/ReelRoulette.Core.SystemChecks/ReelRoulette.Core.SystemChecks.csproj`
+## Prerequisites
 
-## Migration Notes
+- .NET SDK (matching solution target; verify with `dotnet --version`)
+- Node.js + npm (for WebUI build/verify; verify with `node --version` and `npm --version`)
+- Windows packaging only:
+  - Inno Setup 6 (for installer builds)
 
-- During M0/M1, desktop startup/playback continues from the existing `source` project.
-- Core logic moves incrementally and is consumed through desktop adapter classes.
-- New projects are scaffolded now so later milestones can migrate hosting and clients without repo churn.
+## Key Projects
 
-## Verification Workflow (M2)
+- Desktop app: `source/ReelRoulette.csproj`
+- Core domain: `src/core/ReelRoulette.Core/ReelRoulette.Core.csproj`
+- Server transport: `src/core/ReelRoulette.Server/ReelRoulette.Server.csproj`
+- Default runtime host: `src/core/ReelRoulette.ServerApp/ReelRoulette.ServerApp.csproj`
+- Legacy/compat host project (non-default runtime path): `src/core/ReelRoulette.Worker/ReelRoulette.Worker.csproj`
+- WebUI client: `src/clients/web/ReelRoulette.WebUI/ReelRoulette.WebUI.csproj`
+- WebHost compat project (non-default runtime path): `src/clients/web/ReelRoulette.WebHost/ReelRoulette.WebHost.csproj`
+- Core tests: `src/core/ReelRoulette.Core.Tests/ReelRoulette.Core.Tests.csproj`
+- System-check harness: `src/core/ReelRoulette.Core.SystemChecks/ReelRoulette.Core.SystemChecks.csproj`
 
-- Default fast gate: `dotnet test ReelRoulette.sln`
-- Optional system checks with verbose output:
-  - `dotnet run --project .\\src\\core\\ReelRoulette.Core.SystemChecks\\ReelRoulette.Core.SystemChecks.csproj -- --verbose`
-- Shared verification logic lives in `src/core/ReelRoulette.Core/Verification/CoreVerification.cs` and is reused by both test and harness flows.
+## Recommended Local Run Paths
 
-## M3 Reconnect/Resync Notes
+### Run ServerApp (default consolidated runtime)
 
-- `GET /api/events` supports reconnect using `Last-Event-ID`.
-- Server replays retained events newer than the supplied revision.
-- If a reconnect misses more history than replay retention, server emits `resyncRequired`.
-- Client recovers by calling `POST /api/library-states` to re-fetch authoritative state.
+- Direct:
+  - `dotnet run --project .\src\core\ReelRoulette.ServerApp\ReelRoulette.ServerApp.csproj`
+- Scripted:
+  - `tools/scripts/run-server.ps1`
+  - `tools/scripts/run-server.sh`
 
-## M4 Worker Runtime + Auth Notes
+Runtime notes:
 
-- Console-first worker host:
-  - `dotnet run --project .\\src\\core\\ReelRoulette.Worker\\ReelRoulette.Worker.csproj`
-  - (legacy compatibility path; M8a default runtime is `ReelRoulette.ServerApp`)
-- Worker and server runtime options are configured through `CoreServer` settings (`ListenUrl`, `RequireAuth`, `TrustLocalhost`, `BindOnLan`, `PairingToken`).
-- Pairing/auth primitive:
-  - pair via `GET /api/pair?token=...` or `POST /api/pair`
-  - cookie/token authorizes subsequent calls when auth is required
-  - localhost trust can be enabled for dev while keeping LAN pairing required.
+- API, SSE, media, and WebUI are served from the same host.
+- Operator UI is available at `/operator`.
+- Runtime config for WebUI is served at `/runtime-config.json` when WebUI is enabled.
 
-## M5 Desktop API-Client Notes
+### Run ServerApp with WebUI rebuild
 
-- Desktop now runs an internal API-client layer for migrated state flows instead of directly mutating those paths first.
-- SSE subscription is used to keep desktop projections synchronized with out-of-process updates.
-- Preset catalog mutations are mirrored via `POST /api/presets`.
-- Migrated state flows are API-required: desktop no longer applies local write fallback for those mutations when core runtime is unavailable.
-- Desktop attempts to auto-start core runtime on launch if local probe fails.
+Use when you want to ensure web assets are freshly rebuilt before startup:
 
-## M6a Tag Editing Notes
+- `tools/scripts/run-server-rebuild.ps1`
+- `tools/scripts/run-server-rebuild.sh`
 
-- Desktop and web tag/category/item-tag mutations are routed through tag-editor API endpoints (`/api/tag-editor/*`).
-- Batch item-tag deltas use `itemIds[]` plus `addTags[]` / `removeTags[]`.
-- Desktop SSE projection now includes tag events (`itemTagsChanged`, `tagCatalogChanged`) to keep local UI state synchronized with out-of-process updates.
-- Desktop additionally syncs local tag catalog to core on successful core connect/start (`POST /api/tag-editor/sync-catalog`) so the core/web model starts from complete category/tag data.
-- Desktop hydrates requested item-tag snapshots to core with `POST /api/tag-editor/sync-item-tags` ahead of web tag-editor model queries.
-- Category deletes in migrated tag flows reassign tags to canonical `uncategorized` (fixed ID) instead of deleting tags.
-- Web remote tag editor is full-screen and pauses playback/photo autoplay while open, then resumes prior media behavior on close.
-- Web editor supports touch-friendly controls, per-session category collapse state, inline category move/delete controls, and staged category/tag operations that are applied in one batch when `Apply` is pressed.
-- Chip backgrounds remain current-state indicators (`all/some/none`), while pending add/remove intent is represented by orange `+/-` toggle button selection.
-- Tag edit supports rename and reassignment to an existing category via dropdown.
-- Desktop `ItemTagsDialog` uses a parity control layout with top controls (`➕ Category`, `🔄`, `❌`) and a single bottom action row (`category`, `tag name`, `➕ Tag`, `✅️`) replacing the old `Cancel`/`OK` footer.
-- Desktop tag chip controls follow `➕`, `➖`, `✏️`, `🗑` order and reuse existing shared icon button/toggle styles.
-- Desktop category headers expose inline `⬆️`, `⬇️`, `🗑` controls using the same shared square icon button style family.
-- Desktop category delete/reorder is staged in-dialog (delete warning shown on click) and sent to core only on `Apply`; `Close` discards staged category changes.
-- Desktop `ItemTagsDialog` is the single tag-management dialog (player button/context entry points). Opening with no selected items is supported; item tag `+/-` assignment controls are disabled in that mode while category/tag catalog editing remains available.
-- Desktop and web category inline controls use `up`, `down`, `edit`, `delete` order, and category create/rename blocks duplicate names (trimmed, case-insensitive).
-- Web footer controls keep a single-row layout on small screens with the tag name input as the flexible/fill field.
+### Run Desktop app
 
-## M6b Unified Refresh + Grid/Thumbnail Notes
+- `dotnet run --project .\source\ReelRoulette.csproj`
 
-- Core refresh pipeline + ownership:
-  - `POST /api/refresh/start` starts manual refresh.
-  - `GET /api/refresh/status` returns snapshot state.
-  - `GET/POST /api/refresh/settings` reads/writes core-owned refresh settings.
-  - SSE emits `refreshStatusChanged` payloads during and after runs.
-- Overlap behavior:
-  - refresh overlap is rejected (`409 already running`), with one active refresh run at a time.
-- Stage order:
-  1. source refresh
-  2. duration scan
-  3. loudness scan (new/unscanned)
-  4. thumbnail generation
-- Desktop UX migration:
-  - `Manage Sources` refresh now requests core refresh start (dialog can be closed while run continues).
-  - standalone `Scan Durations`/`Scan Loudness` library menu actions are removed.
-  - library panel supports persisted list/grid view toggle (`🖼️`) and a justified, responsive grid using variable-size aspect-ratio-preserving thumbnails.
-- Thumbnail artifacts + metadata:
-  - artifacts are stored at `%LOCALAPPDATA%\\ReelRoulette\\thumbnails\\{itemId}.jpg`.
-  - index metadata tracks `revision`, `width`, `height`, and `generatedUtc` for layout projection and invalidation.
-- Web refresh-status projection note:
-  - desktop projects refresh status in M6b; direct web-to-core SSE status parity is completed in M7 when web UI is decoupled from desktop-hosted bridge paths.
+Desktop behavior notes:
 
-## M7a Web Client Foundation Notes
+- Desktop is API/SSE thin-client orchestration for migrated flows.
+- Desktop playback can run local-first with API fallback (or force API mode via settings).
 
-- Canonical web client location:
-  - `src/clients/web/ReelRoulette.WebUI`
-- Toolchain:
-  - Vite + TypeScript (`npm run dev`, `npm run build`, `npm run test`)
-- Runtime endpoint bootstrap (no compile-time base URL constants):
-  - load `window.__REEL_ROULETTE_RUNTIME_CONFIG` when present
-  - otherwise fetch `/runtime-config.json` with `no-store`
-  - required keys: `apiBaseUrl`, `sseUrl`
-  - optional key: `pairToken` for direct web auth bootstrap convenience
-- Validation:
-  - runtime-config schema is validated by web unit tests (`src/test/runtimeConfig.test.ts`)
-  - build-output verification checks `dist` artifacts and runtime-config presence (`scripts/verify-build-output.mjs`)
-- One-command web verification helpers:
-  - `tools/scripts/verify-web.ps1`
-  - `tools/scripts/verify-web.sh`
+## API and Control Surfaces (High-Signal)
 
-## M7b Direct Web Auth + SSE Reliability Notes
+- Metadata and compatibility:
+  - `/health`
+  - `/api/version`
+  - `/api/capabilities`
+- Core events:
+  - `/api/events`
+- Operator/control plane:
+  - `/operator`
+  - `/control/status`
+  - `/control/settings`
+  - `/control/pair`
+  - `/control/restart`
+  - `/control/stop`
+  - `/control/logs/server`
+  - `/control/testing`
 
-- Worker/server direct web auth flow:
-  - Pair with `GET/POST /api/pair` token bootstrap.
-  - Server issues HTTP-only session cookie; credentialed web requests/SSE use that cookie.
-- Runtime policy controls (`CoreServer`):
-  - `EnableCors`, `CorsAllowedOrigins`, `CorsAllowCredentials`
-  - `PairingSessionDurationHours`, `PairingCookieSameSite`, `PairingCookieSecureMode`
-  - `AllowLegacyTokenAuth` (temporary compatibility fallback)
-- Web reconnect/resync behavior:
-  - direct `EventSource` to `/api/events` with credentials
-  - reconnect tracks revision and passes `lastEventId` query fallback
-  - `resyncRequired` triggers authoritative requery (`POST /api/library-states`) and refresh snapshot sync (`GET /api/refresh/status`)
-- Verification notes:
-  - automated: `dotnet test ReelRoulette.sln` and `npm run verify` (web includes `src/test/sseClient.test.ts` resync regression coverage)
-  - manual CORS/pairing sanity checks:
-    - `OPTIONS /api/version` from allowed origin (`http://localhost:5173`) should return `Access-Control-Allow-Origin` + `Access-Control-Allow-Credentials`
-    - `OPTIONS /api/version` from blocked origin should omit CORS allow-origin header
-    - `POST /api/pair?token=...` should issue `Set-Cookie` with HTTP-only session semantics
+## Verification Workflow
 
-## M7c Zero-Restart Web Deployment Notes
+### Baseline gates
 
-- Independent web host:
-  - run with `dotnet run --project .\\src\\clients\\web\\ReelRoulette.WebHost\\ReelRoulette.WebHost.csproj`
-  - default listen URL: `http://localhost:51302`
-- Versioned artifact layout:
-  - deployment root: `.web-deploy` (configurable)
-  - immutable builds: `.web-deploy/versions/{versionId}`
-  - active pointer: `.web-deploy/active-manifest.json`
-- Deployment commands:
-  - `tools/scripts/publish-web.ps1` / `tools/scripts/publish-web.sh`
-  - `tools/scripts/activate-web-version.ps1` / `tools/scripts/activate-web-version.sh`
-  - `tools/scripts/rollback-web-version.ps1` / `tools/scripts/rollback-web-version.sh`
-- Cache policy:
-  - `index.html` and `runtime-config.json`: `Cache-Control: no-store`
-  - fingerprinted `assets/*`: `Cache-Control: public, max-age=31536000, immutable`
-- Smoke verification:
-  - `tools/scripts/verify-web-deploy.ps1`
-  - `tools/scripts/verify-web-deploy.sh`
+- `dotnet build ReelRoulette.sln`
+- `dotnet test ReelRoulette.sln`
 
-## M8a Server App Consolidation Notes
+### WebUI verification
 
-- Default runtime host is now `ReelRoulette.ServerApp`:
-  - `dotnet run --project .\\src\\core\\ReelRoulette.ServerApp\\ReelRoulette.ServerApp.csproj`
-  - or `tools/scripts/run-core.ps1` / `tools/scripts/run-core.sh`
-- Single-origin serving:
-  - WebUI + API + SSE + media are served from one origin/port.
-  - dynamic runtime config is served at `/runtime-config.json` from the server app host.
-- Runtime diagnostics/control:
-  - metadata endpoints: `/health`, `/api/version`, `/api/capabilities`
-  - operator UI path: `/operator`
-  - control-plane endpoints:
-    - `GET /control/status`
-    - `GET/POST /control/settings`
-    - `GET/POST /control/pair`
-    - `POST /control/restart`
-    - `POST /control/stop`
-  - settings apply is two-step: update settings first, then restart for listen/auth/WebUI-enable changes.
-  - control-plane localhost access is always available; LAN control access is available only when runtime LAN bind is enabled.
-  - control settings include optional admin token auth with deterministic apply result reporting.
-  - operator UI is dark-theme and responsive, with incoming/outgoing API telemetry and connected-client diagnostics.
-  - when WebUI is enabled and LAN bind is on, ServerApp advertises `http://{lanHostname}.local:{port}/` via mDNS.
-- Desktop thin-client cutover notes (M8c):
-  - desktop no longer auto-starts server runtime; reconnect guidance is shown when core is unavailable.
-  - desktop default core endpoint is `http://localhost:51234`.
-  - source import, duplicate scan/apply, auto-tag scan/apply, and playback-stats clear now have server API surfaces.
-  - desktop local `last.log` writes are removed; client events are centralized through `POST /api/logs/client`.
-- Desktop playback policy compromise notes (M8d):
-  - desktop playback source selection is local-first with deterministic API media fallback when local access fails.
-  - `ForceApiPlayback` (desktop settings) forces API media playback path and persists in `desktop-settings.json` (`false` default).
-  - manual library-panel play requires stable item identity mapping before playback; unmappable targets return explicit user guidance instead of silent fallback substitution.
-- WebUI/mobile thin-client contract standardization notes (M8e):
-  - desktop and web now use stable `clientId` + optional runtime `sessionId` semantics across random/playback/requery/SSE surfaces.
-  - desktop persists `CoreClientId` in `desktop-settings.json` and uses per-runtime `CoreSessionId` for SSE and playback-origin correlation.
-  - web startup compatibility checks require server capability `identity.sessionId` in addition to existing auth/events/random/preset capabilities.
-  - SSE reconnect continuity now consistently uses revision replay hints (`Last-Event-ID` / `lastEventId`) plus `clientId`/`sessionId` query hints where event-source headers are limited.
-- WebUI enable semantics:
-  - `enabled=true` -> WebUI static routes + `/runtime-config.json` are served.
-  - `enabled=false` (after restart) -> WebUI routes return `404`, while API/SSE/media/operator endpoints remain available.
-- `ReelRoulette.WebHost` and `active-manifest` switching are no longer required runtime dependencies.
-- `tools/scripts/verify-web-deploy.*` now validate the M8a single-origin server path (WebUI build + server app smoke checks).
+From `src/clients/web/ReelRoulette.WebUI`:
 
-## M7d Controlled Cutover Notes
+- `npm install` (first run)
+- `npm run verify`
+- `npm run dev`/`npm run build` auto-sync shared icon from `assets/HI.ico` to WebUI `public/HI.ico`.
 
-- Legacy embedded `source/WebRemote` runtime is retired; use independent WebUI + WebHost paths.
-- During M7d transition, worker-supervised WebHost lifecycle/mDNS paths were used for compatibility.
-- In M8a final runtime, normal operation is consolidated under `ReelRoulette.ServerApp`; Worker startup no longer supervises `ReelRoulette.WebHost`.
-- Core web runtime settings API:
-  - `GET /api/web-runtime/settings`
-  - `POST /api/web-runtime/settings`
-- Source and preset flows used by desktop/web are API-first:
-  - `GET /api/sources`
-  - `POST /api/sources/{sourceId}/enabled`
-  - `GET /api/presets`
-  - `POST /api/presets`
-  - `POST /api/presets/match`
-  - `POST /api/random`
-- Local bootstrap helper for publish+activate+worker:
-  - `tools/scripts/publish-activate-run-worker.ps1`
+Optional helper scripts:
 
-## M7e Contract Compatibility Notes
+- `tools/scripts/verify-web.ps1`
+- `tools/scripts/verify-web.sh`
+- `tools/scripts/verify-web-deploy.ps1`
+- `tools/scripts/verify-web-deploy.sh`
 
-- WebUI contract generation:
-  - `npm run generate:contracts` generates `src/types/openapi.generated.ts` from `shared/api/openapi.yaml`.
-  - `npm run verify:contracts` verifies generated contract freshness and fails when output is stale.
-- `npm run verify` now runs contract freshness checks before typecheck/tests/build.
-- Version compatibility/capability checks:
-  - `GET /api/version` includes `minimumCompatibleApiVersion`, `supportedApiVersions[]`, and `capabilities[]`.
-  - WebUI startup/auth bootstrap validates N/N-1 API compatibility and required capability presence before enabling normal flows.
+### Optional system checks
+
+- `dotnet run --project .\src\core\ReelRoulette.Core.SystemChecks\ReelRoulette.Core.SystemChecks.csproj -- --verbose`
+
+## Auth, CORS, and Runtime Settings Notes
+
+- Pairing/auth is server enforced via `/api/pair` and runtime policy.
+- Browser-client CORS and cookie behavior is controlled by `CoreServer` settings.
+- Some settings changes require restart to fully apply (for example listen/auth/WebUI availability changes); use `/control/restart` or restart the process.
+
+## Logging and Diagnostics
+
+- Server diagnostics are available through `last.log` and `/control/logs/server`.
+- Clients can relay logs to server ingestion endpoint:
+  - `POST /api/logs/client`
+- Connected client/session diagnostics are available in Operator UI and `/control/status`.
+
+## Windows Packaging
+
+### Portable package
+
+- `tools/scripts/package-serverapp-win-portable.ps1`
+- `tools/scripts/package-desktop-win-portable.ps1`
+
+### Inno installer package
+
+- `tools/scripts/package-serverapp-win-inno.ps1`
+- `tools/scripts/package-desktop-win-inno.ps1`
+
+Packaging notes:
+
+- Server packaging scripts auto-detect version from `src/core/ReelRoulette.ServerApp/ReelRoulette.ServerApp.csproj` when `-Version` is not passed.
+- Desktop packaging scripts auto-detect version from `source/ReelRoulette.csproj` when `-Version` is not passed.
+- Server packaging scripts run WebUI build and bundle static assets into ServerApp publish output (`wwwroot`) so packaged runtime includes WebUI and Operator favicon.
+- Shared app/installer/web icon source is `assets/HI.ico`.
+- Inno script auto-detects `ISCC.exe` from PATH/common install locations/registry.
+
+## Release Versioning
+
+Use one command to align release-version surfaces:
+
+- `tools/scripts/set-release-version.ps1 -Version 0.9.0 -UpdateDesktopVersion -RegenerateContracts -RunVerify`
+
+This updates:
+
+- OpenAPI `info.version`
+- server `assetsVersion` in `/api/version` response
+- release-version test fixtures
+- server app project `<Version>`
+- desktop project `<Version>`
+
+Then package server and desktop as needed:
+
+- `tools/scripts/package-serverapp-win-portable.ps1`
+- `tools/scripts/package-serverapp-win-inno.ps1`
+- `tools/scripts/package-desktop-win-portable.ps1`
+- `tools/scripts/package-desktop-win-inno.ps1`
+- or run the chained flow:
+  - `tools/scripts/full-release.ps1 -Version 0.9.0`
+
+## Troubleshooting
+
+- WebUI changes not appearing:
+  - run `tools/scripts/run-server-rebuild.ps1` (or `.sh`) to rebuild before run.
+- Version/capability startup blocks:
+  - check `/api/version` and `/api/capabilities` output against expected client requirements.
+- Installer build fails:
+  - confirm Inno Setup 6 is installed; rerun `package-serverapp-win-inno.ps1` or `package-desktop-win-inno.ps1`.

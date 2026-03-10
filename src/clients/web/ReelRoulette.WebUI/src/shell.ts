@@ -1,5 +1,5 @@
 import type { RuntimeConfig } from "./types/runtimeConfig";
-import { startLegacyApp } from "./legacyApp";
+import { startApp } from "./app";
 
 export function renderApp(container: HTMLElement, config: RuntimeConfig): void {
   container.innerHTML = `
@@ -84,8 +84,9 @@ export function renderApp(container: HTMLElement, config: RuntimeConfig): void {
       </div>
     </div>
     <div id="status" class="status status-bottom"></div>
+    <div id="mobile-diagnostics" class="status diagnostics-mobile" style="display:none"></div>
   `;
-  startLegacyApp(config);
+  startApp(config);
 }
 
 export function renderStartupError(container: HTMLElement, message: string): void {

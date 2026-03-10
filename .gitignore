@@ -41,7 +41,10 @@ AppData/
 # Temporary files
 *.tmp
 *.temp
+
+# Local docs
 COMMIT_MESSAGE.txt
+PROMPTS.txt
 
 # Node/web artifacts
 node_modules/
@@ -50,6 +53,7 @@ coverage/
 *.tsbuildinfo
 .web-deploy/
 .web-deploy-smoke/
+artifacts/
 
 # FFmpeg binaries (too large for GitHub)
 ffprobe.exe

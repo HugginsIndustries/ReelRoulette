@@ -21,6 +21,8 @@ public sealed class ServerSessionStore
             _sessions[sessionId] = new SessionRecord
             {
                 Scope = normalizedScope,
+                CreatedUtc = nowUtc,
+                LastSeenUtc = nowUtc,
                 ExpiresUtc = nowUtc.Add(duration)
             };
         }
@@ -47,7 +49,13 @@ public sealed class ServerSessionStore
                 return false;
             }
 
-            return string.Equals(record.Scope, normalizedScope, StringComparison.Ordinal);
+            if (!string.Equals(record.Scope, normalizedScope, StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            record.LastSeenUtc = nowUtc;
+            return true;
         }
     }
 
@@ -58,6 +66,27 @@ public sealed class ServerSessionStore
         {
             PruneExpiredLocked(nowUtc);
             return _sessions.Values.Count(session => string.Equals(session.Scope, normalizedScope, StringComparison.Ordinal));
+        }
+    }
+
+    public IReadOnlyList<SessionSnapshot> GetActiveSessions(string scope, DateTimeOffset nowUtc, int maxCount = 100)
+    {
+        var normalizedScope = NormalizeScope(scope);
+        lock (_lock)
+        {
+            PruneExpiredLocked(nowUtc);
+            return _sessions
+                .Where(kvp => string.Equals(kvp.Value.Scope, normalizedScope, StringComparison.Ordinal))
+                .Select(kvp => new SessionSnapshot
+                {
+                    SessionId = kvp.Key,
+                    CreatedUtc = kvp.Value.CreatedUtc,
+                    LastSeenUtc = kvp.Value.LastSeenUtc,
+                    ExpiresUtc = kvp.Value.ExpiresUtc
+                })
+                .OrderByDescending(snapshot => snapshot.LastSeenUtc)
+                .Take(Math.Clamp(maxCount, 1, 1000))
+                .ToList();
         }
     }
 
@@ -91,6 +120,16 @@ public sealed class ServerSessionStore
     private sealed class SessionRecord
     {
         public string Scope { get; set; } = ApiScope;
+        public DateTimeOffset CreatedUtc { get; set; }
+        public DateTimeOffset LastSeenUtc { get; set; }
         public DateTimeOffset ExpiresUtc { get; set; }
     }
+}
+
+public sealed class SessionSnapshot
+{
+    public string SessionId { get; set; } = string.Empty;
+    public DateTimeOffset CreatedUtc { get; set; }
+    public DateTimeOffset LastSeenUtc { get; set; }
+    public DateTimeOffset ExpiresUtc { get; set; }
 }

@@ -146,6 +146,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/control/logs/server": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read server last.log lines */
+        get: operations["getControlServerLogs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/control/testing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get current operator testing mode and fault flags */
+        get: operations["getControlTestingState"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/control/testing/update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Update testing mode and operator fault simulation flags */
+        post: operations["postControlTestingUpdate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/control/testing/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reset all testing scenario flags while preserving testing mode state */
+        post: operations["postControlTestingReset"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/control/pair": {
         parameters: {
             query?: never;
@@ -278,6 +346,23 @@ export interface paths {
         put?: never;
         /** Request a random media item */
         post: operations["postRandom"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/media/{idOrToken}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Stream media by stable item id or issued playback token */
+        get: operations["getMediaByIdOrToken"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -775,6 +860,9 @@ export interface components {
             controlPairedSessions: number;
             /** Format: int32 */
             sseSubscribers: number;
+            apiSessions: components["schemas"]["SessionInfoSnapshot"][];
+            controlSessions: components["schemas"]["SessionInfoSnapshot"][];
+            activeSseClients: components["schemas"]["SseClientInfoSnapshot"][];
         };
         ControlStatusResponse: {
             /** Format: date-time */
@@ -785,6 +873,56 @@ export interface components {
             connectedClients: components["schemas"]["ConnectedClientsSnapshot"];
             incomingApiEvents?: components["schemas"]["ApiEventTelemetryEntry"][];
             outgoingApiEvents?: components["schemas"]["ApiEventTelemetryEntry"][];
+            testing?: components["schemas"]["OperatorTestingStateSnapshot"];
+        };
+        SessionInfoSnapshot: {
+            sessionId: string;
+            /** Format: date-time */
+            createdUtc: string;
+            /** Format: date-time */
+            lastSeenUtc: string;
+            /** Format: date-time */
+            expiresUtc: string;
+        };
+        SseClientInfoSnapshot: {
+            connectionId: string;
+            clientId?: string | null;
+            sessionId?: string | null;
+            clientType?: string | null;
+            deviceName?: string | null;
+            userAgent?: string | null;
+            /** Format: date-time */
+            connectedUtc: string;
+            remoteAddress?: string | null;
+        };
+        ServerLogResponse: {
+            sourcePath: string;
+            /** Format: int32 */
+            totalLinesRead: number;
+            lines: string[];
+        };
+        OperatorTestingStateSnapshot: {
+            testingModeEnabled: boolean;
+            forceApiVersionMismatch: boolean;
+            forceCapabilityMismatch: boolean;
+            forceApiUnavailable: boolean;
+            forceMediaMissing: boolean;
+            forceSseDisconnect: boolean;
+            /** Format: date-time */
+            lastUpdatedUtc: string;
+        };
+        OperatorTestingUpdateRequest: {
+            testingModeEnabled?: boolean | null;
+            forceApiVersionMismatch?: boolean | null;
+            forceCapabilityMismatch?: boolean | null;
+            forceApiUnavailable?: boolean | null;
+            forceMediaMissing?: boolean | null;
+            forceSseDisconnect?: boolean | null;
+        };
+        OperatorTestingActionResponse: {
+            accepted: boolean;
+            message: string;
+            state: components["schemas"]["OperatorTestingStateSnapshot"];
         };
         PresetResponse: {
             id: string;
@@ -1469,6 +1607,178 @@ export interface operations {
             };
         };
     };
+    getControlServerLogs: {
+        parameters: {
+            query?: {
+                /** @description Number of trailing lines to return. */
+                tail?: number;
+                /** @description Optional case-insensitive contains filter. */
+                contains?: string | null;
+                /** @description Optional level hint filter (for example info/warn/error). */
+                level?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Log snapshot response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServerLogResponse"];
+                };
+            };
+            /** @description Unauthorized when control admin auth is required and request is not paired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden when request is non-local and LAN control access is disabled */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getControlTestingState: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Operator testing state */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperatorTestingStateSnapshot"];
+                };
+            };
+            /** @description Unauthorized when control admin auth is required and request is not paired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden when request is non-local and LAN control access is disabled */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    postControlTestingUpdate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OperatorTestingUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Testing state update result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperatorTestingActionResponse"];
+                };
+            };
+            /** @description Unauthorized for testing actions while control admin auth is required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden when request is non-local and LAN control access is disabled */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Testing mode is required before enabling fault simulation flags */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    postControlTestingReset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Testing reset result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperatorTestingActionResponse"];
+                };
+            };
+            /** @description Unauthorized for testing actions while control admin auth is required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden when request is non-local and LAN control access is disabled */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     getControlPair: {
         parameters: {
             query?: {
@@ -1571,6 +1881,15 @@ export interface operations {
             };
             /** @description Unauthorized when auth is required and request is not paired */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No playable media available for current request or testing scenario */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1812,6 +2131,46 @@ export interface operations {
             };
             /** @description Unauthorized when auth is required and request is not paired */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getMediaByIdOrToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                idOrToken: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Media stream response with range support */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            /** @description Unauthorized when auth is required and request is not paired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Media not found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2581,6 +2940,10 @@ export interface operations {
                 clientId?: string | null;
                 /** @description Optional runtime session identity for reconnect/playback correlation. */
                 sessionId?: string | null;
+                /** @description Optional client type hint (for example desktop/web/mobile-web/operator). */
+                clientType?: string | null;
+                /** @description Optional friendly device/client label shown in operator diagnostics. */
+                deviceName?: string | null;
             };
             header?: {
                 /** @description Last acknowledged SSE revision from the previous connection. */
