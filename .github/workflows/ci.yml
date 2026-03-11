@@ -5,8 +5,25 @@ on:
   pull_request:
 
 jobs:
-  build-test:
+  build-test-linux:
     runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "9.0.x"
+
+      - name: Build solution
+        run: dotnet build ReelRoulette.sln --configuration Release -p:TargetFramework=net9.0
+
+      - name: Test solution
+        run: dotnet test ReelRoulette.sln --configuration Release --no-build -p:TargetFramework=net9.0
+
+  build-test-windows:
+    runs-on: windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
