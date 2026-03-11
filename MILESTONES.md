@@ -62,106 +62,338 @@ Do not use this file for detailed architecture explanation or current capability
 
 ## Milestone Board
 
-### M8g - Unified last.log Pipeline (Server + Client Logging Consolidation)
+### M9a - Structured JSONL Schema + Server Writer Foundation
 
 - **Status**: ⏳ Planned
-- **Goal**: Make server-owned `last.log` the single diagnostics stream for server + client logs using structured JSONL entries, with reliable correlation/filtering across services and sessions, and **privacy-by-construction at the source** using a **new structured Log API** (no parsing/inferring/normalizing after the fact).
+- **Goal**: Establish canonical JSONL `last.log` foundation with server-owned write path and deterministic lifecycle behavior.
 - **Scope**:
   - Define and enforce canonical JSONL log schema (one JSON object per line) with required core fields:
     - required on every entry: `ts`, `lvl`, `svc`, `comp`, `op`, `msg`,
-    - conditional/optional fields: `traceId`, `spanId`, `reqId`, `clientId`, `sessionId`, `ver`, `build`, `clientTs`, `srcIp`, `userAgent`.
-    - example: `{"ts":"2026-03-10T20:30:35.355Z","lvl":"info","svc":"desktop","comp":"ui.main-window","op":"UpdateLibraryPanel","msg":"Library panel updated."}`
-  - Centralize all writes through one server log writer path used by:
+    - `lvl` vocabulary is fixed to lowercase values only: `trace|debug|info|warn|error|fatal`.
+    - `svc` vocabulary for M9 is fixed to lowercase values only: `server|desktop|webui`; `android|ios` remain schema-reserved for later milestones and are not emitted by M9 flows.
+    - conditional/optional fields in canonical serialization order: `evt`, `data`, `ingestReqId`, `clientOpId`, `traceId`, `spanId`, `clientId`, `sessionId`, `ver`, `build`, `clientTs`, `srcIp`, `userAgent`.
+    - canonical serialization order places `evt` immediately after `op` when present, and places `data` immediately after `msg` when present.
+    - `evt` is optional and free-form with naming convention guidance (dot-delimited, lowercase, action-oriented), for example: `sse.connected`, `ui.pair.submit`, `api.random.requested`.
+    - include `evt` only when it adds clarity beyond `op`; omit it when `op` already captures the event meaning.
+    - keep `evt` stable and low-cardinality; never embed user data, file names/paths, or other high-cardinality/sensitive values.
+    - `ingestReqId` is server-writer-assigned and required on every persisted entry; `clientOpId` is optional client-generated operation identifier for client-side action correlation.
+    - `data` payloads must be bounded and privacy-safe (safe primitives, allowlisted short strings, and small structured objects); arbitrary object dumps are not allowed.
+    - `ex` is API input convenience only and is not persisted as a top-level JSONL field.
+    - when `ex` is provided, it is normalized into privacy-safe `data.error` metadata (for example: `type`, `code`, `messageSafe`, optional bounded stack fingerprint).
+    - example (all fields shown in canonical order): `{"ts":"...","lvl":"info","svc":"desktop","comp":"ui.main-window","op":"UpdateLibraryPanel","evt":"ui.library.panel.updated","msg":"Library panel updated.","data":{"totalCount":38833,"eligibleCount":163},"ingestReqId":"...","clientOpId":"...","traceId":"...","spanId":"...","clientId":"...","sessionId":"...","ver":"...","build":"...","clientTs":"...","srcIp":"...","userAgent":"..."}`
+  - Centralize writes through one server writer for:
     - server runtime logging pipeline (`ILogger` sink/provider),
     - client ingestion endpoint (`POST /api/logs/client`).
+  - Enforce strict validation at `/api/logs/client`:
+    - preserve valid provided metadata fields without parsing/inference of `lvl`/`comp`/`op`,
+    - reject invalid rows (missing required fields, invalid `lvl`/`svc`, invalid/oversized `data`) instead of normalizing,
+    - return deterministic machine-readable `400` validation payloads for contract violations:
+      - one response may include multiple validation errors,
+      - each error includes `code`, `field`, `reason`,
+      - `field` uses canonical dotted-path notation (for example: `lvl`, `data.error.code`),
+      - unknown/unmodeled input fields are rejected rather than silently ignored.
+  - Keep optional human-readable rendering as a *view* over structured fields (Operator panel/console), not as the persisted source of truth.
+  - Treat `srcIp` and `userAgent` as server-enriched fields when available; clients do not set them directly.
+  - Define deterministic size-based rotation/retention for `last.log`:
+    - rotate at 25 MB per file,
+    - keep current file + 10 archives,
+    - no compression for rotated files,
+    - enforce retention/startup cleanup deterministically before append/write,
+    - define deterministic handling for single-entry oversize writes and concurrent writer append attempts.
+- **Acceptance criteria**:
+  - `last.log` is JSONL and entries include required core fields with consistent optional-field shapes when emitted.
+  - `lvl` values are always one of `trace|debug|info|warn|error|fatal` (lowercase).
+  - `svc` values are always one of `server|desktop|webui` for M9-emitted entries; `android|ios` remain reserved and unused in M9 runtime flows.
+  - Optional fields serialize in canonical order with `evt` immediately after `op` when present and `data` immediately after `msg` when present.
+  - `ingestReqId` is present on every persisted log entry and is assigned by the centralized server writer path.
+  - `data` payload shape constraints are enforced (bounded, privacy-safe, no arbitrary object dumps).
+  - `/api/logs/client` rejects invalid payloads with deterministic `400` validation errors (`code`, `field`, `reason`) and does not normalize invalid metadata.
+  - Server runtime logs are written through the centralized writer path.
+  - Lifecycle behavior is deterministic and documented with 25 MB rotation, 10-archive cap (uncompressed), startup retention enforcement, and defined oversize/concurrency edge handling.
+- **Verification evidence**:
+  - Evidence placeholders maintained at planned state; completion evidence must include schema/order validation checks, strict-ingest rejection-path checks, and lifecycle/rotation edge-case checks.
+  - Contract/docs evidence must capture canonical `svc` vocabulary and always-present writer-assigned `ingestReqId` behavior.
+- **Deferrals / Follow-ups**:
+  - None at planned state.
+
+### M9b - Ingestion Contract + Correlation Semantics
+
+- **Status**: ⏳ Planned
+- **Goal**: Make server/client event ordering and correlation deterministic through ingestion contracts and trace propagation.
+- **Scope**:
   - Preserve two-time semantics for client-originated events:
     - `ts` = server ingestion/write UTC time (authoritative ordering),
     - `clientTs` = client-reported event time (diagnostic context).
-  - Require W3C trace context (`traceId`/`spanId`) for HTTP/SSE request-scoped logs; keep it optional for background/local-only client events.
-  - Keep optional human-readable rendering as a *view* over structured fields (Operator panel/console), not as the source-of-truth persisted format.
-  - **Introduce a new structured Log API for desktop and WebUI** and require call sites to supply metadata explicitly:
-    - Provide strongly-typed methods (or overloads) such as:
-      - `LogTrace(comp, op, msg, data? = null)`
-      - `LogDebug(comp, op, msg, data? = null)`
-      - `LogInfo(comp, op, msg, data? = null)`
-      - `LogWarn(comp, op, msg, data? = null)`
-      - `LogError(comp, op, msg, ex? = null, data? = null)`
-      - `LogFatal(comp, op, msg, ex? = null, data? = null)`
-    - `comp` and `op` are explicit parameters (no parsing from `msg`).
-    - `lvl` is set by the API method used (no “everything is info” path).
-    - Optional `data` must also be privacy-safe (see below).
-  - **Update every desktop and WebUI log call site** to use the new structured Log API:
-    - Replace all legacy `Log("OpName: ...")` string-prefix patterns.
-    - Remove any “infer op from msg” logic or normalizers.
-    - Ensure each call site chooses an appropriate level:
-      - `trace/debug` for noisy flow details,
-      - `info` for meaningful state transitions,
-      - `warn` for recoverable degradations,
-      - `error` for failures/exceptions,
-      - `fatal` for unrecoverable failures.
-  - **Remove/obsolete the old Log method**:
-    - Mark legacy `Log(string)` (and similar) as `[Obsolete(..., error: true)]` once call sites are migrated, or delete it.
-    - Ensure there is no fallback that reintroduces string-prefix parsing or forced `info` levels.
-  - **Provide a minimal canonical `comp` mapping list** and enforce it in code review / docs:
-    - Desktop (examples):
-      - `ui.main-window`
-      - `ui.player`
-      - `ui.settings`
-      - `core.client` (desktop API client / connectivity)
-      - `playback.vlc`
-      - `library.panel`
-    - Server (examples):
-      - `api`
-      - `auth`
-      - `sse`
-      - `playback`
-      - `refresh.pipeline`
-      - `storage`
-    - WebUI (examples):
-      - `web.app`
-      - `web.player`
-      - `web.api`
-      - `web.sse`
-  - **Enforce privacy-by-default by construction (no redaction layer):**
-    - Emitters must never include domain-identifying/sensitive values in `msg` or `data`, including:
+  - Define request/operation identifier semantics:
+    - `ingestReqId` = server-writer-assigned identifier present on every persisted row for deterministic traceability,
+    - `clientOpId` = optional client-generated operation identifier for client-side action correlation across retries/UI events.
+  - Require W3C trace context (`traceId`/`spanId`) for HTTP/SSE request-scoped logs when active trace context is available; keep it optional for background/local-only client events.
+  - Ensure `/api/logs/client` preserves valid provided metadata without parsing/inference of `lvl`/`comp`/`op`; reject invalid payloads rather than normalizing.
+- **Acceptance criteria**:
+  - Client-originated entries preserve both `ts` and `clientTs` semantics with server-side ordering.
+  - `ingestReqId` is server-writer-assigned, present on every persisted row, and deterministic; `clientOpId` is preserved when provided.
+  - Request-scoped HTTP/SSE flows include `traceId`/`spanId` when active trace context is available; paths without active trace context are explicitly documented/test-evidenced.
+  - `/api/logs/client` contract mapping is deterministic with no inferred metadata fields; invalid contract inputs return deterministic machine-readable `400` validation errors.
+- **Verification evidence**:
+  - Evidence placeholders maintained at planned state; completion evidence must include two-time semantics checks (`ts` vs `clientTs`) and correlation checks across `ingestReqId`/`clientOpId`/trace fields.
+  - Ingest-contract evidence must include both valid preserve-path and invalid reject-path behavior (`400` with `code`/`field`/`reason`).
+- **Deferrals / Follow-ups**:
+  - None at planned state.
+
+### M9c - Structured Log API Introduction (Desktop + WebUI)
+
+- **Status**: ⏳ Planned
+- **Goal**: Introduce typed structured Log API surfaces that require explicit metadata at call sites.
+- **Scope**:
+  - Provide strongly-typed methods (or overloads) with optional typed context metadata:
+    - `LogTrace(comp, op, evt? = null, msg, data? = null, context? = null)`
+    - `LogDebug(comp, op, evt? = null, msg, data? = null, context? = null)`
+    - `LogInfo(comp, op, evt? = null, msg, data? = null, context? = null)`
+    - `LogWarn(comp, op, evt? = null, msg, data? = null, context? = null)`
+    - `LogError(comp, op, evt? = null, msg, data? = null, ex? = null, context? = null)`
+    - `LogFatal(comp, op, evt? = null, msg, data? = null, ex? = null, context? = null)`
+  - Enforce explicit `comp` and `op` parameters (no parsing from `msg`).
+  - Ensure `lvl` is set by API method used and constrained to `trace|debug|info|warn|error|fatal` only (no “everything is info” path and no custom variants).
+  - Support optional `evt` to classify event type independently from operation context (`op`), using free-form dot-delimited lowercase naming convention.
+  - Include `evt` only when it adds clarity beyond `op`; avoid redundant `evt` values.
+  - Keep `evt` tokens stable and low-cardinality; do not include user data, file names/paths, or other high-cardinality values.
+  - Optional `data` payloads must follow privacy-safe bounded-shape rules (safe primitives, allowlisted short strings, small objects; no arbitrary object dumps).
+  - `ex` parameter semantics:
+    - accepted only on `LogError`/`LogFatal`,
+    - normalized into `data.error` before emit,
+    - never written as a top-level field,
+    - raw exception text/stack is not emitted unless explicitly privacy-approved and bounded by policy.
+  - `context` holds conditional metadata (`clientOpId`, `traceId`, `spanId`, `clientId`, `sessionId`, `ver`, `build`, `clientTs`) where available/applicable.
+  - Define canonical `LogContext` shape used by all `Log*` methods:
+    - `LogContext = { clientOpId?: string; traceId?: string; spanId?: string; clientId?: string; sessionId?: string; ver?: string; build?: string; clientTs?: string }`
+    - `traceId`/`spanId` are required for request-scoped HTTP/SSE flows when active trace context is available.
+    - `ingestReqId` is assigned by the centralized server writer and is not client-supplied; clients may provide `clientOpId` when correlating multi-step client operations.
+    - `ingestReqId`, `srcIp`, and `userAgent` are excluded from client-supplied `LogContext` and are server-enriched only.
+  - Provide minimal canonical `comp` mapping list and enforce in review/docs:
+    - Desktop examples: `ui.main-window`, `ui.player`, `ui.settings`, `core.client`, `playback.vlc`, `library.panel`.
+    - Server examples (reference baseline for `M9e` server/core instrumentation): `api`, `auth`, `sse`, `playback`, `refresh.pipeline`, `storage`.
+    - WebUI examples: `web.app`, `web.player`, `web.api`, `web.sse`.
+- **Acceptance criteria**:
+  - Structured Log API exists for desktop and WebUI with explicit `comp`/`op` and level-typed methods.
+  - `lvl` is determined by method choice, constrained to `trace|debug|info|warn|error|fatal`, and no “forced info” path is required.
+  - `evt` is supported as optional event-type metadata and appears in canonical serialized position when emitted.
+  - `data` payload constraints are enforced by API surface/policy (bounded safe shape, no arbitrary object dumps).
+  - Canonical `comp` mapping list is documented and used as migration baseline.
+- **Verification evidence**:
+  - Evidence placeholders maintained at planned state; completion evidence must include API-surface validation for level-typed methods, `ex` normalization to `data.error`, and context-field mapping behavior.
+  - Evidence must confirm request-scoped trace fields are emitted when active trace context is available, and omitted paths are explicitly expected/tested.
+- **Deferrals / Follow-ups**:
+  - None at planned state.
+
+### M9d - Desktop Log Migration + Legacy API Obsoletion
+
+- **Status**: ⏳ Planned
+- **Goal**: Migrate the high-volume desktop logging surface to structured API as the primary M9 migration priority.
+- **Scope**:
+  - Update all desktop legacy `Log("OpName: ...")` call sites to structured API.
+  - Remove any desktop-side “infer op from msg” logic/normalizers.
+  - Concrete expected call-site pattern example:
+    - call: `LogInfo(comp: "ui.main-window", op: "UpdateLibraryPanel", evt: "ui.library.panel.updated", msg: "Library panel updated.", data: { totalCount: 38833, eligibleCount: 163 }, context: { clientOpId: <when-available>, traceId: <request-scoped>, spanId: <request-scoped>, clientId: <when-available>, sessionId: <when-available>, ver: <when-available>, build: <when-available>, clientTs: <client-originated> })`.
+    - expected emitted entry shape (all fields shown in canonical order): `{"ts":"...","lvl":"info","svc":"desktop","comp":"ui.main-window","op":"UpdateLibraryPanel","evt":"ui.library.panel.updated","msg":"Library panel updated.","data":{"totalCount":38833,"eligibleCount":163},"ingestReqId":"...","clientOpId":"...","traceId":"...","spanId":"...","clientId":"...","sessionId":"...","ver":"...","build":"...","clientTs":"...","srcIp":"...","userAgent":"..."}`
+  - Ensure desktop call sites choose appropriate levels:
+    - `trace/debug` for noisy flow details,
+    - `info` for meaningful state transitions,
+    - `warn` for recoverable degradations,
+    - `error` for failures/exceptions,
+    - `fatal` for unrecoverable failures.
+  - Mark legacy desktop `Log(string)` path as obsolete/error once migration is complete (or delete path).
+- **Acceptance criteria**:
+  - No legacy desktop `Log(string)` usage remains.
+  - Desktop logs provide explicit `comp`/`op` (with `evt` where meaningful) and correctly categorized levels.
+  - No desktop fallback path reintroduces string-prefix parsing or forced `info` levels.
+- **Verification evidence**:
+  - Evidence placeholders maintained at planned state; completion evidence must include call-site migration inventory, obsolete/remove enforcement for legacy `Log(string)`, and representative emitted-entry validation.
+  - Evidence must confirm migrated desktop flows retain canonical field ordering and writer-assigned `ingestReqId`.
+- **Deferrals / Follow-ups**:
+  - None at planned state.
+
+### M9e - Server/Core Meaningful Instrumentation Expansion
+
+- **Status**: ⏳ Planned
+- **Goal**: Add meaningful, structured logs to server/core decision points and runtime features (not only transport wrappers).
+- **Scope**:
+  - Instrument server/core logic paths with structured logs:
+    - API handlers + auth/pairing outcomes,
+    - SSE lifecycle and session identity transitions,
+    - playback decision engine and playback-session orchestration,
+    - refresh pipeline stages/outcomes,
+    - storage/config apply and error paths.
+  - Emphasize meaningful state transitions, decisions, degradations, and failures over noisy repetitive logs.
+- **Acceptance criteria**:
+  - Server/core features emit meaningful structured logs with `comp`/`op` and correct levels across listed functional areas.
+  - Correlation fields (`traceId`/`spanId` when active trace context is available, plus writer-assigned `ingestReqId`) are present on request-scoped server/core logs; `clientOpId` is present only when propagated from a client-originated operation.
+- **Verification evidence**:
+  - Evidence placeholders maintained at planned state; completion evidence must include representative logs across all listed functional areas with level/category correctness.
+  - Evidence must include request-scoped correlation checks and explicit expected handling for paths without active trace context.
+- **Deferrals / Follow-ups**:
+  - None at planned state.
+
+### M9f - WebUI Meaningful Instrumentation Expansion
+
+- **Status**: ⏳ Planned
+- **Goal**: Raise WebUI from minimal/wrapped status logging to meaningful structured logging aligned with unified API.
+- **Scope**:
+  - Add structured WebUI logging coverage for:
+    - app bootstrap and runtime initialization,
+    - auth/pairing flows and state transitions,
+    - SSE connect/disconnect/retry lifecycle,
+    - API request lifecycle/failure handling,
+    - key user action flows and major UX error states.
+  - Define and instrument the top 5 critical WebUI flows with stable operation keys:
+    - session bootstrap + compatibility gating (`BootstrapSession`),
+    - pairing/auth transition (`PairSession`),
+    - SSE connection lifecycle (`SseLifecycle`),
+    - random selection + playback start (`RandomPickAndPlay`),
+    - item-state mutation actions (favorite/blacklist/tag-edit apply) (`MutateItemState`).
+  - Migrate remaining WebUI legacy/prefix log usage to structured API.
+  - Remove any WebUI-side “infer op from msg” logic/normalizers.
+  - Use optional `evt` across those flows with free-form dot-delimited lowercase naming convention to classify event type without overloading `op`.
+  - Ensure WebUI call sites choose appropriate levels:
+    - `trace/debug` for noisy flow details,
+    - `info` for meaningful state transitions,
+    - `warn` for recoverable degradations,
+    - `error` for failures/exceptions,
+    - `fatal` for unrecoverable failures.
+- **Acceptance criteria**:
+  - WebUI no longer relies on minimal/wrapped status-only logging for critical flows.
+  - WebUI logs are emitted via structured API with explicit `comp`/`op` (and `evt` where meaningful) and appropriate levels.
+  - Top 5 critical WebUI flows listed in scope emit meaningful structured logs with request/trace linkage where applicable.
+  - `MutateItemState` instrumentation includes explicit subcase coverage for favorite, blacklist, and tag-edit apply actions.
+  - No legacy WebUI `Log(string)` usage remains.
+  - No WebUI fallback path reintroduces string-prefix parsing or forced `info` levels.
+- **Verification evidence**:
+  - Evidence placeholders maintained at planned state; completion evidence must include one captured structured entry for each required critical flow and `MutateItemState` subcase.
+  - Evidence must include request-scoped correlation checks (trace fields when active trace context is available) and no-legacy-path enforcement.
+- **Deferrals / Follow-ups**:
+  - None at planned state.
+
+### M9g - Operator Structured Query Surface
+
+- **Status**: ⏳ Planned
+- **Goal**: Deliver operator triage capabilities over structured logs with typed filtering while keeping server write path file-based.
+- **Scope**:
+  - Perform end-to-end naming cutover from **Server Logs** to **Log Viewer** across UI, API contracts, and test/docs artifacts.
+  - Rename primary read/query endpoint from `/control/logs/server` to `/control/log-viewer` with compatibility alias:
+    - keep `/control/logs/server` temporarily as backward-compatible alias,
+    - maintain equivalent behavior/payload semantics during alias period,
+    - mark alias as deprecated in OpenAPI/docs during M9g with explicit planned removal in M9i (no indefinite dual-endpoint ambiguity).
+  - Ensure `/control/log-viewer` remains read/query only; server runtime log writes continue directly to `last.log`.
+  - Update OpenAPI and docs (`shared/api/openapi.yaml`, `docs/api.md`, operator-facing docs) to:
+    - define `/control/log-viewer` as primary endpoint,
+    - mark `/control/logs/server` as deprecated compatibility alias with M9i removal note.
+  - Update Operator page title and navigation labels from `Server Logs` to `Log Viewer`.
+  - Implement collapsible Log Viewer controls section:
+    - collapsed by default,
+    - expandable on demand,
+    - show active-filter summary chips while collapsed.
+  - Ensure Log Viewer supports full structured + text + time filtering:
+    - `svc`, `lvl`, `clientId`, `sessionId`, `traceId`, `ingestReqId`, `clientOpId`, `comp`, `op`, `evt`,
+    - message text search,
+    - time-window filter.
+  - Filter execution model:
+    - primary filtering path is server-side query/filter at `/control/log-viewer` for `svc`, `lvl`, `clientId`, `sessionId`, `traceId`, `ingestReqId`, `clientOpId`, `comp`, `op`, `evt`, text, and time-window inputs,
+    - client-side filtering is limited to transient UX refinement on already-fetched results,
+    - server query results are deterministic for identical filter inputs (including time window and pagination cursor),
+    - deterministic ordering contract is explicit and stable: newest-first by `ts` with deterministic tie-breakers (`ingestReqId`, then stable row sequence) to avoid page drift/duplication,
+    - when `ts` and `ingestReqId` are equal, ordering falls back to a stable per-row sequence key evaluated by cursor semantics so paging never duplicates/skips rows,
+    - cursor contract is explicit and versioned, with deterministic bound semantics for `from`/`to` time-window filters.
+  - Render human-readable log rows by default with expandable per-row raw JSON details.
+  - Implement newest-first ordering, incremental/cursor paging, and auto-refresh behavior:
+    - auto-refresh toggle,
+    - pause auto-refresh while user is scrolled away from newest rows,
+    - explicit resume control/state indicator.
+- **Acceptance criteria**:
+  - Operator Log Viewer can filter/search by structured fields, text, and time window without shell access.
+  - Primary endpoint `/control/log-viewer` returns structured-entry responses compatible with exact field filtering.
+  - Compatibility alias `/control/logs/server` remains functional during migration window.
+  - Alias lifecycle is explicit: OpenAPI/docs mark alias deprecated in M9g with planned M9i removal.
+  - Log Viewer controls are collapsed by default and expose active filter state when collapsed.
+  - Human-readable row mode with expandable JSON detail is available and functional.
+  - Query ordering and cursor pagination are deterministic and documented (stable sort tuple, tie-break semantics, cursor version/bounds behavior).
+- **Verification evidence**:
+  - Evidence placeholders maintained at planned state; completion evidence must include deterministic pagination checks (no duplicate/missing rows across page boundaries) and stable-result replay for identical filter inputs.
+  - Evidence must include contract/docs artifacts for sort/cursor/time-bound semantics and alias deprecation annotations.
+- **Deferrals / Follow-ups**:
+  - None at planned state.
+
+### M9h - Privacy-by-Construction Enforcement + Legacy Guardrails
+
+- **Status**: ⏳ Planned
+- **Goal**: Enforce source-safe logging policy and prevent regression to unsafe or inferred logging behavior.
+- **Scope**:
+  - Enforce privacy-by-default by construction:
+    - emitters must never include domain-identifying/sensitive values in `msg` or `data`, including:
       - filenames or file paths,
       - tag/category names,
       - preset/source names,
       - user-provided search text,
       - token/cookie/secret values,
       - raw media identifiers that could reveal content without server context.
-    - Prefer safe templates and coarse counts/booleans/durations (examples):
+    - prefer safe templates and coarse counts/booleans/durations (examples):
       - `"Saved desktop settings."` with `data: { wroteBackup: true }`
       - `"Applied favorite update."` with `data: { isFavorite: true }`
       - `"Library panel updated."` with `data: { totalCount: 38833, eligibleCount: 163 }`
       - `"API request failed."` with `data: { endpoint: "SetFavorite" }` (no URL, no path)
+  - Exception handling policy for structured logging:
+    - `ex` inputs must be converted to privacy-safe `data.error` shape,
+    - do not emit raw stack traces, local file paths, or sensitive payload fragments by default,
+    - include only safe error descriptors (`type`, `code`, `messageSafe`, optional hash/fingerprint).
+    - explicit error emitted entry example (`ex` normalized into `data.error`): `{"ts":"...","lvl":"error","svc":"desktop","comp":"core.client","op":"PairSession","evt":"ui.pair.failed","msg":"Pairing request failed.","data":{"error":{"type":"HttpError","code":"401","messageSafe":"Unauthorized"}},"ingestReqId":"...","clientOpId":"...","traceId":"...","spanId":"...","clientId":"...","sessionId":"...","ver":"...","build":"...","clientTs":"...","srcIp":"...","userAgent":"..."}`
+  - Enforce bounded `data` payload contract at runtime:
+    - allow safe primitives, allowlisted short strings, and small objects only,
+    - reject/trim/block arbitrary object dumps and oversized payloads before serialization.
+  - Prevent reintroduction of legacy logging paths:
+    - remove/obsolete global `Log(string)` paths once migration is complete,
+    - enforce no parsing/inference fallback for `lvl`/`comp`/`op`.
+- **Acceptance criteria**:
+  - Privacy constraints are enforced at source in `msg` and `data`.
+  - Error/fatal logs with `ex` inputs persist only privacy-safe `data.error` payloads; no top-level `ex` field is written and no raw sensitive exception content is emitted by default.
+  - Runtime safety/correctness is achieved by source-safe templates + structured Log API contracts, not by post-hoc sanitizer/normalizer rewriting.
+  - Sanitizer/normalizer runtime paths are removed by end of M9h with regression tests proving they are not in runtime data path.
+  - Legacy string-prefix logging paths are blocked from reintroduction.
+- **Verification evidence**:
+  - Evidence placeholders maintained at planned state; completion evidence must include negative tests for sensitive content leakage and `ex` serialization policy enforcement.
+  - Evidence must include regression proof that sanitizer/normalizer paths are removed from runtime data path and legacy string-prefix logging is blocked.
+- **Deferrals / Follow-ups**:
+  - None at planned state.
+
+### M9i - Reliability Hardening and Final Verification
+
+- **Status**: ⏳ Planned
+- **Goal**: Finalize non-blocking behavior and complete cross-surface sign-off evidence for M9.
+- **Scope**:
   - Keep logging best-effort and non-blocking for clients:
     - client relay failures must not block/interrupt user actions,
     - retries are asynchronous and bounded.
-  - Define deterministic size-based rotation/retention for `last.log`:
-    - rotate at 25 MB per file,
-    - keep current file + 10 archives,
-    - no compression for rotated files.
-  - Scope for M8g implementation is `server`, `desktop`, and `webui`; `android`/`ios` remain schema-reserved `svc` values for later milestones.
+  - Complete endpoint cutover by removing compatibility alias `/control/logs/server` in M9i; `/control/log-viewer` becomes sole supported endpoint after M9 sign-off.
+  - Complete OpenAPI/docs endpoint cutover in M9i:
+    - remove deprecated `/control/logs/server` alias from contract/docs,
+    - keep `/control/log-viewer` as sole documented/supported endpoint.
+  - Scope for M9 implementation is `server`, `desktop`, and `webui`; `android`/`ios` remain schema-reserved `svc` values for later milestones.
 - **Acceptance criteria**:
-  - `last.log` is JSONL and every entry includes required core fields (`ts`, `lvl`, `svc`, `comp`, `op`, `msg`) with consistent optional-field shapes when emitted.
   - `last.log` includes both server runtime logs and ingested desktop/web client logs through the same writer path.
-  - Client-originated entries preserve both server time (`ts`) and client time (`clientTs` where provided); ordering uses server-side `ts`.
-  - Request-scoped HTTP/SSE flows include `traceId`/`spanId` and can be filtered end-to-end across server and client events for the same operation flow.
-  - Desktop and WebUI logs are emitted using the new structured Log API:
-    - no legacy `Log(string)` usage remains,
-    - `comp` and `op` are explicitly provided (no parsing/inference),
-    - log levels are correctly categorized (not all `info`).
-  - Privacy-by-default constraints are enforced at the source (no banned sensitive/domain-identifying values in `msg` or `data`), and no sanitizer/normalizer is required for safety.
-  - Operator diagnostics view can filter/search by `svc`, `lvl`, `clientId`, `sessionId`, `traceId`, `comp`, and `op` without requiring shell access.
+  - Desktop and WebUI logs are emitted using structured API with explicit `comp`/`op` and correctly categorized levels.
   - Client log ingestion failures are non-blocking in user flows and bounded retry behavior is deterministic/tested.
-  - Lifecycle behavior is deterministic and documented with size-based rotation limit (25 MB) and archive cap (10, uncompressed).
+  - `/control/logs/server` compatibility alias is removed as part of M9i cutover; `/control/log-viewer` remains the only supported log-viewer endpoint.
   - Automated tests cover schema validation, ingestion mapping, timestamp semantics, request-scoped trace correlation fields, structured Log API behavior (field correctness + levels), privacy guardrails (source-safe templates), lifecycle behavior, and non-blocking relay behavior.
 - **Verification evidence**:
   - Centralized server writer emits JSONL entries for both server and client-ingested events.
-  - `/api/logs/client` maps to canonical schema and preserves client/session/trace metadata without parsing/inference of `lvl`/`comp`/`op`.
-  - Desktop + WebUI relays verified with stable `svc`, `clientId`, `sessionId`; request-scoped paths include trace fields.
-  - Operator log view validates mixed-source filtering/search by structured fields (`svc`, `lvl`, `clientId`, `sessionId`, `traceId`, `comp`, `op`) plus message text search.
+  - `/api/logs/client` maps to canonical schema, preserves valid client/session/trace metadata without parsing/inference of `lvl`/`comp`/`op`, and rejects invalid inputs with deterministic machine-readable `400` validation errors.
+  - Desktop + WebUI relays verified with stable `svc`, `clientId`, `sessionId`; request-scoped paths include trace fields when active trace context is available.
+  - `clientOpId` appears only when propagated from a client-originated operation; absence on pure server-originated rows is expected.
+  - Operator Log Viewer validates mixed-source filtering/search by structured fields (`svc`, `lvl`, `clientId`, `sessionId`, `traceId`, `ingestReqId`, `clientOpId`, `comp`, `op`, `evt`) plus message text search and time-window filtering.
+  - Endpoint migration evidence captures:
+    - `/control/log-viewer` primary endpoint behavior,
+    - `/control/logs/server` alias deprecation state in M9g and removal behavior in M9i (expected unsupported response after cutover).
+  - Log Viewer UX evidence captures:
+    - collapsed-by-default controls with active-filter summary while collapsed,
+    - human-readable rows with expandable JSON detail,
+    - auto-refresh toggle + pause-on-scroll behavior.
   - Automated verification passes:
     - `dotnet build ReelRoulette.sln`
     - `dotnet test ReelRoulette.sln`
@@ -170,11 +402,13 @@ Do not use this file for detailed architecture explanation or current capability
     - server lifecycle logs,
     - desktop action/error logs,
     - web SSE/auth/error logs,
+    - one captured structured log example for each required WebUI flow (`BootstrapSession`, `PairSession`, `SseLifecycle`, `RandomPickAndPlay`, `MutateItemState`),
+    - `MutateItemState` evidence includes favorite, blacklist, and tag-edit apply subcases,
     - combined trace-level evidence across server + client for at least one end-to-end flow,
     - one explicit `/api/logs/client` failure simulation proving user actions remain non-blocking,
     - field-level evidence snippets in `docs/testing-checklist.md`.
 
-### M8h - UX/UI Polish Follow-up (Post-M8f Reliability Closeout)
+### M10 - UX/UI Polish
 
 - **Status**: ⏳ Planned
 - **Goal**: Apply UX polish improvements deferred from M8f reliability closeout without changing core API-first ownership boundaries.
@@ -197,25 +431,25 @@ Do not use this file for detailed architecture explanation or current capability
   - Duplicate groups in desktop duplicates dialog show per-file thumbnails inline in the defined order, enabling quick visual validation before delete/apply actions.
   - No regressions to M8f reliability fixes (compatibility gating, reconnect/resync, deterministic testing simulations).
 
-### M9a - Playback Session Contracts and Capability Surface
+### M11a - Playback Session Contracts and Capability Surface
 
 - **Status**: ⏳ Planned
 - **Goal**: Establish contract-first playback-session APIs and capability signaling.
 - **Scope**:
-  - Milestone-sequencing guardrails for the M9 series:
-    - complete M8 stabilization before starting M9 implementation,
-    - keep each `M9*` slice independently verifiable and shippable,
+  - Milestone-sequencing guardrails for the M11 series:
+    - complete M8 stabilization before starting M11 implementation,
+    - keep each `M11*` slice independently verifiable and shippable,
     - preserve thin-client boundaries while introducing server-side playback decisions.
   - Define OpenAPI contracts for playback-session create/read and stream URL contracts.
   - Add server capability markers for playback-session and transcode support in `/api/version`.
   - Regenerate/refresh generated client contracts used by desktop and WebUI.
 - **Acceptance criteria**:
-  - `M9a` establishes the contract/capability baseline used by subsequent `M9*` slices.
+  - `M11a` establishes the contract/capability baseline used by subsequent `M11*` slices.
   - OpenAPI includes playback-session surfaces and validates.
   - Generated desktop/web client contracts are in sync with OpenAPI.
   - Version/capability checks can detect missing playback features deterministically.
 
-### M9b - Server Playback Decision Engine
+### M11b - Server Playback Decision Engine
 
 - **Status**: ⏳ Planned
 - **Goal**: Make server the sole decision point for direct/remux/transcode mode selection.
@@ -231,7 +465,7 @@ Do not use this file for detailed architecture explanation or current capability
   - Decision outputs are stable/repeatable for identical inputs.
   - Session responses include delivery type (`progressive` or `hls-fmp4`) and actionable reason fields.
 
-### M9c - Direct-Stream Session URL Baseline
+### M11c - Direct-Stream Session URL Baseline
 
 - **Status**: ⏳ Planned
 - **Goal**: Ship direct-stream playback-session URL path first as the initial playback foundation.
@@ -243,7 +477,7 @@ Do not use this file for detailed architecture explanation or current capability
   - Session token/session mapping is guarded against invalid/expired use.
   - Direct-stream sessions are cleaned up reliably after TTL expiry.
 
-### M9d - Remux/Transcode and Segmented Streaming (HLS fMP4 Baseline)
+### M11d - Remux/Transcode and Segmented Streaming (HLS fMP4 Baseline)
 
 - **Status**: ⏳ Planned
 - **Goal**: Add resilient compatibility streaming for unsupported formats and long-form playback.
@@ -256,12 +490,12 @@ Do not use this file for detailed architecture explanation or current capability
   - Segmented streaming baseline is explicitly HLS with fMP4 segments and is validated in playback paths.
   - No orphan ffmpeg processes or segment/transcode artifacts remain after session expiry or runtime shutdown.
 
-### M9e - Desktop Thin-Client Playback Cutover
+### M11e - Desktop Thin-Client Playback Cutover
 
 - **Status**: ⏳ Planned
 - **Goal**: Integrate desktop with playback-session APIs while preserving local-first performance semantics from M8d.
 - **Scope**:
-  - Preserve the M8d compromise baseline through M9:
+  - Preserve the M8d compromise baseline through M11:
     - local-first playback with automatic API fallback,
     - optional `ForceApiPlayback` for deterministic API-path validation.
   - Add playback-session orchestration path for desktop API playback mode.
@@ -272,7 +506,7 @@ Do not use this file for detailed architecture explanation or current capability
     - path is not a server-issued token/virtual playback path,
     - quick open-read preflight succeeds.
   - Ensure automatic fallback to API playback when local path is inaccessible.
-  - Ensure `ForceApiPlayback=true` always routes desktop through API playback path (for M9 validation and advanced-user preference).
+  - Ensure `ForceApiPlayback=true` always routes desktop through API playback path (for M11 validation and advanced-user preference).
   - Desktop loop parity requirement:
     - toggling loop must not reload media,
     - loop transitions remain gapless,
@@ -287,7 +521,7 @@ Do not use this file for detailed architecture explanation or current capability
   - Desktop looping parity is preserved: loop toggling/iteration semantics remain gapless without per-loop stat increments.
   - Disconnect/reconnect behavior remains user-friendly and deterministic.
 
-### M9f - WebUI Playback Cutover and Format Resilience
+### M11f - WebUI Playback Cutover and Format Resilience
 
 - **Status**: ⏳ Planned
 - **Goal**: Align WebUI playback with server playback-session contract and robust format handling, while preserving parity with desktop API playback mode.
@@ -302,7 +536,7 @@ Do not use this file for detailed architecture explanation or current capability
   - Movie-length playback reliability issues are resolved for supported validation corpus.
   - Looping parity is preserved: WebUI behavior remains unchanged across progressive and HLS playback paths.
 
-### M9g - Resume Position and Session Continuity
+### M11g - Resume Position and Session Continuity
 
 - **Status**: ⏳ Planned
 - **Goal**: Deliver server-authoritative remember-position behavior across desktop and WebUI playback paths.
@@ -320,21 +554,21 @@ Do not use this file for detailed architecture explanation or current capability
   - Clear-resume operations are deterministic and observable.
   - Resume policy settings are documented, persisted, and enforced by server.
 
-### M9h - Hardening, Operations, and Final Verification
+### M11h - Hardening, Operations, and Final Verification
 
 - **Status**: ⏳ Planned
 - **Goal**: Stabilize playback pipeline for multi-client operation and operational visibility.
 - **Scope**:
   - Add concurrency/backpressure controls (max concurrent transcodes + queueing policy).
   - Add operator diagnostics for active sessions, mode decisions, and failure reasons.
-  - Execute full automated/manual verification matrix and finalize docs/tracking updates for M9.
+  - Execute full automated/manual verification matrix and finalize docs/tracking updates for M11.
 - **Acceptance criteria**:
   - Multi-client playback remains stable under constrained transcode capacity.
   - Operator-facing diagnostics are sufficient to troubleshoot playback failures.
-  - Automated gates and manual playback matrix pass before M9 sign-off.
+  - Automated gates and manual playback matrix pass before M11 sign-off.
   - After server shutdown, no ffmpeg workers remain, and temporary playback/transcode directories are cleaned or explicitly TTL-managed.
 
-### M10 - Android Client Bootstrap
+### M12 - Android Client Bootstrap
 
 - **Status**: ⏳ Planned
 - **Goal**: Enable initial Android app development on stable API seam after desktop/web client migration is functionally complete.
@@ -349,7 +583,7 @@ Do not use this file for detailed architecture explanation or current capability
   - Mobile resume/reconnect auth continuity is verified (pairing/auth state survives app background/resume and SSE reconnect paths).
   - Regression tests validate Android client API/SSE compatibility expectations (schema, event envelope handling, and reconnect behavior) and pass in `dotnet test`.
 
-### M11 - File Metadata Sync and Extended Metadata
+### M13 - File Metadata Sync and Extended Metadata
 
 - **Status**: ⏳ Planned
 - **Goal**: Add server-authoritative metadata sync so tags/metadata can be imported from and exported to media files, while preserving thin-client boundaries and cross-client parity.
@@ -381,7 +615,7 @@ Do not use this file for detailed architecture explanation or current capability
   - Batch metadata operations work through API contracts and respect conflict/error policies.
   - Error reporting is actionable (success/failure counts + reasons), and logging follows centralized server logging ownership.
 
-### M12 - Customizable Keyboard Shortcuts (Desktop)
+### M14 - Customizable Keyboard Shortcuts (Desktop)
 
 - **Status**: ⏳ Planned
 - **Goal**: Enable user-configurable desktop keyboard shortcuts while preserving reliable input handling and existing default behavior.
@@ -403,7 +637,7 @@ Do not use this file for detailed architecture explanation or current capability
   - System-reserved shortcuts are protected from unsafe overrides.
   - Existing playback/control workflows remain stable with both default and customized bindings.
 
-### M13 - Playback Analytics and Visualization
+### M15 - Playback Analytics and Visualization
 
 - **Status**: ⏳ Planned
 - **Goal**: Provide server-authoritative playback analytics with rich client-side visualization for desktop/WebUI parity.
@@ -431,7 +665,7 @@ Do not use this file for detailed architecture explanation or current capability
   - Date-range filters produce correct aggregate differences and are validated by tests.
   - Client visualizations do not introduce local authoritative analytics calculations that diverge from server semantics.
 
-### M14 - Desktop Confirmation Dialog Standardization
+### M16 - Desktop Confirmation Dialog Standardization
 
 - **Status**: ⏳ Planned
 - **Goal**: Reduce desktop UI duplication and improve consistency by standardizing confirmation dialogs behind a reusable component.
@@ -452,7 +686,7 @@ Do not use this file for detailed architecture explanation or current capability
   - Duplicate confirmation-dialog code paths are reduced with no functional regressions.
   - Desktop UI tests/manual checks confirm parity for destructive and non-destructive confirmation actions.
 
-### M15 - Advanced Runtime and Cache Controls
+### M17 - Advanced Runtime and Cache Controls
 
 - **Status**: ⏳ Planned
 - **Goal**: Provide controlled, server-authoritative cache/performance tuning for varied hardware and storage environments, with safe defaults and clear operator observability.
@@ -482,7 +716,7 @@ Do not use this file for detailed architecture explanation or current capability
   - Desktop/WebUI/operator surfaces show consistent effective settings and apply results.
   - No client-local authoritative settings drift is introduced.
 
-### M16a - Photo Face Detection Baseline
+### M18a - Photo Face Detection Baseline
 
 - **Status**: ⏳ Planned
 - **Goal**: Deliver reliable face detection for photos with practical UX and performance controls.
@@ -494,7 +728,7 @@ Do not use this file for detailed architecture explanation or current capability
   - Keep clients as orchestration/render layers:
     - no client-local detection authority,
     - clients display overlays/results and invoke server jobs/queries.
-  - This milestone is the first phase of the M16 rollout, with video expansion in `M16b`.
+  - This milestone is the first phase of the M18 rollout, with video expansion in `M18b`.
   - Select and integrate a .NET-compatible detection stack (OpenCV/ML.NET/other) for photo inputs.
   - Add detection execution modes:
     - import-time and/or on-demand scan jobs.
@@ -515,12 +749,12 @@ Do not use this file for detailed architecture explanation or current capability
   - Overlay/filter behavior works for detected photo faces with deterministic result semantics.
   - Performance impact is bounded and documented.
 
-### M16b - Video Face Detection Expansion
+### M18b - Video Face Detection Expansion
 
 - **Status**: ⏳ Planned
 - **Goal**: Extend face detection to video with sampling/throughput strategies suitable for long-form media.
 - **Scope**:
-  - This milestone is the second phase of the M16 rollout and extends the server-authoritative model established in `M16a`.
+  - This milestone is the second phase of the M18 rollout and extends the server-authoritative model established in `M18a`.
   - Define video frame-sampling strategy (interval/keyframe/scene-aware options as needed).
   - Run detection as background jobs with queueing/concurrency controls.
   - Persist timeline-aware face detection outputs for video items.
@@ -535,7 +769,7 @@ Do not use this file for detailed architecture explanation or current capability
   - Long-duration media processing is resumable/retry-safe and operationally observable.
   - Recognition/identity features remain explicitly out of scope unless separately approved.
 
-### M17a - Linux Runtime Baseline (Server + Desktop)
+### M19a - Linux Runtime Baseline (Server + Desktop)
 
 - **Status**: ⏳ Planned
 - **Goal**: Establish a supported Linux runtime baseline for both `ReelRoulette Server` and desktop client with deterministic startup/playback behavior.
@@ -563,7 +797,7 @@ Do not use this file for detailed architecture explanation or current capability
     - `npm run verify` (`src/clients/web/ReelRoulette.WebUI`)
     - Linux run/smoke command evidence for server + desktop startup.
 
-### M17b - Linux Packaging (Server + Desktop)
+### M19b - Linux Packaging (Server + Desktop)
 
 - **Status**: ⏳ Planned
 - **Goal**: Produce distributable Linux artifacts for both server and desktop using repo-owned packaging scripts.
@@ -585,7 +819,7 @@ Do not use this file for detailed architecture explanation or current capability
   - Install/run smoke checks from packaged artifacts pass on Linux baseline host.
   - `docs/testing-checklist.md` packaging checklist includes Linux package checks.
 
-### M17c - CI Linux Distribution Gates
+### M19c - CI Linux Distribution Gates
 
 - **Status**: ⏳ Planned
 - **Goal**: Add Linux build/test/package verification to CI so Linux distribution quality is continuously enforced.
@@ -603,7 +837,7 @@ Do not use this file for detailed architecture explanation or current capability
   - Workflow files include Linux jobs and artifact upload steps.
   - CI run evidence shows passing Linux gates and generated artifacts.
 
-### M17d - Linux Documentation and Operator Runbook
+### M19d - Linux Documentation and Operator Runbook
 
 - **Status**: ⏳ Planned
 - **Goal**: Make Linux setup, packaging, and troubleshooting workflows first-class and self-serve for contributors/operators.
@@ -624,7 +858,7 @@ Do not use this file for detailed architecture explanation or current capability
   - Doc set updates merged and internally consistent with scripts/workflows.
   - Manual dry-run of documented Linux commands succeeds on baseline host.
 
-### M17e - Linux Release Readiness and Sign-off
+### M19e - Linux Release Readiness and Sign-off
 
 - **Status**: ⏳ Planned
 - **Goal**: Complete release-quality Linux validation for server + desktop and capture final evidence for sign-off.
@@ -641,7 +875,7 @@ Do not use this file for detailed architecture explanation or current capability
 - **Verification evidence**:
   - Completed Linux checklist entries in `docs/testing-checklist.md`.
   - CI evidence for Linux packaging + smoke checks.
-  - Updated `MILESTONES.md`, `CHANGELOG.md`, and `COMMIT_MESSAGE.txt` entries reflecting final M17 state.
+  - Updated `MILESTONES.md`, `CHANGELOG.md`, and `COMMIT_MESSAGE.txt` entries reflecting final M19 state.
 
 ---
 
@@ -723,7 +957,7 @@ Latest completions first:
     - desktop now enforces API/capability compatibility gates and shows reconnect/resync SSE status guidance,
     - missing-media simulation now preserves random selection and fails deterministically at media-fetch endpoints with explicit `Media not found` API errors.
     - desktop legacy locate/remove missing-file dialog flow removed to keep missing-media remediation server-authoritative.
-  - Deferred to `M8h` (UX/UI polish only):
+  - Deferred to `M10` (UX/UI polish only):
     - tag-editor apply latency/close responsiveness polish,
     - web refresh-status detail parity enhancements.
 
@@ -734,7 +968,7 @@ Latest completions first:
 - **Scope**:
   - Standardize client-facing API contracts/capabilities for desktop/web/mobile parity.
   - Ensure WebUI uses the same API semantics as desktop for migrated behaviors.
-  - Scope boundary: playback-session pipeline contracts/capabilities are owned by `M9a` and are out of scope for `M8e`.
+  - Scope boundary: playback-session pipeline contracts/capabilities are owned by `M11a` and are out of scope for `M8e`.
   - Define session/reconnect rules on the shared contract surface:
     - persistent per-device `clientId`,
     - optional `sessionId` for future shared-session features,
@@ -761,7 +995,7 @@ Latest completions first:
 ### M8d - Desktop Playback Policy Compromise (Local-First with API Fallback)
 
 - **Status**: ✅ Complete
-- **Goal**: Keep desktop playback performant for local/shared-storage scenarios while preserving API-first orchestration and M9 playback-pipeline readiness.
+- **Goal**: Keep desktop playback performant for local/shared-storage scenarios while preserving API-first orchestration and M11 playback-pipeline readiness.
 - **Scope**:
   - Introduce desktop playback policy:
     - local playback first when the selected media path is accessible on the desktop machine,
@@ -775,7 +1009,7 @@ Latest completions first:
     - desktop may read/write only `desktop-settings.json`,
     - desktop may read local media files for playback/accessibility checks only,
     - no reintroduction of local authoritative state reads/writes (library/settings/log/domain mutations).
-  - Keep this policy compatible with M9 incremental playback-pipeline work so API-only playback can be forced during M9 validation.
+  - Keep this policy compatible with M11 incremental playback-pipeline work so API-only playback can be forced during M11 validation.
 - **Acceptance criteria**:
   - Desktop playback selection is deterministic:
     - uses local playback when file path is locally accessible and `ForceApiPlayback=false`,
