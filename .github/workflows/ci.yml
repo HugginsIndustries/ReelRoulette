@@ -4,32 +4,35 @@ on:
   push:
   pull_request:
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build-test-linux:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           dotnet-version: "9.0.x"
 
       - name: Build solution
-        run: dotnet build ReelRoulette.sln --configuration Release -p:TargetFramework=net9.0
+        run: dotnet build ReelRoulette.sln --configuration Release -p:TargetFramework=net9.0 -p:EnableWindowsTargeting=true
 
       - name: Test solution
-        run: dotnet test ReelRoulette.sln --configuration Release --no-build -p:TargetFramework=net9.0
+        run: dotnet test ReelRoulette.sln --configuration Release --no-build -p:TargetFramework=net9.0 -p:EnableWindowsTargeting=true
 
   build-test-windows:
     runs-on: windows-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           dotnet-version: "9.0.x"
 
@@ -46,7 +49,7 @@ jobs:
         working-directory: src/clients/web/ReelRoulette.WebUI
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node
         uses: actions/setup-node@v4
