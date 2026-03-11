@@ -91,6 +91,7 @@ Do not use this file for detailed architecture explanation or current capability
   - Linux runtime path is unaffected (continues headless unless Linux tray is explicitly enabled in M19 work).
 - **Verification evidence**:
   - Manual Windows launch evidence: no console window + tray icon visible.
+  - Tray icon evidence confirms the runtime icon source is `assets/HI.ico` (for example: visible icon parity check and/or implementation/config reference).
   - Manual tray action evidence for all four minimum actions (including success/failure behavior where applicable).
   - Automated gate pass includes:
     - `dotnet build ReelRoulette.sln`
