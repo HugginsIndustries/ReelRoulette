@@ -62,6 +62,45 @@ Do not use this file for detailed architecture explanation or current capability
 
 ## Milestone Board
 
+### M8g - Windows ServerApp System Tray Baseline (Single Binary, No Console)
+
+- **Status**: ⏳ Planned
+- **Goal**: Provide a single-binary Windows `ReelRoulette Server` runtime that starts without a command prompt and exposes essential operator actions via system tray.
+- **Scope**:
+  - Convert Windows ServerApp startup to no-console behavior (`WinExe`) while preserving existing server/API behavior.
+  - Require tray icon asset parity with repo branding:
+    - system tray icon must use the shared app icon at `assets/HI.ico` (same icon source used by other app/package surfaces).
+  - Add initial Windows system tray surface with minimum actions:
+    - Open Operator UI (default browser to `/operator`),
+    - Refresh Library (manual refresh trigger),
+    - Restart Server,
+    - Stop Server / Exit.
+  - Keep server logic API-authoritative and reuse existing server services/endpoints for lifecycle/refresh operations.
+  - Introduce host-UI abstraction so non-Windows runtimes remain headless-compatible and can adopt tray support later without server-core rewrites.
+  - Preserve existing packaging/install behavior except for intentional startup UX change (no visible command prompt).
+- **Acceptance criteria**:
+  - Launching `ReelRoulette.ServerApp.exe` on Windows does not show a command prompt window.
+  - Windows tray icon uses the shared app icon from `assets/HI.ico` (not a placeholder/default framework icon).
+  - Tray icon appears reliably and menu actions execute deterministically:
+    - Operator UI opens in default browser,
+    - Refresh action triggers library refresh pipeline,
+    - Restart action performs graceful self-restart,
+    - Stop/Exit performs graceful shutdown.
+  - Existing API/SSE/WebUI/Operator runtime behavior remains functional and unchanged in intent.
+  - Single-binary Windows ServerApp packaging remains valid and install/run flow remains reproducible.
+  - Linux runtime path is unaffected (continues headless unless Linux tray is explicitly enabled in M19 work).
+- **Verification evidence**:
+  - Manual Windows launch evidence: no console window + tray icon visible.
+  - Manual tray action evidence for all four minimum actions (including success/failure behavior where applicable).
+  - Automated gate pass includes:
+    - `dotnet build ReelRoulette.sln`
+    - `dotnet test ReelRoulette.sln`
+    - `npm run verify` (`src/clients/web/ReelRoulette.WebUI`)
+  - Packaging/install smoke evidence confirms installed ServerApp also runs with tray/no-console behavior.
+- **Deferrals / Follow-ups**:
+  - Linux tray support is explicitly deferred to M19 Linux milestones as best-effort capability.
+  - Advanced tray UX (notifications, rich status panes, localization, startup-on-login toggles) is out of scope for M8g unless separately approved.
+
 ### M9a - Structured JSONL Schema + Server Writer Foundation
 
 - **Status**: ⏳ Planned
@@ -776,6 +815,9 @@ Do not use this file for detailed architecture explanation or current capability
 - **Scope**:
   - Define and document initial support target:
     - `linux-x64` first (single baseline distro family/version for sign-off).
+  - Define Linux tray capability policy as best-effort optional:
+    - enable tray UI when desktop environment/session supports system tray or status notifier,
+    - fall back deterministically to headless runtime when tray capability is unavailable.
   - Validate consolidated server runtime on Linux:
     - API/SSE/media/WebUI/Operator surfaces start and respond.
   - Validate desktop runtime on Linux:
@@ -787,10 +829,12 @@ Do not use this file for detailed architecture explanation or current capability
 - **Acceptance criteria**:
   - Server starts on Linux and serves `/health`, `/api/version`, `/api/events`, `/api/media/{idOrToken}`, `/operator`.
   - Desktop launches on Linux and completes core playback/control workflows against Linux server runtime.
+  - Linux runtime is validated for both tray-capable and tray-unavailable environments, with headless fallback behavior when tray support is unavailable.
   - Linux runtime dependency prerequisites are explicit and reproducible.
   - No new client-local authoritative mutation paths are introduced.
 - **Verification evidence**:
   - Linux runtime smoke checks pass for server surfaces and desktop connect/playback flows.
+  - Evidence includes at least one tray-capable Linux environment run and one tray-unavailable/headless fallback run.
   - Automated gate pass includes:
     - `dotnet build ReelRoulette.sln`
     - `dotnet test ReelRoulette.sln`
@@ -805,6 +849,7 @@ Do not use this file for detailed architecture explanation or current capability
   - Add Linux packaging scripts (portable first):
     - server portable package (`tar.gz`),
     - desktop portable package (`tar.gz`).
+  - Ensure packaged runtime supports best-effort tray enablement where available while preserving deterministic headless fallback where unavailable.
   - Ensure server Linux package includes built WebUI assets in `wwwroot`.
   - Ensure packaging preserves version metadata and release naming conventions.
   - Ensure executable bits and launch scripts are correctly staged for Linux artifacts.
@@ -813,9 +858,11 @@ Do not use this file for detailed architecture explanation or current capability
   - Linux server and desktop portable artifacts are produced deterministically by scripts.
   - Server package includes API/SSE/media/WebUI/Operator runtime assets.
   - Artifact naming/version metadata align with release version.
+  - Packaged Linux apps launch successfully in both tray-capable environments and tray-unavailable environments (headless fallback path).
   - Packaged apps launch successfully on the supported Linux baseline.
 - **Verification evidence**:
   - Packaging scripts produce expected Linux artifacts under `artifacts/packages/`.
+  - Packaging smoke evidence captures both tray-enabled launch behavior and tray-unavailable fallback behavior.
   - Install/run smoke checks from packaged artifacts pass on Linux baseline host.
   - `docs/testing-checklist.md` packaging checklist includes Linux package checks.
 
@@ -827,14 +874,19 @@ Do not use this file for detailed architecture explanation or current capability
   - Add Linux CI jobs for build/test/web verify parity.
   - Add Linux packaging jobs for server + desktop artifact generation.
   - Add Linux smoke checks for packaged runtime startup and key endpoint reachability.
+  - Add CI validation for Linux tray capability handling:
+    - verify deterministic startup when tray capability is unavailable (headless fallback required),
+    - where feasible, verify tray-capability detection behavior on a tray-capable Linux runner/image.
   - Publish Linux artifacts from CI packaging workflow.
 - **Acceptance criteria**:
   - CI runs Linux build/test/web verify successfully on default branch/PR paths.
   - Linux package workflow produces downloadable server + desktop artifacts.
   - Linux smoke checks fail deterministically on runtime/package regressions.
+  - CI fails deterministically when Linux startup regresses in either tray-capable or tray-unavailable/fallback execution paths.
   - Windows CI/package gates remain green and unchanged in intent.
 - **Verification evidence**:
   - Workflow files include Linux jobs and artifact upload steps.
+  - CI evidence includes tray-capability handling checks and fallback-path validation.
   - CI run evidence shows passing Linux gates and generated artifacts.
 
 ### M19d - Linux Documentation and Operator Runbook
@@ -846,16 +898,20 @@ Do not use this file for detailed architecture explanation or current capability
   - Update `docs/dev-setup.md` with Linux prerequisites, runtime notes, and packaging flow.
   - Update `docs/testing-checklist.md` with Linux-specific validation checklist entries.
   - Update `docs/domain-inventory.md` to include Linux packaging/runtime surfaces.
+  - Document Linux tray support as best-effort, including environment/session variability and headless fallback expectations.
   - Add Linux troubleshooting guidance:
     - native dependency resolution,
     - permissions/executable-bit issues,
-    - display/audio/runtime edge cases.
+    - display/audio/runtime edge cases,
+    - missing tray icon or unsupported tray session behavior.
 - **Acceptance criteria**:
   - Linux setup and packaging instructions are complete and executable without ad-hoc tribal knowledge.
   - Testing guide includes Linux validation paths for server + desktop distribution.
+  - Documentation explicitly distinguishes guaranteed Linux runtime support from best-effort tray support and includes fallback/headless operator guidance.
   - Domain inventory reflects Linux ownership/tooling surfaces accurately.
 - **Verification evidence**:
   - Doc set updates merged and internally consistent with scripts/workflows.
+  - Manual doc dry-run evidence includes both tray-capable and tray-unavailable/headless operator flows.
   - Manual dry-run of documented Linux commands succeeds on baseline host.
 
 ### M19e - Linux Release Readiness and Sign-off
@@ -865,15 +921,18 @@ Do not use this file for detailed architecture explanation or current capability
 - **Scope**:
   - Execute full automated + manual Linux validation matrix.
   - Validate server/web/desktop parity on migrated API/SSE flows.
+  - Validate Linux tray support as best-effort capability and confirm deterministic headless fallback where tray support is unavailable.
   - Validate packaged artifact install/run behavior end-to-end.
   - Capture evidence and finalize release-tracking docs.
 - **Acceptance criteria**:
   - Linux automated gates pass (build/test/web verify/package/smoke).
   - Linux manual validation checklist is completed with PASS/FAIL evidence.
   - No critical Linux-only runtime regressions remain for server or desktop.
+  - Release sign-off explicitly confirms tray-capable validation results and tray-unavailable fallback validation results.
   - Release tracking docs are synchronized to final Linux-ready state.
 - **Verification evidence**:
   - Completed Linux checklist entries in `docs/testing-checklist.md`.
+  - Final evidence bundle includes tested Linux environment matrix noting tray-capable vs tray-unavailable outcomes.
   - CI evidence for Linux packaging + smoke checks.
   - Updated `MILESTONES.md`, `CHANGELOG.md`, and `COMMIT_MESSAGE.txt` entries reflecting final M19 state.
 
