@@ -30,7 +30,11 @@ dotnet build ReelRoulette.sln
 Run the server app:
 
 ```bash
-dotnet run --project .\src\core\ReelRoulette.ServerApp\ReelRoulette.ServerApp.csproj
+# Windows (tray + no-console path):
+dotnet run --framework net9.0-windows --project .\src\core\ReelRoulette.ServerApp\ReelRoulette.ServerApp.csproj
+
+# Linux/macOS (headless path):
+dotnet run --framework net9.0 --project .\src\core\ReelRoulette.ServerApp\ReelRoulette.ServerApp.csproj
 ```
 
 Run the desktop client:
@@ -61,6 +65,11 @@ Run server app directly:
 
 Default listen URL: `http://localhost:45123`.
 
+Windows runtime note:
+
+- `ReelRoulette.ServerApp` runs as a tray-hosted runtime on Windows (no command prompt window when launched as app binary).
+- Tray menu provides quick actions for opening `/operator`, starting library refresh, restarting server, and stop/exit.
+
 Build WebUI and run server app:
 
 ```bash
@@ -72,7 +81,7 @@ Build WebUI and run server app:
 Set release-aligned version surfaces in one step:
 
 ```powershell
-.\tools\scripts\set-release-version.ps1 -Version 0.9.1-dev -UpdateDesktopVersion -RegenerateContracts -RunVerify
+.\tools\scripts\set-release-version.ps1 -Version 0.10.0 -UpdateDesktopVersion -RegenerateContracts -RunVerify
 ```
 
 ## Verification
@@ -119,14 +128,15 @@ Manual test guide:
   - server packaging scripts auto-use `src/core/ReelRoulette.ServerApp/ReelRoulette.ServerApp.csproj` `<Version>`,
   - desktop packaging scripts auto-use `src/clients/windows/ReelRoulette.WindowsApp/ReelRoulette.WindowsApp.csproj` `<Version>`.
 - Server packaging scripts rebuild and bundle WebUI static assets into published output (`wwwroot`), including `/HI.ico`.
+- Server runtime publish output includes `HI.ico` at app root for tray icon loading, sourced from shared `assets/HI.ico`.
 - Desktop packaging scripts stage native desktop dependencies into published output (`runtimes/win-x64/native`) during packaging.
 - Desktop native staging prefers local repo runtimes when present; otherwise scripts acquire dependencies via Chocolatey (`ffmpeg` + `vlc`).
 - Installer metadata (setup/start-menu/uninstall display) uses shared `assets/HI.ico`.
 
-Simple release flow (example `0.9.1-dev`):
+Simple release flow (example `0.10.0`):
 
 ```powershell
-.\tools\scripts\full-release.ps1 -Version 0.9.1-dev
+.\tools\scripts\full-release.ps1 -Version 0.10.0
 ```
 
 GitHub release asset flow:

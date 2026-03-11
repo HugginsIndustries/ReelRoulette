@@ -4,65 +4,152 @@ using System.Text.Json;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Logging.Abstractions;
 using ReelRoulette.ServerApp;
+using ReelRoulette.ServerApp.Hosting;
 using ReelRoulette.Server.Contracts;
 using ReelRoulette.Server.Hosting;
 using ReelRoulette.Server.Services;
 
-var builder = WebApplication.CreateBuilder(args);
-var runtimeOptions = ServerRuntimeOptions.FromConfiguration(builder.Configuration);
-var startupSettings = new CoreSettingsService(NullLogger<CoreSettingsService>.Instance, runtimeOptions);
-var startupWebRuntime = startupSettings.GetWebRuntimeSettings();
-ServerAppRuntimeHelpers.ApplyWebRuntimeSettingsToRuntimeOptions(runtimeOptions, startupWebRuntime);
-var webUiEnabledAtStartup = startupWebRuntime.Enabled;
-var corsOrigins = new DynamicCorsOriginRegistry(runtimeOptions);
-var serverAppOptions = ServerAppOptions.FromConfiguration(builder.Configuration);
-ServerAppRuntimeHelpers.ResetServerLastLog();
+await RunAsync(args);
 
-builder.WebHost.UseUrls(runtimeOptions.ListenUrl);
-builder.Services.AddSingleton(runtimeOptions);
-builder.Services.AddSingleton(serverAppOptions);
-builder.Services.AddSingleton(corsOrigins);
-builder.Services.AddSingleton<RestartCoordinator>();
-builder.Services.AddHostedService<WebUiMdnsService>();
-builder.Services.AddCors(options =>
+static async Task RunAsync(string[] args)
 {
-    options.AddPolicy(ServerHostComposition.WebClientCorsPolicyName, cors =>
-    {
-        cors.SetIsOriginAllowed(corsOrigins.IsAllowed);
-        cors.WithMethods("GET", "POST", "OPTIONS")
-            .WithHeaders("Content-Type", "Authorization", "Last-Event-ID");
-        if (runtimeOptions.CorsAllowCredentials)
+        var builder = WebApplication.CreateBuilder(args);
+        var runtimeOptions = ServerRuntimeOptions.FromConfiguration(builder.Configuration);
+        var startupSettings = new CoreSettingsService(NullLogger<CoreSettingsService>.Instance, runtimeOptions);
+        var startupWebRuntime = startupSettings.GetWebRuntimeSettings();
+        ServerAppRuntimeHelpers.ApplyWebRuntimeSettingsToRuntimeOptions(runtimeOptions, startupWebRuntime);
+        var webUiEnabledAtStartup = startupWebRuntime.Enabled;
+        var corsOrigins = new DynamicCorsOriginRegistry(runtimeOptions);
+        var serverAppOptions = ServerAppOptions.FromConfiguration(builder.Configuration);
+        ServerAppRuntimeHelpers.ResetServerLastLog();
+
+        builder.WebHost.UseUrls(runtimeOptions.ListenUrl);
+        builder.Services.AddSingleton(runtimeOptions);
+        builder.Services.AddSingleton(serverAppOptions);
+        builder.Services.AddSingleton(corsOrigins);
+        builder.Services.AddSingleton<RestartCoordinator>();
+        builder.Services.AddHostedService<WebUiMdnsService>();
+        builder.Services.AddCors(options =>
         {
-            cors.AllowCredentials();
+            options.AddPolicy(ServerHostComposition.WebClientCorsPolicyName, cors =>
+            {
+                cors.SetIsOriginAllowed(corsOrigins.IsAllowed);
+                cors.WithMethods("GET", "POST", "OPTIONS")
+                    .WithHeaders("Content-Type", "Authorization", "Last-Event-ID");
+                if (runtimeOptions.CorsAllowCredentials)
+                {
+                    cors.AllowCredentials();
+                }
+            });
+        });
+        builder.Services.AddReelRouletteServer();
+
+        var app = builder.Build();
+        app.MapReelRouletteEndpoints(runtimeOptions);
+
+        corsOrigins.Start(
+            app.Services.GetRequiredService<CoreSettingsService>(),
+            app.Logger);
+        app.Lifetime.ApplicationStopping.Register(corsOrigins.Stop);
+
+        MapRuntimeConfig(app, runtimeOptions, startupWebRuntime);
+        MapOperatorUi(app, serverAppOptions, webUiEnabledAtStartup);
+        MapRestartEndpoints(app, serverAppOptions);
+        MapWebUiStaticServing(app, serverAppOptions, webUiEnabledAtStartup);
+
+        await using var hostUi = CreateHostUi(app, runtimeOptions, serverAppOptions);
+        app.Lifetime.ApplicationStarted.Register(() =>
+        {
+            app.Logger.LogInformation("ReelRoulette.ServerApp started on {ListenUrl}", runtimeOptions.ListenUrl);
+            hostUi.Start();
+        });
+
+        app.Lifetime.ApplicationStopping.Register(() =>
+        {
+            _ = hostUi.StopAsync(CancellationToken.None);
+            app.Logger.LogInformation("ReelRoulette.ServerApp is shutting down.");
+        });
+
+        await app.RunAsync();
+}
+
+static IHostUi CreateHostUi(WebApplication app, ServerRuntimeOptions runtimeOptions, ServerAppOptions serverAppOptions)
+{
+        var loggerFactory = app.Services.GetRequiredService<ILoggerFactory>();
+        var operatorUrl = BuildOperatorUrl(runtimeOptions.ListenUrl, serverAppOptions.OperatorUiPath);
+        var sharedIconPath = ResolveSharedIconPath(app.Environment.ContentRootPath);
+
+#if WINDOWS
+        if (OperatingSystem.IsWindows())
+        {
+            return new WindowsNotifyIconHostUi(
+                loggerFactory.CreateLogger<WindowsNotifyIconHostUi>(),
+                operatorUrl,
+                sharedIconPath,
+                onRefreshLibrary: cancellationToken =>
+                {
+                    var refresh = app.Services.GetRequiredService<RefreshPipelineService>();
+                    var result = refresh.TryStartManual();
+                    if (!result.Accepted)
+                    {
+                        throw new InvalidOperationException("Refresh is already in progress.");
+                    }
+
+                    return Task.CompletedTask;
+                },
+                onRestart: async cancellationToken =>
+                {
+                    var coordinator = app.Services.GetRequiredService<RestartCoordinator>();
+                    var result = await coordinator.TryRestartAsync("tray-menu-restart", serverAppOptions.EnableSelfRestart, cancellationToken);
+                    return (result.Accepted, result.Message);
+                },
+                onStop: async cancellationToken =>
+                {
+                    var coordinator = app.Services.GetRequiredService<RestartCoordinator>();
+                    var result = await coordinator.TryStopAsync("tray-menu-stop", cancellationToken);
+                    return (result.Accepted, result.Message);
+                });
         }
-    });
-});
-builder.Services.AddReelRouletteServer();
+#endif
 
-var app = builder.Build();
-app.MapReelRouletteEndpoints(runtimeOptions);
+        return new HeadlessHostUi();
+}
 
-corsOrigins.Start(
-    app.Services.GetRequiredService<CoreSettingsService>(),
-    app.Logger);
-app.Lifetime.ApplicationStopping.Register(corsOrigins.Stop);
-
-MapRuntimeConfig(app, runtimeOptions, startupWebRuntime);
-MapOperatorUi(app, serverAppOptions, webUiEnabledAtStartup);
-MapRestartEndpoints(app, serverAppOptions);
-MapWebUiStaticServing(app, serverAppOptions, webUiEnabledAtStartup);
-
-app.Lifetime.ApplicationStarted.Register(() =>
+static string BuildOperatorUrl(string listenUrl, string operatorPath)
 {
-    app.Logger.LogInformation("ReelRoulette.ServerApp started on {ListenUrl}", runtimeOptions.ListenUrl);
-});
+        if (!Uri.TryCreate(listenUrl, UriKind.Absolute, out var uri))
+        {
+            return $"http://localhost:45123{NormalizeOperatorPath(operatorPath)}";
+        }
 
-app.Lifetime.ApplicationStopping.Register(() =>
+        var host = uri.Host is "0.0.0.0" or "::" ? "localhost" : uri.Host;
+        var builder = new UriBuilder(uri.Scheme, host, uri.Port)
+        {
+            Path = NormalizeOperatorPath(operatorPath)
+        };
+        return builder.Uri.ToString();
+}
+
+static string ResolveSharedIconPath(string contentRootPath)
 {
-    app.Logger.LogInformation("ReelRoulette.ServerApp is shutting down.");
-});
+        var localPath = Path.Combine(AppContext.BaseDirectory, "HI.ico");
+        if (File.Exists(localPath))
+        {
+            return localPath;
+        }
 
-app.Run();
+        return Path.GetFullPath(Path.Combine(contentRootPath, "..", "..", "..", "assets", "HI.ico"));
+}
+
+static string NormalizeOperatorPath(string operatorPath)
+{
+        if (string.IsNullOrWhiteSpace(operatorPath))
+        {
+            return "/operator";
+        }
+
+        return operatorPath.StartsWith('/') ? operatorPath : "/" + operatorPath;
+}
 
 static void MapRuntimeConfig(
     WebApplication app,

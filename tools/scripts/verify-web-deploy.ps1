@@ -21,6 +21,7 @@ finally {
 }
 
 $listenUrl = "http://localhost:$ServerPort"
+$framework = if ($IsWindows) { "net9.0-windows" } else { "net9.0" }
 if (Test-Path $serverOutLogPath) {
     Remove-Item $serverOutLogPath -Force
 }
@@ -29,6 +30,8 @@ if (Test-Path $serverErrLogPath) {
 }
 $serverProcess = Start-Process dotnet -ArgumentList @(
     "run",
+    "--framework",
+    $framework,
     "--project",
     $serverProject,
     "--",

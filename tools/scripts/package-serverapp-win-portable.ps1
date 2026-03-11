@@ -72,6 +72,7 @@ try {
 
     dotnet publish $projectPath `
         -c $Configuration `
+        -f net9.0-windows `
         -r $Runtime `
         --self-contained true `
         -p:PublishSingleFile=false `

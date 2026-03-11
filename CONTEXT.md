@@ -18,6 +18,9 @@ ReelRoulette is migrating from a monolithic desktop app to a thin-client, API-fi
   - Control-plane surfaces under `/control/*` for runtime status/settings/pairing/lifecycle/testing/logs.
   - Operator testing mode supports deterministic fault simulation (version/capability mismatch, API unavailable, media missing, SSE disconnect).
   - mDNS LAN hostname advertisement for WebUI when enabled.
+  - Host-UI abstraction keeps server runtime tray-agnostic:
+    - Windows uses native `NotifyIcon` tray host with lifecycle/refresh/operator shortcuts.
+    - non-Windows remains headless-compatible.
 
 - **Domain execution (`src/core/ReelRoulette.Core` + server services)**
   - API-authoritative library operations (import, duplicates, auto-tag, playback stats, refresh pipeline).
@@ -43,10 +46,9 @@ ReelRoulette is migrating from a monolithic desktop app to a thin-client, API-fi
 
 Authoritative roadmap details live in `MILESTONES.md`. Near-term focus areas:
 
-- `M8g`: unified `last.log` pipeline (server + client logging consolidation).
-- `M8h`: UX/UI polish follow-up.
-- `M9*`: playback-session pipeline rollout.
-- `M10`: Android bootstrap on the existing API seam.
+- `M9*`: structured logging pipeline and migration rollout.
+- `M10`: UX/UI polish.
+- `M11*`: playback-session pipeline rollout.
 
 ## Repository Map (High Signal)
 
@@ -68,7 +70,8 @@ For full setup/run details use `README.md` and `docs/dev-setup.md`. Core command
 
 - `dotnet build ReelRoulette.sln`
 - `dotnet test ReelRoulette.sln`
-- `dotnet run --project .\src\core\ReelRoulette.ServerApp\ReelRoulette.ServerApp.csproj`
+- `dotnet run --framework net9.0-windows --project .\src\core\ReelRoulette.ServerApp\ReelRoulette.ServerApp.csproj` (Windows tray path)
+- `dotnet run --framework net9.0 --project .\src\core\ReelRoulette.ServerApp\ReelRoulette.ServerApp.csproj` (non-Windows headless path)
 - `dotnet run --project .\src\clients\windows\ReelRoulette.WindowsApp\ReelRoulette.WindowsApp.csproj`
 - `.\tools\scripts\run-server.ps1` / `.\tools\scripts\run-server-rebuild.ps1`
 - `npm run verify` (in `src/clients/web/ReelRoulette.WebUI`)

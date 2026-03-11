@@ -60,6 +60,12 @@ Boundary:
 
 - `src/core/ReelRoulette.ServerApp/Program.cs`
   - single-process host for API + SSE + media + WebUI static assets + `/operator`.
+- `src/core/ReelRoulette.ServerApp/Hosting/IHostUi.cs`
+  - host-UI abstraction boundary keeping server runtime tray-agnostic.
+- `src/core/ReelRoulette.ServerApp/Hosting/WindowsNotifyIconHostUi.cs`
+  - Windows-only tray runtime controls (Open Operator UI, Refresh Library, Restart Server, Stop Server / Exit) using shared `assets/HI.ico`.
+- `src/core/ReelRoulette.ServerApp/Hosting/HeadlessHostUi.cs`
+  - non-Windows headless host path for runtime compatibility.
 - `src/core/ReelRoulette.Server/Services/ConnectedClientTracker.cs`
   - connected client/session/SSE diagnostics backing operator visibility.
 - `src/core/ReelRoulette.Server/Services/OperatorTestingService.cs`
@@ -164,6 +170,7 @@ Runtime scripts:
 
 - `tools/scripts/run-server.ps1` / `.sh`
 - `tools/scripts/run-server-rebuild.ps1` / `.sh`
+- scripts select `net9.0-windows` framework on Windows and `net9.0` on non-Windows for ServerApp startup.
 - `tools/scripts/set-release-version.ps1` (release-aligned version fan-out for OpenAPI/runtime/tests/project metadata plus README/dev-setup release command examples; use `-NoDocUpdates` to skip docs updates)
 - `tools/scripts/full-release.ps1` (chained release flow: version fan-out + verify + server/desktop packaging)
 - `tools/scripts/reset-checklist.ps1` (resets `docs/testing-checklist.md` metadata/checklist state; preserves waived checks by default, supports `-RemoveWaived`)

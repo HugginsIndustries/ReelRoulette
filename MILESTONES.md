@@ -62,46 +62,6 @@ Do not use this file for detailed architecture explanation or current capability
 
 ## Milestone Board
 
-### M8g - Windows ServerApp System Tray Baseline (Single Binary, No Console)
-
-- **Status**: ⏳ Planned
-- **Goal**: Provide a single-binary Windows `ReelRoulette Server` runtime that starts without a command prompt and exposes essential operator actions via system tray.
-- **Scope**:
-  - Convert Windows ServerApp startup to no-console behavior (`WinExe`) while preserving existing server/API behavior.
-  - Require tray icon asset parity with repo branding:
-    - system tray icon must use the shared app icon at `assets/HI.ico` (same icon source used by other app/package surfaces).
-  - Add initial Windows system tray surface with minimum actions:
-    - Open Operator UI (default browser to `/operator`),
-    - Refresh Library (manual refresh trigger),
-    - Restart Server,
-    - Stop Server / Exit.
-  - Keep server logic API-authoritative and reuse existing server services/endpoints for lifecycle/refresh operations.
-  - Introduce host-UI abstraction so non-Windows runtimes remain headless-compatible and can adopt tray support later without server-core rewrites.
-  - Preserve existing packaging/install behavior except for intentional startup UX change (no visible command prompt).
-- **Acceptance criteria**:
-  - Launching `ReelRoulette.ServerApp.exe` on Windows does not show a command prompt window.
-  - Windows tray icon uses the shared app icon from `assets/HI.ico` (not a placeholder/default framework icon).
-  - Tray icon appears reliably and menu actions execute deterministically:
-    - Operator UI opens in default browser,
-    - Refresh action triggers library refresh pipeline,
-    - Restart action performs graceful self-restart,
-    - Stop/Exit performs graceful shutdown.
-  - Existing API/SSE/WebUI/Operator runtime behavior remains functional and unchanged in intent.
-  - Single-binary Windows ServerApp packaging remains valid and install/run flow remains reproducible.
-  - Linux runtime path is unaffected (continues headless unless Linux tray is explicitly enabled in M19 work).
-- **Verification evidence**:
-  - Manual Windows launch evidence: no console window + tray icon visible.
-  - Tray icon evidence confirms the runtime icon source is `assets/HI.ico` (for example: visible icon parity check and/or implementation/config reference).
-  - Manual tray action evidence for all four minimum actions (including success/failure behavior where applicable).
-  - Automated gate pass includes:
-    - `dotnet build ReelRoulette.sln`
-    - `dotnet test ReelRoulette.sln`
-    - `npm run verify` (`src/clients/web/ReelRoulette.WebUI`)
-  - Packaging/install smoke evidence confirms installed ServerApp also runs with tray/no-console behavior.
-- **Deferrals / Follow-ups**:
-  - Linux tray support is explicitly deferred to M19 Linux milestones as best-effort capability.
-  - Advanced tray UX (notifications, rich status panes, localization, startup-on-login toggles) is out of scope for M8g unless separately approved.
-
 ### M9a - Structured JSONL Schema + Server Writer Foundation
 
 - **Status**: ⏳ Planned
@@ -942,6 +902,52 @@ Do not use this file for detailed architecture explanation or current capability
 ## Completed Milestones
 
 Latest completions first:
+
+### M8g - Windows ServerApp System Tray Baseline (Single Binary, No Console)
+
+- **Status**: ✅ Complete
+- **Goal**: Provide a single-binary Windows `ReelRoulette Server` runtime that starts without a command prompt and exposes essential operator actions via system tray.
+- **Scope**:
+  - Convert Windows ServerApp startup to no-console behavior (`WinExe`) while preserving existing server/API behavior.
+  - Require tray icon asset parity with repo branding:
+    - system tray icon must use the shared app icon at `assets/HI.ico` (same icon source used by other app/package surfaces).
+  - Add initial Windows system tray surface with minimum actions:
+    - Open Operator UI (default browser to `/operator`),
+    - Refresh Library (manual refresh trigger),
+    - Restart Server,
+    - Stop Server / Exit.
+  - Keep server logic API-authoritative and reuse existing server services/endpoints for lifecycle/refresh operations.
+  - Introduce host-UI abstraction so non-Windows runtimes remain headless-compatible and can adopt tray support later without server-core rewrites.
+  - Preserve existing packaging/install behavior except for intentional startup UX change (no visible command prompt).
+- **Acceptance criteria**:
+  - Launching `ReelRoulette.ServerApp.exe` on Windows does not show a command prompt window.
+  - Windows tray icon uses the shared app icon from `assets/HI.ico` (not a placeholder/default framework icon).
+  - Tray icon appears reliably and menu actions execute deterministically:
+    - Operator UI opens in default browser,
+    - Refresh action triggers library refresh pipeline,
+    - Restart action performs graceful self-restart,
+    - Stop/Exit performs graceful shutdown.
+  - Existing API/SSE/WebUI/Operator runtime behavior remains functional and unchanged in intent.
+  - Single-binary Windows ServerApp packaging remains valid and install/run flow remains reproducible.
+  - Linux runtime path is unaffected (continues headless unless Linux tray is explicitly enabled in M19 work).
+- **Verification evidence**:
+  - Implemented code path:
+    - host-UI abstraction added under `src/core/ReelRoulette.ServerApp/Hosting/*` with Windows `NotifyIcon` tray host and non-Windows headless host.
+    - tray menu actions wired for Open Operator UI, Refresh Library, Restart Server, and Stop Server / Exit.
+    - Windows no-console runtime path implemented via `net9.0-windows` + `WinExe`; non-Windows path remains `net9.0` headless.
+    - tray icon source now resolves shared `assets/HI.ico` via published `HI.ico` copy and repo fallback path.
+  - Automated gate pass (2026-03-11):
+    - `dotnet build ReelRoulette.sln`
+    - `dotnet test ReelRoulette.sln`
+    - `npm run verify` (`src/clients/web/ReelRoulette.WebUI`)
+  - Manual verification completed (`docs/testing-checklist.md`):
+    - no-console Windows launch verified,
+    - tray icon parity evidence verified for `assets/HI.ico`,
+    - tray action behavior verified for all four required menu actions,
+    - packaged portable/install runtime tray behavior verified.
+- **Deferrals / Follow-ups**:
+  - Linux tray support is explicitly deferred to M19 Linux milestones as best-effort capability.
+  - Advanced tray UX (notifications, rich status panes, localization, startup-on-login toggles) is out of scope for M8g unless separately approved.
 
 ### M8f - Hardening, Packaging, and Release Readiness
 

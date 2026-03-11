@@ -24,7 +24,8 @@ This guide covers local setup, run paths, verification gates, packaging, and rel
 ### Run ServerApp (default consolidated runtime)
 
 - Direct:
-  - `dotnet run --project .\src\core\ReelRoulette.ServerApp\ReelRoulette.ServerApp.csproj`
+  - Windows tray path: `dotnet run --framework net9.0-windows --project .\src\core\ReelRoulette.ServerApp\ReelRoulette.ServerApp.csproj`
+  - Linux/macOS headless path: `dotnet run --framework net9.0 --project .\src\core\ReelRoulette.ServerApp\ReelRoulette.ServerApp.csproj`
 - Scripted:
   - `tools/scripts/run-server.ps1`
   - `tools/scripts/run-server.sh`
@@ -35,6 +36,7 @@ Runtime notes:
 - Operator UI is available at `/operator`.
 - Runtime config for WebUI is served at `/runtime-config.json` when WebUI is enabled.
 - Default listen URL/port is `http://localhost:45123` unless overridden by runtime settings or script parameters.
+- Windows runtime uses tray-hosted ServerApp behavior (no visible command prompt when launched as app binary).
 
 ### Run ServerApp with WebUI rebuild
 
@@ -128,6 +130,7 @@ Packaging notes:
 - Desktop packaging scripts stage native desktop runtime dependencies into publish output (`runtimes/win-x64/native`) at package time.
 - Desktop native dependency staging prefers local repo runtimes when available; otherwise scripts acquire dependencies via Chocolatey (`ffmpeg` for `ffprobe.exe`, `vlc` for LibVLC files).
 - Server packaging scripts run WebUI build and bundle static assets into ServerApp publish output (`wwwroot`) so packaged runtime includes WebUI and Operator favicon.
+- Server publish output includes `HI.ico` at app root for tray icon loading (from shared `assets/HI.ico`).
 - Shared app/installer/web icon source is `assets/HI.ico`.
 - Inno script auto-detects `ISCC.exe` from PATH/common install locations/registry.
 
@@ -135,7 +138,7 @@ Packaging notes:
 
 Use one command to align release-version surfaces:
 
-- `tools/scripts/set-release-version.ps1 -Version 0.9.1-dev -UpdateDesktopVersion -RegenerateContracts -RunVerify`
+- `tools/scripts/set-release-version.ps1 -Version 0.10.0 -UpdateDesktopVersion -RegenerateContracts -RunVerify`
 - By default, this script also updates release command examples in `README.md` and `docs/dev-setup.md`.
 - Use `-NoDocUpdates` to skip those docs updates when needed.
 
@@ -154,7 +157,7 @@ Then package server and desktop as needed:
 - `tools/scripts/package-desktop-win-portable.ps1`
 - `tools/scripts/package-desktop-win-inno.ps1`
 - or run the chained flow:
-  - `tools/scripts/full-release.ps1 -Version 0.9.1-dev`
+  - `tools/scripts/full-release.ps1 -Version 0.10.0`
 
 Reset manual testing checklist state for a fresh run:
 

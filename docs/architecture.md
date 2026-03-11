@@ -41,6 +41,9 @@ flowchart LR
 - Hosts API, SSE, media, and static WebUI surfaces on a consolidated runtime path.
 - Serves Operator UI and control-plane endpoints.
 - Owns runtime lifecycle and settings apply/restart orchestration.
+- Uses a thin host-UI abstraction:
+  - Windows host path uses native tray runtime controls (`NotifyIcon`) for operator shortcuts.
+  - non-Windows host path remains headless-compatible.
 
 ### Server Transport Layer
 
@@ -127,6 +130,7 @@ Operator UI is an operational surface and does not own domain logic.
 ## Packaging and Delivery
 
 - Windows packaging supports portable and installer outputs through repository scripts.
+- Windows ServerApp runtime targets `net9.0-windows` `WinExe` behavior for no-console launch; non-Windows runtime remains `net9.0` headless path.
 - CI/workflow gates validate build/test/contract/web checks and packaging paths.
 - Release version metadata should remain aligned across contract, runtime, project, and package surfaces.
 

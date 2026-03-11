@@ -3,6 +3,7 @@ param(
     [switch]$RequireAuth,
     [switch]$BindOnLan,
     [switch]$DisableLocalhostTrust,
+    [string]$Framework = "",
     [string]$PairingToken = "reelroulette-dev-token"
 )
 
@@ -39,7 +40,13 @@ if ($RequireAuth.IsPresent) {
 }
 Write-Host "Verification hint: GET $healthUrl"
 
-dotnet run --project ".\src\core\ReelRoulette.ServerApp\ReelRoulette.ServerApp.csproj"
+$framework = if ([string]::IsNullOrWhiteSpace($Framework)) {
+    if ($IsWindows) { "net9.0-windows" } else { "net9.0" }
+}
+else {
+    $Framework
+}
+dotnet run --framework $framework --project ".\src\core\ReelRoulette.ServerApp\ReelRoulette.ServerApp.csproj"
 if ($LASTEXITCODE -ne 0) {
     Write-Error "ServerApp exited with code $LASTEXITCODE"
     exit $LASTEXITCODE

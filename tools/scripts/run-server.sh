@@ -36,4 +36,12 @@ if [[ "${REQUIRE_AUTH}" == "true" ]]; then
 fi
 echo "Verification hint: curl ${HEALTH_URL}"
 
-dotnet run --project "./src/core/ReelRoulette.ServerApp/ReelRoulette.ServerApp.csproj"
+if [[ -n "${SERVERAPP_FRAMEWORK:-}" ]]; then
+  FRAMEWORK="${SERVERAPP_FRAMEWORK}"
+elif [[ "${OS:-}" == "Windows_NT" ]] || [[ "${MSYSTEM:-}" != "" ]]; then
+  FRAMEWORK="net9.0-windows"
+else
+  FRAMEWORK="net9.0"
+fi
+
+dotnet run --framework "${FRAMEWORK}" --project "./src/core/ReelRoulette.ServerApp/ReelRoulette.ServerApp.csproj"

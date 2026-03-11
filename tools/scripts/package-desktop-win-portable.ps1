@@ -206,7 +206,7 @@ try {
         "Version: $Version",
         "Runtime: $Runtime",
         "",
-        "Run: ReelRoulette.exe"
+        "Run: ReelRoulette.WindowsApp.exe"
     ) | Set-Content -Path (Join-Path $stagingDir "PACKAGE_INFO.txt")
 
     Compress-Archive -Path (Join-Path $stagingDir "*") -DestinationPath $zipPath

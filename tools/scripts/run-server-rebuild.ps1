@@ -41,12 +41,14 @@ try {
     }
 
     $env:ServerApp__WebUiStaticRootPath = $distPath
+    $framework = if ($IsWindows) { "net9.0-windows" } else { "net9.0" }
 
     $scriptArgs = @(
         "-NoProfile",
         "-ExecutionPolicy", "Bypass",
         "-File", (Join-Path $PSScriptRoot "run-server.ps1"),
         "-Port", $Port.ToString(),
+        "-Framework", $framework,
         "-PairingToken", $PairingToken
     )
     if ($RequireAuth.IsPresent) { $scriptArgs += "-RequireAuth" }

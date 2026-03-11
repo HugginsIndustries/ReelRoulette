@@ -26,4 +26,10 @@ if [[ ! -d "${DIST_PATH}" ]]; then
 fi
 
 export ServerApp__WebUiStaticRootPath="${DIST_PATH}"
-"${REPO_ROOT}/tools/scripts/run-server.sh"
+if [[ "${OS:-}" == "Windows_NT" ]] || [[ "${MSYSTEM:-}" != "" ]]; then
+  SERVERAPP_FRAMEWORK="net9.0-windows"
+else
+  SERVERAPP_FRAMEWORK="net9.0"
+fi
+
+SERVERAPP_FRAMEWORK="${SERVERAPP_FRAMEWORK}" "${REPO_ROOT}/tools/scripts/run-server.sh"

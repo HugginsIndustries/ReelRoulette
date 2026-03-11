@@ -1,4 +1,5 @@
 # Changelog
+<!-- markdownlint-disable MD024 -->
 
 This file follows a Keep a Changelog style format.
 
@@ -6,10 +7,30 @@ This file follows a Keep a Changelog style format.
 
 ### Added
 
+- None yet.
+
+### Changed
+
+- None yet.
+
+### Fixed
+
+- None yet.
+
+## v0.10.0 - Platform and Experience Update (2026-03-11)
+
+### Added
+
 - Add `tools/scripts/reset-checklist.ps1` to reset `docs/testing-checklist.md` metadata/checklist state using the current server app version, with default waived-item preservation and optional `-RemoveWaived` cleanup.
 
 ### Changed
 
+- Add Windows tray-host runtime path for `ReelRoulette.ServerApp` using native `NotifyIcon` behind host-UI abstraction, while keeping non-Windows runtime headless-compatible.
+- Add required tray actions (`Open Operator UI`, `Refresh Library`, `Restart Server`, `Stop Server / Exit`) wired to existing server-authoritative lifecycle/refresh paths.
+- Multi-target `ReelRoulette.ServerApp` for `net9.0` (headless) and `net9.0-windows` (`WinExe` no-console path), and include shared `HI.ico` in publish output for tray icon loading.
+- Update server run/package/verify script paths for explicit multi-target framework selection (`net9.0-windows` on Windows, `net9.0` otherwise) without introducing single-file publish requirements.
+- Synchronize runtime/docs/checklist surfaces for Windows tray baseline verification and shared icon parity requirements.
+- Align Windows tray restart/stop shutdown sequencing to marshal tray exit on the UI thread, ensuring deterministic tray teardown and single-instance tray behavior across restart cycles.
 - Move desktop app runtime from `source/` to `src/clients/windows/ReelRoulette.WindowsApp/` while preserving behavior.
 - Replace placeholder windows-client project files with the shipping desktop app project, source files, and assets.
 - Update solution, test-project compile links, desktop packaging scripts, and release-version script to target `ReelRoulette.WindowsApp.csproj` in the new path.
@@ -17,11 +38,10 @@ This file follows a Keep a Changelog style format.
 - Update `set-release-version.ps1` to sync release command examples in `README.md` and `docs/dev-setup.md` by default, with docs opt-out via `-NoDocUpdates`.
 - Remove legacy compatibility projects `ReelRoulette.Worker` and `ReelRoulette.WebHost` from the solution and repository.
 - Remove the legacy `source/` desktop runtime tree after path cutover.
-- Change default server/web runtime port from `51234` to `45123` and add desktop settings guidance to avoid ephemeral ports (`49152-65535`) when choosing Web UI ports.
 
 ### Fixed
 
-- None yet.
+- Reduce intermittent server startup failures from port conflicts by changing the default server/web runtime port from `51234` to `45123` and documenting avoidance of ephemeral port ranges (`49152-65535`) for Web UI port choices.
 
 ## v0.9.0 - Initial Release (2026-03-09)
 

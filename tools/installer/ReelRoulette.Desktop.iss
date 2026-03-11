@@ -27,7 +27,7 @@ SolidCompression=yes
 WizardStyle=modern
 ArchitecturesInstallIn64BitMode=x64compatible
 SetupIconFile={#SharedIconPath}
-UninstallDisplayIcon={app}\ReelRoulette.exe
+UninstallDisplayIcon={app}\ReelRoulette.WindowsApp.exe
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -36,7 +36,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion
 
 [Icons]
-Name: "{autoprograms}\ReelRoulette Desktop"; Filename: "{app}\ReelRoulette.exe"; IconFilename: "{app}\ReelRoulette.exe"
+Name: "{autoprograms}\ReelRoulette Desktop"; Filename: "{app}\ReelRoulette.WindowsApp.exe"; IconFilename: "{app}\ReelRoulette.WindowsApp.exe"
 
 [Run]
-Filename: "{app}\ReelRoulette.exe"; Description: "Launch ReelRoulette Desktop"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\ReelRoulette.WindowsApp.exe"; Description: "Launch ReelRoulette Desktop"; Flags: nowait postinstall skipifsilent

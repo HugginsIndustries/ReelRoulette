@@ -13,14 +13,14 @@ public sealed class ServerContractTests
     {
         var response = ApiContractMapper.MapVersion(
             "1",
-            assetsVersion: "0.9.1-dev",
+            assetsVersion: "0.10.0",
             minimumCompatibleApiVersion: "0",
             supportedApiVersions: ["1", "0"],
             capabilities: ["identity.sessionId", "events.refreshStatusChanged", "events.resyncRequired"]);
 
         Assert.False(string.IsNullOrWhiteSpace(response.AppVersion));
         Assert.Equal("1", response.ApiVersion);
-        Assert.Equal("0.9.1-dev", response.AssetsVersion);
+        Assert.Equal("0.10.0", response.AssetsVersion);
         Assert.Equal("0", response.MinimumCompatibleApiVersion);
         Assert.Contains("1", response.SupportedApiVersions);
         Assert.Contains("0", response.SupportedApiVersions);

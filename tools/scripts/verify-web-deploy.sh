@@ -7,13 +7,18 @@ SERVER_PORT="${1:-51312}"
 BASE_URL="http://localhost:${SERVER_PORT}"
 WEBUI_PATH="${REPO_ROOT}/src/clients/web/ReelRoulette.WebUI"
 DIST_PATH="${WEBUI_PATH}/dist"
+if [[ "${OS:-}" == "Windows_NT" ]] || [[ "${MSYSTEM:-}" != "" ]]; then
+  FRAMEWORK="net9.0-windows"
+else
+  FRAMEWORK="net9.0"
+fi
 
 pushd "${WEBUI_PATH}" >/dev/null
 npm install
 npm run build
 popd >/dev/null
 
-dotnet run --project "${REPO_ROOT}/src/core/ReelRoulette.ServerApp/ReelRoulette.ServerApp.csproj" -- \
+dotnet run --framework "${FRAMEWORK}" --project "${REPO_ROOT}/src/core/ReelRoulette.ServerApp/ReelRoulette.ServerApp.csproj" -- \
   --CoreServer:ListenUrl="${BASE_URL}" \
   --ServerApp:WebUiStaticRootPath="${DIST_PATH}" >/tmp/reelroulette-serverapp.log 2>&1 &
 SERVER_PID=$!
