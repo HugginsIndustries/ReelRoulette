@@ -65,12 +65,12 @@ Do not use this file for detailed architecture explanation or current capability
 ### M8g - Unified last.log Pipeline (Server + Client Logging Consolidation)
 
 - **Status**: ⏳ Planned
-- **Goal**: Make server-owned `last.log` the single diagnostics stream for server + client logs using structured JSONL entries, with reliable correlation/filtering across services and sessions.
+- **Goal**: Make server-owned `last.log` the single diagnostics stream for server + client logs using structured JSONL entries, with reliable correlation/filtering across services and sessions, and **privacy-by-construction at the source** using a **new structured Log API** (no parsing/inferring/normalizing after the fact).
 - **Scope**:
   - Define and enforce canonical JSONL log schema (one JSON object per line) with required core fields:
     - required on every entry: `ts`, `lvl`, `svc`, `comp`, `op`, `msg`,
     - conditional/optional fields: `traceId`, `spanId`, `reqId`, `clientId`, `sessionId`, `ver`, `build`, `clientTs`, `srcIp`, `userAgent`.
-    - example: {"ts":"2026-03-10T20:30:35.355Z","lvl":"info","svc":"desktop","comp":"ui.main-window","op":"UpdateLibraryPanel","msg":"Got 38833 items from library."}
+    - example: `{"ts":"2026-03-10T20:30:35.355Z","lvl":"info","svc":"desktop","comp":"ui.main-window","op":"UpdateLibraryPanel","msg":"Library panel updated."}`
   - Centralize all writes through one server log writer path used by:
     - server runtime logging pipeline (`ILogger` sink/provider),
     - client ingestion endpoint (`POST /api/logs/client`).
@@ -79,10 +79,62 @@ Do not use this file for detailed architecture explanation or current capability
     - `clientTs` = client-reported event time (diagnostic context).
   - Require W3C trace context (`traceId`/`spanId`) for HTTP/SSE request-scoped logs; keep it optional for background/local-only client events.
   - Keep optional human-readable rendering as a *view* over structured fields (Operator panel/console), not as the source-of-truth persisted format.
-  - Enforce privacy-by-default message policy for all emitters using safe templates by construction:
-    - never log filenames/filepaths, tag/category names, preset/source names, token/cookie/secret values,
-    - prefer generic structured status/count wording (for example: `"Saved 2 tags to 2 media"`).
-  - Add final server-side safety rewrite fallback before writing `last.log` to prevent unsafe payload leakage from any caller.
+  - **Introduce a new structured Log API for desktop and WebUI** and require call sites to supply metadata explicitly:
+    - Provide strongly-typed methods (or overloads) such as:
+      - `LogTrace(comp, op, msg, data? = null)`
+      - `LogDebug(comp, op, msg, data? = null)`
+      - `LogInfo(comp, op, msg, data? = null)`
+      - `LogWarn(comp, op, msg, data? = null)`
+      - `LogError(comp, op, msg, ex? = null, data? = null)`
+      - `LogFatal(comp, op, msg, ex? = null, data? = null)`
+    - `comp` and `op` are explicit parameters (no parsing from `msg`).
+    - `lvl` is set by the API method used (no “everything is info” path).
+    - Optional `data` must also be privacy-safe (see below).
+  - **Update every desktop and WebUI log call site** to use the new structured Log API:
+    - Replace all legacy `Log("OpName: ...")` string-prefix patterns.
+    - Remove any “infer op from msg” logic or normalizers.
+    - Ensure each call site chooses an appropriate level:
+      - `trace/debug` for noisy flow details,
+      - `info` for meaningful state transitions,
+      - `warn` for recoverable degradations,
+      - `error` for failures/exceptions,
+      - `fatal` for unrecoverable failures.
+  - **Remove/obsolete the old Log method**:
+    - Mark legacy `Log(string)` (and similar) as `[Obsolete(..., error: true)]` once call sites are migrated, or delete it.
+    - Ensure there is no fallback that reintroduces string-prefix parsing or forced `info` levels.
+  - **Provide a minimal canonical `comp` mapping list** and enforce it in code review / docs:
+    - Desktop (examples):
+      - `ui.main-window`
+      - `ui.player`
+      - `ui.settings`
+      - `core.client` (desktop API client / connectivity)
+      - `playback.vlc`
+      - `library.panel`
+    - Server (examples):
+      - `api`
+      - `auth`
+      - `sse`
+      - `playback`
+      - `refresh.pipeline`
+      - `storage`
+    - WebUI (examples):
+      - `web.app`
+      - `web.player`
+      - `web.api`
+      - `web.sse`
+  - **Enforce privacy-by-default by construction (no redaction layer):**
+    - Emitters must never include domain-identifying/sensitive values in `msg` or `data`, including:
+      - filenames or file paths,
+      - tag/category names,
+      - preset/source names,
+      - user-provided search text,
+      - token/cookie/secret values,
+      - raw media identifiers that could reveal content without server context.
+    - Prefer safe templates and coarse counts/booleans/durations (examples):
+      - `"Saved desktop settings."` with `data: { wroteBackup: true }`
+      - `"Applied favorite update."` with `data: { isFavorite: true }`
+      - `"Library panel updated."` with `data: { totalCount: 38833, eligibleCount: 163 }`
+      - `"API request failed."` with `data: { endpoint: "SetFavorite" }` (no URL, no path)
   - Keep logging best-effort and non-blocking for clients:
     - client relay failures must not block/interrupt user actions,
     - retries are asynchronous and bounded.
@@ -96,14 +148,18 @@ Do not use this file for detailed architecture explanation or current capability
   - `last.log` includes both server runtime logs and ingested desktop/web client logs through the same writer path.
   - Client-originated entries preserve both server time (`ts`) and client time (`clientTs` where provided); ordering uses server-side `ts`.
   - Request-scoped HTTP/SSE flows include `traceId`/`spanId` and can be filtered end-to-end across server and client events for the same operation flow.
-  - Privacy-by-default constraints are enforced in emitted content (no banned sensitive/domain-identifying values), including server-side fallback rewrite protection.
+  - Desktop and WebUI logs are emitted using the new structured Log API:
+    - no legacy `Log(string)` usage remains,
+    - `comp` and `op` are explicitly provided (no parsing/inference),
+    - log levels are correctly categorized (not all `info`).
+  - Privacy-by-default constraints are enforced at the source (no banned sensitive/domain-identifying values in `msg` or `data`), and no sanitizer/normalizer is required for safety.
   - Operator diagnostics view can filter/search by `svc`, `lvl`, `clientId`, `sessionId`, `traceId`, `comp`, and `op` without requiring shell access.
   - Client log ingestion failures are non-blocking in user flows and bounded retry behavior is deterministic/tested.
   - Lifecycle behavior is deterministic and documented with size-based rotation limit (25 MB) and archive cap (10, uncompressed).
-  - Automated tests cover schema validation, ingestion mapping, timestamp semantics, request-scoped trace correlation fields, privacy guardrails (including fallback rewrite), lifecycle behavior, and non-blocking relay behavior.
+  - Automated tests cover schema validation, ingestion mapping, timestamp semantics, request-scoped trace correlation fields, structured Log API behavior (field correctness + levels), privacy guardrails (source-safe templates), lifecycle behavior, and non-blocking relay behavior.
 - **Verification evidence**:
   - Centralized server writer emits JSONL entries for both server and client-ingested events.
-  - `/api/logs/client` maps to canonical schema and preserves client/session/trace metadata.
+  - `/api/logs/client` maps to canonical schema and preserves client/session/trace metadata without parsing/inference of `lvl`/`comp`/`op`.
   - Desktop + WebUI relays verified with stable `svc`, `clientId`, `sessionId`; request-scoped paths include trace fields.
   - Operator log view validates mixed-source filtering/search by structured fields (`svc`, `lvl`, `clientId`, `sessionId`, `traceId`, `comp`, `op`) plus message text search.
   - Automated verification passes:
