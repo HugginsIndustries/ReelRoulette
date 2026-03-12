@@ -20,10 +20,10 @@ jobs:
           dotnet-version: "9.0.x"
 
       - name: Build solution
-        run: dotnet build ReelRoulette.sln --configuration Release -p:TargetFramework=net9.0 -p:EnableWindowsTargeting=true
+        run: dotnet build ReelRoulette.sln --configuration Release -p:TargetFramework=net9.0 -p:EnableWindowsTargeting=true -m:1
 
       - name: Test solution
-        run: dotnet test ReelRoulette.sln --configuration Release --no-build -p:TargetFramework=net9.0 -p:EnableWindowsTargeting=true
+        run: dotnet test ReelRoulette.sln --configuration Release --no-build -p:TargetFramework=net9.0 -p:EnableWindowsTargeting=true -m:1
 
   build-test-windows:
     runs-on: windows-latest
