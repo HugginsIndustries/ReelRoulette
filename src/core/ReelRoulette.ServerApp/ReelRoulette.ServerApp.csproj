@@ -3,7 +3,7 @@
     <TargetFrameworks>net9.0;net9.0-windows</TargetFrameworks>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <Version>0.10.0</Version>
+    <Version>0.11.0-dev</Version>
     <ApplicationIcon>..\..\..\assets\HI.ico</ApplicationIcon>
   </PropertyGroup>
   <PropertyGroup Condition="'$(TargetFramework)'=='net9.0'">
@@ -22,6 +22,7 @@
   </ItemGroup>
   <ItemGroup Condition="'$(TargetFramework)'!='net9.0-windows'">
     <Compile Remove="Hosting\WindowsNotifyIconHostUi.cs" />
+    <Compile Remove="Hosting\WindowsStartupLaunchService.cs" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Makaretu.Dns.Multicast">

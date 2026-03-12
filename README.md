@@ -69,6 +69,7 @@ Windows runtime note:
 
 - `ReelRoulette.ServerApp` runs as a tray-hosted runtime on Windows (no command prompt window when launched as app binary).
 - Tray menu provides quick actions for opening `/operator`, starting library refresh, restarting server, and stop/exit.
+- Tray and Operator UI both expose `Launch Server on Startup` control; changes apply immediately and do not require restart.
 
 Build WebUI and run server app:
 
@@ -81,7 +82,7 @@ Build WebUI and run server app:
 Set release-aligned version surfaces in one step:
 
 ```powershell
-.\tools\scripts\set-release-version.ps1 -Version 0.10.0 -UpdateDesktopVersion -RegenerateContracts -RunVerify
+.\tools\scripts\set-release-version.ps1 -Version 0.11.0-dev -UpdateDesktopVersion -RegenerateContracts -RunVerify
 ```
 
 ## Verification
@@ -132,11 +133,13 @@ Manual test guide:
 - Desktop packaging scripts stage native desktop dependencies into published output (`runtimes/win-x64/native`) during packaging.
 - Desktop native staging prefers local repo runtimes when present; otherwise scripts acquire dependencies via Chocolatey (`ffmpeg` + `vlc`).
 - Installer metadata (setup/start-menu/uninstall display) uses shared `assets/HI.ico`.
+- Server installer includes `Create Desktop Shortcut` task (default checked).
+- Desktop installer includes `Create Desktop Shortcut` task (default checked).
 
-Simple release flow (example `0.10.0`):
+Simple release flow (example `0.11.0-dev`):
 
 ```powershell
-.\tools\scripts\full-release.ps1 -Version 0.10.0
+.\tools\scripts\full-release.ps1 -Version 0.11.0-dev
 ```
 
 GitHub release asset flow:

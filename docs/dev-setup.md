@@ -37,6 +37,7 @@ Runtime notes:
 - Runtime config for WebUI is served at `/runtime-config.json` when WebUI is enabled.
 - Default listen URL/port is `http://localhost:45123` unless overridden by runtime settings or script parameters.
 - Windows runtime uses tray-hosted ServerApp behavior (no visible command prompt when launched as app binary).
+- `Launch Server on Startup` can be toggled from tray and Operator control settings and applies immediately (no restart required).
 
 ### Run ServerApp with WebUI rebuild
 
@@ -66,6 +67,7 @@ Desktop behavior notes:
   - `/operator`
   - `/control/status`
   - `/control/settings`
+  - `/control/startup`
   - `/control/pair`
   - `/control/restart`
   - `/control/stop`
@@ -133,12 +135,16 @@ Packaging notes:
 - Server publish output includes `HI.ico` at app root for tray icon loading (from shared `assets/HI.ico`).
 - Shared app/installer/web icon source is `assets/HI.ico`.
 - Inno script auto-detects `ISCC.exe` from PATH/common install locations/registry.
+- Server installer task:
+  - `Create Desktop Shortcut` (default checked).
+- Desktop installer task:
+  - `Create Desktop Shortcut` (default checked).
 
 ## Release Versioning
 
 Use one command to align release-version surfaces:
 
-- `tools/scripts/set-release-version.ps1 -Version 0.10.0 -UpdateDesktopVersion -RegenerateContracts -RunVerify`
+- `tools/scripts/set-release-version.ps1 -Version 0.11.0-dev -UpdateDesktopVersion -RegenerateContracts -RunVerify`
 - By default, this script also updates release command examples in `README.md` and `docs/dev-setup.md`.
 - Use `-NoDocUpdates` to skip those docs updates when needed.
 
@@ -157,7 +163,7 @@ Then package server and desktop as needed:
 - `tools/scripts/package-desktop-win-portable.ps1`
 - `tools/scripts/package-desktop-win-inno.ps1`
 - or run the chained flow:
-  - `tools/scripts/full-release.ps1 -Version 0.10.0`
+  - `tools/scripts/full-release.ps1 -Version 0.11.0-dev`
 
 Reset manual testing checklist state for a fresh run:
 

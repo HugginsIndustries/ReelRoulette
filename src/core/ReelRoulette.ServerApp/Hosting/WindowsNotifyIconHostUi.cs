@@ -12,6 +12,8 @@ internal sealed class WindowsNotifyIconHostUi : IHostUi
     private readonly Func<CancellationToken, Task> _onRefreshLibrary;
     private readonly Func<CancellationToken, Task<(bool Accepted, string Message)>> _onRestart;
     private readonly Func<CancellationToken, Task<(bool Accepted, string Message)>> _onStop;
+    private readonly Func<CancellationToken, Task<StartupLaunchStatus>> _getStartupLaunchStatus;
+    private readonly Func<bool, CancellationToken, Task<StartupLaunchResult>> _setStartupLaunchEnabled;
     private readonly object _sync = new();
     private Thread? _uiThread;
     private Control? _uiInvoker;
@@ -27,7 +29,9 @@ internal sealed class WindowsNotifyIconHostUi : IHostUi
         string iconPath,
         Func<CancellationToken, Task> onRefreshLibrary,
         Func<CancellationToken, Task<(bool Accepted, string Message)>> onRestart,
-        Func<CancellationToken, Task<(bool Accepted, string Message)>> onStop)
+        Func<CancellationToken, Task<(bool Accepted, string Message)>> onStop,
+        Func<CancellationToken, Task<StartupLaunchStatus>> getStartupLaunchStatus,
+        Func<bool, CancellationToken, Task<StartupLaunchResult>> setStartupLaunchEnabled)
     {
         _logger = logger;
         _operatorUrl = operatorUrl;
@@ -35,6 +39,8 @@ internal sealed class WindowsNotifyIconHostUi : IHostUi
         _onRefreshLibrary = onRefreshLibrary;
         _onRestart = onRestart;
         _onStop = onStop;
+        _getStartupLaunchStatus = getStartupLaunchStatus;
+        _setStartupLaunchEnabled = setStartupLaunchEnabled;
     }
 
     public void Start()
@@ -109,11 +115,13 @@ internal sealed class WindowsNotifyIconHostUi : IHostUi
         {
             menu = new ContextMenuStrip();
             var openItem = new ToolStripMenuItem("Open Operator UI");
+            var startupItem = new ToolStripMenuItem("Launch Server on Startup");
             var refreshItem = new ToolStripMenuItem("Refresh Library");
             var restartItem = new ToolStripMenuItem("Restart Server");
             var stopItem = new ToolStripMenuItem("Stop Server / Exit");
             menu.Items.Add(openItem);
             menu.Items.Add(new ToolStripSeparator());
+            menu.Items.Add(startupItem);
             menu.Items.Add(refreshItem);
             menu.Items.Add(restartItem);
             menu.Items.Add(stopItem);
@@ -132,9 +140,11 @@ internal sealed class WindowsNotifyIconHostUi : IHostUi
             _notifyIcon = trayIcon;
 
             openItem.Click += (_, _) => OpenOperatorUi();
+            startupItem.Click += (_, _) => _ = ToggleStartupLaunchAsync(startupItem);
             refreshItem.Click += (_, _) => _ = RunMenuActionAsync("refresh", _onRefreshLibrary);
             restartItem.Click += (_, _) => _ = RunRestartOrStopActionAsync("restart", _onRestart, requestExit: true);
             stopItem.Click += (_, _) => _ = RunRestartOrStopActionAsync("stop", _onStop, requestExit: true);
+            _ = InitializeStartupToggleAsync(startupItem);
 
             _readyTcs?.TrySetResult(true);
             Application.Run();
@@ -328,5 +338,60 @@ internal sealed class WindowsNotifyIconHostUi : IHostUi
         }
 
         await tcs.Task.WaitAsync(cancellationToken);
+    }
+
+    private async Task InitializeStartupToggleAsync(ToolStripMenuItem startupItem)
+    {
+        try
+        {
+            var status = await _getStartupLaunchStatus(CancellationToken.None);
+            await SetStartupMenuStateAsync(startupItem, status.Supported, status.LaunchServerOnStartup);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to load startup-launch status for tray menu.");
+            await SetStartupMenuStateAsync(startupItem, supported: true, enabled: false);
+        }
+    }
+
+    private async Task ToggleStartupLaunchAsync(ToolStripMenuItem startupItem)
+    {
+        if (Volatile.Read(ref _shutdownRequested) == 1)
+        {
+            return;
+        }
+
+        var requestedEnabled = !startupItem.Checked;
+        try
+        {
+            startupItem.Enabled = false;
+            var result = await _setStartupLaunchEnabled(requestedEnabled, CancellationToken.None);
+            if (!result.Accepted)
+            {
+                _logger.LogWarning("Tray startup-launch toggle was rejected: {Message}", result.Message);
+                return;
+            }
+
+            await SetStartupMenuStateAsync(startupItem, result.Supported, result.LaunchServerOnStartup);
+            _logger.LogInformation("Tray startup-launch toggle applied: {Message}", result.Message);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Tray startup-launch toggle failed.");
+        }
+        finally
+        {
+            if (!startupItem.IsDisposed)
+            {
+                startupItem.Enabled = true;
+            }
+        }
+    }
+
+    private static Task SetStartupMenuStateAsync(ToolStripMenuItem startupItem, bool supported, bool enabled)
+    {
+        startupItem.Checked = supported && enabled;
+        startupItem.Enabled = supported;
+        return Task.CompletedTask;
     }
 }

@@ -120,9 +120,11 @@ Use `tools/scripts/reset-checklist.ps1` to reset metadata/check states before st
 - [x] Windows app-binary launch (`ReelRoulette.ServerApp.exe`) shows no command prompt window.
 - [x] Tray icon appears and uses shared icon parity with `assets/HI.ico`.
 - [x] Tray `Open Operator UI` opens default browser at `/operator`.
+- [x] Tray `Launch Server on Startup` toggle updates startup registration immediately (no restart required).
 - [x] Tray `Refresh Library` triggers refresh pipeline start.
 - [x] Tray `Restart Server` performs graceful restart and service recovers.
 - [x] Tray `Stop Server / Exit` performs graceful shutdown.
+- [x] Operator `Control Settings` apply flow persists `Launch Server on Startup` state and reports apply status.
 - [x] Packaged portable server runtime preserves tray/no-console behavior.
 - [x] Packaged installer server runtime preserves tray/no-console behavior.
 
@@ -136,6 +138,8 @@ Use `tools/scripts/reset-checklist.ps1` to reset metadata/check states before st
   - `tools/scripts/package-desktop-win-inno.ps1`.
 - [x] Packaged server runtime includes WebUI static assets (root `/` serves WebUI, not missing-assets text).
 - [x] Shared icon appears consistently across installer UI, installed shortcuts/apps, and `/HI.ico` for WebUI/Operator.
+- [x] Server installer `Create Desktop Shortcut` task is present and default checked.
+- [x] Desktop installer `Create Desktop Shortcut` task is present and default checked.
 - [x] WebUI dev/build auto-syncs shared icon (`assets/HI.ico` -> `src/clients/web/ReelRoulette.WebUI/public/HI.ico`).
 - [x] Web deploy verify script passes:
   - `tools/scripts/verify-web-deploy.ps1`.

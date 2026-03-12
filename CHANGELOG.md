@@ -7,7 +7,10 @@ This file follows a Keep a Changelog style format.
 
 ### Added
 
-- None yet.
+- Add startup-launch host service path for `ReelRoulette.ServerApp`, including Windows `HKCU` startup registration support and non-Windows unsupported/no-op behavior.
+- Add `Launch Server on Startup` control-plane endpoints (`GET/POST /control/startup`) and Operator UI control-settings integration.
+- Add tray menu toggle for `Launch Server on Startup` with immediate apply behavior.
+- Add installer desktop shortcut task options with default-checked behavior for both server and desktop installers.
 
 ### Changed
 

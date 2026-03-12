@@ -44,6 +44,9 @@ flowchart LR
 - Uses a thin host-UI abstraction:
   - Windows host path uses native tray runtime controls (`NotifyIcon`) for operator shortcuts.
   - non-Windows host path remains headless-compatible.
+- Owns host-level startup-launch registration behavior:
+  - Windows path uses per-user startup registration and exposes immediate toggle control via tray and Operator UI.
+  - non-Windows path reports unsupported without affecting server-core behavior.
 
 ### Server Transport Layer
 

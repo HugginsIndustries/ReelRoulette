@@ -63,9 +63,13 @@ Boundary:
 - `src/core/ReelRoulette.ServerApp/Hosting/IHostUi.cs`
   - host-UI abstraction boundary keeping server runtime tray-agnostic.
 - `src/core/ReelRoulette.ServerApp/Hosting/WindowsNotifyIconHostUi.cs`
-  - Windows-only tray runtime controls (Open Operator UI, Refresh Library, Restart Server, Stop Server / Exit) using shared `assets/HI.ico`.
+  - Windows-only tray runtime controls (Open Operator UI, Launch Server on Startup, Refresh Library, Restart Server, Stop Server / Exit) using shared `assets/HI.ico`.
 - `src/core/ReelRoulette.ServerApp/Hosting/HeadlessHostUi.cs`
   - non-Windows headless host path for runtime compatibility.
+- `src/core/ReelRoulette.ServerApp/Hosting/WindowsStartupLaunchService.cs`
+  - Windows startup-launch registration and state reconciliation (`HKCU` Run key) for immediate tray/operator toggles.
+- `src/core/ReelRoulette.ServerApp/Hosting/HeadlessStartupLaunchService.cs`
+  - non-Windows startup-launch no-op/unsupported path for host portability.
 - `src/core/ReelRoulette.Server/Services/ConnectedClientTracker.cs`
   - connected client/session/SSE diagnostics backing operator visibility.
 - `src/core/ReelRoulette.Server/Services/OperatorTestingService.cs`
@@ -76,6 +80,7 @@ Boundary:
 Includes:
 
 - control-plane surfaces (`/control/status`, `/control/settings`, `/control/pair`, `/control/restart`, `/control/stop`, testing/log endpoints),
+- startup-launch control surface (`/control/startup`),
 - operator diagnostics and manual testing controls.
 
 ---

@@ -21,6 +21,7 @@ ReelRoulette is migrating from a monolithic desktop app to a thin-client, API-fi
   - Host-UI abstraction keeps server runtime tray-agnostic:
     - Windows uses native `NotifyIcon` tray host with lifecycle/refresh/operator shortcuts.
     - non-Windows remains headless-compatible.
+  - Windows startup-launch registration is host-managed and user-scoped (`HKCU`), with immediate toggle support through tray and Operator control settings.
 
 - **Domain execution (`src/core/ReelRoulette.Core` + server services)**
   - API-authoritative library operations (import, duplicates, auto-tag, playback stats, refresh pipeline).
@@ -41,6 +42,7 @@ ReelRoulette is migrating from a monolithic desktop app to a thin-client, API-fi
 - **Operational surfaces**
   - Manual validation guide/checklist at `docs/testing-checklist.md`.
   - Windows packaging scripts and CI workflows are present for build/verify/package gates.
+  - Windows installers expose desktop shortcut install tasks (checked by default for server and desktop installers).
 
 ## Near-Term Planned Work
 

@@ -35,8 +35,12 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 [Files]
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion
 
+[Tasks]
+Name: "desktopicon"; Description: "Create Desktop Shortcut"
+
 [Icons]
 Name: "{autoprograms}\ReelRoulette Server"; Filename: "{app}\ReelRoulette.ServerApp.exe"; IconFilename: "{app}\ReelRoulette.ServerApp.exe"
+Name: "{autodesktop}\ReelRoulette Server"; Filename: "{app}\ReelRoulette.ServerApp.exe"; IconFilename: "{app}\ReelRoulette.ServerApp.exe"; Tasks: desktopicon
 
 [Run]
 Filename: "{app}\ReelRoulette.ServerApp.exe"; Description: "Launch ReelRoulette Server"; Flags: nowait postinstall skipifsilent

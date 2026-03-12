@@ -52,12 +52,15 @@ static async Task RunAsync(string[] args)
             app.Logger);
         app.Lifetime.ApplicationStopping.Register(corsOrigins.Stop);
 
+        var startupLaunchService = CreateStartupLaunchService(app);
+
         MapRuntimeConfig(app, runtimeOptions, startupWebRuntime);
         MapOperatorUi(app, serverAppOptions, webUiEnabledAtStartup);
         MapRestartEndpoints(app, serverAppOptions);
+        MapStartupLaunchEndpoints(app, startupLaunchService);
         MapWebUiStaticServing(app, serverAppOptions, webUiEnabledAtStartup);
 
-        await using var hostUi = CreateHostUi(app, runtimeOptions, serverAppOptions);
+        await using var hostUi = CreateHostUi(app, runtimeOptions, serverAppOptions, startupLaunchService);
         app.Lifetime.ApplicationStarted.Register(() =>
         {
             app.Logger.LogInformation("ReelRoulette.ServerApp started on {ListenUrl}", runtimeOptions.ListenUrl);
@@ -73,7 +76,11 @@ static async Task RunAsync(string[] args)
         await app.RunAsync();
 }
 
-static IHostUi CreateHostUi(WebApplication app, ServerRuntimeOptions runtimeOptions, ServerAppOptions serverAppOptions)
+static IHostUi CreateHostUi(
+    WebApplication app,
+    ServerRuntimeOptions runtimeOptions,
+    ServerAppOptions serverAppOptions,
+    IStartupLaunchService startupLaunchService)
 {
         var loggerFactory = app.Services.GetRequiredService<ILoggerFactory>();
         var operatorUrl = BuildOperatorUrl(runtimeOptions.ListenUrl, serverAppOptions.OperatorUiPath);
@@ -108,11 +115,31 @@ static IHostUi CreateHostUi(WebApplication app, ServerRuntimeOptions runtimeOpti
                     var coordinator = app.Services.GetRequiredService<RestartCoordinator>();
                     var result = await coordinator.TryStopAsync("tray-menu-stop", cancellationToken);
                     return (result.Accepted, result.Message);
+                },
+                getStartupLaunchStatus: cancellationToken =>
+                {
+                    return startupLaunchService.GetStatusAsync(cancellationToken);
+                },
+                setStartupLaunchEnabled: (enabled, cancellationToken) =>
+                {
+                    return startupLaunchService.SetEnabledAsync(enabled, "tray-menu-toggle", cancellationToken);
                 });
         }
 #endif
 
         return new HeadlessHostUi();
+}
+
+static IStartupLaunchService CreateStartupLaunchService(WebApplication app)
+{
+    var loggerFactory = app.Services.GetRequiredService<ILoggerFactory>();
+#if WINDOWS
+    if (OperatingSystem.IsWindows())
+    {
+        return new WindowsStartupLaunchService(loggerFactory.CreateLogger<WindowsStartupLaunchService>());
+    }
+#endif
+    return new HeadlessStartupLaunchService();
 }
 
 static string BuildOperatorUrl(string listenUrl, string operatorPath)
@@ -412,6 +439,10 @@ static void MapOperatorUi(WebApplication app, ServerAppOptions options, bool web
       </select>
       <label for="adminSharedToken">Admin Shared Token</label>
       <input id="adminSharedToken" type="text" />
+      <div class="inline">
+        <input id="launchServerOnStartup" type="checkbox" />
+        <label for="launchServerOnStartup" style="margin-top:0;">Launch Server on Startup</label>
+      </div>
       <button id="saveControlSettings">Apply control settings</button>
       <label for="pairToken">Pair Token (for /control/pair)</label>
       <input id="pairToken" type="text" />
@@ -747,6 +778,13 @@ static void MapOperatorUi(WebApplication app, ServerAppOptions options, bool web
       document.getElementById("adminSharedToken").value = settings.adminSharedToken ?? "";
     }
 
+    async function loadStartupLaunchSetting() {
+      const startup = await getJson("/control/startup");
+      const checkbox = document.getElementById("launchServerOnStartup");
+      checkbox.checked = !!startup.launchServerOnStartup;
+      checkbox.disabled = !startup.supported;
+    }
+
     async function saveControlSettings() {
       const payload = {
         adminAuthMode: document.getElementById("adminAuthMode").value || "Off",
@@ -766,8 +804,20 @@ static void MapOperatorUi(WebApplication app, ServerAppOptions options, bool web
         return;
       }
 
-      await Promise.all([loadControlSettings(), refreshStatus()]);
-      setControlStatus(result.message || "Control settings applied.");
+      const startupPayload = {
+        launchServerOnStartup: document.getElementById("launchServerOnStartup").checked
+      };
+
+      const startupResult = await getJson("/control/startup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(startupPayload)
+      });
+
+      await Promise.all([loadControlSettings(), loadStartupLaunchSetting(), refreshStatus()]);
+      const controlMessage = result.message || "Control settings applied.";
+      const startupMessage = startupResult.message || "Launch Server on Startup updated.";
+      setControlStatus(`${controlMessage}<br />${startupMessage}`);
     }
 
     async function pairControl() {
@@ -817,7 +867,7 @@ static void MapOperatorUi(WebApplication app, ServerAppOptions options, bool web
     });
     document.getElementById("saveTestingState").addEventListener("click", () => saveTestingState().catch(err => setTestingStatus(err.message, true)));
     document.getElementById("resetTestingState").addEventListener("click", () => resetTestingState().catch(err => setTestingStatus(err.message, true)));
-    Promise.all([refreshStatus(), loadWebRuntimeSettings(), loadControlSettings(), refreshLogs(), loadTestingState()]).catch(err => setStatus(err.message));
+    Promise.all([refreshStatus(), loadWebRuntimeSettings(), loadControlSettings(), loadStartupLaunchSetting(), refreshLogs(), loadTestingState()]).catch(err => setStatus(err.message));
     setInterval(() => refreshStatus().catch(() => {}), 3000);
     setInterval(() => refreshLogs().catch(() => {}), 5000);
   </script>
@@ -842,6 +892,26 @@ static void MapRestartEndpoints(WebApplication app, ServerAppOptions options)
     app.MapPost("/control/stop", async (HttpContext context, RestartCoordinator restarter) =>
     {
         var result = await restarter.TryStopAsync("operator-requested-stop", context.RequestAborted);
+        return result.Accepted
+            ? Results.Ok(result)
+            : Results.Json(result, statusCode: StatusCodes.Status409Conflict);
+    });
+}
+
+static void MapStartupLaunchEndpoints(WebApplication app, IStartupLaunchService startupLaunchService)
+{
+    app.MapGet("/control/startup", async (HttpContext context) =>
+    {
+        var result = await startupLaunchService.GetStatusAsync(context.RequestAborted);
+        return Results.Ok(result);
+    });
+
+    app.MapPost("/control/startup", async (HttpContext context, StartupLaunchUpdateRequest request) =>
+    {
+        var result = await startupLaunchService.SetEnabledAsync(
+            request.LaunchServerOnStartup,
+            "operator-requested",
+            context.RequestAborted);
         return result.Accepted
             ? Results.Ok(result)
             : Results.Json(result, statusCode: StatusCodes.Status409Conflict);
@@ -956,6 +1026,11 @@ file sealed class ServerAppOptions
 
         return options;
     }
+}
+
+file sealed class StartupLaunchUpdateRequest
+{
+    public bool LaunchServerOnStartup { get; set; }
 }
 
 file sealed class RestartCoordinator

@@ -194,6 +194,8 @@ Reconnect/resync behavior:
 - `GET /control/status`
 - `GET /control/settings`
 - `POST /control/settings`
+- `GET /control/startup`
+- `POST /control/startup`
 - `GET /control/pair`
 - `POST /control/pair`
 - `POST /control/restart`
