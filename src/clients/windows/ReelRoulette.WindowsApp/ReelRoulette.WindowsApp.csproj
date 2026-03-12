@@ -38,5 +38,6 @@
   </ItemGroup>
   <ItemGroup>
     <AvaloniaResource Include="..\..\..\..\assets\HI.ico" Link="assets\HI.ico" />
+    <AvaloniaResource Include="..\..\..\..\assets\fonts\MaterialSymbolsOutlined.var.ttf" Link="assets\fonts\MaterialSymbolsOutlined.var.ttf" />
   </ItemGroup>
 </Project>

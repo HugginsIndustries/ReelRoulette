@@ -62,6 +62,53 @@ Do not use this file for detailed architecture explanation or current capability
 
 ## Milestone Board
 
+### M8h - Tray Theme Parity and Material Symbols Icon Standardization
+
+- **Status**: 🚧 In Progress
+- **Goal**: Align Windows ServerApp tray UX with system theme behavior and standardize icon rendering on Material Symbols **font-based** patterns (with shared icon styles) for consistent cross-platform theming/customization.
+- **Scope**:
+  - Windows tray menu theme parity:
+    - make tray context menu follow active system theme (light/dark) instead of fixed light styling,
+    - keep existing tray action behavior unchanged while applying theme-aware rendering.
+  - Desktop icon foundation (font-based):
+    - wire `assets/fonts/MaterialSymbolsOutlined.var.ttf` into Avalonia resources for desktop icon rendering,
+    - use shared `TextBlock.MaterialSymbolIcon` style for icon font setup,
+    - standardize transparent icon-button behavior on shared styles:
+      - base class: `IconGlyphBase`,
+      - control wrappers: `IconGlyphButton`, `IconGlyphToggle`.
+  - Full-surface migration contract (this milestone):
+    - use mute button as the first implementation slice, then migrate all remaining icon controls/surfaces in desktop and WebUI within M8h,
+    - preserve existing control behavior while replacing icon rendering implementation (no feature-behavior regressions during cutover).
+  - Cross-surface tinting contract:
+    - desktop/Avalonia icon font tinting is driven by foreground color/brush and system theme,
+    - WebUI icon font tinting is driven via CSS color/theming so symbols inherit site theme state.
+  - Asset/source-of-truth boundaries:
+    - keep Material Symbols font asset under `assets/fonts/` as desktop icon-font source.
+  - Preserve architecture boundaries:
+    - keep icon/theming logic in host/UI/render layers,
+    - do not move domain logic into clients for this work.
+- **Acceptance criteria**:
+  - Tray context menu follows current Windows system light/dark theme at runtime.
+  - Desktop icon-font path is active via `MaterialSymbolsOutlined.var.ttf` and shared icon styles (`IconGlyphBase`, `IconGlyphButton`, `IconGlyphToggle`, `MaterialSymbolIcon`).
+  - All desktop icon controls/surfaces (not only mute) are migrated to the shared icon-style foundation and Material Symbols font rendering where applicable.
+  - WebUI icon rendering is font-based (Material Symbols via CSS) and supports deterministic CSS-driven tinting.
+  - All WebUI icon controls/surfaces are migrated to the Material Symbols font-based CSS path.
+  - No regressions to existing tray actions (`Open Operator UI`, `Launch Server on Startup`, `Refresh Library`, `Restart Server`, `Stop Server / Exit`).
+- **Verification evidence**:
+  - Automated gate pass:
+    - `dotnet build ReelRoulette.sln`
+    - `dotnet test ReelRoulette.sln`
+    - `npm run verify` (`src/clients/web/ReelRoulette.WebUI`)
+  - Manual verification captures:
+    - tray menu light-mode rendering evidence,
+    - tray menu dark-mode rendering evidence,
+    - desktop icon-surface evidence showing full icon migration to shared icon-style + Material Symbols font rendering in light/dark themes,
+    - WebUI icon-surface evidence showing full icon migration to Material Symbols CSS font rendering in light/dark themes,
+    - icon-source evidence showing desktop font-asset usage (`assets/fonts/MaterialSymbolsOutlined.var.ttf`).
+- **Deferrals / Follow-ups**:
+  - Windows tray menu item icons are deferred; add Material Symbols-based tray menu icons in a follow-up milestone after theme-parity rollout stabilizes.
+  - Linux tray theme/icon parity remains best-effort and is tracked under Linux milestone work unless explicitly expanded.
+
 ### M9a - Structured JSONL Schema + Server Writer Foundation
 
 - **Status**: ⏳ Planned

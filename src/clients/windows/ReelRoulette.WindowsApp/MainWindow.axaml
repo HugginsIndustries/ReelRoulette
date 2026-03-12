@@ -527,14 +527,15 @@
             <!-- Mute button -->
             <ToggleButton x:Name="MuteButton"
                           Grid.Column="14"
-                          Classes="IconToggleLarge"
+                          Classes="IconGlyphBase IconGlyphToggle"
                           ToolTip.Tip="Mute / Unmute (M)"
                           Checked="MuteButton_Checked"
                           Unchecked="MuteButton_Unchecked">
-                <TextBlock Text="🔇"
-                           TextAlignment="Center"
-                           HorizontalAlignment="Center"
-                           VerticalAlignment="Center"/>
+                <TextBlock x:Name="MuteGlyph"
+                           Classes="MaterialSymbolIcon"
+                           Text="volume_up"
+                           FontSize="32"
+                           />
             </ToggleButton>
 
             <!-- Hidden controls kept for logic (driven via menus/dialogs) -->

@@ -933,6 +933,7 @@ namespace ReelRoulette
 
             // Load persisted data (includes FilterState)
             LoadSettings();
+            UpdateMuteButtonGlyph();
             
             // Restore last folder if enabled and path exists
             // Folder restoration removed - library system is now the primary method
@@ -10905,6 +10906,8 @@ namespace ReelRoulette
             {
                 SaveSettings();
             }
+
+            UpdateMuteButtonGlyph();
         }
 
         private void MuteButton_Unchecked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -10957,6 +10960,19 @@ namespace ReelRoulette
             {
                 SaveSettings();
             }
+
+            UpdateMuteButtonGlyph();
+        }
+
+        private void UpdateMuteButtonGlyph()
+        {
+            if (MuteGlyph == null)
+            {
+                return;
+            }
+
+            var isMuted = MuteButton?.IsChecked == true || _isMuted;
+            MuteGlyph.Text = isMuted ? "volume_off" : "volume_up";
         }
 
         #region Seek Bar

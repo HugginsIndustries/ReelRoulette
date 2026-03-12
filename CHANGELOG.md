@@ -11,10 +11,12 @@ This file follows a Keep a Changelog style format.
 - Add `Launch Server on Startup` control-plane endpoints (`GET/POST /control/startup`) and Operator UI control-settings integration.
 - Add tray menu toggle for `Launch Server on Startup` with immediate apply behavior.
 - Add installer desktop shortcut task options with default-checked behavior for both server and desktop installers.
+- Add Material Symbols variable font asset (`assets/fonts/MaterialSymbolsOutlined.var.ttf`) to Windows desktop app resources for icon-font rendering.
+- Add shared desktop icon-style foundation in `App.axaml` with reusable base + wrappers (`IconGlyphBase`, `IconGlyphButton`, `IconGlyphToggle`) and shared `MaterialSymbolIcon` text style for future UI migration.
 
 ### Changed
 
-- None yet.
+- Update Windows desktop mute control to Material Symbols icon-font pilot (`volume_up`/`volume_off`) using reusable shared icon styles, transparent button chrome, and stronger hover/pressed feedback.
 
 ### Fixed
 
