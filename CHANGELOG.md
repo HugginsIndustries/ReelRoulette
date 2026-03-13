@@ -16,7 +16,11 @@ This file follows a Keep a Changelog style format.
 
 ### Changed
 
-- Update Windows desktop mute control to Material Symbols icon-font pilot (`volume_up`/`volume_off`) using reusable shared icon styles, transparent button chrome, and stronger hover/pressed feedback.
+- Expand Windows desktop icon-font migration across primary controls in `MainWindow` (transport, random, filter, tags, show-in-file-manager, loop/autoplay/favorite/blacklist/mute, library panel filter/grid/list actions) using shared no-box icon styles.
+- Standardize migrated Material Symbols icon sizing/weight (`32pt` bold), with emphasized transport play/pause icon sizing (`36pt`) and tighter intra-transport spacing.
+- Add shared checked-state tint for glyph toggles (`HugginsOrange`) while preserving shared opacity-based hover/pressed feedback behavior.
+- Reposition transport controls to sit left of the seek slider, with explicit asymmetric spacing around the transport cluster for clearer visual separation from neighboring controls.
+- Simplify library panel filtering UX by removing the `Respect filters` toggle from UI and code-behind; active filter state is now applied consistently when present.
 
 ### Fixed
 

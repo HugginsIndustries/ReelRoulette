@@ -3618,10 +3618,7 @@ namespace ReelRoulette
                     return;
                 }
 
-                // Capture UI control values on UI thread before entering background thread
-                bool respectFilters = LibraryRespectFiltersToggle?.IsChecked == true;
-                
-                Log($"UpdateLibraryPanel: Processing {_libraryIndex.Items.Count} items, sort: {_librarySortMode}, descending: {_librarySortDescending}, search: '{_librarySearchText}', respect filters: {respectFilters}");
+                Log($"UpdateLibraryPanel: Processing {_libraryIndex.Items.Count} items, sort: {_librarySortMode}, descending: {_librarySortDescending}, search: '{_librarySearchText}'");
                 // Run filtering and sorting on background thread
                 await Task.Run(() =>
                 {
@@ -3650,9 +3647,8 @@ namespace ReelRoulette
                             Log($"UpdateLibraryPanel: After search filter: {items.Count} items.");
                         }
 
-                        // Apply FilterState if "Respect filters" is enabled.
-                        bool shouldApplyFilterState = respectFilters 
-                            && _currentFilterState != null;
+                        // Apply FilterState whenever one is active.
+                        bool shouldApplyFilterState = _currentFilterState != null;
                         
                         if (shouldApplyFilterState && _currentFilterState != null)
                         {
@@ -3665,7 +3661,7 @@ namespace ReelRoulette
                         }
                         else
                         {
-                            Log("UpdateLibraryPanel: Skipping FilterState (Respect filters off or no filter state)");
+                            Log("UpdateLibraryPanel: Skipping FilterState (no active filter state)");
                         }
 
                         // Apply sorting
@@ -3968,9 +3964,7 @@ namespace ReelRoulette
                 ).ToList();
             }
 
-            bool respectFilters = LibraryRespectFiltersToggle?.IsChecked == true;
-            bool shouldApplyFilterState = respectFilters
-                && _currentFilterState != null;
+            bool shouldApplyFilterState = _currentFilterState != null;
 
             if (shouldApplyFilterState && _currentFilterState != null)
             {
@@ -4480,13 +4474,6 @@ namespace ReelRoulette
             FilterMenuItem_Click(sender, e);
         }
 
-        private void LibraryRespectFiltersToggle_Changed(object? sender, RoutedEventArgs e)
-        {
-            var isChecked = LibraryRespectFiltersToggle?.IsChecked == true;
-            Log($"UI ACTION: LibraryRespectFiltersToggle changed to: {isChecked}");
-            UpdateLibraryPanel();
-        }
-
         private void LibraryItemPlay_Click(object? sender, RoutedEventArgs e)
         {
             if (sender is Button button && button.Tag is string path)
@@ -4893,9 +4880,8 @@ namespace ReelRoulette
                 
                 // Only rebuild library panel if tag filters are active that might affect visibility
                 // Tag-only changes don't affect which items are visible unless filters are applied
-                bool hasTagFilters = (LibraryRespectFiltersToggle?.IsChecked == true) 
-                    && ((_currentFilterState?.SelectedTags?.Count ?? 0) > 0 
-                        || (_currentFilterState?.ExcludedTags?.Count ?? 0) > 0);
+                bool hasTagFilters = ((_currentFilterState?.SelectedTags?.Count ?? 0) > 0
+                    || (_currentFilterState?.ExcludedTags?.Count ?? 0) > 0);
                 
                 if (hasTagFilters)
                 {
@@ -11696,6 +11682,7 @@ namespace ReelRoulette
             }
             // Note: Button state (IsChecked) is updated by MediaPlayer Playing/Paused/Stopped events
         }
+
 
         private void SeekForward()
         {

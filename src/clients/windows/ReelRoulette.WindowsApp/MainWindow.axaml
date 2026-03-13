@@ -334,11 +334,12 @@
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="24"/>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="12"/>
                 <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
@@ -346,119 +347,121 @@
             </Grid.ColumnDefinitions>
             <!-- Previous button -->
             <Button x:Name="PreviousButton"
-                    Grid.Column="0"
-                    Classes="IconMomentaryLarge"
-                    ToolTip.Tip="Previous video (←)"
-                    Margin="0,0,8,0"
+                    Grid.Column="7"
+                    Classes="IconGlyphBase IconGlyphButton"
+                    ToolTip.Tip="Previous (←)"
+                    Margin="0"
                     Click="PreviousButton_Click">
-                <TextBlock Text="⏮"
-                           TextAlignment="Center"
-                           HorizontalAlignment="Center"
-                           VerticalAlignment="Center"/>
+                <TextBlock Classes="MaterialSymbolIcon"
+                           Text="skip_previous"
+                           FontSize="36"
+                           FontWeight="Bold"/>
             </Button>
             <!-- Play/Pause button -->
             <ToggleButton x:Name="PlayPauseButton"
-                          Grid.Column="1"
-                          Classes="IconToggleLarge"
+                          Grid.Column="8"
+                          Classes="IconGlyphBase IconGlyphToggle"
                           ToolTip.Tip="Play / Pause (K or Space)"
-                          Margin="0,0,8,0"
+                          Margin="0"
                           Click="PlayPauseButton_Click">
-                <TextBlock Text="⏯"
-                           TextAlignment="Center"
-                           HorizontalAlignment="Center"
-                           VerticalAlignment="Center"/>
+                <TextBlock
+                           Classes="MaterialSymbolIcon"
+                           Text="play_pause"
+                           FontSize="36"
+                           FontWeight="Bold"/>
             </ToggleButton>
             <!-- Next button -->
             <Button x:Name="NextButton"
-                    Grid.Column="2"
-                    Classes="IconMomentaryLarge"
-                    ToolTip.Tip="Next video (→)"
-                    Margin="0,0,8,0"
+                    Grid.Column="9"
+                    Classes="IconGlyphBase IconGlyphButton"
+                    ToolTip.Tip="Next (→)"
+                    Margin="0"
                     Click="NextButton_Click">
-                <TextBlock Text="⏭"
-                           TextAlignment="Center"
-                           HorizontalAlignment="Center"
-                           VerticalAlignment="Center"/>
+                <TextBlock Classes="MaterialSymbolIcon"
+                           Text="skip_next"
+                           FontSize="36"
+                           FontWeight="Bold"/>
             </Button>
             <!-- Play Random button -->
             <Button x:Name="PlayRandomButton"
-                    Grid.Column="3"
-                    Classes="IconMomentaryLarge"
-                    ToolTip.Tip="Play random video (R)"
+                    Grid.Column="0"
+                    Classes="IconGlyphBase IconGlyphButton"
+                    ToolTip.Tip="Play random media (R)"
                     Margin="0,0,8,0"
                     Click="PlayRandom_Click">
-                <TextBlock Text="🎲"
-                           TextAlignment="Center"
-                           HorizontalAlignment="Center"
-                           VerticalAlignment="Center"/>
+                <TextBlock Classes="MaterialSymbolIcon"
+                           Text="casino"
+                           FontSize="32"
+                           FontWeight="Bold"/>
             </Button>
             <!-- Filter button -->
             <Button x:Name="FilterButton"
-                    Grid.Column="4"
-                    Classes="IconMomentaryLarge"
+                    Grid.Column="1"
+                    Classes="IconGlyphBase IconGlyphButton"
                     ToolTip.Tip="Select filters..."
                     Margin="0,0,8,0"
                     Click="FilterMenuItem_Click">
-                <TextBlock Text="🎚️"
-                           TextAlignment="Center"
-                           HorizontalAlignment="Center"
-                           VerticalAlignment="Center"/>
+                <TextBlock Classes="MaterialSymbolIcon"
+                           Text="filter_alt"
+                           FontSize="32"
+                           FontWeight="Bold"/>
             </Button>
             <!-- Manage tags button -->
             <Button x:Name="ManageTagsButton"
-                    Grid.Column="5"
-                    Classes="IconMomentaryLarge"
-                    ToolTip.Tip="Edit tags (T)"
+                    Grid.Column="2"
+                    Classes="IconGlyphBase IconGlyphButton"
+                    ToolTip.Tip="Edit tags... (T)"
                     Margin="0,0,8,0"
                     Click="ManageTagsForCurrentVideo_Click">
-                <TextBlock Text="🏷️"
-                           TextAlignment="Center"
-                           HorizontalAlignment="Center"
-                           VerticalAlignment="Center"/>
+                <TextBlock Classes="MaterialSymbolIcon"
+                           Text="tag"
+                           FontSize="32"
+                           FontWeight="Bold"/>
             </Button>
             <!-- Show in file manager button -->
             <Button x:Name="ShowInFileManagerButton"
-                    Grid.Column="6"
-                    Classes="IconMomentaryLarge"
-                    ToolTip.Tip="Show current video in file manager"
+                    Grid.Column="3"
+                    Classes="IconGlyphBase IconGlyphButton"
+                    ToolTip.Tip="Show current media in file manager..."
                     Margin="0,0,8,0"
                     Click="ShowCurrentVideoInFileManager_Click">
-                <TextBlock Text="📁"
-                           TextAlignment="Center"
-                           HorizontalAlignment="Center"
-                           VerticalAlignment="Center"/>
+                <TextBlock Classes="MaterialSymbolIcon"
+                           Text="folder_open"
+                           FontSize="32"
+                           FontWeight="Bold"/>
             </Button>
             <!-- Loop toggle -->
             <ToggleButton x:Name="LoopToggle"
-                          Grid.Column="7"
-                          Classes="IconToggleLarge"
-                          ToolTip.Tip="Loop current video"
+                          Grid.Column="4"
+                          Classes="IconGlyphBase IconGlyphToggle"
+                          ToolTip.Tip="Loop"
                           IsChecked="True"
                           Margin="0,0,8,0"
                           Checked="LoopToggle_Changed"
                           Unchecked="LoopToggle_Changed">
-                <TextBlock Text="🔂"
-                           TextAlignment="Center"
-                           HorizontalAlignment="Center"
-                           VerticalAlignment="Center"/>
+                <TextBlock x:Name="LoopGlyph"
+                           Classes="MaterialSymbolIcon"
+                           Text="repeat_one"
+                           FontSize="32"
+                           FontWeight="Bold"/>
             </ToggleButton>
             <!-- Auto-play next toggle -->
             <ToggleButton x:Name="AutoPlayNextCheckBox"
-                          Grid.Column="8"
-                          Classes="IconToggleLarge"
-                          ToolTip.Tip="Auto-play next on end (A)"
+                          Grid.Column="5"
+                          Classes="IconGlyphBase IconGlyphToggle"
+                          ToolTip.Tip="Auto-play next (A)"
                           IsChecked="True"
-                          Margin="0,0,8,0"
+                          Margin="0"
                           Checked="AutoPlayNext_Changed"
                           Unchecked="AutoPlayNext_Changed">
-                <TextBlock Text="➡️"
-                           TextAlignment="Center"
-                           HorizontalAlignment="Center"
-                           VerticalAlignment="Center"/>
+                <TextBlock Classes="MaterialSymbolIcon"
+                           Text="autoplay"
+                           FontSize="32"
+                           FontWeight="Bold"/>
             </ToggleButton>
             <!-- Seek bar -->
             <Slider x:Name="SeekSlider"
-                    Grid.Column="9"
+                    Grid.Column="11"
                     MinWidth="200"
                     HorizontalAlignment="Stretch"
                     VerticalAlignment="Center"
@@ -487,33 +490,33 @@
             </Slider>
             <!-- Favorite toggle -->
             <ToggleButton x:Name="FavoriteToggle"
-                          Grid.Column="11"
-                          Classes="IconToggleLarge"
-                          ToolTip.Tip="Mark as favorite (F)"
+                          Grid.Column="12"
+                          Classes="IconGlyphBase IconGlyphToggle"
+                          ToolTip.Tip="Favorite (F)"
                           Margin="0,0,8,0"
                           Checked="FavoriteToggle_Changed"
                           Unchecked="FavoriteToggle_Changed">
-                <TextBlock Text="★"
-                           TextAlignment="Center"
-                           HorizontalAlignment="Center"
-                           VerticalAlignment="Center"/>
+                <TextBlock Classes="MaterialSymbolIcon"
+                           Text="favorite"
+                           FontSize="32"
+                           FontWeight="Bold"/>
             </ToggleButton>
             <!-- Blacklist toggle -->
             <ToggleButton x:Name="BlacklistToggle"
-                          Grid.Column="12"
-                          Classes="IconToggleLarge"
-                          ToolTip.Tip="Never show again / blacklist current video (B)"
+                          Grid.Column="13"
+                          Classes="IconGlyphBase IconGlyphToggle"
+                          ToolTip.Tip="Blacklist (B)"
                           Margin="0,0,8,0"
                           Checked="BlacklistToggle_Changed"
                           Unchecked="BlacklistToggle_Changed">
-                <TextBlock Text="👎"
-                           TextAlignment="Center"
-                           HorizontalAlignment="Center"
-                           VerticalAlignment="Center"/>
+                <TextBlock Classes="MaterialSymbolIcon"
+                           Text="thumb_down"
+                           FontSize="32"
+                           FontWeight="Bold"/>
             </ToggleButton>
             <!-- Volume slider -->
             <Slider x:Name="VolumeSlider"
-                    Grid.Column="13"
+                    Grid.Column="14"
                     Width="120"
                     Minimum="0"
                     Maximum="200"
@@ -526,7 +529,7 @@
                     PointerCaptureLost="VolumeSlider_PointerCaptureLost"/>
             <!-- Mute button -->
             <ToggleButton x:Name="MuteButton"
-                          Grid.Column="14"
+                          Grid.Column="15"
                           Classes="IconGlyphBase IconGlyphToggle"
                           ToolTip.Tip="Mute / Unmute (M)"
                           Checked="MuteButton_Checked"
@@ -535,6 +538,7 @@
                            Classes="MaterialSymbolIcon"
                            Text="volume_up"
                            FontSize="32"
+                           FontWeight="Bold"
                            />
             </ToggleButton>
 
@@ -588,45 +592,33 @@
                               Text="🎯 0 filtered • 📝 0 selected"/>
                     
                     <!-- Row 2: Filters row -->
-                    <Grid Grid.Row="2" ColumnDefinitions="* Auto Auto Auto" ColumnSpacing="4" Margin="0,0,0,8">
+                    <Grid Grid.Row="2" ColumnDefinitions="* Auto Auto" ColumnSpacing="4" Margin="0,0,0,8">
                         <TextBlock x:Name="LibraryFilterSummaryTextBlock"
                                  Grid.Column="0"
                                  VerticalAlignment="Center"
                                  Text="{Binding FilterSummaryText}"/>
                         <ToggleButton x:Name="LibraryGridViewToggle"
                                     Grid.Column="1"
-                                    Classes="IconToggleSmall"
+                                    Classes="IconGlyphBase IconGlyphToggle"
                                     ToolTip.Tip="Grid view"
                                     Checked="LibraryGridViewToggle_Changed"
                                     Unchecked="LibraryGridViewToggle_Changed">
-                            <TextBlock Text="🖼️"
-                                       TextAlignment="Center"
-                                       HorizontalAlignment="Center"
-                                       VerticalAlignment="Center"/>
+                            <TextBlock Classes="MaterialSymbolIcon"
+                                       Text="gallery_thumbnail"
+                                       FontSize="32"
+                                       FontWeight="Bold"/>
                         </ToggleButton>
                         <Button x:Name="LibraryFilterButton"
                                Grid.Column="2"
-                               Classes="IconMomentarySmall"
+                               Classes="IconGlyphBase IconGlyphButton"
                                ToolTip.Tip="Select filters..."
                                Margin="0,0,4,0"
                                Click="LibraryFilterButton_Click">
-                            <TextBlock Text="🎚️"
-                                       TextAlignment="Center"
-                                       HorizontalAlignment="Center"
-                                       VerticalAlignment="Center"/>
+                            <TextBlock Classes="MaterialSymbolIcon"
+                                       Text="filter_alt"
+                                       FontSize="32"
+                                       FontWeight="Bold"/>
                         </Button>
-                        <ToggleButton x:Name="LibraryRespectFiltersToggle"
-                                    Grid.Column="3"
-                                    Classes="IconToggleSmall"
-                                    ToolTip.Tip="Respect filters"
-                                    IsChecked="True"
-                                    Checked="LibraryRespectFiltersToggle_Changed"
-                                    Unchecked="LibraryRespectFiltersToggle_Changed">
-                            <TextBlock Text="✅"
-                                       TextAlignment="Center"
-                                       HorizontalAlignment="Center"
-                                       VerticalAlignment="Center"/>
-                        </ToggleButton>
                     </Grid>
                     
                     <!-- Row 3: Filter Preset selection -->
@@ -789,26 +781,26 @@
                                                    TextTrimming="CharacterEllipsis"/>
                                     </StackPanel>
                                     <Button Grid.Column="1"
-                                            Classes="IconMomentarySmall"
+                                            Classes="IconGlyphBase IconGlyphButton"
                                             Margin="4,0,2,0"
                                             ToolTip.Tip="Play this video"
                                             Tag="{Binding FullPath}"
                                             Click="LibraryItemPlay_Click">
-                                        <TextBlock Text="▶️"
-                                                   TextAlignment="Center"
-                                                   HorizontalAlignment="Center"
-                                                   VerticalAlignment="Center"/>
+                                        <TextBlock Classes="MaterialSymbolIcon"
+                                                   Text="play_arrow"
+                                                   FontSize="32"
+                                                   FontWeight="Bold"/>
                                     </Button>
                                     <Button Grid.Column="2"
-                                            Classes="IconMomentarySmall"
+                                            Classes="IconGlyphBase IconGlyphButton"
                                             Margin="2,0,2,0"
                                             ToolTip.Tip="Show in file manager"
                                             Tag="{Binding FullPath}"
                                             Click="LibraryItemShowInFileManager_Click">
-                                        <TextBlock Text="📁"
-                                                   TextAlignment="Center"
-                                                   HorizontalAlignment="Center"
-                                                   VerticalAlignment="Center"/>
+                                        <TextBlock Classes="MaterialSymbolIcon"
+                                                   Text="folder_open"
+                                                   FontSize="32"
+                                                   FontWeight="Bold"/>
                                     </Button>
                                 </Grid>
                             </DataTemplate>
