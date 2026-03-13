@@ -811,56 +811,85 @@
                                   Grid.Row="7"
                                   VerticalAlignment="Stretch"
                                   HorizontalScrollBarVisibility="Disabled"
-                                  VerticalScrollBarVisibility="Auto"
+                                  VerticalScrollBarVisibility="Visible"
+                                  ScrollChanged="LibraryGridScrollViewer_ScrollChanged"
+                                  PointerPressed="LibraryGridScrollViewer_PointerPressed"
+                                  PointerReleased="LibraryGridScrollViewer_PointerReleased"
+                                  PointerCaptureLost="LibraryGridScrollViewer_PointerCaptureLost"
                                   IsVisible="False">
-                        <ItemsControl x:Name="LibraryGridItemsControl"
-                                      ItemsSource="{Binding}">
-                            <ItemsControl.ItemsPanel>
-                                <ItemsPanelTemplate>
-                                    <VirtualizingStackPanel />
-                                </ItemsPanelTemplate>
-                            </ItemsControl.ItemsPanel>
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate DataType="local:LibraryGridRowViewModel">
-                                    <ItemsControl ItemsSource="{Binding Items}" Margin="0,0,0,1">
-                                        <ItemsControl.ItemsPanel>
-                                            <ItemsPanelTemplate>
-                                                <StackPanel Orientation="Horizontal" Spacing="2"/>
-                                            </ItemsPanelTemplate>
-                                        </ItemsControl.ItemsPanel>
-                                        <ItemsControl.ItemTemplate>
-                                            <DataTemplate DataType="local:LibraryGridTileViewModel">
-                                                <Button Tag="{Binding Item.FullPath}"
-                                                        Click="LibraryGridItem_Click"
-                                                        Width="{Binding TileWidth}"
-                                                        Height="{Binding TileHeight}"
-                                                        HorizontalAlignment="Stretch"
-                                                        VerticalAlignment="Stretch">
-                                                    <Grid>
-                                                        <Border Background="#22000000"
-                                                                CornerRadius="0"
-                                                                ClipToBounds="True">
-                                                            <Image Source="{Binding Item.ThumbnailBitmap}"
-                                                                   Stretch="UniformToFill"/>
-                                                        </Border>
-                                                        <Border VerticalAlignment="Bottom"
-                                                                Background="#AA000000"
-                                                                CornerRadius="0"
-                                                                Padding="6,3">
-                                                            <TextBlock Text="{Binding Item.FileName}"
-                                                                       MaxLines="1"
-                                                                       TextTrimming="CharacterEllipsis"
-                                                                       Foreground="White"
-                                                                       FontSize="12"/>
-                                                        </Border>
-                                                    </Grid>
-                                                </Button>
-                                            </DataTemplate>
-                                        </ItemsControl.ItemTemplate>
-                                    </ItemsControl>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
+                        <StackPanel Orientation="Vertical">
+                            <Border Height="{Binding LibraryGridTopSpacerHeight}"/>
+                            <ItemsControl x:Name="LibraryGridItemsControl"
+                                          ItemsSource="{Binding LibraryGridVisibleRows}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="local:LibraryGridRowViewModel">
+                                        <ItemsControl ItemsSource="{Binding Items}" Margin="0,0,0,1">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <StackPanel Orientation="Horizontal" Spacing="2"/>
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate DataType="local:LibraryGridTileViewModel">
+                                                    <Button Tag="{Binding Item.FullPath}"
+                                                            Click="LibraryGridItem_Click"
+                                                            Width="{Binding TileWidth}"
+                                                            Height="{Binding TileHeight}"
+                                                            HorizontalAlignment="Stretch"
+                                                            VerticalAlignment="Stretch">
+                                                        <Grid>
+                                                            <Border Background="#22000000"
+                                                                    CornerRadius="0"
+                                                                    ClipToBounds="True">
+                                                                <Image Source="{Binding Item.ThumbnailBitmap}"
+                                                                       Stretch="UniformToFill"/>
+                                                            </Border>
+                                                            <Border HorizontalAlignment="Right"
+                                                                    VerticalAlignment="Top"
+                                                                    Margin="4"
+                                                                    Background="#99000000"
+                                                                    CornerRadius="4"
+                                                                    Padding="3,2"
+                                                                    IsVisible="{Binding Item.HasGridStateIndicator}">
+                                                                <StackPanel Orientation="Horizontal"
+                                                                            Spacing="4">
+                                                                    <TextBlock Classes="MaterialSymbolIcon"
+                                                                               Text="favorite"
+                                                                               FontSize="18"
+                                                                               Foreground="{StaticResource HugginsOrangeBrush}"
+                                                                               IsVisible="{Binding Item.IsFavorite}"/>
+                                                                    <TextBlock Classes="MaterialSymbolIcon"
+                                                                               Text="thumb_down"
+                                                                               FontSize="18"
+                                                                               Foreground="{StaticResource HugginsOrangeBrush}"
+                                                                               IsVisible="{Binding Item.IsBlacklisted}"/>
+                                                                </StackPanel>
+                                                            </Border>
+                                                            <Border VerticalAlignment="Bottom"
+                                                                    Background="#AA000000"
+                                                                    CornerRadius="0"
+                                                                    Padding="6,3">
+                                                                <TextBlock Text="{Binding Item.FileName}"
+                                                                           MaxLines="1"
+                                                                           TextTrimming="CharacterEllipsis"
+                                                                           Foreground="White"
+                                                                           FontSize="12"/>
+                                                            </Border>
+                                                        </Grid>
+                                                    </Button>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <Border Height="{Binding LibraryGridBottomSpacerHeight}"/>
+                        </StackPanel>
                     </ScrollViewer>
                 </Grid>
             </Border>
@@ -904,8 +933,8 @@
                     BorderBrush="Gray"
                     BorderThickness="0"
                     Padding="8"
-                    MinWidth="270"
-                    MaxWidth="270"
+                    MinWidth="290"
+                    MaxWidth="290"
                     HorizontalAlignment="Stretch"
                     VerticalAlignment="Stretch"
                     IsVisible="False">
@@ -928,6 +957,8 @@
                             <TextBlock Text="{Binding GlobalTotalVideosKnown, StringFormat='Total videos: {0}'}"/>
                             <TextBlock Text="{Binding GlobalTotalPhotosKnown, StringFormat='Total photos: {0}'}"/>
                             <TextBlock Text="{Binding GlobalTotalMediaKnown, StringFormat='Total media: {0}'}"/>
+                            <TextBlock Text="{Binding GlobalFavoritesCount, StringFormat='Favorites: {0}'}"/>
+                            <TextBlock Text="{Binding GlobalBlacklistCount, StringFormat='Blacklisted: {0}'}"/>
                             
                             <!-- Playback Statistics -->
                             <TextBlock Text="Playback Statistics"
@@ -935,26 +966,8 @@
                                        FontSize="14"
                                        Margin="0,8,0,2"/>
                             <TextBlock Text="{Binding GlobalTotalPlays, StringFormat='Total plays (all time): {0}'}"/>
-                            <TextBlock Text="{Binding GlobalUniqueVideosPlayed, StringFormat='Unique videos played: {0}'}"/>
-                            <TextBlock Text="{Binding GlobalUniquePhotosPlayed, StringFormat='Unique photos played: {0}'}"/>
-                            <TextBlock Text="{Binding GlobalUniqueMediaPlayed, StringFormat='Unique media played: {0}'}"/>
-                            
-                            <!-- Never Played -->
-                            <TextBlock Text="Never Played"
-                                       FontWeight="Bold"
-                                       FontSize="14"
-                                       Margin="0,8,0,2"/>
-                            <TextBlock Text="{Binding GlobalNeverPlayedVideosKnown, StringFormat='Never played videos: {0}'}"/>
-                            <TextBlock Text="{Binding GlobalNeverPlayedPhotosKnown, StringFormat='Never played photos: {0}'}"/>
+                            <TextBlock Text="{Binding GlobalUniqueMediaPlayed, StringFormat='Unique played media: {0}'}"/>
                             <TextBlock Text="{Binding GlobalNeverPlayedMediaKnown, StringFormat='Never played media: {0}'}"/>
-                            
-                            <!-- Library Management -->
-                            <TextBlock Text="Library Management"
-                                       FontWeight="Bold"
-                                       FontSize="14"
-                                       Margin="0,8,0,2"/>
-                            <TextBlock Text="{Binding GlobalFavoritesCount, StringFormat='Favorites: {0}'}"/>
-                            <TextBlock Text="{Binding GlobalBlacklistCount, StringFormat='Blacklisted: {0}'}"/>
                             
                             <!-- Video Audio Stats -->
                             <TextBlock Text="Video Audio Stats"

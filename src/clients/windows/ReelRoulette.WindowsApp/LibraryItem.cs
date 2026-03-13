@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
+using System.Runtime.CompilerServices;
 using System.Text.Json.Serialization;
 using Avalonia.Media.Imaging;
 
@@ -8,8 +10,27 @@ namespace ReelRoulette
     /// <summary>
     /// Represents a single video file in the library with all its metadata.
     /// </summary>
-    public class LibraryItem
+    public class LibraryItem : INotifyPropertyChanged
     {
+        public event PropertyChangedEventHandler? PropertyChanged;
+
+        private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
+
+        private bool SetField<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
+        {
+            if (EqualityComparer<T>.Default.Equals(field, value))
+            {
+                return false;
+            }
+
+            field = value;
+            OnPropertyChanged(propertyName);
+            return true;
+        }
+
         /// <summary>
         /// Stable item identity for path changes (rename/move).
         /// </summary>
@@ -67,14 +88,41 @@ namespace ReelRoulette
         /// <summary>
         /// Whether this item is marked as a favorite.
         /// </summary>
+        private bool _isFavorite;
+
         [JsonPropertyName("isFavorite")]
-        public bool IsFavorite { get; set; }
+        public bool IsFavorite
+        {
+            get => _isFavorite;
+            set
+            {
+                if (SetField(ref _isFavorite, value))
+                {
+                    OnPropertyChanged(nameof(HasGridStateIndicator));
+                }
+            }
+        }
 
         /// <summary>
         /// Whether this item is blacklisted.
         /// </summary>
+        private bool _isBlacklisted;
+
         [JsonPropertyName("isBlacklisted")]
-        public bool IsBlacklisted { get; set; }
+        public bool IsBlacklisted
+        {
+            get => _isBlacklisted;
+            set
+            {
+                if (SetField(ref _isBlacklisted, value))
+                {
+                    OnPropertyChanged(nameof(HasGridStateIndicator));
+                }
+            }
+        }
+
+        [JsonIgnore]
+        public bool HasGridStateIndicator => IsFavorite || IsBlacklisted;
 
         /// <summary>
         /// Number of times this video has been played.
@@ -159,6 +207,8 @@ namespace ReelRoulette
                 _thumbnailBitmap?.Dispose();
                 _thumbnailPath = value ?? string.Empty;
                 _thumbnailBitmap = null;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(ThumbnailBitmap));
             }
         }
 
@@ -190,11 +240,23 @@ namespace ReelRoulette
             }
         }
 
-        [JsonIgnore]
-        public double ThumbnailWidth { get; set; }
+        private double _thumbnailWidth;
 
         [JsonIgnore]
-        public double ThumbnailHeight { get; set; }
+        public double ThumbnailWidth
+        {
+            get => _thumbnailWidth;
+            set => SetField(ref _thumbnailWidth, value);
+        }
+
+        private double _thumbnailHeight;
+
+        [JsonIgnore]
+        public double ThumbnailHeight
+        {
+            get => _thumbnailHeight;
+            set => SetField(ref _thumbnailHeight, value);
+        }
     }
 }
 

@@ -244,6 +244,16 @@ namespace ReelRoulette
         // Library panel state
         private ObservableCollection<LibraryItem> _libraryItems = new ObservableCollection<LibraryItem>();
         private ObservableCollection<LibraryGridRowViewModel> _libraryGridRows = new ObservableCollection<LibraryGridRowViewModel>();
+        private ObservableCollection<LibraryGridRowViewModel> _libraryGridVisibleRows = new ObservableCollection<LibraryGridRowViewModel>();
+        private readonly List<double> _libraryGridRowTopOffsets = new();
+        private readonly List<double> _libraryGridRowBottomOffsets = new();
+        private double _libraryGridTotalExtentHeight = 0d;
+        private int _lastLibraryGridVisibleStartIndex = -1;
+        private int _lastLibraryGridVisibleEndExclusive = -1;
+        private int _lastLoggedLibraryGridVisibleStartIndex = -1;
+        private int _lastLoggedLibraryGridVisibleEndExclusive = -1;
+        private double _libraryGridTopSpacerHeight = 0d;
+        private double _libraryGridBottomSpacerHeight = 0d;
         private double _libraryPanelWidth = 400; // Track panel width independently from Bounds (default matches XAML MinWidth)
         private string _librarySearchText = "";
         private string _librarySortMode = "Name"; // "Name", "LastPlayed", "PlayCount", "Duration"
@@ -267,8 +277,12 @@ namespace ReelRoulette
         private CancellationTokenSource? _updateLibraryPanelCancellationSource;
         private DispatcherTimer? _updateLibraryPanelDebounceTimer;
         private readonly object _updateLibraryPanelLock = new object();
+        private int _libraryPanelRefreshGeneration = 0;
+        private bool _isGridScrollInteracting = false;
+        private bool _pendingLibraryPanelRefresh = false;
         private bool _isInitializingLibraryPanel = false; // Flag to suppress events during initialization
         private bool _isUpdatingLibraryItems = false; // Flag to suppress Favorite/Blacklist events during UI updates
+        private const double LibraryGridVerticalRowGap = 1d;
         
         // Volume slider debouncing
         private DispatcherTimer? _volumeSliderDebounceTimer;
@@ -381,6 +395,36 @@ namespace ReelRoulette
                 if (_libraryGridColumns != clamped)
                 {
                     _libraryGridColumns = clamped;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public ObservableCollection<LibraryGridRowViewModel> LibraryGridVisibleRows => _libraryGridVisibleRows;
+
+        public double LibraryGridTopSpacerHeight
+        {
+            get => _libraryGridTopSpacerHeight;
+            private set
+            {
+                var clamped = Math.Max(0, value);
+                if (Math.Abs(_libraryGridTopSpacerHeight - clamped) > 0.5)
+                {
+                    _libraryGridTopSpacerHeight = clamped;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public double LibraryGridBottomSpacerHeight
+        {
+            get => _libraryGridBottomSpacerHeight;
+            private set
+            {
+                var clamped = Math.Max(0, value);
+                if (Math.Abs(_libraryGridBottomSpacerHeight - clamped) > 0.5)
+                {
+                    _libraryGridBottomSpacerHeight = clamped;
                     OnPropertyChanged();
                 }
             }
@@ -1394,6 +1438,17 @@ namespace ReelRoulette
 
         #region Favorites System
 
+        private void RefreshLibraryPanelFromServiceState()
+        {
+            if (!_showLibraryPanel)
+            {
+                return;
+            }
+
+            _libraryIndex = _libraryService.LibraryIndex;
+            UpdateLibraryPanel();
+        }
+
         private void ApplyRemoteItemStateProjection(string fullPath, bool isFavorite, bool isBlacklisted, string statusMessage, bool persistLibrary = false)
         {
             if (_libraryIndex == null || string.IsNullOrWhiteSpace(fullPath))
@@ -1415,6 +1470,17 @@ namespace ReelRoulette
                 item.IsFavorite = isFavorite;
                 item.IsBlacklisted = isBlacklisted;
                 _libraryService.UpdateItem(item);
+
+                // Keep currently bound library-panel item state in sync with canonical projection state.
+                // This ensures overlay indicators update immediately even when bound instances differ.
+                var boundItem = _libraryItems.FirstOrDefault(listItem =>
+                    string.Equals(listItem.FullPath, fullPath, StringComparison.OrdinalIgnoreCase));
+                if (boundItem != null && !ReferenceEquals(boundItem, item))
+                {
+                    boundItem.IsFavorite = isFavorite;
+                    boundItem.IsBlacklisted = isBlacklisted;
+                }
+
                 if (persistLibrary)
                 {
                     _ = Task.Run(() =>
@@ -1437,10 +1503,7 @@ namespace ReelRoulette
                     UpdateCurrentFileStatsUi();
                 }
 
-                if (_showLibraryPanel)
-                {
-                    UpdateLibraryPanel();
-                }
+                RefreshLibraryPanelFromServiceState();
 
                 RebuildPlayQueueIfNeeded();
                 RecalculateGlobalStats();
@@ -1655,6 +1718,7 @@ namespace ReelRoulette
                     Log($"RecordPlayback: Updating item - PlayCount: {oldPlayCount} -> {item.PlayCount}, LastPlayedUtc: {oldLastPlayed} -> {item.LastPlayedUtc}");
                     
                     _libraryService.UpdateItem(item);
+                    RefreshLibraryPanelFromServiceState();
                     
                     if (persistLibrary)
                     {
@@ -2640,6 +2704,14 @@ namespace ReelRoulette
             {
                 RecalculateGlobalStats();
                 UpdateCurrentFileStatsUi();
+                if (_showLibraryPanel &&
+                    _currentFilterState != null &&
+                    (_currentFilterState.MinDuration.HasValue ||
+                     _currentFilterState.MaxDuration.HasValue ||
+                     _currentFilterState.OnlyKnownDuration))
+                {
+                    UpdateLibraryPanel();
+                }
                 // Always show scan completion message
                 SetStatusMessage($"Duration scan complete ({total} files)");
             });
@@ -3197,6 +3269,14 @@ namespace ReelRoulette
             Log("ScanLoudnessAsync: Updating UI");
             Avalonia.Threading.Dispatcher.UIThread.Post(() =>
             {
+                if (_showLibraryPanel &&
+                    _currentFilterState != null &&
+                    (_currentFilterState.AudioFilter != AudioFilterMode.PlayAll ||
+                     _currentFilterState.OnlyKnownLoudness))
+                {
+                    UpdateLibraryPanel();
+                }
+
                 var noAudioText = noAudioCount > 0 ? $", {noAudioCount} without audio" : "";
                 var errorText = errorCount > 0 ? $", {errorCount} errors" : "";
                 // Always show scan completion message
@@ -3456,7 +3536,7 @@ namespace ReelRoulette
 
                 if (LibraryGridItemsControl != null)
                 {
-                    LibraryGridItemsControl.ItemsSource = _libraryGridRows;
+                    LibraryGridItemsControl.ItemsSource = _libraryGridVisibleRows;
                 }
 
                 if (LibraryGridViewToggle != null)
@@ -3544,6 +3624,16 @@ namespace ReelRoulette
 
         private void UpdateLibraryPanel()
         {
+            var refreshGeneration = Interlocked.Increment(ref _libraryPanelRefreshGeneration);
+            if (_libraryGridViewEnabled && _isGridScrollInteracting)
+            {
+                _pendingLibraryPanelRefresh = true;
+                Log($"UpdateLibraryPanel: Deferring refresh during grid scroll interaction (generation={refreshGeneration})");
+                return;
+            }
+
+            _pendingLibraryPanelRefresh = false;
+
             // Cancel any in-flight update (but don't dispose yet - let the timer handler do it)
             lock (_updateLibraryPanelLock)
             {
@@ -3567,6 +3657,7 @@ namespace ReelRoulette
                 _updateLibraryPanelDebounceTimer.Tick += async (s, e) =>
                 {
                     _updateLibraryPanelDebounceTimer.Stop();
+                    var timerGeneration = Volatile.Read(ref _libraryPanelRefreshGeneration);
                     
                     // Cancel any in-flight update before starting new one
                     lock (_updateLibraryPanelLock)
@@ -3586,7 +3677,7 @@ namespace ReelRoulette
                     
                     try
                     {
-                        await UpdateLibraryPanelInternal(cancellationToken);
+                        await UpdateLibraryPanelInternal(cancellationToken, timerGeneration);
                     }
                     finally
                     {
@@ -3607,7 +3698,7 @@ namespace ReelRoulette
             _updateLibraryPanelDebounceTimer.Start();
         }
 
-        private async Task UpdateLibraryPanelInternal(CancellationToken cancellationToken)
+        private async Task UpdateLibraryPanelInternal(CancellationToken cancellationToken, int refreshGeneration)
         {
             try
             {
@@ -3671,14 +3762,30 @@ namespace ReelRoulette
 
                         // Update UI on UI thread
                         Log("UpdateLibraryPanel: Posting to UI thread...");
-                        Dispatcher.UIThread.Post(() =>
+                        Dispatcher.UIThread.Post(async () =>
                         {
                             try
                             {
+                                if (ShouldAbortLibraryPanelRefresh(cancellationToken, refreshGeneration))
+                                {
+                                    Log($"UpdateLibraryPanel: Skipping stale UI apply (generation={refreshGeneration}, latest={Volatile.Read(ref _libraryPanelRefreshGeneration)})");
+                                    return;
+                                }
+
                                 Log($"UpdateLibraryPanel: UI thread callback started, about to add {items.Count} items");
+
+                                // Preserve grid scroll offset across row rebuilds to prevent jumpy drag/scroll behavior.
+                                var shouldRestoreGridOffset = _libraryGridViewEnabled && LibraryGridScrollViewer != null && !_isGridScrollInteracting;
+                                var shouldRestoreListAnchor = !_libraryGridViewEnabled;
+                                var gridOffsetYBeforeUpdate = shouldRestoreGridOffset
+                                    ? LibraryGridScrollViewer!.Offset.Y
+                                    : 0d;
+                                var gridViewportAnchor = shouldRestoreGridOffset
+                                    ? CaptureGridViewportAnchor()
+                                    : null;
                                 
                                 // Save scroll position anchor before clearing (first visible item)
-                                if (LibraryListBox != null && _libraryItems.Count > 0)
+                                if (shouldRestoreListAnchor && LibraryListBox != null && _libraryItems.Count > 0)
                                 {
                                     int anchorIndex = -1;
                                     string? strategy = null;
@@ -3749,20 +3856,38 @@ namespace ReelRoulette
                                 _isUpdatingLibraryItems = true;
                                 try
                                 {
-                                    _libraryItems.Clear();
-                                    Log($"UpdateLibraryPanel: Cleared _libraryItems, adding {items.Count} items");
-                                    foreach (var item in items)
+                                    var firstChangedItemIndex = await ApplyLibraryItemsDiffChunkedAsync(items, cancellationToken, refreshGeneration);
+                                    if (ShouldAbortLibraryPanelRefresh(cancellationToken, refreshGeneration))
                                     {
-                                        if (cancellationToken.IsCancellationRequested)
-                                        {
-                                            Log($"UpdateLibraryPanel: Cancelled during item addition (scroll anchor preserved: {_scrollAnchorPath ?? "null"})");
-                                            return;
-                                        }
-                                        _libraryItems.Add(item);
+                                        return;
                                     }
-                                    BuildGridRowsFromItems(_libraryItems.ToList());
+
+                                    await RebuildLibraryGridRowsIncrementalAsync(_libraryItems.ToList(), firstChangedItemIndex, cancellationToken, refreshGeneration);
+                                    if (ShouldAbortLibraryPanelRefresh(cancellationToken, refreshGeneration))
+                                    {
+                                        return;
+                                    }
+
                                     UpdateLibraryViewModeVisibility();
                                     Log($"UpdateLibraryPanel: UI thread callback completed. _libraryItems now has {_libraryItems.Count} items. LibraryListBox.ItemsSource is set: {LibraryListBox?.ItemsSource != null}, LibraryListBox.IsVisible: {LibraryListBox?.IsVisible}, LibraryPanelContainer.IsVisible: {LibraryPanelContainer?.IsVisible}");
+
+                                    if (shouldRestoreGridOffset)
+                                    {
+                                        Dispatcher.UIThread.Post(() =>
+                                        {
+                                            if (LibraryGridScrollViewer == null || _isGridScrollInteracting)
+                                            {
+                                                return;
+                                            }
+
+                                            var maxY = Math.Max(0, LibraryGridScrollViewer.Extent.Height - LibraryGridScrollViewer.Viewport.Height);
+                                            var restoredY = gridViewportAnchor != null
+                                                ? RestoreGridViewportAnchor(gridViewportAnchor)
+                                                : gridOffsetYBeforeUpdate;
+                                            var clampedY = Math.Clamp(restoredY, 0, maxY);
+                                            LibraryGridScrollViewer.Offset = new Vector(LibraryGridScrollViewer.Offset.X, clampedY);
+                                        }, DispatcherPriority.Loaded);
+                                    }
                                     
                                     // Update filter count display
                                     UpdateFilterCountDisplay(_libraryItems.Count);
@@ -3794,7 +3919,7 @@ namespace ReelRoulette
                                     }
                                     
                                     // Restore scroll position using anchor item
-                                    if (_scrollAnchorPath != null && LibraryListBox != null)
+                                    if (shouldRestoreListAnchor && _scrollAnchorPath != null && LibraryListBox != null)
                                     {
                                         var anchorIndex = _libraryItems
                                             .Select((item, index) => new { item, index })
@@ -3827,11 +3952,11 @@ namespace ReelRoulette
                                     }
                                     else
                                     {
-                                        if (_scrollAnchorPath != null && LibraryListBox == null)
+                                        if (shouldRestoreListAnchor && _scrollAnchorPath != null && LibraryListBox == null)
                                         {
                                             Log($"UpdateLibraryPanel: Scroll anchor exists but LibraryListBox is null - cannot restore scroll position");
                                         }
-                                        else if (_scrollAnchorPath == null)
+                                        else if (shouldRestoreListAnchor && _scrollAnchorPath == null)
                                         {
                                             Log($"UpdateLibraryPanel: No scroll anchor to restore (_scrollAnchorPath=null)");
                                         }
@@ -3855,7 +3980,7 @@ namespace ReelRoulette
                                 }
                                 Log(errorMsg);
                             }
-                        });
+                        }, DispatcherPriority.Background);
                         Log("UpdateLibraryPanel: Task.Run completed.");
                     }
                     catch (OperationCanceledException)
@@ -4084,26 +4209,165 @@ namespace ReelRoulette
             {
                 LibraryGridScrollViewer.IsVisible = _libraryGridViewEnabled;
             }
+
+            if (_libraryGridViewEnabled)
+            {
+                RebuildLibraryGridOffsetIndex();
+                UpdateLibraryGridVisibleRowsWindow();
+            }
         }
 
-        private void BuildGridRowsFromItems(IReadOnlyList<LibraryItem> items)
+        private bool ShouldAbortLibraryPanelRefresh(CancellationToken cancellationToken, int refreshGeneration)
         {
-            _libraryGridRows.Clear();
-            if (items.Count == 0)
+            if (cancellationToken.IsCancellationRequested ||
+                refreshGeneration != Volatile.Read(ref _libraryPanelRefreshGeneration))
             {
-                LibraryGridColumns = 1;
-                return;
+                return true;
             }
 
-            var layoutWidth = ComputeLibraryGridAvailableWidth();
-            const double targetRowHeight = 150;
-            const double minRowHeight = 100;
-            const double maxRowHeight = 260;
+            if (_libraryGridViewEnabled && _isGridScrollInteracting)
+            {
+                _pendingLibraryPanelRefresh = true;
+                return true;
+            }
+
+            return false;
+        }
+
+        private sealed class ItemDiffWindow
+        {
+            public int StartIndex { get; init; }
+            public int OldCount { get; init; }
+            public int NewCount { get; init; }
+            public bool HasChanges { get; init; }
+        }
+
+        private sealed class GridViewportAnchorState
+        {
+            public string AnchorItemKey { get; init; } = string.Empty;
+            public double InsetY { get; init; }
+            public double RawOffsetY { get; init; }
+        }
+
+        private string GetLibraryItemKey(LibraryItem item)
+        {
+            if (!string.IsNullOrWhiteSpace(item.Id))
+            {
+                return item.Id;
+            }
+
+            return item.FullPath;
+        }
+
+        private ItemDiffWindow ComputeLibraryItemDiffWindow(IReadOnlyList<LibraryItem> currentItems, IReadOnlyList<LibraryItem> nextItems)
+        {
+            var prefix = 0;
+            var prefixLimit = Math.Min(currentItems.Count, nextItems.Count);
+            while (prefix < prefixLimit &&
+                   string.Equals(GetLibraryItemKey(currentItems[prefix]), GetLibraryItemKey(nextItems[prefix]), StringComparison.OrdinalIgnoreCase))
+            {
+                prefix++;
+            }
+
+            if (prefix == currentItems.Count && prefix == nextItems.Count)
+            {
+                return new ItemDiffWindow
+                {
+                    HasChanges = false,
+                    StartIndex = prefix,
+                    OldCount = 0,
+                    NewCount = 0
+                };
+            }
+
+            var currentTail = currentItems.Count - 1;
+            var nextTail = nextItems.Count - 1;
+            while (currentTail >= prefix &&
+                   nextTail >= prefix &&
+                   string.Equals(GetLibraryItemKey(currentItems[currentTail]), GetLibraryItemKey(nextItems[nextTail]), StringComparison.OrdinalIgnoreCase))
+            {
+                currentTail--;
+                nextTail--;
+            }
+
+            return new ItemDiffWindow
+            {
+                HasChanges = true,
+                StartIndex = prefix,
+                OldCount = Math.Max(0, currentTail - prefix + 1),
+                NewCount = Math.Max(0, nextTail - prefix + 1)
+            };
+        }
+
+        private async Task<int> ApplyLibraryItemsDiffChunkedAsync(IReadOnlyList<LibraryItem> items, CancellationToken cancellationToken, int refreshGeneration)
+        {
+            const int chunkSize = 200;
+            var diffWindow = ComputeLibraryItemDiffWindow(_libraryItems, items);
+            if (!diffWindow.HasChanges)
+            {
+                return -1;
+            }
+
+            Log($"UpdateLibraryPanel: Applying item diff window start={diffWindow.StartIndex}, oldCount={diffWindow.OldCount}, newCount={diffWindow.NewCount}");
+
+            if (diffWindow.OldCount > 0)
+            {
+                for (var i = 0; i < diffWindow.OldCount; i++)
+                {
+                    if (ShouldAbortLibraryPanelRefresh(cancellationToken, refreshGeneration))
+                    {
+                        Log($"UpdateLibraryPanel: Cancelled during item removal (scroll anchor preserved: {_scrollAnchorPath ?? "null"})");
+                        return -1;
+                    }
+
+                    _libraryItems.RemoveAt(diffWindow.StartIndex);
+                    if (i > 0 && i % chunkSize == 0)
+                    {
+                        await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
+                    }
+                }
+            }
+
+            if (diffWindow.NewCount > 0)
+            {
+                var inserted = 0;
+                for (var index = diffWindow.StartIndex; index < diffWindow.StartIndex + diffWindow.NewCount; index++)
+                {
+                    if (ShouldAbortLibraryPanelRefresh(cancellationToken, refreshGeneration))
+                    {
+                        Log($"UpdateLibraryPanel: Cancelled during item insertion (scroll anchor preserved: {_scrollAnchorPath ?? "null"})");
+                        return -1;
+                    }
+
+                    _libraryItems.Insert(index, items[index]);
+                    inserted++;
+                    if (inserted % chunkSize == 0)
+                    {
+                        await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
+                    }
+                }
+            }
+
+            return diffWindow.StartIndex;
+        }
+
+        private (List<LibraryGridRowViewModel> Rows, int MaxColumns) BuildGridRowModels(IReadOnlyList<LibraryItem> items, double layoutWidth)
+        {
+            return BuildGridRowModelsRange(items, 0, items.Count, layoutWidth);
+        }
+
+        private (List<LibraryGridRowViewModel> Rows, int MaxColumns) BuildGridRowModelsRange(IReadOnlyList<LibraryItem> items, int startIndex, int endExclusive, double layoutWidth)
+        {
+            const double targetRowHeight = 300;
+            const double minRowHeight = 200;
+            const double maxRowHeight = 400;
             const double horizontalGap = 2;
             var maxColumns = 1;
+            var rows = new List<LibraryGridRowViewModel>();
 
             var pendingItems = new List<LibraryItem>();
             var pendingAspects = new List<double>();
+            var pendingItemIndexes = new List<int>();
             var pendingAspectSum = 0d;
 
             void AddRow(bool isLastRow)
@@ -4128,26 +4392,43 @@ namespace ReelRoulette
 
                 for (var i = 0; i < pendingItems.Count; i++)
                 {
+                    var item = pendingItems[i];
+                    var itemIndex = pendingItemIndexes[i];
                     row.Items.Add(new LibraryGridTileViewModel
                     {
-                        Item = pendingItems[i],
+                        Item = item,
                         TileWidth = widths[i],
-                        TileHeight = rowHeight
+                        TileHeight = rowHeight,
+                        ItemIndex = itemIndex,
+                        AspectRatioUsed = pendingAspects[i],
+                        ItemKey = GetLibraryItemKey(item)
                     });
                 }
 
-                _libraryGridRows.Add(row);
+                row.StartItemIndex = pendingItemIndexes[0];
+                row.EndItemIndexExclusive = pendingItemIndexes[^1] + 1;
+                row.ItemCount = row.Items.Count;
+                row.RowHeight = rowHeight;
+                row.RowWidth = widths.Sum() + ((row.Items.Count - 1) * horizontalGap);
+                row.FirstItemKey = row.Items[0].ItemKey;
+                rows.Add(row);
                 maxColumns = Math.Max(maxColumns, row.Items.Count);
                 pendingItems.Clear();
                 pendingAspects.Clear();
+                pendingItemIndexes.Clear();
                 pendingAspectSum = 0;
             }
 
-            foreach (var item in items)
+            startIndex = Math.Clamp(startIndex, 0, items.Count);
+            endExclusive = Math.Clamp(endExclusive, startIndex, items.Count);
+
+            for (var itemIndex = startIndex; itemIndex < endExclusive; itemIndex++)
             {
+                var item = items[itemIndex];
                 var aspect = GetThumbnailAspectRatio(item);
                 pendingItems.Add(item);
                 pendingAspects.Add(aspect);
+                pendingItemIndexes.Add(itemIndex);
                 pendingAspectSum += aspect;
 
                 var projectedWidth = (pendingAspectSum * targetRowHeight) + ((pendingItems.Count - 1) * horizontalGap);
@@ -4158,7 +4439,391 @@ namespace ReelRoulette
             }
 
             AddRow(isLastRow: true);
-            LibraryGridColumns = Math.Clamp(maxColumns, 1, 12);
+            return (rows, maxColumns);
+        }
+
+        private int FindGridRowIndexContainingItemIndex(int itemIndex)
+        {
+            for (var rowIndex = 0; rowIndex < _libraryGridRows.Count; rowIndex++)
+            {
+                var row = _libraryGridRows[rowIndex];
+                if (row.StartItemIndex <= itemIndex && itemIndex < row.EndItemIndexExclusive)
+                {
+                    return rowIndex;
+                }
+            }
+
+            return -1;
+        }
+
+        private int FindGridReflowStartRowIndex(int changedItemIndex)
+        {
+            if (_libraryGridRows.Count == 0)
+            {
+                return 0;
+            }
+
+            var containingRowIndex = FindGridRowIndexContainingItemIndex(changedItemIndex);
+            if (containingRowIndex >= 0)
+            {
+                // If the change lands on a row boundary, the previous row may repack.
+                if (_libraryGridRows[containingRowIndex].StartItemIndex == changedItemIndex && containingRowIndex > 0)
+                {
+                    return containingRowIndex - 1;
+                }
+
+                return containingRowIndex;
+            }
+
+            // No containing row means insertion/removal at a boundary (or tail). Reflow from the prior row.
+            var firstRowStartingAfterChangedIndex = -1;
+            for (var rowIndex = 0; rowIndex < _libraryGridRows.Count; rowIndex++)
+            {
+                if (_libraryGridRows[rowIndex].StartItemIndex > changedItemIndex)
+                {
+                    firstRowStartingAfterChangedIndex = rowIndex;
+                    break;
+                }
+            }
+
+            if (firstRowStartingAfterChangedIndex <= 0)
+            {
+                return 0;
+            }
+
+            return firstRowStartingAfterChangedIndex - 1;
+        }
+
+        private async Task ApplyGridRowSpliceChunkedAsync(int startRowIndex, int replaceCount, IReadOnlyList<LibraryGridRowViewModel> newRows, CancellationToken cancellationToken, int refreshGeneration)
+        {
+            const int rowChunkSize = 24;
+
+            for (var i = 0; i < replaceCount; i++)
+            {
+                if (ShouldAbortLibraryPanelRefresh(cancellationToken, refreshGeneration))
+                {
+                    return;
+                }
+
+                if (startRowIndex < _libraryGridRows.Count)
+                {
+                    _libraryGridRows.RemoveAt(startRowIndex);
+                }
+
+                if (i > 0 && i % rowChunkSize == 0)
+                {
+                    await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
+                }
+            }
+
+            if (newRows.Count == 0)
+            {
+                return;
+            }
+
+            for (var i = 0; i < newRows.Count; i++)
+            {
+                if (ShouldAbortLibraryPanelRefresh(cancellationToken, refreshGeneration))
+                {
+                    return;
+                }
+
+                _libraryGridRows.Insert(startRowIndex + i, newRows[i]);
+                if (i > 0 && i % rowChunkSize == 0)
+                {
+                    await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
+                }
+            }
+        }
+
+        private async Task RebuildLibraryGridRowsIncrementalAsync(IReadOnlyList<LibraryItem> items, int firstChangedItemIndex, CancellationToken cancellationToken, int refreshGeneration)
+        {
+            if (firstChangedItemIndex < 0)
+            {
+                RebuildLibraryGridOffsetIndex();
+                UpdateLibraryGridVisibleRowsWindow();
+                return;
+            }
+
+            if (items.Count == 0)
+            {
+                _libraryGridRows.Clear();
+                LibraryGridColumns = 1;
+                RebuildLibraryGridOffsetIndex();
+                UpdateLibraryGridVisibleRowsWindow();
+                return;
+            }
+
+            var layoutWidth = ComputeLibraryGridAvailableWidth();
+            var clampedChangedIndex = Math.Clamp(firstChangedItemIndex, 0, items.Count - 1);
+            var startRowIndex = FindGridReflowStartRowIndex(clampedChangedIndex);
+            startRowIndex = Math.Clamp(startRowIndex, 0, Math.Max(0, _libraryGridRows.Count - 1));
+
+            var reflowStartItemIndex = clampedChangedIndex;
+            if (startRowIndex < _libraryGridRows.Count && _libraryGridRows[startRowIndex].StartItemIndex >= 0)
+            {
+                reflowStartItemIndex = _libraryGridRows[startRowIndex].StartItemIndex;
+            }
+
+            var (reflowRows, _) = BuildGridRowModelsRange(items, reflowStartItemIndex, items.Count, layoutWidth);
+            var replaceCount = Math.Max(0, _libraryGridRows.Count - startRowIndex);
+            await ApplyGridRowSpliceChunkedAsync(startRowIndex, replaceCount, reflowRows, cancellationToken, refreshGeneration);
+
+            LibraryGridColumns = Math.Clamp(_libraryGridRows.Count == 0 ? 1 : _libraryGridRows.Max(row => Math.Max(1, row.ItemCount)), 1, 12);
+            RebuildLibraryGridOffsetIndex(startRowIndex);
+            UpdateLibraryGridVisibleRowsWindow();
+        }
+
+        private GridViewportAnchorState? CaptureGridViewportAnchor()
+        {
+            if (LibraryGridScrollViewer == null)
+            {
+                return null;
+            }
+
+            var rawOffsetY = LibraryGridScrollViewer.Offset.Y;
+            if (_libraryGridRows.Count == 0)
+            {
+                return new GridViewportAnchorState { RawOffsetY = rawOffsetY };
+            }
+
+            var runningTop = 0d;
+            foreach (var row in _libraryGridRows)
+            {
+                var rowHeight = row.RowHeight > 0 ? row.RowHeight : (row.Items.Count > 0 ? row.Items[0].TileHeight : 0d);
+                var rowBottom = runningTop + rowHeight + LibraryGridVerticalRowGap;
+                if (rawOffsetY <= rowBottom)
+                {
+                    var anchorKey = row.FirstItemKey;
+                    if (string.IsNullOrWhiteSpace(anchorKey) && row.Items.Count > 0)
+                    {
+                        anchorKey = row.Items[0].ItemKey;
+                    }
+
+                    return new GridViewportAnchorState
+                    {
+                        AnchorItemKey = anchorKey ?? string.Empty,
+                        InsetY = Math.Max(0, rawOffsetY - runningTop),
+                        RawOffsetY = rawOffsetY
+                    };
+                }
+
+                runningTop = rowBottom;
+            }
+
+            return new GridViewportAnchorState { RawOffsetY = rawOffsetY };
+        }
+
+        private double RestoreGridViewportAnchor(GridViewportAnchorState anchorState)
+        {
+            if (LibraryGridScrollViewer == null)
+            {
+                return anchorState.RawOffsetY;
+            }
+
+            if (string.IsNullOrWhiteSpace(anchorState.AnchorItemKey))
+            {
+                return anchorState.RawOffsetY;
+            }
+
+            var runningTop = 0d;
+            foreach (var row in _libraryGridRows)
+            {
+                var containsAnchor = row.Items.Any(tile => string.Equals(tile.ItemKey, anchorState.AnchorItemKey, StringComparison.OrdinalIgnoreCase));
+                var rowHeight = row.RowHeight > 0 ? row.RowHeight : (row.Items.Count > 0 ? row.Items[0].TileHeight : 0d);
+                if (containsAnchor)
+                {
+                    return runningTop + anchorState.InsetY;
+                }
+
+                runningTop += rowHeight + LibraryGridVerticalRowGap;
+            }
+
+            return anchorState.RawOffsetY;
+        }
+
+        private double GetGridRowMeasuredHeight(LibraryGridRowViewModel row)
+        {
+            var rowHeight = row.RowHeight > 0
+                ? row.RowHeight
+                : (row.Items.Count > 0 ? row.Items[0].TileHeight : 0d);
+
+            return Math.Max(1d, rowHeight) + LibraryGridVerticalRowGap;
+        }
+
+        private void RebuildLibraryGridOffsetIndex(int startRowIndex = 0)
+        {
+            var sw = Stopwatch.StartNew();
+            if (_libraryGridRows.Count == 0)
+            {
+                _libraryGridRowTopOffsets.Clear();
+                _libraryGridRowBottomOffsets.Clear();
+                _libraryGridTotalExtentHeight = 0;
+                _lastLibraryGridVisibleStartIndex = -1;
+                _lastLibraryGridVisibleEndExclusive = -1;
+                LibraryGridTopSpacerHeight = 0;
+                LibraryGridBottomSpacerHeight = 0;
+                _libraryGridVisibleRows.Clear();
+                Log("LibraryGridVirtualizer: Cleared row offset index (no rows).");
+                return;
+            }
+
+            startRowIndex = Math.Clamp(startRowIndex, 0, _libraryGridRows.Count);
+            if (startRowIndex == 0 || _libraryGridRowTopOffsets.Count != _libraryGridRows.Count || _libraryGridRowBottomOffsets.Count != _libraryGridRows.Count)
+            {
+                _libraryGridRowTopOffsets.Clear();
+                _libraryGridRowBottomOffsets.Clear();
+                _libraryGridRowTopOffsets.Capacity = _libraryGridRows.Count;
+                _libraryGridRowBottomOffsets.Capacity = _libraryGridRows.Count;
+                var runningTop = 0d;
+                foreach (var row in _libraryGridRows)
+                {
+                    _libraryGridRowTopOffsets.Add(runningTop);
+                    runningTop += GetGridRowMeasuredHeight(row);
+                    _libraryGridRowBottomOffsets.Add(runningTop);
+                }
+
+                _libraryGridTotalExtentHeight = runningTop;
+                sw.Stop();
+                Log($"LibraryGridVirtualizer: Rebuilt full offset index. rows={_libraryGridRows.Count}, extent={_libraryGridTotalExtentHeight:F0}px, elapsedMs={sw.ElapsedMilliseconds}");
+                return;
+            }
+
+            var reindexStart = Math.Max(0, startRowIndex);
+            var running = reindexStart == 0 ? 0d : _libraryGridRowBottomOffsets[reindexStart - 1];
+            for (var rowIndex = reindexStart; rowIndex < _libraryGridRows.Count; rowIndex++)
+            {
+                _libraryGridRowTopOffsets[rowIndex] = running;
+                running += GetGridRowMeasuredHeight(_libraryGridRows[rowIndex]);
+                _libraryGridRowBottomOffsets[rowIndex] = running;
+            }
+
+            _libraryGridTotalExtentHeight = running;
+            sw.Stop();
+            Log($"LibraryGridVirtualizer: Reindexed offsets from row {reindexStart}. rows={_libraryGridRows.Count}, extent={_libraryGridTotalExtentHeight:F0}px, elapsedMs={sw.ElapsedMilliseconds}");
+        }
+
+        private int FindFirstVisibleGridRowIndexForOffset(double offsetY)
+        {
+            if (_libraryGridRowBottomOffsets.Count == 0)
+            {
+                return 0;
+            }
+
+            offsetY = Math.Max(0, offsetY);
+            var low = 0;
+            var high = _libraryGridRowBottomOffsets.Count - 1;
+            while (low < high)
+            {
+                var mid = low + ((high - low) / 2);
+                if (_libraryGridRowBottomOffsets[mid] <= offsetY)
+                {
+                    low = mid + 1;
+                }
+                else
+                {
+                    high = mid;
+                }
+            }
+
+            return Math.Clamp(low, 0, _libraryGridRowBottomOffsets.Count - 1);
+        }
+
+        private int FindLastVisibleGridRowIndexForOffset(double bottomOffsetY)
+        {
+            if (_libraryGridRowTopOffsets.Count == 0)
+            {
+                return 0;
+            }
+
+            bottomOffsetY = Math.Max(0, bottomOffsetY);
+            var low = 0;
+            var high = _libraryGridRowTopOffsets.Count - 1;
+            while (low < high)
+            {
+                var mid = low + ((high - low + 1) / 2);
+                if (_libraryGridRowTopOffsets[mid] < bottomOffsetY)
+                {
+                    low = mid;
+                }
+                else
+                {
+                    high = mid - 1;
+                }
+            }
+
+            return Math.Clamp(low, 0, _libraryGridRowTopOffsets.Count - 1);
+        }
+
+        private void UpdateLibraryGridVisibleRowsWindow()
+        {
+            if (!_libraryGridViewEnabled || LibraryGridScrollViewer == null)
+            {
+                return;
+            }
+
+            if (_libraryGridRows.Count == 0 || _libraryGridRowTopOffsets.Count == 0 || _libraryGridRowBottomOffsets.Count == 0)
+            {
+                if (_libraryGridVisibleRows.Count > 0)
+                {
+                    _libraryGridVisibleRows.Clear();
+                }
+
+                LibraryGridTopSpacerHeight = 0;
+                LibraryGridBottomSpacerHeight = 0;
+                _lastLibraryGridVisibleStartIndex = -1;
+                _lastLibraryGridVisibleEndExclusive = -1;
+                return;
+            }
+
+            const double overscanPx = 900d;
+            var viewportTop = LibraryGridScrollViewer.Offset.Y;
+            var viewportBottom = viewportTop + Math.Max(0, LibraryGridScrollViewer.Viewport.Height);
+            var startOffset = Math.Max(0, viewportTop - overscanPx);
+            var endOffset = Math.Max(startOffset, viewportBottom + overscanPx);
+
+            var firstVisibleRow = FindFirstVisibleGridRowIndexForOffset(startOffset);
+            var lastVisibleRow = FindLastVisibleGridRowIndexForOffset(endOffset);
+            firstVisibleRow = Math.Clamp(firstVisibleRow, 0, _libraryGridRows.Count - 1);
+            lastVisibleRow = Math.Clamp(lastVisibleRow, firstVisibleRow, _libraryGridRows.Count - 1);
+            var endExclusive = lastVisibleRow + 1;
+
+            if (_lastLibraryGridVisibleStartIndex == firstVisibleRow &&
+                _lastLibraryGridVisibleEndExclusive == endExclusive)
+            {
+                return;
+            }
+
+            _lastLibraryGridVisibleStartIndex = firstVisibleRow;
+            _lastLibraryGridVisibleEndExclusive = endExclusive;
+
+            LibraryGridTopSpacerHeight = _libraryGridRowTopOffsets[firstVisibleRow];
+            var bottomBoundary = _libraryGridRowBottomOffsets[lastVisibleRow];
+            LibraryGridBottomSpacerHeight = Math.Max(0, _libraryGridTotalExtentHeight - bottomBoundary);
+
+            _libraryGridVisibleRows.Clear();
+            for (var i = firstVisibleRow; i < endExclusive; i++)
+            {
+                _libraryGridVisibleRows.Add(_libraryGridRows[i]);
+            }
+
+            if (_lastLoggedLibraryGridVisibleStartIndex != firstVisibleRow ||
+                _lastLoggedLibraryGridVisibleEndExclusive != endExclusive)
+            {
+                _lastLoggedLibraryGridVisibleStartIndex = firstVisibleRow;
+                _lastLoggedLibraryGridVisibleEndExclusive = endExclusive;
+                Log($"LibraryGridVirtualizer: Visible rows {firstVisibleRow}-{endExclusive - 1} (count={_libraryGridVisibleRows.Count}), topSpacer={LibraryGridTopSpacerHeight:F0}px, bottomSpacer={LibraryGridBottomSpacerHeight:F0}px, offsetY={LibraryGridScrollViewer.Offset.Y:F0}");
+            }
+        }
+
+        private void LibraryGridScrollViewer_ScrollChanged(object? sender, ScrollChangedEventArgs e)
+        {
+            if (!_libraryGridViewEnabled)
+            {
+                return;
+            }
+
+            UpdateLibraryGridVisibleRowsWindow();
         }
 
         private void PopulateThumbnailPaths(IReadOnlyList<LibraryItem> items)
@@ -4200,7 +4865,7 @@ namespace ReelRoulette
                 return;
             }
 
-            BuildGridRowsFromItems(_libraryItems.ToList());
+            _ = RebuildLibraryGridRowsIncrementalAsync(_libraryItems.ToList(), 0, CancellationToken.None, Volatile.Read(ref _libraryPanelRefreshGeneration));
         }
 
         private double ComputeLibraryGridAvailableWidth()
@@ -4367,10 +5032,7 @@ namespace ReelRoulette
                 UpdateFilterSummaryText();
                 
                 // Rebuild queue and update library panel
-                if (_showLibraryPanel)
-                {
-                    UpdateLibraryPanel();
-                }
+                RefreshLibraryPanelFromServiceState();
                 StatusTextBlock.Text = "Cleared filter preset";
                 _ = Task.Run(async () => await RebuildPlayQueueIfNeededAsync());
                 SaveSettings();
@@ -4505,45 +5167,24 @@ namespace ReelRoulette
             if (sender is ToggleButton toggle && toggle.Tag is LibraryItem item)
             {
                 var toggleState = toggle.IsChecked == true;
-                
-                // CRITICAL FIX: Get the item from the library index to ensure we have the latest state
-                // The bound item might be stale due to virtualization recycling
                 var libraryItem = _libraryService.FindItemByPath(item.FullPath);
                 if (libraryItem == null)
                 {
                     Log($"LibraryItemFavorite_Changed: Item not found in library: {item.FileName}");
                     return;
                 }
-                
-                // CRITICAL FIX: Check if the item reference in Tag matches the library item
-                // If they're different objects, this is virtualization recycling the UI element
-                // and we should ignore the event to prevent data loss
+
+                Log($"UI ACTION: LibraryItemFavorite toggled for '{item.FileName}' to: {toggleState} (was: {libraryItem.IsFavorite})");
+                // Keep bound tile UI in sync immediately even if the tag item instance differs.
                 if (!ReferenceEquals(item, libraryItem))
                 {
-                    // The Tag has a stale item reference from virtualization recycling
-                    // The binding has updated the toggle based on the new item, but Tag still has the old item
-                    // This is NOT a user action - ignore it to prevent incorrect updates
-                    Log($"LibraryItemFavorite_Changed: Ignoring virtualization recycling for '{item.FileName}' - Tag item reference doesn't match library item (Tag item IsFavorite={item.IsFavorite}, Library item IsFavorite={libraryItem.IsFavorite}, Toggle={toggleState})");
-                    return;
+                    item.IsFavorite = toggleState;
                 }
-                
-                // CRITICAL FIX: Check if the item's state already matches the toggle state
-                // If it matches, this is a binding update from virtualization, not a user action
-                // This prevents favorites from being incorrectly removed when scrolling
-                // When virtualization recycles items, bindings update and fire events even when state matches
-                if (libraryItem.IsFavorite == toggleState)
-                {
-                    // State already matches - this is definitely a binding update, not a user action
-                    // This happens when virtualization recycles items and updates bindings during scrolling
-                    Log($"LibraryItemFavorite_Changed: Ignoring binding update for '{item.FileName}' - state already matches: {toggleState}");
-                    return;
-                }
-                
-                Log($"UI ACTION: LibraryItemFavorite toggled for '{item.FileName}' to: {toggleState} (was: {libraryItem.IsFavorite})");
+
                 libraryItem.IsFavorite = toggleState;
                 _libraryService.UpdateItem(libraryItem);
                 _ = Task.Run(() => _libraryService.SaveLibrary());
-                UpdateLibraryPanel();
+                RefreshLibraryPanelFromServiceState();
             }
         }
 
@@ -4560,45 +5201,27 @@ namespace ReelRoulette
             if (sender is ToggleButton toggle && toggle.Tag is LibraryItem item)
             {
                 var toggleState = toggle.IsChecked == true;
-                
-                // CRITICAL FIX: Get the item from the library index to ensure we have the latest state
-                // The bound item might be stale due to virtualization recycling
                 var libraryItem = _libraryService.FindItemByPath(item.FullPath);
                 if (libraryItem == null)
                 {
                     Log($"LibraryItemBlacklist_Changed: Item not found in library: {item.FileName}");
                     return;
                 }
-                
-                // CRITICAL FIX: Check if the item reference in Tag matches the library item
-                // If they're different objects, this is virtualization recycling the UI element
-                // and we should ignore the event to prevent data loss
+
+                Log($"UI ACTION: LibraryItemBlacklist toggled for '{item.FileName}' to: {toggleState} (was: {libraryItem.IsBlacklisted})");
+                // Keep bound tile UI in sync immediately even if the tag item instance differs.
                 if (!ReferenceEquals(item, libraryItem))
                 {
-                    // The Tag has a stale item reference from virtualization recycling
-                    // The binding has updated the toggle based on the new item, but Tag still has the old item
-                    // This is NOT a user action - ignore it to prevent incorrect updates
-                    Log($"LibraryItemBlacklist_Changed: Ignoring virtualization recycling for '{item.FileName}' - Tag item reference doesn't match library item (Tag item IsBlacklisted={item.IsBlacklisted}, Library item IsBlacklisted={libraryItem.IsBlacklisted}, Toggle={toggleState})");
-                    return;
+                    item.IsBlacklisted = toggleState;
                 }
-                
-                // CRITICAL FIX: Check if the item's state already matches the toggle state
-                // If it matches, this is a binding update from virtualization, not a user action
-                // This prevents blacklist state from being incorrectly changed when scrolling
-                // When virtualization recycles items, bindings update and fire events even when state matches
-                if (libraryItem.IsBlacklisted == toggleState)
-                {
-                    // State already matches - this is definitely a binding update, not a user action
-                    // This happens when virtualization recycles items and updates bindings during scrolling
-                    Log($"LibraryItemBlacklist_Changed: Ignoring binding update for '{item.FileName}' - state already matches: {toggleState}");
-                    return;
-                }
-                
-                Log($"UI ACTION: LibraryItemBlacklist toggled for '{item.FileName}' to: {toggleState} (was: {libraryItem.IsBlacklisted})");
+
                 libraryItem.IsBlacklisted = toggleState;
                 _libraryService.UpdateItem(libraryItem);
                 _ = Task.Run(() => _libraryService.SaveLibrary());
-                UpdateLibraryPanel();
+                if (_showLibraryPanel)
+                {
+                    UpdateLibraryPanel();
+                }
                 // Rebuild queue if item was blacklisted
                 if (libraryItem.IsBlacklisted)
                 {
@@ -4673,6 +5296,50 @@ namespace ReelRoulette
             }
         }
 
+        private void LibraryGridScrollViewer_PointerPressed(object? sender, PointerPressedEventArgs e)
+        {
+            if (!_libraryGridViewEnabled)
+            {
+                return;
+            }
+
+            var source = e.Source;
+            var isScrollbarInteraction = source is ScrollBar or Thumb;
+            if (!isScrollbarInteraction)
+            {
+                return;
+            }
+
+            _isGridScrollInteracting = true;
+            Log("LibraryGridVirtualizer: Scroll interaction started.");
+        }
+
+        private void LibraryGridScrollViewer_PointerReleased(object? sender, PointerReleasedEventArgs e)
+        {
+            EndGridScrollInteractionAndFlushPendingRefresh();
+        }
+
+        private void LibraryGridScrollViewer_PointerCaptureLost(object? sender, PointerCaptureLostEventArgs e)
+        {
+            EndGridScrollInteractionAndFlushPendingRefresh();
+        }
+
+        private void EndGridScrollInteractionAndFlushPendingRefresh()
+        {
+            if (!_isGridScrollInteracting)
+            {
+                return;
+            }
+
+            _isGridScrollInteracting = false;
+            Log($"LibraryGridVirtualizer: Scroll interaction ended. pendingRefresh={_pendingLibraryPanelRefresh}");
+            if (_pendingLibraryPanelRefresh)
+            {
+                _pendingLibraryPanelRefresh = false;
+                UpdateLibraryPanel();
+            }
+        }
+
         private async void LibraryItemTags_Click(object? sender, RoutedEventArgs e)
         {
             Log("UI ACTION: LibraryItemTags clicked");
@@ -4721,7 +5388,7 @@ namespace ReelRoulette
             
             await Task.Run(() => _libraryService.SaveLibrary());
             StatusTextBlock.Text = $"Added {selectedItems.Count} item(s) to favorites";
-            UpdateLibraryPanel();
+            RefreshLibraryPanelFromServiceState();
             UpdateContextMenuState();
         }
 
@@ -4744,7 +5411,7 @@ namespace ReelRoulette
             
             await Task.Run(() => _libraryService.SaveLibrary());
             StatusTextBlock.Text = $"Removed {selectedItems.Count} item(s) from favorites";
-            UpdateLibraryPanel();
+            RefreshLibraryPanelFromServiceState();
             UpdateContextMenuState();
         }
 
@@ -4768,7 +5435,7 @@ namespace ReelRoulette
             await Task.Run(() => _libraryService.SaveLibrary());
             StatusTextBlock.Text = $"Added {selectedItems.Count} item(s) to blacklist";
             RebuildPlayQueueIfNeeded();
-            UpdateLibraryPanel();
+            RefreshLibraryPanelFromServiceState();
             UpdateContextMenuState();
         }
 
@@ -4792,7 +5459,7 @@ namespace ReelRoulette
             await Task.Run(() => _libraryService.SaveLibrary());
             StatusTextBlock.Text = $"Removed {selectedItems.Count} item(s) from blacklist";
             RebuildPlayQueueIfNeeded();
-            UpdateLibraryPanel();
+            RefreshLibraryPanelFromServiceState();
             UpdateContextMenuState();
         }
 
@@ -4813,7 +5480,7 @@ namespace ReelRoulette
             
             await Task.Run(() => _libraryService.SaveLibrary());
             StatusTextBlock.Text = $"Cleared playback stats for {selectedItems.Count} item(s)";
-            UpdateLibraryPanel();
+            RefreshLibraryPanelFromServiceState();
             if (_currentVideoPath != null && selectedItems.Any(item => item.FullPath == _currentVideoPath))
             {
                 UpdateCurrentFileStatsUi();
@@ -5083,10 +5750,7 @@ namespace ReelRoulette
                 }
 
                 // Update Library panel if visible
-                if (_showLibraryPanel)
-                {
-                    UpdateLibraryPanel();
-                }
+                RefreshLibraryPanelFromServiceState();
                 StatusTextBlock.Text = $"Removed from favorites: {System.IO.Path.GetFileName(path)}";
 
                 // Queue will be rebuilt when filters change via FilterDialog
@@ -7379,10 +8043,6 @@ namespace ReelRoulette
                     _lastAppliedRefreshCompletionRunId = completionRunId;
                     // Do not reload local library.json on refresh completion.
                     _ = SyncLibraryProjectionFromCoreAsync();
-                    if (_showLibraryPanel)
-                    {
-                        UpdateLibraryPanel();
-                    }
                     UpdateLibraryInfoText();
                     UpdateFilterSummaryText();
                     RecalculateGlobalStats();

@@ -7,24 +7,25 @@ This file follows a Keep a Changelog style format.
 
 ### Added
 
-- Add startup-launch host service path for `ReelRoulette.ServerApp`, including Windows `HKCU` startup registration support and non-Windows unsupported/no-op behavior.
-- Add `Launch Server on Startup` control-plane endpoints (`GET/POST /control/startup`) and Operator UI control-settings integration.
-- Add tray menu toggle for `Launch Server on Startup` with immediate apply behavior.
-- Add installer desktop shortcut task options with default-checked behavior for both server and desktop installers.
-- Add Material Symbols variable font asset (`assets/fonts/MaterialSymbolsOutlined.var.ttf`) to Windows desktop app resources for icon-font rendering.
-- Add shared desktop icon-style foundation in `App.axaml` with reusable base + wrappers (`IconGlyphBase`, `IconGlyphButton`, `IconGlyphToggle`) and shared `MaterialSymbolIcon` text style for future UI migration.
+- Add startup-launch host support for `ReelRoulette.ServerApp` (Windows `HKCU` registration), including control-plane APIs and tray/Operator toggles for immediate apply behavior.
+- Add installer desktop-shortcut task options with default-checked behavior for both server and desktop installers.
+- Add Material Symbols desktop icon-font foundation (`assets/fonts/MaterialSymbolsOutlined.var.ttf`) with shared glyph styles and grid-tile favorite/blacklist overlays.
 
 ### Changed
 
-- Expand Windows desktop icon-font migration across primary controls in `MainWindow` (transport, random, filter, tags, show-in-file-manager, loop/autoplay/favorite/blacklist/mute, library panel filter/grid/list actions) using shared no-box icon styles.
-- Standardize migrated Material Symbols icon sizing/weight (`32pt` bold), with emphasized transport play/pause icon sizing (`36pt`) and tighter intra-transport spacing.
-- Add shared checked-state tint for glyph toggles (`HugginsOrange`) while preserving shared opacity-based hover/pressed feedback behavior.
-- Reposition transport controls to sit left of the seek slider, with explicit asymmetric spacing around the transport cluster for clearer visual separation from neighboring controls.
-- Simplify library panel filtering UX by removing the `Respect filters` toggle from UI and code-behind; active filter state is now applied consistently when present.
+- Complete broad desktop icon migration to shared no-box Material Symbols controls, with standardized glyph sizing/weight, checked-state tint behavior, and transport layout cleanup.
+- Simplify library filtering UX by removing `Respect filters`; active filter state now applies consistently when present.
+- Rework library panel update flow for large sets with observable item state, keyed diff patching, first-changed-index justified row reflow/splicing, and service-state resync before mutation-triggered refreshes.
+- Add single-item filter-eligibility helper groundwork for active panel filtering (`source + search + filter state`) in preparation for authority/filter migration.
+- Introduce exact logical grid-row virtualization (`top spacer + visible rows + bottom spacer`) backed by deterministic row-offset indexing and binary-search visible-window selection.
+- Add anchor/inset viewport restore, drag-authoritative coalescing, and targeted `last.log` virtualizer diagnostics for deep-scroll update behavior.
+- Add top-right favorite/blacklist indicators on grid thumbnails using Material Symbols with real-time visibility updates.
 
 ### Fixed
 
-- None yet.
+- Improve grid-view scrollbar stability by combining exact row-offset virtualization with drag-aware update gating and anchor/inset offset restoration.
+- Keep projection sync as the single trigger for core refresh completion updates to the library panel.
+- Improve dynamic-filter refresh behavior (for example `OnlyNeverPlayed`) by adding targeted panel refresh triggers for playback/stat and metadata-related filter changes.
 
 ## v0.10.0 - Platform and Experience Update (2026-03-11)
 

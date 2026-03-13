@@ -36,6 +36,31 @@ namespace ReelRoulette
                 .ToList();
         }
 
+        public bool IsItemEligibleWithoutFileCheck(FilterState filterState, LibraryIndex libraryIndex, LibraryItem item)
+        {
+            var request = ToCoreRequest(libraryIndex);
+            request.Items = new List<FilterItem>
+            {
+                new()
+                {
+                    Key = GetItemKey(item),
+                    SourceId = item.SourceId,
+                    FullPath = item.FullPath,
+                    IsBlacklisted = item.IsBlacklisted,
+                    IsFavorite = item.IsFavorite,
+                    PlayCount = item.PlayCount,
+                    HasAudio = item.HasAudio,
+                    Duration = item.Duration,
+                    IntegratedLoudness = item.IntegratedLoudness,
+                    MediaType = (MediaTypeValue)(int)item.MediaType,
+                    Tags = item.Tags?.ToList() ?? new List<string>()
+                }
+            };
+
+            var result = _coreBuilder.BuildEligibleSetWithoutFileCheck(ToCoreState(filterState), request);
+            return result.Any();
+        }
+
         private static Dictionary<string, LibraryItem> BuildItemMap(IEnumerable<LibraryItem> items)
         {
             return items.ToDictionary(GetItemKey, item => item, StringComparer.OrdinalIgnoreCase);
