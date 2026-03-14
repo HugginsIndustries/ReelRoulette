@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using ReelRoulette.Core.Fingerprints;
 using ReelRoulette.Server.Contracts;
 using SkiaSharp;
@@ -34,6 +35,12 @@ public sealed class RefreshPipelineService : BackgroundService
     private static readonly object FfprobeSemaphoreLock = new();
     private static SemaphoreSlim? _ffmpegSemaphore;
     private static readonly object FfmpegSemaphoreLock = new();
+    private static readonly Regex IntegratedLufsRegex = new(
+        @"(?:^|\s)I:\s*(?<value>-?\d+(?:\.\d+)?)\s*LUFS\b",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex PeakDbfsRegex = new(
+        @"(?:^|\s)(?:Peak|True peak):\s*(?<value>-?\d+(?:\.\d+)?)\s*dBFS\b",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     private readonly ServerStateService _state;
     private readonly ILogger<RefreshPipelineService> _logger;
@@ -88,7 +95,7 @@ public sealed class RefreshPipelineService : BackgroundService
         lock (_runLock)
         {
             var updated = _coreSettings.UpdateRefreshSettings(snapshot);
-            _nextAutoRunUtc = DateTimeOffset.UtcNow.AddMinutes(updated.AutoRefreshIntervalMinutes);
+            ScheduleNextAutoRunFromNowLocked();
             return updated;
         }
     }
@@ -119,16 +126,12 @@ public sealed class RefreshPipelineService : BackgroundService
         }
 
         _ = Task.Run(() => ExecuteReservedRunAsync(CancellationToken.None));
-        lock (_runLock)
+        return new RefreshStartResponse
         {
-            _nextAutoRunUtc = DateTimeOffset.UtcNow.AddMinutes(_coreSettings.GetRefreshSettings().AutoRefreshIntervalMinutes);
-            return new RefreshStartResponse
-            {
-                Accepted = true,
-                Message = "started",
-                RunId = runId
-            };
-        }
+            Accepted = true,
+            Message = "started",
+            RunId = runId
+        };
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -150,10 +153,6 @@ public sealed class RefreshPipelineService : BackgroundService
                 if (TryReserveRun("auto", out _))
                 {
                     await ExecuteReservedRunAsync(stoppingToken);
-                    lock (_runLock)
-                    {
-                        _nextAutoRunUtc = DateTimeOffset.UtcNow.AddMinutes(_coreSettings.GetRefreshSettings().AutoRefreshIntervalMinutes);
-                    }
                 }
             }
 
@@ -202,8 +201,8 @@ public sealed class RefreshPipelineService : BackgroundService
         try
         {
             await RunSourceRefreshAsync(cancellationToken);
-            await RunDurationStageAsync(cancellationToken);
-            await RunLoudnessStageAsync(cancellationToken);
+            await RunDurationStageWithOneShotAsync(cancellationToken);
+            await RunLoudnessStageWithOneShotAsync(cancellationToken);
             await RunThumbnailStageAsync(cancellationToken);
 
             lock (_runLock)
@@ -229,9 +228,15 @@ public sealed class RefreshPipelineService : BackgroundService
         {
             lock (_runLock)
             {
+                ScheduleNextAutoRunFromNowLocked();
                 _isRunLoopActive = false;
             }
         }
+    }
+
+    private void ScheduleNextAutoRunFromNowLocked()
+    {
+        _nextAutoRunUtc = DateTimeOffset.UtcNow.AddMinutes(_coreSettings.GetRefreshSettings().AutoRefreshIntervalMinutes);
     }
 
     private async Task RunSourceRefreshAsync(CancellationToken cancellationToken)
@@ -545,7 +550,24 @@ public sealed class RefreshPipelineService : BackgroundService
             $"Source refresh complete ({added} added, {removed} removed, {renamed} renamed, {moved} moved, {updated} updated, {unresolvedQueued} unresolved)");
     }
 
-    private async Task RunDurationStageAsync(CancellationToken cancellationToken)
+    private async Task RunDurationStageWithOneShotAsync(CancellationToken cancellationToken)
+    {
+        var settings = _coreSettings.GetRefreshSettings();
+        var forceFullRescan = settings.ForceRescanDuration;
+        try
+        {
+            await RunDurationStageAsync(cancellationToken, forceFullRescan);
+        }
+        finally
+        {
+            if (forceFullRescan)
+            {
+                ConsumeRefreshRescanFlags(clearDuration: true, clearLoudness: false);
+            }
+        }
+    }
+
+    private async Task RunDurationStageAsync(CancellationToken cancellationToken, bool forceFullRescan)
     {
         var root = await LoadLibraryJsonAsync(cancellationToken);
         var items = root["items"] as JsonArray ?? [];
@@ -565,18 +587,21 @@ public sealed class RefreshPipelineService : BackgroundService
         }
 
         var allFiles = fileToNode.Keys.ToArray();
-        var filesToScan = allFiles.Where(path => !HasValidDuration(fileToNode[path])).ToArray();
-        var alreadyCachedCount = allFiles.Length - filesToScan.Length;
+        var filesToScan = forceFullRescan
+            ? allFiles
+            : allFiles.Where(path => !HasValidDuration(fileToNode[path])).ToArray();
+        var alreadyCachedCount = forceFullRescan ? 0 : allFiles.Length - filesToScan.Length;
         var total = allFiles.Length;
         var processed = alreadyCachedCount;
         var updated = 0;
         var processedLock = new object();
         var updates = new Dictionary<string, TimeSpan>(StringComparer.OrdinalIgnoreCase);
         var updatesLock = new object();
+        var forcedSuffix = forceFullRescan ? " (forced full rescan)" : string.Empty;
 
         if (filesToScan.Length == 0)
         {
-            CompleteStage("durationScan", $"Duration scan complete ({total} files, all cached)");
+            CompleteStage("durationScan", $"Duration scan complete ({total} files, all cached){forcedSuffix}");
             return;
         }
 
@@ -596,7 +621,7 @@ public sealed class RefreshPipelineService : BackgroundService
                     skippedProcessed = processed;
                 }
 
-                TryUpdateDurationProgress(skippedProcessed, total);
+                TryUpdateDurationProgress(skippedProcessed, total, forceFullRescan);
                 return;
             }
 
@@ -616,7 +641,7 @@ public sealed class RefreshPipelineService : BackgroundService
                 currentProcessed = processed;
             }
 
-            TryUpdateDurationProgress(currentProcessed, total);
+            TryUpdateDurationProgress(currentProcessed, total, forceFullRescan);
         });
 
         await Task.WhenAll(scanTasks);
@@ -636,10 +661,27 @@ public sealed class RefreshPipelineService : BackgroundService
 
         root["items"] = items;
         await SaveLibraryJsonAsync(root, cancellationToken);
-        CompleteStage("durationScan", $"Duration scan complete ({total} files, {updated} updated)");
+        CompleteStage("durationScan", $"Duration scan complete ({total} files, {updated} updated){forcedSuffix}");
     }
 
-    private async Task RunLoudnessStageAsync(CancellationToken cancellationToken)
+    private async Task RunLoudnessStageWithOneShotAsync(CancellationToken cancellationToken)
+    {
+        var settings = _coreSettings.GetRefreshSettings();
+        var forceFullRescan = settings.ForceRescanLoudness;
+        try
+        {
+            await RunLoudnessStageAsync(cancellationToken, forceFullRescan);
+        }
+        finally
+        {
+            if (forceFullRescan)
+            {
+                ConsumeRefreshRescanFlags(clearDuration: false, clearLoudness: true);
+            }
+        }
+    }
+
+    private async Task RunLoudnessStageAsync(CancellationToken cancellationToken, bool forceFullRescan)
     {
         var ffmpegPath = ResolveFfmpegPath();
         if (!await VerifyFfmpegAsync(ffmpegPath, cancellationToken))
@@ -666,13 +708,30 @@ public sealed class RefreshPipelineService : BackgroundService
         }
 
         var allFiles = fileToNode.Keys.ToArray();
-        var filesToScan = allFiles.Where(path =>
-        {
-            var node = fileToNode[path];
-            return node["hasAudio"] == null || node["integratedLoudness"] == null;
-        }).ToArray();
+        var filesToScan = forceFullRescan
+            ? allFiles
+            : allFiles.Where(path =>
+            {
+                var node = fileToNode[path];
+                var hasAudio = node["hasAudio"]?.GetValue<bool?>();
+                var integrated = node["integratedLoudness"]?.GetValue<double?>();
 
-        var alreadyScannedCount = allFiles.Length - filesToScan.Length;
+                // Scan when unknown audio state, when audio is known and loudness is missing,
+                // or when stale loudness is present on a known no-audio item.
+                if (!hasAudio.HasValue)
+                {
+                    return true;
+                }
+
+                if (hasAudio.Value)
+                {
+                    return !integrated.HasValue;
+                }
+
+                return integrated.HasValue;
+            }).ToArray();
+
+        var alreadyScannedCount = forceFullRescan ? 0 : allFiles.Length - filesToScan.Length;
         var total = allFiles.Length;
         var processed = alreadyScannedCount;
         var noAudioCount = 0;
@@ -680,10 +739,11 @@ public sealed class RefreshPipelineService : BackgroundService
         var processedLock = new object();
         var updates = new Dictionary<string, FileLoudnessInfo>(StringComparer.OrdinalIgnoreCase);
         var updatesLock = new object();
+        var forcedSuffix = forceFullRescan ? " (forced full rescan)" : string.Empty;
 
         if (filesToScan.Length == 0)
         {
-            CompleteStage("loudnessScan", $"Loudness scan complete ({total} files, all scanned)");
+            CompleteStage("loudnessScan", $"Loudness scan complete ({total} files, all scanned){forcedSuffix}");
             return;
         }
 
@@ -702,7 +762,7 @@ public sealed class RefreshPipelineService : BackgroundService
                     processed++;
                     skippedProcessed = processed;
                 }
-                TryUpdateLoudnessProgress(skippedProcessed, total, noAudioCount, errorCount);
+                TryUpdateLoudnessProgress(skippedProcessed, total, noAudioCount, errorCount, forceFullRescan);
                 return;
             }
 
@@ -714,19 +774,19 @@ public sealed class RefreshPipelineService : BackgroundService
                     updates[file] = loudness;
                 }
 
-                if (!loudness.HasAudio)
+                if (loudness.IsError)
+                {
+                    lock (processedLock)
+                    {
+                        errorCount++;
+                    }
+                }
+                else if (!loudness.HasAudio)
                 {
                     lock (processedLock)
                     {
                         noAudioCount++;
                     }
-                }
-            }
-            else
-            {
-                lock (processedLock)
-                {
-                    errorCount++;
                 }
             }
 
@@ -741,7 +801,7 @@ public sealed class RefreshPipelineService : BackgroundService
                 currentErrors = errorCount;
             }
 
-            TryUpdateLoudnessProgress(currentProcessed, total, currentNoAudio, currentErrors);
+            TryUpdateLoudnessProgress(currentProcessed, total, currentNoAudio, currentErrors, forceFullRescan);
         });
 
         await Task.WhenAll(scanTasks);
@@ -765,7 +825,15 @@ public sealed class RefreshPipelineService : BackgroundService
             }
 
             var currentIntegrated = node["integratedLoudness"]?.GetValue<double?>();
-            if (info.HasAudio && Math.Abs(info.MeanVolumeDb) > 0.0001)
+            if (info.IsError)
+            {
+                if (currentIntegrated.HasValue)
+                {
+                    node["integratedLoudness"] = null;
+                    nodeUpdated = true;
+                }
+            }
+            else if (info.HasAudio && Math.Abs(info.MeanVolumeDb) > 0.0001)
             {
                 if (!currentIntegrated.HasValue || Math.Abs(currentIntegrated.Value - info.MeanVolumeDb) > 0.1)
                 {
@@ -773,9 +841,22 @@ public sealed class RefreshPipelineService : BackgroundService
                     nodeUpdated = true;
                 }
             }
+            else if (!info.HasAudio && currentIntegrated.HasValue)
+            {
+                node["integratedLoudness"] = null;
+                nodeUpdated = true;
+            }
 
             var currentPeak = node["peakDb"]?.GetValue<double?>();
-            if (info.HasAudio && Math.Abs(info.PeakDb) > 0.0001)
+            if (info.IsError)
+            {
+                if (currentPeak.HasValue)
+                {
+                    node["peakDb"] = null;
+                    nodeUpdated = true;
+                }
+            }
+            else if (info.HasAudio && Math.Abs(info.PeakDb) > 0.0001)
             {
                 if (!currentPeak.HasValue || Math.Abs(currentPeak.Value - info.PeakDb) > 0.1)
                 {
@@ -789,6 +870,24 @@ public sealed class RefreshPipelineService : BackgroundService
                 nodeUpdated = true;
             }
 
+            var currentLoudnessError = node["loudnessError"]?.GetValue<string>();
+            if (info.IsError)
+            {
+                var message = string.IsNullOrWhiteSpace(info.ErrorMessage)
+                    ? "Loudness analysis failed."
+                    : info.ErrorMessage;
+                if (!string.Equals(currentLoudnessError, message, StringComparison.Ordinal))
+                {
+                    node["loudnessError"] = message;
+                    nodeUpdated = true;
+                }
+            }
+            else if (!string.IsNullOrWhiteSpace(currentLoudnessError))
+            {
+                node["loudnessError"] = null;
+                nodeUpdated = true;
+            }
+
             if (nodeUpdated)
             {
                 updated++;
@@ -799,7 +898,7 @@ public sealed class RefreshPipelineService : BackgroundService
         await SaveLibraryJsonAsync(root, cancellationToken);
         var noAudioText = noAudioCount > 0 ? $", {noAudioCount} without audio" : string.Empty;
         var errorText = errorCount > 0 ? $", {errorCount} errors" : string.Empty;
-        CompleteStage("loudnessScan", $"Loudness scan complete ({total} files, {updated} updated{noAudioText}{errorText})");
+        CompleteStage("loudnessScan", $"Loudness scan complete ({total} files, {updated} updated{noAudioText}{errorText}){forcedSuffix}");
     }
 
     private async Task RunThumbnailStageAsync(CancellationToken cancellationToken)
@@ -1523,18 +1622,40 @@ public sealed class RefreshPipelineService : BackgroundService
             : null;
     }
 
-    private void TryUpdateDurationProgress(int processed, int total)
+    private void TryUpdateDurationProgress(int processed, int total, bool forceFullRescan)
     {
         var pct = Math.Clamp((int)Math.Round((processed / (double)Math.Max(1, total)) * 100.0), 0, 100);
-        UpdateStage("durationScan", pct, $"Duration scan {processed}/{total}");
+        var forcedSuffix = forceFullRescan ? " (forced full rescan)" : string.Empty;
+        UpdateStage("durationScan", pct, $"Duration scan {processed}/{total}{forcedSuffix}");
     }
 
-    private void TryUpdateLoudnessProgress(int processed, int total, int noAudioCount, int errorCount)
+    private void TryUpdateLoudnessProgress(int processed, int total, int noAudioCount, int errorCount, bool forceFullRescan)
     {
         var pct = Math.Clamp((int)Math.Round((processed / (double)Math.Max(1, total)) * 100.0), 0, 100);
         var noAudioText = noAudioCount > 0 ? $", {noAudioCount} without audio" : string.Empty;
         var errorText = errorCount > 0 ? $", {errorCount} errors" : string.Empty;
-        UpdateStage("loudnessScan", pct, $"Loudness scan {processed}/{total}{noAudioText}{errorText}");
+        var forcedSuffix = forceFullRescan ? " (forced full rescan)" : string.Empty;
+        UpdateStage("loudnessScan", pct, $"Loudness scan {processed}/{total}{noAudioText}{errorText}{forcedSuffix}");
+    }
+
+    private void ConsumeRefreshRescanFlags(bool clearDuration, bool clearLoudness)
+    {
+        try
+        {
+            var current = _coreSettings.GetRefreshSettings();
+            var updated = new RefreshSettingsSnapshot
+            {
+                AutoRefreshEnabled = current.AutoRefreshEnabled,
+                AutoRefreshIntervalMinutes = current.AutoRefreshIntervalMinutes,
+                ForceRescanDuration = clearDuration ? false : current.ForceRescanDuration,
+                ForceRescanLoudness = clearLoudness ? false : current.ForceRescanLoudness
+            };
+            _coreSettings.UpdateRefreshSettings(updated);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to clear one-shot refresh rescan flags");
+        }
     }
 
     private static string ResolveFfprobePath()
@@ -1708,6 +1829,13 @@ public sealed class RefreshPipelineService : BackgroundService
 
     private static async Task<FileLoudnessInfo?> AnalyzeLoudnessAsync(string filePath, string ffmpegPath, CancellationToken cancellationToken)
     {
+        var hasAudioStream = await TryDetectAudioStreamAsync(filePath, cancellationToken);
+        if (hasAudioStream == false)
+        {
+            // Advisory only. Continue with ffmpeg ebur128 analysis to avoid false negatives
+            // on containers/codecs where ffprobe stream probing can be incomplete.
+        }
+
         if (_ffmpegSemaphore == null)
         {
             lock (FfmpegSemaphoreLock)
@@ -1758,10 +1886,26 @@ public sealed class RefreshPipelineService : BackgroundService
             }
             catch
             {
-                return null;
+                return new FileLoudnessInfo
+                {
+                    HasAudio = true,
+                    IsError = true,
+                    ErrorMessage = "Loudness analysis failed while running ffmpeg."
+                };
             }
 
-            return ParseLoudnessFromFfmpegOutput(output, exitCode);
+            var parsed = ParseLoudnessFromFfmpegOutput(output, exitCode);
+            if (parsed != null)
+            {
+                return parsed;
+            }
+
+            return new FileLoudnessInfo
+            {
+                HasAudio = true,
+                IsError = true,
+                ErrorMessage = "Loudness analysis failed. Item kept as has-audio for safety."
+            };
         }
         finally
         {
@@ -1772,6 +1916,75 @@ public sealed class RefreshPipelineService : BackgroundService
         }
     }
 
+    private static async Task<bool?> TryDetectAudioStreamAsync(string filePath, CancellationToken cancellationToken)
+    {
+        var ffprobePath = ResolveFfprobePath();
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = ffprobePath,
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true
+        };
+
+        startInfo.ArgumentList.Add("-v");
+        startInfo.ArgumentList.Add("error");
+        startInfo.ArgumentList.Add("-show_streams");
+        startInfo.ArgumentList.Add("-of");
+        startInfo.ArgumentList.Add("json");
+        startInfo.ArgumentList.Add(filePath);
+
+        try
+        {
+            using var process = new Process { StartInfo = startInfo };
+            using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
+            process.Start();
+            var stdout = await process.StandardOutput.ReadToEndAsync(linkedCts.Token);
+            _ = await process.StandardError.ReadToEndAsync(linkedCts.Token);
+            await process.WaitForExitAsync(linkedCts.Token);
+
+            if (process.ExitCode != 0)
+            {
+                return null;
+            }
+
+            if (string.IsNullOrWhiteSpace(stdout))
+            {
+                return null;
+            }
+
+            using var doc = JsonDocument.Parse(stdout);
+            if (!doc.RootElement.TryGetProperty("streams", out var streams) || streams.ValueKind != JsonValueKind.Array)
+            {
+                return null;
+            }
+
+            if (streams.GetArrayLength() == 0)
+            {
+                return false;
+            }
+
+            foreach (var stream in streams.EnumerateArray())
+            {
+                if (stream.TryGetProperty("codec_type", out var codecType) &&
+                    codecType.ValueKind == JsonValueKind.String &&
+                    string.Equals(codecType.GetString(), "audio", StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+        catch
+        {
+            // Unknown detection state; fall back to ffmpeg analysis path.
+            return null;
+        }
+    }
+
     private static FileLoudnessInfo? ParseLoudnessFromFfmpegOutput(string output, int exitCode = 0)
     {
         double? integratedLoudness = null;
@@ -1779,34 +1992,57 @@ public sealed class RefreshPipelineService : BackgroundService
         bool hasAudio = false;
         var lines = output.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
 
+        var fileOpenedSuccessfully = output.Contains("Input #0", StringComparison.OrdinalIgnoreCase);
+        var hasVideoStream = output.Contains("Stream #0:", StringComparison.Ordinal) && output.Contains("Video:", StringComparison.OrdinalIgnoreCase);
+        var hasAudioStream = output.Contains("Stream #0:", StringComparison.Ordinal) && output.Contains("Audio:", StringComparison.OrdinalIgnoreCase);
+        var hasExplicitNoAudioMessage =
+            output.Contains("does not contain any audio stream", StringComparison.OrdinalIgnoreCase) ||
+            output.Contains("matches no streams", StringComparison.OrdinalIgnoreCase) ||
+            output.Contains("no audio stream", StringComparison.OrdinalIgnoreCase) ||
+            output.Contains("Stream map '0:a' matches no streams", StringComparison.OrdinalIgnoreCase) ||
+            output.Contains("no audio streams found", StringComparison.OrdinalIgnoreCase);
+        var hasNoStreamOutputError = output.Contains("Output file does not contain any stream", StringComparison.OrdinalIgnoreCase) ||
+                                     (output.Contains("Error opening output file", StringComparison.OrdinalIgnoreCase) &&
+                                      output.Contains("Invalid argument", StringComparison.OrdinalIgnoreCase));
+        var hasFatalError =
+            (!fileOpenedSuccessfully && output.Length > 0 && exitCode != 0) ||
+            output.Contains("Invalid data found", StringComparison.OrdinalIgnoreCase) ||
+            (output.Contains("Error opening", StringComparison.OrdinalIgnoreCase) &&
+             !hasNoStreamOutputError &&
+             !output.Contains("output file", StringComparison.OrdinalIgnoreCase)) ||
+            output.Contains("Permission denied", StringComparison.OrdinalIgnoreCase) ||
+            output.Contains("No such file", StringComparison.OrdinalIgnoreCase) ||
+            output.Contains("cannot open", StringComparison.OrdinalIgnoreCase) ||
+            output.Contains("does not exist", StringComparison.OrdinalIgnoreCase) ||
+            output.Contains("No space left", StringComparison.OrdinalIgnoreCase);
+
+        if (hasExplicitNoAudioMessage ||
+            (fileOpenedSuccessfully && hasVideoStream && !hasAudioStream) ||
+            (fileOpenedSuccessfully && hasNoStreamOutputError && !hasFatalError))
+        {
+            return new FileLoudnessInfo
+            {
+                MeanVolumeDb = 0.0,
+                PeakDb = 0.0,
+                HasAudio = false
+            };
+        }
+
         foreach (var line in lines)
         {
-            if (line.Contains("I:", StringComparison.Ordinal) && line.Contains("LUFS", StringComparison.Ordinal))
+            var integratedMatch = IntegratedLufsRegex.Match(line);
+            if (integratedMatch.Success &&
+                double.TryParse(integratedMatch.Groups["value"].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var loudness))
             {
-                var parts = line.Split([':'], StringSplitOptions.RemoveEmptyEntries);
-                if (parts.Length >= 2)
-                {
-                    var valueStr = parts[1].Replace("LUFS", string.Empty, StringComparison.Ordinal).Trim();
-                    if (double.TryParse(valueStr, NumberStyles.Float, CultureInfo.InvariantCulture, out var loudness))
-                    {
-                        integratedLoudness = loudness;
-                        hasAudio = true;
-                    }
-                }
+                integratedLoudness = loudness;
+                hasAudio = true;
             }
 
-            if ((line.Contains("Peak:", StringComparison.Ordinal) || line.Contains("True peak:", StringComparison.Ordinal)) &&
-                line.Contains("dBFS", StringComparison.Ordinal))
+            var peakMatch = PeakDbfsRegex.Match(line);
+            if (peakMatch.Success &&
+                double.TryParse(peakMatch.Groups["value"].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var peak))
             {
-                var parts = line.Split([':'], StringSplitOptions.RemoveEmptyEntries);
-                if (parts.Length >= 2)
-                {
-                    var valueStr = parts[1].Replace("dBFS", string.Empty, StringComparison.Ordinal).Trim();
-                    if (double.TryParse(valueStr, NumberStyles.Float, CultureInfo.InvariantCulture, out var peak))
-                    {
-                        peakDb = peak;
-                    }
-                }
+                peakDb = peak;
             }
         }
 
@@ -1873,35 +2109,7 @@ public sealed class RefreshPipelineService : BackgroundService
             };
         }
 
-        var fileOpenedSuccessfully = output.Contains("Input #0", StringComparison.OrdinalIgnoreCase);
-        var hasVideoStream = output.Contains("Stream #0:", StringComparison.Ordinal) && output.Contains("Video:", StringComparison.OrdinalIgnoreCase);
-        var hasAudioStream = output.Contains("Stream #0:", StringComparison.Ordinal) && output.Contains("Audio:", StringComparison.OrdinalIgnoreCase);
-        var hasExplicitNoAudioMessage =
-            output.Contains("does not contain any audio stream", StringComparison.OrdinalIgnoreCase) ||
-            output.Contains("matches no streams", StringComparison.OrdinalIgnoreCase) ||
-            output.Contains("no audio stream", StringComparison.OrdinalIgnoreCase) ||
-            output.Contains("Stream map '0:a' matches no streams", StringComparison.OrdinalIgnoreCase) ||
-            output.Contains("no audio streams found", StringComparison.OrdinalIgnoreCase) ||
-            (output.Contains("Could not find codec parameters", StringComparison.OrdinalIgnoreCase) &&
-             output.Contains("audio", StringComparison.OrdinalIgnoreCase));
-        var hasNoStreamOutputError = output.Contains("Output file does not contain any stream", StringComparison.OrdinalIgnoreCase) ||
-                                     (output.Contains("Error opening output file", StringComparison.OrdinalIgnoreCase) &&
-                                      output.Contains("Invalid argument", StringComparison.OrdinalIgnoreCase));
-        var hasFatalError =
-            (!fileOpenedSuccessfully && output.Length > 0 && exitCode != 0) ||
-            output.Contains("Invalid data found", StringComparison.OrdinalIgnoreCase) ||
-            (output.Contains("Error opening", StringComparison.OrdinalIgnoreCase) &&
-             !hasNoStreamOutputError &&
-             !output.Contains("output file", StringComparison.OrdinalIgnoreCase)) ||
-            output.Contains("Permission denied", StringComparison.OrdinalIgnoreCase) ||
-            output.Contains("No such file", StringComparison.OrdinalIgnoreCase) ||
-            output.Contains("cannot open", StringComparison.OrdinalIgnoreCase) ||
-            output.Contains("does not exist", StringComparison.OrdinalIgnoreCase) ||
-            output.Contains("No space left", StringComparison.OrdinalIgnoreCase);
-
-        if (hasExplicitNoAudioMessage ||
-            (fileOpenedSuccessfully && hasVideoStream && !hasAudioStream && !meanVolumeDb.HasValue && !peakDb.HasValue) ||
-            (fileOpenedSuccessfully && hasNoStreamOutputError && !hasFatalError))
+        if (fileOpenedSuccessfully && hasVideoStream && !hasAudioStream && !meanVolumeDb.HasValue && !peakDb.HasValue)
         {
             return new FileLoudnessInfo
             {
@@ -1919,6 +2127,8 @@ public sealed class RefreshPipelineService : BackgroundService
         public bool HasAudio { get; init; }
         public double MeanVolumeDb { get; init; }
         public double PeakDb { get; init; }
+        public bool IsError { get; init; }
+        public string? ErrorMessage { get; init; }
     }
 
     private sealed class ThumbnailIndexEntry

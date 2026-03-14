@@ -14,33 +14,33 @@ namespace ReelRoulette
 {
     public partial class ManageSourcesDialog : Window, INotifyPropertyChanged
     {
-        private readonly LibraryService _libraryService;
+        private readonly Func<Task<CoreLibraryStatsResponse?>>? _getLibraryStatsAsync;
         private readonly Func<Task<bool>>? _requestRefreshAsync;
         private readonly Func<string, bool, Task<bool>>? _setSourceEnabledAsync;
         private readonly Func<DuplicateScanScope, string?, Task<CoreDuplicateScanResponse?>>? _scanDuplicatesAsync;
         private readonly Func<List<CoreDuplicateApplySelection>, Task<CoreDuplicateApplyResponse?>>? _applyDuplicatesAsync;
         private ObservableCollection<SourceViewModel> _sources = new();
 
-        public ManageSourcesDialog() : this(new LibraryService(), null, null, null, null)
+        public ManageSourcesDialog() : this(null, null, null, null, null)
         {
             // Design-time constructor
         }
 
         public ManageSourcesDialog(
-            LibraryService libraryService,
+            Func<Task<CoreLibraryStatsResponse?>>? getLibraryStatsAsync = null,
             Func<Task<bool>>? requestRefreshAsync = null,
             Func<string, bool, Task<bool>>? setSourceEnabledAsync = null,
             Func<DuplicateScanScope, string?, Task<CoreDuplicateScanResponse?>>? scanDuplicatesAsync = null,
             Func<List<CoreDuplicateApplySelection>, Task<CoreDuplicateApplyResponse?>>? applyDuplicatesAsync = null)
         {
-            _libraryService = libraryService;
+            _getLibraryStatsAsync = getLibraryStatsAsync;
             _requestRefreshAsync = requestRefreshAsync;
             _setSourceEnabledAsync = setSourceEnabledAsync;
             _scanDuplicatesAsync = scanDuplicatesAsync;
             _applyDuplicatesAsync = applyDuplicatesAsync;
             InitializeComponent();
             DataContext = this;
-            LoadSources();
+            _ = LoadSourcesAsync();
         }
 
         public new event PropertyChangedEventHandler? PropertyChanged;
@@ -50,18 +50,26 @@ namespace ReelRoulette
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
 
-        private void LoadSources()
+        private async Task LoadSourcesAsync()
         {
             _sources.Clear();
-            
-            if (_libraryService.LibraryIndex.Sources.Count == 0)
+
+            CoreLibraryStatsResponse? statsSnapshot = null;
+            if (_getLibraryStatsAsync != null)
             {
-                // Show empty state message by creating a dummy view model with the message
+                statsSnapshot = await _getLibraryStatsAsync();
+            }
+
+            if (statsSnapshot == null || statsSnapshot.Sources.Count == 0)
+            {
+                // Show empty state message by creating a dummy view model with the message.
                 var emptyViewModel = new SourceViewModel
                 {
                     Id = "empty",
                     DisplayName = "No library sources found.",
-                    RootPath = "Use Library → Import Folder to add a source.",
+                    RootPath = _getLibraryStatsAsync == null
+                        ? "Manage Sources requires core API connection."
+                        : "Use Library -> Import Folder to add a source.",
                     IsEnabled = false,
                     Statistics = new SourceStatistics()
                 };
@@ -69,26 +77,36 @@ namespace ReelRoulette
                 SourcesItemsControl.ItemsSource = _sources;
                 return;
             }
-            
-            foreach (var source in _libraryService.LibraryIndex.Sources)
+
+            foreach (var source in statsSnapshot.Sources)
             {
-                var stats = _libraryService.GetSourceStatistics(source.Id);
                 var displayName = !string.IsNullOrEmpty(source.DisplayName) 
                     ? source.DisplayName 
                     : Path.GetFileName(source.RootPath);
-                
+
                 var viewModel = new SourceViewModel
                 {
-                    Id = source.Id,
+                    Id = source.SourceId,
                     DisplayName = displayName,
                     RootPath = source.RootPath,
                     IsEnabled = source.IsEnabled,
-                    Statistics = stats
+                    Statistics = new SourceStatistics
+                    {
+                        TotalVideos = source.TotalVideos,
+                        TotalPhotos = source.TotalPhotos,
+                        TotalMedia = source.TotalMedia,
+                        VideosWithAudio = source.VideosWithAudio,
+                        VideosWithoutAudio = source.VideosWithoutAudio,
+                        TotalDuration = TimeSpan.FromSeconds(Math.Max(0, source.TotalDurationSeconds)),
+                        AverageDuration = source.AverageDurationSeconds.HasValue
+                            ? TimeSpan.FromSeconds(Math.Max(0, source.AverageDurationSeconds.Value))
+                            : null
+                    }
                 };
-                
+
                 _sources.Add(viewModel);
             }
-            
+
             SourcesItemsControl.ItemsSource = _sources;
         }
 
@@ -96,16 +114,17 @@ namespace ReelRoulette
         {
             if (sender is ToggleButton toggle && toggle.Tag is string sourceId)
             {
-                var source = _libraryService.LibraryIndex.Sources.FirstOrDefault(s => s.Id == sourceId);
+                var source = _sources.FirstOrDefault(s => string.Equals(s.Id, sourceId, StringComparison.OrdinalIgnoreCase));
                 if (source != null)
                 {
+                    var previousEnabled = source.IsEnabled;
                     var nextEnabled = toggle.IsChecked ?? true;
                     if (_setSourceEnabledAsync != null)
                     {
                         var accepted = await _setSourceEnabledAsync(sourceId, nextEnabled);
                         if (!accepted)
                         {
-                            toggle.IsChecked = source.IsEnabled;
+                            toggle.IsChecked = previousEnabled;
                             return;
                         }
                     }
@@ -117,14 +136,6 @@ namespace ReelRoulette
                     }
 
                     source.IsEnabled = nextEnabled;
-                    _libraryService.UpdateSource(source);
-                    
-                    // Update the view model to reflect the change
-                    var viewModel = _sources.FirstOrDefault(s => s.Id == sourceId);
-                    if (viewModel != null)
-                    {
-                        viewModel.IsEnabled = source.IsEnabled;
-                    }
                 }
             }
         }
@@ -133,7 +144,7 @@ namespace ReelRoulette
         {
             if (sender is Button button && button.Tag is string sourceId)
             {
-                var source = _libraryService.LibraryIndex.Sources.FirstOrDefault(s => s.Id == sourceId);
+                var source = _sources.FirstOrDefault(s => string.Equals(s.Id, sourceId, StringComparison.OrdinalIgnoreCase));
                 if (source == null) return;
 
                 var dialog = new RenameSourceDialog(source.DisplayName ?? Path.GetFileName(source.RootPath));
@@ -150,7 +161,7 @@ namespace ReelRoulette
         {
             if (sender is Button button && button.Tag is string sourceId)
             {
-                var source = _libraryService.LibraryIndex.Sources.FirstOrDefault(s => s.Id == sourceId);
+                var source = _sources.FirstOrDefault(s => string.Equals(s.Id, sourceId, StringComparison.OrdinalIgnoreCase));
                 if (source == null) return;
 
                 try
@@ -193,7 +204,7 @@ namespace ReelRoulette
                     ((Button)((StackPanel)msgBox.Content).Children[1]).Click += (s, e) => msgBox.Close();
                     await msgBox.ShowDialog(this);
                     
-                    LoadSources(); // Refresh local source stats display
+                    await LoadSourcesAsync(); // Refresh source stats display from core.
                 }
                 catch (Exception ex)
                 {
@@ -293,7 +304,7 @@ namespace ReelRoulette
                 };
                 var dialog = new DuplicatesDialog(_applyDuplicatesAsync, _scanDuplicatesAsync, scan, scope.Value, sourceId);
                 await dialog.ShowDialog(this);
-                LoadSources();
+                await LoadSourcesAsync();
             }
             finally
             {
@@ -363,13 +374,13 @@ namespace ReelRoulette
         {
             if (sender is Button button && button.Tag is string sourceId)
             {
-                var source = _libraryService.LibraryIndex.Sources.FirstOrDefault(s => s.Id == sourceId);
+                var source = _sources.FirstOrDefault(s => string.Equals(s.Id, sourceId, StringComparison.OrdinalIgnoreCase));
                 if (source == null) return;
 
                 var displayName = !string.IsNullOrEmpty(source.DisplayName) 
                     ? source.DisplayName 
                     : Path.GetFileName(source.RootPath);
-                var itemCount = _libraryService.GetItemsBySource(sourceId).Count();
+                var itemCount = source.Statistics.TotalMedia;
 
                 var confirmDialog = new Window
                 {
@@ -390,7 +401,7 @@ namespace ReelRoulette
                             },
                             new TextBlock 
                             { 
-                                Text = $"This will remove {itemCount} video(s) from your library.\n(The actual files will NOT be deleted from disk.)",
+                                Text = $"This will remove {itemCount} media item(s) from your library.\n(The actual files will NOT be deleted from disk.)",
                                 TextWrapping = Avalonia.Media.TextWrapping.Wrap 
                             },
                             new StackPanel

@@ -110,8 +110,9 @@ namespace ReelRoulette
         
         // Backup settings
         private bool _backupLibraryEnabled = true;
-        private int _minimumBackupGapMinutes = 15;
-        private int _numberOfBackups = 10;
+        private int _minimumBackupGapMinutes = 360;
+        private int _numberOfBackups = 8;
+        private bool _serverBackupSettingsWritable;
         private bool _backupSettingsEnabled = true;
         private int _minimumSettingsBackupGapMinutes = 15;
         private int _numberOfSettingsBackups = 10;
@@ -119,6 +120,8 @@ namespace ReelRoulette
         // Auto-refresh settings
         private bool _autoRefreshSourcesEnabled = true;
         private int _autoRefreshIntervalMinutes = 60;
+        private bool _forceRescanLoudnessOnNextRefresh;
+        private bool _forceRescanDurationOnNextRefresh;
         private bool _autoRefreshOnlyWhenIdle = false;
         private int _autoRefreshIdleThresholdMinutes = 1;
 
@@ -171,7 +174,7 @@ namespace ReelRoulette
         ];
 
         // Duration scanning
-        private CancellationTokenSource? _scanCancellationSource;
+        private CancellationTokenSource? _scanCancellationSource = null;
         private static SemaphoreSlim? _ffprobeSemaphore;
         private static readonly object _ffprobeSemaphoreLock = new object();
         private DateTime _lastDurationStatusUpdate = DateTime.MinValue;
@@ -179,7 +182,6 @@ namespace ReelRoulette
         private bool _isDurationScanRunning = false;
 
         // Loudness scanning
-        private static SemaphoreSlim? _ffmpegSemaphore;
         private static readonly object _ffmpegSemaphoreLock = new object();
         private DateTime _lastLoudnessStatusUpdate = DateTime.MinValue;
         private readonly object _loudnessStatusUpdateLock = new object();
@@ -196,7 +198,6 @@ namespace ReelRoulette
         private DateTime _lastStatusMessageTime = DateTime.MinValue;
         private CancellationTokenSource? _statusMessageCancellation;
         private readonly object _statusMessageLock = new object();
-        private DateTime _lastFingerprintStatusUiUtc = DateTime.MinValue;
         
         // Prevent recursive SaveSettings calls when updating UI from settings
         private bool _isApplyingSettings = false;
@@ -231,7 +232,6 @@ namespace ReelRoulette
         private string? _lastFolderPath = null;
 
         // Library system services
-        private readonly LibraryService _libraryService = new LibraryService();
         private readonly FilterService _filterService = new FilterService();
         private LibraryIndex? _libraryIndex;
         private FilterState? _currentFilterState;
@@ -972,7 +972,6 @@ namespace ReelRoulette
             };
 
             // Initialize library system
-            _libraryService.FingerprintProgressUpdated += OnFingerprintProgressUpdated;
             _libraryIndex = new LibraryIndex();
 
             // Load persisted data (includes FilterState)
@@ -1039,22 +1038,8 @@ namespace ReelRoulette
                         EnsureCoreEventStreamStarted();
                     }
 
-                    // Run non-essential startup work in background so first paint is fast.
-#pragma warning disable CS4014
-                    Task.Run(() =>
-                    {
-                        try
-                        {
-                            _libraryService.StartPostLoadBackgroundWork();
-                        }
-                        catch (Exception ex)
-                        {
-                            Log($"MainWindow Loaded event: ERROR in post-load background work - {ex.GetType().Name}: {ex.Message}");
-                        }
-                    });
-#pragma warning restore CS4014
-
                     _ = SyncRefreshSettingsFromCoreAsync();
+                    _ = SyncBackupSettingsFromCoreAsync();
                     _ = SyncWebRuntimeSettingsFromCoreAsync();
                     _ = SyncPresetsFromCoreAsync();
                     _ = SyncSourcesFromCoreAsync();
@@ -1166,43 +1151,6 @@ namespace ReelRoulette
             SaveSettings();
             Log("OnClosed: Settings save completed");
             
-            // Create backup before saving library (if enabled)
-            if (_libraryIndex != null)
-            {
-                try
-                {
-                    _libraryService.CreateBackupIfNeeded(_backupLibraryEnabled, _minimumBackupGapMinutes, _numberOfBackups);
-                }
-                catch (Exception ex)
-                {
-                    Log($"OnClosed: ERROR creating backup - Exception: {ex.GetType().Name}, Message: {ex.Message}");
-                    Log($"OnClosed: ERROR - Stack trace: {ex.StackTrace}");
-                    if (ex.InnerException != null)
-                    {
-                        Log($"OnClosed: ERROR - Inner exception: {ex.InnerException.GetType().Name}, Message: {ex.InnerException.Message}");
-                    }
-                    // Don't throw - backup failures shouldn't prevent library save
-                }
-            }
-            
-            // Save library (final save on shutdown - contains all data now)
-            if (_libraryIndex != null)
-            {
-                try
-                {
-                    _libraryService.SaveLibrary();
-                }
-                catch (Exception ex)
-                {
-                    Log($"OnClosed: ERROR saving library on shutdown - Exception: {ex.GetType().Name}, Message: {ex.Message}");
-                    Log($"OnClosed: ERROR - Stack trace: {ex.StackTrace}");
-                    if (ex.InnerException != null)
-                    {
-                        Log($"OnClosed: ERROR - Inner exception: {ex.InnerException.GetType().Name}, Message: {ex.InnerException.Message}");
-                    }
-                }
-            }
-
             // Clean up LibVLC
             if (_mediaPlayer != null)
             {
@@ -1445,7 +1393,6 @@ namespace ReelRoulette
                 return;
             }
 
-            _libraryIndex = _libraryService.LibraryIndex;
             UpdateLibraryPanel();
         }
 
@@ -1457,7 +1404,8 @@ namespace ReelRoulette
                 return;
             }
 
-            var item = _libraryService.FindItemByPath(fullPath);
+            var item = _libraryIndex.Items.FirstOrDefault(candidate =>
+                string.Equals(candidate.FullPath, fullPath, StringComparison.OrdinalIgnoreCase));
             if (item == null)
             {
                 Log($"CoreEvents: Projection skipped (item not found in library): {Path.GetFileName(fullPath)}");
@@ -1469,7 +1417,6 @@ namespace ReelRoulette
             {
                 item.IsFavorite = isFavorite;
                 item.IsBlacklisted = isBlacklisted;
-                _libraryService.UpdateItem(item);
 
                 // Keep currently bound library-panel item state in sync with canonical projection state.
                 // This ensures overlay indicators update immediately even when bound instances differ.
@@ -1479,20 +1426,6 @@ namespace ReelRoulette
                 {
                     boundItem.IsFavorite = isFavorite;
                     boundItem.IsBlacklisted = isBlacklisted;
-                }
-
-                if (persistLibrary)
-                {
-                    _ = Task.Run(() =>
-                    {
-                        try
-                        {
-                            _libraryService.SaveLibrary();
-                        }
-                        catch
-                        {
-                        }
-                    });
                 }
 
                 var isCurrentItem = string.Equals(_currentVideoPath, fullPath, StringComparison.OrdinalIgnoreCase);
@@ -1544,16 +1477,19 @@ namespace ReelRoulette
             {
                 try
                 {
-                    var success = await _coreServerApiClient.SetFavoriteAsync(_coreServerBaseUrl, path, isFavorite);
-                    if (!success)
+                    var state = await _coreServerApiClient.SetFavoriteWithStateAsync(
+                        _coreServerBaseUrl,
+                        path,
+                        isFavorite,
+                        _coreClientId,
+                        _coreSessionId);
+                    if (state == null)
                     {
                         SetStatusMessage("Core runtime rejected favorite update.", 0);
                         return;
                     }
 
-                    var priorItem = _libraryService.FindItemByPath(path);
-                    var projectedBlacklist = isFavorite ? false : (priorItem?.IsBlacklisted ?? false);
-                    ApplyRemoteItemStateProjection(path, isFavorite, projectedBlacklist, isFavorite
+                    ApplyRemoteItemStateProjection(state.Path, state.IsFavorite, state.IsBlacklisted, state.IsFavorite
                         ? $"Added to favorites: {System.IO.Path.GetFileName(path)}"
                         : $"Removed from favorites: {System.IO.Path.GetFileName(path)}");
                     return;
@@ -1575,41 +1511,8 @@ namespace ReelRoulette
 
         private void BlacklistCurrentVideo()
         {
-            if (string.IsNullOrEmpty(_currentVideoPath))
-                return;
-
-            // Update library item
-            if (_libraryIndex != null)
-            {
-                var item = _libraryService.FindItemByPath(_currentVideoPath);
-                if (item != null)
-                {
-                    item.IsBlacklisted = true;
-                    _libraryService.UpdateItem(item);
-                    
-                    // Save library asynchronously
-                    _ = Task.Run(() =>
-                    {
-                        try
-                        {
-                            _libraryService.SaveLibrary();
-                        }
-                        catch (Exception ex)
-                        {
-                            Log($"BlacklistToggle_Changed: ERROR saving library - Exception: {ex.GetType().Name}, Message: {ex.Message}");
-                            Log($"BlacklistToggle_Changed: ERROR - Stack trace: {ex.StackTrace}");
-                            if (ex.InnerException != null)
-                            {
-                                Log($"BlacklistToggle_Changed: ERROR - Inner exception: {ex.InnerException.GetType().Name}, Message: {ex.InnerException.Message}");
-                            }
-                        }
-                    });
-                }
-            }
-
-            // Rebuild randomization state after eligibility change.
-            RebuildPlayQueueIfNeeded();
-            UpdatePerVideoToggleStates();
+            // Legacy local-authority path intentionally disabled.
+            // Use API-authoritative toggle handlers instead.
         }
 
         private async Task RemoveFromBlacklistAsync(string videoPath)
@@ -1623,12 +1526,24 @@ namespace ReelRoulette
             {
                 try
                 {
-                    var accepted = await _coreServerApiClient.SetBlacklistAsync(_coreServerBaseUrl, videoPath, false);
-                    if (!accepted)
+                    var state = await _coreServerApiClient.SetBlacklistWithStateAsync(
+                        _coreServerBaseUrl,
+                        videoPath,
+                        false,
+                        _coreClientId,
+                        _coreSessionId);
+                    if (state == null)
                     {
                         SetStatusMessage("Core runtime rejected blacklist update.", 0);
                         return;
                     }
+
+                    ApplyRemoteItemStateProjection(
+                        state.Path,
+                        state.IsFavorite,
+                        state.IsBlacklisted,
+                        $"Removed from blacklist: {Path.GetFileName(videoPath)}");
+                    return;
                 }
                 catch (Exception ex)
                 {
@@ -1645,10 +1560,6 @@ namespace ReelRoulette
                 SetStatusMessage("Core runtime is required for state changes. Please wait for startup and retry.", 0);
                 return;
             }
-
-            var item = _libraryService.FindItemByPath(videoPath);
-            var projectedFavorite = item?.IsFavorite ?? false;
-            ApplyRemoteItemStateProjection(videoPath, projectedFavorite, false, $"Removed from blacklist: {Path.GetFileName(videoPath)}");
         }
 
         #endregion
@@ -1674,7 +1585,6 @@ namespace ReelRoulette
                     var success = await _coreServerApiClient.RecordPlaybackAsync(_coreServerBaseUrl, path, _coreClientId, _coreSessionId);
                     if (success)
                     {
-                        await Dispatcher.UIThread.InvokeAsync(() => RecordPlaybackProjection(path, persistLibrary: false));
                         return;
                     }
                     Log("RecordPlayback: API rejected record-playback request.");
@@ -1689,7 +1599,7 @@ namespace ReelRoulette
             await EnsureCoreRuntimeAvailableAsync();
         }
 
-        private void RecordPlaybackProjection(string path, bool persistLibrary)
+        private async Task RecordPlaybackProjectionAsync(string path)
         {
             Log($"RecordPlayback: Starting - path: {path ?? "null"}");
             
@@ -1699,66 +1609,46 @@ namespace ReelRoulette
                 return;
             }
 
-            // Update library item directly
             if (_libraryIndex != null)
             {
-                var item = _libraryService.FindItemByPath(path);
-                if (item != null)
-                {
-                    var oldPlayCount = item.PlayCount;
-                    var oldLastPlayed = item.LastPlayedUtc;
-                    
-                    // Capture the previous LastPlayedUtc before updating (for display purposes)
-                    // This way "Last played" shows when it was last played BEFORE this current play
-                    _previousLastPlayedUtc = item.LastPlayedUtc;
-
-                    item.PlayCount++;
-                    item.LastPlayedUtc = DateTime.UtcNow;
-                    
-                    Log($"RecordPlayback: Updating item - PlayCount: {oldPlayCount} -> {item.PlayCount}, LastPlayedUtc: {oldLastPlayed} -> {item.LastPlayedUtc}");
-                    
-                    _libraryService.UpdateItem(item);
-                    RefreshLibraryPanelFromServiceState();
-                    
-                    if (persistLibrary)
-                    {
-                        // Save library asynchronously to avoid blocking
-                        _ = Task.Run(() =>
-                        {
-                            try
-                            {
-                                Log("RecordPlayback: Saving library asynchronously...");
-                                _libraryService.SaveLibrary();
-                                Log("RecordPlayback: Library saved successfully");
-                            }
-                            catch (Exception ex)
-                            {
-                                Log($"RecordPlayback: ERROR saving library - Exception: {ex.GetType().Name}, Message: {ex.Message}");
-                                Log($"RecordPlayback: ERROR - Stack trace: {ex.StackTrace}");
-                                if (ex.InnerException != null)
-                                {
-                                    Log($"RecordPlayback: ERROR - Inner exception: {ex.InnerException.GetType().Name}, Message: {ex.InnerException.Message}");
-                                }
-                            }
-                        });
-                    }
-                }
-                else
-                {
-                    Log($"RecordPlayback: Item not found in library for path: {path}");
-                }
+                var item = _libraryIndex.Items.FirstOrDefault(candidate =>
+                    string.Equals(candidate.FullPath, path, StringComparison.OrdinalIgnoreCase));
+                _previousLastPlayedUtc = item?.LastPlayedUtc;
             }
-            else
+
+            await SyncLibraryProjectionFromCoreAsync();
+            UpdateCurrentFileStatsUi();
+            Log("RecordPlayback: Completed");
+        }
+
+        private bool TryApplyPlaybackProjectionFromEvent(CorePlaybackRecordedPayload playback)
+        {
+            if (_libraryIndex == null || string.IsNullOrWhiteSpace(playback.Path))
             {
-                Log("RecordPlayback: Library index is null, skipping playback recording");
+                return false;
             }
 
-            // Update UI immediately (we're already on UI thread when called from PlayMedia)
-            // Call UpdateCurrentFileStatsUi first to show current file, then recalculate globals
-            Log("RecordPlayback: Updating UI stats");
+            var item = _libraryIndex.Items.FirstOrDefault(candidate =>
+                string.Equals(candidate.FullPath, playback.Path, StringComparison.OrdinalIgnoreCase));
+            if (item == null)
+            {
+                return false;
+            }
+
+            _previousLastPlayedUtc = item.LastPlayedUtc;
+            item.PlayCount = Math.Max(0, playback.PlayCount ?? (item.PlayCount + 1));
+            item.LastPlayedUtc = playback.LastPlayedUtc?.ToUniversalTime() ?? DateTime.UtcNow;
+
             UpdateCurrentFileStatsUi();
             RecalculateGlobalStats();
-            Log("RecordPlayback: Completed");
+
+            var playbackSensitiveSort = _librarySortMode is "LastPlayed" or "PlayCount" or "Duration";
+            if (_showLibraryPanel && ((_currentFilterState?.OnlyNeverPlayed ?? false) || playbackSensitiveSort))
+            {
+                UpdateLibraryPanel();
+            }
+
+            return true;
         }
 
         private void RecalculateGlobalStats()
@@ -2030,7 +1920,7 @@ namespace ReelRoulette
             
             if (path != null && _libraryIndex != null)
             {
-                item = _libraryService.FindItemByPath(path);
+                item = FindProjectionItemByPath(path);
                 if (item != null)
                 {
                     playCount = item.PlayCount;
@@ -2233,68 +2123,15 @@ namespace ReelRoulette
 
         private void StartDurationScan(string rootFolder)
         {
-            Log($"StartDurationScan: Starting duration scan for folder: {rootFolder}");
-            if (_isAutoRefreshRunning || _libraryService.IsRefreshRunning)
+            Log($"StartDurationScan: Delegating duration scan request to core refresh pipeline for folder: {rootFolder}");
+            _ = Task.Run(async () =>
             {
-                Log("StartDurationScan: Auto/manual refresh is running, skipping duration scan request");
-                SetStatusMessage("Duration scan deferred: source refresh is running.", 0);
-                return;
-            }
-
-            // Cancel any existing scan
-            if (_scanCancellationSource != null)
-            {
-                Log("StartDurationScan: Already scanning, skipping new scan request");
-                return; // Already scanning
-            }
-                
-            _scanCancellationSource?.Cancel();
-            _scanCancellationSource?.Dispose();
-            _scanCancellationSource = new CancellationTokenSource();
-            _isDurationScanRunning = true;
-
-            var token = _scanCancellationSource.Token;
-            Log("StartDurationScan: Cancellation token created, starting async scan task");
-
-            // Start async scan on thread pool (not Task.Run to avoid thread pool issues)
-            _ = Task.Factory.StartNew(async () =>
-            {
-                try
+                var accepted = await RequestCoreRefreshAsync();
+                if (!accepted)
                 {
-                    Log("StartDurationScan: Async scan task started");
-                    await ScanDurationsAsync(rootFolder, token);
-                    Log("StartDurationScan: Async scan task completed successfully");
+                    SetStatusMessage("Duration scan request deferred: core refresh unavailable or already running.", 0);
                 }
-                catch (Exception ex)
-                {
-                    Log($"StartDurationScan: ERROR - Exception in scan task: {ex.GetType().Name}, Message: {ex.Message}");
-                    Log($"StartDurationScan: ERROR - Stack trace: {ex.StackTrace}");
-                    if (ex.InnerException != null)
-                    {
-                        Log($"StartDurationScan: ERROR - Inner exception: {ex.InnerException.GetType().Name}, Message: {ex.InnerException.Message}");
-                    }
-                    // Log error to UI thread
-                    try
-                    {
-                        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-                        {
-                            StatusTextBlock.Text = $"Scan error: {ex.GetType().Name} - {ex.Message}";
-                        });
-                    }
-                    catch (Exception uiEx)
-                    {
-                        // UI might be disposed
-                        Log($"StartDurationScan: UI thread unavailable for error message - Exception: {uiEx.GetType().Name}, Message: {uiEx.Message}");
-                    }
-                }
-                finally
-                {
-                    Log("StartDurationScan: Cleaning up cancellation token source");
-                    _scanCancellationSource?.Dispose();
-                    _scanCancellationSource = null;
-                    _isDurationScanRunning = false;
-                }
-            }, token, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+            });
         }
 
         private static async Task<TimeSpan?> GetVideoDurationAsync(string filePath, CancellationToken cancellationToken)
@@ -2487,805 +2324,20 @@ namespace ReelRoulette
             }
         }
 
-        private async Task ScanDurationsAsync(string rootFolder, CancellationToken cancellationToken)
-        {
-            Log($"ScanDurationsAsync: Starting duration scan for folder: {rootFolder}");
-            // Get all video files in the folder tree
-            string[] allFiles;
-            try
-            {
-                Log($"ScanDurationsAsync: Scanning directory tree for video files...");
-                allFiles = Directory.GetFiles(rootFolder, "*.*", SearchOption.AllDirectories)
-                    .Where(f => _videoExtensions.Contains(
-                        Path.GetExtension(f).ToLowerInvariant()))
-                    .ToArray();
-                Log($"ScanDurationsAsync: Found {allFiles.Length} video files in folder tree");
-            }
-            catch (Exception ex)
-            {
-                Log($"ScanDurationsAsync: ERROR scanning folder - Exception: {ex.GetType().Name}, Message: {ex.Message}");
-                Log($"ScanDurationsAsync: ERROR - Stack trace: {ex.StackTrace}");
-                if (ex.InnerException != null)
-                {
-                    Log($"ScanDurationsAsync: ERROR - Inner exception: {ex.InnerException.GetType().Name}, Message: {ex.InnerException.Message}");
-                }
-                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-                {
-                    StatusTextBlock.Text = $"Error scanning folder: {ex.Message}";
-                });
-                return;
-            }
-
-            // Filter out already-cached files upfront (batch check for performance)
-            // Check library items for existing durations
-            HashSet<string> filesWithDuration = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            if (_libraryIndex != null)
-            {
-                foreach (var item in _libraryIndex.Items)
-                {
-                    if (item.Duration.HasValue && item.Duration.Value.TotalSeconds > 0)
-                    {
-                        filesWithDuration.Add(item.FullPath);
-                    }
-                }
-            }
-            
-            string[] filesToScan = allFiles.Where(f => !filesWithDuration.Contains(f)).ToArray();
-            int alreadyCachedCount = allFiles.Length - filesToScan.Length;
-            Log($"ScanDurationsAsync: {alreadyCachedCount} files already have duration cached, {filesToScan.Length} files need scanning");
-
-            int total = allFiles.Length;
-            int processed = alreadyCachedCount; // Start with already cached count
-            var processedLock = new object();
-
-            // Update UI to show scan started
-            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-            {
-                if (alreadyCachedCount > 0)
-                {
-                    SetStatusMessage($"Scanning / indexing… ({alreadyCachedCount} already cached, {filesToScan.Length} to scan)");
-                }
-                else
-                {
-                    SetStatusMessage($"Scanning / indexing… (0/{total} files processed)");
-                }
-            });
-
-            // If all files are already cached, we're done
-            if (filesToScan.Length == 0)
-            {
-                Log($"ScanDurationsAsync: All {total} files already have duration cached, skipping scan");
-                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-                {
-                    SetStatusMessage($"Ready ({total} files, all cached)");
-                });
-                return;
-            }
-
-            // Log which FFprobe binary is being used (on first scan)
-            var ffprobePath = NativeBinaryHelper.GetFFprobePath();
-            if (!string.IsNullOrEmpty(ffprobePath))
-            {
-                Log($"Using bundled FFprobe: {ffprobePath}");
-            }
-            else
-            {
-                Log("Using system FFprobe from PATH");
-            }
-
-            Log($"ScanDurationsAsync: Starting parallel processing of {filesToScan.Length} files");
-            // Process only uncached files with parallel async execution
-            var scanTasks = filesToScan.Select(async file =>
-            {
-                if (cancellationToken.IsCancellationRequested)
-                {
-                    Log($"ScanDurationsAsync: Scan cancelled, stopping file processing");
-                    return;
-                }
-
-                // Verify file exists and is accessible
-                if (!System.IO.File.Exists(file))
-                {
-                    Log($"ScanDurationsAsync: File does not exist, skipping: {Path.GetFileName(file)}");
-                    lock (processedLock)
-                    {
-                        processed++;
-                    }
-                    return;
-                }
-
-                // Use FFprobe to get duration
-                var duration = await GetVideoDurationAsync(file, cancellationToken);
-                
-                if (duration.HasValue && duration.Value.TotalSeconds > 0)
-                {
-                    // Update library item if it exists
-                    if (_libraryIndex != null)
-                    {
-                        var item = _libraryService.FindItemByPath(file);
-                        if (item != null && (!item.Duration.HasValue || item.Duration.Value != duration.Value))
-                        {
-                            var oldDuration = item.Duration;
-                            item.Duration = duration.Value;
-                            _libraryService.UpdateItem(item);
-                            Log($"ScanDurationsAsync: Updated duration for {Path.GetFileName(file)}: {oldDuration?.TotalSeconds ?? -1:F2}s -> {duration.Value.TotalSeconds:F2}s");
-                            // Save library asynchronously (batch saves at end of scan)
-                        }
-                        else if (item == null)
-                        {
-                            Log($"ScanDurationsAsync: Library item not found for {Path.GetFileName(file)}, duration not saved");
-                        }
-                    }
-                }
-                else
-                {
-                    Log($"ScanDurationsAsync: Could not get duration for {Path.GetFileName(file)}");
-                }
-                // If duration is null, skip this file (don't write 0 - treat as "Unknown")
-
-                int newProcessed;
-                lock (processedLock)
-                {
-                    processed++;
-                    newProcessed = processed;
-                }
-
-                // Update UI progress with throttling (every file, but max once per 100ms)
-                bool shouldUpdate = false;
-                lock (_durationStatusUpdateLock)
-                {
-                    var now = DateTime.UtcNow;
-                    if ((now - _lastDurationStatusUpdate).TotalMilliseconds >= 1000 || newProcessed == total)
-                    {
-                        _lastDurationStatusUpdate = now;
-                        shouldUpdate = true;
-                    }
-                }
-
-                if (shouldUpdate)
-                {
-                    // Save library periodically during scan
-                    if (_libraryIndex != null)
-                    {
-                        _ = Task.Run(() =>
-                        {
-                            try
-                            {
-                                _libraryService.SaveLibrary();
-                            }
-                            catch (Exception ex)
-                            {
-                                Log($"ScanDurationsAsync: ERROR saving library during scan - Exception: {ex.GetType().Name}, Message: {ex.Message}");
-                                Log($"ScanDurationsAsync: ERROR - Stack trace: {ex.StackTrace}");
-                                if (ex.InnerException != null)
-                                {
-                                    Log($"ScanDurationsAsync: ERROR - Inner exception: {ex.InnerException.GetType().Name}, Message: {ex.InnerException.Message}");
-                                }
-                            }
-                        });
-                    }
-                    
-                    Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-                    {
-                        SetStatusMessage($"Scanning / indexing… ({newProcessed}/{total} files processed)");
-                    });
-                }
-            });
-
-            // Wait for all scan tasks to complete
-            Log("ScanDurationsAsync: Waiting for all scan tasks to complete...");
-            await Task.WhenAll(scanTasks);
-            Log($"ScanDurationsAsync: All scan tasks completed. Processed {processed}/{total} files");
-
-            // Final save library and update UI
-            if (_libraryIndex != null)
-            {
-                Log("ScanDurationsAsync: Performing final library save...");
-                _ = Task.Run(() =>
-                {
-                    try
-                    {
-                        _libraryService.SaveLibrary();
-                        Log("ScanDurationsAsync: Final library save completed successfully");
-                    }
-                    catch (Exception ex)
-                    {
-                        Log($"ScanDurationsAsync: ERROR saving library after duration scan - Exception: {ex.GetType().Name}, Message: {ex.Message}");
-                        Log($"ScanDurationsAsync: ERROR - Stack trace: {ex.StackTrace}");
-                        if (ex.InnerException != null)
-                        {
-                            Log($"ScanDurationsAsync: ERROR - Inner exception: {ex.InnerException.GetType().Name}, Message: {ex.InnerException.Message}");
-                        }
-                    }
-                });
-            }
-            Log("ScanDurationsAsync: Updating UI and stats");
-            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-            {
-                RecalculateGlobalStats();
-                UpdateCurrentFileStatsUi();
-                if (_showLibraryPanel &&
-                    _currentFilterState != null &&
-                    (_currentFilterState.MinDuration.HasValue ||
-                     _currentFilterState.MaxDuration.HasValue ||
-                     _currentFilterState.OnlyKnownDuration))
-                {
-                    UpdateLibraryPanel();
-                }
-                // Always show scan completion message
-                SetStatusMessage($"Duration scan complete ({total} files)");
-            });
-            Log("ScanDurationsAsync: Duration scan complete");
-        }
-
         private void StartLoudnessScan(string rootFolder, bool rescanAll = false)
         {
-            Log($"StartLoudnessScan: Starting loudness scan for folder: {rootFolder}, RescanAll: {rescanAll}");
-            if (_isAutoRefreshRunning || _libraryService.IsRefreshRunning)
+            Log($"StartLoudnessScan: Delegating loudness scan request to core refresh pipeline for folder: {rootFolder}, RescanAll: {rescanAll}");
+            _ = Task.Run(async () =>
             {
-                Log("StartLoudnessScan: Auto/manual refresh is running, skipping loudness scan request");
-                SetStatusMessage("Loudness scan deferred: source refresh is running.", 0);
-                return;
-            }
-
-            // Cancel any existing scan
-            if (_scanCancellationSource != null)
-            {
-                Log("StartLoudnessScan: Already scanning, skipping new scan request");
-                return; // Already scanning
-            }
-                
-            _scanCancellationSource?.Cancel();
-            _scanCancellationSource?.Dispose();
-            _scanCancellationSource = new CancellationTokenSource();
-            _isLoudnessScanRunning = true;
-
-            var token = _scanCancellationSource.Token;
-            Log("StartLoudnessScan: Cancellation token created, starting async scan task");
-
-            // Start async scan on thread pool
-            _ = Task.Factory.StartNew(async () =>
-            {
-                try
+                var accepted = await RequestCoreRefreshAsync();
+                if (!accepted)
                 {
-                    Log("StartLoudnessScan: Async scan task started");
-                    await ScanLoudnessAsync(rootFolder, token, rescanAll);
-                    Log("StartLoudnessScan: Async scan task completed successfully");
+                    SetStatusMessage("Loudness scan request deferred: core refresh unavailable or already running.", 0);
                 }
-                catch (Exception ex)
-                {
-                    Log($"StartLoudnessScan: ERROR - Exception in scan task: {ex.GetType().Name}, Message: {ex.Message}");
-                    Log($"StartLoudnessScan: ERROR - Stack trace: {ex.StackTrace}");
-                    if (ex.InnerException != null)
-                    {
-                        Log($"StartLoudnessScan: ERROR - Inner exception: {ex.InnerException.GetType().Name}, Message: {ex.InnerException.Message}");
-                    }
-                    // Log error to UI thread
-                    try
-                    {
-                        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-                        {
-                            StatusTextBlock.Text = $"Loudness scan error: {ex.GetType().Name} - {ex.Message}";
-                        });
-                    }
-                    catch (Exception uiEx)
-                    {
-                        // UI might be disposed
-                        Log($"StartLoudnessScan: UI thread unavailable for error message - Exception: {uiEx.GetType().Name}, Message: {uiEx.Message}");
-                    }
-                }
-                finally
-                {
-                    Log("StartLoudnessScan: Cleaning up cancellation token source");
-                    _scanCancellationSource?.Dispose();
-                    _scanCancellationSource = null;
-                    _isLoudnessScanRunning = false;
-                }
-            }, token, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+            });
         }
 
-        private async Task ScanLoudnessAsync(string rootFolder, CancellationToken cancellationToken, bool rescanAll = false)
-        {
-            Log($"ScanLoudnessAsync: Starting loudness scan for folder: {rootFolder}, RescanAll: {rescanAll}");
-            // FFmpeg presence check: verify that ffmpeg is available
-            var ffmpegPath = NativeBinaryHelper.GetFFmpegPath();
-            if (string.IsNullOrEmpty(ffmpegPath))
-            {
-                Log("ScanLoudnessAsync: FFmpeg not found (bundled or system), aborting scan");
-                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-                {
-                    StatusTextBlock.Text = "Loudness scan unavailable: ffmpeg not found";
-                });
-                return;
-            }
-            Log($"ScanLoudnessAsync: Using FFmpeg: {ffmpegPath}");
-
-            // Verify ffmpeg can be executed
-            try
-            {
-                Log("ScanLoudnessAsync: Verifying FFmpeg can be executed...");
-                var testStartInfo = new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = ffmpegPath,
-                    Arguments = "-version",
-                    UseShellExecute = false,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    CreateNoWindow = true
-                };
-                using var testProcess = new System.Diagnostics.Process { StartInfo = testStartInfo };
-                testProcess.Start();
-                await testProcess.WaitForExitAsync(cancellationToken);
-                if (testProcess.ExitCode != 0)
-                {
-                    Log($"ScanLoudnessAsync: FFmpeg test failed with exit code: {testProcess.ExitCode}");
-                    Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-                    {
-                        StatusTextBlock.Text = "Loudness scan unavailable: ffmpeg not found";
-                    });
-                    return;
-                }
-                Log("ScanLoudnessAsync: FFmpeg verification successful");
-            }
-            catch (Exception ex)
-            {
-                Log($"ScanLoudnessAsync: ERROR verifying FFmpeg - Exception: {ex.GetType().Name}, Message: {ex.Message}");
-                Log($"ScanLoudnessAsync: ERROR - Stack trace: {ex.StackTrace}");
-                if (ex.InnerException != null)
-                {
-                    Log($"ScanLoudnessAsync: ERROR - Inner exception: {ex.InnerException.GetType().Name}, Message: {ex.InnerException.Message}");
-                }
-                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-                {
-                    StatusTextBlock.Text = "Loudness scan unavailable: ffmpeg not found";
-                });
-                return;
-            }
-
-            // Get all video files in the folder tree
-            string[] allFiles;
-            try
-            {
-                Log($"ScanLoudnessAsync: Scanning directory tree for video files...");
-                allFiles = Directory.GetFiles(rootFolder, "*.*", SearchOption.AllDirectories)
-                    .Where(f => _videoExtensions.Contains(
-                        Path.GetExtension(f).ToLowerInvariant()))
-                    .ToArray();
-                Log($"ScanLoudnessAsync: Found {allFiles.Length} video files in folder tree");
-            }
-            catch (Exception ex)
-            {
-                Log($"ScanLoudnessAsync: ERROR scanning folder - Exception: {ex.GetType().Name}, Message: {ex.Message}");
-                Log($"ScanLoudnessAsync: ERROR - Stack trace: {ex.StackTrace}");
-                if (ex.InnerException != null)
-                {
-                    Log($"ScanLoudnessAsync: ERROR - Inner exception: {ex.InnerException.GetType().Name}, Message: {ex.InnerException.Message}");
-                }
-                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-                {
-                    StatusTextBlock.Text = $"Error scanning folder: {ex.Message}";
-                });
-                return;
-            }
-
-            // Filter files based on scan mode
-            string[] filesToScan;
-            int alreadyScannedCount = 0;
-            
-            if (!rescanAll)
-            {
-                // Only scan files that don't have loudness data yet
-                HashSet<string> filesWithLoudness = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                if (_libraryIndex != null)
-                {
-                    foreach (var item in _libraryIndex.Items)
-                    {
-                        if (item.HasAudio.HasValue || item.IntegratedLoudness.HasValue)
-                        {
-                            filesWithLoudness.Add(item.FullPath);
-                        }
-                    }
-                }
-                
-                filesToScan = allFiles.Where(f => !filesWithLoudness.Contains(f)).ToArray();
-                alreadyScannedCount = allFiles.Length - filesToScan.Length;
-                Log($"ScanLoudnessAsync: Mode: Only New Files - {alreadyScannedCount} files already have loudness data, {filesToScan.Length} files need scanning");
-            }
-            else
-            {
-                // Rescan all files (update all loudness data with new filter)
-                filesToScan = allFiles;
-                Log($"ScanLoudnessAsync: Mode: Rescan All - Scanning all {filesToScan.Length} files with EBU R128");
-            }
-
-            int total = allFiles.Length;
-            int processed = alreadyScannedCount;
-            int noAudioCount = 0;
-            int errorCount = 0;
-            var processedLock = new object();
-
-            // Update UI to show scan started
-            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-            {
-                if (!rescanAll && alreadyScannedCount > 0)
-                {
-                    SetStatusMessage($"Scanning loudness… ({alreadyScannedCount} already scanned, {filesToScan.Length} to scan)");
-                }
-                else
-                {
-                    SetStatusMessage($"Scanning loudness… (0/{total} files processed)");
-                }
-            });
-
-            // If all files are already scanned (and not rescanning), we're done
-            if (!rescanAll && filesToScan.Length == 0)
-            {
-                Log($"ScanLoudnessAsync: All {total} files already have loudness data, skipping scan");
-                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-                {
-                    SetStatusMessage($"Ready ({total} files, all scanned)");
-                });
-                return;
-            }
-
-            // Initialize semaphore for concurrency control (max 4 concurrent ffmpeg processes)
-            lock (_ffmpegSemaphoreLock)
-            {
-                if (_ffmpegSemaphore == null)
-                {
-                    _ffmpegSemaphore = new SemaphoreSlim(4, 4);
-                    Log("ScanLoudnessAsync: Initialized FFmpeg semaphore with max concurrency: 4");
-                }
-            }
-
-            Log($"ScanLoudnessAsync: Starting parallel processing of {filesToScan.Length} files");
-            // Process only unscanned files with parallel async execution
-            var scanTasks = filesToScan.Select(async file =>
-            {
-                if (cancellationToken.IsCancellationRequested)
-                {
-                    Log($"ScanLoudnessAsync: Scan cancelled, stopping file processing");
-                    return;
-                }
-
-                // CRITICAL: Check file existence first
-                if (!File.Exists(file))
-                {
-                    Log($"ScanLoudnessAsync: File does not exist, skipping: {Path.GetFileName(file)}");
-                    lock (processedLock)
-                    {
-                        processed++;
-                    }
-                    return;
-                }
-
-                bool semaphoreAcquired = false;
-                try
-                {
-                    await _ffmpegSemaphore.WaitAsync(cancellationToken);
-                    semaphoreAcquired = true;
-                    Log($"ScanLoudnessAsync: Acquired semaphore for {Path.GetFileName(file)}");
-
-                    // Wrap each ffmpeg invocation in try/catch
-                    try
-                    {
-                        var startInfo = new System.Diagnostics.ProcessStartInfo
-                        {
-                            FileName = ffmpegPath,
-                            UseShellExecute = false,
-                            RedirectStandardOutput = true,
-                            RedirectStandardError = true,
-                            CreateNoWindow = true
-                        };
-
-                        // Use ArgumentList to safely handle paths with spaces and special characters
-                        startInfo.ArgumentList.Add("-hide_banner");
-                        startInfo.ArgumentList.Add("-nostats");
-                        startInfo.ArgumentList.Add("-vn");
-                        startInfo.ArgumentList.Add("-sn");
-                        startInfo.ArgumentList.Add("-i");
-                        startInfo.ArgumentList.Add(file);
-                        startInfo.ArgumentList.Add("-filter:a");
-                        startInfo.ArgumentList.Add("ebur128=framelog=verbose");
-                        startInfo.ArgumentList.Add("-f");
-                        startInfo.ArgumentList.Add("null");
-                        startInfo.ArgumentList.Add("-");
-
-                        using var process = new System.Diagnostics.Process { StartInfo = startInfo };
-                        using var timeoutCts = new CancellationTokenSource(TimeSpan.FromMinutes(5));
-                        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
-
-                        int exitCode = 0;
-                        string output = "";
-                        
-                        var outputTask = Task.Run(async () =>
-                        {
-                            try
-                            {
-                                process.Start();
-                                // Read stderr (ffmpeg outputs ebur128 info to stderr)
-                                var stderrTask = process.StandardError.ReadToEndAsync(linkedCts.Token);
-                                await process.WaitForExitAsync(linkedCts.Token);
-                                var exitCodeLocal = process.ExitCode;
-                                var outputLocal = await stderrTask;
-                                return (outputLocal, exitCodeLocal);
-                            }
-                            catch
-                            {
-                                return ("", -1); // Indicate failure
-                            }
-                        }, linkedCts.Token);
-
-                        var result = await outputTask;
-                        output = result.Item1;
-                        exitCode = result.Item2;
-
-                        // Parse loudness from output (pass exit code for better detection)
-                        var loudnessInfo = ParseLoudnessFromFFmpegOutput(output, exitCode);
-                        string logResult;
-                        if (loudnessInfo != null)
-                        {
-                            // Update library item directly
-                            if (_libraryIndex != null)
-                            {
-                                var item = _libraryService.FindItemByPath(file);
-                                if (item != null)
-                                {
-                                    bool itemUpdated = false;
-                                    var oldHasAudio = item.HasAudio;
-                                    var oldIntegratedLoudness = item.IntegratedLoudness;
-                                    var oldPeakDb = item.PeakDb;
-                                    
-                                    if (item.HasAudio != loudnessInfo.HasAudio)
-                                    {
-                                        item.HasAudio = loudnessInfo.HasAudio;
-                                        itemUpdated = true;
-                                    }
-                                    // Store MeanVolumeDb as IntegratedLoudness if audio is present
-                                    if (loudnessInfo.HasAudio == true && loudnessInfo.MeanVolumeDb != 0.0)
-                                    {
-                                        if (!item.IntegratedLoudness.HasValue || 
-                                            Math.Abs(item.IntegratedLoudness.Value - loudnessInfo.MeanVolumeDb) > 0.1)
-                                        {
-                                            item.IntegratedLoudness = loudnessInfo.MeanVolumeDb;
-                                            itemUpdated = true;
-                                        }
-                                    }
-                                    
-                                    // Store PeakDb if available
-                                    if (loudnessInfo.HasAudio == true && loudnessInfo.PeakDb != 0.0)
-                                    {
-                                        if (!item.PeakDb.HasValue || 
-                                            Math.Abs(item.PeakDb.Value - loudnessInfo.PeakDb) > 0.1)
-                                        {
-                                            item.PeakDb = loudnessInfo.PeakDb;
-                                            itemUpdated = true;
-                                        }
-                                    }
-                                    else if (loudnessInfo.HasAudio == false)
-                                    {
-                                        // No audio - clear peak if set
-                                        if (item.PeakDb.HasValue)
-                                        {
-                                            item.PeakDb = null;
-                                            itemUpdated = true;
-                                        }
-                                    }
-                                    
-                                    if (itemUpdated)
-                                    {
-                                        _libraryService.UpdateItem(item);
-                                        Log($"ScanLoudnessAsync: Updated loudness for {Path.GetFileName(file)} - HasAudio: {oldHasAudio} -> {loudnessInfo.HasAudio}, IntegratedLoudness: {oldIntegratedLoudness?.ToString("F1") ?? "null"} -> {loudnessInfo.MeanVolumeDb:F1} dB, PeakDb: {oldPeakDb?.ToString("F1") ?? "null"} -> {loudnessInfo.PeakDb:F1} dB");
-                                        // Save library asynchronously
-                                        _ = Task.Run(() =>
-                                        {
-                                            try
-                                            {
-                                                _libraryService.SaveLibrary();
-                                            }
-                                            catch (Exception ex)
-                                            {
-                                                Log($"ScanLoudnessAsync: ERROR saving library after loudness update - Exception: {ex.GetType().Name}, Message: {ex.Message}");
-                                                Log($"ScanLoudnessAsync: ERROR - Stack trace: {ex.StackTrace}");
-                                                if (ex.InnerException != null)
-                                                {
-                                                    Log($"ScanLoudnessAsync: ERROR - Inner exception: {ex.InnerException.GetType().Name}, Message: {ex.InnerException.Message}");
-                                                }
-                                            }
-                                        });
-                                    }
-                                }
-                                else
-                                {
-                                    Log($"ScanLoudnessAsync: Library item not found for {Path.GetFileName(file)}, loudness data not saved");
-                                }
-                            }
-
-                            // Track no-audio files separately from errors
-                            if (loudnessInfo.HasAudio == false)
-                            {
-                                lock (processedLock)
-                                {
-                                    noAudioCount++;
-                                }
-                                logResult = "No Audio";
-                                Log($"ScanLoudnessAsync: File has no audio: {Path.GetFileName(file)}");
-                            }
-                            else
-                            {
-                                logResult = "Success";
-                                Log($"ScanLoudnessAsync: Successfully processed {Path.GetFileName(file)} - IntegratedLoudness: {loudnessInfo.MeanVolumeDb:F1} dB, PeakDb: {loudnessInfo.PeakDb:F1} dB");
-                            }
-                        }
-                        else
-                        {
-                            // Parse failed - genuine error (file couldn't be processed)
-                            lock (processedLock)
-                            {
-                                errorCount++;
-                            }
-                            logResult = "Error";
-                            Log($"ScanLoudnessAsync: Failed to parse loudness for {Path.GetFileName(file)} (exit code: {exitCode})");
-                        }
-
-                        // Log the FFmpeg execution
-                        lock (_ffmpegLogsLock)
-                        {
-                            _ffmpegLogs.Add(new FFmpegLogEntry
-                            {
-                                Timestamp = DateTime.Now,
-                                FilePath = file,
-                                ExitCode = exitCode,
-                                Output = output,
-                                Result = logResult
-                            });
-                            // Keep only last 1000 entries to prevent memory issues
-                            if (_ffmpegLogs.Count > 1000)
-                            {
-                                _ffmpegLogs.RemoveAt(0);
-                            }
-                        }
-                        
-                        // Update log window if it's open (non-blocking)
-                        if (_ffmpegLogWindow is FFmpegLogWindow logWindow && logWindow.IsVisible)
-                        {
-                            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-                            {
-                                logWindow.UpdateLogDisplay();
-                            }, Avalonia.Threading.DispatcherPriority.Background);
-                        }
-                    }
-                    catch
-                    {
-                        // Individual file failure - increment error counter but continue
-                        lock (processedLock)
-                        {
-                            errorCount++;
-                        }
-                    }
-                }
-                finally
-                {
-                    if (semaphoreAcquired)
-                    {
-                        _ffmpegSemaphore.Release();
-                        Log($"ScanLoudnessAsync: Released semaphore for {Path.GetFileName(file)}");
-                    }
-                }
-
-                int newProcessed;
-                int currentNoAudio;
-                int currentErrors;
-                lock (processedLock)
-                {
-                    processed++;
-                    newProcessed = processed;
-                    currentNoAudio = noAudioCount;
-                    currentErrors = errorCount;
-                }
-
-                // Update UI progress with throttling (every file, but max once per 100ms)
-                bool shouldUpdate = false;
-                lock (_loudnessStatusUpdateLock)
-                {
-                    var now = DateTime.UtcNow;
-                    if ((now - _lastLoudnessStatusUpdate).TotalMilliseconds >= 1000 || newProcessed == total)
-                    {
-                        _lastLoudnessStatusUpdate = now;
-                        shouldUpdate = true;
-                    }
-                }
-
-                if (shouldUpdate)
-                {
-                    // Save library periodically during scan
-                    if (_libraryIndex != null)
-                    {
-                        _ = Task.Run(() =>
-                        {
-                            try
-                            {
-                                _libraryService.SaveLibrary();
-                            }
-                            catch (Exception ex)
-                            {
-                                Log($"ScanLoudnessAsync: ERROR saving library during scan - Exception: {ex.GetType().Name}, Message: {ex.Message}");
-                                Log($"ScanLoudnessAsync: ERROR - Stack trace: {ex.StackTrace}");
-                                if (ex.InnerException != null)
-                                {
-                                    Log($"ScanLoudnessAsync: ERROR - Inner exception: {ex.InnerException.GetType().Name}, Message: {ex.InnerException.Message}");
-                                }
-                            }
-                        });
-                    }
-                    
-                    Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-                    {
-                        var noAudioText = currentNoAudio > 0 ? $", {currentNoAudio} without audio" : "";
-                        var errorText = currentErrors > 0 ? $", {currentErrors} errors" : "";
-                        SetStatusMessage($"Scanning loudness… ({newProcessed}/{total} files processed{noAudioText}{errorText})");
-                    });
-                }
-            });
-
-            // Wait for all scan tasks to complete
-            Log("ScanLoudnessAsync: Waiting for all scan tasks to complete...");
-            await Task.WhenAll(scanTasks);
-            Log($"ScanLoudnessAsync: All scan tasks completed. Processed {processed}/{total} files, {noAudioCount} without audio, {errorCount} errors");
-
-            // Final save library and update UI
-            if (_libraryIndex != null)
-            {
-                Log("ScanLoudnessAsync: Performing final library save...");
-                _ = Task.Run(() =>
-                {
-                    try
-                    {
-                        _libraryService.SaveLibrary();
-                        Log("ScanLoudnessAsync: Final library save completed successfully");
-                    }
-                    catch (Exception ex)
-                    {
-                        Log($"ScanLoudnessAsync: ERROR saving library after loudness scan - Exception: {ex.GetType().Name}, Message: {ex.Message}");
-                        Log($"ScanLoudnessAsync: ERROR - Stack trace: {ex.StackTrace}");
-                        if (ex.InnerException != null)
-                        {
-                            Log($"ScanLoudnessAsync: ERROR - Inner exception: {ex.InnerException.GetType().Name}, Message: {ex.InnerException.Message}");
-                        }
-                    }
-                });
-            }
-            Log("ScanLoudnessAsync: Recalculating global stats");
-            RecalculateGlobalStats(); // Recalculate stats after scan completes
-            
-            // Reset cached baseline so next normalization recalculates with new data
-            _cachedBaselineLoudnessDb = null;
-            Log("ScanLoudnessAsync: Reset cached baseline loudness - will recalculate on next use");
-            
-            // Reset warning flag so it can be shown again if needed for newly added files
-            _hasShownMissingLoudnessWarning = false;
-            Log("ScanLoudnessAsync: Reset missing loudness warning flag");
-            
-            Log("ScanLoudnessAsync: Updating UI");
-            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-            {
-                if (_showLibraryPanel &&
-                    _currentFilterState != null &&
-                    (_currentFilterState.AudioFilter != AudioFilterMode.PlayAll ||
-                     _currentFilterState.OnlyKnownLoudness))
-                {
-                    UpdateLibraryPanel();
-                }
-
-                var noAudioText = noAudioCount > 0 ? $", {noAudioCount} without audio" : "";
-                var errorText = errorCount > 0 ? $", {errorCount} errors" : "";
-                // Always show scan completion message
-                SetStatusMessage($"Loudness scan complete ({total} files{noAudioText}{errorText})");
-            });
-            Log("ScanLoudnessAsync: Loudness scan complete");
-        }
-
-        private FileLoudnessInfo? ParseLoudnessFromFFmpegOutput(string output, int exitCode = 0)
+                private FileLoudnessInfo? ParseLoudnessFromFFmpegOutput(string output, int exitCode = 0)
         {
             // Parse loudness from ffmpeg stderr output
             // Supports both new ebur128 format and legacy volumedetect format for backward compatibility
@@ -3747,7 +2799,10 @@ namespace ReelRoulette
                             // Use BuildEligibleSetWithoutFileCheck for performance - file existence will be checked when video is played
                             var eligibleItems = _filterService.BuildEligibleSetWithoutFileCheck(_currentFilterState, _libraryIndex).ToList();
                             Log($"UpdateLibraryPanel: FilterService returned {eligibleItems.Count} eligible items.");
-                            items = items.Where(item => eligibleItems.Any(eligible => eligible.FullPath == item.FullPath)).ToList();
+                            var eligiblePaths = new HashSet<string>(
+                                eligibleItems.Select(eligible => eligible.FullPath),
+                                StringComparer.OrdinalIgnoreCase);
+                            items = items.Where(item => eligiblePaths.Contains(item.FullPath)).ToList();
                             Log($"UpdateLibraryPanel: After FilterState: {items.Count} items.");
                         }
                         else
@@ -4040,13 +3095,24 @@ namespace ReelRoulette
             var selectedItems = new List<LibraryItem>();
             foreach (var path in _selectedItemPaths)
             {
-                var item = _libraryService.FindItemByPath(path);
+                var item = FindProjectionItemByPath(path);
                 if (item != null)
                 {
                     selectedItems.Add(item);
                 }
             }
             return selectedItems;
+        }
+
+        private LibraryItem? FindProjectionItemByPath(string? fullPath)
+        {
+            if (_libraryIndex == null || string.IsNullOrWhiteSpace(fullPath))
+            {
+                return null;
+            }
+
+            return _libraryIndex.Items.FirstOrDefault(item =>
+                string.Equals(item.FullPath, fullPath, StringComparison.OrdinalIgnoreCase));
         }
 
         private List<LibraryItem> GetAutoTagScopeItems(bool scanFullLibrary)
@@ -5154,7 +4220,7 @@ namespace ReelRoulette
             }
         }
 
-        private void LibraryItemFavorite_Changed(object? sender, RoutedEventArgs e)
+        private async void LibraryItemFavorite_Changed(object? sender, RoutedEventArgs e)
         {
             // Don't process if we're updating the library items UI
             if (_isUpdatingLibraryItems || _isInitializingLibraryPanel)
@@ -5167,7 +4233,7 @@ namespace ReelRoulette
             if (sender is ToggleButton toggle && toggle.Tag is LibraryItem item)
             {
                 var toggleState = toggle.IsChecked == true;
-                var libraryItem = _libraryService.FindItemByPath(item.FullPath);
+                var libraryItem = FindProjectionItemByPath(item.FullPath);
                 if (libraryItem == null)
                 {
                     Log($"LibraryItemFavorite_Changed: Item not found in library: {item.FileName}");
@@ -5175,20 +4241,37 @@ namespace ReelRoulette
                 }
 
                 Log($"UI ACTION: LibraryItemFavorite toggled for '{item.FileName}' to: {toggleState} (was: {libraryItem.IsFavorite})");
-                // Keep bound tile UI in sync immediately even if the tag item instance differs.
-                if (!ReferenceEquals(item, libraryItem))
+                if (!await EnsureCoreCommandApiAvailableAsync())
                 {
-                    item.IsFavorite = toggleState;
+                    toggle.IsChecked = libraryItem.IsFavorite;
+                    StatusTextBlock.Text = "Core runtime is required for favorite updates.";
+                    return;
                 }
 
-                libraryItem.IsFavorite = toggleState;
-                _libraryService.UpdateItem(libraryItem);
-                _ = Task.Run(() => _libraryService.SaveLibrary());
-                RefreshLibraryPanelFromServiceState();
+                var state = await _coreServerApiClient.SetFavoriteWithStateAsync(
+                    _coreServerBaseUrl,
+                    libraryItem.FullPath,
+                    toggleState,
+                    _coreClientId,
+                    _coreSessionId);
+                if (state == null)
+                {
+                    toggle.IsChecked = libraryItem.IsFavorite;
+                    StatusTextBlock.Text = "Favorite update rejected by core runtime.";
+                    return;
+                }
+
+                ApplyRemoteItemStateProjection(
+                    state.Path,
+                    state.IsFavorite,
+                    state.IsBlacklisted,
+                    state.IsFavorite
+                        ? $"Added to favorites: {Path.GetFileName(state.Path)}"
+                        : $"Removed from favorites: {Path.GetFileName(state.Path)}");
             }
         }
 
-        private void LibraryItemBlacklist_Changed(object? sender, RoutedEventArgs e)
+        private async void LibraryItemBlacklist_Changed(object? sender, RoutedEventArgs e)
         {
             // Don't process if we're updating the library items UI
             if (_isUpdatingLibraryItems || _isInitializingLibraryPanel)
@@ -5201,7 +4284,7 @@ namespace ReelRoulette
             if (sender is ToggleButton toggle && toggle.Tag is LibraryItem item)
             {
                 var toggleState = toggle.IsChecked == true;
-                var libraryItem = _libraryService.FindItemByPath(item.FullPath);
+                var libraryItem = FindProjectionItemByPath(item.FullPath);
                 if (libraryItem == null)
                 {
                     Log($"LibraryItemBlacklist_Changed: Item not found in library: {item.FileName}");
@@ -5209,24 +4292,33 @@ namespace ReelRoulette
                 }
 
                 Log($"UI ACTION: LibraryItemBlacklist toggled for '{item.FileName}' to: {toggleState} (was: {libraryItem.IsBlacklisted})");
-                // Keep bound tile UI in sync immediately even if the tag item instance differs.
-                if (!ReferenceEquals(item, libraryItem))
+                if (!await EnsureCoreCommandApiAvailableAsync())
                 {
-                    item.IsBlacklisted = toggleState;
+                    toggle.IsChecked = libraryItem.IsBlacklisted;
+                    StatusTextBlock.Text = "Core runtime is required for blacklist updates.";
+                    return;
                 }
 
-                libraryItem.IsBlacklisted = toggleState;
-                _libraryService.UpdateItem(libraryItem);
-                _ = Task.Run(() => _libraryService.SaveLibrary());
-                if (_showLibraryPanel)
+                var state = await _coreServerApiClient.SetBlacklistWithStateAsync(
+                    _coreServerBaseUrl,
+                    libraryItem.FullPath,
+                    toggleState,
+                    _coreClientId,
+                    _coreSessionId);
+                if (state == null)
                 {
-                    UpdateLibraryPanel();
+                    toggle.IsChecked = libraryItem.IsBlacklisted;
+                    StatusTextBlock.Text = "Blacklist update rejected by core runtime.";
+                    return;
                 }
-                // Rebuild queue if item was blacklisted
-                if (libraryItem.IsBlacklisted)
-                {
-                    RebuildPlayQueueIfNeeded();
-                }
+
+                ApplyRemoteItemStateProjection(
+                    state.Path,
+                    state.IsFavorite,
+                    state.IsBlacklisted,
+                    state.IsBlacklisted
+                        ? $"Blacklisted: {Path.GetFileName(state.Path)}"
+                        : $"Removed from blacklist: {Path.GetFileName(state.Path)}");
             }
         }
 
@@ -5346,20 +4438,13 @@ namespace ReelRoulette
             if (sender is Button button && button.Tag is LibraryItem item)
             {
                 Log($"LibraryItemTags_Click: Opening tags dialog for: {item.FileName}");
-                var dialog = new ItemTagsDialog(new List<LibraryItem> { item }, _libraryIndex, _libraryService, this, _filterPresets);
+                var dialog = new ItemTagsDialog(new List<LibraryItem> { item }, _libraryIndex, this);
                 var result = await dialog.ShowDialog<bool?>(this);
                 if (result == true)
                 {
                     Log($"LibraryItemTags_Click: Tags updated for: {item.FileName}");
                     // Save filter presets (in case tags were renamed/deleted)
                     SaveSettings();
-                    // Refresh library index reference
-                    _libraryIndex = _libraryService.LibraryIndex;
-                    // Update library panel if visible
-                    if (_showLibraryPanel)
-                    {
-                        UpdateLibraryPanel();
-                    }
                     // Update stats if this is the current video
                     if (_currentVideoPath == item.FullPath)
                     {
@@ -5376,19 +4461,31 @@ namespace ReelRoulette
                 return;
 
             Log($"ContextMenu_AddToFavorites_Click: Adding {selectedItems.Count} items to favorites");
-            
+            if (!await EnsureCoreCommandApiAvailableAsync())
+            {
+                StatusTextBlock.Text = "Core runtime is required for favorite updates.";
+                return;
+            }
+
+            var accepted = 0;
             foreach (var item in selectedItems)
             {
                 if (!item.IsFavorite)
                 {
-                    item.IsFavorite = true;
-                    _libraryService.UpdateItem(item);
+                    var success = await _coreServerApiClient.SetFavoriteAsync(_coreServerBaseUrl, item.FullPath, true);
+                    if (success)
+                    {
+                        accepted++;
+                    }
                 }
             }
-            
-            await Task.Run(() => _libraryService.SaveLibrary());
-            StatusTextBlock.Text = $"Added {selectedItems.Count} item(s) to favorites";
-            RefreshLibraryPanelFromServiceState();
+
+            if (accepted > 0)
+            {
+                await SyncLibraryProjectionFromCoreAsync();
+            }
+
+            StatusTextBlock.Text = $"Added {accepted} item(s) to favorites";
             UpdateContextMenuState();
         }
 
@@ -5399,19 +4496,31 @@ namespace ReelRoulette
                 return;
 
             Log($"ContextMenu_RemoveFromFavorites_Click: Removing {selectedItems.Count} items from favorites");
-            
+            if (!await EnsureCoreCommandApiAvailableAsync())
+            {
+                StatusTextBlock.Text = "Core runtime is required for favorite updates.";
+                return;
+            }
+
+            var accepted = 0;
             foreach (var item in selectedItems)
             {
                 if (item.IsFavorite)
                 {
-                    item.IsFavorite = false;
-                    _libraryService.UpdateItem(item);
+                    var success = await _coreServerApiClient.SetFavoriteAsync(_coreServerBaseUrl, item.FullPath, false);
+                    if (success)
+                    {
+                        accepted++;
+                    }
                 }
             }
-            
-            await Task.Run(() => _libraryService.SaveLibrary());
-            StatusTextBlock.Text = $"Removed {selectedItems.Count} item(s) from favorites";
-            RefreshLibraryPanelFromServiceState();
+
+            if (accepted > 0)
+            {
+                await SyncLibraryProjectionFromCoreAsync();
+            }
+
+            StatusTextBlock.Text = $"Removed {accepted} item(s) from favorites";
             UpdateContextMenuState();
         }
 
@@ -5422,20 +4531,32 @@ namespace ReelRoulette
                 return;
 
             Log($"ContextMenu_AddToBlacklist_Click: Adding {selectedItems.Count} items to blacklist");
-            
+            if (!await EnsureCoreCommandApiAvailableAsync())
+            {
+                StatusTextBlock.Text = "Core runtime is required for blacklist updates.";
+                return;
+            }
+
+            var accepted = 0;
             foreach (var item in selectedItems)
             {
                 if (!item.IsBlacklisted)
                 {
-                    item.IsBlacklisted = true;
-                    _libraryService.UpdateItem(item);
+                    var success = await _coreServerApiClient.SetBlacklistAsync(_coreServerBaseUrl, item.FullPath, true);
+                    if (success)
+                    {
+                        accepted++;
+                    }
                 }
             }
-            
-            await Task.Run(() => _libraryService.SaveLibrary());
-            StatusTextBlock.Text = $"Added {selectedItems.Count} item(s) to blacklist";
+
+            if (accepted > 0)
+            {
+                await SyncLibraryProjectionFromCoreAsync();
+            }
+
+            StatusTextBlock.Text = $"Added {accepted} item(s) to blacklist";
             RebuildPlayQueueIfNeeded();
-            RefreshLibraryPanelFromServiceState();
             UpdateContextMenuState();
         }
 
@@ -5446,20 +4567,32 @@ namespace ReelRoulette
                 return;
 
             Log($"ContextMenu_RemoveFromBlacklist_Click: Removing {selectedItems.Count} items from blacklist");
-            
+            if (!await EnsureCoreCommandApiAvailableAsync())
+            {
+                StatusTextBlock.Text = "Core runtime is required for blacklist updates.";
+                return;
+            }
+
+            var accepted = 0;
             foreach (var item in selectedItems)
             {
                 if (item.IsBlacklisted)
                 {
-                    item.IsBlacklisted = false;
-                    _libraryService.UpdateItem(item);
+                    var success = await _coreServerApiClient.SetBlacklistAsync(_coreServerBaseUrl, item.FullPath, false);
+                    if (success)
+                    {
+                        accepted++;
+                    }
                 }
             }
-            
-            await Task.Run(() => _libraryService.SaveLibrary());
-            StatusTextBlock.Text = $"Removed {selectedItems.Count} item(s) from blacklist";
+
+            if (accepted > 0)
+            {
+                await SyncLibraryProjectionFromCoreAsync();
+            }
+
+            StatusTextBlock.Text = $"Removed {accepted} item(s) from blacklist";
             RebuildPlayQueueIfNeeded();
-            RefreshLibraryPanelFromServiceState();
             UpdateContextMenuState();
         }
 
@@ -5470,17 +4603,24 @@ namespace ReelRoulette
                 return;
 
             Log($"ContextMenu_ClearStats_Click: Clearing stats for {selectedItems.Count} items");
-            
-            foreach (var item in selectedItems)
+            if (!await EnsureCoreCommandApiAvailableAsync())
             {
-                item.PlayCount = 0;
-                item.LastPlayedUtc = null;
-                _libraryService.UpdateItem(item);
+                StatusTextBlock.Text = "Core runtime is required for clearing stats.";
+                return;
             }
-            
-            await Task.Run(() => _libraryService.SaveLibrary());
-            StatusTextBlock.Text = $"Cleared playback stats for {selectedItems.Count} item(s)";
-            RefreshLibraryPanelFromServiceState();
+
+            var response = await _coreServerApiClient.ClearPlaybackStatsAsync(_coreServerBaseUrl, new CoreClearPlaybackStatsRequest
+            {
+                ItemPaths = selectedItems.Select(item => item.FullPath).ToList()
+            });
+            if (response == null)
+            {
+                StatusTextBlock.Text = "Clearing playback stats failed.";
+                return;
+            }
+
+            await SyncLibraryProjectionFromCoreAsync();
+            StatusTextBlock.Text = $"Cleared playback stats for {response.ClearedCount} item(s)";
             if (_currentVideoPath != null && selectedItems.Any(item => item.FullPath == _currentVideoPath))
             {
                 UpdateCurrentFileStatsUi();
@@ -5503,27 +4643,7 @@ namespace ReelRoulette
             }
 
             Log($"ContextMenu_RemoveFromLibrary_Click: Removing {selectedItems.Count} items from library");
-            
-            foreach (var item in selectedItems)
-            {
-                _libraryService.RemoveItem(item.FullPath);
-            }
-            
-            await Task.Run(() => _libraryService.SaveLibrary());
-            
-            // Clear selection
-            _selectedItemPaths.Clear();
-            if (LibraryListBox != null && LibraryListBox.SelectedItems != null)
-            {
-                LibraryListBox.SelectedItems.Clear();
-            }
-            
-            // Update library index reference
-            _libraryIndex = _libraryService.LibraryIndex;
-            
-            StatusTextBlock.Text = $"Removed {selectedItems.Count} item(s) from library";
-            UpdateLibraryPanel();
-            RebuildPlayQueueIfNeeded();
+            StatusTextBlock.Text = "Removing items from library is now API-required and not available as a desktop-local operation.";
         }
 
         private async void ContextMenu_AddTags_Click(object? sender, RoutedEventArgs e)
@@ -5534,7 +4654,7 @@ namespace ReelRoulette
 
             Log($"ContextMenu_AddTags_Click: Opening tags dialog for {selectedItems.Count} items");
             
-            var dialog = new ItemTagsDialog(selectedItems, _libraryIndex, _libraryService, this, _filterPresets);
+            var dialog = new ItemTagsDialog(selectedItems, _libraryIndex, this);
             var result = await dialog.ShowDialog<bool?>(this);
             if (result == true)
             {
@@ -5542,19 +4662,6 @@ namespace ReelRoulette
                 
                 // Save filter presets (in case tags were renamed/deleted)
                 SaveSettings();
-                // Refresh library index reference
-                _libraryIndex = _libraryService.LibraryIndex;
-                
-                // Only rebuild library panel if tag filters are active that might affect visibility
-                // Tag-only changes don't affect which items are visible unless filters are applied
-                bool hasTagFilters = ((_currentFilterState?.SelectedTags?.Count ?? 0) > 0
-                    || (_currentFilterState?.ExcludedTags?.Count ?? 0) > 0);
-                
-                if (hasTagFilters)
-                {
-                    UpdateLibraryPanel(); // Rebuild only if tag filters might hide/show items
-                }
-                // Otherwise, tags are updated in place, no UI rebuild needed
                 
                 if (_currentVideoPath != null && selectedItems.Any(item => item.FullPath == _currentVideoPath))
                 {
@@ -5600,7 +4707,6 @@ namespace ReelRoulette
             }
 
             StatusTextBlock.Text = $"Removed {commonTags.Count} tag(s) from {selectedItems.Count} item(s)";
-            UpdateLibraryPanel();
             if (_currentVideoPath != null && selectedItems.Any(item => item.FullPath == _currentVideoPath))
             {
                 UpdateCurrentFileStatsUi();
@@ -5709,51 +4815,35 @@ namespace ReelRoulette
             }
         }
 
-        private void FavoritesRemove_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        private async void FavoritesRemove_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
             if (sender is Button button && button.Tag is string path)
             {
                 Log($"UI ACTION: FavoritesRemove clicked for: {Path.GetFileName(path)}");
-                // Update library item
-                if (_libraryIndex != null)
+                if (!await EnsureCoreCommandApiAvailableAsync())
                 {
-                    var item = _libraryService.FindItemByPath(path);
-                    if (item != null)
-                    {
-                        item.IsFavorite = false;
-                        _libraryService.UpdateItem(item);
-                        
-                        // Save library asynchronously
-                        _ = Task.Run(() =>
-                        {
-                            try
-                            {
-                                _libraryService.SaveLibrary();
-                            }
-                            catch (Exception ex)
-                            {
-                                Log($"FavoritesRemove_Click: ERROR saving library - Exception: {ex.GetType().Name}, Message: {ex.Message}");
-                                Log($"FavoritesRemove_Click: ERROR - Stack trace: {ex.StackTrace}");
-                                if (ex.InnerException != null)
-                                {
-                                    Log($"FavoritesRemove_Click: ERROR - Inner exception: {ex.InnerException.GetType().Name}, Message: {ex.InnerException.Message}");
-                                }
-                            }
-                        });
-                    }
+                    StatusTextBlock.Text = "Core runtime is required for favorites updates.";
+                    return;
                 }
 
-                // If the removed entry is the current video, update the toggle and status line
-                if (path.Equals(_currentVideoPath, StringComparison.OrdinalIgnoreCase))
+                var state = await _coreServerApiClient.SetFavoriteWithStateAsync(
+                    _coreServerBaseUrl,
+                    path,
+                    false,
+                    _coreClientId,
+                    _coreSessionId);
+                if (state == null)
                 {
-                    UpdatePerVideoToggleStates();
+                    StatusTextBlock.Text = "Favorite update rejected by core runtime.";
+                    return;
                 }
 
-                // Update Library panel if visible
-                RefreshLibraryPanelFromServiceState();
+                ApplyRemoteItemStateProjection(
+                    state.Path,
+                    state.IsFavorite,
+                    state.IsBlacklisted,
+                    $"Removed from favorites: {System.IO.Path.GetFileName(path)}");
                 StatusTextBlock.Text = $"Removed from favorites: {System.IO.Path.GetFileName(path)}";
-
-                // Queue will be rebuilt when filters change via FilterDialog
             }
         }
 
@@ -5909,7 +4999,7 @@ namespace ReelRoulette
 
         private PlaybackTarget? ResolveManualPlaybackTarget(string videoPath)
         {
-            var item = _libraryService.FindItemByPath(videoPath);
+            var item = FindProjectionItemByPath(videoPath);
             if (item == null || string.IsNullOrWhiteSpace(item.Id))
             {
                 return null;
@@ -5992,55 +5082,10 @@ namespace ReelRoulette
                 return;
             }
             
-            try
+            await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
             {
-                _libraryService.RemoveItem(path);
-                
-                // Save library asynchronously
-                await Task.Run(() =>
-                {
-                    try
-                    {
-                        _libraryService.SaveLibrary();
-                        Log("RemoveLibraryItemAsync: Library saved successfully");
-                    }
-                    catch (Exception ex)
-                    {
-                        Log($"RemoveLibraryItemAsync: ERROR saving library - Exception: {ex.GetType().Name}, Message: {ex.Message}");
-                        throw; // Re-throw to be caught by outer try-catch and displayed to user
-                    }
-                });
-                
-                // Update library index reference
-                var updatedIndex = _libraryService.LibraryIndex;
-                
-                await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
-                {
-                    _libraryIndex = updatedIndex;
-                    
-                    if (_showLibraryPanel)
-                    {
-                        UpdateLibraryPanel();
-                    }
-                    
-                    // Recalculate stats
-                    RecalculateGlobalStats();
-                    
-                    // Set success status message
-                    SetStatusMessage($"Removed from library: {Path.GetFileName(path)}");
-                });
-                
-                Log($"RemoveLibraryItemAsync: Successfully removed item: {Path.GetFileName(path)}");
-            }
-            catch (Exception ex)
-            {
-                Log($"RemoveLibraryItemAsync: ERROR - Exception: {ex.GetType().Name}, Message: {ex.Message}");
-                Log($"RemoveLibraryItemAsync: ERROR - Stack trace: {ex.StackTrace}");
-                await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
-                {
-                    SetStatusMessage($"Error removing item: {ex.Message}");
-                });
-            }
+                SetStatusMessage("Removing items from library is now API-required and not available as a desktop-local operation.");
+            });
         }
 
         private void SetStatusMessage(string message, int minimumDisplayMilliseconds = 1000)
@@ -6108,39 +5153,6 @@ namespace ReelRoulette
             });
         }
 
-        private void OnFingerprintProgressUpdated(FingerprintProgressSnapshot snapshot)
-        {
-            var now = DateTime.UtcNow;
-            if ((now - _lastFingerprintStatusUiUtc).TotalMilliseconds < 300)
-            {
-                return;
-            }
-            _lastFingerprintStatusUiUtc = now;
-
-            Dispatcher.UIThread.Post(() =>
-            {
-                // Keep high-priority active scan messages visible.
-                var current = StatusTextBlock?.Text ?? string.Empty;
-                if (current.StartsWith("Scanning / indexing", StringComparison.OrdinalIgnoreCase) ||
-                    current.StartsWith("Scanning loudness", StringComparison.OrdinalIgnoreCase) ||
-                    current.StartsWith("Applying filters and rebuilding queue", StringComparison.OrdinalIgnoreCase) ||
-                    current.StartsWith("Auto refresh:", StringComparison.OrdinalIgnoreCase))
-                {
-                    return;
-                }
-
-                if (snapshot.TotalEligible <= 0)
-                {
-                    return;
-                }
-
-                if (StatusTextBlock != null)
-                {
-                    StatusTextBlock.Text = $"Fingerprinting: {snapshot.Completed:N0}/{snapshot.TotalEligible:N0} complete";
-                }
-            });
-        }
-
         private void InitializeUserActivityTracking()
         {
             _lastUserInteractionUtc = DateTime.UtcNow;
@@ -6158,7 +5170,7 @@ namespace ReelRoulette
                 return false;
             }
 
-            if (_libraryService.IsRefreshRunning || _isDurationScanRunning || _isLoudnessScanRunning)
+            if (_isDurationScanRunning || _isLoudnessScanRunning)
             {
                 reason = "another library job is running";
                 return false;
@@ -6234,74 +5246,28 @@ namespace ReelRoulette
                     return;
                 }
 
-                var enabledSources = _libraryService.LibraryIndex.Sources
-                    .Where(s => s.IsEnabled && !string.IsNullOrWhiteSpace(s.RootPath) && Directory.Exists(s.RootPath))
-                    .ToList();
-                if (enabledSources.Count == 0)
+                if (_libraryIndex == null)
                 {
-                    Log("AutoRefresh: Deferred - no enabled sources with valid paths");
+                    Log("AutoRefresh: Deferred - library projection unavailable");
                     return;
                 }
 
-                Log($"AutoRefresh: Tick started for {enabledSources.Count} source(s)");
-                int totalAdded = 0;
-                int totalRemoved = 0;
-                int totalRenamed = 0;
-                int totalMoved = 0;
-                int totalUpdated = 0;
-                int totalUnresolved = 0;
-
-                for (int index = 0; index < enabledSources.Count; index++)
+                var enabledSources = _libraryIndex.Sources.Count(s => s.IsEnabled);
+                if (enabledSources == 0)
                 {
-                    var source = enabledSources[index];
-                    var sourceLabel = string.IsNullOrWhiteSpace(source.DisplayName)
-                        ? Path.GetFileName(source.RootPath)
-                        : source.DisplayName;
-
-                    SetStatusMessage($"Auto refresh: source {index + 1}/{enabledSources.Count} scanning ({sourceLabel})...", 0);
-                    var sourceIdx = index + 1;
-                    var sourceCount = enabledSources.Count;
-                    var progress = new Progress<RefreshProgress>(p =>
-                    {
-                        var phaseText = string.IsNullOrWhiteSpace(p.Message)
-                            ? p.Phase
-                            : p.Message;
-                        SetStatusMessage($"Auto refresh: source {sourceIdx}/{sourceCount} {phaseText}", 0);
-
-                        var now = DateTime.UtcNow;
-                        if ((now - _lastAutoRefreshProgressLogUtc).TotalSeconds >= 5)
-                        {
-                            _lastAutoRefreshProgressLogUtc = now;
-                            Log($"AutoRefresh: Progress source {sourceIdx}/{sourceCount} - {phaseText}");
-                        }
-                    });
-
-                    var result = await Task.Run(() => _libraryService.RefreshSource(source.Id, progress));
-                    totalAdded += result.Added;
-                    totalRemoved += result.Removed;
-                    totalRenamed += result.Renamed;
-                    totalMoved += result.Moved;
-                    totalUpdated += result.Updated;
-                    totalUnresolved += result.UnresolvedQueued;
-                    Log($"AutoRefresh: Source complete ({sourceLabel}) - Added={result.Added}, Removed={result.Removed}, Renamed={result.Renamed}, Moved={result.Moved}, Updated={result.Updated}, Unresolved={result.UnresolvedQueued}");
+                    Log("AutoRefresh: Deferred - no enabled sources");
+                    return;
                 }
 
-                _libraryService.SaveLibrary();
-                _libraryIndex = _libraryService.LibraryIndex;
-
-                await Dispatcher.UIThread.InvokeAsync(() =>
+                Log($"AutoRefresh: Requesting server refresh for {enabledSources} enabled source(s)");
+                var accepted = await RequestCoreRefreshAsync();
+                if (!accepted)
                 {
-                    if (_showLibraryPanel)
-                    {
-                        UpdateLibraryPanel();
-                    }
-                    RecalculateGlobalStats();
-                    UpdateLibraryInfoText();
-                    _ = RebuildPlayQueueIfNeededAsync();
-                });
+                    Log("AutoRefresh: Core refresh already running or unavailable");
+                    return;
+                }
 
-                SetStatusMessage($"Auto refresh: complete ({totalAdded} added, {totalRemoved} removed, {totalRenamed} renamed, {totalMoved} moved, {totalUpdated} updated, {totalUnresolved} unresolved)", 0);
-                Log($"AutoRefresh: Completed - Added={totalAdded}, Removed={totalRemoved}, Renamed={totalRenamed}, Moved={totalMoved}, Updated={totalUpdated}, Unresolved={totalUnresolved}");
+                SetStatusMessage("Auto refresh: requested in core runtime.", 0);
             }
             catch (Exception ex)
             {
@@ -7105,7 +6071,7 @@ namespace ReelRoulette
                 return false;
             }
 
-            if (!await EnsureCoreRuntimeAvailableAsync())
+            if (!await EnsureCoreCommandApiAvailableAsync())
             {
                 return false;
             }
@@ -7121,8 +6087,6 @@ namespace ReelRoulette
                 return false;
             }
 
-            _libraryService.AddOrUpdateCategory(category);
-            _libraryIndex = _libraryService.LibraryIndex;
             return true;
         }
 
@@ -7151,7 +6115,7 @@ namespace ReelRoulette
                 return false;
             }
 
-            if (!await EnsureCoreRuntimeAvailableAsync())
+            if (!await EnsureCoreCommandApiAvailableAsync())
             {
                 return false;
             }
@@ -7162,8 +6126,6 @@ namespace ReelRoulette
                 return false;
             }
 
-            _libraryService.DeleteCategory(categoryId, newCategoryId);
-            _libraryIndex = _libraryService.LibraryIndex;
             return true;
         }
 
@@ -7174,7 +6136,7 @@ namespace ReelRoulette
                 return false;
             }
 
-            if (!await EnsureCoreRuntimeAvailableAsync())
+            if (!await EnsureCoreCommandApiAvailableAsync())
             {
                 return false;
             }
@@ -7189,12 +6151,6 @@ namespace ReelRoulette
                 return false;
             }
 
-            _libraryService.AddOrUpdateTag(new Tag
-            {
-                Name = tagName,
-                CategoryId = categoryId ?? string.Empty
-            });
-            _libraryIndex = _libraryService.LibraryIndex;
             return true;
         }
 
@@ -7205,7 +6161,7 @@ namespace ReelRoulette
                 return false;
             }
 
-            if (!await EnsureCoreRuntimeAvailableAsync())
+            if (!await EnsureCoreCommandApiAvailableAsync())
             {
                 return false;
             }
@@ -7221,9 +6177,6 @@ namespace ReelRoulette
                 return false;
             }
 
-            _libraryService.RenameTag(oldTagName, newTagName, newCategoryId);
-            _ = LibraryService.UpdateFilterPresetsForRenamedTag(_filterPresets, oldTagName, newTagName);
-            _libraryIndex = _libraryService.LibraryIndex;
             return true;
         }
 
@@ -7234,7 +6187,7 @@ namespace ReelRoulette
                 return false;
             }
 
-            if (!await EnsureCoreRuntimeAvailableAsync())
+            if (!await EnsureCoreCommandApiAvailableAsync())
             {
                 return false;
             }
@@ -7245,9 +6198,6 @@ namespace ReelRoulette
                 return false;
             }
 
-            _libraryService.DeleteTag(tagName);
-            _ = LibraryService.UpdateFilterPresetsForDeletedTag(_filterPresets, tagName);
-            _libraryIndex = _libraryService.LibraryIndex;
             return true;
         }
 
@@ -7274,31 +6224,6 @@ namespace ReelRoulette
                 return false;
             }
 
-            foreach (var itemId in itemIds)
-            {
-                var item = _libraryService.FindItemByPath(itemId);
-                if (item == null)
-                {
-                    continue;
-                }
-
-                item.Tags ??= [];
-                var tagSet = new HashSet<string>(item.Tags, StringComparer.OrdinalIgnoreCase);
-                foreach (var tag in removeTags ?? [])
-                {
-                    tagSet.Remove(tag);
-                }
-
-                foreach (var tag in addTags ?? [])
-                {
-                    tagSet.Add(tag);
-                }
-
-                item.Tags = tagSet.OrderBy(t => t, StringComparer.OrdinalIgnoreCase).ToList();
-                _libraryService.UpdateItem(item);
-            }
-
-            _libraryIndex = _libraryService.LibraryIndex;
             return true;
         }
 
@@ -7309,54 +6234,116 @@ namespace ReelRoulette
                 return;
             }
 
-            var changedCurrent = false;
-            foreach (var itemId in payload.ItemIds)
+            var identifiers = payload.ItemIds
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Select(id => id.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            if (identifiers.Count == 0)
             {
-                var item = _libraryService.FindItemByPath(itemId);
-                if (item == null)
+                return;
+            }
+
+            var addTags = (payload.AddedTags ?? [])
+                .Where(tag => !string.IsNullOrWhiteSpace(tag))
+                .Select(tag => tag.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            var removeTags = (payload.RemovedTags ?? [])
+                .Where(tag => !string.IsNullOrWhiteSpace(tag))
+                .Select(tag => tag.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            var byId = _libraryIndex.Items
+                .Where(item => !string.IsNullOrWhiteSpace(item.Id))
+                .GroupBy(item => item.Id, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+            var byPath = _libraryIndex.Items
+                .Where(item => !string.IsNullOrWhiteSpace(item.FullPath))
+                .GroupBy(item => item.FullPath, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+
+            var targetItems = new List<LibraryItem>(identifiers.Count);
+            foreach (var identifier in identifiers)
+            {
+                if (!byId.TryGetValue(identifier, out var item) &&
+                    !byPath.TryGetValue(identifier, out item))
                 {
-                    continue;
+                    Log($"CoreEvents: itemTagsChanged fallback to full projection sync (unknown item '{identifier}').");
+                    _ = SyncLibraryProjectionFromCoreAsync();
+                    return;
                 }
 
-                item.Tags ??= [];
-                var tagSet = new HashSet<string>(item.Tags, StringComparer.OrdinalIgnoreCase);
-                foreach (var removed in payload.RemovedTags)
+                if (!targetItems.Contains(item))
                 {
-                    tagSet.Remove(removed);
-                }
-
-                foreach (var added in payload.AddedTags)
-                {
-                    tagSet.Add(added);
-                }
-
-                item.Tags = tagSet.OrderBy(t => t, StringComparer.OrdinalIgnoreCase).ToList();
-                _libraryService.UpdateItem(item);
-                if (!string.IsNullOrWhiteSpace(_currentVideoPath) &&
-                    string.Equals(_currentVideoPath, item.FullPath, StringComparison.OrdinalIgnoreCase))
-                {
-                    changedCurrent = true;
+                    targetItems.Add(item);
                 }
             }
 
-            _libraryIndex = _libraryService.LibraryIndex;
-            if (_showLibraryPanel)
+            foreach (var item in targetItems)
+            {
+                var updatedTags = (item.Tags ?? [])
+                    .Where(tag => !removeTags.Contains(tag))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+
+                foreach (var addTag in addTags)
+                {
+                    if (!updatedTags.Contains(addTag, StringComparer.OrdinalIgnoreCase))
+                    {
+                        updatedTags.Add(addTag);
+                    }
+                }
+
+                item.Tags = updatedTags;
+            }
+
+            var hasTagFilters = ((_currentFilterState?.SelectedTags?.Count ?? 0) > 0)
+                || ((_currentFilterState?.ExcludedTags?.Count ?? 0) > 0);
+            if (_showLibraryPanel && hasTagFilters)
             {
                 UpdateLibraryPanel();
             }
 
-            if (changedCurrent)
+            if (_currentVideoPath != null)
             {
-                UpdateCurrentFileStatsUi();
+                var currentItemUpdated = targetItems.Any(item =>
+                    string.Equals(item.FullPath, _currentVideoPath, StringComparison.OrdinalIgnoreCase));
+                if (currentItemUpdated)
+                {
+                    UpdateCurrentFileStatsUi();
+                }
             }
+
+            Log($"CoreEvents: itemTagsChanged applied to {targetItems.Count} item(s) via targeted projection update.");
         }
 
         private void ApplyTagCatalogProjection(CoreTagCatalogChangedPayload payload)
         {
-            // Do not replace local tag catalog from SSE payloads.
-            // The desktop catalog is currently the authoritative source for dialog visibility;
-            // applying partial remote snapshots can collapse categories/tags into uncategorized.
-            Log($"CoreEvents: tagCatalogChanged received (reason={payload.Reason}); preserving local catalog.");
+            if (_libraryIndex == null)
+            {
+                return;
+            }
+
+            _libraryIndex.Categories = (payload.Categories ?? [])
+                .Where(category => !string.IsNullOrWhiteSpace(category.Name))
+                .Select(category => new TagCategory
+                {
+                    Id = category.Id ?? string.Empty,
+                    Name = category.Name ?? string.Empty,
+                    SortOrder = category.SortOrder
+                })
+                .ToList();
+            _libraryIndex.Tags = (payload.Tags ?? [])
+                .Where(tag => !string.IsNullOrWhiteSpace(tag.Name))
+                .Select(tag => new Tag
+                {
+                    Name = tag.Name ?? string.Empty,
+                    CategoryId = tag.CategoryId ?? string.Empty
+                })
+                .ToList();
+            Log($"CoreEvents: tagCatalogChanged applied from server (reason={payload.Reason}).");
         }
 
         private void ApplySourceStateProjection(CoreSourceStateChangedPayload payload)
@@ -7374,7 +6361,6 @@ namespace ReelRoulette
             }
 
             source.IsEnabled = payload.IsEnabled;
-            _libraryService.UpdateSource(source);
             if (_showLibraryPanel)
             {
                 UpdateLibraryPanel();
@@ -7526,7 +6512,6 @@ namespace ReelRoulette
             _isCoreApiReachable = false;
             StopCoreEventStream();
             _libraryIndex = new LibraryIndex();
-            _libraryService.ReplaceProjection(_libraryIndex);
             Dispatcher.UIThread.Post(() =>
             {
                 if (_showLibraryPanel)
@@ -7574,6 +6559,7 @@ namespace ReelRoulette
                                 _ = SyncPresetsFromCoreAsync();
                                 _ = SyncSourcesFromCoreAsync();
                                 _ = SyncRefreshSettingsFromCoreAsync();
+                                _ = SyncBackupSettingsFromCoreAsync();
                                 _ = SyncWebRuntimeSettingsFromCoreAsync();
                                 _ = SyncRefreshStatusFromCoreAsync();
                                 SetStatusMessage("Core runtime connected.", 0);
@@ -7635,6 +6621,7 @@ namespace ReelRoulette
                 _ = SyncPresetsFromCoreAsync();
                 _ = SyncSourcesFromCoreAsync();
                 _ = SyncRefreshSettingsFromCoreAsync();
+                _ = SyncBackupSettingsFromCoreAsync();
                 _ = SyncWebRuntimeSettingsFromCoreAsync();
                 _ = SyncRefreshStatusFromCoreAsync();
                 return true;
@@ -7680,7 +6667,6 @@ namespace ReelRoulette
                 }
 
                 _libraryIndex = projection;
-                _libraryService.ReplaceProjection(projection);
 
                 await Dispatcher.UIThread.InvokeAsync(() =>
                 {
@@ -7891,17 +6877,12 @@ namespace ReelRoulette
                         return;
                     }
 
-                    var isSameClient = string.Equals(playback.ClientId, _coreClientId, StringComparison.Ordinal);
-                    var isSameSession = !string.IsNullOrWhiteSpace(playback.SessionId) &&
-                        string.Equals(playback.SessionId, _coreSessionId, StringComparison.Ordinal);
-                    if (isSameSession || (isSameClient && string.IsNullOrWhiteSpace(playback.SessionId)))
+                    await Dispatcher.UIThread.InvokeAsync(async () =>
                     {
-                        return;
-                    }
-
-                    await Dispatcher.UIThread.InvokeAsync(() =>
-                    {
-                        RecordPlaybackProjection(playback.Path, persistLibrary: false);
+                        if (!TryApplyPlaybackProjectionFromEvent(playback))
+                        {
+                            await RecordPlaybackProjectionAsync(playback.Path);
+                        }
                     });
                     break;
                 case "itemTagsChanged":
@@ -8009,6 +6990,7 @@ namespace ReelRoulette
                             _ = SyncPresetsFromCoreAsync();
                             _ = SyncSourcesFromCoreAsync();
                             _ = SyncRefreshSettingsFromCoreAsync();
+                            _ = SyncBackupSettingsFromCoreAsync();
                             _ = SyncWebRuntimeSettingsFromCoreAsync();
                             _ = SyncRefreshStatusFromCoreAsync();
                             SetStatusMessage("Core events resync complete.", 0);
@@ -8153,12 +7135,42 @@ namespace ReelRoulette
 
                 _autoRefreshSourcesEnabled = settings.AutoRefreshEnabled;
                 _autoRefreshIntervalMinutes = Math.Clamp(settings.AutoRefreshIntervalMinutes, 5, 1440);
+                _forceRescanLoudnessOnNextRefresh = settings.ForceRescanLoudness;
+                _forceRescanDurationOnNextRefresh = settings.ForceRescanDuration;
                 _autoRefreshOnlyWhenIdle = false;
                 _autoRefreshIdleThresholdMinutes = 1;
             }
             catch (Exception ex)
             {
                 Log($"CoreRefresh: Failed to fetch refresh settings ({ex.Message})");
+            }
+        }
+
+        private async Task SyncBackupSettingsFromCoreAsync()
+        {
+            _serverBackupSettingsWritable = _isCoreApiReachable;
+            if (!_isCoreApiReachable)
+            {
+                return;
+            }
+
+            try
+            {
+                var settings = await _coreServerApiClient.GetBackupSettingsAsync(_coreServerBaseUrl);
+                if (settings == null)
+                {
+                    return;
+                }
+
+                _backupLibraryEnabled = settings.Enabled;
+                _minimumBackupGapMinutes = Math.Clamp(settings.MinimumBackupGapMinutes, 1, 10080);
+                _numberOfBackups = Math.Clamp(settings.NumberOfBackups, 1, 100);
+                _serverBackupSettingsWritable = true;
+            }
+            catch (Exception ex)
+            {
+                _serverBackupSettingsWritable = false;
+                Log($"CoreBackup: Failed to fetch backup settings ({ex.Message})");
             }
         }
 
@@ -8480,6 +7492,24 @@ namespace ReelRoulette
             }
         }
 
+        private async Task<CoreLibraryStatsResponse?> FetchLibraryStatsViaCoreAsync()
+        {
+            if (!_isCoreApiReachable)
+            {
+                return null;
+            }
+
+            try
+            {
+                return await _coreServerApiClient.GetLibraryStatsAsync(_coreServerBaseUrl);
+            }
+            catch (Exception ex)
+            {
+                Log($"CoreLibraryStats: Failed to fetch library stats ({ex.Message})");
+                return null;
+            }
+        }
+
         #region View Preferences
 
         private class AppSettings
@@ -8776,18 +7806,21 @@ namespace ReelRoulette
             _fixedImageMaxHeight = settings.FixedImageMaxHeight > 0 ? settings.FixedImageMaxHeight : 2160;
             Log($"LoadSettings: Restored image scaling - Mode: {_imageScalingMode}, FixedMax: {_fixedImageMaxWidth}x{_fixedImageMaxHeight}");
             
-            // Load backup settings
-            _backupLibraryEnabled = settings.BackupLibraryEnabled;
-            _minimumBackupGapMinutes = settings.MinimumBackupGapMinutes > 0 ? settings.MinimumBackupGapMinutes : 15;
-            _numberOfBackups = settings.NumberOfBackups > 0 ? settings.NumberOfBackups : 10;
+            // Server backup settings are core-owned and loaded via API.
+            _backupLibraryEnabled = true;
+            _minimumBackupGapMinutes = 360;
+            _numberOfBackups = 8;
+            _serverBackupSettingsWritable = false;
             _backupSettingsEnabled = settings.BackupSettingsEnabled;
             _minimumSettingsBackupGapMinutes = settings.MinimumSettingsBackupGapMinutes > 0 ? settings.MinimumSettingsBackupGapMinutes : 15;
             _numberOfSettingsBackups = settings.NumberOfSettingsBackups > 0 ? settings.NumberOfSettingsBackups : 10;
-            Log($"LoadSettings: Restored backup settings - LibraryEnabled: {_backupLibraryEnabled}, LibraryMinGap: {_minimumBackupGapMinutes} minutes, LibraryCount: {_numberOfBackups}, SettingsEnabled: {_backupSettingsEnabled}, SettingsMinGap: {_minimumSettingsBackupGapMinutes} minutes, SettingsCount: {_numberOfSettingsBackups}");
+            Log($"LoadSettings: Restored backup settings - Server defaults pending core sync, ClientEnabled: {_backupSettingsEnabled}, ClientMinGap: {_minimumSettingsBackupGapMinutes} minutes, ClientCount: {_numberOfSettingsBackups}");
             
             // Refresh settings are core-owned and loaded via API.
             _autoRefreshSourcesEnabled = true;
             _autoRefreshIntervalMinutes = 60;
+            _forceRescanLoudnessOnNextRefresh = false;
+            _forceRescanDurationOnNextRefresh = false;
             _autoRefreshOnlyWhenIdle = false;
             _autoRefreshIdleThresholdMinutes = 1;
             _libraryGridViewEnabled = settings.LibraryGridViewEnabled;
@@ -8990,10 +8023,7 @@ namespace ReelRoulette
                 settings.FixedImageMaxWidth = _fixedImageMaxWidth;
                 settings.FixedImageMaxHeight = _fixedImageMaxHeight;
                 
-                // Backup settings
-                settings.BackupLibraryEnabled = _backupLibraryEnabled;
-                settings.MinimumBackupGapMinutes = _minimumBackupGapMinutes;
-                settings.NumberOfBackups = _numberOfBackups;
+                // Client backup settings (desktop-settings.json only)
                 settings.BackupSettingsEnabled = _backupSettingsEnabled;
                 settings.MinimumSettingsBackupGapMinutes = _minimumSettingsBackupGapMinutes;
                 settings.NumberOfSettingsBackups = _numberOfSettingsBackups;
@@ -9058,7 +8088,7 @@ namespace ReelRoulette
                 }
 
                 var backupDir = AppDataManager.GetBackupDirectoryPath();
-                var backupFiles = Directory.GetFiles(backupDir, "settings.json.backup.*")
+                var backupFiles = Directory.GetFiles(backupDir, "desktop-settings.json.backup.*")
                     .Select(f => new FileInfo(f))
                     .OrderBy(f => f.CreationTime)
                     .ToList();
@@ -9089,7 +8119,7 @@ namespace ReelRoulette
                 }
 
                 var timestamp = now.ToString("yyyy-MM-dd_HH-mm-ss");
-                var backupPath = Path.Combine(backupDir, $"settings.json.backup.{timestamp}");
+                var backupPath = Path.Combine(backupDir, $"desktop-settings.json.backup.{timestamp}");
                 File.Copy(settingsPath, backupPath, true);
                 Log($"SaveSettings: Created settings backup: {Path.GetFileName(backupPath)}");
             }
@@ -9723,7 +8753,7 @@ namespace ReelRoulette
             Log("UI ACTION: ManageSourcesMenuItem clicked");
             await SyncSourcesFromCoreAsync();
             var dialog = new ManageSourcesDialog(
-                _libraryService,
+                FetchLibraryStatsViaCoreAsync,
                 RequestCoreRefreshAsync,
                 UpdateSourceEnabledViaCoreAsync,
                 ScanDuplicatesViaCoreAsync,
@@ -9856,61 +8886,6 @@ namespace ReelRoulette
             }
         }
 
-        private async System.Threading.Tasks.Task ShowTagMigrationDialog()
-        {
-            Log("ShowTagMigrationDialog: Starting migration process");
-            
-            // Get the flat tags from the old format
-            var flatTags = _libraryIndex?.AvailableTags?.ToList() ?? new List<string>();
-            
-            if (flatTags.Count == 0)
-            {
-                Log("ShowTagMigrationDialog: No tags to migrate");
-                return;
-            }
-
-            Log($"ShowTagMigrationDialog: Found {flatTags.Count} tags to migrate");
-
-            var dialog = new MigrationDialog();
-            dialog.Initialize(flatTags);
-            
-            await dialog.ShowDialog(this);
-
-            if (dialog.WasCompleted)
-            {
-                Log($"ShowTagMigrationDialog: Migration completed - {dialog.Categories.Count} categories, {dialog.MigratedTags.Count} tags");
-                
-                // Complete the migration in LibraryService
-                _libraryService.CompleteMigration(dialog.Categories, dialog.MigratedTags);
-                
-                // Refresh the library index reference
-                _libraryIndex = _libraryService.LibraryIndex;
-                
-                // Save the migrated library
-                try
-                {
-                    _libraryService.SaveLibrary();
-                    Log("ShowTagMigrationDialog: Migrated library saved successfully");
-                }
-                catch (Exception ex)
-                {
-                    Log($"ShowTagMigrationDialog: ERROR saving library - {ex.Message}");
-                }
-                
-                // Refresh UI
-                UpdateLibraryPanel();
-                RecalculateGlobalStats();
-                UpdateLibraryInfoText();
-            }
-            else
-            {
-                Log("ShowTagMigrationDialog: Migration cancelled by user - closing application");
-                // If user cancels migration, close the application
-                // We can't continue with the old format
-                Close();
-            }
-        }
-
         private void AlwaysOnTopMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
             _alwaysOnTop = AlwaysOnTopMenuItem.IsChecked == true;
@@ -9961,6 +8936,11 @@ namespace ReelRoulette
                 if (_isCoreApiReachable)
                 {
                     await SyncRefreshSettingsFromCoreAsync();
+                    await SyncBackupSettingsFromCoreAsync();
+                }
+                else
+                {
+                    _serverBackupSettingsWritable = false;
                 }
 
                 dialog.WindowStartupLocation = WindowStartupLocation.CenterOwner;
@@ -9993,8 +8973,11 @@ namespace ReelRoulette
                     _backupSettingsEnabled,
                     _minimumSettingsBackupGapMinutes,
                     _numberOfSettingsBackups,
+                    _serverBackupSettingsWritable,
                     _autoRefreshSourcesEnabled,
                     _autoRefreshIntervalMinutes,
+                    _forceRescanLoudnessOnNextRefresh,
+                    _forceRescanDurationOnNextRefresh,
                     _autoRefreshOnlyWhenIdle,
                     _autoRefreshIdleThresholdMinutes,
                     _coreServerBaseUrl,
@@ -10063,6 +9046,8 @@ namespace ReelRoulette
                         var oldSettingsBackupCount = _numberOfSettingsBackups;
                         var oldAutoRefreshEnabled = _autoRefreshSourcesEnabled;
                         var oldAutoRefreshInterval = _autoRefreshIntervalMinutes;
+                        var oldForceLoudnessRescan = _forceRescanLoudnessOnNextRefresh;
+                        var oldForceDurationRescan = _forceRescanDurationOnNextRefresh;
                         var oldAutoRefreshIdleOnly = _autoRefreshOnlyWhenIdle;
                         var oldAutoRefreshIdleThreshold = _autoRefreshIdleThresholdMinutes;
                         var oldWebRemoteEnabled = _webRemoteEnabled;
@@ -10104,15 +9089,17 @@ namespace ReelRoulette
                     _backupSettingsEnabled = dialog.GetBackupSettingsEnabled();
                     _minimumSettingsBackupGapMinutes = dialog.GetMinimumSettingsBackupGapMinutes();
                     _numberOfSettingsBackups = dialog.GetNumberOfSettingsBackups();
-                    Log($"Settings: Backup settings changed - LibraryEnabled: {oldBackupEnabled} -> {_backupLibraryEnabled}, LibraryMinGap: {oldMinGap} -> {_minimumBackupGapMinutes} minutes, LibraryCount: {oldBackupCount} -> {_numberOfBackups}, SettingsEnabled: {oldSettingsBackupEnabled} -> {_backupSettingsEnabled}, SettingsMinGap: {oldSettingsMinGap} -> {_minimumSettingsBackupGapMinutes} minutes, SettingsCount: {oldSettingsBackupCount} -> {_numberOfSettingsBackups}");
+                    Log($"Settings: Backup settings changed - ServerEnabled: {oldBackupEnabled} -> {_backupLibraryEnabled}, ServerMinGap: {oldMinGap} -> {_minimumBackupGapMinutes} minutes, ServerCount: {oldBackupCount} -> {_numberOfBackups}, ClientEnabled: {oldSettingsBackupEnabled} -> {_backupSettingsEnabled}, ClientMinGap: {oldSettingsMinGap} -> {_minimumSettingsBackupGapMinutes} minutes, ClientCount: {oldSettingsBackupCount} -> {_numberOfSettingsBackups}");
                     
                     _autoRefreshSourcesEnabled = dialog.GetAutoRefreshSourcesEnabled();
                     _autoRefreshIntervalMinutes = Math.Clamp(dialog.GetAutoRefreshIntervalMinutes(), 5, 1440);
+                    _forceRescanLoudnessOnNextRefresh = dialog.GetForceRescanLoudness();
+                    _forceRescanDurationOnNextRefresh = dialog.GetForceRescanDuration();
                     _autoRefreshOnlyWhenIdle = false;
                     _autoRefreshIdleThresholdMinutes = 1;
                     _coreServerBaseUrl = dialog.GetCoreServerBaseUrl();
                     ClientLogRelay.SetBaseUrl(_coreServerBaseUrl);
-                    Log($"Settings: Auto-refresh settings changed - Enabled: {oldAutoRefreshEnabled} -> {_autoRefreshSourcesEnabled}, Interval: {oldAutoRefreshInterval} -> {_autoRefreshIntervalMinutes} minutes (idle settings are core-owned and disabled)");
+                    Log($"Settings: Auto-refresh settings changed - Enabled: {oldAutoRefreshEnabled} -> {_autoRefreshSourcesEnabled}, Interval: {oldAutoRefreshInterval} -> {_autoRefreshIntervalMinutes} minutes, ForceLoudness: {oldForceLoudnessRescan} -> {_forceRescanLoudnessOnNextRefresh}, ForceDuration: {oldForceDurationRescan} -> {_forceRescanDurationOnNextRefresh} (idle settings are core-owned and disabled)");
 
                     // Update Web UI settings
                     _webRemoteEnabled = dialog.GetWebRemoteEnabled();
@@ -10139,14 +9126,13 @@ namespace ReelRoulette
                             oldScalingMode != _imageScalingMode ||
                             oldFixedWidth != _fixedImageMaxWidth ||
                             oldFixedHeight != _fixedImageMaxHeight ||
-                            oldBackupEnabled != _backupLibraryEnabled ||
-                            oldMinGap != _minimumBackupGapMinutes ||
-                            oldBackupCount != _numberOfBackups ||
                             oldSettingsBackupEnabled != _backupSettingsEnabled ||
                             oldSettingsMinGap != _minimumSettingsBackupGapMinutes ||
                             oldSettingsBackupCount != _numberOfSettingsBackups ||
                             oldAutoRefreshEnabled != _autoRefreshSourcesEnabled ||
                             oldAutoRefreshInterval != _autoRefreshIntervalMinutes ||
+                            oldForceLoudnessRescan != _forceRescanLoudnessOnNextRefresh ||
+                            oldForceDurationRescan != _forceRescanDurationOnNextRefresh ||
                             oldAutoRefreshIdleOnly != _autoRefreshOnlyWhenIdle ||
                             oldAutoRefreshIdleThreshold != _autoRefreshIdleThresholdMinutes ||
                             oldWebRemoteEnabled != _webRemoteEnabled ||
@@ -10159,8 +9145,15 @@ namespace ReelRoulette
                         var autoRefreshChanged =
                             oldAutoRefreshEnabled != _autoRefreshSourcesEnabled ||
                             oldAutoRefreshInterval != _autoRefreshIntervalMinutes ||
+                            oldForceLoudnessRescan != _forceRescanLoudnessOnNextRefresh ||
+                            oldForceDurationRescan != _forceRescanDurationOnNextRefresh ||
                             oldAutoRefreshIdleOnly != _autoRefreshOnlyWhenIdle ||
                             oldAutoRefreshIdleThreshold != _autoRefreshIdleThresholdMinutes;
+
+                        var backupSettingsChanged =
+                            oldBackupEnabled != _backupLibraryEnabled ||
+                            oldMinGap != _minimumBackupGapMinutes ||
+                            oldBackupCount != _numberOfBackups;
 
                         var webRemoteChanged =
                             oldWebRemoteEnabled != _webRemoteEnabled ||
@@ -10171,6 +9164,59 @@ namespace ReelRoulette
                             !string.Equals(oldWebRemoteSharedToken ?? string.Empty, _webRemoteSharedToken ?? string.Empty, StringComparison.Ordinal);
                         var webRuntimeApplyFailed = false;
 
+                        if (backupSettingsChanged)
+                        {
+                            if (!_isCoreApiReachable)
+                            {
+                                _backupLibraryEnabled = oldBackupEnabled;
+                                _minimumBackupGapMinutes = oldMinGap;
+                                _numberOfBackups = oldBackupCount;
+                                _serverBackupSettingsWritable = false;
+                                SetStatusMessage("Failed to apply server backup settings: core API is unavailable. Changes were reverted.", 0);
+                                Log("Settings: Core API unavailable while applying server backup settings. Reverted local values.");
+                            }
+                            else
+                            {
+                                try
+                                {
+                                    using var backupSettingsTimeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(8));
+                                    var updated = await _coreServerApiClient.UpdateBackupSettingsAsync(_coreServerBaseUrl, new CoreBackupSettingsSnapshot
+                                    {
+                                        Enabled = _backupLibraryEnabled,
+                                        MinimumBackupGapMinutes = _minimumBackupGapMinutes,
+                                        NumberOfBackups = _numberOfBackups
+                                    }, backupSettingsTimeoutCts.Token);
+
+                                    if (updated != null)
+                                    {
+                                        _backupLibraryEnabled = updated.Enabled;
+                                        _minimumBackupGapMinutes = Math.Clamp(updated.MinimumBackupGapMinutes, 1, 10080);
+                                        _numberOfBackups = Math.Clamp(updated.NumberOfBackups, 1, 100);
+                                        _serverBackupSettingsWritable = true;
+                                        Log("Settings: Core backup settings updated via API.");
+                                    }
+                                    else
+                                    {
+                                        _backupLibraryEnabled = oldBackupEnabled;
+                                        _minimumBackupGapMinutes = oldMinGap;
+                                        _numberOfBackups = oldBackupCount;
+                                        _serverBackupSettingsWritable = false;
+                                        SetStatusMessage("Failed to apply server backup settings (empty API response). Changes were reverted.", 0);
+                                        Log("Settings: Core backup settings update returned no payload; reverted local values.");
+                                    }
+                                }
+                                catch (Exception ex)
+                                {
+                                    _backupLibraryEnabled = oldBackupEnabled;
+                                    _minimumBackupGapMinutes = oldMinGap;
+                                    _numberOfBackups = oldBackupCount;
+                                    _serverBackupSettingsWritable = false;
+                                    SetStatusMessage("Failed to apply server backup settings. Changes were reverted.", 0);
+                                    Log($"Settings: Failed to push core backup settings ({ex.Message}); reverted local values.");
+                                }
+                            }
+                        }
+
                         if (autoRefreshChanged && _isCoreApiReachable)
                         {
                             try
@@ -10179,13 +9225,17 @@ namespace ReelRoulette
                                 var updated = await _coreServerApiClient.UpdateRefreshSettingsAsync(_coreServerBaseUrl, new CoreRefreshSettingsSnapshot
                                 {
                                     AutoRefreshEnabled = _autoRefreshSourcesEnabled,
-                                    AutoRefreshIntervalMinutes = _autoRefreshIntervalMinutes
+                                    AutoRefreshIntervalMinutes = _autoRefreshIntervalMinutes,
+                                    ForceRescanLoudness = _forceRescanLoudnessOnNextRefresh,
+                                    ForceRescanDuration = _forceRescanDurationOnNextRefresh
                                 }, refreshSettingsTimeoutCts.Token);
 
                                 if (updated != null)
                                 {
                                     _autoRefreshSourcesEnabled = updated.AutoRefreshEnabled;
                                     _autoRefreshIntervalMinutes = Math.Clamp(updated.AutoRefreshIntervalMinutes, 5, 1440);
+                                    _forceRescanLoudnessOnNextRefresh = updated.ForceRescanLoudness;
+                                    _forceRescanDurationOnNextRefresh = updated.ForceRescanDuration;
                                     _autoRefreshOnlyWhenIdle = false;
                                     _autoRefreshIdleThresholdMinutes = 1;
                                     Log("Settings: Core refresh settings updated via API.");
@@ -10972,7 +10022,7 @@ namespace ReelRoulette
         {
             Log("UI ACTION: ManageTagsForCurrentVideo button clicked");
 
-            if (_libraryIndex == null || _libraryService == null)
+            if (_libraryIndex == null)
             {
                 Log("ManageTagsForCurrentVideo_Click: Library system not available");
                 StatusTextBlock.Text = "Library system not available.";
@@ -10982,7 +10032,7 @@ namespace ReelRoulette
             var items = new List<LibraryItem>();
             if (!string.IsNullOrEmpty(_currentVideoPath))
             {
-                var item = _libraryService.FindItemByPath(_currentVideoPath);
+                var item = FindProjectionItemByPath(_currentVideoPath);
                 if (item == null)
                 {
                     Log($"ManageTagsForCurrentVideo_Click: Could not find library item for path: {_currentVideoPath}; opening tag editor with no selected item.");
@@ -10996,7 +10046,7 @@ namespace ReelRoulette
             Log(items.Count > 0
                 ? $"ManageTagsForCurrentVideo_Click: Opening tags dialog for current video: {items[0].FileName}"
                 : "ManageTagsForCurrentVideo_Click: Opening tags dialog with no selected item.");
-            var dialog = new ItemTagsDialog(items, _libraryIndex, _libraryService, this, _filterPresets);
+            var dialog = new ItemTagsDialog(items, _libraryIndex, this);
             var result = await dialog.ShowDialog<bool?>(this);
             
             if (result == true)
@@ -11006,13 +10056,6 @@ namespace ReelRoulette
                     : "ManageTagsForCurrentVideo_Click: Tag catalog updated (no selected item)");
                 // Save filter presets (in case tags were renamed/deleted)
                 SaveSettings();
-                // Refresh library index reference
-                _libraryIndex = _libraryService.LibraryIndex;
-                // Update library panel if visible
-                if (_showLibraryPanel)
-                {
-                    UpdateLibraryPanel();
-                }
                 // Update stats for current video
                 UpdateCurrentFileStatsUi();
                 StatusTextBlock.Text = items.Count > 0
@@ -11045,16 +10088,19 @@ namespace ReelRoulette
             {
                 try
                 {
-                    var success = await _coreServerApiClient.SetBlacklistAsync(_coreServerBaseUrl, path, isBlacklisted);
-                    if (!success)
+                    var state = await _coreServerApiClient.SetBlacklistWithStateAsync(
+                        _coreServerBaseUrl,
+                        path,
+                        isBlacklisted,
+                        _coreClientId,
+                        _coreSessionId);
+                    if (state == null)
                     {
                         SetStatusMessage("Core runtime rejected blacklist update.", 0);
                         return;
                     }
 
-                    var priorItem = _libraryService.FindItemByPath(path);
-                    var projectedFavorite = isBlacklisted ? false : (priorItem?.IsFavorite ?? false);
-                    ApplyRemoteItemStateProjection(path, projectedFavorite, isBlacklisted, isBlacklisted
+                    ApplyRemoteItemStateProjection(state.Path, state.IsFavorite, state.IsBlacklisted, state.IsBlacklisted
                         ? $"Blacklisted: {System.IO.Path.GetFileName(path)}"
                         : $"Removed from blacklist: {System.IO.Path.GetFileName(path)}");
                     return;
@@ -11096,7 +10142,8 @@ namespace ReelRoulette
             bool isBlacklisted = false;
             if (_currentVideoPath != null && _libraryIndex != null)
             {
-                var item = _libraryService.FindItemByPath(_currentVideoPath);
+                var item = _libraryIndex.Items.FirstOrDefault(candidate =>
+                    string.Equals(candidate.FullPath, _currentVideoPath, StringComparison.OrdinalIgnoreCase));
                 if (item != null)
                 {
                     isFavorite = item.IsFavorite;
@@ -11172,7 +10219,7 @@ namespace ReelRoulette
             if (string.IsNullOrEmpty(path) || _libraryIndex == null)
                 return null;
                 
-            var item = _libraryService.FindItemByPath(path);
+            var item = FindProjectionItemByPath(path);
             if (item == null || !item.HasAudio.HasValue || item.HasAudio != true)
                 return null;
                 

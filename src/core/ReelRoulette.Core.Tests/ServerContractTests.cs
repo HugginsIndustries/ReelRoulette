@@ -99,8 +99,20 @@ public sealed class ServerContractTests
     public void ReplayAfter_ShouldReturnBufferedEventsWithoutGap()
     {
         var service = new ServerStateService();
-        service.SetFavorite(new FavoriteRequest { Path = "a.mp4", IsFavorite = true });
-        service.SetBlacklist(new BlacklistRequest { Path = "b.mp4", IsBlacklisted = true });
+        service.PublishExternal("itemStateChanged", new ItemStateChangedPayload
+        {
+            ItemId = "a",
+            Path = "a.mp4",
+            IsFavorite = true,
+            IsBlacklisted = false
+        });
+        service.PublishExternal("itemStateChanged", new ItemStateChangedPayload
+        {
+            ItemId = "b",
+            Path = "b.mp4",
+            IsFavorite = false,
+            IsBlacklisted = true
+        });
 
         var replay = service.GetReplayAfter(1);
         Assert.False(replay.GapDetected);
@@ -109,18 +121,23 @@ public sealed class ServerContractTests
     }
 
     [Fact]
-    public void LibraryStates_ShouldEnforceFavoriteBlacklistMutualExclusion()
+    public void PublishExternal_ShouldIncludeCanonicalItemStatePayload()
     {
         var service = new ServerStateService();
-        service.SetFavorite(new FavoriteRequest { Path = "movie.mp4", IsFavorite = true });
-        service.SetBlacklist(new BlacklistRequest { Path = "movie.mp4", IsBlacklisted = true });
+        var envelope = service.PublishExternal("itemStateChanged", new ItemStateChangedPayload
+        {
+            ItemId = "movie",
+            Path = "movie.mp4",
+            IsFavorite = false,
+            IsBlacklisted = true
+        });
 
-        var states = service.GetLibraryStates(new LibraryStatesRequest { Paths = ["movie.mp4"] });
-        var state = Assert.Single(states);
-        Assert.Equal("movie.mp4", state.Path);
-        Assert.False(state.IsFavorite);
-        Assert.True(state.IsBlacklisted);
-        Assert.True(state.Revision > 0);
+        Assert.Equal("itemStateChanged", envelope.EventType);
+        var payload = Assert.IsType<ItemStateChangedPayload>(envelope.Payload);
+        Assert.Equal("movie.mp4", payload.Path);
+        Assert.False(payload.IsFavorite);
+        Assert.True(payload.IsBlacklisted);
+        Assert.True(envelope.Revision > 0);
     }
 
     [Fact]

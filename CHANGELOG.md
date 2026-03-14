@@ -10,6 +10,8 @@ This file follows a Keep a Changelog style format.
 - Add startup-launch host support for `ReelRoulette.ServerApp` (Windows `HKCU` registration), including control-plane APIs and tray/Operator toggles for immediate apply behavior.
 - Add installer desktop-shortcut task options with default-checked behavior for both server and desktop installers.
 - Add Material Symbols desktop icon-font foundation (`assets/fonts/MaterialSymbolsOutlined.var.ttf`) with shared glyph styles and grid-tile favorite/blacklist overlays.
+- Add core-authoritative contracts/client support for library stats, library item state reads, and backup settings synchronization.
+- Add one-shot `Force Rescan (Loudness)` and `Force Rescan (Duration)` settings flow from desktop settings to the core refresh pipeline.
 
 ### Changed
 
@@ -20,12 +22,19 @@ This file follows a Keep a Changelog style format.
 - Introduce exact logical grid-row virtualization (`top spacer + visible rows + bottom spacer`) backed by deterministic row-offset indexing and binary-search visible-window selection.
 - Add anchor/inset viewport restore, drag-authoritative coalescing, and targeted `last.log` virtualizer diagnostics for deep-scroll update behavior.
 - Add top-right favorite/blacklist indicators on grid thumbnails using Material Symbols with real-time visibility updates.
+- Finalize server-authoritative desktop library behavior by removing `LibraryService` and routing favorites/blacklist, tags/categories, playback stats, refresh triggers, and library remove flows through core API + SSE reconciliation.
+- Consolidate mutation authority on the server (`LibraryOperationsService` persistence-first, `ServerStateService` event publication), and align mutation responses for canonical client reconciliation.
+- Move Manage Sources statistics to server-owned `/api/library/stats` and harden source/media counting for legacy library data shapes.
+- Finalize backup ownership split: server manages `library.json`/`core-settings.json` backups with no-churn gap policy and retention trimming; desktop backup scope is `desktop-settings.json` only.
+- Improve tag/category apply performance by removing redundant full projection sync/rebuild triggers and relying on targeted SSE-driven updates.
 
 ### Fixed
 
 - Improve grid-view scrollbar stability by combining exact row-offset virtualization with drag-aware update gating and anchor/inset offset restoration.
 - Keep projection sync as the single trigger for core refresh completion updates to the library panel.
 - Improve dynamic-filter refresh behavior (for example `OnlyNeverPlayed`) by adding targeted panel refresh triggers for playback/stat and metadata-related filter changes.
+- Ensure playback projection updates apply for same-session events via authoritative projection sync instead of local writebacks.
+- Fix edit-tag category display so newly created categories resolve to human-readable names instead of fallback GUID text.
 
 ## v0.10.0 - Platform and Experience Update (2026-03-11)
 

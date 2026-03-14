@@ -288,6 +288,11 @@ public static class ServerHostComposition
             return Results.Json(operations.GetLibraryProjection());
         });
 
+        app.MapGet("/api/library/stats", (LibraryOperationsService operations) =>
+        {
+            return Results.Ok(operations.GetLibraryStats());
+        });
+
         app.MapPost("/api/sources/{sourceId}/enabled", (string sourceId, UpdateSourceEnabledRequest request, ServerStateService state) =>
         {
             if (string.IsNullOrWhiteSpace(sourceId))
@@ -319,15 +324,16 @@ public static class ServerHostComposition
             return Results.Ok(response);
         });
 
-        app.MapPost("/api/random", (RandomRequest request, ServerStateService state, LibraryPlaybackService playback, OperatorTestingService testingService) =>
+        app.MapPost("/api/random", (RandomRequest request, ServerStateService state, LibraryPlaybackService playback, LibraryOperationsService operations, OperatorTestingService testingService) =>
         {
             request.ClientId = NormalizeOptionalIdentity(request.ClientId);
             request.SessionId = NormalizeOptionalIdentity(request.SessionId);
+            var tagModel = operations.GetTagEditorModel(new TagEditorModelRequest());
             if (!playback.TrySelectRandom(
                     request,
                     state.GetPresetCatalogSnapshot(),
-                    state.GetTagCategoriesSnapshot(),
-                    state.GetTagsSnapshot(),
+                    tagModel.Categories,
+                    tagModel.Tags,
                     out var response,
                     out var statusCode,
                     out var error))
@@ -362,29 +368,55 @@ public static class ServerHostComposition
             return Results.File(fullPath, contentType, enableRangeProcessing: true);
         });
 
-        app.MapPost("/api/favorite", (FavoriteRequest request, ServerStateService state) =>
+        app.MapPost("/api/favorite", (FavoriteRequest request, ServerStateService state, LibraryOperationsService operations) =>
         {
             if (string.IsNullOrWhiteSpace(request.Path))
             {
                 return Results.BadRequest(new { error = "path is required" });
             }
 
-            state.SetFavorite(request);
-            return Results.Ok();
+            var persisted = operations.SetFavorite(request.Path, request.IsFavorite);
+            if (persisted == null)
+            {
+                return Results.NotFound(new { error = "path not found in library" });
+            }
+
+            var envelope = state.PublishExternal("itemStateChanged", new ItemStateChangedPayload
+            {
+                ItemId = persisted.ItemId,
+                Path = persisted.Path,
+                IsFavorite = persisted.IsFavorite,
+                IsBlacklisted = persisted.IsBlacklisted
+            });
+            persisted.Revision = envelope.Revision;
+            return Results.Ok(persisted);
         });
 
-        app.MapPost("/api/blacklist", (BlacklistRequest request, ServerStateService state) =>
+        app.MapPost("/api/blacklist", (BlacklistRequest request, ServerStateService state, LibraryOperationsService operations) =>
         {
             if (string.IsNullOrWhiteSpace(request.Path))
             {
                 return Results.BadRequest(new { error = "path is required" });
             }
 
-            state.SetBlacklist(request);
-            return Results.Ok();
+            var persisted = operations.SetBlacklist(request.Path, request.IsBlacklisted);
+            if (persisted == null)
+            {
+                return Results.NotFound(new { error = "path not found in library" });
+            }
+
+            var envelope = state.PublishExternal("itemStateChanged", new ItemStateChangedPayload
+            {
+                ItemId = persisted.ItemId,
+                Path = persisted.Path,
+                IsFavorite = persisted.IsFavorite,
+                IsBlacklisted = persisted.IsBlacklisted
+            });
+            persisted.Revision = envelope.Revision;
+            return Results.Ok(persisted);
         });
 
-        app.MapPost("/api/record-playback", (RecordPlaybackRequest request, ServerStateService state) =>
+        app.MapPost("/api/record-playback", (RecordPlaybackRequest request, ServerStateService state, LibraryOperationsService operations) =>
         {
             if (string.IsNullOrWhiteSpace(request.Path))
             {
@@ -393,105 +425,286 @@ public static class ServerHostComposition
 
             request.ClientId = NormalizeOptionalIdentity(request.ClientId);
             request.SessionId = NormalizeOptionalIdentity(request.SessionId);
-            state.RecordPlayback(request);
-            return Results.Ok();
+            var recorded = operations.RecordPlayback(request.Path);
+            if (!recorded.Found)
+            {
+                return Results.NotFound(new { error = "path not found in library" });
+            }
+
+            var envelope = state.PublishExternal("playbackRecorded", new PlaybackRecordedPayload
+            {
+                Path = request.Path,
+                ClientId = request.ClientId,
+                SessionId = request.SessionId,
+                PlayCount = recorded.PlayCount,
+                LastPlayedUtc = recorded.LastPlayedUtc
+            });
+            return Results.Ok(new
+            {
+                accepted = true,
+                revision = envelope.Revision,
+                playCount = recorded.PlayCount,
+                lastPlayedUtc = recorded.LastPlayedUtc
+            });
         });
 
-        app.MapPost("/api/playback/clear-stats", (ClearPlaybackStatsRequest request, LibraryOperationsService operations) =>
+        app.MapPost("/api/playback/clear-stats", (ClearPlaybackStatsRequest request, LibraryOperationsService operations, ServerStateService state) =>
         {
-            return Results.Ok(operations.ClearPlaybackStats(request));
+            var response = operations.ClearPlaybackStats(request);
+            if (response.ClearedCount > 0)
+            {
+                state.PublishExternal("resyncRequired", new
+                {
+                    reason = "playbackStatsCleared"
+                });
+            }
+
+            return Results.Ok(response);
         });
 
-        app.MapPost("/api/library-states", (LibraryStatesRequest request, ServerStateService state) =>
+        app.MapPost("/api/library-states", (LibraryStatesRequest request, LibraryOperationsService operations) =>
         {
             request.ClientId = NormalizeOptionalIdentity(request.ClientId);
             request.SessionId = NormalizeOptionalIdentity(request.SessionId);
-            var states = state.GetLibraryStates(request);
+            var states = operations.GetLibraryStates(request);
             return Results.Ok(states);
         });
 
-        app.MapPost("/api/tag-editor/model", (TagEditorModelRequest request, ServerStateService state) =>
+        app.MapPost("/api/tag-editor/model", (TagEditorModelRequest request, LibraryOperationsService operations) =>
         {
-            var model = state.GetTagEditorModel(request);
+            var model = operations.GetTagEditorModel(request);
             return Results.Ok(model);
         });
 
-        app.MapPost("/api/tag-editor/apply-item-tags", (ApplyItemTagsRequest request, ServerStateService state) =>
+        app.MapPost("/api/tag-editor/apply-item-tags", (ApplyItemTagsRequest request, ServerStateService state, LibraryOperationsService operations) =>
         {
             if (request.ItemIds.Count == 0)
             {
                 return Results.BadRequest(new { error = "itemIds must contain at least one id" });
             }
 
-            state.ApplyItemTags(request);
-            return Results.Ok();
+            var accepted = operations.ApplyItemTags(request, out var catalogChanged);
+            if (!accepted)
+            {
+                return Results.Json(new { error = "apply rejected or produced no changes" }, statusCode: StatusCodes.Status409Conflict);
+            }
+
+            var itemTagsEnvelope = state.PublishExternal("itemTagsChanged", new ItemTagsChangedPayload
+            {
+                ItemIds = request.ItemIds,
+                AddedTags = request.AddTags,
+                RemovedTags = request.RemoveTags
+            });
+            var model = operations.GetTagEditorModel(new TagEditorModelRequest());
+            ServerEventEnvelope? catalogEnvelope = null;
+            if (catalogChanged)
+            {
+                catalogEnvelope = state.PublishExternal("tagCatalogChanged", new TagCatalogChangedPayload
+                {
+                    Reason = "applyItemTags",
+                    Categories = model.Categories,
+                    Tags = model.Tags
+                });
+            }
+
+            return Results.Ok(new
+            {
+                accepted = true,
+                itemTagsRevision = itemTagsEnvelope.Revision,
+                tagCatalogRevision = catalogEnvelope?.Revision,
+                categories = model.Categories,
+                tags = model.Tags
+            });
         });
 
-        app.MapPost("/api/tag-editor/upsert-category", (UpsertCategoryRequest request, ServerStateService state) =>
+        app.MapPost("/api/tag-editor/upsert-category", (UpsertCategoryRequest request, ServerStateService state, LibraryOperationsService operations) =>
         {
             if (string.IsNullOrWhiteSpace(request.Id) || string.IsNullOrWhiteSpace(request.Name))
             {
                 return Results.BadRequest(new { error = "id and name are required" });
             }
 
-            state.UpsertCategory(request);
-            return Results.Ok();
+            var accepted = operations.UpsertCategory(request);
+            if (!accepted)
+            {
+                return Results.Json(new { error = "upsert category rejected or produced no changes" }, statusCode: StatusCodes.Status409Conflict);
+            }
+
+            var model = operations.GetTagEditorModel(new TagEditorModelRequest());
+            var envelope = state.PublishExternal("tagCatalogChanged", new TagCatalogChangedPayload
+            {
+                Reason = "upsertCategory",
+                Categories = model.Categories,
+                Tags = model.Tags
+            });
+            return Results.Ok(new
+            {
+                accepted = true,
+                revision = envelope.Revision,
+                categories = model.Categories,
+                tags = model.Tags
+            });
         });
 
-        app.MapPost("/api/tag-editor/upsert-tag", (UpsertTagRequest request, ServerStateService state) =>
+        app.MapPost("/api/tag-editor/upsert-tag", (UpsertTagRequest request, ServerStateService state, LibraryOperationsService operations) =>
         {
             if (string.IsNullOrWhiteSpace(request.Name))
             {
                 return Results.BadRequest(new { error = "name is required" });
             }
 
-            state.UpsertTag(request);
-            return Results.Ok();
+            var accepted = operations.UpsertTag(request);
+            if (!accepted)
+            {
+                return Results.Json(new { error = "upsert tag rejected or produced no changes" }, statusCode: StatusCodes.Status409Conflict);
+            }
+
+            var model = operations.GetTagEditorModel(new TagEditorModelRequest());
+            var envelope = state.PublishExternal("tagCatalogChanged", new TagCatalogChangedPayload
+            {
+                Reason = "upsertTag",
+                Categories = model.Categories,
+                Tags = model.Tags
+            });
+            return Results.Ok(new
+            {
+                accepted = true,
+                revision = envelope.Revision,
+                categories = model.Categories,
+                tags = model.Tags
+            });
         });
 
-        app.MapPost("/api/tag-editor/rename-tag", (RenameTagRequest request, ServerStateService state) =>
+        app.MapPost("/api/tag-editor/rename-tag", (RenameTagRequest request, ServerStateService state, LibraryOperationsService operations) =>
         {
             if (string.IsNullOrWhiteSpace(request.OldName) || string.IsNullOrWhiteSpace(request.NewName))
             {
                 return Results.BadRequest(new { error = "oldName and newName are required" });
             }
 
-            state.RenameTag(request);
-            return Results.Ok();
+            var accepted = operations.RenameTag(request);
+            if (!accepted)
+            {
+                return Results.Json(new { error = "rename tag rejected or produced no changes" }, statusCode: StatusCodes.Status409Conflict);
+            }
+
+            _ = state.RenameTagInPresetCatalogOnly(request.OldName, request.NewName);
+            var model = operations.GetTagEditorModel(new TagEditorModelRequest());
+            var envelope = state.PublishExternal("tagCatalogChanged", new TagCatalogChangedPayload
+            {
+                Reason = "renameTag",
+                Categories = model.Categories,
+                Tags = model.Tags
+            });
+            return Results.Ok(new
+            {
+                accepted = true,
+                revision = envelope.Revision,
+                categories = model.Categories,
+                tags = model.Tags
+            });
         });
 
-        app.MapPost("/api/tag-editor/delete-tag", (DeleteTagRequest request, ServerStateService state) =>
+        app.MapPost("/api/tag-editor/delete-tag", (DeleteTagRequest request, ServerStateService state, LibraryOperationsService operations) =>
         {
             if (string.IsNullOrWhiteSpace(request.Name))
             {
                 return Results.BadRequest(new { error = "name is required" });
             }
 
-            state.DeleteTag(request);
-            return Results.Ok();
+            var accepted = operations.DeleteTag(request);
+            if (!accepted)
+            {
+                return Results.Json(new { error = "delete tag rejected or produced no changes" }, statusCode: StatusCodes.Status409Conflict);
+            }
+
+            _ = state.RemoveTagFromPresetCatalogOnly(request.Name);
+            var model = operations.GetTagEditorModel(new TagEditorModelRequest());
+            var envelope = state.PublishExternal("tagCatalogChanged", new TagCatalogChangedPayload
+            {
+                Reason = "deleteTag",
+                Categories = model.Categories,
+                Tags = model.Tags
+            });
+            return Results.Ok(new
+            {
+                accepted = true,
+                revision = envelope.Revision,
+                categories = model.Categories,
+                tags = model.Tags
+            });
         });
 
-        app.MapPost("/api/tag-editor/delete-category", (DeleteCategoryRequest request, ServerStateService state) =>
+        app.MapPost("/api/tag-editor/delete-category", (DeleteCategoryRequest request, ServerStateService state, LibraryOperationsService operations) =>
         {
             if (string.IsNullOrWhiteSpace(request.CategoryId))
             {
                 return Results.BadRequest(new { error = "categoryId is required" });
             }
 
-            state.DeleteCategory(request);
-            return Results.Ok();
+            var accepted = operations.DeleteCategory(request);
+            if (!accepted)
+            {
+                return Results.Json(new { error = "delete category rejected or produced no changes" }, statusCode: StatusCodes.Status409Conflict);
+            }
+
+            var model = operations.GetTagEditorModel(new TagEditorModelRequest());
+            var envelope = state.PublishExternal("tagCatalogChanged", new TagCatalogChangedPayload
+            {
+                Reason = "deleteCategory",
+                Categories = model.Categories,
+                Tags = model.Tags
+            });
+            return Results.Ok(new
+            {
+                accepted = true,
+                revision = envelope.Revision,
+                categories = model.Categories,
+                tags = model.Tags
+            });
         });
 
-        app.MapPost("/api/tag-editor/sync-catalog", (SyncTagCatalogRequest request, ServerStateService state) =>
+        app.MapPost("/api/tag-editor/sync-catalog", (SyncTagCatalogRequest request, ServerStateService state, LibraryOperationsService operations) =>
         {
-            state.SyncTagCatalog(request);
-            return Results.Ok();
+            var accepted = operations.SyncTagCatalog(request);
+            var model = operations.GetTagEditorModel(new TagEditorModelRequest());
+            var envelope = state.PublishExternal("tagCatalogChanged", new TagCatalogChangedPayload
+            {
+                Reason = "syncCatalog",
+                Categories = model.Categories,
+                Tags = model.Tags
+            });
+            return Results.Ok(new
+            {
+                accepted,
+                revision = envelope.Revision,
+                categories = model.Categories,
+                tags = model.Tags
+            });
         });
 
-        app.MapPost("/api/tag-editor/sync-item-tags", (SyncItemTagsRequest request, ServerStateService state) =>
+        app.MapPost("/api/tag-editor/sync-item-tags", (SyncItemTagsRequest request, ServerStateService state, LibraryOperationsService operations) =>
         {
-            state.SyncItemTags(request);
-            return Results.Ok();
+            var accepted = operations.SyncItemTags(request);
+            if (!accepted)
+            {
+                return Results.Json(new { error = "sync item tags rejected or produced no changes" }, statusCode: StatusCodes.Status409Conflict);
+            }
+
+            var envelope = state.PublishExternal("itemTagsChanged", new ItemTagsChangedPayload
+            {
+                ItemIds = request.Items.Select(item => item.ItemId).Where(itemId => !string.IsNullOrWhiteSpace(itemId)).ToList(),
+                AddedTags = [],
+                RemovedTags = []
+            });
+            var model = operations.GetTagEditorModel(new TagEditorModelRequest());
+            return Results.Ok(new
+            {
+                accepted = true,
+                revision = envelope.Revision,
+                categories = model.Categories,
+                tags = model.Tags
+            });
         });
 
         app.MapPost("/api/refresh/start", (RefreshStartRequest? request, RefreshPipelineService refresh) =>
@@ -520,6 +733,16 @@ public static class ServerHostComposition
             return Results.Ok(settings.UpdateRefreshSettings(snapshot));
         });
 
+        app.MapGet("/api/backup/settings", (CoreSettingsService settings) =>
+        {
+            return Results.Ok(settings.GetBackupSettings());
+        });
+
+        app.MapPost("/api/backup/settings", (BackupSettingsSnapshot snapshot, CoreSettingsService settings) =>
+        {
+            return Results.Ok(settings.UpdateBackupSettings(snapshot));
+        });
+
         app.MapPost("/api/duplicates/scan", (DuplicateScanRequest request, LibraryOperationsService operations) =>
         {
             return Results.Ok(operations.ScanDuplicates(request));
@@ -537,22 +760,30 @@ public static class ServerHostComposition
 
         app.MapPost("/api/autotag/apply", (AutoTagApplyRequest request, LibraryOperationsService operations, ServerStateService state) =>
         {
-            foreach (var assignment in request.Assignments)
+            var response = operations.ApplyAutoTags(request);
+            if (response.AssignmentsAdded > 0)
             {
-                if (string.IsNullOrWhiteSpace(assignment.TagName) || assignment.ItemPaths.Count == 0)
+                state.PublishExternal("itemTagsChanged", new ItemTagsChangedPayload
                 {
-                    continue;
-                }
+                    ItemIds = response.ChangedItemPaths,
+                    AddedTags = request.Assignments
+                        .Select(assignment => assignment.TagName)
+                        .Where(tag => !string.IsNullOrWhiteSpace(tag))
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToList(),
+                    RemovedTags = []
+                });
 
-                state.ApplyItemTags(new ApplyItemTagsRequest
+                var model = operations.GetTagEditorModel(new TagEditorModelRequest());
+                state.PublishExternal("tagCatalogChanged", new TagCatalogChangedPayload
                 {
-                    ItemIds = assignment.ItemPaths,
-                    AddTags = [assignment.TagName],
-                    RemoveTags = []
+                    Reason = "autotagApply",
+                    Categories = model.Categories,
+                    Tags = model.Tags
                 });
             }
 
-            return Results.Ok(operations.ApplyAutoTags(request));
+            return Results.Ok(response);
         });
 
         app.MapPost("/api/logs/client", (ClientLogRequest request, LibraryOperationsService operations) =>

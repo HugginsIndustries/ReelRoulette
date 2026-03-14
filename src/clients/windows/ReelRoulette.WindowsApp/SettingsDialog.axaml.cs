@@ -351,10 +351,13 @@ namespace ReelRoulette
         private bool _backupSettingsEnabled = true;
         private int _minimumSettingsBackupGapMinutes = 15;
         private int _numberOfSettingsBackups = 10;
+        private bool _serverBackupSettingsEnabled = true;
         
         // Auto-refresh settings
         private bool _autoRefreshSourcesEnabled = true;
         private int _autoRefreshIntervalMinutes = 60;
+        private bool _forceRescanLoudness;
+        private bool _forceRescanDuration;
         private bool _autoRefreshOnlyWhenIdle = true;
         private int _autoRefreshIdleThresholdMinutes = 3;
         private string _coreServerBaseUrl = "http://localhost:45123";
@@ -520,6 +523,22 @@ namespace ReelRoulette
                 }
             }
         }
+
+        public bool ServerBackupSettingsEnabled
+        {
+            get => _serverBackupSettingsEnabled;
+            set
+            {
+                if (_serverBackupSettingsEnabled != value)
+                {
+                    _serverBackupSettingsEnabled = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(IsServerBackupReadOnlyHintVisible));
+                }
+            }
+        }
+
+        public bool IsServerBackupReadOnlyHintVisible => !_serverBackupSettingsEnabled;
         
         public bool AutoRefreshSourcesEnabled
         {
@@ -542,6 +561,32 @@ namespace ReelRoulette
                 if (_autoRefreshIntervalMinutes != value)
                 {
                     _autoRefreshIntervalMinutes = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public bool ForceRescanLoudness
+        {
+            get => _forceRescanLoudness;
+            set
+            {
+                if (_forceRescanLoudness != value)
+                {
+                    _forceRescanLoudness = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public bool ForceRescanDuration
+        {
+            get => _forceRescanDuration;
+            set
+            {
+                if (_forceRescanDuration != value)
+                {
+                    _forceRescanDuration = value;
                     OnPropertyChanged();
                 }
             }
@@ -710,8 +755,11 @@ namespace ReelRoulette
             bool backupSettingsEnabled = true,
             int minimumSettingsBackupGapMinutes = 15,
             int numberOfSettingsBackups = 10,
+            bool serverBackupSettingsEnabled = true,
             bool autoRefreshSourcesEnabled = true,
             int autoRefreshIntervalMinutes = 60,
+            bool forceRescanLoudness = false,
+            bool forceRescanDuration = false,
             bool autoRefreshOnlyWhenIdle = true,
             int autoRefreshIdleThresholdMinutes = 3,
             string? coreServerBaseUrl = "http://localhost:45123",
@@ -837,14 +885,21 @@ namespace ReelRoulette
             OnPropertyChanged(nameof(BackupSettingsEnabled));
             OnPropertyChanged(nameof(MinimumSettingsBackupGapMinutes));
             OnPropertyChanged(nameof(NumberOfSettingsBackups));
+            _serverBackupSettingsEnabled = serverBackupSettingsEnabled;
+            OnPropertyChanged(nameof(ServerBackupSettingsEnabled));
+            OnPropertyChanged(nameof(IsServerBackupReadOnlyHintVisible));
             
             // Auto-refresh settings
             _autoRefreshSourcesEnabled = autoRefreshSourcesEnabled;
             _autoRefreshIntervalMinutes = autoRefreshIntervalMinutes;
+            _forceRescanLoudness = forceRescanLoudness;
+            _forceRescanDuration = forceRescanDuration;
             _autoRefreshOnlyWhenIdle = autoRefreshOnlyWhenIdle;
             _autoRefreshIdleThresholdMinutes = autoRefreshIdleThresholdMinutes;
             OnPropertyChanged(nameof(AutoRefreshSourcesEnabled));
             OnPropertyChanged(nameof(AutoRefreshIntervalMinutes));
+            OnPropertyChanged(nameof(ForceRescanLoudness));
+            OnPropertyChanged(nameof(ForceRescanDuration));
             OnPropertyChanged(nameof(AutoRefreshOnlyWhenIdle));
             OnPropertyChanged(nameof(AutoRefreshIdleThresholdMinutes));
             OnPropertyChanged(nameof(AutoRefreshIdleThresholdEnabled));
@@ -900,6 +955,8 @@ namespace ReelRoulette
         public int GetNumberOfSettingsBackups() => _numberOfSettingsBackups;
         public bool GetAutoRefreshSourcesEnabled() => _autoRefreshSourcesEnabled;
         public int GetAutoRefreshIntervalMinutes() => _autoRefreshIntervalMinutes;
+        public bool GetForceRescanLoudness() => _forceRescanLoudness;
+        public bool GetForceRescanDuration() => _forceRescanDuration;
         public bool GetAutoRefreshOnlyWhenIdle() => _autoRefreshOnlyWhenIdle;
         public int GetAutoRefreshIdleThresholdMinutes() => _autoRefreshIdleThresholdMinutes;
         public string GetCoreServerBaseUrl() => string.IsNullOrWhiteSpace(_coreServerBaseUrl) ? "http://localhost:45123" : _coreServerBaseUrl.Trim();
@@ -936,11 +993,11 @@ namespace ReelRoulette
             }
             
             // Validate backup settings
-            if (_minimumBackupGapMinutes < 1 || _minimumBackupGapMinutes > 60)
+            if (_minimumBackupGapMinutes < 1 || _minimumBackupGapMinutes > 10080)
             {
                 return false;
             }
-            if (_numberOfBackups < 1 || _numberOfBackups > 30)
+            if (_numberOfBackups < 1 || _numberOfBackups > 100)
             {
                 return false;
             }

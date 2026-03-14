@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
@@ -96,6 +97,18 @@ public sealed class CoreServerApiClient
         return await JsonSerializer.DeserializeAsync<JsonElement>(stream, _serializerOptions, cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<CoreLibraryStatsResponse?> GetLibraryStatsAsync(string baseUrl, CancellationToken cancellationToken = default)
+    {
+        using var response = await _httpClient.GetAsync($"{baseUrl.TrimEnd('/')}/api/library/stats", cancellationToken).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        return await JsonSerializer.DeserializeAsync<CoreLibraryStatsResponse>(stream, _serializerOptions, cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task<CoreSourceResponse?> UpdateSourceEnabledAsync(string baseUrl, string sourceId, bool isEnabled, CancellationToken cancellationToken = default)
     {
         var request = new CoreUpdateSourceEnabledRequest { IsEnabled = isEnabled };
@@ -118,6 +131,25 @@ public sealed class CoreServerApiClient
         return response.IsSuccessStatusCode;
     }
 
+    public async Task<CoreLibraryStateResponse?> SetFavoriteWithStateAsync(
+        string baseUrl,
+        string path,
+        bool isFavorite,
+        string? clientId = null,
+        string? sessionId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var accepted = await SetFavoriteAsync(baseUrl, path, isFavorite, cancellationToken).ConfigureAwait(false);
+        if (!accepted)
+        {
+            return null;
+        }
+
+        var states = await GetLibraryStatesAsync(baseUrl, [path], clientId, sessionId, cancellationToken).ConfigureAwait(false);
+        return states?.FirstOrDefault(state =>
+            string.Equals(state.Path, path, StringComparison.OrdinalIgnoreCase));
+    }
+
     public async Task<bool> SetBlacklistAsync(string baseUrl, string path, bool isBlacklisted, CancellationToken cancellationToken = default)
     {
         var request = new { path, isBlacklisted };
@@ -126,12 +158,55 @@ public sealed class CoreServerApiClient
         return response.IsSuccessStatusCode;
     }
 
+    public async Task<CoreLibraryStateResponse?> SetBlacklistWithStateAsync(
+        string baseUrl,
+        string path,
+        bool isBlacklisted,
+        string? clientId = null,
+        string? sessionId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var accepted = await SetBlacklistAsync(baseUrl, path, isBlacklisted, cancellationToken).ConfigureAwait(false);
+        if (!accepted)
+        {
+            return null;
+        }
+
+        var states = await GetLibraryStatesAsync(baseUrl, [path], clientId, sessionId, cancellationToken).ConfigureAwait(false);
+        return states?.FirstOrDefault(state =>
+            string.Equals(state.Path, path, StringComparison.OrdinalIgnoreCase));
+    }
+
     public async Task<bool> RecordPlaybackAsync(string baseUrl, string path, string clientId, string? sessionId = null, CancellationToken cancellationToken = default)
     {
         var request = new { path, clientId, sessionId };
         using var content = SerializeJson(request);
         using var response = await _httpClient.PostAsync($"{baseUrl.TrimEnd('/')}/api/record-playback", content, cancellationToken).ConfigureAwait(false);
         return response.IsSuccessStatusCode;
+    }
+
+    public async Task<List<CoreLibraryStateResponse>?> GetLibraryStatesAsync(
+        string baseUrl,
+        List<string>? paths = null,
+        string? clientId = null,
+        string? sessionId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var request = new CoreLibraryStatesRequest
+        {
+            ClientId = clientId,
+            SessionId = sessionId,
+            Paths = paths
+        };
+        using var content = SerializeJson(request);
+        using var response = await _httpClient.PostAsync($"{baseUrl.TrimEnd('/')}/api/library-states", content, cancellationToken).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        return await JsonSerializer.DeserializeAsync<List<CoreLibraryStateResponse>>(stream, _serializerOptions, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<CoreClearPlaybackStatsResponse?> ClearPlaybackStatsAsync(string baseUrl, CoreClearPlaybackStatsRequest? request = null, CancellationToken cancellationToken = default)
@@ -278,6 +353,31 @@ public sealed class CoreServerApiClient
 
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
         return await JsonSerializer.DeserializeAsync<CoreRefreshSettingsSnapshot>(stream, _serializerOptions, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<CoreBackupSettingsSnapshot?> GetBackupSettingsAsync(string baseUrl, CancellationToken cancellationToken = default)
+    {
+        using var response = await _httpClient.GetAsync($"{baseUrl.TrimEnd('/')}/api/backup/settings", cancellationToken).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        return await JsonSerializer.DeserializeAsync<CoreBackupSettingsSnapshot>(stream, _serializerOptions, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<CoreBackupSettingsSnapshot?> UpdateBackupSettingsAsync(string baseUrl, CoreBackupSettingsSnapshot snapshot, CancellationToken cancellationToken = default)
+    {
+        using var content = SerializeJson(snapshot);
+        using var response = await _httpClient.PostAsync($"{baseUrl.TrimEnd('/')}/api/backup/settings", content, cancellationToken).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        return await JsonSerializer.DeserializeAsync<CoreBackupSettingsSnapshot>(stream, _serializerOptions, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<CoreWebRuntimeSettingsSnapshot?> GetWebRuntimeSettingsAsync(string baseUrl, CancellationToken cancellationToken = default)
@@ -554,6 +654,39 @@ public sealed class CoreSourceResponse
     public bool IsEnabled { get; set; } = true;
 }
 
+public sealed class CoreLibraryStatsResponse
+{
+    public CoreLibraryGlobalStatsResponse Global { get; set; } = new();
+    public List<CoreSourceStatsResponse> Sources { get; set; } = [];
+}
+
+public sealed class CoreLibraryGlobalStatsResponse
+{
+    public int TotalVideos { get; set; }
+    public int TotalPhotos { get; set; }
+    public int TotalMedia { get; set; }
+    public int Favorites { get; set; }
+    public int Blacklisted { get; set; }
+    public int UniquePlayedMedia { get; set; }
+    public int NeverPlayedMedia { get; set; }
+    public int TotalPlays { get; set; }
+}
+
+public sealed class CoreSourceStatsResponse
+{
+    public string SourceId { get; set; } = string.Empty;
+    public string RootPath { get; set; } = string.Empty;
+    public string? DisplayName { get; set; }
+    public bool IsEnabled { get; set; } = true;
+    public int TotalVideos { get; set; }
+    public int TotalPhotos { get; set; }
+    public int TotalMedia { get; set; }
+    public int VideosWithAudio { get; set; }
+    public int VideosWithoutAudio { get; set; }
+    public double TotalDurationSeconds { get; set; }
+    public double? AverageDurationSeconds { get; set; }
+}
+
 public sealed class CoreUpdateSourceEnabledRequest
 {
     public bool IsEnabled { get; set; }
@@ -688,6 +821,22 @@ public sealed class CoreClearPlaybackStatsResponse
     public int ClearedCount { get; set; }
 }
 
+public sealed class CoreLibraryStatesRequest
+{
+    public string? ClientId { get; set; }
+    public string? SessionId { get; set; }
+    public List<string>? Paths { get; set; }
+}
+
+public sealed class CoreLibraryStateResponse
+{
+    public string ItemId { get; set; } = string.Empty;
+    public string Path { get; set; } = string.Empty;
+    public bool IsFavorite { get; set; }
+    public bool IsBlacklisted { get; set; }
+    public long Revision { get; set; }
+}
+
 public sealed class CoreServerEventEnvelope
 {
     public long Revision { get; set; }
@@ -709,6 +858,8 @@ public sealed class CorePlaybackRecordedPayload
     public string Path { get; set; } = string.Empty;
     public string? ClientId { get; set; }
     public string? SessionId { get; set; }
+    public int? PlayCount { get; set; }
+    public DateTime? LastPlayedUtc { get; set; }
 }
 
 public sealed class CoreFilterPresetSnapshot
@@ -822,6 +973,15 @@ public sealed class CoreRefreshSettingsSnapshot
 {
     public bool AutoRefreshEnabled { get; set; } = true;
     public int AutoRefreshIntervalMinutes { get; set; } = 15;
+    public bool ForceRescanLoudness { get; set; }
+    public bool ForceRescanDuration { get; set; }
+}
+
+public sealed class CoreBackupSettingsSnapshot
+{
+    public bool Enabled { get; set; } = true;
+    public int MinimumBackupGapMinutes { get; set; } = 360;
+    public int NumberOfBackups { get; set; } = 8;
 }
 
 public sealed class CoreWebRuntimeSettingsSnapshot

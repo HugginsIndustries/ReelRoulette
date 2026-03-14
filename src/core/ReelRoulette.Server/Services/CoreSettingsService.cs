@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Text.Json;
 using ReelRoulette.Server.Contracts;
 using ReelRoulette.Server.Hosting;
@@ -15,7 +16,9 @@ public sealed class CoreSettingsService
     private readonly object _lock = new();
     private readonly ILogger<CoreSettingsService> _logger;
     private readonly string _settingsPath;
+    private readonly string _backupDirectory;
     private readonly RefreshSettingsSnapshot _refreshSettings;
+    private readonly BackupSettingsSnapshot _backupSettings;
     private readonly WebRuntimeSettingsSnapshot _webRuntimeSettings;
     private readonly ControlRuntimeSettingsSnapshot _controlRuntimeSettings;
     public event Action<WebRuntimeSettingsSnapshot>? WebRuntimeSettingsChanged;
@@ -30,7 +33,14 @@ public sealed class CoreSettingsService
                              Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ReelRoulette");
         Directory.CreateDirectory(roamingAppData);
         _settingsPath = Path.Combine(roamingAppData, "core-settings.json");
-        (_refreshSettings, _webRuntimeSettings, _controlRuntimeSettings) = LoadSettings(options);
+        _backupDirectory = Path.Combine(roamingAppData, "backups");
+        var loaded = LoadSettings(options);
+        (_refreshSettings, _backupSettings, _webRuntimeSettings, _controlRuntimeSettings) = loaded.Settings;
+        if (loaded.NeedsStartupBackfillPersist)
+        {
+            PersistSettings(createBackup: false);
+        }
+        CreateBackupIfNeeded();
     }
 
     public RefreshSettingsSnapshot GetRefreshSettings()
@@ -40,7 +50,9 @@ public sealed class CoreSettingsService
             return new RefreshSettingsSnapshot
             {
                 AutoRefreshEnabled = _refreshSettings.AutoRefreshEnabled,
-                AutoRefreshIntervalMinutes = _refreshSettings.AutoRefreshIntervalMinutes
+                AutoRefreshIntervalMinutes = _refreshSettings.AutoRefreshIntervalMinutes,
+                ForceRescanLoudness = _refreshSettings.ForceRescanLoudness,
+                ForceRescanDuration = _refreshSettings.ForceRescanDuration
             };
         }
     }
@@ -51,8 +63,35 @@ public sealed class CoreSettingsService
         {
             _refreshSettings.AutoRefreshEnabled = snapshot.AutoRefreshEnabled;
             _refreshSettings.AutoRefreshIntervalMinutes = Math.Clamp(snapshot.AutoRefreshIntervalMinutes, 5, 1440);
+            _refreshSettings.ForceRescanLoudness = snapshot.ForceRescanLoudness;
+            _refreshSettings.ForceRescanDuration = snapshot.ForceRescanDuration;
             PersistSettings();
             return GetRefreshSettings();
+        }
+    }
+
+    public BackupSettingsSnapshot GetBackupSettings()
+    {
+        lock (_lock)
+        {
+            return new BackupSettingsSnapshot
+            {
+                Enabled = _backupSettings.Enabled,
+                MinimumBackupGapMinutes = _backupSettings.MinimumBackupGapMinutes,
+                NumberOfBackups = _backupSettings.NumberOfBackups
+            };
+        }
+    }
+
+    public BackupSettingsSnapshot UpdateBackupSettings(BackupSettingsSnapshot snapshot)
+    {
+        lock (_lock)
+        {
+            _backupSettings.Enabled = snapshot.Enabled;
+            _backupSettings.MinimumBackupGapMinutes = Math.Clamp(snapshot.MinimumBackupGapMinutes, 1, 10080);
+            _backupSettings.NumberOfBackups = Math.Clamp(snapshot.NumberOfBackups, 1, 100);
+            PersistSettings();
+            return GetBackupSettings();
         }
     }
 
@@ -164,12 +203,20 @@ public sealed class CoreSettingsService
         }
     }
 
-    private (RefreshSettingsSnapshot Refresh, WebRuntimeSettingsSnapshot WebRuntime, ControlRuntimeSettingsSnapshot ControlRuntime) LoadSettings(ServerRuntimeOptions options)
+    private ((RefreshSettingsSnapshot Refresh, BackupSettingsSnapshot Backup, WebRuntimeSettingsSnapshot WebRuntime, ControlRuntimeSettingsSnapshot ControlRuntime) Settings, bool NeedsStartupBackfillPersist) LoadSettings(ServerRuntimeOptions options)
     {
         var refresh = new RefreshSettingsSnapshot
         {
             AutoRefreshEnabled = options.AutoRefreshEnabled,
-            AutoRefreshIntervalMinutes = options.AutoRefreshIntervalMinutes
+            AutoRefreshIntervalMinutes = options.AutoRefreshIntervalMinutes,
+            ForceRescanLoudness = options.ForceRescanLoudness,
+            ForceRescanDuration = options.ForceRescanDuration
+        };
+        var backup = new BackupSettingsSnapshot
+        {
+            Enabled = options.BackupEnabled,
+            MinimumBackupGapMinutes = Math.Clamp(options.MinimumBackupGapMinutes, 1, 10080),
+            NumberOfBackups = Math.Clamp(options.NumberOfBackups, 1, 100)
         };
         var webRuntime = new WebRuntimeSettingsSnapshot();
         var controlRuntime = new ControlRuntimeSettingsSnapshot
@@ -177,17 +224,30 @@ public sealed class CoreSettingsService
             AdminAuthMode = NormalizeAuthMode(options.ControlAdminAuthMode),
             AdminSharedToken = string.IsNullOrWhiteSpace(options.ControlAdminSharedToken) ? null : options.ControlAdminSharedToken.Trim()
         };
+        var needsStartupBackfillPersist = !File.Exists(_settingsPath);
         try
         {
             if (File.Exists(_settingsPath))
             {
-                var parsed = JsonSerializer.Deserialize<CoreSettingsDocument>(File.ReadAllText(_settingsPath), JsonOptions);
+                var text = File.ReadAllText(_settingsPath);
+                var parsed = JsonSerializer.Deserialize<CoreSettingsDocument>(text, JsonOptions);
                 if (parsed != null)
                 {
+                    needsStartupBackfillPersist |= HasMissingTopLevelSettingsSectionsOrFields(text);
+
                     if (parsed.Refresh != null)
                     {
                         refresh.AutoRefreshEnabled = parsed.Refresh.AutoRefreshEnabled;
                         refresh.AutoRefreshIntervalMinutes = Math.Clamp(parsed.Refresh.AutoRefreshIntervalMinutes, 5, 1440);
+                        refresh.ForceRescanLoudness = parsed.Refresh.ForceRescanLoudness;
+                        refresh.ForceRescanDuration = parsed.Refresh.ForceRescanDuration;
+                    }
+
+                    if (parsed.Backup != null)
+                    {
+                        backup.Enabled = parsed.Backup.Enabled;
+                        backup.MinimumBackupGapMinutes = Math.Clamp(parsed.Backup.MinimumBackupGapMinutes, 1, 10080);
+                        backup.NumberOfBackups = Math.Clamp(parsed.Backup.NumberOfBackups, 1, 100);
                     }
 
                     if (parsed.WebRuntime != null)
@@ -208,8 +268,11 @@ public sealed class CoreSettingsService
                             : parsed.ControlRuntime.AdminSharedToken.Trim();
                     }
 
-                    return (refresh, webRuntime, controlRuntime);
+                    return ((refresh, backup, webRuntime, controlRuntime), needsStartupBackfillPersist);
                 }
+
+                // Existing file present but not parseable as the current schema - rewrite to canonical schema.
+                needsStartupBackfillPersist = true;
             }
         }
         catch
@@ -217,20 +280,147 @@ public sealed class CoreSettingsService
             // fall back to runtime defaults
         }
 
-        return (refresh, webRuntime, controlRuntime);
+        return ((refresh, backup, webRuntime, controlRuntime), needsStartupBackfillPersist);
     }
 
-    private void PersistSettings()
+    private void PersistSettings(bool createBackup = true)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(_settingsPath)!);
+        if (createBackup)
+        {
+            CreateBackupIfNeeded();
+        }
         File.WriteAllText(
             _settingsPath,
             JsonSerializer.Serialize(new CoreSettingsDocument
             {
                 Refresh = _refreshSettings,
+                Backup = _backupSettings,
                 WebRuntime = _webRuntimeSettings,
                 ControlRuntime = _controlRuntimeSettings
             }, JsonOptions));
+    }
+
+    private static bool HasMissingTopLevelSettingsSectionsOrFields(string json)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                return true;
+            }
+
+            var root = document.RootElement;
+
+            if (!root.TryGetProperty("refresh", out var refresh) ||
+                refresh.ValueKind != JsonValueKind.Object ||
+                !HasObjectProperty(refresh, "autoRefreshEnabled") ||
+                !HasObjectProperty(refresh, "autoRefreshIntervalMinutes") ||
+                !HasObjectProperty(refresh, "forceRescanLoudness") ||
+                !HasObjectProperty(refresh, "forceRescanDuration"))
+            {
+                return true;
+            }
+
+            if (!root.TryGetProperty("backup", out var backup) ||
+                backup.ValueKind != JsonValueKind.Object ||
+                !HasObjectProperty(backup, "enabled") ||
+                !HasObjectProperty(backup, "minimumBackupGapMinutes") ||
+                !HasObjectProperty(backup, "numberOfBackups"))
+            {
+                return true;
+            }
+
+            if (!root.TryGetProperty("webRuntime", out var webRuntime) ||
+                webRuntime.ValueKind != JsonValueKind.Object ||
+                !HasObjectProperty(webRuntime, "enabled") ||
+                !HasObjectProperty(webRuntime, "port") ||
+                !HasObjectProperty(webRuntime, "bindOnLan") ||
+                !HasObjectProperty(webRuntime, "lanHostname") ||
+                !HasObjectProperty(webRuntime, "authMode") ||
+                !HasObjectProperty(webRuntime, "sharedToken"))
+            {
+                return true;
+            }
+
+            if (!root.TryGetProperty("controlRuntime", out var controlRuntime) ||
+                controlRuntime.ValueKind != JsonValueKind.Object ||
+                !HasObjectProperty(controlRuntime, "adminAuthMode") ||
+                !HasObjectProperty(controlRuntime, "adminSharedToken"))
+            {
+                return true;
+            }
+
+            return false;
+        }
+        catch
+        {
+            return true;
+        }
+    }
+
+    private static bool HasObjectProperty(JsonElement element, string propertyName)
+    {
+        return element.ValueKind == JsonValueKind.Object && element.TryGetProperty(propertyName, out _);
+    }
+
+    private void CreateBackupIfNeeded()
+    {
+        if (!_backupSettings.Enabled || !File.Exists(_settingsPath))
+        {
+            return;
+        }
+
+        Directory.CreateDirectory(_backupDirectory);
+        var backupFiles = Directory.GetFiles(_backupDirectory, "core-settings.json.backup.*")
+            .Select(path => new FileInfo(path))
+            .OrderBy(GetBackupFileUtcTimestamp)
+            .ToList();
+
+        var maxBackups = Math.Max(1, _backupSettings.NumberOfBackups);
+        var minGapMinutes = Math.Max(1, _backupSettings.MinimumBackupGapMinutes);
+        var nowUtc = DateTime.UtcNow;
+        var lastBackupTime = backupFiles.Count > 0 ? GetBackupFileUtcTimestamp(backupFiles[^1]) : DateTime.MinValue;
+        var hasLastBackup = backupFiles.Count > 0;
+        var timeSinceLastBackup = hasLastBackup ? nowUtc - lastBackupTime : TimeSpan.MaxValue;
+
+        if (hasLastBackup && timeSinceLastBackup.TotalMinutes < minGapMinutes)
+        {
+            return;
+        }
+
+        var timestamp = nowUtc.ToString("yyyy-MM-dd_HH-mm-ss");
+        var backupPath = Path.Combine(_backupDirectory, $"core-settings.json.backup.{timestamp}");
+        File.Copy(_settingsPath, backupPath, true);
+
+        var filesAfterCreate = Directory.GetFiles(_backupDirectory, "core-settings.json.backup.*")
+            .Select(path => new FileInfo(path))
+            .OrderBy(GetBackupFileUtcTimestamp)
+            .ToList();
+
+        while (filesAfterCreate.Count > maxBackups)
+        {
+            filesAfterCreate[0].Delete();
+            filesAfterCreate.RemoveAt(0);
+        }
+    }
+
+    private static DateTime GetBackupFileUtcTimestamp(FileInfo file)
+    {
+        var creationUtc = file.CreationTimeUtc;
+        var lastWriteUtc = file.LastWriteTimeUtc;
+        if (creationUtc == DateTime.MinValue)
+        {
+            return lastWriteUtc;
+        }
+
+        if (lastWriteUtc == DateTime.MinValue)
+        {
+            return creationUtc;
+        }
+
+        return creationUtc >= lastWriteUtc ? creationUtc : lastWriteUtc;
     }
 
     private static string NormalizeAuthMode(string? value)
@@ -246,6 +436,7 @@ public sealed class CoreSettingsService
     private sealed class CoreSettingsDocument
     {
         public RefreshSettingsSnapshot? Refresh { get; set; }
+        public BackupSettingsSnapshot? Backup { get; set; }
         public WebRuntimeSettingsSnapshot? WebRuntime { get; set; }
         public ControlRuntimeSettingsSnapshot? ControlRuntime { get; set; }
     }

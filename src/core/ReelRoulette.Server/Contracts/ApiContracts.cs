@@ -28,6 +28,39 @@ public sealed class SourceResponse
     public bool IsEnabled { get; set; } = true;
 }
 
+public sealed class LibraryStatsResponse
+{
+    public LibraryGlobalStatsResponse Global { get; set; } = new();
+    public List<SourceStatsResponse> Sources { get; set; } = [];
+}
+
+public sealed class LibraryGlobalStatsResponse
+{
+    public int TotalVideos { get; set; }
+    public int TotalPhotos { get; set; }
+    public int TotalMedia { get; set; }
+    public int Favorites { get; set; }
+    public int Blacklisted { get; set; }
+    public int UniquePlayedMedia { get; set; }
+    public int NeverPlayedMedia { get; set; }
+    public int TotalPlays { get; set; }
+}
+
+public sealed class SourceStatsResponse
+{
+    public string SourceId { get; set; } = string.Empty;
+    public string RootPath { get; set; } = string.Empty;
+    public string? DisplayName { get; set; }
+    public bool IsEnabled { get; set; } = true;
+    public int TotalVideos { get; set; }
+    public int TotalPhotos { get; set; }
+    public int TotalMedia { get; set; }
+    public int VideosWithAudio { get; set; }
+    public int VideosWithoutAudio { get; set; }
+    public double TotalDurationSeconds { get; set; }
+    public double? AverageDurationSeconds { get; set; }
+}
+
 public sealed class UpdateSourceEnabledRequest
 {
     public bool IsEnabled { get; set; }
@@ -94,6 +127,13 @@ public sealed class ClearPlaybackStatsRequest
 public sealed class ClearPlaybackStatsResponse
 {
     public int ClearedCount { get; set; }
+}
+
+public sealed class RecordPlaybackResult
+{
+    public bool Found { get; set; }
+    public int PlayCount { get; set; }
+    public DateTime? LastPlayedUtc { get; set; }
 }
 
 public sealed class LibraryStatesRequest
@@ -219,6 +259,15 @@ public sealed class RefreshSettingsSnapshot
 {
     public bool AutoRefreshEnabled { get; set; } = true;
     public int AutoRefreshIntervalMinutes { get; set; } = 15;
+    public bool ForceRescanLoudness { get; set; }
+    public bool ForceRescanDuration { get; set; }
+}
+
+public sealed class BackupSettingsSnapshot
+{
+    public bool Enabled { get; set; } = true;
+    public int MinimumBackupGapMinutes { get; set; } = 360;
+    public int NumberOfBackups { get; set; } = 8;
 }
 
 public sealed class WebRuntimeSettingsSnapshot
@@ -373,6 +422,8 @@ public sealed class PlaybackRecordedPayload
     public string Path { get; set; } = string.Empty;
     public string? ClientId { get; set; }
     public string? SessionId { get; set; }
+    public int? PlayCount { get; set; }
+    public DateTime? LastPlayedUtc { get; set; }
 }
 
 public sealed class ItemTagsChangedPayload

@@ -139,8 +139,6 @@ namespace ReelRoulette
     {
         private List<LibraryItem> _items;
         private LibraryIndex? _libraryIndex;
-        private LibraryService? _libraryService;
-        private System.Collections.Generic.List<FilterPreset>? _filterPresets;
         private ObservableCollection<ItemTagsCategoryViewModel> _categoryViewModels = new ObservableCollection<ItemTagsCategoryViewModel>();
         private PixelPoint? _savedPosition; // Store position to set after window opens
         private readonly ITagMutationClient _tagMutationClient;
@@ -159,15 +157,11 @@ namespace ReelRoulette
         public ItemTagsDialog(
             List<LibraryItem> items,
             LibraryIndex? libraryIndex,
-            LibraryService? libraryService,
-            ITagMutationClient tagMutationClient,
-            System.Collections.Generic.List<FilterPreset>? filterPresets = null)
+            ITagMutationClient tagMutationClient)
         {
             InitializeComponent();
             _items = CloneItemsForEditor(items);
             _libraryIndex = CloneLibraryIndexForEditor(libraryIndex);
-            _libraryService = libraryService;
-            _filterPresets = filterPresets;
             _tagMutationClient = tagMutationClient ?? throw new ArgumentNullException(nameof(tagMutationClient));
 
             Log($"ItemTagsDialog: Opening tags dialog for {items.Count} item(s)");
@@ -581,13 +575,31 @@ namespace ReelRoulette
             var orderedCategories = _categoryViewModels
                 .Where(c => c.IsReorderable)
                 .ToList();
+            var baselineOrderIndex = _baselineCategoryOrder
+                .Select((id, index) => new { id, index })
+                .ToDictionary(entry => entry.id, entry => entry.index, StringComparer.OrdinalIgnoreCase);
+
             for (var i = 0; i < orderedCategories.Count; i++)
             {
                 var categoryVm = orderedCategories[i];
+                var isNewCategory = !baselineOrderIndex.ContainsKey(categoryVm.CategoryId);
+                var hasNameChange = !_baselineCategoryNames.TryGetValue(categoryVm.CategoryId, out var baselineName)
+                    || !string.Equals(
+                        baselineName?.Trim(),
+                        (categoryVm.CategoryName ?? string.Empty).Trim(),
+                        StringComparison.OrdinalIgnoreCase);
+                var hasOrderChange = !baselineOrderIndex.TryGetValue(categoryVm.CategoryId, out var baselineIndex)
+                    || baselineIndex != i;
+
+                if (!isNewCategory && !hasNameChange && !hasOrderChange)
+                {
+                    continue;
+                }
+
                 var accepted = await _tagMutationClient.UpsertCategoryAsync(new TagCategory
                 {
                     Id = categoryVm.CategoryId,
-                    Name = categoryVm.CategoryName,
+                    Name = categoryVm.CategoryName ?? string.Empty,
                     SortOrder = i
                 });
                 if (!accepted)
@@ -611,8 +623,6 @@ namespace ReelRoulette
                     ShowApiRequiredError();
                     return false;
                 }
-
-                _ = LibraryService.UpdateFilterPresetsForDeletedTag(_filterPresets, tagName);
             }
 
             foreach (var rename in _pendingRenameTags.Values.ToList())
@@ -626,7 +636,7 @@ namespace ReelRoulette
 
                 if (!string.Equals(rename.OldName, rename.NewName, StringComparison.OrdinalIgnoreCase))
                 {
-                    _ = LibraryService.UpdateFilterPresetsForRenamedTag(_filterPresets, rename.OldName, rename.NewName);
+                    // Preset tag updates are server-owned; desktop refreshes the catalog from core after apply.
                 }
             }
 
@@ -936,13 +946,6 @@ namespace ReelRoulette
             {
                 Log($"ItemTagsDialog.EditTagButton_Click: Editing tag '{tagVm.Tag}'");
 
-                // Check if library service is available
-                if (_libraryService == null)
-                {
-                    ShowLibraryServiceError();
-                    return;
-                }
-
                 var dialog = new EditTagDialog();
                 var categories = _libraryIndex?.Categories ?? new List<TagCategory>();
                 dialog.Initialize(categories, tagVm.Tag, tagVm.CategoryId);
@@ -1013,11 +1016,13 @@ namespace ReelRoulette
                             string.Equals(c.CategoryId, newCategoryId, StringComparison.OrdinalIgnoreCase));
                         if (targetCategory == null)
                         {
-                            var targetCategoryName = _libraryIndex?.Categories?
-                                .FirstOrDefault(c => string.Equals(c.Id, newCategoryId, StringComparison.OrdinalIgnoreCase))?.Name
-                                ?? (string.Equals(newCategoryId, ItemTagsCategoryViewModel.UncategorizedCategoryId, StringComparison.OrdinalIgnoreCase)
-                                    ? "Uncategorized"
-                                    : newCategoryId);
+                            var targetCategoryName = !string.IsNullOrWhiteSpace(dialog.CategoryName)
+                                ? dialog.CategoryName.Trim()
+                                : _libraryIndex?.Categories?
+                                    .FirstOrDefault(c => string.Equals(c.Id, newCategoryId, StringComparison.OrdinalIgnoreCase))?.Name
+                                    ?? (string.Equals(newCategoryId, ItemTagsCategoryViewModel.UncategorizedCategoryId, StringComparison.OrdinalIgnoreCase)
+                                        ? "Uncategorized"
+                                        : newCategoryId);
                             targetCategory = new ItemTagsCategoryViewModel
                             {
                                 CategoryId = newCategoryId,
@@ -1307,56 +1312,6 @@ namespace ReelRoulette
             UpdateApplyButtonState();
         }
 
-        private void ShowLibraryServiceError()
-        {
-            Log($"ItemTagsDialog: ERROR - Library service is null, operation cannot proceed!");
-            var errorDialog = new Window
-            {
-                Title = "Error: Cannot Save",
-                Width = 450,
-                Height = 180,
-                WindowStartupLocation = WindowStartupLocation.CenterOwner
-            };
-            
-            var grid = new Grid();
-            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            grid.Margin = new Thickness(16);
-            
-            var titleText = new TextBlock
-            {
-                Text = "Error: Cannot save changes",
-                FontWeight = FontWeight.Bold,
-                FontSize = 14,
-                Margin = new Thickness(0, 0, 0, 12)
-            };
-            Grid.SetRow(titleText, 0);
-            grid.Children.Add(titleText);
-            
-            var messageText = new TextBlock
-            {
-                Text = "Library service is not available. Changes cannot be saved and will be lost when the application closes.\n\nPlease cancel and try again later.",
-                TextWrapping = TextWrapping.Wrap,
-                Margin = new Thickness(0, 0, 0, 12)
-            };
-            Grid.SetRow(messageText, 1);
-            grid.Children.Add(messageText);
-            
-            var okButton = new Button
-            {
-                Content = "OK",
-                HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
-                Width = 80
-            };
-            okButton.Click += (s, args) => errorDialog.Close();
-            Grid.SetRow(okButton, 2);
-            grid.Children.Add(okButton);
-            
-            errorDialog.Content = grid;
-            errorDialog.ShowDialog(this);
-        }
-
         private void ShowApiRequiredError()
         {
             Log("ItemTagsDialog: API-required mutation failed; core API unavailable or request rejected.");
@@ -1410,13 +1365,6 @@ namespace ReelRoulette
         private async void OkButton_Click(object? sender, RoutedEventArgs e)
         {
             Log($"ItemTagsDialog: Saving tags for {_items.Count} item(s)");
-            
-            // CRITICAL: Verify library service is available before attempting to save
-            if (_libraryService == null)
-            {
-                ShowLibraryServiceError();
-                return;
-            }
             
             var categoryMutationsAccepted = await ApplyPendingCategoryMutationsAsync();
             if (!categoryMutationsAccepted)

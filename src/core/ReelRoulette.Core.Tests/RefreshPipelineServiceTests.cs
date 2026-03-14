@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Security.Cryptography;
+using System.Reflection;
 using ReelRoulette.Server.Hosting;
 using ReelRoulette.Server.Services;
 using Xunit;
@@ -62,6 +63,68 @@ public sealed class RefreshPipelineServiceTests
 
         var replay = state.GetReplayAfter(0);
         Assert.Contains(replay.Events, e => string.Equals(e.EventType, "refreshStatusChanged", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task SourceRefresh_ShouldPersistRemovalOfMissingItem_AndKeepProjectionParity()
+    {
+        using var scope = new AppDataScope();
+        var sourceDir = Path.Combine(scope.RootPath, "source-a");
+        Directory.CreateDirectory(sourceDir);
+
+        var existingPath = Path.Combine(sourceDir, "existing.mp4");
+        var missingPath = Path.Combine(sourceDir, "missing.mp4");
+        await File.WriteAllTextAsync(existingPath, "existing");
+
+        await SeedLibraryAsync(scope.LibraryPath, new JsonObject
+        {
+            ["sources"] = new JsonArray
+            {
+                new JsonObject
+                {
+                    ["id"] = "src-a",
+                    ["rootPath"] = sourceDir,
+                    ["isEnabled"] = true
+                }
+            },
+            ["items"] = new JsonArray
+            {
+                new JsonObject
+                {
+                    ["id"] = "item-existing",
+                    ["sourceId"] = "src-a",
+                    ["fullPath"] = existingPath,
+                    ["relativePath"] = "existing.mp4",
+                    ["fileName"] = "existing.mp4",
+                    ["mediaType"] = 0
+                },
+                new JsonObject
+                {
+                    ["id"] = "item-missing",
+                    ["sourceId"] = "src-a",
+                    ["fullPath"] = missingPath,
+                    ["relativePath"] = "missing.mp4",
+                    ["fileName"] = "missing.mp4",
+                    ["mediaType"] = 0
+                }
+            }
+        });
+
+        var state = new ServerStateService();
+        var service = CreateService(state, scope.RootPath);
+        Assert.True(service.TryStartManual().Accepted);
+        var final = await WaitForCompletionAsync(service, TimeSpan.FromSeconds(30));
+
+        var root = await LoadLibraryAsync(scope.LibraryPath);
+        var items = Assert.IsType<JsonArray>(root["items"]);
+        var itemList = items.OfType<JsonObject>().ToList();
+        var kept = Assert.Single(itemList);
+        Assert.Equal("item-existing", kept["id"]?.GetValue<string>());
+        Assert.Equal(existingPath, kept["fullPath"]?.GetValue<string>());
+        Assert.DoesNotContain(itemList, item => string.Equals(item["id"]?.GetValue<string>(), "item-missing", StringComparison.OrdinalIgnoreCase));
+
+        var sourceStage = final.Stages.Single(s => s.Stage == "sourceRefresh");
+        Assert.Contains("1 removed", sourceStage.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -290,6 +353,112 @@ public sealed class RefreshPipelineServiceTests
     }
 
     [Fact]
+    public async Task DurationForceRescan_ShouldBeOneShot_AndShowForcedHint()
+    {
+        using var scope = new AppDataScope();
+        await SeedLibraryAsync(scope.LibraryPath, new JsonObject
+        {
+            ["sources"] = new JsonArray(),
+            ["items"] = new JsonArray
+            {
+                new JsonObject
+                {
+                    ["id"] = "duration-1",
+                    ["mediaType"] = 0,
+                    ["fullPath"] = Path.Combine(scope.RootPath, "missing-duration.mp4"),
+                    ["duration"] = "00:00:03"
+                }
+            }
+        });
+
+        var state = new ServerStateService();
+        var logger = new Microsoft.Extensions.Logging.Abstractions.NullLogger<RefreshPipelineService>();
+        var settingsLogger = new Microsoft.Extensions.Logging.Abstractions.NullLogger<CoreSettingsService>();
+        var options = new ServerRuntimeOptions
+        {
+            AutoRefreshEnabled = true,
+            AutoRefreshIntervalMinutes = 15,
+            ForceRescanDuration = true,
+            ForceRescanLoudness = false
+        };
+        var coreSettings = new CoreSettingsService(settingsLogger, options, scope.RootPath);
+        var service = new RefreshPipelineService(state, logger, coreSettings, scope.RootPath);
+
+        Assert.True(service.TryStartManual().Accepted);
+        var completed = await WaitForCompletionAsync(service, TimeSpan.FromSeconds(10));
+
+        var durationStage = completed.Stages.Single(s => s.Stage == "durationScan");
+        Assert.Contains("(forced full rescan)", durationStage.Message, StringComparison.OrdinalIgnoreCase);
+        var settingsAfterRun = coreSettings.GetRefreshSettings();
+        Assert.False(settingsAfterRun.ForceRescanDuration);
+        Assert.False(settingsAfterRun.ForceRescanLoudness);
+    }
+
+    [Fact]
+    public async Task LoudnessFailure_ShouldMarkHasAudioTrue_AndSetLoudnessError()
+    {
+        using var scope = new AppDataScope();
+        var brokenMediaPath = Path.Combine(scope.RootPath, "broken-audio.mkv");
+        await File.WriteAllTextAsync(brokenMediaPath, "not-a-valid-media-file");
+        await SeedLibraryAsync(scope.LibraryPath, new JsonObject
+        {
+            ["sources"] = new JsonArray(),
+            ["items"] = new JsonArray
+            {
+                new JsonObject
+                {
+                    ["id"] = "broken-1",
+                    ["mediaType"] = 0,
+                    ["fullPath"] = brokenMediaPath,
+                    ["hasAudio"] = false,
+                    ["integratedLoudness"] = -20.0,
+                    ["peakDb"] = -2.0
+                }
+            }
+        });
+
+        var service = CreateService(new ServerStateService(), scope.RootPath);
+        Assert.True(service.TryStartManual().Accepted);
+        await WaitForCompletionAsync(service, TimeSpan.FromSeconds(20));
+
+        var root = await LoadLibraryAsync(scope.LibraryPath);
+        var items = Assert.IsType<JsonArray>(root["items"]);
+        var item = Assert.Single(items.OfType<JsonObject>());
+        Assert.True(item?["hasAudio"]?.GetValue<bool>());
+        Assert.Null(item?["integratedLoudness"]);
+        Assert.Null(item?["peakDb"]);
+        Assert.False(string.IsNullOrWhiteSpace(item?["loudnessError"]?.GetValue<string>()));
+    }
+
+    [Fact]
+    public async Task ManualRun_ShouldScheduleNextAutoRun_FromCompletionTime()
+    {
+        using var scope = new AppDataScope();
+        await SeedLibraryAsync(scope.LibraryPath, new JsonObject
+        {
+            ["sources"] = new JsonArray(),
+            ["items"] = new JsonArray()
+        });
+
+        var state = new ServerStateService();
+        var logger = new Microsoft.Extensions.Logging.Abstractions.NullLogger<RefreshPipelineService>();
+        var settingsLogger = new Microsoft.Extensions.Logging.Abstractions.NullLogger<CoreSettingsService>();
+        var options = new ServerRuntimeOptions
+        {
+            AutoRefreshEnabled = true,
+            AutoRefreshIntervalMinutes = 5
+        };
+        var coreSettings = new CoreSettingsService(settingsLogger, options, scope.RootPath);
+        var service = new RefreshPipelineService(state, logger, coreSettings, scope.RootPath);
+
+        Assert.True(service.TryStartManual().Accepted);
+        var final = await WaitForCompletionAsync(service, TimeSpan.FromSeconds(10));
+        var nextAutoRunUtc = GetNextAutoRunUtc(service);
+        Assert.NotNull(final.CompletedUtc);
+        Assert.True(nextAutoRunUtc >= final.CompletedUtc.Value.AddMinutes(4));
+    }
+
+    [Fact]
     public async Task SourceRefresh_ShouldReconcileMovedFile_ByFingerprintWithoutAddRemove()
     {
         using var scope = new AppDataScope();
@@ -358,6 +527,54 @@ public sealed class RefreshPipelineServiceTests
         Assert.Contains("moved", sourceStage.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void ParseLoudness_ShouldReturnNoAudio_ForExplicitNoAudioOutput()
+    {
+        var output = """
+                     Input #0, mov, from 'sample.mp4':
+                       Stream #0:0: Video: h264
+                     Stream map '0:a' matches no streams.
+                     To ignore this, add a trailing '?' to the map.
+                     """;
+
+        var parsed = InvokeParseLoudness(output, exitCode: 1);
+        Assert.NotNull(parsed);
+        Assert.False(parsed!.HasAudio);
+        Assert.Equal(0.0, parsed.MeanVolumeDb);
+    }
+
+    [Fact]
+    public void ParseLoudness_ShouldParseIntegratedAndPeak_FromEbur128SummaryLines()
+    {
+        var output = """
+                     Input #0, mov, from 'sample.mp4':
+                       Stream #0:0: Video: h264
+                       Stream #0:1: Audio: aac
+                     [Parsed_ebur128_0 @ 000001]   I:         -16.2 LUFS
+                     [Parsed_ebur128_0 @ 000001]   Peak:       -1.5 dBFS
+                     """;
+
+        var parsed = InvokeParseLoudness(output, exitCode: 0);
+        Assert.NotNull(parsed);
+        Assert.True(parsed!.HasAudio);
+        Assert.Equal(-16.2, parsed.MeanVolumeDb, 1);
+        Assert.Equal(-1.5, parsed.PeakDb, 1);
+    }
+
+    [Fact]
+    public void ParseLoudness_ShouldNotInferNoAudio_WhenAudioStreamExistsWithoutSummary()
+    {
+        var output = """
+                     Input #0, matroska,webm, from 'sample.mkv':
+                       Stream #0:0: Video: h264
+                       Stream #0:1: Audio: aac
+                     Error while filtering: Invalid data found when processing input
+                     """;
+
+        var parsed = InvokeParseLoudness(output, exitCode: 1);
+        Assert.Null(parsed);
+    }
+
     private static RefreshPipelineService CreateService(ServerStateService state, string appDataPathOverride)
     {
         var logger = new Microsoft.Extensions.Logging.Abstractions.NullLogger<RefreshPipelineService>();
@@ -369,6 +586,40 @@ public sealed class RefreshPipelineServiceTests
         };
         var coreSettings = new CoreSettingsService(settingsLogger, options, appDataPathOverride);
         return new RefreshPipelineService(state, logger, coreSettings, appDataPathOverride);
+    }
+
+    private static ParsedLoudnessResult? InvokeParseLoudness(string output, int exitCode)
+    {
+        var method = typeof(RefreshPipelineService).GetMethod(
+            "ParseLoudnessFromFfmpegOutput",
+            BindingFlags.NonPublic | BindingFlags.Static);
+        Assert.NotNull(method);
+
+        var result = method!.Invoke(null, [output, exitCode]);
+        if (result == null)
+        {
+            return null;
+        }
+
+        var type = result.GetType();
+        var hasAudioProp = type.GetProperty("HasAudio");
+        var meanProp = type.GetProperty("MeanVolumeDb");
+        var peakProp = type.GetProperty("PeakDb");
+        Assert.NotNull(hasAudioProp);
+        Assert.NotNull(meanProp);
+        Assert.NotNull(peakProp);
+
+        return new ParsedLoudnessResult(
+            HasAudio: (bool)(hasAudioProp!.GetValue(result) ?? false),
+            MeanVolumeDb: (double)(meanProp!.GetValue(result) ?? 0.0),
+            PeakDb: (double)(peakProp!.GetValue(result) ?? 0.0));
+    }
+
+    private static DateTimeOffset GetNextAutoRunUtc(RefreshPipelineService service)
+    {
+        var field = typeof(RefreshPipelineService).GetField("_nextAutoRunUtc", BindingFlags.NonPublic | BindingFlags.Instance);
+        Assert.NotNull(field);
+        return (DateTimeOffset)(field!.GetValue(service) ?? DateTimeOffset.MinValue);
     }
 
     private static async Task<ReelRoulette.Server.Contracts.RefreshStatusSnapshot> WaitForCompletionAsync(
@@ -455,4 +706,6 @@ public sealed class RefreshPipelineServiceTests
             }
         }
     }
+
+    private sealed record ParsedLoudnessResult(bool HasAudio, double MeanVolumeDb, double PeakDb);
 }

@@ -16,67 +16,76 @@
             <TabItem Header="General">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel Spacing="20" Margin="12">
-                        <!-- Library Backup Section -->
-                        <StackPanel Spacing="8">
-                            <TextBlock Text="Library Backup" 
+                        <!-- Server Backup Section -->
+                        <StackPanel Spacing="8" IsEnabled="{Binding ServerBackupSettingsEnabled}">
+                            <TextBlock Text="Server Backup Settings" 
                                        FontWeight="SemiBold" 
                                        FontSize="13"
                                        Margin="0,0,0,4"/>
-                            <CheckBox Content="Backup Library?"
+                            <CheckBox Content="Enable server backups"
                                       IsChecked="{Binding BackupLibraryEnabled}"/>
                             <Grid ColumnDefinitions="Auto * Auto" ColumnSpacing="8" Margin="20,4,0,4">
                                 <TextBlock Grid.Column="0" 
-                                           Text="Minimum Backup Gap (minutes):" 
+                                           Text="Time between backups (minutes):" 
                                            VerticalAlignment="Center"/>
                                 <NumericUpDown Grid.Column="1"
                                                x:Name="MinimumBackupGapNumericUpDown"
                                                Value="{Binding MinimumBackupGapMinutes}"
                                                Minimum="1"
-                                               Maximum="60"
+                                               Maximum="10080"
                                                FormatString="0"
                                                Increment="1"
                                                ShowButtonSpinner="True"
                                                HorizontalAlignment="Left"
                                                Width="150"/>
                                 <TextBlock Grid.Column="2"
-                                           Text="(1-60)"
+                                           Text="(1-10080)"
                                            VerticalAlignment="Center"
                                            Foreground="Gray"
                                            FontSize="12"/>
                             </Grid>
                             <Grid ColumnDefinitions="Auto * Auto" ColumnSpacing="8" Margin="20,4,0,4">
                                 <TextBlock Grid.Column="0" 
-                                           Text="Number of Backups:" 
+                                           Text="Number of backups to keep:" 
                                            VerticalAlignment="Center"/>
                                 <NumericUpDown Grid.Column="1"
                                                x:Name="NumberOfBackupsNumericUpDown"
                                                Value="{Binding NumberOfBackups}"
                                                Minimum="1"
-                                               Maximum="30"
+                                               Maximum="100"
                                                FormatString="0"
                                                Increment="1"
                                                ShowButtonSpinner="True"
                                                HorizontalAlignment="Left"
                                                Width="150"/>
                                 <TextBlock Grid.Column="2"
-                                           Text="(1-30)"
+                                           Text="(1-100)"
                                            VerticalAlignment="Center"
                                            Foreground="Gray"
                                            FontSize="12"/>
                             </Grid>
+                            <TextBlock Text="Server backup settings are managed by core and apply to library + core settings backups."
+                                       FontSize="11"
+                                       Foreground="Gray"
+                                       Margin="20,0,0,0"/>
+                            <TextBlock Text="Core API unavailable: server backup settings are read-only."
+                                       FontSize="11"
+                                       Foreground="Gray"
+                                       Margin="20,0,0,0"
+                                       IsVisible="{Binding IsServerBackupReadOnlyHintVisible}"/>
                         </StackPanel>
 
-                        <!-- Settings Backup Section -->
+                        <!-- Client Backup Section -->
                         <StackPanel Spacing="8">
-                            <TextBlock Text="Settings Backup"
+                            <TextBlock Text="Client Backup Settings"
                                        FontWeight="SemiBold"
                                        FontSize="13"
                                        Margin="0,0,0,4"/>
-                            <CheckBox Content="Backup Settings?"
+                            <CheckBox Content="Enable client backups"
                                       IsChecked="{Binding BackupSettingsEnabled}"/>
                             <Grid ColumnDefinitions="Auto * Auto" ColumnSpacing="8" Margin="20,4,0,4">
                                 <TextBlock Grid.Column="0"
-                                           Text="Minimum Backup Gap (minutes):"
+                                           Text="Time between backups (minutes):"
                                            VerticalAlignment="Center"/>
                                 <NumericUpDown Grid.Column="1"
                                                Value="{Binding MinimumSettingsBackupGapMinutes}"
@@ -95,7 +104,7 @@
                             </Grid>
                             <Grid ColumnDefinitions="Auto * Auto" ColumnSpacing="8" Margin="20,4,0,4">
                                 <TextBlock Grid.Column="0"
-                                           Text="Number of Backups:"
+                                           Text="Number of backups to keep:"
                                            VerticalAlignment="Center"/>
                                 <NumericUpDown Grid.Column="1"
                                                Value="{Binding NumberOfSettingsBackups}"
@@ -112,6 +121,10 @@
                                            Foreground="Gray"
                                            FontSize="12"/>
                             </Grid>
+                            <TextBlock Text="Client backups apply to desktop settings only."
+                                       FontSize="11"
+                                       Foreground="Gray"
+                                       Margin="20,0,0,0"/>
                         </StackPanel>
 
                         <!-- Auto Refresh Section -->
@@ -143,6 +156,12 @@
                                            Foreground="Gray"
                                            FontSize="12"/>
                             </Grid>
+                            <CheckBox Content="Force loudness rescan on next refresh"
+                                      IsChecked="{Binding ForceRescanLoudness}"
+                                      Margin="20,4,0,0"/>
+                            <CheckBox Content="Force duration rescan on next refresh"
+                                      IsChecked="{Binding ForceRescanDuration}"
+                                      Margin="20,4,0,0"/>
                             <TextBlock Text="Auto-refresh runs in core and applies to enabled sources only."
                                        FontSize="11"
                                        Foreground="Gray"

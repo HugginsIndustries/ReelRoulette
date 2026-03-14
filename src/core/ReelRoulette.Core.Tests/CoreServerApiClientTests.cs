@@ -193,6 +193,28 @@ public sealed class CoreServerApiClientTests
     }
 
     [Fact]
+    public async Task ApplyItemTagsAsync_ShouldReturnFalse_OnConflictStatus()
+    {
+        var handler = new DelegatingStubHandler(_ =>
+        {
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Conflict)
+            {
+                Content = new StringContent("{\"error\":\"apply rejected or produced no changes\"}", Encoding.UTF8, "application/json")
+            });
+        });
+        var apiClient = new CoreServerApiClient(new HttpClient(handler));
+
+        var success = await apiClient.ApplyItemTagsAsync("http://localhost:51301", new CoreApplyItemTagsRequest
+        {
+            ItemIds = ["a.mp4"],
+            AddTags = ["new"],
+            RemoveTags = []
+        });
+
+        Assert.False(success);
+    }
+
+    [Fact]
     public async Task RenameTagAsync_ShouldPostExpectedJsonShape()
     {
         HttpRequestMessage? capturedRequest = null;
@@ -340,7 +362,7 @@ public sealed class CoreServerApiClientTests
             {
                 return new HttpResponseMessage(HttpStatusCode.OK)
                 {
-                    Content = new StringContent("{\"autoRefreshEnabled\":true,\"autoRefreshIntervalMinutes\":15}", Encoding.UTF8, "application/json")
+                    Content = new StringContent("{\"autoRefreshEnabled\":true,\"autoRefreshIntervalMinutes\":15,\"forceRescanLoudness\":false,\"forceRescanDuration\":false}", Encoding.UTF8, "application/json")
                 };
             }
 
@@ -356,7 +378,9 @@ public sealed class CoreServerApiClientTests
         var updated = await client.UpdateRefreshSettingsAsync("http://localhost:51301", new CoreRefreshSettingsSnapshot
         {
             AutoRefreshEnabled = false,
-            AutoRefreshIntervalMinutes = 20
+            AutoRefreshIntervalMinutes = 20,
+            ForceRescanLoudness = true,
+            ForceRescanDuration = true
         });
 
         Assert.NotNull(existing);
@@ -366,11 +390,116 @@ public sealed class CoreServerApiClientTests
         Assert.NotNull(updated);
         Assert.False(updated!.AutoRefreshEnabled);
         Assert.Equal(20, updated.AutoRefreshIntervalMinutes);
+        Assert.True(updated.ForceRescanLoudness);
+        Assert.True(updated.ForceRescanDuration);
 
         Assert.False(string.IsNullOrWhiteSpace(updatePayload));
         using var doc = JsonDocument.Parse(updatePayload!);
         Assert.False(doc.RootElement.GetProperty("autoRefreshEnabled").GetBoolean());
         Assert.Equal(20, doc.RootElement.GetProperty("autoRefreshIntervalMinutes").GetInt32());
+        Assert.True(doc.RootElement.GetProperty("forceRescanLoudness").GetBoolean());
+        Assert.True(doc.RootElement.GetProperty("forceRescanDuration").GetBoolean());
+    }
+
+    [Fact]
+    public async Task GetAndUpdateBackupSettingsAsync_ShouldRoundTripSnapshot()
+    {
+        var step = 0;
+        string? updatePayload = null;
+        var handler = new DelegatingStubHandler(async request =>
+        {
+            step++;
+            if (step == 1)
+            {
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent("{\"enabled\":true,\"minimumBackupGapMinutes\":360,\"numberOfBackups\":8}", Encoding.UTF8, "application/json")
+                };
+            }
+
+            updatePayload = await request.Content!.ReadAsStringAsync();
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(updatePayload, Encoding.UTF8, "application/json")
+            };
+        });
+        var client = new CoreServerApiClient(new HttpClient(handler));
+
+        var existing = await client.GetBackupSettingsAsync("http://localhost:51301");
+        var updated = await client.UpdateBackupSettingsAsync("http://localhost:51301", new CoreBackupSettingsSnapshot
+        {
+            Enabled = false,
+            MinimumBackupGapMinutes = 480,
+            NumberOfBackups = 12
+        });
+
+        Assert.NotNull(existing);
+        Assert.True(existing!.Enabled);
+        Assert.Equal(360, existing.MinimumBackupGapMinutes);
+        Assert.Equal(8, existing.NumberOfBackups);
+
+        Assert.NotNull(updated);
+        Assert.False(updated!.Enabled);
+        Assert.Equal(480, updated.MinimumBackupGapMinutes);
+        Assert.Equal(12, updated.NumberOfBackups);
+
+        Assert.False(string.IsNullOrWhiteSpace(updatePayload));
+        using var doc = JsonDocument.Parse(updatePayload!);
+        Assert.False(doc.RootElement.GetProperty("enabled").GetBoolean());
+        Assert.Equal(480, doc.RootElement.GetProperty("minimumBackupGapMinutes").GetInt32());
+        Assert.Equal(12, doc.RootElement.GetProperty("numberOfBackups").GetInt32());
+    }
+
+    [Fact]
+    public async Task GetLibraryStatsAsync_ShouldDeserializeSourcesAndGlobalTotals()
+    {
+        var handler = new DelegatingStubHandler(_ =>
+            Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    """
+                    {
+                      "global": {
+                        "totalVideos": 4,
+                        "totalPhotos": 2,
+                        "totalMedia": 6,
+                        "favorites": 1,
+                        "blacklisted": 1,
+                        "uniquePlayedMedia": 3,
+                        "neverPlayedMedia": 3,
+                        "totalPlays": 9
+                      },
+                      "sources": [
+                        {
+                          "sourceId": "src-1",
+                          "rootPath": "C:\\media",
+                          "displayName": "Media",
+                          "isEnabled": true,
+                          "totalVideos": 4,
+                          "totalPhotos": 2,
+                          "totalMedia": 6,
+                          "videosWithAudio": 3,
+                          "videosWithoutAudio": 1,
+                          "totalDurationSeconds": 600,
+                          "averageDurationSeconds": 150
+                        }
+                      ]
+                    }
+                    """,
+                    Encoding.UTF8,
+                    "application/json")
+            }));
+        var client = new CoreServerApiClient(new HttpClient(handler));
+
+        var snapshot = await client.GetLibraryStatsAsync("http://localhost:51301");
+
+        Assert.NotNull(snapshot);
+        Assert.Equal(6, snapshot!.Global.TotalMedia);
+        Assert.Equal(9, snapshot.Global.TotalPlays);
+        var source = Assert.Single(snapshot.Sources);
+        Assert.Equal("src-1", source.SourceId);
+        Assert.Equal(600, source.TotalDurationSeconds);
+        Assert.Equal(150, source.AverageDurationSeconds);
     }
 
     private sealed class DelegatingStubHandler : HttpMessageHandler

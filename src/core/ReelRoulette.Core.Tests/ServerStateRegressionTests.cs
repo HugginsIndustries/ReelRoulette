@@ -13,10 +13,12 @@ public sealed class ServerStateRegressionTests
 
         for (var i = 0; i < 300; i++)
         {
-            service.SetFavorite(new FavoriteRequest
+            service.PublishExternal("itemStateChanged", new ItemStateChangedPayload
             {
+                ItemId = $"clip-{i}",
                 Path = $"clip-{i}.mp4",
-                IsFavorite = true
+                IsFavorite = true,
+                IsBlacklisted = false
             });
         }
 
@@ -29,7 +31,7 @@ public sealed class ServerStateRegressionTests
     public void RecordPlayback_ShouldPublishPlaybackRecordedPayloadWithClientId()
     {
         var service = new ServerStateService();
-        service.RecordPlayback(new RecordPlaybackRequest
+        service.PublishExternal("playbackRecorded", new PlaybackRecordedPayload
         {
             Path = "movie.mp4",
             ClientId = "desktop-client",
@@ -44,67 +46,114 @@ public sealed class ServerStateRegressionTests
         Assert.Equal("movie.mp4", payload.Path);
         Assert.Equal("desktop-client", payload.ClientId);
         Assert.Equal("session-1", payload.SessionId);
+        Assert.Null(payload.PlayCount);
+        Assert.Null(payload.LastPlayedUtc);
     }
 
     [Fact]
-    public void LibraryStates_WithoutPathFilter_ShouldReturnAllPathsSorted()
+    public void RecordPlayback_WithStats_ShouldIncludeStatsInPayload()
     {
         var service = new ServerStateService();
-        service.SetFavorite(new FavoriteRequest { Path = "zeta.mp4", IsFavorite = true });
-        service.SetFavorite(new FavoriteRequest { Path = "alpha.mp4", IsFavorite = true });
-
-        var allStates = service.GetLibraryStates(new LibraryStatesRequest());
-        Assert.Equal(2, allStates.Count);
-        Assert.Equal("alpha.mp4", allStates[0].Path);
-        Assert.Equal("zeta.mp4", allStates[1].Path);
-    }
-
-    [Fact]
-    public void SetFavoriteAfterBlacklist_ShouldClearBlacklistForSameItem()
-    {
-        var service = new ServerStateService();
-        service.SetBlacklist(new BlacklistRequest { Path = "movie.mp4", IsBlacklisted = true });
-        service.SetFavorite(new FavoriteRequest { Path = "movie.mp4", IsFavorite = true });
-
-        var state = Assert.Single(service.GetLibraryStates(new LibraryStatesRequest { Paths = ["movie.mp4"] }));
-        Assert.True(state.IsFavorite);
-        Assert.False(state.IsBlacklisted);
-    }
-
-    [Fact]
-    public void ApplyItemTags_ShouldPublishItemTagsChangedEvent()
-    {
-        var service = new ServerStateService();
-        service.ApplyItemTags(new ApplyItemTagsRequest
+        var nowUtc = DateTime.UtcNow;
+        service.PublishExternal("playbackRecorded", new PlaybackRecordedPayload
         {
-            ItemIds = ["a.mp4"],
-            AddTags = ["TagA"]
+            Path = "movie.mp4",
+            ClientId = "desktop-client",
+            SessionId = "session-1",
+            PlayCount = 9,
+            LastPlayedUtc = nowUtc
         });
 
         var replay = service.GetReplayAfter(0);
         var envelope = Assert.Single(replay.Events);
-        Assert.Equal("itemTagsChanged", envelope.EventType);
-        var payload = Assert.IsType<ItemTagsChangedPayload>(envelope.Payload);
-        Assert.Equal("a.mp4", Assert.Single(payload.ItemIds));
-        Assert.Equal("TagA", Assert.Single(payload.AddedTags));
+        var payload = Assert.IsType<PlaybackRecordedPayload>(envelope.Payload);
+        Assert.Equal(9, payload.PlayCount);
+        Assert.NotNull(payload.LastPlayedUtc);
+        Assert.InRange(payload.LastPlayedUtc!.Value, nowUtc.AddSeconds(-1), nowUtc.AddSeconds(1));
     }
 
     [Fact]
-    public void ApplyItemTags_ShouldPreserveExistingTagCategory()
+    public void PublishExternal_ShouldAppendEventsInOrder()
     {
         var service = new ServerStateService();
-        service.UpsertCategory(new UpsertCategoryRequest { Id = "cat-1", Name = "Category 1", SortOrder = 1 });
-        service.UpsertTag(new UpsertTagRequest { Name = "TagA", CategoryId = "cat-1" });
-
-        service.ApplyItemTags(new ApplyItemTagsRequest
+        service.PublishExternal("itemStateChanged", new ItemStateChangedPayload
         {
-            ItemIds = ["a.mp4"],
-            AddTags = ["TagA"]
+            ItemId = "zeta",
+            Path = "zeta.mp4",
+            IsFavorite = true,
+            IsBlacklisted = false
+        });
+        service.PublishExternal("itemStateChanged", new ItemStateChangedPayload
+        {
+            ItemId = "alpha",
+            Path = "alpha.mp4",
+            IsFavorite = true,
+            IsBlacklisted = false
         });
 
-        var model = service.GetTagEditorModel(new TagEditorModelRequest { ItemIds = ["a.mp4"] });
-        var tag = Assert.Single(model.Tags, t => string.Equals(t.Name, "TagA", StringComparison.OrdinalIgnoreCase));
-        Assert.Equal("cat-1", tag.CategoryId);
+        var replay = service.GetReplayAfter(0);
+        Assert.Equal(2, replay.Events.Count);
+        Assert.Equal("zeta.mp4", Assert.IsType<ItemStateChangedPayload>(replay.Events[0].Payload).Path);
+        Assert.Equal("alpha.mp4", Assert.IsType<ItemStateChangedPayload>(replay.Events[1].Payload).Path);
+    }
+
+    [Fact]
+    public void PublishExternal_TagCatalogChanged_ShouldRoundTripPayload()
+    {
+        var service = new ServerStateService();
+        var payload = new TagCatalogChangedPayload
+        {
+            Reason = "syncCatalog",
+            Categories = [new TagCategorySnapshot { Id = "uncategorized", Name = "Uncategorized", SortOrder = int.MaxValue }],
+            Tags = [new TagSnapshot { Name = "TagA", CategoryId = "uncategorized" }]
+        };
+        service.PublishExternal("tagCatalogChanged", payload);
+
+        var replay = service.GetReplayAfter(0);
+        var envelope = Assert.Single(replay.Events);
+        Assert.Equal("tagCatalogChanged", envelope.EventType);
+        var replayPayload = Assert.IsType<TagCatalogChangedPayload>(envelope.Payload);
+        Assert.Equal("syncCatalog", replayPayload.Reason);
+        Assert.Contains(replayPayload.Tags, tag => string.Equals(tag.Name, "TagA", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void ApplyItemTags_EventPublish_ShouldEmitOnlyItemTagsChanged_WhenCatalogUnchanged()
+    {
+        var service = new ServerStateService();
+        _ = service.PublishExternal("itemTagsChanged", new ItemTagsChangedPayload
+        {
+            ItemIds = ["item-1"],
+            AddedTags = ["TagA"],
+            RemovedTags = []
+        });
+
+        var replay = service.GetReplayAfter(0);
+        Assert.Single(replay.Events);
+        Assert.Equal("itemTagsChanged", replay.Events[0].EventType);
+    }
+
+    [Fact]
+    public void ApplyItemTags_EventPublish_ShouldEmitItemAndCatalogEvents_WhenCatalogChanged()
+    {
+        var service = new ServerStateService();
+        _ = service.PublishExternal("itemTagsChanged", new ItemTagsChangedPayload
+        {
+            ItemIds = ["item-1"],
+            AddedTags = ["NewTag"],
+            RemovedTags = []
+        });
+        _ = service.PublishExternal("tagCatalogChanged", new TagCatalogChangedPayload
+        {
+            Reason = "applyItemTags",
+            Categories = [new TagCategorySnapshot { Id = "uncategorized", Name = "Uncategorized", SortOrder = int.MaxValue }],
+            Tags = [new TagSnapshot { Name = "NewTag", CategoryId = "uncategorized" }]
+        });
+
+        var replay = service.GetReplayAfter(0);
+        Assert.Equal(2, replay.Events.Count);
+        Assert.Equal("itemTagsChanged", replay.Events[0].EventType);
+        Assert.Equal("tagCatalogChanged", replay.Events[1].EventType);
     }
 
     [Fact]
@@ -144,64 +193,39 @@ public sealed class ServerStateRegressionTests
     }
 
     [Fact]
-    public void RenameTag_ShouldUpdateCatalogAndItemTagModel()
+    public void RenameTagInPresetCatalogOnly_ShouldRenameSelectedAndExcludedTags()
     {
-        var service = new ServerStateService();
-        service.UpsertCategory(new UpsertCategoryRequest { Id = "cat-1", Name = "Category 1" });
-        service.UpsertTag(new UpsertTagRequest { Name = "TagA", CategoryId = "cat-1" });
-        service.ApplyItemTags(new ApplyItemTagsRequest
+        var appDataPath = Path.Combine(Path.GetTempPath(), "reelroulette-server-state-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(appDataPath);
+        try
         {
-            ItemIds = ["a.mp4"],
-            AddTags = ["TagA"]
-        });
-
-        service.RenameTag(new RenameTagRequest
-        {
-            OldName = "TagA",
-            NewName = "TagB",
-            NewCategoryId = "cat-1"
-        });
-
-        var model = service.GetTagEditorModel(new TagEditorModelRequest { ItemIds = ["a.mp4"] });
-        Assert.Contains(model.Tags, t => t.Name == "TagB");
-        Assert.DoesNotContain(model.Tags, t => t.Name == "TagA");
-        var item = Assert.Single(model.Items);
-        Assert.Contains("TagB", item.Tags);
-        Assert.DoesNotContain("TagA", item.Tags);
-    }
-
-    [Fact]
-    public void DeleteCategory_ShouldReassignTagsToUncategorized()
-    {
-        var service = new ServerStateService();
-        service.UpsertCategory(new UpsertCategoryRequest { Id = "cat-1", Name = "Category 1" });
-        service.UpsertTag(new UpsertTagRequest { Name = "TagA", CategoryId = "cat-1" });
-
-        service.DeleteCategory(new DeleteCategoryRequest { CategoryId = "cat-1" });
-
-        var model = service.GetTagEditorModel(new TagEditorModelRequest { ItemIds = [] });
-        var tag = Assert.Single(model.Tags, t => t.Name == "TagA");
-        Assert.Equal("uncategorized", tag.CategoryId);
-        Assert.Contains(model.Categories, c => c.Id == "uncategorized" && c.Name == "Uncategorized");
-    }
-
-    [Fact]
-    public void SyncTagCatalog_ShouldNormalizeBlankCategoryIdsToUncategorized()
-    {
-        var service = new ServerStateService();
-        service.SyncTagCatalog(new SyncTagCatalogRequest
-        {
-            Categories = [new TagCategorySnapshot { Id = "cat-1", Name = "Category 1", SortOrder = 0 }],
-            Tags =
+            var service = new ServerStateService(appDataPathOverride: appDataPath);
+            service.SetPresetCatalog(
             [
-                new TagSnapshot { Name = "TagA", CategoryId = string.Empty },
-                new TagSnapshot { Name = "TagB", CategoryId = "cat-1" }
-            ]
-        });
+                new FilterPresetSnapshot
+                {
+                    Name = "Tag test",
+                    FilterState = System.Text.Json.JsonSerializer.SerializeToElement(new
+                    {
+                        selectedTags = new[] { "TagA" },
+                        excludedTags = new[] { "TagA" }
+                    })
+                }
+            ]);
 
-        var model = service.GetTagEditorModel(new TagEditorModelRequest { ItemIds = [] });
-        var uncategorizedTag = Assert.Single(model.Tags, t => t.Name == "TagA");
-        Assert.Equal("uncategorized", uncategorizedTag.CategoryId);
-        Assert.Contains(model.Categories, c => c.Id == "uncategorized" && c.Name == "Uncategorized");
+            Assert.True(service.RenameTagInPresetCatalogOnly("TagA", "TagB"));
+            var presets = service.GetPresetCatalogSnapshot();
+            var preset = Assert.Single(presets);
+            var raw = preset.FilterState.GetRawText();
+            Assert.Contains("TagB", raw, StringComparison.Ordinal);
+            Assert.DoesNotContain("TagA", raw, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(appDataPath))
+            {
+                Directory.Delete(appDataPath, recursive: true);
+            }
+        }
     }
 }

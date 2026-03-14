@@ -68,9 +68,19 @@
                                                     Spacing="12"
                                                     Margin="0,4,0,8">
                                             <TextBlock FontSize="12" Foreground="Gray">
+                                                <Run Text="📦"/>
+                                                <Run Text="{Binding Statistics.TotalMedia}"/>
+                                                <Run Text=" media"/>
+                                            </TextBlock>
+                                            <TextBlock FontSize="12" Foreground="Gray">
                                                 <Run Text="🎞️"/>
                                                 <Run Text="{Binding Statistics.TotalVideos}"/>
                                                 <Run Text="videos"/>
+                                            </TextBlock>
+                                            <TextBlock FontSize="12" Foreground="Gray">
+                                                <Run Text="🖼️"/>
+                                                <Run Text="{Binding Statistics.TotalPhotos}"/>
+                                                <Run Text=" photos"/>
                                             </TextBlock>
                                             <TextBlock FontSize="12" Foreground="Gray">
                                                 <Run Text="⏱️"/>

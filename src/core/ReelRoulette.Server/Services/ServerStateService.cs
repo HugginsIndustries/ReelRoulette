@@ -89,39 +89,17 @@ public sealed class ServerStateService
 
     public void SetFavorite(FavoriteRequest request)
     {
-        var current = GetOrCreateItemState(request.Path);
-        current.Payload.IsFavorite = request.IsFavorite;
-        if (request.IsFavorite)
-        {
-            // Favorite/blacklist must remain mutually exclusive.
-            current.Payload.IsBlacklisted = false;
-        }
-        var envelope = Publish("itemStateChanged", current.Payload);
-        current.Revision = envelope.Revision;
+        throw new NotSupportedException("Mutation authority moved to LibraryOperationsService.");
     }
 
     public void SetBlacklist(BlacklistRequest request)
     {
-        var current = GetOrCreateItemState(request.Path);
-        current.Payload.IsBlacklisted = request.IsBlacklisted;
-        if (request.IsBlacklisted)
-        {
-            // Favorite/blacklist must remain mutually exclusive.
-            current.Payload.IsFavorite = false;
-        }
-        var envelope = Publish("itemStateChanged", current.Payload);
-        current.Revision = envelope.Revision;
+        throw new NotSupportedException("Mutation authority moved to LibraryOperationsService.");
     }
 
-    public void RecordPlayback(RecordPlaybackRequest request)
+    public void RecordPlayback(RecordPlaybackRequest request, int? playCount = null, DateTime? lastPlayedUtc = null)
     {
-        var payload = new PlaybackRecordedPayload
-        {
-            Path = request.Path,
-            ClientId = request.ClientId,
-            SessionId = request.SessionId
-        };
-        Publish("playbackRecorded", payload);
+        throw new NotSupportedException("Mutation authority moved to LibraryOperationsService.");
     }
 
     public ReplayResult GetReplayAfter(long revision)
@@ -198,6 +176,38 @@ public sealed class ServerStateService
         }
 
         PersistPresetCatalog();
+    }
+
+    public bool RenameTagInPresetCatalogOnly(string oldName, string newName)
+    {
+        if (string.IsNullOrWhiteSpace(oldName) || string.IsNullOrWhiteSpace(newName))
+        {
+            return false;
+        }
+
+        var changed = RenameTagInPresetCatalog(oldName, newName);
+        if (changed)
+        {
+            PersistPresetCatalog();
+        }
+
+        return changed;
+    }
+
+    public bool RemoveTagFromPresetCatalogOnly(string tagName)
+    {
+        if (string.IsNullOrWhiteSpace(tagName))
+        {
+            return false;
+        }
+
+        var changed = RemoveTagFromPresetCatalog(tagName);
+        if (changed)
+        {
+            PersistPresetCatalog();
+        }
+
+        return changed;
     }
 
     public IReadOnlyList<SourceResponse> GetSourcesSnapshot()
@@ -315,233 +325,42 @@ public sealed class ServerStateService
 
     public void ApplyItemTags(ApplyItemTagsRequest request)
     {
-        var itemIds = request.ItemIds
-            .Where(id => !string.IsNullOrWhiteSpace(id))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
-        var addTags = request.AddTags
-            .Where(tag => !string.IsNullOrWhiteSpace(tag))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
-        var removeTags = request.RemoveTags
-            .Where(tag => !string.IsNullOrWhiteSpace(tag))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-        if (itemIds.Count == 0 || (addTags.Count == 0 && removeTags.Count == 0))
-        {
-            return;
-        }
-
-        lock (_tagLock)
-        {
-            foreach (var itemId in itemIds)
-            {
-                var tags = GetOrCreateItemTags(itemId);
-                foreach (var removeTag in removeTags)
-                {
-                    tags.Remove(removeTag);
-                }
-
-                foreach (var addTag in addTags)
-                {
-                    tags.Add(addTag);
-                    EnsureTagExists(addTag, ResolveCategoryIdForTag(addTag), keepExistingCategory: true);
-                }
-            }
-        }
-
-        Publish("itemTagsChanged", new ItemTagsChangedPayload
-        {
-            ItemIds = itemIds,
-            AddedTags = addTags,
-            RemovedTags = removeTags
-        });
+        throw new NotSupportedException("Mutation authority moved to LibraryOperationsService.");
     }
 
     public void UpsertCategory(UpsertCategoryRequest request)
     {
-        lock (_tagLock)
-        {
-            var categoryId = NormalizeCategoryId(request.Id);
-            if (string.IsNullOrWhiteSpace(categoryId))
-            {
-                categoryId = UncategorizedCategoryId;
-            }
-
-            if (string.Equals(categoryId, UncategorizedCategoryId, StringComparison.OrdinalIgnoreCase))
-            {
-                EnsureUncategorizedCategoryLocked();
-                return;
-            }
-
-            var existing = _tagCategories.FirstOrDefault(c => string.Equals(c.Id, categoryId, StringComparison.OrdinalIgnoreCase));
-            if (existing == null)
-            {
-                _tagCategories.Add(new TagCategorySnapshot
-                {
-                    Id = categoryId,
-                    Name = request.Name,
-                    SortOrder = request.SortOrder ?? _tagCategories.Count
-                });
-            }
-            else
-            {
-                existing.Name = request.Name;
-                if (request.SortOrder.HasValue)
-                {
-                    existing.SortOrder = request.SortOrder.Value;
-                }
-            }
-        }
-
-        Publish("tagCatalogChanged", CreateTagCatalogPayload("upsertCategory"));
+        throw new NotSupportedException("Mutation authority moved to LibraryOperationsService.");
     }
 
     public void UpsertTag(UpsertTagRequest request)
     {
-        lock (_tagLock)
-        {
-            EnsureTagExists(request.Name, NormalizeCategoryId(request.CategoryId));
-        }
-
-        Publish("tagCatalogChanged", CreateTagCatalogPayload("upsertTag"));
+        throw new NotSupportedException("Mutation authority moved to LibraryOperationsService.");
     }
 
     public void RenameTag(RenameTagRequest request)
     {
-        var tagRenamed = false;
-        lock (_tagLock)
-        {
-            var existing = _tags.FirstOrDefault(t => string.Equals(t.Name, request.OldName, StringComparison.OrdinalIgnoreCase));
-            if (existing == null)
-            {
-                return;
-            }
-
-            existing.Name = request.NewName;
-            tagRenamed = true;
-            if (request.NewCategoryId != null)
-            {
-                existing.CategoryId = NormalizeCategoryId(request.NewCategoryId);
-            }
-
-            foreach (var itemTags in _itemTags.Values)
-            {
-                if (itemTags.Remove(request.OldName))
-                {
-                    itemTags.Add(request.NewName);
-                }
-            }
-        }
-
-        if (tagRenamed && RenameTagInPresetCatalog(request.OldName, request.NewName))
-        {
-            PersistPresetCatalog();
-        }
-
-        Publish("tagCatalogChanged", CreateTagCatalogPayload("renameTag"));
+        throw new NotSupportedException("Mutation authority moved to LibraryOperationsService.");
     }
 
     public void DeleteTag(DeleteTagRequest request)
     {
-        var removed = false;
-        lock (_tagLock)
-        {
-            removed = _tags.RemoveAll(t => string.Equals(t.Name, request.Name, StringComparison.OrdinalIgnoreCase)) > 0;
-            foreach (var itemTags in _itemTags.Values)
-            {
-                itemTags.Remove(request.Name);
-            }
-        }
-
-        if (removed && RemoveTagFromPresetCatalog(request.Name))
-        {
-            PersistPresetCatalog();
-        }
-
-        Publish("tagCatalogChanged", CreateTagCatalogPayload("deleteTag"));
+        throw new NotSupportedException("Mutation authority moved to LibraryOperationsService.");
     }
 
     public void DeleteCategory(DeleteCategoryRequest request)
     {
-        lock (_tagLock)
-        {
-            var sourceCategoryId = NormalizeCategoryId(request.CategoryId);
-            if (string.Equals(sourceCategoryId, UncategorizedCategoryId, StringComparison.OrdinalIgnoreCase))
-            {
-                return;
-            }
-
-            var targetCategoryId = request.NewCategoryId == null
-                ? UncategorizedCategoryId
-                : NormalizeCategoryId(request.NewCategoryId);
-
-            EnsureUncategorizedCategoryLocked();
-            _tagCategories.RemoveAll(c => string.Equals(c.Id, sourceCategoryId, StringComparison.OrdinalIgnoreCase));
-            foreach (var tag in _tags.Where(t => string.Equals(t.CategoryId, sourceCategoryId, StringComparison.OrdinalIgnoreCase)))
-            {
-                tag.CategoryId = targetCategoryId;
-            }
-        }
-
-        Publish("tagCatalogChanged", CreateTagCatalogPayload("deleteCategory"));
+        throw new NotSupportedException("Mutation authority moved to LibraryOperationsService.");
     }
 
     public void SyncTagCatalog(SyncTagCatalogRequest request)
     {
-        lock (_tagLock)
-        {
-            _tagCategories.Clear();
-            foreach (var category in request.Categories
-                         .Where(c => !string.IsNullOrWhiteSpace(c.Name))
-                         .Select(CloneCategory))
-            {
-                category.Id = NormalizeCategoryId(category.Id);
-                if (string.Equals(category.Id, UncategorizedCategoryId, StringComparison.OrdinalIgnoreCase))
-                {
-                    category.Id = UncategorizedCategoryId;
-                    category.Name = UncategorizedCategoryName;
-                    category.SortOrder = int.MaxValue;
-                }
-
-                if (_tagCategories.Any(c => string.Equals(c.Id, category.Id, StringComparison.OrdinalIgnoreCase)))
-                {
-                    continue;
-                }
-
-                _tagCategories.Add(category);
-            }
-
-            _tags.Clear();
-            foreach (var tag in request.Tags
-                         .Where(t => !string.IsNullOrWhiteSpace(t.Name))
-                         .Select(CloneTag))
-            {
-                tag.CategoryId = NormalizeCategoryId(tag.CategoryId);
-                _tags.RemoveAll(t => string.Equals(t.Name, tag.Name, StringComparison.OrdinalIgnoreCase));
-                _tags.Add(tag);
-            }
-
-            EnsureUncategorizedCategoryLocked();
-        }
-
-        Publish("tagCatalogChanged", CreateTagCatalogPayload("syncCatalog"));
+        throw new NotSupportedException("Mutation authority moved to LibraryOperationsService.");
     }
 
     public void SyncItemTags(SyncItemTagsRequest request)
     {
-        lock (_tagLock)
-        {
-            foreach (var item in request.Items.Where(i => !string.IsNullOrWhiteSpace(i.ItemId)))
-            {
-                var itemId = item.ItemId.Trim();
-                _itemTags[itemId] = (item.Tags ?? [])
-                    .Where(t => !string.IsNullOrWhiteSpace(t))
-                    .Select(t => t.Trim())
-                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
-            }
-        }
+        throw new NotSupportedException("Mutation authority moved to LibraryOperationsService.");
     }
 
     public ChannelReader<ServerEventEnvelope> Subscribe(CancellationToken cancellationToken)

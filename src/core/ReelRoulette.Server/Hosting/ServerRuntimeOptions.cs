@@ -21,6 +21,11 @@ public sealed class ServerRuntimeOptions
     ];
     public bool AutoRefreshEnabled { get; set; } = true;
     public int AutoRefreshIntervalMinutes { get; set; } = 15;
+    public bool ForceRescanLoudness { get; set; }
+    public bool ForceRescanDuration { get; set; }
+    public bool BackupEnabled { get; set; } = true;
+    public int MinimumBackupGapMinutes { get; set; } = 360;
+    public int NumberOfBackups { get; set; } = 8;
     public string ControlAdminAuthMode { get; set; } = "Off";
     public string? ControlAdminSharedToken { get; set; }
     public string ControlAdminCookieName { get; set; } = "rr_admin";
@@ -59,6 +64,8 @@ public sealed class ServerRuntimeOptions
         }
 
         options.AutoRefreshIntervalMinutes = Math.Clamp(options.AutoRefreshIntervalMinutes, 5, 1440);
+        options.MinimumBackupGapMinutes = Math.Clamp(options.MinimumBackupGapMinutes, 1, 10080);
+        options.NumberOfBackups = Math.Clamp(options.NumberOfBackups, 1, 100);
         options.ControlAdminAuthMode = NormalizeControlAuthMode(options.ControlAdminAuthMode);
         if (string.IsNullOrWhiteSpace(options.ControlAdminSharedToken))
         {

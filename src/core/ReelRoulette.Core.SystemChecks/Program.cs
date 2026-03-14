@@ -31,23 +31,24 @@ if (eventB.Revision <= eventA.Revision)
     return;
 }
 
-serverState.SetFavorite(new ReelRoulette.Server.Contracts.FavoriteRequest { Path = "fixture-a.mp4", IsFavorite = true });
-serverState.SetBlacklist(new ReelRoulette.Server.Contracts.BlacklistRequest { Path = "fixture-b.mp4", IsBlacklisted = true });
+serverState.PublishExternal("itemStateChanged", new ReelRoulette.Server.Contracts.ItemStateChangedPayload
+{
+    ItemId = "fixture-a",
+    Path = "fixture-a.mp4",
+    IsFavorite = true,
+    IsBlacklisted = false
+});
+serverState.PublishExternal("itemStateChanged", new ReelRoulette.Server.Contracts.ItemStateChangedPayload
+{
+    ItemId = "fixture-b",
+    Path = "fixture-b.mp4",
+    IsFavorite = false,
+    IsBlacklisted = true
+});
 var replay = serverState.GetReplayAfter(0);
 if (replay.Events.Count < 2 || replay.GapDetected)
 {
     Console.WriteLine("Server replay check failed.");
-    Environment.ExitCode = 1;
-    return;
-}
-
-var states = serverState.GetLibraryStates(new ReelRoulette.Server.Contracts.LibraryStatesRequest
-{
-    Paths = ["fixture-a.mp4", "fixture-b.mp4"]
-});
-if (states.Count != 2 || states.Any(s => s.Revision <= 0))
-{
-    Console.WriteLine("Server library-states check failed.");
     Environment.ExitCode = 1;
     return;
 }
