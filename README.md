@@ -33,6 +33,10 @@ Run the server app:
 # Windows (tray + no-console path):
 dotnet run --framework net9.0-windows --project .\src\core\ReelRoulette.ServerApp\ReelRoulette.ServerApp.csproj
 
+# Windows (system tray validation via app binary):
+dotnet build .\src\core\ReelRoulette.ServerApp\ReelRoulette.ServerApp.csproj -f net9.0-windows
+.\src\core\ReelRoulette.ServerApp\bin\Debug\net9.0-windows\ReelRoulette.ServerApp.exe
+
 # Linux/macOS (headless path):
 dotnet run --framework net9.0 --project .\src\core\ReelRoulette.ServerApp\ReelRoulette.ServerApp.csproj
 ```
@@ -51,7 +55,10 @@ npm install
 npm run dev
 ```
 
-`npm run dev` and `npm run build` automatically sync the shared icon from `assets/HI.ico` into WebUI `public/HI.ico`.
+`npm run dev` and `npm run build` automatically sync shared assets into WebUI `public/`, including:
+
+- app icon: `assets/HI.ico` -> `public/HI.ico`
+- Material Symbols font: `assets/fonts/MaterialSymbolsOutlined.var.ttf` -> `public/assets/fonts/MaterialSymbolsOutlined.var.ttf`
 
 ## Helper Scripts
 
@@ -116,7 +123,7 @@ dotnet run --project .\src\core\ReelRoulette.Core.SystemChecks\ReelRoulette.Core
 
 Manual test guide:
 
-- `docs/testing-checklist.md`
+- `docs/checklists/testing-checklist.md`
 - `tools/scripts/reset-checklist.ps1` resets testing-checklist metadata/checklist state for a new pass.
 
 ## Packaging (Windows)

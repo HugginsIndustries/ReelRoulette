@@ -1,0 +1,29 @@
+Instructions:
+
+- Keep title format as `*: {concise summary}`.
+- Use one of these title prefixes based on scope:
+  - `Docs: {concise summary}` for docs-only updates.
+  - `{milestone id}: {concise summary}` for milestone implementation work (examples: `M8c: ...`, `M9h: ...`, `M16b: ...`).
+  - Do not use milestone-id title prefixes for planning/roadmap/doc-only milestone updates; use `Docs:` for those commits.
+  - `Bugfix: {concise summary}` for defect fixes.
+  - `Feature: {concise summary}` for net-new feature work outside milestone framing.
+  - `Refactor: {concise summary}` for internal code restructuring with no behavior change.
+  - `Test: {concise summary}` for test-only additions/updates.
+  - `Chore: {concise summary}` for tooling/maintenance updates.
+- Keep the summary concise and outcome-focused.
+- Use 1-8 bullet points max in the message body.
+- Keep bullets high-level; avoid excessive implementation detail.
+- Update only the `Commit Message` section for each new commit.
+- Do not modify this `Instructions` section unless explicitly requested.
+
+
+Commit Message:
+
+M8h: complete icon migration and tray parity
+
+- migrate desktop `ItemTagsDialog` controls from emoji glyphs to Material Symbols with shared no-box icon styles, including category/footer action placement updates, responsive tag-chip layout, rounded category bars, and session-scoped category collapse persistence.
+- migrate WebUI overlay controls and tag editor controls to Material Symbols with shared CSS icon primitives, explicit play/pause (`play_arrow`/`pause`) swapping, and local font-asset delivery via shared icon sync.
+- align WebUI tag-editor visuals with desktop parity by adding dark themed rounded inputs, desktop-matching category bars, exact shared tag-chip color tokens (orange/lime/violet), and consistent stronger text/glyph shadows.
+- implement Windows tray context-menu runtime light/dark theme parity with system theme detection, themed renderer colors, and live theme-change refresh handling.
+- document Windows tray testing path in `README.md` with explicit server `.exe` run instructions for tray validation.
+- fix desktop library panel resize/repaint behavior by switching list+grid to fixed non-overlay vertical scrollbars, rebuilding grid widths from viewport width (with an 8px right visual gutter), debouncing splitter-driven reflow, and forcing visible-row refresh when layout changes without index-range changes (eliminates right-edge cutoff/blank space and stale-until-scroll updates).

@@ -6,7 +6,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
-$checklistPath = Join-Path $repoRoot "docs\testing-checklist.md"
+$checklistPath = Join-Path $repoRoot "docs\checklists\testing-checklist.md"
 $serverAppProjectPath = Join-Path $repoRoot "src\core\ReelRoulette.ServerApp\ReelRoulette.ServerApp.csproj"
 
 if (-not (Test-Path $checklistPath)) {

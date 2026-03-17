@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Drawing;
 using System.Windows.Forms;
+using Microsoft.Win32;
 
 namespace ReelRoulette.ServerApp.Hosting;
 
@@ -111,6 +112,7 @@ internal sealed class WindowsNotifyIconHostUi : IHostUi
         NotifyIcon? trayIcon = null;
         ContextMenuStrip? menu = null;
         Control? uiInvoker = null;
+        UserPreferenceChangedEventHandler? userPreferenceChangedHandler = null;
         try
         {
             menu = new ContextMenuStrip();
@@ -129,6 +131,36 @@ internal sealed class WindowsNotifyIconHostUi : IHostUi
             uiInvoker = new Control();
             uiInvoker.CreateControl();
             _uiInvoker = uiInvoker;
+            ApplyMenuTheme(menu);
+
+            userPreferenceChangedHandler = (_, args) =>
+            {
+                if (args.Category is not (UserPreferenceCategory.General or UserPreferenceCategory.VisualStyle or UserPreferenceCategory.Color))
+                {
+                    return;
+                }
+
+                if (uiInvoker.IsDisposed)
+                {
+                    return;
+                }
+
+                try
+                {
+                    uiInvoker.BeginInvoke(new Action(() =>
+                    {
+                        if (!menu.IsDisposed)
+                        {
+                            ApplyMenuTheme(menu);
+                        }
+                    }));
+                }
+                catch (InvalidOperationException)
+                {
+                    // UI thread is gone; no action needed.
+                }
+            };
+            SystemEvents.UserPreferenceChanged += userPreferenceChangedHandler;
 
             trayIcon = new NotifyIcon
             {
@@ -162,6 +194,17 @@ internal sealed class WindowsNotifyIconHostUi : IHostUi
                 {
                     trayIcon.Visible = false;
                     trayIcon.Dispose();
+                }
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                if (userPreferenceChangedHandler is not null)
+                {
+                    SystemEvents.UserPreferenceChanged -= userPreferenceChangedHandler;
                 }
             }
             catch
@@ -393,5 +436,89 @@ internal sealed class WindowsNotifyIconHostUi : IHostUi
         startupItem.Checked = supported && enabled;
         startupItem.Enabled = supported;
         return Task.CompletedTask;
+    }
+
+    private static void ApplyMenuTheme(ContextMenuStrip menu)
+    {
+        var isLightTheme = IsWindowsAppsLightThemeEnabled();
+        var background = isLightTheme ? Color.White : Color.FromArgb(32, 32, 32);
+        var foreground = isLightTheme ? Color.Black : Color.White;
+        var border = isLightTheme ? Color.FromArgb(198, 198, 198) : Color.FromArgb(68, 68, 68);
+        var menuItemHover = isLightTheme ? Color.FromArgb(232, 240, 255) : Color.FromArgb(56, 56, 64);
+        var menuItemPressed = isLightTheme ? Color.FromArgb(216, 230, 252) : Color.FromArgb(74, 74, 84);
+        var separator = isLightTheme ? Color.FromArgb(220, 220, 220) : Color.FromArgb(82, 82, 82);
+
+        menu.BackColor = background;
+        menu.ForeColor = foreground;
+        menu.Renderer = new ToolStripProfessionalRenderer(
+            new TrayMenuColorTable(
+                background,
+                border,
+                menuItemHover,
+                menuItemPressed,
+                separator));
+
+        foreach (ToolStripItem item in menu.Items)
+        {
+            ApplyToolStripItemTheme(item, background, foreground);
+        }
+    }
+
+    private static void ApplyToolStripItemTheme(ToolStripItem item, Color background, Color foreground)
+    {
+        item.BackColor = background;
+        item.ForeColor = foreground;
+
+        if (item is ToolStripMenuItem menuItem)
+        {
+            foreach (ToolStripItem dropDownItem in menuItem.DropDownItems)
+            {
+                ApplyToolStripItemTheme(dropDownItem, background, foreground);
+            }
+        }
+    }
+
+    private static bool IsWindowsAppsLightThemeEnabled()
+    {
+        try
+        {
+            using var key = Registry.CurrentUser.OpenSubKey(
+                @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
+                writable: false);
+            var value = key?.GetValue("AppsUseLightTheme");
+            return value switch
+            {
+                int intValue => intValue != 0,
+                long longValue => longValue != 0L,
+                _ => true
+            };
+        }
+        catch
+        {
+            return true;
+        }
+    }
+
+    private sealed class TrayMenuColorTable(
+        Color background,
+        Color border,
+        Color menuItemHover,
+        Color menuItemPressed,
+        Color separator) : ProfessionalColorTable
+    {
+        public override Color ToolStripDropDownBackground => background;
+        public override Color MenuBorder => border;
+        public override Color MenuItemBorder => border;
+        public override Color MenuItemSelected => menuItemHover;
+        public override Color MenuItemSelectedGradientBegin => menuItemHover;
+        public override Color MenuItemSelectedGradientEnd => menuItemHover;
+        public override Color MenuItemPressedGradientBegin => menuItemPressed;
+        public override Color MenuItemPressedGradientMiddle => menuItemPressed;
+        public override Color MenuItemPressedGradientEnd => menuItemPressed;
+        public override Color ImageMarginGradientBegin => background;
+        public override Color ImageMarginGradientMiddle => background;
+        public override Color ImageMarginGradientEnd => background;
+        public override Color SeparatorDark => separator;
+        public override Color SeparatorLight => separator;
     }
 }

@@ -40,7 +40,7 @@ ReelRoulette is migrating from a monolithic desktop app to a thin-client, API-fi
   - Core playback/control/tag workflows aligned with server-authoritative behavior.
 
 - **Operational surfaces**
-  - Manual validation guide/checklist at `docs/testing-checklist.md`.
+  - Manual validation guide/checklist at `docs/checklists/testing-checklist.md`.
   - Windows packaging scripts and CI workflows are present for build/verify/package gates.
   - Windows installers expose desktop shortcut install tasks (checked by default for server and desktop installers).
 

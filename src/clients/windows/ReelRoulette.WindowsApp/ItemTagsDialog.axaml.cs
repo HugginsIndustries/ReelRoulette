@@ -36,11 +36,11 @@ namespace ReelRoulette
             {
                 _isExpanded = value;
                 OnPropertyChanged();
-                OnPropertyChanged(nameof(ExpandIcon));
+                OnPropertyChanged(nameof(ExpandIconSymbol));
             }
         }
 
-        public string ExpandIcon => IsExpanded ? "▼" : "▶";
+        public string ExpandIconSymbol => IsExpanded ? "keyboard_arrow_down" : "keyboard_arrow_right";
         public bool IsReorderable =>
             !string.IsNullOrWhiteSpace(CategoryId) &&
             !string.Equals(CategoryId, UncategorizedCategoryId, StringComparison.OrdinalIgnoreCase);
@@ -137,6 +137,8 @@ namespace ReelRoulette
 
     public partial class ItemTagsDialog : Window
     {
+        // Session-scoped UI state: persists while app process is alive.
+        private static readonly HashSet<string> _sessionCollapsedCategoryIds = new(StringComparer.OrdinalIgnoreCase);
         private List<LibraryItem> _items;
         private LibraryIndex? _libraryIndex;
         private ObservableCollection<ItemTagsCategoryViewModel> _categoryViewModels = new ObservableCollection<ItemTagsCategoryViewModel>();
@@ -277,10 +279,14 @@ namespace ReelRoulette
             // Group tags by category
             foreach (var category in categories.OrderBy(c => c.SortOrder))
             {
+                var categoryId = string.IsNullOrWhiteSpace(category.Id)
+                    ? ItemTagsCategoryViewModel.UncategorizedCategoryId
+                    : category.Id;
                 var categoryVm = new ItemTagsCategoryViewModel
                 {
-                    CategoryId = category.Id,
-                    CategoryName = category.Name
+                    CategoryId = categoryId,
+                    CategoryName = category.Name,
+                    IsExpanded = !_sessionCollapsedCategoryIds.Contains(categoryId)
                 };
 
                 // Process all tags that belong to this category OR that should belong to it (sorted alphabetically)
@@ -336,7 +342,8 @@ namespace ReelRoulette
                     ?? new ItemTagsCategoryViewModel
                 {
                     CategoryId = ItemTagsCategoryViewModel.UncategorizedCategoryId,
-                    CategoryName = "Uncategorized"
+                    CategoryName = "Uncategorized",
+                    IsExpanded = !_sessionCollapsedCategoryIds.Contains(ItemTagsCategoryViewModel.UncategorizedCategoryId)
                 };
 
                 foreach (var tagName in orphanedTags.OrderBy(t => t))
@@ -367,6 +374,12 @@ namespace ReelRoulette
                     _categoryViewModels.Add(orphanedCategoryVm);
                 }
             }
+
+            // Keep session collapse map clean when categories are removed/renamed.
+            var activeCategoryIds = new HashSet<string>(
+                _categoryViewModels.Select(c => c.CategoryId),
+                StringComparer.OrdinalIgnoreCase);
+            _sessionCollapsedCategoryIds.RemoveWhere(categoryId => !activeCategoryIds.Contains(categoryId));
 
             CategoriesItemsControl.ItemsSource = _categoryViewModels;
             UpdateApplyButtonState();
@@ -414,6 +427,14 @@ namespace ReelRoulette
             if (sender is Button button && button.CommandParameter is ItemTagsCategoryViewModel categoryVm)
             {
                 categoryVm.IsExpanded = !categoryVm.IsExpanded;
+                if (categoryVm.IsExpanded)
+                {
+                    _sessionCollapsedCategoryIds.Remove(categoryVm.CategoryId);
+                }
+                else
+                {
+                    _sessionCollapsedCategoryIds.Add(categoryVm.CategoryId);
+                }
                 Log($"ItemTagsDialog.ToggleCategoryButton_Click: Category '{categoryVm.CategoryName}' IsExpanded={categoryVm.IsExpanded}");
             }
         }
@@ -484,6 +505,7 @@ namespace ReelRoulette
             }
 
             _pendingDeletedCategoryIds.Add(categoryVm.CategoryId);
+            _sessionCollapsedCategoryIds.Remove(categoryVm.CategoryId);
 
             var uncategorizedCategory = _categoryViewModels.FirstOrDefault(c =>
                 string.Equals(c.CategoryId, ItemTagsCategoryViewModel.UncategorizedCategoryId, StringComparison.OrdinalIgnoreCase));

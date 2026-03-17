@@ -43,7 +43,7 @@ AppData/
 *.temp
 
 # Local docs
-COMMIT_MESSAGE.txt
+# COMMIT-MESSAGE.txt
 PROMPTS.txt
 
 # Node/web artifacts

@@ -158,7 +158,7 @@ Boundary:
 - WebUI tests:
   - `src/clients/web/ReelRoulette.WebUI/src/test/*`
 - Manual test guide/checklist:
-  - `docs/testing-checklist.md`
+  - `docs/checklists/testing-checklist.md`
 
 Canonical gates:
 
@@ -178,7 +178,7 @@ Runtime scripts:
 - scripts select `net9.0-windows` framework on Windows and `net9.0` on non-Windows for ServerApp startup.
 - `tools/scripts/set-release-version.ps1` (release-aligned version fan-out for OpenAPI/runtime/tests/project metadata plus README/dev-setup release command examples; use `-NoDocUpdates` to skip docs updates)
 - `tools/scripts/full-release.ps1` (chained release flow: version fan-out + verify + server/desktop packaging)
-- `tools/scripts/reset-checklist.ps1` (resets `docs/testing-checklist.md` metadata/checklist state; preserves waived checks by default, supports `-RemoveWaived`)
+- `tools/scripts/reset-checklist.ps1` (resets `docs/checklists/testing-checklist.md` metadata/checklist state; preserves waived checks by default, supports `-RemoveWaived`)
 
 Web verification:
 

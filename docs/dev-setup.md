@@ -87,7 +87,9 @@ From `src/clients/web/ReelRoulette.WebUI`:
 
 - `npm install` (first run)
 - `npm run verify`
-- `npm run dev`/`npm run build` auto-sync shared icon from `assets/HI.ico` to WebUI `public/HI.ico`.
+- `npm run dev`/`npm run build` auto-sync shared assets into WebUI `public/`:
+  - `assets/HI.ico` -> `public/HI.ico`
+  - `assets/fonts/MaterialSymbolsOutlined.var.ttf` -> `public/assets/fonts/MaterialSymbolsOutlined.var.ttf`
 
 Optional helper scripts:
 

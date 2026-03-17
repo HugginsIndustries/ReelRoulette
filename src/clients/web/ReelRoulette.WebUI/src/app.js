@@ -350,6 +350,33 @@ export function startApp(config) {
     autoplayBtn.classList.toggle("active", state.autoplay);
     favoriteBtn.classList.toggle("active", state.current?.isFavorite === true);
     blacklistBtn.classList.toggle("active", state.current?.isBlacklisted === true);
+    updatePlayButtonGlyph();
+  }
+
+  function setButtonSymbol(button, symbolName) {
+    if (!button) return;
+    const iconNode = button.querySelector(".material-symbol-icon");
+    if (iconNode) {
+      iconNode.textContent = symbolName;
+      return;
+    }
+
+    button.textContent = symbolName;
+  }
+
+  function createMaterialSymbolNode(symbolName) {
+    const icon = document.createElement("span");
+    icon.className = "material-symbol-icon";
+    icon.textContent = symbolName;
+    return icon;
+  }
+
+  function updatePlayButtonGlyph() {
+    const shouldShowPause =
+      !!state.current &&
+      video.style.display !== "none" &&
+      !video.paused;
+    setButtonSymbol(playBtn, shouldShowPause ? "pause" : "play_arrow");
   }
 
   function clearPhotoTimer() {
@@ -405,6 +432,8 @@ export function startApp(config) {
       if (!state.autoplay || state.loop) return;
       goNext();
     };
+    video.onplay = () => updatePlayButtonGlyph();
+    video.onpause = () => updatePlayButtonGlyph();
   }
 
   async function playCurrent() {
@@ -503,6 +532,7 @@ export function startApp(config) {
     }
 
     updateToggleButtons();
+    updatePlayButtonGlyph();
   }
 
   async function loadPresets() {
@@ -1058,9 +1088,9 @@ export function startApp(config) {
       const left = document.createElement("div");
       left.className = "tag-editor-category-left";
       const toggleButton = document.createElement("button");
-      toggleButton.className = "tag-editor-category-toggle";
+      toggleButton.className = "tag-editor-category-toggle icon-glyph-base icon-glyph-button";
       const collapsed = state.tagEditorCollapsedCategories.has(String(category.id || ""));
-      toggleButton.textContent = collapsed ? "▶" : "▼";
+      toggleButton.appendChild(createMaterialSymbolNode(collapsed ? "keyboard_arrow_right" : "keyboard_arrow_down"));
       toggleButton.title = collapsed ? "Expand category" : "Collapse category";
       toggleButton.onclick = () => toggleCategoryCollapsed(category.id);
       left.appendChild(toggleButton);
@@ -1075,23 +1105,23 @@ export function startApp(config) {
       const isUncategorized = isUncategorizedCategoryId(category.id);
       const movableCount = categories.filter((item) => !isUncategorizedCategoryId(item.id)).length;
       const upButton = document.createElement("button");
-      upButton.className = "tag-editor-category-btn";
-      upButton.textContent = "⬆️";
+      upButton.className = "tag-editor-category-btn icon-glyph-base icon-glyph-button";
+      upButton.appendChild(createMaterialSymbolNode("arrow_drop_up"));
       upButton.title = "Move category up";
       upButton.disabled = isUncategorized || movableCount <= 1 || categoryIndex === 0;
       upButton.onclick = () => moveCategory(category.id, -1);
       controls.appendChild(upButton);
       const downButton = document.createElement("button");
-      downButton.className = "tag-editor-category-btn";
-      downButton.textContent = "⬇️";
+      downButton.className = "tag-editor-category-btn icon-glyph-base icon-glyph-button";
+      downButton.appendChild(createMaterialSymbolNode("arrow_drop_down"));
       downButton.title = "Move category down";
       const lastMovableIndex = categories.filter((item) => !isUncategorizedCategoryId(item.id)).length - 1;
       downButton.disabled = isUncategorized || movableCount <= 1 || categoryIndex >= lastMovableIndex;
       downButton.onclick = () => moveCategory(category.id, 1);
       controls.appendChild(downButton);
       const editCategoryButton = document.createElement("button");
-      editCategoryButton.className = "tag-editor-category-btn";
-      editCategoryButton.textContent = "✏️";
+      editCategoryButton.className = "tag-editor-category-btn icon-glyph-base icon-glyph-button";
+      editCategoryButton.appendChild(createMaterialSymbolNode("edit_note"));
       editCategoryButton.title = "Rename category";
       editCategoryButton.disabled = isUncategorized;
       editCategoryButton.onclick = () => {
@@ -1116,8 +1146,8 @@ export function startApp(config) {
       };
       controls.appendChild(editCategoryButton);
       const deleteCategoryButton = document.createElement("button");
-      deleteCategoryButton.className = "tag-editor-category-btn";
-      deleteCategoryButton.textContent = "🗑";
+      deleteCategoryButton.className = "tag-editor-category-btn icon-glyph-base icon-glyph-button";
+      deleteCategoryButton.appendChild(createMaterialSymbolNode("delete"));
       deleteCategoryButton.title = "Delete category";
       deleteCategoryButton.disabled = isUncategorized;
       deleteCategoryButton.onclick = () => {
@@ -1145,8 +1175,8 @@ export function startApp(config) {
         label.textContent = String(tag.name || "");
         chip.appendChild(label);
         const plusButton = document.createElement("button");
-        plusButton.className = "chip-btn";
-        plusButton.textContent = "➕";
+        plusButton.className = "chip-btn icon-glyph-base icon-glyph-toggle";
+        plusButton.appendChild(createMaterialSymbolNode("add"));
         plusButton.title = "Add tag";
         plusButton.disabled = !Array.isArray(items) || items.length === 0;
         if (pendingAction === "add") plusButton.classList.add("is-selected");
@@ -1156,8 +1186,8 @@ export function startApp(config) {
         };
         chip.appendChild(plusButton);
         const minusButton = document.createElement("button");
-        minusButton.className = "chip-btn";
-        minusButton.textContent = "➖";
+        minusButton.className = "chip-btn icon-glyph-base icon-glyph-toggle";
+        minusButton.appendChild(createMaterialSymbolNode("remove"));
         minusButton.title = "Remove tag";
         minusButton.disabled = !Array.isArray(items) || items.length === 0;
         if (pendingAction === "remove") minusButton.classList.add("is-selected");
@@ -1167,14 +1197,14 @@ export function startApp(config) {
         };
         chip.appendChild(minusButton);
         const editButton = document.createElement("button");
-        editButton.className = "chip-btn";
-        editButton.textContent = "✏️";
+        editButton.className = "chip-btn icon-glyph-base icon-glyph-button";
+        editButton.appendChild(createMaterialSymbolNode("edit_note"));
         editButton.title = "Edit tag";
         editButton.onclick = () => openTagEditModal(tag, categories);
         chip.appendChild(editButton);
         const deleteButton = document.createElement("button");
-        deleteButton.className = "chip-btn";
-        deleteButton.textContent = "🗑";
+        deleteButton.className = "chip-btn icon-glyph-base icon-glyph-button";
+        deleteButton.appendChild(createMaterialSymbolNode("delete"));
         deleteButton.title = "Delete tag";
         deleteButton.onclick = () => {
           if (!confirm(`Delete tag "${tag.name}"?`)) return;
@@ -1188,8 +1218,10 @@ export function startApp(config) {
       tagEditorBody.appendChild(section);
     });
 
-    tagEditorApplyBtn.textContent = hasPendingTagEditorMutations() ? "✅️*" : "✅️";
-    tagEditorApplyBtn.disabled = !hasPendingTagEditorMutations();
+    const hasPendingChanges = hasPendingTagEditorMutations();
+    tagEditorApplyBtn.classList.toggle("has-pending", hasPendingChanges);
+    setButtonSymbol(tagEditorApplyBtn, "save");
+    tagEditorApplyBtn.disabled = !hasPendingChanges;
   }
 
   async function refreshTagEditorModel() {
@@ -1448,6 +1480,7 @@ export function startApp(config) {
       } else {
         video.pause();
       }
+      updatePlayButtonGlyph();
     }
   });
   prevBtn.addEventListener("click", (event) => {

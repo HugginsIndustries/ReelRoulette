@@ -12,7 +12,7 @@
     <Grid RowDefinitions="Auto * Auto" Margin="12">
         <!-- Top Controls -->
         <Grid Grid.Row="0"
-              ColumnDefinitions="* Auto Auto Auto"
+              ColumnDefinitions="* Auto Auto"
               ColumnSpacing="8"
               Margin="0,0,0,12">
             <TextBlock Grid.Column="0"
@@ -21,21 +21,23 @@
                       FontSize="16"
                       VerticalAlignment="Center"/>
             <Button Grid.Column="1"
-                    Content="➕ Category"
-                    Click="AddCategoryButton_Click"
-                    MinWidth="100"/>
-            <Button Grid.Column="2"
-                    Content="🔄"
                     ToolTip.Tip="Refresh"
-                    Classes="IconMomentarySmall"
-                    Click="RefreshButton_Click"
-                    MinWidth="36"/>
-            <Button Grid.Column="3"
-                    Content="❌"
+                    Classes="IconGlyphBase IconGlyphButton"
+                    Click="RefreshButton_Click">
+                <TextBlock Classes="MaterialSymbolIcon"
+                           Text="refresh"
+                           FontSize="32"
+                           FontWeight="Bold"/>
+            </Button>
+            <Button Grid.Column="2"
                     ToolTip.Tip="Close"
-                    Classes="IconMomentarySmall"
-                    Click="CloseButton_Click"
-                    MinWidth="36"/>
+                    Classes="IconGlyphBase IconGlyphButton"
+                    Click="CloseButton_Click">
+                <TextBlock Classes="MaterialSymbolIcon"
+                           Text="close"
+                           FontSize="32"
+                           FontWeight="Bold"/>
+            </Button>
         </Grid>
 
         <!-- Tags by Category -->
@@ -47,52 +49,67 @@
                     <DataTemplate x:DataType="local:ItemTagsCategoryViewModel">
                         <StackPanel Margin="0,0,0,16">
                             <!-- Category Header -->
-                            <Border Background="#2D2D30" Padding="8,6" Margin="0,0,0,8">
-                            <Grid ColumnDefinitions="Auto * Auto Auto Auto Auto" ColumnSpacing="6">
+                            <Border Background="#2D2D30" Padding="8,6" Margin="0,0,0,8" CornerRadius="4">
+                            <Grid ColumnDefinitions="Auto * Auto Auto Auto Auto" ColumnSpacing="0">
                                 <Button Grid.Column="0"
-                                       Content="{Binding ExpandIcon}"
+                                       Classes="IconGlyphBase IconGlyphButton"
                                        Click="ToggleCategoryButton_Click"
                                        CommandParameter="{Binding}"
-                                       Background="Transparent"
-                                       BorderThickness="0"
-                                       Padding="0"
-                                       Width="24"
-                                       Height="24"
-                                       Margin="0,0,8,0"
-                                       FontSize="14"/>
+                                       ToolTip.Tip="Expand/collapse category">
+                                    <TextBlock Classes="MaterialSymbolIcon"
+                                               Text="{Binding ExpandIconSymbol}"
+                                               FontSize="32"
+                                               FontWeight="Bold"/>
+                                </Button>
                                 <TextBlock Grid.Column="1"
                                           Text="{Binding CategoryName}"
                                           FontWeight="SemiBold"
                                           FontSize="14"
                                           VerticalAlignment="Center"/>
                                 <Button Grid.Column="2"
-                                       Content="↑"
-                                       Classes="IconMomentarySmall"
+                                       Classes="IconGlyphBase IconGlyphButton"
                                        ToolTip.Tip="Move category up"
                                        Click="MoveCategoryUpButton_Click"
                                        CommandParameter="{Binding}"
-                                       IsEnabled="{Binding IsReorderable}"/>
+                                       IsEnabled="{Binding IsReorderable}">
+                                    <TextBlock Classes="MaterialSymbolIcon"
+                                               Text="arrow_drop_up"
+                                               FontSize="32"
+                                               FontWeight="Bold"/>
+                                </Button>
                                 <Button Grid.Column="3"
-                                       Content="↓"
-                                       Classes="IconMomentarySmall"
+                                       Classes="IconGlyphBase IconGlyphButton"
                                        ToolTip.Tip="Move category down"
                                        Click="MoveCategoryDownButton_Click"
                                        CommandParameter="{Binding}"
-                                       IsEnabled="{Binding IsReorderable}"/>
+                                       IsEnabled="{Binding IsReorderable}">
+                                    <TextBlock Classes="MaterialSymbolIcon"
+                                               Text="arrow_drop_down"
+                                               FontSize="32"
+                                               FontWeight="Bold"/>
+                                </Button>
                                 <Button Grid.Column="4"
-                                       Content="✏️"
-                                       Classes="IconMomentarySmall"
+                                       Classes="IconGlyphBase IconGlyphButton"
                                        ToolTip.Tip="Rename category"
                                        Click="EditCategoryButton_Click"
                                        CommandParameter="{Binding}"
-                                       IsEnabled="{Binding IsReorderable}"/>
+                                       IsEnabled="{Binding IsReorderable}">
+                                    <TextBlock Classes="MaterialSymbolIcon"
+                                               Text="edit_note"
+                                               FontSize="32"
+                                               FontWeight="Bold"/>
+                                </Button>
                                 <Button Grid.Column="5"
-                                       Content="🗑"
-                                       Classes="IconMomentarySmall"
+                                       Classes="IconGlyphBase IconGlyphButton"
                                        ToolTip.Tip="Delete category"
                                        Click="DeleteCategoryButton_Click"
                                        CommandParameter="{Binding}"
-                                       IsEnabled="{Binding IsReorderable}"/>
+                                       IsEnabled="{Binding IsReorderable}">
+                                    <TextBlock Classes="MaterialSymbolIcon"
+                                               Text="delete"
+                                               FontSize="32"
+                                               FontWeight="Bold"/>
+                                </Button>
                             </Grid>
                             </Border>
 
@@ -100,7 +117,7 @@
                             <ItemsControl ItemsSource="{Binding Tags}" IsVisible="{Binding IsExpanded}">
                                 <ItemsControl.ItemsPanel>
                                     <ItemsPanelTemplate>
-                                        <UniformGrid Columns="3" Rows="0"/>
+                                        <WrapPanel Orientation="Horizontal"/>
                                     </ItemsPanelTemplate>
                                 </ItemsControl.ItemsPanel>
                                 <ItemsControl.ItemTemplate>
@@ -108,38 +125,57 @@
                                         <Border Background="{Binding BackgroundBrush}"
                                                 CornerRadius="4"
                                                 Padding="8,6"
-                                                Margin="4">
-                                            <Grid ColumnDefinitions="* Auto Auto Auto Auto" ColumnSpacing="6">
+                                                Margin="4"
+                                                HorizontalAlignment="Left"
+                                                MaxWidth="{Binding $parent[ItemsControl].Bounds.Width}">
+                                            <Grid ColumnDefinitions="Auto Auto Auto Auto Auto" ColumnSpacing="0">
                                                 <TextBlock Grid.Column="0"
                                                           Text="{Binding Tag}"
+                                                          TextWrapping="Wrap"
                                                           VerticalAlignment="Center"
                                                           FontWeight="SemiBold"/>
                                                 <ToggleButton Grid.Column="1"
-                                                             Content="➕"
                                                              IsChecked="{Binding IsPlusSelected}"
                                                              IsEnabled="{Binding IsSelectionEnabled}"
-                                                             Classes="IconToggleSmall"
+                                                             Classes="IconGlyphBase IconGlyphToggle"
                                                              ToolTip.Tip="Add tag to all items"
-                                                             Click="PlusButton_Click"/>
+                                                             Click="PlusButton_Click">
+                                                    <TextBlock Classes="MaterialSymbolIcon"
+                                                               Text="add"
+                                                               FontSize="32"
+                                                               FontWeight="Bold"/>
+                                                </ToggleButton>
                                                 <ToggleButton Grid.Column="2"
-                                                             Content="➖"
                                                              IsChecked="{Binding IsMinusSelected}"
                                                              IsEnabled="{Binding IsSelectionEnabled}"
-                                                             Classes="IconToggleSmall"
+                                                             Classes="IconGlyphBase IconGlyphToggle"
                                                              ToolTip.Tip="Remove tag from all items"
-                                                             Click="MinusButton_Click"/>
+                                                             Click="MinusButton_Click">
+                                                    <TextBlock Classes="MaterialSymbolIcon"
+                                                               Text="remove"
+                                                               FontSize="32"
+                                                               FontWeight="Bold"/>
+                                                </ToggleButton>
                                                 <Button Grid.Column="3"
-                                                       Content="✏️"
-                                                       Classes="IconMomentarySmall"
+                                                       Classes="IconGlyphBase IconGlyphButton"
                                                        ToolTip.Tip="Edit tag"
                                                        Click="EditTagButton_Click"
-                                                       CommandParameter="{Binding}"/>
+                                                       CommandParameter="{Binding}">
+                                                    <TextBlock Classes="MaterialSymbolIcon"
+                                                               Text="edit_note"
+                                                               FontSize="32"
+                                                               FontWeight="Bold"/>
+                                                </Button>
                                                 <Button Grid.Column="4"
-                                                       Content="🗑"
-                                                       Classes="IconMomentarySmall"
+                                                       Classes="IconGlyphBase IconGlyphButton"
                                                        ToolTip.Tip="Delete tag"
                                                        Click="DeleteTagButton_Click"
-                                                       CommandParameter="{Binding}"/>
+                                                       CommandParameter="{Binding}">
+                                                    <TextBlock Classes="MaterialSymbolIcon"
+                                                               Text="delete"
+                                                               FontSize="32"
+                                                               FontWeight="Bold"/>
+                                                </Button>
                                             </Grid>
                                         </Border>
                                     </DataTemplate>
@@ -153,30 +189,50 @@
 
         <!-- Add Tag Section -->
         <Grid Grid.Row="2"
-              ColumnDefinitions="Auto * Auto Auto"
+              ColumnDefinitions="Auto Auto * Auto Auto"
               ColumnSpacing="8"
               Margin="0,0,0,0">
+            <Button Grid.Column="0"
+                    ToolTip.Tip="Add category"
+                    Classes="IconGlyphBase IconGlyphButton"
+                    Click="AddCategoryButton_Click">
+                <TextBlock Classes="MaterialSymbolIcon"
+                           Text="add"
+                           FontSize="32"
+                           FontWeight="Bold"/>
+            </Button>
             <ComboBox x:Name="TagCategoryComboBox"
-                     Grid.Column="0"
+                     Grid.Column="1"
                      MinWidth="150"
+                     Height="36"
                      PlaceholderText="Category"/>
             <TextBox x:Name="NewTagTextBox"
-                     Grid.Column="1"
+                     Grid.Column="2"
+                     Height="36"
                      Watermark="New tag name"
                      KeyDown="NewTagTextBox_KeyDown"/>
-            <Button Grid.Column="2"
-                    Content="➕ Tag"
+            <Button Grid.Column="3"
+                    ToolTip.Tip="Add tag"
+                    Classes="IconGlyphBase IconGlyphButton"
                     Click="AddTagButton_Click"
-                    MinWidth="80"/>
+                    Margin="0">
+                <TextBlock Classes="MaterialSymbolIcon"
+                           Text="add"
+                           FontSize="32"
+                           FontWeight="Bold"/>
+            </Button>
             <Button x:Name="ApplyButton"
-                    Grid.Column="3"
-                    Content="✅️"
+                    Grid.Column="4"
                     ToolTip.Tip="Apply"
-                    Classes="IconMomentarySmall"
+                    Classes="IconGlyphBase IconGlyphButton"
                     Click="OkButton_Click"
-                    MinWidth="36"
                     IsEnabled="False"
-                    IsDefault="True"/>
+                    IsDefault="True">
+                <TextBlock Classes="MaterialSymbolIcon"
+                           Text="save"
+                           FontSize="32"
+                           FontWeight="Bold"/>
+            </Button>
         </Grid>
     </Grid>
 </Window>

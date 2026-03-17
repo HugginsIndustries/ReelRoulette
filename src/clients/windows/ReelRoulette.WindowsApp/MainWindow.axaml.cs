@@ -278,6 +278,7 @@ namespace ReelRoulette
         private DispatcherTimer? _updateLibraryPanelDebounceTimer;
         private readonly object _updateLibraryPanelLock = new object();
         private int _libraryPanelRefreshGeneration = 0;
+        private DispatcherTimer? _libraryGridResizeDebounceTimer;
         private bool _isGridScrollInteracting = false;
         private bool _pendingLibraryPanelRefresh = false;
         private bool _isInitializingLibraryPanel = false; // Flag to suppress events during initialization
@@ -3261,7 +3262,26 @@ namespace ReelRoulette
                 return;
             }
 
-            RebuildLibraryGridRowsFromCurrentItems();
+            if (_libraryGridResizeDebounceTimer == null)
+            {
+                _libraryGridResizeDebounceTimer = new DispatcherTimer
+                {
+                    Interval = TimeSpan.FromMilliseconds(90)
+                };
+                _libraryGridResizeDebounceTimer.Tick += (_, _) =>
+                {
+                    _libraryGridResizeDebounceTimer.Stop();
+                    if (!_libraryGridViewEnabled || !_showLibraryPanel)
+                    {
+                        return;
+                    }
+
+                    RebuildLibraryGridRowsFromCurrentItems();
+                };
+            }
+
+            _libraryGridResizeDebounceTimer.Stop();
+            _libraryGridResizeDebounceTimer.Start();
         }
 
         private void UpdateLibraryViewModeVisibility()
@@ -3279,7 +3299,7 @@ namespace ReelRoulette
             if (_libraryGridViewEnabled)
             {
                 RebuildLibraryGridOffsetIndex();
-                UpdateLibraryGridVisibleRowsWindow();
+                UpdateLibraryGridVisibleRowsWindow(forceRefreshRows: true);
             }
         }
 
@@ -3616,7 +3636,7 @@ namespace ReelRoulette
                 _libraryGridRows.Clear();
                 LibraryGridColumns = 1;
                 RebuildLibraryGridOffsetIndex();
-                UpdateLibraryGridVisibleRowsWindow();
+                UpdateLibraryGridVisibleRowsWindow(forceRefreshRows: true);
                 return;
             }
 
@@ -3637,7 +3657,7 @@ namespace ReelRoulette
 
             LibraryGridColumns = Math.Clamp(_libraryGridRows.Count == 0 ? 1 : _libraryGridRows.Max(row => Math.Max(1, row.ItemCount)), 1, 12);
             RebuildLibraryGridOffsetIndex(startRowIndex);
-            UpdateLibraryGridVisibleRowsWindow();
+            UpdateLibraryGridVisibleRowsWindow(forceRefreshRows: true);
         }
 
         private GridViewportAnchorState? CaptureGridViewportAnchor()
@@ -3821,7 +3841,7 @@ namespace ReelRoulette
             return Math.Clamp(low, 0, _libraryGridRowTopOffsets.Count - 1);
         }
 
-        private void UpdateLibraryGridVisibleRowsWindow()
+        private void UpdateLibraryGridVisibleRowsWindow(bool forceRefreshRows = false)
         {
             if (!_libraryGridViewEnabled || LibraryGridScrollViewer == null)
             {
@@ -3854,7 +3874,8 @@ namespace ReelRoulette
             lastVisibleRow = Math.Clamp(lastVisibleRow, firstVisibleRow, _libraryGridRows.Count - 1);
             var endExclusive = lastVisibleRow + 1;
 
-            if (_lastLibraryGridVisibleStartIndex == firstVisibleRow &&
+            if (!forceRefreshRows &&
+                _lastLibraryGridVisibleStartIndex == firstVisibleRow &&
                 _lastLibraryGridVisibleEndExclusive == endExclusive)
             {
                 return;
@@ -3936,16 +3957,18 @@ namespace ReelRoulette
 
         private double ComputeLibraryGridAvailableWidth()
         {
-            const double rightSafetyPx = 24;
-            var measuredWidth = LibraryGridItemsControl?.Bounds.Width > 0
+            const double visualRightGutterPx = 8;
+            var measuredWidth = LibraryGridScrollViewer?.Viewport.Width > 0
+                ? LibraryGridScrollViewer.Viewport.Width
+                : (LibraryGridItemsControl?.Bounds.Width > 0
                 ? LibraryGridItemsControl.Bounds.Width
                 : (LibraryGridScrollViewer?.Bounds.Width > 0
                     ? LibraryGridScrollViewer.Bounds.Width
                     : (LibraryPanelContainer?.Bounds.Width > 0
                         ? LibraryPanelContainer.Bounds.Width
-                        : _libraryPanelWidth));
+                        : _libraryPanelWidth)));
 
-            return Math.Max(280, measuredWidth - rightSafetyPx);
+            return Math.Max(280, measuredWidth - visualRightGutterPx);
         }
 
         private static double GetThumbnailAspectRatio(LibraryItem item)

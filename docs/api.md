@@ -136,6 +136,7 @@ Reconnect/resync behavior:
 - `POST /api/sources/import`
 - `POST /api/sources/{sourceId}/enabled`
 - `GET /api/library/projection`
+- `GET /api/library/stats`
 - `POST /api/library-states`
 - `POST /api/favorite`
 - `POST /api/blacklist`

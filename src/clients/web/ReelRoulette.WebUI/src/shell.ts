@@ -35,16 +35,16 @@ export function renderApp(container: HTMLElement, config: RuntimeConfig): void {
         <img id="photo" alt="Photo" style="display:none">
         <div id="empty-state" class="empty-state">Select a preset and click here</div>
         <div id="overlay-controls" class="overlay-controls">
-          <button id="favorite-btn" class="overlay-btn overlay-toggle overlay-corner-btn" aria-label="Favorite" title="Favorite">★</button>
-          <button id="blacklist-btn" class="overlay-btn overlay-toggle overlay-corner-btn" aria-label="Blacklist" title="Blacklist">👎</button>
+          <button id="favorite-btn" class="overlay-btn icon-glyph-base icon-glyph-toggle overlay-toggle overlay-corner-btn" aria-label="Favorite" title="Favorite"><span class="material-symbol-icon">favorite</span></button>
+          <button id="blacklist-btn" class="overlay-btn icon-glyph-base icon-glyph-toggle overlay-toggle overlay-corner-btn" aria-label="Blacklist" title="Blacklist"><span class="material-symbol-icon">thumb_down</span></button>
           <div class="overlay-controls-row">
-            <button id="prev-btn" class="overlay-btn" aria-label="Previous" title="Previous">⏮</button>
-            <button id="play-btn" class="overlay-btn overlay-btn-play" aria-label="Play/Pause" title="Play/Pause">⏯</button>
-            <button id="next-btn" class="overlay-btn" aria-label="Next" title="Next">⏭</button>
-            <button id="tag-edit-btn" class="overlay-btn" aria-label="Edit Tags" title="Edit Tags">🏷️</button>
-            <button id="loop-btn" class="overlay-btn overlay-toggle" aria-label="Loop" title="Loop">🔂</button>
-            <button id="autoplay-btn" class="overlay-btn overlay-toggle" aria-label="Autoplay" title="Autoplay">➡️</button>
-            <button id="fullscreen-btn" class="overlay-btn" aria-label="Fullscreen" title="Fullscreen">⛶</button>
+            <button id="prev-btn" class="overlay-btn icon-glyph-base icon-glyph-button" aria-label="Previous" title="Previous"><span class="material-symbol-icon">skip_previous</span></button>
+            <button id="play-btn" class="overlay-btn icon-glyph-base icon-glyph-button overlay-btn-play" aria-label="Play/Pause" title="Play/Pause"><span class="material-symbol-icon">play_arrow</span></button>
+            <button id="next-btn" class="overlay-btn icon-glyph-base icon-glyph-button" aria-label="Next" title="Next"><span class="material-symbol-icon">skip_next</span></button>
+            <button id="tag-edit-btn" class="overlay-btn icon-glyph-base icon-glyph-button" aria-label="Edit Tags" title="Edit Tags"><span class="material-symbol-icon">tag</span></button>
+            <button id="loop-btn" class="overlay-btn icon-glyph-base icon-glyph-toggle overlay-toggle" aria-label="Loop" title="Loop"><span class="material-symbol-icon">repeat_one</span></button>
+            <button id="autoplay-btn" class="overlay-btn icon-glyph-base icon-glyph-toggle overlay-toggle" aria-label="Autoplay" title="Autoplay"><span class="material-symbol-icon">autoplay</span></button>
+            <button id="fullscreen-btn" class="overlay-btn icon-glyph-base icon-glyph-button" aria-label="Fullscreen" title="Fullscreen"><span class="material-symbol-icon">fullscreen</span></button>
           </div>
           <div id="seek-row" class="overlay-seek-row" style="display:none">
             <input type="range" id="seek-slider" min="0" max="100" value="0" aria-label="Seek">
@@ -57,17 +57,17 @@ export function renderApp(container: HTMLElement, config: RuntimeConfig): void {
       <div class="tag-editor-header">
         <h2>Tag Editor</h2>
         <div class="tag-editor-actions">
-          <button id="tag-editor-add-category-btn">➕ Category</button>
-          <button id="tag-editor-refresh-btn" title="Refresh" aria-label="Refresh">🔄</button>
-          <button id="tag-editor-close-btn" title="Close" aria-label="Close">❌</button>
+          <button id="tag-editor-refresh-btn" class="icon-glyph-base icon-glyph-button" title="Refresh" aria-label="Refresh"><span class="material-symbol-icon">refresh</span></button>
+          <button id="tag-editor-close-btn" class="icon-glyph-base icon-glyph-button" title="Close" aria-label="Close"><span class="material-symbol-icon">close</span></button>
         </div>
       </div>
       <div id="tag-editor-body" class="tag-editor-body"></div>
       <div class="tag-editor-footer">
+        <button id="tag-editor-add-category-btn" class="icon-glyph-base icon-glyph-button" title="Add category" aria-label="Add category"><span class="material-symbol-icon">add</span></button>
         <select id="tag-editor-category-select"></select>
         <input id="tag-editor-new-tag" type="text" placeholder="New tag name">
-        <button id="tag-editor-add-tag-btn">➕ Tag</button>
-        <button id="tag-editor-apply-btn" title="Apply" aria-label="Apply">✅️</button>
+        <button id="tag-editor-add-tag-btn" class="icon-glyph-base icon-glyph-button" title="Add tag" aria-label="Add tag"><span class="material-symbol-icon">add</span></button>
+        <button id="tag-editor-apply-btn" class="icon-glyph-base icon-glyph-button" title="Apply" aria-label="Apply"><span class="material-symbol-icon">save</span></button>
       </div>
       <div id="tag-edit-modal" class="tag-edit-modal" style="display:none">
         <div class="tag-edit-modal-card">

@@ -26,7 +26,15 @@ Do not use this file for detailed architecture explanation or current capability
 
 - Keep entries **current-state accurate**: update statuses and evidence as work progresses.
 - Keep scope locked to milestone intent; record out-of-scope items as explicit deferrals.
-- When a milestone is completed, move it to `## Completed Milestones` as-is: keep all existing scope/acceptance/evidence detail unchanged, update only status to complete, and preserve newest completions first.
+- Organize milestone sections as:
+  - `## Active Milestones`: milestones currently being worked, using `M*` IDs in historical order.
+  - `## Planned Milestones`: backlog candidates not yet started, using `P*` IDs in numerical order (for example base phases and lettered sub-slices).
+  - `## Completed Milestones`: archive of finished milestones, newest completions first.
+- Keep `## Active Milestones` updated with `Last milestone completed: Mx` so the next `M*` assignment is unambiguous.
+- When promoting planned work to active work, assign the next `M*` ID at promotion time and keep planned `P*` IDs stable until then.
+- When a milestone is completed, move it to `## Completed Milestones` as-is: keep existing scope/acceptance/evidence detail unchanged except final-state corrections, and preserve newest completions first.
+- In milestone body content (scope/acceptance/evidence/deferrals), do not reference milestone IDs; use milestone names/descriptions (or "this milestone"/"this series") so ID reassignment does not require copy edits.
+- ID references are allowed only in milestone section headers and the `Last milestone completed: Mx` tracker line.
 - Keep acceptance criteria testable and outcome-focused (avoid implementation-narrative bloat).
 - Keep verification evidence concrete:
   - commands/checks run,
@@ -58,56 +66,30 @@ Do not use this file for detailed architecture explanation or current capability
 - **Deferrals / Follow-ups**:
   - {deferred item -> target milestone}
 
+### Px - {Planned Milestone Title}
+
+- **Status**: ⏳ Planned
+- **Goal**: {one concise outcome statement}
+- **Scope**:
+  - {key deliverable 1}
+  - {key deliverable 2}
+  - {key deliverable 3}
+- **Acceptance criteria**:
+  - {testable outcome 1}
+  - {testable outcome 2}
+  - {testable outcome 3}
+- **Verification evidence**:
+  - {automated checks run}
+  - {manual checks/evidence notes}
+  - {docs/artifacts updated}
+- **Deferrals / Follow-ups**:
+  - {deferred item -> target milestone}
+
 ---
 
-## Milestone Board
+## Active Milestones
 
-### M8h - Tray Theme Parity and Material Symbols Icon Standardization
-
-- **Status**: 🚧 In Progress
-- **Goal**: Align Windows ServerApp tray UX with system theme behavior and standardize icon rendering on Material Symbols **font-based** patterns (with shared icon styles) for consistent cross-platform theming/customization.
-- **Scope**:
-  - Windows tray menu theme parity:
-    - make tray context menu follow active system theme (light/dark) instead of fixed light styling,
-    - keep existing tray action behavior unchanged while applying theme-aware rendering.
-  - Desktop icon foundation (font-based):
-    - wire `assets/fonts/MaterialSymbolsOutlined.var.ttf` into Avalonia resources for desktop icon rendering,
-    - use shared `TextBlock.MaterialSymbolIcon` style for icon font setup,
-    - standardize transparent icon-button behavior on shared styles:
-      - base class: `IconGlyphBase`,
-      - control wrappers: `IconGlyphButton`, `IconGlyphToggle`.
-  - Full-surface migration contract (this milestone):
-    - use mute button as the first implementation slice, then migrate all remaining icon controls/surfaces in desktop and WebUI within M8h,
-    - preserve existing control behavior while replacing icon rendering implementation (no feature-behavior regressions during cutover).
-  - Cross-surface tinting contract:
-    - desktop/Avalonia icon font tinting is driven by foreground color/brush and system theme,
-    - WebUI icon font tinting is driven via CSS color/theming so symbols inherit site theme state.
-  - Asset/source-of-truth boundaries:
-    - keep Material Symbols font asset under `assets/fonts/` as desktop icon-font source.
-  - Preserve architecture boundaries:
-    - keep icon/theming logic in host/UI/render layers,
-    - do not move domain logic into clients for this work.
-- **Acceptance criteria**:
-  - Tray context menu follows current Windows system light/dark theme at runtime.
-  - Desktop icon-font path is active via `MaterialSymbolsOutlined.var.ttf` and shared icon styles (`IconGlyphBase`, `IconGlyphButton`, `IconGlyphToggle`, `MaterialSymbolIcon`).
-  - All desktop icon controls/surfaces (not only mute) are migrated to the shared icon-style foundation and Material Symbols font rendering where applicable.
-  - WebUI icon rendering is font-based (Material Symbols via CSS) and supports deterministic CSS-driven tinting.
-  - All WebUI icon controls/surfaces are migrated to the Material Symbols font-based CSS path.
-  - No regressions to existing tray actions (`Open Operator UI`, `Launch Server on Startup`, `Refresh Library`, `Restart Server`, `Stop Server / Exit`).
-- **Verification evidence**:
-  - Automated gate pass:
-    - `dotnet build ReelRoulette.sln`
-    - `dotnet test ReelRoulette.sln`
-    - `npm run verify` (`src/clients/web/ReelRoulette.WebUI`)
-  - Manual verification captures:
-    - tray menu light-mode rendering evidence,
-    - tray menu dark-mode rendering evidence,
-    - desktop icon-surface evidence showing full icon migration to shared icon-style + Material Symbols font rendering in light/dark themes,
-    - WebUI icon-surface evidence showing full icon migration to Material Symbols CSS font rendering in light/dark themes,
-    - icon-source evidence showing desktop font-asset usage (`assets/fonts/MaterialSymbolsOutlined.var.ttf`).
-- **Deferrals / Follow-ups**:
-  - Windows tray menu item icons are deferred; add Material Symbols-based tray menu icons in a follow-up milestone after theme-parity rollout stabilizes.
-  - Linux tray theme/icon parity remains best-effort and is tracked under Linux milestone work unless explicitly expanded.
+Last milestone completed: M8h
 
 ### M9a - Structured JSONL Schema + Server Writer Foundation
 
@@ -117,7 +99,7 @@ Do not use this file for detailed architecture explanation or current capability
   - Define and enforce canonical JSONL log schema (one JSON object per line) with required core fields:
     - required on every entry: `ts`, `lvl`, `svc`, `comp`, `op`, `msg`,
     - `lvl` vocabulary is fixed to lowercase values only: `trace|debug|info|warn|error|fatal`.
-    - `svc` vocabulary for M9 is fixed to lowercase values only: `server|desktop|webui`; `android|ios` remain schema-reserved for later milestones and are not emitted by M9 flows.
+    - `svc` vocabulary for this structured-logging series is fixed to lowercase values only: `server|desktop|webui`; `android|ios` remain schema-reserved for later milestones and are not emitted by this series.
     - conditional/optional fields in canonical serialization order: `evt`, `data`, `ingestReqId`, `clientOpId`, `traceId`, `spanId`, `clientId`, `sessionId`, `ver`, `build`, `clientTs`, `srcIp`, `userAgent`.
     - canonical serialization order places `evt` immediately after `op` when present, and places `data` immediately after `msg` when present.
     - `evt` is optional and free-form with naming convention guidance (dot-delimited, lowercase, action-oriented), for example: `sse.connected`, `ui.pair.submit`, `api.random.requested`.
@@ -150,7 +132,7 @@ Do not use this file for detailed architecture explanation or current capability
 - **Acceptance criteria**:
   - `last.log` is JSONL and entries include required core fields with consistent optional-field shapes when emitted.
   - `lvl` values are always one of `trace|debug|info|warn|error|fatal` (lowercase).
-  - `svc` values are always one of `server|desktop|webui` for M9-emitted entries; `android|ios` remain reserved and unused in M9 runtime flows.
+  - `svc` values are always one of `server|desktop|webui` for this series' emitted entries; `android|ios` remain reserved and unused in this series runtime flows.
   - Optional fields serialize in canonical order with `evt` immediately after `op` when present and `data` immediately after `msg` when present.
   - `ingestReqId` is present on every persisted log entry and is assigned by the centralized server writer path.
   - `data` payload shape constraints are enforced (bounded, privacy-safe, no arbitrary object dumps).
@@ -218,7 +200,7 @@ Do not use this file for detailed architecture explanation or current capability
     - `ingestReqId`, `srcIp`, and `userAgent` are excluded from client-supplied `LogContext` and are server-enriched only.
   - Provide minimal canonical `comp` mapping list and enforce in review/docs:
     - Desktop examples: `ui.main-window`, `ui.player`, `ui.settings`, `core.client`, `playback.vlc`, `library.panel`.
-    - Server examples (reference baseline for `M9e` server/core instrumentation): `api`, `auth`, `sse`, `playback`, `refresh.pipeline`, `storage`.
+    - Server examples (reference baseline for **Server/Core Meaningful Instrumentation Expansion**): `api`, `auth`, `sse`, `playback`, `refresh.pipeline`, `storage`.
     - WebUI examples: `web.app`, `web.player`, `web.api`, `web.sse`.
 - **Acceptance criteria**:
   - Structured Log API exists for desktop and WebUI with explicit `comp`/`op` and level-typed methods.
@@ -235,7 +217,7 @@ Do not use this file for detailed architecture explanation or current capability
 ### M9d - Desktop Log Migration + Legacy API Obsoletion
 
 - **Status**: ⏳ Planned
-- **Goal**: Migrate the high-volume desktop logging surface to structured API as the primary M9 migration priority.
+- **Goal**: Migrate the high-volume desktop logging surface to structured API as the primary structured-logging migration priority.
 - **Scope**:
   - Update all desktop legacy `Log("OpName: ...")` call sites to structured API.
   - Remove any desktop-side “infer op from msg” logic/normalizers.
@@ -328,11 +310,11 @@ Do not use this file for detailed architecture explanation or current capability
   - Rename primary read/query endpoint from `/control/logs/server` to `/control/log-viewer` with compatibility alias:
     - keep `/control/logs/server` temporarily as backward-compatible alias,
     - maintain equivalent behavior/payload semantics during alias period,
-    - mark alias as deprecated in OpenAPI/docs during M9g with explicit planned removal in M9i (no indefinite dual-endpoint ambiguity).
+    - mark alias as deprecated in OpenAPI/docs during **Operator Structured Query Surface** with explicit planned removal in **Reliability Hardening and Final Verification** (no indefinite dual-endpoint ambiguity).
   - Ensure `/control/log-viewer` remains read/query only; server runtime log writes continue directly to `last.log`.
   - Update OpenAPI and docs (`shared/api/openapi.yaml`, `docs/api.md`, operator-facing docs) to:
     - define `/control/log-viewer` as primary endpoint,
-    - mark `/control/logs/server` as deprecated compatibility alias with M9i removal note.
+    - mark `/control/logs/server` as deprecated compatibility alias with planned removal noted in **Reliability Hardening and Final Verification**.
   - Update Operator page title and navigation labels from `Server Logs` to `Log Viewer`.
   - Implement collapsible Log Viewer controls section:
     - collapsed by default,
@@ -358,7 +340,7 @@ Do not use this file for detailed architecture explanation or current capability
   - Operator Log Viewer can filter/search by structured fields, text, and time window without shell access.
   - Primary endpoint `/control/log-viewer` returns structured-entry responses compatible with exact field filtering.
   - Compatibility alias `/control/logs/server` remains functional during migration window.
-  - Alias lifecycle is explicit: OpenAPI/docs mark alias deprecated in M9g with planned M9i removal.
+  - Alias lifecycle is explicit: OpenAPI/docs mark the alias deprecated during **Operator Structured Query Surface** with planned removal in **Reliability Hardening and Final Verification**.
   - Log Viewer controls are collapsed by default and expose active filter state when collapsed.
   - Human-readable row mode with expandable JSON detail is available and functional.
   - Query ordering and cursor pagination are deterministic and documented (stable sort tuple, tie-break semantics, cursor version/bounds behavior).
@@ -401,7 +383,7 @@ Do not use this file for detailed architecture explanation or current capability
   - Privacy constraints are enforced at source in `msg` and `data`.
   - Error/fatal logs with `ex` inputs persist only privacy-safe `data.error` payloads; no top-level `ex` field is written and no raw sensitive exception content is emitted by default.
   - Runtime safety/correctness is achieved by source-safe templates + structured Log API contracts, not by post-hoc sanitizer/normalizer rewriting.
-  - Sanitizer/normalizer runtime paths are removed by end of M9h with regression tests proving they are not in runtime data path.
+  - Sanitizer/normalizer runtime paths are removed by end of this milestone with regression tests proving they are not in runtime data path.
   - Legacy string-prefix logging paths are blocked from reintroduction.
 - **Verification evidence**:
   - Evidence placeholders maintained at planned state; completion evidence must include negative tests for sensitive content leakage and `ex` serialization policy enforcement.
@@ -412,21 +394,21 @@ Do not use this file for detailed architecture explanation or current capability
 ### M9i - Reliability Hardening and Final Verification
 
 - **Status**: ⏳ Planned
-- **Goal**: Finalize non-blocking behavior and complete cross-surface sign-off evidence for M9.
+- **Goal**: Finalize non-blocking behavior and complete cross-surface sign-off evidence for the structured-logging series.
 - **Scope**:
   - Keep logging best-effort and non-blocking for clients:
     - client relay failures must not block/interrupt user actions,
     - retries are asynchronous and bounded.
-  - Complete endpoint cutover by removing compatibility alias `/control/logs/server` in M9i; `/control/log-viewer` becomes sole supported endpoint after M9 sign-off.
-  - Complete OpenAPI/docs endpoint cutover in M9i:
+  - Complete endpoint cutover by removing compatibility alias `/control/logs/server` in this milestone; `/control/log-viewer` becomes sole supported endpoint after structured-logging sign-off.
+  - Complete OpenAPI/docs endpoint cutover in this milestone:
     - remove deprecated `/control/logs/server` alias from contract/docs,
     - keep `/control/log-viewer` as sole documented/supported endpoint.
-  - Scope for M9 implementation is `server`, `desktop`, and `webui`; `android`/`ios` remain schema-reserved `svc` values for later milestones.
+  - Scope for this implementation series is `server`, `desktop`, and `webui`; `android`/`ios` remain schema-reserved `svc` values for later milestones.
 - **Acceptance criteria**:
   - `last.log` includes both server runtime logs and ingested desktop/web client logs through the same writer path.
   - Desktop and WebUI logs are emitted using structured API with explicit `comp`/`op` and correctly categorized levels.
   - Client log ingestion failures are non-blocking in user flows and bounded retry behavior is deterministic/tested.
-  - `/control/logs/server` compatibility alias is removed as part of M9i cutover; `/control/log-viewer` remains the only supported log-viewer endpoint.
+  - `/control/logs/server` compatibility alias is removed as part of this milestone cutover; `/control/log-viewer` remains the only supported log-viewer endpoint.
   - Automated tests cover schema validation, ingestion mapping, timestamp semantics, request-scoped trace correlation fields, structured Log API behavior (field correctness + levels), privacy guardrails (source-safe templates), lifecycle behavior, and non-blocking relay behavior.
 - **Verification evidence**:
   - Centralized server writer emits JSONL entries for both server and client-ingested events.
@@ -436,7 +418,7 @@ Do not use this file for detailed architecture explanation or current capability
   - Operator Log Viewer validates mixed-source filtering/search by structured fields (`svc`, `lvl`, `clientId`, `sessionId`, `traceId`, `ingestReqId`, `clientOpId`, `comp`, `op`, `evt`) plus message text search and time-window filtering.
   - Endpoint migration evidence captures:
     - `/control/log-viewer` primary endpoint behavior,
-    - `/control/logs/server` alias deprecation state in M9g and removal behavior in M9i (expected unsupported response after cutover).
+    - `/control/logs/server` alias deprecation state in **Operator Structured Query Surface** and removal behavior in **Reliability Hardening and Final Verification** (expected unsupported response after cutover).
   - Log Viewer UX evidence captures:
     - collapsed-by-default controls with active-filter summary while collapsed,
     - human-readable rows with expandable JSON detail,
@@ -453,12 +435,14 @@ Do not use this file for detailed architecture explanation or current capability
     - `MutateItemState` evidence includes favorite, blacklist, and tag-edit apply subcases,
     - combined trace-level evidence across server + client for at least one end-to-end flow,
     - one explicit `/api/logs/client` failure simulation proving user actions remain non-blocking,
-    - field-level evidence snippets in `docs/testing-checklist.md`.
+    - field-level evidence snippets in `docs/checklists/testing-checklist.md`.
 
-### M10 - UX/UI Polish
+## Planned Milestones
+
+### P1 - UX/UI Polish
 
 - **Status**: ⏳ Planned
-- **Goal**: Apply UX polish improvements deferred from M8f reliability closeout without changing core API-first ownership boundaries.
+- **Goal**: Apply UX polish improvements deferred from the completed hardening/packaging/release-readiness work without changing core API-first ownership boundaries.
 - **Scope**:
   - Improve desktop tag-editor apply responsiveness (close/progress UX should feel immediate while apply completes).
   - Expand WebUI refresh-status projection detail parity with desktop stage/progress visibility.
@@ -476,27 +460,27 @@ Do not use this file for detailed architecture explanation or current capability
   - Tag apply interactions feel immediate and do not block UI unexpectedly.
   - Web refresh-status projections provide actionable stage/progress detail comparable to desktop.
   - Duplicate groups in desktop duplicates dialog show per-file thumbnails inline in the defined order, enabling quick visual validation before delete/apply actions.
-  - No regressions to M8f reliability fixes (compatibility gating, reconnect/resync, deterministic testing simulations).
+  - No regressions to previously completed reliability fixes (compatibility gating, reconnect/resync, deterministic testing simulations).
 
-### M11a - Playback Session Contracts and Capability Surface
+### P2a - Playback Session Contracts and Capability Surface
 
 - **Status**: ⏳ Planned
 - **Goal**: Establish contract-first playback-session APIs and capability signaling.
 - **Scope**:
-  - Milestone-sequencing guardrails for the M11 series:
-    - complete M8 stabilization before starting M11 implementation,
-    - keep each `M11*` slice independently verifiable and shippable,
+  - Milestone-sequencing guardrails for this playback-session series:
+    - complete current stabilization work before starting this series implementation,
+    - keep each slice independently verifiable and shippable,
     - preserve thin-client boundaries while introducing server-side playback decisions.
   - Define OpenAPI contracts for playback-session create/read and stream URL contracts.
   - Add server capability markers for playback-session and transcode support in `/api/version`.
   - Regenerate/refresh generated client contracts used by desktop and WebUI.
 - **Acceptance criteria**:
-  - `M11a` establishes the contract/capability baseline used by subsequent `M11*` slices.
+  - This milestone establishes the contract/capability baseline used by subsequent slices in the playback-session series.
   - OpenAPI includes playback-session surfaces and validates.
   - Generated desktop/web client contracts are in sync with OpenAPI.
   - Version/capability checks can detect missing playback features deterministically.
 
-### M11b - Server Playback Decision Engine
+### P2b - Server Playback Decision Engine
 
 - **Status**: ⏳ Planned
 - **Goal**: Make server the sole decision point for direct/remux/transcode mode selection.
@@ -512,7 +496,7 @@ Do not use this file for detailed architecture explanation or current capability
   - Decision outputs are stable/repeatable for identical inputs.
   - Session responses include delivery type (`progressive` or `hls-fmp4`) and actionable reason fields.
 
-### M11c - Direct-Stream Session URL Baseline
+### P2c - Direct-Stream Session URL Baseline
 
 - **Status**: ⏳ Planned
 - **Goal**: Ship direct-stream playback-session URL path first as the initial playback foundation.
@@ -524,7 +508,7 @@ Do not use this file for detailed architecture explanation or current capability
   - Session token/session mapping is guarded against invalid/expired use.
   - Direct-stream sessions are cleaned up reliably after TTL expiry.
 
-### M11d - Remux/Transcode and Segmented Streaming (HLS fMP4 Baseline)
+### P2d - Remux/Transcode and Segmented Streaming (HLS fMP4 Baseline)
 
 - **Status**: ⏳ Planned
 - **Goal**: Add resilient compatibility streaming for unsupported formats and long-form playback.
@@ -537,12 +521,12 @@ Do not use this file for detailed architecture explanation or current capability
   - Segmented streaming baseline is explicitly HLS with fMP4 segments and is validated in playback paths.
   - No orphan ffmpeg processes or segment/transcode artifacts remain after session expiry or runtime shutdown.
 
-### M11e - Desktop Thin-Client Playback Cutover
+### P2e - Desktop Thin-Client Playback Cutover
 
 - **Status**: ⏳ Planned
-- **Goal**: Integrate desktop with playback-session APIs while preserving local-first performance semantics from M8d.
+- **Goal**: Integrate desktop with playback-session APIs while preserving local-first performance semantics from the completed desktop playback-policy milestone.
 - **Scope**:
-  - Preserve the M8d compromise baseline through M11:
+  - Preserve the desktop playback-policy compromise baseline throughout this playback-session series:
     - local-first playback with automatic API fallback,
     - optional `ForceApiPlayback` for deterministic API-path validation.
   - Add playback-session orchestration path for desktop API playback mode.
@@ -553,7 +537,7 @@ Do not use this file for detailed architecture explanation or current capability
     - path is not a server-issued token/virtual playback path,
     - quick open-read preflight succeeds.
   - Ensure automatic fallback to API playback when local path is inaccessible.
-  - Ensure `ForceApiPlayback=true` always routes desktop through API playback path (for M11 validation and advanced-user preference).
+  - Ensure `ForceApiPlayback=true` always routes desktop through API playback path (for this series validation and advanced-user preference).
   - Desktop loop parity requirement:
     - toggling loop must not reload media,
     - loop transitions remain gapless,
@@ -564,11 +548,11 @@ Do not use this file for detailed architecture explanation or current capability
     - local playback when locally accessible and `ForceApiPlayback=false`,
     - API playback when local path is inaccessible or `ForceApiPlayback=true`.
   - Desktop API playback mode uses server playback-session contract successfully.
-  - Outside allowed M8d exceptions (`desktop-settings.json`, media-read for playback), no new local file authority paths are introduced.
+  - Outside allowed desktop playback-policy exceptions (`desktop-settings.json`, media-read for playback), no new local file authority paths are introduced.
   - Desktop looping parity is preserved: loop toggling/iteration semantics remain gapless without per-loop stat increments.
   - Disconnect/reconnect behavior remains user-friendly and deterministic.
 
-### M11f - WebUI Playback Cutover and Format Resilience
+### P2f - WebUI Playback Cutover and Format Resilience
 
 - **Status**: ⏳ Planned
 - **Goal**: Align WebUI playback with server playback-session contract and robust format handling, while preserving parity with desktop API playback mode.
@@ -583,7 +567,7 @@ Do not use this file for detailed architecture explanation or current capability
   - Movie-length playback reliability issues are resolved for supported validation corpus.
   - Looping parity is preserved: WebUI behavior remains unchanged across progressive and HLS playback paths.
 
-### M11g - Resume Position and Session Continuity
+### P2g - Resume Position and Session Continuity
 
 - **Status**: ⏳ Planned
 - **Goal**: Deliver server-authoritative remember-position behavior across desktop and WebUI playback paths.
@@ -601,21 +585,21 @@ Do not use this file for detailed architecture explanation or current capability
   - Clear-resume operations are deterministic and observable.
   - Resume policy settings are documented, persisted, and enforced by server.
 
-### M11h - Hardening, Operations, and Final Verification
+### P2h - Hardening, Operations, and Final Verification
 
 - **Status**: ⏳ Planned
 - **Goal**: Stabilize playback pipeline for multi-client operation and operational visibility.
 - **Scope**:
   - Add concurrency/backpressure controls (max concurrent transcodes + queueing policy).
   - Add operator diagnostics for active sessions, mode decisions, and failure reasons.
-  - Execute full automated/manual verification matrix and finalize docs/tracking updates for M11.
+  - Execute full automated/manual verification matrix and finalize docs/tracking updates for this playback-session series.
 - **Acceptance criteria**:
   - Multi-client playback remains stable under constrained transcode capacity.
   - Operator-facing diagnostics are sufficient to troubleshoot playback failures.
-  - Automated gates and manual playback matrix pass before M11 sign-off.
+  - Automated gates and manual playback matrix pass before playback-session series sign-off.
   - After server shutdown, no ffmpeg workers remain, and temporary playback/transcode directories are cleaned or explicitly TTL-managed.
 
-### M12 - Android Client Bootstrap
+### P3 - Android Client Bootstrap
 
 - **Status**: ⏳ Planned
 - **Goal**: Enable initial Android app development on stable API seam after desktop/web client migration is functionally complete.
@@ -630,7 +614,7 @@ Do not use this file for detailed architecture explanation or current capability
   - Mobile resume/reconnect auth continuity is verified (pairing/auth state survives app background/resume and SSE reconnect paths).
   - Regression tests validate Android client API/SSE compatibility expectations (schema, event envelope handling, and reconnect behavior) and pass in `dotnet test`.
 
-### M13 - File Metadata Sync and Extended Metadata
+### P4 - File Metadata Sync and Extended Metadata
 
 - **Status**: ⏳ Planned
 - **Goal**: Add server-authoritative metadata sync so tags/metadata can be imported from and exported to media files, while preserving thin-client boundaries and cross-client parity.
@@ -662,7 +646,7 @@ Do not use this file for detailed architecture explanation or current capability
   - Batch metadata operations work through API contracts and respect conflict/error policies.
   - Error reporting is actionable (success/failure counts + reasons), and logging follows centralized server logging ownership.
 
-### M14 - Customizable Keyboard Shortcuts (Desktop)
+### P5 - Customizable Keyboard Shortcuts (Desktop)
 
 - **Status**: ⏳ Planned
 - **Goal**: Enable user-configurable desktop keyboard shortcuts while preserving reliable input handling and existing default behavior.
@@ -684,7 +668,7 @@ Do not use this file for detailed architecture explanation or current capability
   - System-reserved shortcuts are protected from unsafe overrides.
   - Existing playback/control workflows remain stable with both default and customized bindings.
 
-### M15 - Playback Analytics and Visualization
+### P6 - Playback Analytics and Visualization
 
 - **Status**: ⏳ Planned
 - **Goal**: Provide server-authoritative playback analytics with rich client-side visualization for desktop/WebUI parity.
@@ -712,7 +696,7 @@ Do not use this file for detailed architecture explanation or current capability
   - Date-range filters produce correct aggregate differences and are validated by tests.
   - Client visualizations do not introduce local authoritative analytics calculations that diverge from server semantics.
 
-### M16 - Desktop Confirmation Dialog Standardization
+### P7 - Desktop Confirmation Dialog Standardization
 
 - **Status**: ⏳ Planned
 - **Goal**: Reduce desktop UI duplication and improve consistency by standardizing confirmation dialogs behind a reusable component.
@@ -733,7 +717,7 @@ Do not use this file for detailed architecture explanation or current capability
   - Duplicate confirmation-dialog code paths are reduced with no functional regressions.
   - Desktop UI tests/manual checks confirm parity for destructive and non-destructive confirmation actions.
 
-### M17 - Advanced Runtime and Cache Controls
+### P8 - Advanced Runtime and Cache Controls
 
 - **Status**: ⏳ Planned
 - **Goal**: Provide controlled, server-authoritative cache/performance tuning for varied hardware and storage environments, with safe defaults and clear operator observability.
@@ -763,7 +747,7 @@ Do not use this file for detailed architecture explanation or current capability
   - Desktop/WebUI/operator surfaces show consistent effective settings and apply results.
   - No client-local authoritative settings drift is introduced.
 
-### M18a - Photo Face Detection Baseline
+### P9a - Photo Face Detection Baseline
 
 - **Status**: ⏳ Planned
 - **Goal**: Deliver reliable face detection for photos with practical UX and performance controls.
@@ -775,7 +759,7 @@ Do not use this file for detailed architecture explanation or current capability
   - Keep clients as orchestration/render layers:
     - no client-local detection authority,
     - clients display overlays/results and invoke server jobs/queries.
-  - This milestone is the first phase of the M18 rollout, with video expansion in `M18b`.
+  - This milestone is the first phase of the face-detection rollout, with video expansion in the companion video-detection phase.
   - Select and integrate a .NET-compatible detection stack (OpenCV/ML.NET/other) for photo inputs.
   - Add detection execution modes:
     - import-time and/or on-demand scan jobs.
@@ -796,12 +780,12 @@ Do not use this file for detailed architecture explanation or current capability
   - Overlay/filter behavior works for detected photo faces with deterministic result semantics.
   - Performance impact is bounded and documented.
 
-### M18b - Video Face Detection Expansion
+### P9b - Video Face Detection Expansion
 
 - **Status**: ⏳ Planned
 - **Goal**: Extend face detection to video with sampling/throughput strategies suitable for long-form media.
 - **Scope**:
-  - This milestone is the second phase of the M18 rollout and extends the server-authoritative model established in `M18a`.
+  - This milestone is the second phase of the face-detection rollout and extends the server-authoritative model established in the companion photo-detection phase.
   - Define video frame-sampling strategy (interval/keyframe/scene-aware options as needed).
   - Run detection as background jobs with queueing/concurrency controls.
   - Persist timeline-aware face detection outputs for video items.
@@ -816,7 +800,7 @@ Do not use this file for detailed architecture explanation or current capability
   - Long-duration media processing is resumable/retry-safe and operationally observable.
   - Recognition/identity features remain explicitly out of scope unless separately approved.
 
-### M19a - Linux Runtime Baseline (Server + Desktop)
+### P10a - Linux Runtime Baseline (Server + Desktop)
 
 - **Status**: ⏳ Planned
 - **Goal**: Establish a supported Linux runtime baseline for both `ReelRoulette Server` and desktop client with deterministic startup/playback behavior.
@@ -849,7 +833,7 @@ Do not use this file for detailed architecture explanation or current capability
     - `npm run verify` (`src/clients/web/ReelRoulette.WebUI`)
     - Linux run/smoke command evidence for server + desktop startup.
 
-### M19b - Linux Packaging (Server + Desktop)
+### P10b - Linux Packaging (Server + Desktop)
 
 - **Status**: ⏳ Planned
 - **Goal**: Produce distributable Linux artifacts for both server and desktop using repo-owned packaging scripts.
@@ -872,9 +856,9 @@ Do not use this file for detailed architecture explanation or current capability
   - Packaging scripts produce expected Linux artifacts under `artifacts/packages/`.
   - Packaging smoke evidence captures both tray-enabled launch behavior and tray-unavailable fallback behavior.
   - Install/run smoke checks from packaged artifacts pass on Linux baseline host.
-  - `docs/testing-checklist.md` packaging checklist includes Linux package checks.
+  - `docs/checklists/testing-checklist.md` packaging checklist includes Linux package checks.
 
-### M19c - CI Linux Distribution Gates
+### P10c - CI Linux Distribution Gates
 
 - **Status**: ⏳ Planned
 - **Goal**: Add Linux build/test/package verification to CI so Linux distribution quality is continuously enforced.
@@ -897,14 +881,14 @@ Do not use this file for detailed architecture explanation or current capability
   - CI evidence includes tray-capability handling checks and fallback-path validation.
   - CI run evidence shows passing Linux gates and generated artifacts.
 
-### M19d - Linux Documentation and Operator Runbook
+### P10d - Linux Documentation and Operator Runbook
 
 - **Status**: ⏳ Planned
 - **Goal**: Make Linux setup, packaging, and troubleshooting workflows first-class and self-serve for contributors/operators.
 - **Scope**:
   - Update `README.md` with Linux run/package command paths.
   - Update `docs/dev-setup.md` with Linux prerequisites, runtime notes, and packaging flow.
-  - Update `docs/testing-checklist.md` with Linux-specific validation checklist entries.
+  - Update `docs/checklists/testing-checklist.md` with Linux-specific validation checklist entries.
   - Update `docs/domain-inventory.md` to include Linux packaging/runtime surfaces.
   - Document Linux tray support as best-effort, including environment/session variability and headless fallback expectations.
   - Add Linux troubleshooting guidance:
@@ -922,7 +906,7 @@ Do not use this file for detailed architecture explanation or current capability
   - Manual doc dry-run evidence includes both tray-capable and tray-unavailable/headless operator flows.
   - Manual dry-run of documented Linux commands succeeds on baseline host.
 
-### M19e - Linux Release Readiness and Sign-off
+### P10e - Linux Release Readiness and Sign-off
 
 - **Status**: ⏳ Planned
 - **Goal**: Complete release-quality Linux validation for server + desktop and capture final evidence for sign-off.
@@ -939,16 +923,64 @@ Do not use this file for detailed architecture explanation or current capability
   - Release sign-off explicitly confirms tray-capable validation results and tray-unavailable fallback validation results.
   - Release tracking docs are synchronized to final Linux-ready state.
 - **Verification evidence**:
-  - Completed Linux checklist entries in `docs/testing-checklist.md`.
+  - Completed Linux checklist entries in `docs/checklists/testing-checklist.md`.
   - Final evidence bundle includes tested Linux environment matrix noting tray-capable vs tray-unavailable outcomes.
   - CI evidence for Linux packaging + smoke checks.
-  - Updated `MILESTONES.md`, `CHANGELOG.md`, and `COMMIT_MESSAGE.txt` entries reflecting final M19 state.
+  - Updated `MILESTONES.md`, `CHANGELOG.md`, and `COMMIT_MESSAGE.txt` entries reflecting final Linux-release-readiness state.
 
 ---
 
 ## Completed Milestones
 
 Latest completions first:
+
+### M8h - Tray Theme Parity and Material Symbols Icon Standardization
+
+- **Status**: ✅ Complete
+- **Goal**: Align Windows ServerApp tray UX with system theme behavior and standardize icon rendering on Material Symbols **font-based** patterns (with shared icon styles) for consistent cross-platform theming/customization.
+- **Scope**:
+  - Windows tray menu theme parity:
+    - make tray context menu follow active system theme (light/dark) instead of fixed light styling,
+    - keep existing tray action behavior unchanged while applying theme-aware rendering.
+  - Desktop icon foundation (font-based):
+    - wire `assets/fonts/MaterialSymbolsOutlined.var.ttf` into Avalonia resources for desktop icon rendering,
+    - use shared `TextBlock.MaterialSymbolIcon` style for icon font setup,
+    - standardize transparent icon-button behavior on shared styles:
+      - base class: `IconGlyphBase`,
+      - control wrappers: `IconGlyphButton`, `IconGlyphToggle`.
+  - Full-surface migration contract (this milestone):
+    - use mute button as the first implementation slice, then migrate the intended remaining icon controls/surfaces in desktop and WebUI within this milestone,
+    - intentionally retain existing emoji/text indicator surfaces in `MainWindow.axaml` and `ManageSourcesDialog.axaml`,
+    - preserve existing control behavior while replacing icon rendering implementation (no feature-behavior regressions during cutover).
+  - Cross-surface tinting contract:
+    - desktop/Avalonia icon font tinting is driven by foreground color/brush and system theme,
+    - WebUI icon font tinting is driven via CSS color/theming so symbols inherit site theme state.
+  - Asset/source-of-truth boundaries:
+    - keep Material Symbols font asset under `assets/fonts/` as desktop icon-font source.
+  - Preserve architecture boundaries:
+    - keep icon/theming logic in host/UI/render layers,
+    - do not move domain logic into clients for this work.
+- **Acceptance criteria**:
+  - Tray context menu follows current Windows system light/dark theme at runtime.
+  - Desktop icon-font path is active via `MaterialSymbolsOutlined.var.ttf` and shared icon styles (`IconGlyphBase`, `IconGlyphButton`, `IconGlyphToggle`, `MaterialSymbolIcon`).
+  - Desktop icon controls/surfaces targeted for migration are moved to the shared icon-style foundation and Material Symbols font rendering, with intentional retention of existing emoji/text surfaces in `MainWindow.axaml` and `ManageSourcesDialog.axaml`.
+  - WebUI icon rendering is font-based (Material Symbols via CSS) and supports deterministic CSS-driven tinting.
+  - All WebUI icon controls/surfaces are migrated to the Material Symbols font-based CSS path.
+  - No regressions to existing tray actions (`Open Operator UI`, `Launch Server on Startup`, `Refresh Library`, `Restart Server`, `Stop Server / Exit`).
+- **Verification evidence**:
+  - Automated gate pass:
+    - `dotnet build ReelRoulette.sln`
+    - `dotnet test ReelRoulette.sln`
+    - `npm run verify` (`src/clients/web/ReelRoulette.WebUI`)
+  - Manual verification captures:
+    - tray menu light-mode rendering evidence,
+    - tray menu dark-mode rendering evidence,
+    - desktop icon-surface evidence showing targeted icon migration to shared icon-style + Material Symbols font rendering in light/dark themes, with intentional retention exceptions for `MainWindow.axaml` and `ManageSourcesDialog.axaml`,
+    - WebUI icon-surface evidence showing full icon migration to Material Symbols CSS font rendering in light/dark themes,
+    - icon-source evidence showing desktop font-asset usage (`assets/fonts/MaterialSymbolsOutlined.var.ttf`).
+- **Deferrals / Follow-ups**:
+  - Windows tray menu item icons are deferred; add Material Symbols-based tray menu icons in a follow-up milestone after theme-parity rollout stabilizes.
+  - Linux tray theme/icon parity remains best-effort and is tracked under Linux milestone work unless explicitly expanded.
 
 ### M8g - Windows ServerApp System Tray Baseline (Single Binary, No Console)
 
@@ -976,7 +1008,7 @@ Latest completions first:
     - Stop/Exit performs graceful shutdown.
   - Existing API/SSE/WebUI/Operator runtime behavior remains functional and unchanged in intent.
   - Single-binary Windows ServerApp packaging remains valid and install/run flow remains reproducible.
-  - Linux runtime path is unaffected (continues headless unless Linux tray is explicitly enabled in M19 work).
+  - Linux runtime path is unaffected (continues headless unless Linux-focused tray work is explicitly enabled later).
 - **Verification evidence**:
   - Implemented code path:
     - host-UI abstraction added under `src/core/ReelRoulette.ServerApp/Hosting/*` with Windows `NotifyIcon` tray host and non-Windows headless host.
@@ -987,14 +1019,14 @@ Latest completions first:
     - `dotnet build ReelRoulette.sln`
     - `dotnet test ReelRoulette.sln`
     - `npm run verify` (`src/clients/web/ReelRoulette.WebUI`)
-  - Manual verification completed (`docs/testing-checklist.md`):
+  - Manual verification completed (`docs/checklists/testing-checklist.md`):
     - no-console Windows launch verified,
     - tray icon parity evidence verified for `assets/HI.ico`,
     - tray action behavior verified for all four required menu actions,
     - packaged portable/install runtime tray behavior verified.
 - **Deferrals / Follow-ups**:
-  - Linux tray support is explicitly deferred to M19 Linux milestones as best-effort capability.
-  - Advanced tray UX (notifications, rich status panes, localization, startup-on-login toggles) is out of scope for M8g unless separately approved.
+  - Linux tray support is explicitly deferred to the Linux milestone group as best-effort capability.
+  - Advanced tray UX (notifications, rich status panes, localization, startup-on-login toggles) is out of scope for this milestone unless separately approved.
 
 ### M8f - Hardening, Packaging, and Release Readiness
 
@@ -1022,7 +1054,7 @@ Latest completions first:
     - SSE replay/resync-required recovery checks,
     - missing/invalid media and related API-error path checks.
   - Produce full repo-wide manual testing artifacts linked to Operator test sections:
-    - `docs/testing-checklist.md` (workflow + inline checklist + PASS/FAIL evidence capture).
+    - `docs/checklists/testing-checklist.md` (workflow + inline checklist + PASS/FAIL evidence capture).
   - Include Operator-assisted evidence capture quality-of-life features:
     - per-scenario PASS/FAIL + note + timestamp recording,
     - copy/export test evidence bundle (status + relevant log snippets),
@@ -1056,21 +1088,21 @@ Latest completions first:
     - `.github/workflows/ci.yml`,
     - `.github/workflows/package-windows.yml`.
   - Manual validation artifacts added:
-    - `docs/testing-checklist.md`.
+    - `docs/checklists/testing-checklist.md`.
   - Automated verification passes on current branch:
     - `dotnet build ReelRoulette.sln`
     - `dotnet test ReelRoulette.sln`
     - `npm run verify` (`src/clients/web/ReelRoulette.WebUI`)
     - `tools/scripts/verify-web-deploy.ps1`
   - Manual checklist waiver applied per user direction:
-    - remaining `NOT TESTED` items in `docs/testing-checklist.md` are accepted as pass/deferred for M8f closeout.
+    - remaining `NOT TESTED` items in `docs/checklists/testing-checklist.md` are accepted as pass/deferred for this milestone closeout.
   - High/medium reliability fix slice (post-manual test feedback) is implemented:
     - duplicate scan now shows deterministic API-recovery guidance instead of silent no-op,
     - auto-tag scan now reports runtime recovery state accurately and no longer relies on a false version-only health signal,
     - desktop now enforces API/capability compatibility gates and shows reconnect/resync SSE status guidance,
     - missing-media simulation now preserves random selection and fails deterministically at media-fetch endpoints with explicit `Media not found` API errors.
     - desktop legacy locate/remove missing-file dialog flow removed to keep missing-media remediation server-authoritative.
-  - Deferred to `M10` (UX/UI polish only):
+  - Deferred to **UX/UI Polish** (polish-only follow-up):
     - tag-editor apply latency/close responsiveness polish,
     - web refresh-status detail parity enhancements.
 
@@ -1081,7 +1113,7 @@ Latest completions first:
 - **Scope**:
   - Standardize client-facing API contracts/capabilities for desktop/web/mobile parity.
   - Ensure WebUI uses the same API semantics as desktop for migrated behaviors.
-  - Scope boundary: playback-session pipeline contracts/capabilities are owned by `M11a` and are out of scope for `M8e`.
+  - Scope boundary: playback-session pipeline contracts/capabilities are owned by **Playback Session Contracts and Capability Surface** and are out of scope for this milestone.
   - Define session/reconnect rules on the shared contract surface:
     - persistent per-device `clientId`,
     - optional `sessionId` for future shared-session features,
@@ -1108,7 +1140,7 @@ Latest completions first:
 ### M8d - Desktop Playback Policy Compromise (Local-First with API Fallback)
 
 - **Status**: ✅ Complete
-- **Goal**: Keep desktop playback performant for local/shared-storage scenarios while preserving API-first orchestration and M11 playback-pipeline readiness.
+- **Goal**: Keep desktop playback performant for local/shared-storage scenarios while preserving API-first orchestration and playback-session-series readiness.
 - **Scope**:
   - Introduce desktop playback policy:
     - local playback first when the selected media path is accessible on the desktop machine,
@@ -1122,7 +1154,7 @@ Latest completions first:
     - desktop may read/write only `desktop-settings.json`,
     - desktop may read local media files for playback/accessibility checks only,
     - no reintroduction of local authoritative state reads/writes (library/settings/log/domain mutations).
-  - Keep this policy compatible with M11 incremental playback-pipeline work so API-only playback can be forced during M11 validation.
+  - Keep this policy compatible with incremental playback-session work so API-only playback can be forced during that series' validation.
 - **Acceptance criteria**:
   - Desktop playback selection is deterministic:
     - uses local playback when file path is locally accessible and `ForceApiPlayback=false`,
@@ -1133,7 +1165,7 @@ Latest completions first:
   - `ForceApiPlayback` is persisted in desktop settings, defaults to `false`, and is respected across restarts.
   - Desktop running on LAN clients can still play local files from shared/NAS mappings when accessible, with seamless API fallback when not accessible.
   - Outside allowed exceptions (desktop settings + media-read playback), no additional local file access is introduced in desktop app.
-  - M8c API-first/thin-client guarantees remain intact for source import, duplicates, auto-tag, playback-stats clear, and logging ownership.
+  - API-first/thin-client guarantees from the desktop thin-client cutover remain intact for source import, duplicates, auto-tag, playback-stats clear, and logging ownership.
 - **Verification evidence**:
   - Desktop manual playback entry points now resolve stable API media identity first and surface explicit guidance when a manual target cannot be mapped.
   - Desktop playback target policy now deterministically selects local playback when media is readable and `ForceApiPlayback=false`, otherwise routes playback through API media URLs.
@@ -1143,7 +1175,7 @@ Latest completions first:
   - Automated verification passes:
     - `dotnet build ReelRoulette.sln`
     - `dotnet test ReelRoulette.sln`
-  - Documentation/tracking updates are synchronized for final M8d state: `README.md`, `CONTEXT.md`, `docs/api.md`, `docs/architecture.md`, `docs/dev-setup.md`, `docs/domain-inventory.md`, `CHANGELOG.md`, `COMMIT_MESSAGE.txt`.
+  - Documentation/tracking updates are synchronized for final milestone state: `README.md`, `CONTEXT.md`, `docs/api.md`, `docs/architecture.md`, `docs/dev-setup.md`, `docs/domain-inventory.md`, `CHANGELOG.md`, `COMMIT_MESSAGE.txt`.
 
 ### M8c - Desktop Client Thin-Client Cutover
 
@@ -1186,7 +1218,7 @@ Latest completions first:
     and desktop ClearPlaybackStats action now executes through API command path.
   - Client log ingestion endpoint added (`POST /api/logs/client`) and desktop local `last.log` file writes removed from app/dialog/service log call paths.
   - ServerApp now resets centralized `last.log` at startup, preserving server-owned log lifecycle ownership.
-  - OpenAPI updated for M8c endpoints/schemas and WebUI generated contracts refreshed (`openapi.generated.ts`).
+  - OpenAPI updated for this milestone's endpoints/schemas and WebUI generated contracts refreshed (`openapi.generated.ts`).
   
 ### M8b - Control-Plane UI + API for Runtime Operations
 
@@ -1260,13 +1292,13 @@ Latest completions first:
   - Operator UI now shows next operator URL hints after apply and runtime status content wraps/scrolls without overlap.
   - `tools/scripts/run-core.ps1` and `tools/scripts/run-core.sh` now start `ReelRoulette.ServerApp` by default.
   - `ReelRoulette.Worker` no longer supervises external `ReelRoulette.WebHost` in its startup path.
-  - M7c version-switch runtime dependency is removed from required runtime behavior; `verify-web-deploy.*` now executes M8a single-origin smoke checks.
+  - Prior version-switch runtime dependency is removed from required runtime behavior; `verify-web-deploy.*` now executes this milestone's single-origin smoke checks.
   - Operator UI path `/operator` provides status visibility, runtime settings apply (`/api/web-runtime/settings`), and restart control (`POST /control/restart`, localhost-only).
 
 ### M7e - Contract Compatibility and Final M7 Verification Gate
 
 - **Status**: ✅ Complete
-- **Goal**: Lock independent-release safety and complete M7 sign-off with contract-compatibility guarantees.
+- **Goal**: Lock independent-release safety and complete this series sign-off with contract-compatibility guarantees.
 - **Scope**:
   - Enforce N/N-1 compatibility policy with capability checks for independent web/core releases.
   - Generate TS web client contracts from OpenAPI; verify C# contract compatibility against the same API source.
@@ -1276,7 +1308,7 @@ Latest completions first:
   - Capability checks prevent unsupported feature usage against older compatible core/server versions.
   - Automated gates pass: build-output asset serving, direct web-to-core SSE/refresh status projection, and OpenAPI compatibility checks.
   - Manual gates pass: direct web connect without desktop bridge, refresh status-line parity through run/fail/complete states, and auth/reconnect continuity.
-  - M7a-M7e acceptance criteria are explicitly verified before advancing to M8.
+  - Acceptance criteria across the full direct-web migration sequence are explicitly verified before advancing to the next major phase.
 - **Verification evidence**:
   - OpenAPI contract generation pipeline added to WebUI (`openapi-typescript`) with generated types committed at `src/clients/web/ReelRoulette.WebUI/src/types/openapi.generated.ts`.
   - Web verify gate now includes stale-contract enforcement (`npm run verify:contracts`) and fails when generated TS contracts drift from `shared/api/openapi.yaml`.
@@ -1323,7 +1355,7 @@ Latest completions first:
   - Dynamic CORS allowlist and worker mDNS advertisement are derived from current web runtime settings and active LAN interfaces.
   - Gate A automated checks passed during cutover slices (`dotnet build ReelRoulette.sln`, core test gate, web verify/build checks).
   - Gate B manual parity checklist was user-executed and approved; Gate C explicit user approval was recorded prior to legacy removal.
-  - Remaining post-cutover runtime stabilization issues (settings reopen/apply lockout, LAN apply consistency edge cases, worker/WebHost shutdown orphan cleanup) are explicitly deferred to `M8b`.
+  - Remaining post-cutover runtime stabilization issues (settings reopen/apply lockout, LAN apply consistency edge cases, worker/WebHost shutdown orphan cleanup) are explicitly deferred to **Control-Plane UI + API for Runtime Operations**.
 
 ### M7c - Zero-Restart Web Deployment, Caching, and Rollback
 
@@ -1344,7 +1376,7 @@ Latest completions first:
   - Automated smoke checks validate active version, cache policy behavior, and rollback.
 - **Verification evidence**:
   - `dotnet build ReelRoulette.sln` passes with the new `ReelRoulette.WebHost` project included.
-  - `dotnet test ReelRoulette.sln` passes after M7c deployment-host/script changes.
+  - `dotnet test ReelRoulette.sln` passes after this milestone's deployment-host/script changes.
   - `npm run verify` passes in `src/clients/web/ReelRoulette.WebUI`.
   - `tools/scripts/verify-web-deploy.ps1` passes end-to-end:
     - publishes two immutable versions,
@@ -1394,7 +1426,7 @@ Latest completions first:
   - `npm run verify` passes in `src/clients/web/ReelRoulette.WebUI` (typecheck + runtime-config tests + production build + build-output checks).
   - Web dev bootstrap starts successfully via `npm run dev` without desktop/core restart dependencies.
 
-### M6b - P1 Feature Alignment Through API (Grid/Thumbnails + Unified Refresh Pipeline)
+### M6b - Feature Alignment Through API (Grid/Thumbnails + Unified Refresh Pipeline)
 
 - **Status**: ✅ Complete
 - **Goal**: Deliver API-backed grid/thumbnails and refresh pipeline refactor as a separate milestone.
@@ -1414,7 +1446,7 @@ Latest completions first:
     - `GET /api/refresh/status` snapshot endpoint complements SSE progress events for active clients
     - core rejects overlapping runs with `409 already running`; auto and manual refresh do not run concurrently
     - triggering manual refresh resets the auto-refresh interval baseline
-    - status/progress events are emitted for both auto/manual runs; desktop projects them during M6b, while direct web/mobile projection is completed in M7+ when those clients are decoupled from desktop-hosted bridges
+    - status/progress events are emitted for both auto/manual runs; desktop projects them during this milestone, while direct web/mobile projection is completed in later direct-web milestones when those clients are decoupled from desktop-hosted bridges
   - Move refresh scheduling/config ownership to core host config:
     - support appsettings + CLI override model
     - client settings updates are pushed to core via API and persisted in core settings
@@ -1426,7 +1458,7 @@ Latest completions first:
 - **Acceptance criteria**:
   - Grid view and thumbnail generation work end-to-end through server/core.
   - No standalone legacy duration/loudness actions in UX (as planned).
-  - Refresh progress/status remains observable while dialogs close and via `GET /api/refresh/status` + SSE for desktop in M6b; direct web-to-core SSE status parity is tracked in M7.
+  - Refresh progress/status remains observable while dialogs close and via `GET /api/refresh/status` + SSE for desktop in this milestone; direct web-to-core SSE status parity is tracked in later direct-web milestones.
   - Core runtime is the single execution owner for unified refresh pipeline and auto-refresh scheduling.
   - Manual refresh is API-triggered (`POST /api/refresh/start`) and returns `409` when a refresh run is already active.
   - Auto-refresh timer baseline is reset when a manual refresh is started.
@@ -1434,7 +1466,7 @@ Latest completions first:
   - Thumbnail artifact/invalidation policy is implemented and documented.
   - Regression tests cover thumbnail invalidation decisions, unified refresh stage sequencing, refresh overlap rejection (`409`), and status/progress projection behavior; all pass in `dotnet test`.
 
-### M6a - P1 Feature Alignment Through API (Web Tag Editing)
+### M6a - Feature Alignment Through API (Web Tag Editing)
 
 - **Status**: ✅ Complete
 - **Goal**: Ship API-backed web tag editing parity as an independent, low-blast-radius milestone.
@@ -1473,7 +1505,7 @@ Latest completions first:
   - Desktop writes state via API (not direct in-process data mutation) for migrated flows.
   - SSE updates keep desktop UI in sync with out-of-process changes.
   - Existing user workflows remain stable.
-  - Regression tests for desktop API-client request shape/parsing and M5 server-state replay/filter-session behaviors are added to `dotnet test` and passing.
+  - Regression tests for desktop API-client request shape/parsing and this milestone's server-state replay/filter-session behaviors are added to `dotnet test` and passing.
 
 ### M4 - Worker Runtime (Headless Host)
 

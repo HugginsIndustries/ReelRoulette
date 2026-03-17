@@ -15,22 +15,22 @@ This file follows a Keep a Changelog style format.
 
 ### Changed
 
-- Complete broad desktop icon migration to shared no-box Material Symbols controls, with standardized glyph sizing/weight, checked-state tint behavior, and transport layout cleanup.
+- Complete desktop Material Symbols migration with shared no-box controls, standardized glyph sizing/checked-state tint and transport layout cleanup, plus `ItemTagsDialog` parity refinements (icon-only footer actions, rounded category bars, responsive wrapping chips, and session-scoped category collapse-state persistence).
+- Migrate WebUI overlay and tag-editor controls to Material Symbols, including explicit `play_arrow`/`pause` glyph swapping and local Material Symbols font sync from shared assets.
+- Align WebUI tag-editor styling with desktop parity: dark rounded inputs, category header bars, shared orange/lime/violet tag-chip tokens, and stronger consistent text/glyph shadows.
+- Implement Windows tray context-menu runtime light/dark theme parity with live refresh on system theme changes.
+- Document explicit server `.exe` tray-validation run steps in `README.md`.
 - Simplify library filtering UX by removing `Respect filters`; active filter state now applies consistently when present.
-- Rework library panel update flow for large sets with observable item state, keyed diff patching, first-changed-index justified row reflow/splicing, and service-state resync before mutation-triggered refreshes.
-- Add single-item filter-eligibility helper groundwork for active panel filtering (`source + search + filter state`) in preparation for authority/filter migration.
-- Introduce exact logical grid-row virtualization (`top spacer + visible rows + bottom spacer`) backed by deterministic row-offset indexing and binary-search visible-window selection.
-- Add anchor/inset viewport restore, drag-authoritative coalescing, and targeted `last.log` virtualizer diagnostics for deep-scroll update behavior.
+- Rework large-library panel performance and stability with keyed diff patching, active-filter eligibility groundwork, exact logical row virtualization, anchor/inset restore with drag-aware coalescing, targeted `last.log` virtualizer diagnostics, and list/grid resize repaint hardening (fixed non-overlay scrollbars, viewport-driven grid width with an 8px right visual gutter, debounced splitter reflow, and forced visible-row refresh when layout changes without index-range changes).
 - Add top-right favorite/blacklist indicators on grid thumbnails using Material Symbols with real-time visibility updates.
-- Finalize server-authoritative desktop library behavior by removing `LibraryService` and routing favorites/blacklist, tags/categories, playback stats, refresh triggers, and library remove flows through core API + SSE reconciliation.
-- Consolidate mutation authority on the server (`LibraryOperationsService` persistence-first, `ServerStateService` event publication), and align mutation responses for canonical client reconciliation.
+- Finalize server-authoritative desktop library behavior by removing `LibraryService`, consolidating persistence-first mutation authority in `LibraryOperationsService` (with `ServerStateService` event publication), and routing favorites/blacklist, tags/categories, playback stats, refresh triggers, and library remove flows through core API + SSE reconciliation.
 - Move Manage Sources statistics to server-owned `/api/library/stats` and harden source/media counting for legacy library data shapes.
 - Finalize backup ownership split: server manages `library.json`/`core-settings.json` backups with no-churn gap policy and retention trimming; desktop backup scope is `desktop-settings.json` only.
 - Improve tag/category apply performance by removing redundant full projection sync/rebuild triggers and relying on targeted SSE-driven updates.
 
 ### Fixed
 
-- Improve grid-view scrollbar stability by combining exact row-offset virtualization with drag-aware update gating and anchor/inset offset restoration.
+- Improve grid-view stability by combining exact row-offset virtualization with drag-aware update gating and anchor/inset offset restoration.
 - Keep projection sync as the single trigger for core refresh completion updates to the library panel.
 - Improve dynamic-filter refresh behavior (for example `OnlyNeverPlayed`) by adding targeted panel refresh triggers for playback/stat and metadata-related filter changes.
 - Ensure playback projection updates apply for same-session events via authoritative projection sync instead of local writebacks.

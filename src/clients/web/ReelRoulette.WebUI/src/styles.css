@@ -1,4 +1,75 @@
 * { box-sizing: border-box; }
+:root {
+  --huggins-orange: #ef7f22;
+  --huggins-orange-hover: #f28a34;
+  --huggins-orange-pressed: #d96f1e;
+  --huggins-orange-soft-border: #ef7f22aa;
+  --huggins-orange-soft-inset: #ef7f2266;
+  --lime-green: #22ef7f;
+  --lime-green-soft-border: #22ef7faa;
+  --lime-green-soft-inset: #22ef7f66;
+  --violet: #7f22ef;
+  --violet-soft-border: #7f22efaa;
+  --icon-dark-grey: #333333;
+  --icon-dark-grey-hover: #444444;
+  --icon-foreground: #ffffff;
+  --icon-hover-opacity: 0.75;
+  --icon-pressed-opacity: 0.55;
+  --icon-disabled-opacity: 0.45;
+}
+
+@font-face {
+  font-family: "Material Symbols Outlined";
+  src: url("/assets/fonts/MaterialSymbolsOutlined.var.ttf") format("truetype");
+  font-weight: 100 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+.material-symbol-icon {
+  font-family: "Material Symbols Outlined";
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-style: normal;
+  letter-spacing: normal;
+  text-transform: none;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-smoothing: antialiased;
+  font-variation-settings: "FILL" 0, "wght" 700, "GRAD" 0, "opsz" 48;
+}
+
+.icon-glyph-base {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  color: var(--icon-foreground);
+}
+
+.icon-glyph-button:hover:not(:disabled),
+.icon-glyph-toggle:hover:not(:disabled) {
+  opacity: var(--icon-hover-opacity);
+}
+
+.icon-glyph-button:active:not(:disabled),
+.icon-glyph-toggle:active:not(:disabled) {
+  opacity: var(--icon-pressed-opacity);
+}
+
+.icon-glyph-button:disabled,
+.icon-glyph-toggle:disabled {
+  opacity: var(--icon-disabled-opacity);
+}
+
+.icon-glyph-toggle.active {
+  color: var(--huggins-orange);
+}
+
 html, body {
   height: 100%;
 }
@@ -136,11 +207,6 @@ body {
   width: 44px;
   height: 44px;
   padding: 0;
-  font-size: 1.3rem;
-  background: rgba(0, 0, 0, 0.6);
-  color: #fff;
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  border-radius: 6px;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -150,11 +216,6 @@ body {
 .overlay-seek-row,
 .overlay-seek-row input[type="range"] {
   pointer-events: auto;
-}
-.overlay-btn:hover { background: rgba(0, 0, 0, 0.8); }
-.overlay-toggle.active {
-  background: rgba(80, 120, 200, 0.6);
-  border-color: rgba(255, 255, 255, 0.5);
 }
 .overlay-corner-btn {
   position: absolute;
@@ -185,6 +246,7 @@ body {
   position: fixed;
   inset: 0;
   background: rgba(16, 16, 16, 0.96);
+  color-scheme: dark;
   z-index: 1000;
   display: flex;
   flex-direction: column;
@@ -236,6 +298,26 @@ body {
   opacity: 0.45;
   cursor: not-allowed;
 }
+.tag-editor button.icon-glyph-base {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--icon-foreground);
+  width: 44px;
+  min-width: 44px;
+}
+.tag-editor button.icon-glyph-button:hover:not(:disabled) {
+  background: transparent;
+  border-color: transparent;
+}
+.tag-editor button.icon-glyph-button:active:not(:disabled) {
+  background: transparent;
+  transform: none;
+}
+#tag-editor-apply-btn.has-pending {
+  color: var(--huggins-orange);
+}
 .tag-editor-body {
   flex: 1;
   overflow: auto;
@@ -251,6 +333,10 @@ body {
   justify-content: space-between;
   gap: 10px;
   margin-bottom: 8px;
+  background: #2d2d30;
+  border: 1px solid #3b3b40;
+  border-radius: 4px;
+  padding: 8px 6px;
 }
 .tag-editor-category-left {
   display: flex;
@@ -264,8 +350,13 @@ body {
   width: 44px;
   padding: 0;
 }
+.tag-editor-category-toggle.icon-glyph-base,
+.tag-editor-category-btn.icon-glyph-base {
+  border-radius: 0;
+}
 .tag-editor-category-title {
   font-weight: 600;
+  font-size: 1.2rem;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -286,39 +377,53 @@ body {
   padding: 8px 10px;
   min-height: 44px;
   border-radius: 10px;
-  border: 1px solid #444;
-  background: #2a2050;
+  border: 1px solid var(--violet-soft-border);
+  background: var(--violet);
 }
 .tag-chip.state-all {
-  background: #1f5f2a;
-  border-color: #7ed88f;
-  box-shadow: 0 0 0 1px #7ed88f66 inset;
+  background: var(--lime-green);
+  border-color: var(--lime-green-soft-border);
+  box-shadow: 0 0 0 1px var(--lime-green-soft-inset) inset;
 }
 .tag-chip.state-some {
-  background: #5f3b1f;
-  border-color: #ffb26b;
-  box-shadow: 0 0 0 1px #ffb26b66 inset;
+  background: var(--huggins-orange);
+  border-color: var(--huggins-orange-soft-border);
+  box-shadow: 0 0 0 1px var(--huggins-orange-soft-inset) inset;
 }
 .tag-chip.state-none {
-  background: #2a2050;
-  border-color: #6b5fa8;
+  background: var(--violet);
+  border-color: var(--violet-soft-border);
 }
-.tag-chip-label { font-weight: 500; }
+.tag-chip-label {
+  font-weight: 700;
+  text-shadow: 0 0 8px rgba(0, 0, 0, 0.62);
+}
 .tag-chip .chip-btn {
   min-width: 44px;
   width: 44px;
   min-height: 44px;
   height: 44px;
   padding: 0;
-  background: #0006;
-  color: #fff;
-  border-radius: 8px;
-  border: 1px solid #666;
+  background: transparent;
+  color: var(--icon-foreground);
+  border-radius: 0;
+  border: 0;
+}
+.tag-chip .chip-btn .material-symbol-icon {
+  font-size: 32px;
+  font-weight: 700;
+  text-shadow: 0 0 8px rgba(0, 0, 0, 0.62);
+}
+.tag-chip .chip-btn.icon-glyph-button:hover:not(:disabled),
+.tag-chip .chip-btn.icon-glyph-toggle:hover:not(:disabled),
+.tag-chip .chip-btn.icon-glyph-button:active:not(:disabled),
+.tag-chip .chip-btn.icon-glyph-toggle:active:not(:disabled) {
+  background: transparent;
+  border-color: transparent;
+  transform: none;
 }
 .tag-chip .chip-btn.is-selected {
-  background: #5f3b1f;
-  border-color: #ffb26b;
-  box-shadow: 0 0 0 1px #ffb26b66 inset;
+  color: var(--huggins-orange);
 }
 .tag-editor-footer {
   display: flex;
@@ -326,13 +431,26 @@ body {
   gap: 10px;
   align-items: center;
 }
+.tag-editor-footer > button {
+  flex: 0 0 44px;
+}
 .tag-editor-footer select {
   flex: 0 1 180px;
   min-width: 120px;
+  background: #2a2a2a;
+  color: #fff;
+  border: 1px solid #555;
+  border-radius: 8px;
+  padding: 0 12px;
 }
 .tag-editor-footer input {
   flex: 1 1 auto;
   min-width: 0;
+  background: #2a2a2a;
+  color: #fff;
+  border: 1px solid #555;
+  border-radius: 8px;
+  padding: 0 12px;
 }
 .tag-edit-modal {
   position: absolute;

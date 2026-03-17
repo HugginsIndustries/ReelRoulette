@@ -28,7 +28,7 @@ Keep this file short and enforceable. For details, use `CONTEXT.md`, `MILESTONES
   - `MILESTONES.md` = roadmap/tracking/evidence
   - `CONTEXT.md` = current implemented capabilities
   - update affected docs: `README.md`, `docs/architecture.md`, `docs/api.md`, `docs/dev-setup.md`, and `docs/domain-inventory.md` when applicable
-  - keep `docs/testing-checklist.md` current: add/update/remove checklist sections/items as features and workflows are added, changed, or removed
+  - keep `docs/checklists/testing-checklist.md` current: add/update/remove checklist sections/items as features and workflows are added, changed, or removed
 - Milestone naming hygiene:
   - Do not add milestone IDs/references (for example `M8f`, `M9a`) in current-state docs or code artifacts (scripts, comments, log/status messages, user-facing copy).
   - Milestone references are allowed only in `MILESTONES.md`, `CHANGELOG.md`, `COMMIT_MESSAGE.txt`, and the `## Near-Term Planned Work` section of `CONTEXT.md` unless the user explicitly requests an exception.

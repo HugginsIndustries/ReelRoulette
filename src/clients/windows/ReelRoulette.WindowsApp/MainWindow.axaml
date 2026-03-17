@@ -220,6 +220,23 @@
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderBrush" Value="Transparent"/>
         </Style>
+
+        <!-- Library panel: use fixed, non-overlay vertical scrollbars -->
+        <Style Selector="ListBox#LibraryListBox">
+            <Setter Property="ScrollViewer.AllowAutoHide" Value="False"/>
+            <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Visible"/>
+        </Style>
+        <Style Selector="ListBox#LibraryListBox ScrollBar:vertical">
+            <Setter Property="Width" Value="14"/>
+            <Setter Property="MinWidth" Value="14"/>
+        </Style>
+        <Style Selector="ScrollViewer#LibraryGridScrollViewer">
+            <Setter Property="AllowAutoHide" Value="False"/>
+        </Style>
+        <Style Selector="ScrollViewer#LibraryGridScrollViewer ScrollBar:vertical">
+            <Setter Property="Width" Value="14"/>
+            <Setter Property="MinWidth" Value="14"/>
+        </Style>
     </Window.Styles>
     
     <Grid RowDefinitions="Auto,Auto,Auto,*" Margin="0">
@@ -675,6 +692,8 @@
                              SelectionMode="Multiple"
                              Background="Transparent"
                              BorderThickness="0"
+                             ScrollViewer.AllowAutoHide="False"
+                             ScrollViewer.VerticalScrollBarVisibility="Visible"
                              IsVisible="True"
                              DoubleTapped="LibraryListBox_DoubleTapped"
                              KeyDown="LibraryListBox_KeyDown"
@@ -810,6 +829,7 @@
                     <ScrollViewer x:Name="LibraryGridScrollViewer"
                                   Grid.Row="7"
                                   VerticalAlignment="Stretch"
+                                  AllowAutoHide="False"
                                   HorizontalScrollBarVisibility="Disabled"
                                   VerticalScrollBarVisibility="Visible"
                                   ScrollChanged="LibraryGridScrollViewer_ScrollChanged"
