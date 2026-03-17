@@ -1343,11 +1343,14 @@ public sealed class LibraryOperationsService
     {
         try
         {
-            var normalizedPath = Path.GetFullPath(fullPath)
-                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-            var normalizedRoot = Path.GetFullPath(rootPath)
-                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-            var rootWithSeparator = normalizedRoot + Path.DirectorySeparatorChar;
+            var normalizedPath = NormalizePathForPrefixComparison(fullPath);
+            var normalizedRoot = NormalizePathForPrefixComparison(rootPath);
+            if (string.IsNullOrWhiteSpace(normalizedPath) || string.IsNullOrWhiteSpace(normalizedRoot))
+            {
+                return false;
+            }
+
+            var rootWithSeparator = normalizedRoot + "/";
 
             return string.Equals(normalizedPath, normalizedRoot, StringComparison.OrdinalIgnoreCase) ||
                 normalizedPath.StartsWith(rootWithSeparator, StringComparison.OrdinalIgnoreCase);
@@ -1356,6 +1359,19 @@ public sealed class LibraryOperationsService
         {
             return false;
         }
+    }
+
+    private static string NormalizePathForPrefixComparison(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return string.Empty;
+        }
+
+        var full = Path.GetFullPath(path.Trim());
+        return full
+            .Replace('\\', '/')
+            .TrimEnd('/');
     }
 
     private static string GetRelativePath(string rootPath, string fullPath)

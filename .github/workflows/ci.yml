@@ -19,6 +19,11 @@ jobs:
         with:
           dotnet-version: "9.0.x"
 
+      - name: Install ffmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
       - name: Build solution
         run: dotnet build ReelRoulette.sln --configuration Release -p:TargetFramework=net9.0 -p:EnableWindowsTargeting=true -m:1
 
@@ -35,6 +40,10 @@ jobs:
         uses: actions/setup-dotnet@v5
         with:
           dotnet-version: "9.0.x"
+
+      - name: Install ffmpeg
+        shell: pwsh
+        run: choco install ffmpeg -y --no-progress
 
       - name: Build solution
         run: dotnet build ReelRoulette.sln --configuration Release
