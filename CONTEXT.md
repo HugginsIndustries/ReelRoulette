@@ -33,6 +33,10 @@ ReelRoulette is migrating from a monolithic desktop app to a thin-client, API-fi
   - Local-first playback with deterministic API fallback (`ForceApiPlayback` option).
   - Server version/capability compatibility gating with reconnect/resync guidance.
   - API-backed source import, duplicate scan/apply, auto-tag scan/apply, and playback-stats clear.
+  - Duplicate review dialog renders per-item thumbnail previews via server thumbnail endpoint paths for faster keep/delete validation.
+  - Duplicate review dialog supports per-group handling selection with a persisted default behavior (`Keep All` or `Select Best`) from desktop settings.
+  - Duplicate review comparison metadata now includes per-item tag counts and enriched keep-selection labels (filename + plays/tags/favorite/blacklisted) for faster keep decisions.
+  - Tag editor and filter `Tags` tab share theme-compatible category/chip surfaces in light/dark mode while preserving filter control behavior boundaries.
 
 - **WebUI client (`src/clients/web/ReelRoulette.WebUI`)**
   - Runtime-config bootstrap, direct API/SSE integration, and startup compatibility/capability checks.

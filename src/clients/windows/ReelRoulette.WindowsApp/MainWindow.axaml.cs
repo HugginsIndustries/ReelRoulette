@@ -96,6 +96,7 @@ namespace ReelRoulette
         private bool _isLoopEnabled = true;
         private bool _autoPlayNext = true;
         private bool _forceApiPlayback;
+        private DuplicateHandlingDefaultBehavior _duplicateHandlingDefaultBehavior = DuplicateHandlingDefaultBehavior.KeepAll;
         private bool _isMuted = false; // Track mute state for persistence
 
         // Photo playback
@@ -7062,28 +7063,234 @@ namespace ReelRoulette
 
             if (hasCompleted)
             {
-                string GetStageMessage(string stageName, string fallback)
+                string? GetStageMessage(string stageName)
                 {
                     var stage = snapshot.Stages.FirstOrDefault(s =>
                         string.Equals(s.Stage, stageName, StringComparison.OrdinalIgnoreCase));
                     if (stage == null || string.IsNullOrWhiteSpace(stage.Message))
                     {
-                        return fallback;
+                        return null;
                     }
 
                     return stage.Message.Trim();
                 }
 
-                // Keep this as one consolidated summary so users can see what each stage did.
-                var sourceSummary = GetStageMessage("sourceRefresh", "Source refresh: no details reported");
-                var durationSummary = GetStageMessage("durationScan", "Duration scan: no details reported");
-                var loudnessSummary = GetStageMessage("loudnessScan", "Loudness scan: no details reported");
-                var thumbnailSummary = GetStageMessage("thumbnailGeneration", "Thumbnail generation: placeholder results pending");
+                var sourceSummary = BuildSourceRefreshSummary(GetStageMessage("sourceRefresh"));
+                var durationSummary = BuildDurationScanSummary(GetStageMessage("durationScan"));
+                var loudnessSummary = BuildLoudnessScanSummary(GetStageMessage("loudnessScan"));
+                var thumbnailSummary = BuildThumbnailSummary(GetStageMessage("thumbnailGeneration"));
 
                 var finalMessage =
                     $"Core refresh complete | Source: {sourceSummary} | Duration: {durationSummary} | Loudness: {loudnessSummary} | Thumbnails: {thumbnailSummary}";
                 SetStatusMessage(finalMessage, 0);
             }
+        }
+
+        private static string BuildSourceRefreshSummary(string? stageMessage)
+        {
+            if (string.IsNullOrWhiteSpace(stageMessage))
+            {
+                return "no data";
+            }
+
+            if (ContainsUnavailableToken(stageMessage))
+            {
+                return "unavailable";
+            }
+
+            var counts = ParseStageCounts(stageMessage);
+            if (counts.Count == 0)
+            {
+                return "no data";
+            }
+
+            var tokens = new List<string>();
+            AddNonZeroToken(tokens, "added", GetCount(counts, "added"));
+            AddNonZeroToken(tokens, "removed", GetCount(counts, "removed"));
+            AddNonZeroToken(tokens, "renamed", GetCount(counts, "renamed"));
+            AddNonZeroToken(tokens, "moved", GetCount(counts, "moved"));
+            AddNonZeroToken(tokens, "updated", GetCount(counts, "updated"));
+            AddNonZeroToken(tokens, "unresolved", GetCount(counts, "unresolved"));
+
+            return tokens.Count == 0
+                ? "no changes"
+                : string.Join(", ", tokens);
+        }
+
+        private static string BuildDurationScanSummary(string? stageMessage)
+        {
+            if (string.IsNullOrWhiteSpace(stageMessage))
+            {
+                return "no data";
+            }
+
+            if (ContainsUnavailableToken(stageMessage))
+            {
+                return "unavailable";
+            }
+
+            var counts = ParseStageCounts(stageMessage);
+            if (!counts.TryGetValue("files", out var files))
+            {
+                return "no data";
+            }
+
+            if (stageMessage.IndexOf("all cached", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return $"files {files}, all cached";
+            }
+
+            var updated = GetCount(counts, "updated");
+            var forcedSuffix = stageMessage.IndexOf("forced full rescan", StringComparison.OrdinalIgnoreCase) >= 0 ? ", forced" : string.Empty;
+            return $"files {files}, updated {updated}{forcedSuffix}";
+        }
+
+        private static string BuildLoudnessScanSummary(string? stageMessage)
+        {
+            if (string.IsNullOrWhiteSpace(stageMessage))
+            {
+                return "no data";
+            }
+
+            if (ContainsUnavailableToken(stageMessage))
+            {
+                return "unavailable";
+            }
+
+            var counts = ParseStageCounts(stageMessage);
+            if (!counts.TryGetValue("files", out var files))
+            {
+                return "no data";
+            }
+
+            if (files == 0)
+            {
+                return "no eligible files";
+            }
+
+            if (stageMessage.IndexOf("all scanned", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                stageMessage.IndexOf("all cached", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return $"files {files}, all cached";
+            }
+
+            var updated = GetCount(counts, "updated");
+            var withoutAudio = GetCount(counts, "without audio");
+            var errors = GetCount(counts, "errors");
+            var tokens = new List<string> { $"files {files}" };
+            AddNonZeroToken(tokens, "updated", updated);
+            AddNonZeroToken(tokens, "no-audio", withoutAudio);
+            AddNonZeroToken(tokens, "errors", errors);
+            if (stageMessage.IndexOf("forced full rescan", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                tokens.Add("forced");
+            }
+
+            return string.Join(", ", tokens);
+        }
+
+        private static string BuildThumbnailSummary(string? stageMessage)
+        {
+            if (string.IsNullOrWhiteSpace(stageMessage))
+            {
+                return "no data";
+            }
+
+            if (ContainsUnavailableToken(stageMessage))
+            {
+                return "unavailable";
+            }
+
+            var counts = ParseStageCounts(stageMessage);
+            if (counts.Count == 0)
+            {
+                return "no data";
+            }
+
+            var tokens = new List<string>();
+            AddNonZeroToken(tokens, "generated", GetCount(counts, "generated"));
+            AddNonZeroToken(tokens, "regenerated", GetCount(counts, "regenerated"));
+            AddNonZeroToken(tokens, "reused", GetCount(counts, "reused"));
+            AddNonZeroToken(tokens, "failed", GetCount(counts, "failed"));
+            AddNonZeroToken(tokens, "missing", GetCount(counts, "missing source"));
+            AddNonZeroToken(tokens, "metadata", GetCount(counts, "metadata updated"));
+            AddNonZeroToken(tokens, "stale", GetCount(counts, "stale removed"));
+            AddNonZeroToken(tokens, "evicted", GetCount(counts, "evicted"));
+
+            return tokens.Count == 0
+                ? "none"
+                : string.Join(", ", tokens);
+        }
+
+        private static void AddNonZeroToken(List<string> tokens, string label, int value)
+        {
+            if (value > 0)
+            {
+                tokens.Add($"{label} {value}");
+            }
+        }
+
+        private static bool ContainsUnavailableToken(string stageMessage)
+        {
+            return stageMessage.IndexOf("unavailable", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private static Dictionary<string, int> ParseStageCounts(string stageMessage)
+        {
+            var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            var openParen = stageMessage.IndexOf('(');
+            if (openParen < 0)
+            {
+                return counts;
+            }
+
+            var closeParen = stageMessage.IndexOf(')', openParen + 1);
+            if (closeParen <= openParen)
+            {
+                return counts;
+            }
+
+            var payload = stageMessage.Substring(openParen + 1, closeParen - openParen - 1);
+            var segments = payload.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            foreach (var segment in segments)
+            {
+                var labelStart = 0;
+                while (labelStart < segment.Length && char.IsWhiteSpace(segment[labelStart]))
+                {
+                    labelStart++;
+                }
+
+                var valueStart = labelStart;
+                while (valueStart < segment.Length && char.IsDigit(segment[valueStart]))
+                {
+                    valueStart++;
+                }
+
+                if (valueStart == labelStart)
+                {
+                    continue;
+                }
+
+                if (!int.TryParse(segment.Substring(labelStart, valueStart - labelStart), out var value))
+                {
+                    continue;
+                }
+
+                var label = segment.Substring(valueStart).Trim();
+                if (string.IsNullOrWhiteSpace(label))
+                {
+                    continue;
+                }
+
+                counts[label] = value;
+            }
+
+            return counts;
+        }
+
+        private static int GetCount(Dictionary<string, int> counts, string key)
+        {
+            return counts.TryGetValue(key, out var value) ? value : 0;
         }
 
         private async Task<bool> RequestCoreRefreshAsync()
@@ -7583,6 +7790,7 @@ namespace ReelRoulette
             public bool LoopEnabled { get; set; } = true;
             public bool AutoPlayNext { get; set; } = true;
             public bool ForceApiPlayback { get; set; } = false;
+            public DuplicateHandlingDefaultBehavior DuplicateHandlingDefaultBehavior { get; set; } = DuplicateHandlingDefaultBehavior.KeepAll;
             public bool IsMuted { get; set; } = false; // Persist mute state
             public int VolumeLevel { get; set; } = 100; // Persist volume level (0-200)
             public RandomizationMode RandomizationMode { get; set; } = RandomizationMode.SmartShuffle;
@@ -7781,6 +7989,7 @@ namespace ReelRoulette
             _isLoopEnabled = settings.LoopEnabled;
             _autoPlayNext = settings.AutoPlayNext;
             _forceApiPlayback = settings.ForceApiPlayback;
+            _duplicateHandlingDefaultBehavior = settings.DuplicateHandlingDefaultBehavior;
             _isMuted = settings.IsMuted;
             _userVolumePreference = settings.VolumeLevel; // Restore saved volume level
             _playbackSessionStateService.Set(new PlaybackSessionState
@@ -7894,7 +8103,7 @@ namespace ReelRoulette
                 }
             }
             
-            Log($"LoadSettings: Restored playback preferences - Loop={_isLoopEnabled}, AutoPlay={_autoPlayNext}, ForceApiPlayback={_forceApiPlayback}, Muted={_isMuted}, RandomizationMode={_randomizationMode}, CoreClientId={_coreClientId}, CoreSessionId={_coreSessionId}");
+            Log($"LoadSettings: Restored playback preferences - Loop={_isLoopEnabled}, AutoPlay={_autoPlayNext}, ForceApiPlayback={_forceApiPlayback}, DuplicateHandlingDefault={_duplicateHandlingDefaultBehavior}, Muted={_isMuted}, RandomizationMode={_randomizationMode}, CoreClientId={_coreClientId}, CoreSessionId={_coreSessionId}");
             
             // Apply filter state
             var previousFilterState = _currentFilterState;
@@ -8035,6 +8244,7 @@ namespace ReelRoulette
                 settings.LoopEnabled = playbackState.LoopEnabled;
                 settings.AutoPlayNext = playbackState.AutoPlayNext;
                 settings.ForceApiPlayback = _forceApiPlayback;
+                settings.DuplicateHandlingDefaultBehavior = _duplicateHandlingDefaultBehavior;
                 settings.IsMuted = playbackState.IsMuted;
                 settings.VolumeLevel = playbackState.VolumeLevel;
                 settings.RandomizationMode = _randomizationMode;
@@ -8780,7 +8990,9 @@ namespace ReelRoulette
                 RequestCoreRefreshAsync,
                 UpdateSourceEnabledViaCoreAsync,
                 ScanDuplicatesViaCoreAsync,
-                ApplyDuplicatesViaCoreAsync);
+                ApplyDuplicatesViaCoreAsync,
+                _coreServerBaseUrl,
+                _duplicateHandlingDefaultBehavior);
             await dialog.ShowDialog(this);
             
             Log("ManageSourcesMenuItem_Click: Dialog closed, refreshing UI");
@@ -8978,6 +9190,7 @@ namespace ReelRoulette
                     _isLoopEnabled,
                     _autoPlayNext,
                     _forceApiPlayback,
+                    _duplicateHandlingDefaultBehavior,
                     (double)intervalValue,
                     _seekStep,
                     _volumeStep,
@@ -9049,6 +9262,7 @@ namespace ReelRoulette
                         var oldLoopEnabled = _isLoopEnabled;
                         var oldAutoPlayNext = _autoPlayNext;
                         var oldForceApiPlayback = _forceApiPlayback;
+                        var oldDuplicateHandlingDefaultBehavior = _duplicateHandlingDefaultBehavior;
                         var oldRandomizationMode = _randomizationMode;
                         var oldSeekStep = _seekStep;
                         var oldVolumeStep = _volumeStep;
@@ -9084,6 +9298,7 @@ namespace ReelRoulette
                     _isLoopEnabled = dialog.LoopEnabled;
                     _autoPlayNext = dialog.AutoPlayNext;
                     _forceApiPlayback = dialog.ForceApiPlayback;
+                    _duplicateHandlingDefaultBehavior = dialog.GetDuplicateHandlingDefaultBehavior();
                     _seekStep = dialog.GetSeekStep();
                     _volumeStep = dialog.GetVolumeStep();
                     _volumeNormalizationEnabled = dialog.GetVolumeNormalizationEnabled();
@@ -9137,6 +9352,7 @@ namespace ReelRoulette
                             oldLoopEnabled != _isLoopEnabled ||
                             oldAutoPlayNext != _autoPlayNext ||
                             oldForceApiPlayback != _forceApiPlayback ||
+                            oldDuplicateHandlingDefaultBehavior != _duplicateHandlingDefaultBehavior ||
                             oldRandomizationMode != _randomizationMode ||
                             !string.Equals(oldSeekStep, _seekStep, StringComparison.OrdinalIgnoreCase) ||
                             oldVolumeStep != _volumeStep ||
@@ -9430,7 +9646,7 @@ namespace ReelRoulette
                             var saveSettingsStopwatch = Stopwatch.StartNew();
                             SaveSettings();
                             Log($"Settings: SaveSettings completed in {saveSettingsStopwatch.ElapsedMilliseconds}ms");
-                            Log($"Settings: Applied and saved - Loop={_isLoopEnabled}, AutoPlay={_autoPlayNext}, ForceApiPlayback={_forceApiPlayback}, RandomizationMode={_randomizationMode}, SeekStep={_seekStep}, VolumeStep={_volumeStep}, VolumeNorm={_volumeNormalizationEnabled}");
+                            Log($"Settings: Applied and saved - Loop={_isLoopEnabled}, AutoPlay={_autoPlayNext}, ForceApiPlayback={_forceApiPlayback}, DuplicateHandlingDefault={_duplicateHandlingDefaultBehavior}, RandomizationMode={_randomizationMode}, SeekStep={_seekStep}, VolumeStep={_volumeStep}, VolumeNorm={_volumeNormalizationEnabled}");
                         }
                         else
                         {

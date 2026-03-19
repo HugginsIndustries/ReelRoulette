@@ -2135,7 +2135,7 @@ components:
 
     DuplicateGroupItemResponse:
       type: object
-      required: [itemId, fullPath, sourceId, isFavorite, isBlacklisted, playCount]
+      required: [itemId, fullPath, sourceId, isFavorite, isBlacklisted, playCount, tagCount]
       properties:
         itemId:
           type: string
@@ -2148,6 +2148,9 @@ components:
         isBlacklisted:
           type: boolean
         playCount:
+          type: integer
+          format: int32
+        tagCount:
           type: integer
           format: int32
 

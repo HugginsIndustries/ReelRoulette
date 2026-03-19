@@ -1566,6 +1566,9 @@ namespace ReelRoulette
                     _isPlusSelected = value;
                     OnPropertyChanged();
                     OnPropertyChanged(nameof(BackgroundBrush));
+                    OnPropertyChanged(nameof(IsStateAll));
+                    OnPropertyChanged(nameof(IsStateSome));
+                    OnPropertyChanged(nameof(IsStateNone));
                 }
             }
         }
@@ -1580,9 +1583,16 @@ namespace ReelRoulette
                     _isMinusSelected = value;
                     OnPropertyChanged();
                     OnPropertyChanged(nameof(BackgroundBrush));
+                    OnPropertyChanged(nameof(IsStateAll));
+                    OnPropertyChanged(nameof(IsStateSome));
+                    OnPropertyChanged(nameof(IsStateNone));
                 }
             }
         }
+
+        public bool IsStateAll => IsPlusSelected;
+        public bool IsStateSome => IsMinusSelected;
+        public bool IsStateNone => !IsPlusSelected && !IsMinusSelected;
 
         public IBrush BackgroundBrush
         {

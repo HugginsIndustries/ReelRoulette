@@ -178,6 +178,7 @@ Reconnect/resync behavior:
 
 ### Duplicates and auto-tag
 
+- Duplicate scan item payload includes per-item duplicate metadata (`itemId`, path/source identity, favorite/blacklist flags, play count) and `tagCount` for faster keep/delete review.
 - `POST /api/duplicates/scan`
 - `POST /api/duplicates/apply`
 - `POST /api/autotag/scan`

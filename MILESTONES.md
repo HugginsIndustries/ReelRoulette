@@ -89,45 +89,14 @@ Do not use this file for detailed architecture explanation or current capability
 
 ## Active Milestones
 
-Last milestone completed: M8h
-
-### M8i - Desktop App UX/UI Polish
-
-- **Status**: 🚧 In Progress
-- **Goal**: Deliver desktop UX/UI polish and light-dark theme compatibility improvements without changing core API-first ownership boundaries.
-- **Scope**:
-  - Improve desktop duplicate-review UX in the duplicates dialog:
-    - for each duplicate group, render file thumbnails inline above each corresponding file info row for quick visual confirmation,
-    - target display order per group:
-      1. `x files share fingerprint...` header,
-      2. keep-selection dropdown,
-      3. file 1 thumbnail,
-      4. file 1 info row,
-      5. file 2 thumbnail,
-      6. file 2 info row,
-      7. continue for all files in that group.
-  - Keep desktop tag editor category rows theme-compatible:
-    - in light mode, category bars use light surfaces with dark-gray borders while text remains readable black,
-    - in dark mode, current dark presentation remains visually consistent.
-  - Keep desktop tag chips visually stable across themes:
-    - chip text/icons remain white in both light and dark modes,
-    - apply consistent chip drop-shadow styling aligned with WebUI appearance.
-  - Update desktop filter dialog `Tags` tab for visual parity with tag editor presentation in both light/dark modes while preserving control differences:
-    - chips expose add/remove controls only,
-    - category rows expose local combine-mode dropdown only.
-- **Acceptance criteria**:
-  - Duplicate groups in desktop duplicates dialog show per-file thumbnails inline in the defined order, enabling quick visual validation before delete/apply actions.
-  - Desktop tag editor category rows render with light-compatible surfaces/borders in light mode and retain readable text/contrast in both themes.
-  - Desktop tag chips preserve white text/icons with consistent drop-shadow treatment in both light and dark modes.
-  - Desktop filter dialog `Tags` tab has visual parity with tag editor surfaces across themes, while preserving intended control differences.
-  - No regressions to previously completed reliability fixes (compatibility gating, reconnect/resync, deterministic testing simulations).
+Last milestone completed: M8i
 
 ### M8j - WebUI UX/UI Polish
 
 - **Status**: 🚧 In Progress
 - **Goal**: Deliver WebUI UX/UI polish and theme parity with desktop behavior without changing core API-first ownership boundaries.
 - **Scope**:
-  - Web refresh-status projections provide actionable stage/progress detail comparable to desktop.
+  - Web refresh-status projections provide actionable stage/progress detail comparable to desktop, including parity for the consolidated refresh-complete summary (`Core refresh complete | Source | Duration | Loudness | Thumbnails`) using the same compact formatting rules as the desktop app (non-zero-only segments where applicable, `all cached` phrasing for duration/loudness no-scan cases, aligned thumbnail/source token vocabulary).
   - Add WebUI runtime theme detection (system/device dark or light mode) and apply matching theme behavior automatically.
   - Ensure WebUI styling parity with desktop for tag editor and related tag-surface visuals in both light and dark modes.
   - WebUI automatically follows device/system dark-light preference at runtime and keeps styling parity with desktop in both modes.
@@ -140,7 +109,7 @@ Last milestone completed: M8h
     - move edit-tags action to the top-right controls cluster, positioned left of favorite.
   - Add control-only shadow treatment on the WebUI media container controls (do not dim or shadow the full media container surface).
 - **Acceptance criteria**:
-  - Web refresh-status projections provide actionable stage/progress detail comparable to desktop.
+  - Web refresh-status projections provide actionable stage/progress detail comparable to desktop, including parity for the consolidated refresh-complete summary (`Core refresh complete | Source | Duration | Loudness | Thumbnails`) using the same compact formatting rules as the desktop app (non-zero-only segments where applicable, `all cached` phrasing for duration/loudness no-scan cases, aligned thumbnail/source token vocabulary).
   - WebUI category move-up/move-down actions in tag editor activate apply/save state and persist correctly when applied.
   - WebUI media controls include a desktop-matching mute button in the bottom-center controls position, and edit-tags is moved to top-right immediately left of favorite.
   - WebUI media-container control chrome uses control-only shadow treatment without darkening the full media container background.
@@ -967,6 +936,59 @@ Last milestone completed: M8h
 ## Completed Milestones
 
 Latest completions first:
+
+### M8i - Desktop App UX/UI Polish
+
+- **Status**: ✅ Complete
+- **Goal**: Deliver desktop UX/UI polish and light-dark theme compatibility improvements without changing core API-first ownership boundaries.
+- **Scope**:
+  - Improve desktop duplicate-review UX in the duplicates dialog:
+    - for each duplicate group, render file thumbnails inline above each corresponding file info row for quick visual confirmation,
+    - target display order per group:
+      1. `x files share fingerprint...` header,
+      2. keep-selection dropdown,
+      3. file 1 thumbnail,
+      4. file 1 info row,
+      5. file 2 thumbnail,
+      6. file 2 info row,
+      7. continue for all files in that group.
+  - Keep desktop tag editor category rows theme-compatible:
+    - in light mode, category bars use light surfaces with dark-gray borders while text remains readable black,
+    - in dark mode, current dark presentation remains visually consistent.
+  - Keep desktop tag chips visually stable across themes:
+    - chip text/icons remain white in both light and dark modes,
+    - apply consistent chip drop-shadow styling aligned with WebUI appearance.
+  - Update desktop filter dialog `Tags` tab for visual parity with tag editor presentation in both light/dark modes while preserving control differences:
+    - chips expose add/remove controls only,
+    - category rows expose local combine-mode dropdown only.
+- **Acceptance criteria**:
+  - Duplicate groups in desktop duplicates dialog show per-file thumbnails inline in the defined order, enabling quick visual validation before delete/apply actions.
+  - Desktop tag editor category rows render with light-compatible surfaces/borders in light mode and retain readable text/contrast in both themes.
+  - Desktop tag chips preserve white text/icons with consistent drop-shadow treatment in both light and dark modes.
+  - Desktop filter dialog `Tags` tab has visual parity with tag editor surfaces across themes, while preserving intended control differences.
+  - No regressions to previously completed reliability fixes (compatibility gating, reconnect/resync, deterministic testing simulations).
+- **Verification evidence**:
+  - Implemented desktop duplicate-review thumbnail rendering in the required per-group order using server thumbnail endpoint paths (`/api/thumbnail/{itemId}`) with explicit desktop bitmap loading for deterministic thumbnail display.
+  - Added per-group duplicate handling selection to avoid forcing all groups to be processed:
+    - each group now supports `Keep All` and per-item keep selection in the same dropdown,
+    - desktop settings now persist a global `Duplicate Handling Default Behavior` (`Keep All` default, `Select Best` legacy behavior).
+    - duplicate delete confirmation now shows total groups handled and total files to delete, and it no longer prompts when all groups are set to `Keep All`.
+    - duplicate item metadata now includes tag counts, and keep-selection dropdown labels now include filename + plays/tags/favorite/blacklisted for easier comparisons.
+  - Implemented shared desktop tag-surface styling tokens and applied them across tag editor and filter `Tags` tab:
+    - category rows now use theme-aware shared surfaces/borders,
+    - chip text/icons are pinned white in both themes,
+    - chip text/icon shadows are strengthened to align with WebUI treatment,
+    - chip state-specific inset shadow behavior now mirrors WebUI closer for selected states.
+  - Preserved filter `Tags` behavior boundaries while applying visual parity:
+    - chips remain add/remove controls only,
+    - category rows retain local combine-mode dropdown controls,
+    - filter tags now render in a responsive wrapping layout instead of a fixed three-column grid.
+  - Automated verification passed:
+    - `dotnet build ReelRoulette.sln`
+    - `dotnet test ReelRoulette.sln` (91 passed, 0 failed).
+  - Manual validation checklist coverage for desktop UX/theme checks added to `docs/checklists/testing-checklist.md`.
+- **Deferrals / Follow-ups**:
+  - Capture post-implementation manual desktop verification evidence (light/dark screenshots + pass/fail notes) during the next targeted validation run.
 
 ### M8h - Tray Theme Parity and Material Symbols Icon Standardization
 

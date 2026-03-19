@@ -873,7 +873,8 @@ public sealed class LibraryOperationsService
                         SourceId = GetNodeString(item["sourceId"]),
                         IsFavorite = GetNodeBool(item["isFavorite"], defaultValue: false),
                         IsBlacklisted = GetNodeBool(item["isBlacklisted"], defaultValue: false),
-                        PlayCount = GetNodeInt(item["playCount"], defaultValue: 0)
+                        PlayCount = GetNodeInt(item["playCount"], defaultValue: 0),
+                        TagCount = (item["tags"] as JsonArray)?.Count ?? 0
                     });
                 }
 

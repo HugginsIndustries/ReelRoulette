@@ -15,6 +15,7 @@ namespace ReelRoulette
         private bool _loopEnabled;
         private bool _autoPlayNext;
         private bool _forceApiPlayback;
+        private DuplicateHandlingDefaultBehavior _duplicateHandlingDefaultBehavior = DuplicateHandlingDefaultBehavior.KeepAll;
         
         // Timer interval
         private decimal _timerIntervalSeconds;
@@ -97,6 +98,34 @@ namespace ReelRoulette
                 {
                     _forceApiPlayback = value;
                     OnPropertyChanged();
+                }
+            }
+        }
+
+        public bool DuplicateHandlingDefaultKeepAll
+        {
+            get => _duplicateHandlingDefaultBehavior == DuplicateHandlingDefaultBehavior.KeepAll;
+            set
+            {
+                if (value)
+                {
+                    _duplicateHandlingDefaultBehavior = DuplicateHandlingDefaultBehavior.KeepAll;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(DuplicateHandlingDefaultSelectBest));
+                }
+            }
+        }
+
+        public bool DuplicateHandlingDefaultSelectBest
+        {
+            get => _duplicateHandlingDefaultBehavior == DuplicateHandlingDefaultBehavior.SelectBest;
+            set
+            {
+                if (value)
+                {
+                    _duplicateHandlingDefaultBehavior = DuplicateHandlingDefaultBehavior.SelectBest;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(DuplicateHandlingDefaultKeepAll));
                 }
             }
         }
@@ -737,6 +766,7 @@ namespace ReelRoulette
             bool loopEnabled,
             bool autoPlayNext,
             bool forceApiPlayback,
+            DuplicateHandlingDefaultBehavior duplicateHandlingDefaultBehavior,
             double? intervalSeconds,
             string? seekStep,
             int volumeStep,
@@ -774,11 +804,14 @@ namespace ReelRoulette
             _loopEnabled = loopEnabled;
             _autoPlayNext = autoPlayNext;
             _forceApiPlayback = forceApiPlayback;
+            _duplicateHandlingDefaultBehavior = duplicateHandlingDefaultBehavior;
             
             // Notify UI of changes
             OnPropertyChanged(nameof(LoopEnabled));
             OnPropertyChanged(nameof(AutoPlayNext));
             OnPropertyChanged(nameof(ForceApiPlayback));
+            OnPropertyChanged(nameof(DuplicateHandlingDefaultKeepAll));
+            OnPropertyChanged(nameof(DuplicateHandlingDefaultSelectBest));
             
             // Timer interval
             if (intervalSeconds.HasValue)
@@ -967,6 +1000,7 @@ namespace ReelRoulette
         public string GetWebRemoteLanHostname() => string.IsNullOrWhiteSpace(_webRemoteLanHostname) ? "reel" : _webRemoteLanHostname.Trim();
         public WebUiAuthMode GetWebRemoteAuthMode() => _webRemoteAuthMode;
         public string? GetWebRemoteSharedToken() => _webRemoteSharedToken;
+        public DuplicateHandlingDefaultBehavior GetDuplicateHandlingDefaultBehavior() => _duplicateHandlingDefaultBehavior;
 
         private bool ValidateSettings()
         {

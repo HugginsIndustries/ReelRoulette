@@ -83,9 +83,16 @@ namespace ReelRoulette
                     _tagState = value;
                     OnPropertyChanged();
                     OnPropertyChanged(nameof(BackgroundBrush));
+                    OnPropertyChanged(nameof(IsStateAll));
+                    OnPropertyChanged(nameof(IsStateSome));
+                    OnPropertyChanged(nameof(IsStateNone));
                 }
             }
         }
+
+        public bool IsStateAll => TagState == TagState.AllItemsHaveTag;
+        public bool IsStateSome => TagState == TagState.SomeItemsHaveTag;
+        public bool IsStateNone => TagState == TagState.NoItemsHaveTag;
 
         public IBrush BackgroundBrush
         {

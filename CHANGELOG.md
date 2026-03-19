@@ -15,6 +15,13 @@ This file follows a Keep a Changelog style format.
 
 ### Changed
 
+- Polish duplicate-review UX: duplicate groups now render per-item thumbnail previews in review order with explicit desktop bitmap loading from `/api/thumbnail/{itemId}`.
+- Add per-group duplicate handling selection: groups can use `Keep All` or a per-item keep selection, with persisted desktop default behavior (`Keep All` or `Select Best`).
+- Improve duplicate delete confirmation UX by summarizing groups/files before destructive apply and skipping the confirmation prompt when no groups are selected.
+- Improve duplicate item comparison signals: item metadata now includes `Tags: {count}`, and keep-selection dropdown labels now include filename + plays/tags/favorite/blacklisted fields for side-by-side decisions.
+- Update filter `Tags` layout to responsive wrapping for parity with tag editor behavior.
+- Refine desktop tag-chip visuals toward WebUI parity: white glyph/text, stronger text/icon shadows, and state-specific inset shadows.
+- Improve desktop core refresh completion status: single `Core refresh complete | Source | Duration | Loudness | Thumbnails` summary with compact tokens parsed from stage messages (for example source `no changes`, duration/loudness `files N, all cached`, thumbnail counts emitted only when non-zero).
 - Complete desktop Material Symbols migration with shared no-box controls, standardized glyph sizing/checked-state tint and transport layout cleanup, plus `ItemTagsDialog` parity refinements (icon-only footer actions, rounded category bars, responsive wrapping chips, and session-scoped category collapse-state persistence).
 - Migrate WebUI overlay and tag-editor controls to Material Symbols, including explicit `play_arrow`/`pause` glyph swapping and local Material Symbols font sync from shared assets.
 - Align WebUI tag-editor styling with desktop parity: dark rounded inputs, category header bars, shared orange/lime/violet tag-chip tokens, and stronger consistent text/glyph shadows.

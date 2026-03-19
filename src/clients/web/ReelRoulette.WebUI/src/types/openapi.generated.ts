@@ -1152,6 +1152,8 @@ export interface components {
             isBlacklisted: boolean;
             /** Format: int32 */
             playCount: number;
+            /** Format: int32 */
+            tagCount: number;
         };
         DuplicateApplyRequest: {
             selections: components["schemas"]["DuplicateApplySelection"][];

@@ -42,10 +42,18 @@ Use `tools/scripts/reset-checklist.ps1` to reset metadata/check states before st
 - [x] Import folder works (or fails with clear guidance). (waived)
 - [x] Manage Sources opens and source enable/disable persists.
 - [x] Duplicate scan + apply flow works (if test data exists).
+- [ ] Duplicate groups in desktop duplicates dialog render per-file thumbnail + info-row pairs in order (header -> keep-selection -> repeated thumbnail/info rows).
+- [ ] Duplicate groups allow per-group handling selection (`Keep All` and specific keep-item choice) so groups can be skipped instead of forced into apply.
+- [ ] Settings -> Playback persists `Duplicate Handling Default Behavior` (`Keep All` default, `Select Best` legacy), and new duplicate dialogs honor the selected default.
+- [ ] Duplicate delete confirmation shows selected group count + file-delete count, and `Keep All`-only selections short-circuit with a no-selection message (no DELETE prompt).
+- [ ] Duplicate per-item metadata includes `Tags: {count}` and dropdown keep-selection labels include filename + plays/tags/favorite/blacklisted for easier comparison.
 - [x] Auto Tag scan + apply works (if test data exists).
 - [x] Favorites toggle updates item state.
 - [x] Blacklist toggle updates item state.
 - [x] Tag editor apply/remove updates item tags as expected.
+- [ ] Desktop tag editor category rows remain readable in both themes (light-compatible surface/border; dark-mode consistency).
+- [ ] Desktop tag chips keep white text/icons with WebUI-like text/icon shadows and state-specific inset chip shadows in both themes.
+- [ ] Filter dialog `Tags` tab matches tag editor visual surfaces in both themes while preserving add/remove chip controls, local combine-mode controls, and responsive wrapping chip layout.
 - [x] Clear playback stats flow works with confirmation.
 
 ## WebUI Core UX (Localhost)

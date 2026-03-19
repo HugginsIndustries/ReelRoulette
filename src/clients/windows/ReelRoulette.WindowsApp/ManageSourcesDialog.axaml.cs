@@ -19,6 +19,8 @@ namespace ReelRoulette
         private readonly Func<string, bool, Task<bool>>? _setSourceEnabledAsync;
         private readonly Func<DuplicateScanScope, string?, Task<CoreDuplicateScanResponse?>>? _scanDuplicatesAsync;
         private readonly Func<List<CoreDuplicateApplySelection>, Task<CoreDuplicateApplyResponse?>>? _applyDuplicatesAsync;
+        private readonly string? _coreServerBaseUrl;
+        private readonly DuplicateHandlingDefaultBehavior _duplicateHandlingDefaultBehavior;
         private ObservableCollection<SourceViewModel> _sources = new();
 
         public ManageSourcesDialog() : this(null, null, null, null, null)
@@ -31,13 +33,17 @@ namespace ReelRoulette
             Func<Task<bool>>? requestRefreshAsync = null,
             Func<string, bool, Task<bool>>? setSourceEnabledAsync = null,
             Func<DuplicateScanScope, string?, Task<CoreDuplicateScanResponse?>>? scanDuplicatesAsync = null,
-            Func<List<CoreDuplicateApplySelection>, Task<CoreDuplicateApplyResponse?>>? applyDuplicatesAsync = null)
+            Func<List<CoreDuplicateApplySelection>, Task<CoreDuplicateApplyResponse?>>? applyDuplicatesAsync = null,
+            string? coreServerBaseUrl = null,
+            DuplicateHandlingDefaultBehavior duplicateHandlingDefaultBehavior = DuplicateHandlingDefaultBehavior.KeepAll)
         {
             _getLibraryStatsAsync = getLibraryStatsAsync;
             _requestRefreshAsync = requestRefreshAsync;
             _setSourceEnabledAsync = setSourceEnabledAsync;
             _scanDuplicatesAsync = scanDuplicatesAsync;
             _applyDuplicatesAsync = applyDuplicatesAsync;
+            _coreServerBaseUrl = coreServerBaseUrl;
+            _duplicateHandlingDefaultBehavior = duplicateHandlingDefaultBehavior;
             InitializeComponent();
             DataContext = this;
             _ = LoadSourcesAsync();
@@ -295,14 +301,22 @@ namespace ReelRoulette
                             SourceId = item.SourceId,
                             IsFavorite = item.IsFavorite,
                             IsBlacklisted = item.IsBlacklisted,
-                            PlayCount = item.PlayCount
+                            PlayCount = item.PlayCount,
+                            TagCount = item.TagCount
                         }).ToList()
                     }).ToList(),
                     ExcludedPending = scanResponse.ExcludedPending,
                     ExcludedFailed = scanResponse.ExcludedFailed,
                     ExcludedStale = scanResponse.ExcludedStale
                 };
-                var dialog = new DuplicatesDialog(_applyDuplicatesAsync, _scanDuplicatesAsync, scan, scope.Value, sourceId);
+                var dialog = new DuplicatesDialog(
+                    _applyDuplicatesAsync,
+                    _scanDuplicatesAsync,
+                    scan,
+                    scope.Value,
+                    sourceId,
+                    _coreServerBaseUrl,
+                    _duplicateHandlingDefaultBehavior);
                 await dialog.ShowDialog(this);
                 await LoadSourcesAsync();
             }

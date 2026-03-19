@@ -494,6 +494,7 @@ public sealed class DuplicateGroupItemResponse
     public bool IsFavorite { get; set; }
     public bool IsBlacklisted { get; set; }
     public int PlayCount { get; set; }
+    public int TagCount { get; set; }
 }
 
 public sealed class DuplicateApplyRequest

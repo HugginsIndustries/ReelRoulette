@@ -20,13 +20,42 @@
                             <Border BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="0,0,0,1" Padding="8">
                                 <StackPanel>
                                     <TextBlock Text="{Binding Title}" FontWeight="SemiBold"/>
-                                    <ComboBox ItemsSource="{Binding KeepOptions}"
-                                              SelectedItem="{Binding SelectedKeepOption}"
+                                    <ComboBox ItemsSource="{Binding SelectionOptions}"
+                                              SelectedItem="{Binding SelectedSelectionOption}"
                                               Margin="0,6,0,6"/>
                                     <ItemsControl ItemsSource="{Binding KeepOptions}">
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate x:DataType="local:DuplicateItemOption">
-                                                <TextBlock Text="{Binding DisplayText}" FontSize="11" Foreground="Gray"/>
+                                                <StackPanel Margin="0,0,0,10">
+                                                    <Border MaxHeight="200"
+                                                            MinWidth="220"
+                                                            MaxWidth="420"
+                                                            HorizontalAlignment="Left"
+                                                            BorderBrush="{DynamicResource ThemeBorderBrush}"
+                                                            BorderThickness="1"
+                                                            CornerRadius="4"
+                                                            Background="Transparent">
+                                                        <Grid>
+                                                            <Image Source="{Binding ThumbnailBitmap}"
+                                                                   IsVisible="{Binding HasThumbnailBitmap}"
+                                                                   Stretch="Uniform"
+                                                                   HorizontalAlignment="Left"/>
+                                                            <TextBlock Text="Thumbnail unavailable"
+                                                                       IsVisible="{Binding ShowThumbnailPlaceholder}"
+                                                                       HorizontalAlignment="Center"
+                                                                       VerticalAlignment="Center"
+                                                                       Foreground="Gray"/>
+                                                        </Grid>
+                                                    </Border>
+                                                    <TextBlock Text="{Binding FullPath}"
+                                                               FontSize="12"
+                                                               TextWrapping="Wrap"
+                                                               Margin="0,6,0,0"/>
+                                                    <TextBlock Text="{Binding MetadataText}"
+                                                               FontSize="11"
+                                                               Foreground="Gray"
+                                                               TextWrapping="Wrap"/>
+                                                </StackPanel>
                                             </DataTemplate>
                                         </ItemsControl.ItemTemplate>
                                     </ItemsControl>

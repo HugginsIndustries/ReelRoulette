@@ -32,6 +32,7 @@ namespace ReelRoulette
         public bool IsFavorite { get; set; }
         public bool IsBlacklisted { get; set; }
         public int PlayCount { get; set; }
+        public int TagCount { get; set; }
         public DateTime? LastPlayedUtc { get; set; }
         public long? FileSizeBytes { get; set; }
         public DateTime? LastWriteTimeUtc { get; set; }

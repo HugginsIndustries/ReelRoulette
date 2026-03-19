@@ -210,6 +210,24 @@
                                       IsChecked="{Binding ForceApiPlayback}"
                                       ToolTip.Tip="When enabled, desktop always plays through /api/media even if local file access is available."/>
                         </StackPanel>
+
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="Duplicate Handling Default Behavior"
+                                       FontWeight="SemiBold"
+                                       FontSize="13"
+                                       Margin="0,0,0,4"/>
+                            <RadioButton Content="Keep All (default)"
+                                         GroupName="DuplicateHandlingDefaultBehavior"
+                                         IsChecked="{Binding DuplicateHandlingDefaultKeepAll}"/>
+                            <RadioButton Content="Select Best (current behavior)"
+                                         GroupName="DuplicateHandlingDefaultBehavior"
+                                         IsChecked="{Binding DuplicateHandlingDefaultSelectBest}"/>
+                            <TextBlock Text="Applies to new duplicate-review dialogs. Keep All skips deletion for each group unless you explicitly choose a keep item."
+                                       FontSize="11"
+                                       Foreground="Gray"
+                                       TextWrapping="Wrap"
+                                       Margin="20,0,0,0"/>
+                        </StackPanel>
                         
                         <!-- Timer Interval Section -->
                         <StackPanel Spacing="8">
