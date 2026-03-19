@@ -19,7 +19,8 @@ Instructions:
 
 Commit Message:
 
-Bugfix: stabilize CI loudness test coverage
+Docs: split UX/UI polish into desktop and WebUI milestones
 
-- fix cross-platform legacy source path matching in library stats by normalizing path separators before prefix checks.
-- install `ffmpeg` in both Ubuntu and Windows CI jobs so loudness-failure tests execute deterministically instead of being skipped by missing-tool paths.
+- promote planned UX/UI polish work into active milestone `M8i`, then split it into `M8i` (desktop) and `M8j` (WebUI).
+- preserve prior UX/UI scope while removing the already-completed desktop tag-apply responsiveness item.
+- add explicit desktop and WebUI acceptance criteria for theme parity, tag-surface visuals, media-control layout updates, and WebUI apply-state behavior.
