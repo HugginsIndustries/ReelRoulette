@@ -32,7 +32,7 @@ This file follows a Keep a Changelog style format.
 - Add top-right favorite/blacklist indicators on grid thumbnails using Material Symbols with real-time visibility updates.
 - Finalize server-authoritative desktop library behavior by removing `LibraryService`, consolidating persistence-first mutation authority in `LibraryOperationsService` (with `ServerStateService` event publication), and routing favorites/blacklist, tags/categories, playback stats, refresh triggers, and library remove flows through core API + SSE reconciliation.
 - Move Manage Sources statistics to server-owned `/api/library/stats` and harden source/media counting for legacy library data shapes.
-- Finalize backup ownership split: server manages `library.json`/`core-settings.json` backups with no-churn gap policy and retention trimming; desktop backup scope is `desktop-settings.json` only.
+- Finalize backup ownership split: server manages `library.json`/`core-settings.json` backups with no-churn gap policy and retention trimming; desktop backup scope is `desktop-settings.json` only. Timestamped backup filenames use the same format everywhere: local wall time plus a filesystem-safe UTC offset token (`_pHHmm` / `_mHHmm`), while retention/min-gap ordering still uses file UTC timestamps.
 - Improve tag/category apply performance by removing redundant full projection sync/rebuild triggers and relying on targeted SSE-driven updates.
 
 ### Fixed

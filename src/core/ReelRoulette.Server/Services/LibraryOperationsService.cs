@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging.Abstractions;
 using ReelRoulette.Core.Fingerprints;
+using ReelRoulette.Core.Storage;
 using ReelRoulette.Server.Contracts;
 
 namespace ReelRoulette.Server.Services;
@@ -1144,13 +1145,13 @@ public sealed class LibraryOperationsService
         Directory.CreateDirectory(_backupDirectory);
         var backupFiles = Directory.GetFiles(_backupDirectory, "library.json.backup.*")
             .Select(path => new FileInfo(path))
-            .OrderBy(GetBackupFileUtcTimestamp)
+            .OrderBy(BackupFileNaming.GetFileOrderingUtcTimestamp)
             .ToList();
 
         var maxBackups = Math.Max(1, policy.NumberOfBackups);
         var minGapMinutes = Math.Max(1, policy.MinimumBackupGapMinutes);
         var nowUtc = DateTime.UtcNow;
-        var lastBackupTime = backupFiles.Count > 0 ? GetBackupFileUtcTimestamp(backupFiles[^1]) : DateTime.MinValue;
+        var lastBackupTime = backupFiles.Count > 0 ? BackupFileNaming.GetFileOrderingUtcTimestamp(backupFiles[^1]) : DateTime.MinValue;
         var hasLastBackup = backupFiles.Count > 0;
         var timeSinceLastBackup = hasLastBackup ? nowUtc - lastBackupTime : TimeSpan.MaxValue;
 
@@ -1159,13 +1160,13 @@ public sealed class LibraryOperationsService
             return;
         }
 
-        var timestamp = nowUtc.ToString("yyyy-MM-dd_HH-mm-ss");
+        var timestamp = BackupFileNaming.FormatNowForBackupSuffix();
         var backupPath = Path.Combine(_backupDirectory, $"library.json.backup.{timestamp}");
         File.Copy(_libraryPath, backupPath, true);
 
         var filesAfterCreate = Directory.GetFiles(_backupDirectory, "library.json.backup.*")
             .Select(path => new FileInfo(path))
-            .OrderBy(GetBackupFileUtcTimestamp)
+            .OrderBy(BackupFileNaming.GetFileOrderingUtcTimestamp)
             .ToList();
 
         while (filesAfterCreate.Count > maxBackups)
@@ -1173,23 +1174,6 @@ public sealed class LibraryOperationsService
             filesAfterCreate[0].Delete();
             filesAfterCreate.RemoveAt(0);
         }
-    }
-
-    private static DateTime GetBackupFileUtcTimestamp(FileInfo file)
-    {
-        var creationUtc = file.CreationTimeUtc;
-        var lastWriteUtc = file.LastWriteTimeUtc;
-        if (creationUtc == DateTime.MinValue)
-        {
-            return lastWriteUtc;
-        }
-
-        if (lastWriteUtc == DateTime.MinValue)
-        {
-            return creationUtc;
-        }
-
-        return creationUtc >= lastWriteUtc ? creationUtc : lastWriteUtc;
     }
 
     private BackupPolicySnapshot ReadBackupPolicy()

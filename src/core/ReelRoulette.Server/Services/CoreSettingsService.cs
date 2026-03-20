@@ -1,5 +1,6 @@
 using System.Linq;
 using System.Text.Json;
+using ReelRoulette.Core.Storage;
 using ReelRoulette.Server.Contracts;
 using ReelRoulette.Server.Hosting;
 
@@ -375,13 +376,13 @@ public sealed class CoreSettingsService
         Directory.CreateDirectory(_backupDirectory);
         var backupFiles = Directory.GetFiles(_backupDirectory, "core-settings.json.backup.*")
             .Select(path => new FileInfo(path))
-            .OrderBy(GetBackupFileUtcTimestamp)
+            .OrderBy(BackupFileNaming.GetFileOrderingUtcTimestamp)
             .ToList();
 
         var maxBackups = Math.Max(1, _backupSettings.NumberOfBackups);
         var minGapMinutes = Math.Max(1, _backupSettings.MinimumBackupGapMinutes);
         var nowUtc = DateTime.UtcNow;
-        var lastBackupTime = backupFiles.Count > 0 ? GetBackupFileUtcTimestamp(backupFiles[^1]) : DateTime.MinValue;
+        var lastBackupTime = backupFiles.Count > 0 ? BackupFileNaming.GetFileOrderingUtcTimestamp(backupFiles[^1]) : DateTime.MinValue;
         var hasLastBackup = backupFiles.Count > 0;
         var timeSinceLastBackup = hasLastBackup ? nowUtc - lastBackupTime : TimeSpan.MaxValue;
 
@@ -390,13 +391,13 @@ public sealed class CoreSettingsService
             return;
         }
 
-        var timestamp = nowUtc.ToString("yyyy-MM-dd_HH-mm-ss");
+        var timestamp = BackupFileNaming.FormatNowForBackupSuffix();
         var backupPath = Path.Combine(_backupDirectory, $"core-settings.json.backup.{timestamp}");
         File.Copy(_settingsPath, backupPath, true);
 
         var filesAfterCreate = Directory.GetFiles(_backupDirectory, "core-settings.json.backup.*")
             .Select(path => new FileInfo(path))
-            .OrderBy(GetBackupFileUtcTimestamp)
+            .OrderBy(BackupFileNaming.GetFileOrderingUtcTimestamp)
             .ToList();
 
         while (filesAfterCreate.Count > maxBackups)
@@ -404,23 +405,6 @@ public sealed class CoreSettingsService
             filesAfterCreate[0].Delete();
             filesAfterCreate.RemoveAt(0);
         }
-    }
-
-    private static DateTime GetBackupFileUtcTimestamp(FileInfo file)
-    {
-        var creationUtc = file.CreationTimeUtc;
-        var lastWriteUtc = file.LastWriteTimeUtc;
-        if (creationUtc == DateTime.MinValue)
-        {
-            return lastWriteUtc;
-        }
-
-        if (lastWriteUtc == DateTime.MinValue)
-        {
-            return creationUtc;
-        }
-
-        return creationUtc >= lastWriteUtc ? creationUtc : lastWriteUtc;
     }
 
     private static string NormalizeAuthMode(string? value)

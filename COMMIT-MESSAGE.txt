@@ -19,12 +19,8 @@ Instructions:
 
 Commit Message:
 
-M8i: complete desktop UX/UI polish for duplicates, tag surfaces, and refresh summary
+Bugfix: unify JSON backup filename timestamps (local + UTC offset)
 
-- add per-item duplicate-review thumbnails in the desktop duplicates dialog using core server thumbnail endpoint paths with explicit desktop bitmap loading.
-- add per-group duplicate handling selection so users can skip groups (`Keep All`) or keep a specific item, plus a persisted desktop setting for default behavior (`Keep All` default, `Select Best` legacy).
-- improve duplicate delete confirmation by showing selected groups/files totals and skipping DELETE confirmation when no groups are selected.
-- add duplicate comparison metadata in dialog rows/dropdowns (tag counts + filename/plays/tags/favorite/blacklisted labels) for easier keep decisions.
-- align desktop tag editor and filter `Tags` visuals with shared theme-compatible category/chip surfaces, white chip text/icons with WebUI-like text/icon shadows and state-specific inset shadows, and responsive wrapping while preserving filter-only control boundaries.
-- improve desktop core refresh completion status with a consolidated `Core refresh complete | Source | Duration | Loudness | Thumbnails` line built from compact stage-derived tokens (for example `no changes`, `files N, all cached`, non-zero-only thumbnail counters).
-- verify implementation with full solution build and test pass.
+- add shared `BackupFileNaming` in core for timestamp suffixes and UTC-based file ordering used by library/core-settings and desktop-settings backups.
+- switch core backups from UTC-only filename stamps to the shared suffix; align desktop settings backups to the same format and UTC ordering for min-gap/retention.
+- add unit tests for suffix encoding and ordering helper behavior.

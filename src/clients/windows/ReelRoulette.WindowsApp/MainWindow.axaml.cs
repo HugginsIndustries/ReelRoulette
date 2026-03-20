@@ -8323,15 +8323,15 @@ namespace ReelRoulette
                 var backupDir = AppDataManager.GetBackupDirectoryPath();
                 var backupFiles = Directory.GetFiles(backupDir, "desktop-settings.json.backup.*")
                     .Select(f => new FileInfo(f))
-                    .OrderBy(f => f.CreationTime)
+                    .OrderBy(BackupFileNaming.GetFileOrderingUtcTimestamp)
                     .ToList();
 
                 var maxBackups = Math.Max(1, _numberOfSettingsBackups);
                 var minGapMinutes = Math.Max(1, _minimumSettingsBackupGapMinutes);
-                var now = DateTime.Now;
-                var lastBackupTime = backupFiles.Count > 0 ? backupFiles[^1].CreationTime : DateTime.MinValue;
+                var nowUtc = DateTime.UtcNow;
+                var lastBackupTime = backupFiles.Count > 0 ? BackupFileNaming.GetFileOrderingUtcTimestamp(backupFiles[^1]) : DateTime.MinValue;
                 var hasLastBackup = backupFiles.Count > 0;
-                var timeSinceLastBackup = hasLastBackup ? now - lastBackupTime : TimeSpan.MaxValue;
+                var timeSinceLastBackup = hasLastBackup ? nowUtc - lastBackupTime : TimeSpan.MaxValue;
 
                 if (backupFiles.Count >= maxBackups)
                 {
@@ -8351,7 +8351,7 @@ namespace ReelRoulette
                     }
                 }
 
-                var timestamp = now.ToString("yyyy-MM-dd_HH-mm-ss");
+                var timestamp = BackupFileNaming.FormatNowForBackupSuffix();
                 var backupPath = Path.Combine(backupDir, $"desktop-settings.json.backup.{timestamp}");
                 File.Copy(settingsPath, backupPath, true);
                 Log($"SaveSettings: Created settings backup: {Path.GetFileName(backupPath)}");
