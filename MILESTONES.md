@@ -91,7 +91,116 @@ Do not use this file for detailed architecture explanation or current capability
 
 Last milestone completed: M8i
 
-### M8j - WebUI UX/UI Polish
+### M9a - Avalonia Server Tray + Linux Runtime Baseline
+
+- **Status**: ⏳ Planned
+- **Goal**: Replace the **Windows**-only WinForms server host tray with a cross-platform **Avalonia** tray that preserves today’s behavior; validate server and the **Desktop** client on Linux with **CachyOS (Arch-based, `linux-x64`)** as the primary sign-off environment; align repo naming from legacy **`windows` / Windows-oriented** client identifiers to **`desktop` paths** and **Desktop**-oriented project/product names.
+- **Scope**:
+  - **Server host tray (WinForms → Avalonia)**:
+    - Retire the WinForms `NotifyIcon` host UI path; implement an Avalonia-based tray (or minimal Avalonia application lifetime) shared across **Windows** and Linux.
+    - Preserve functional parity with the current tray: **Open Operator UI**, **Launch Server on Startup** (enable/disable autostart in parity across OSes—**Windows** registry-backed behavior today; **Linux** via **XDG Autostart** using a standard `*.desktop` entry in the user autostart directory, with the tray toggle installing/removing or enabling/disabling that entry as appropriate), **Refresh Library**, **Restart Server**, **Stop Server / Exit**, shared icon loading with sensible fallback, non-blocking menu actions, graceful UI-thread shutdown aligned with host restart/stop flows.
+    - Preserve **light/dark context-menu theming** on **Windows** where applicable; on Linux, follow the **desktop environment** theme or document explicit behavior when the platform does not expose matching signals.
+    - Unify server app targeting where practical (avoid a **Windows**-only TFM solely for tray unless required); keep **`net9.0` headless** path when **tray is unavailable** (no display / no status notifier / unsupported session) with deterministic behavior matching current non-**Windows** headless semantics.
+  - **Desktop client**:
+    - The **Desktop** GUI client is **already Avalonia**; scope here is Linux **validation and hardening** (not a UI-framework rewrite).
+    - **Repo-wide rename**: `src/clients/windows/...`-style paths, solution/project/assembly names, and docs/scripts slugs move to **`src/clients/desktop/...`**-style paths with **Desktop** client naming (e.g. `ReelRoulette.DesktopApp`—exact identifiers chosen at implementation time; keep **lowercase `desktop` in path segments**, **capitalized Desktop in product-facing names**).
+  - **Linux baseline**:
+    - Primary manual/automated sign-off reference: **CachyOS**, `linux-x64`, on typical **desktop environment** sessions (tray-capable **and** headless/tray-unavailable cases).
+    - Validate consolidated server on Linux: `/health`, `/api/version`, `/api/events`, `/api/media/{idOrToken}`, `/operator`, plus WebUI/static hosting as today.
+    - Validate **Desktop** client: launch, pair/connect, random/manual playback, core controls.
+    - Validate native deps: **ffprobe/ffmpeg**, **LibVLC** runtime expectations.
+    - Keep API-first / thin-client boundaries unchanged.
+- **Acceptance criteria**:
+  - On **Windows**, after the port, tray menu actions and host lifecycle behavior match pre-port intent (no loss of Operator open, refresh, restart, stop, startup-toggle behavior).
+  - On **Linux**, server starts and serves the same core surfaces as above; **Desktop** client completes core workflows against that server.
+  - **Launch Server on Startup** works on **Linux**: the tray toggle deterministically enables/disables user login autostart via **XDG Autostart** (`*.desktop` in the user autostart location), verified on **CachyOS** alongside the existing **Windows** registry-backed behavior.
+  - Tray-capable **desktop environments** show the Avalonia tray when supported; otherwise server runs **headless** without hanging or requiring a display—deterministic fallback.
+  - Linux prerequisites (including VLC/ffmpeg and tray fallbacks) are **documented and reproducible** for the CachyOS baseline.
+  - **Desktop** rename is **consistent** in solution, primary scripts, and contributor-facing paths (no lingering **`windows`** folder naming or **Windows**-centric client wording as the canonical **Desktop** app identity).
+  - No new client-local authoritative mutation paths are introduced.
+- **Verification evidence**:
+  - Evidence on **CachyOS** for server + **Desktop** client smoke runs; include at least one tray-capable session and one tray-unavailable/headless server run.
+  - **Windows** evidence for tray parity post-port (smoke + restart/stop cycle); **Linux** evidence includes autostart on/off cycles (XDG entry present/absent or disabled per design).
+  - Automated gates:
+    - `dotnet build ReelRoulette.sln`
+    - `dotnet test ReelRoulette.sln`
+    - `npm run verify` (`src/clients/web/ReelRoulette.WebUI`)
+  - Notes on any intentional **platform differences** (e.g. autostart implementation details) recorded in the doc slice of this series.
+
+### M9b - Linux Packaging (Server + Desktop)
+
+- **Status**: ⏳ Planned
+- **Goal**: Produce distributable Linux artifacts for server and the renamed **Desktop** client using repo-owned packaging scripts.
+- **Scope**:
+  - Add Linux packaging scripts (portable first):
+    - server portable package (`tar.gz`) including WebUI assets in `wwwroot`,
+    - **Desktop** client portable package (`tar.gz`) using `desktop`-segment naming and layout aligned with post-rename project output.
+  - Package runtime must support **Avalonia server tray** when a tray-capable environment is available, and **headless** fallback otherwise (same policy as baseline milestone).
+  - Preserve version metadata and release naming conventions; correct executable bits and launch helpers on Linux.
+  - **Windows**-OS packaging for **Desktop** deliverables: unchanged **intent**; update script paths/names if the rename moves `.csproj` or output names.
+- **Acceptance criteria**:
+  - Linux server and **Desktop** client portable artifacts build deterministically from scripts.
+  - Server package includes API/SSE/media/WebUI/Operator assets and whatever the Avalonia tray host requires at runtime.
+  - Artifact names align with **`desktop` paths** and **Desktop** branding (not legacy **`windows`** paths or **Windows**-centric client naming).
+  - Packaged apps run on the supported Linux baseline in both tray-available and headless/fallback scenarios.
+- **Verification evidence**:
+  - Artifacts under `artifacts/packages/` (or documented equivalent).
+  - Packaging smoke on CachyOS (or CI-chosen Linux) for tray + headless paths.
+  - `docs/checklists/testing-checklist.md` updated with Linux package checks (including **XDG Autostart** where applicable).
+
+### M9c - CI Linux Distribution Gates
+
+- **Status**: ⏳ Planned
+- **Goal**: Enforce Linux build/test/package quality in CI, including the **unified Avalonia server tray** and **Desktop** client.
+- **Scope**:
+  - Linux jobs: `dotnet build`, `dotnet test`, `npm run verify` parity where applicable.
+  - Linux packaging jobs for server + **Desktop** client; publish artifacts.
+  - Smoke checks: packaged server reachability (health/version/operator); optional **headless** server boot without display.
+  - Tray-related checks: when feasible, runner verifies **headless fallback**; tray-on-runner validation only where the image/session supports it (do not make CI flaky on absent status notifier).
+  - **Windows** jobs remain green; adjust only for renamed **`desktop`** project paths / **Desktop** `.csproj` location.
+- **Acceptance criteria**:
+  - Default-branch/PR Linux pipeline passes and catches Linux-only regressions in server, **Desktop** client, and packaging.
+  - Headless server startup remains deterministic in CI (no hard dependency on GUI session for green builds).
+- **Verification evidence**:
+  - Workflow updates with Linux matrix steps and artifact uploads.
+  - Links or logs showing passing Linux gates.
+
+### M9d - Linux Documentation and Operator Runbook
+
+- **Status**: ⏳ Planned
+- **Goal**: First-class Linux contributor/operator docs: **Avalonia server tray**, **`desktop` paths** and **Desktop** naming, **XDG Autostart** behavior, **CachyOS** baseline, troubleshooting.
+- **Scope**:
+  - Update `README.md`, `docs/dev-setup.md`, `CONTEXT.md`/`docs/architecture.md`/`docs/domain-inventory.md` as needed: Linux run/package commands, **`desktop` client paths** and **Desktop** naming, ffmpeg/VLC, tray vs headless, **Launch Server on Startup** on Linux (XDG `*.desktop` autostart entry, toggle semantics, where the file lives, and how to verify or remove it manually).
+  - Document **CachyOS (Arch-based)** as the primary development/sign-off distro for this series; note other distros as best-effort unless expanded later.
+  - `docs/checklists/testing-checklist.md`: Linux + tray + packaging + autostart entries.
+  - Troubleshooting: native deps, permissions, display/audio, missing tray/status area, **Avalonia**/LibVLC hints for Linux, autostart entry conflicts.
+- **Acceptance criteria**:
+  - A new contributor can build, run server (tray or headless), and run the **Desktop** client on Linux using only the docs.
+  - Tray best-effort vs guaranteed core runtime is explicit; headless operator path documented; **Linux** autostart behavior is explicit and testable from the docs.
+- **Verification evidence**:
+  - Doc consistency with scripts/workflows and renamed paths.
+  - Dry-run evidence (tray-capable + headless) on CachyOS or documented host.
+
+### M9e - Linux Release Readiness and Sign-off
+
+- **Status**: ⏳ Planned
+- **Goal**: Final Linux + cross-platform tray sign-off for server and **Desktop** client distribution.
+- **Scope**:
+  - Full automated + manual matrix on **CachyOS** (`linux-x64`): server (Avalonia tray + headless), **Desktop** client, WebUI/operator against server; include **XDG Autostart** on/off validation for **Launch Server on Startup** on **Linux**.
+  - Confirm **Windows** tray parity after Avalonia port (no regression vs accepted baseline behaviors), including **Windows** autostart toggle behavior.
+  - End-to-end packaged install/run; release notes and tracking updates.
+- **Acceptance criteria**:
+  - All automated gates green (build/test/web verify/package/smoke) for Linux and **Windows**.
+  - Manual checklist complete with PASS/FAIL evidence (tray-capable vs tray-unavailable on Linux; **Linux** autostart on/off evidence).
+  - No critical Linux-only regressions; **Windows** server tray and **Desktop** client behaviors accepted by spot-check matrix.
+  - Tracking docs and changelog reflect **Desktop** naming (`desktop` paths) and Linux-ready state.
+- **Verification evidence**:
+  - Completed checklist entries in `docs/checklists/testing-checklist.md`.
+  - Environment matrix (CachyOS + Windows) noted in evidence bundle.
+  - CI evidence for Linux artifacts.
+  - Updated `MILESTONES.md`, `CHANGELOG.md`, and `COMMIT_MESSAGE.txt` entries for final state.
+
+### M10 - WebUI UX/UI Polish
 
 - **Status**: 🚧 In Progress
 - **Goal**: Deliver WebUI UX/UI polish and theme parity with desktop behavior without changing core API-first ownership boundaries.
@@ -117,7 +226,7 @@ Last milestone completed: M8i
   - WebUI tag chips preserve white text/icons with consistent drop-shadow treatment in both light and dark modes.
   - No regressions to previously completed reliability fixes (compatibility gating, reconnect/resync, deterministic testing simulations).
 
-### M9a - Structured JSONL Schema + Server Writer Foundation
+### M11a - Structured JSONL Schema + Server Writer Foundation
 
 - **Status**: ⏳ Planned
 - **Goal**: Establish canonical JSONL `last.log` foundation with server-owned write path and deterministic lifecycle behavior.
@@ -171,7 +280,7 @@ Last milestone completed: M8i
 - **Deferrals / Follow-ups**:
   - None at planned state.
 
-### M9b - Ingestion Contract + Correlation Semantics
+### M11b - Ingestion Contract + Correlation Semantics
 
 - **Status**: ⏳ Planned
 - **Goal**: Make server/client event ordering and correlation deterministic through ingestion contracts and trace propagation.
@@ -195,7 +304,7 @@ Last milestone completed: M8i
 - **Deferrals / Follow-ups**:
   - None at planned state.
 
-### M9c - Structured Log API Introduction (Desktop + WebUI)
+### M11c - Structured Log API Introduction (Desktop + WebUI)
 
 - **Status**: ⏳ Planned
 - **Goal**: Introduce typed structured Log API surfaces that require explicit metadata at call sites.
@@ -240,7 +349,7 @@ Last milestone completed: M8i
 - **Deferrals / Follow-ups**:
   - None at planned state.
 
-### M9d - Desktop Log Migration + Legacy API Obsoletion
+### M11d - Desktop Log Migration + Legacy API Obsoletion
 
 - **Status**: ⏳ Planned
 - **Goal**: Migrate the high-volume desktop logging surface to structured API as the primary structured-logging migration priority.
@@ -267,7 +376,7 @@ Last milestone completed: M8i
 - **Deferrals / Follow-ups**:
   - None at planned state.
 
-### M9e - Server/Core Meaningful Instrumentation Expansion
+### M11e - Server/Core Meaningful Instrumentation Expansion
 
 - **Status**: ⏳ Planned
 - **Goal**: Add meaningful, structured logs to server/core decision points and runtime features (not only transport wrappers).
@@ -288,7 +397,7 @@ Last milestone completed: M8i
 - **Deferrals / Follow-ups**:
   - None at planned state.
 
-### M9f - WebUI Meaningful Instrumentation Expansion
+### M11f - WebUI Meaningful Instrumentation Expansion
 
 - **Status**: ⏳ Planned
 - **Goal**: Raise WebUI from minimal/wrapped status logging to meaningful structured logging aligned with unified API.
@@ -327,7 +436,7 @@ Last milestone completed: M8i
 - **Deferrals / Follow-ups**:
   - None at planned state.
 
-### M9g - Operator Structured Query Surface
+### M11g - Operator Structured Query Surface
 
 - **Status**: ⏳ Planned
 - **Goal**: Deliver operator triage capabilities over structured logs with typed filtering while keeping server write path file-based.
@@ -376,7 +485,7 @@ Last milestone completed: M8i
 - **Deferrals / Follow-ups**:
   - None at planned state.
 
-### M9h - Privacy-by-Construction Enforcement + Legacy Guardrails
+### M11h - Privacy-by-Construction Enforcement + Legacy Guardrails
 
 - **Status**: ⏳ Planned
 - **Goal**: Enforce source-safe logging policy and prevent regression to unsafe or inferred logging behavior.
@@ -417,7 +526,7 @@ Last milestone completed: M8i
 - **Deferrals / Follow-ups**:
   - None at planned state.
 
-### M9i - Reliability Hardening and Final Verification
+### M11i - Reliability Hardening and Final Verification
 
 - **Status**: ⏳ Planned
 - **Goal**: Finalize non-blocking behavior and complete cross-surface sign-off evidence for the structured-logging series.
@@ -803,133 +912,6 @@ Last milestone completed: M8i
   - Long-duration media processing is resumable/retry-safe and operationally observable.
   - Recognition/identity features remain explicitly out of scope unless separately approved.
 
-### P10a - Linux Runtime Baseline (Server + Desktop)
-
-- **Status**: ⏳ Planned
-- **Goal**: Establish a supported Linux runtime baseline for both `ReelRoulette Server` and desktop client with deterministic startup/playback behavior.
-- **Scope**:
-  - Define and document initial support target:
-    - `linux-x64` first (single baseline distro family/version for sign-off).
-  - Define Linux tray capability policy as best-effort optional:
-    - enable tray UI when desktop environment/session supports system tray or status notifier,
-    - fall back deterministically to headless runtime when tray capability is unavailable.
-  - Validate consolidated server runtime on Linux:
-    - API/SSE/media/WebUI/Operator surfaces start and respond.
-  - Validate desktop runtime on Linux:
-    - app launch, connect to server, random/manual playback, and control interactions.
-  - Validate native dependency expectations on Linux:
-    - ffprobe/ffmpeg availability,
-    - LibVLC runtime dependency behavior and startup prerequisites.
-  - Keep existing API-first/thin-client ownership boundaries unchanged.
-- **Acceptance criteria**:
-  - Server starts on Linux and serves `/health`, `/api/version`, `/api/events`, `/api/media/{idOrToken}`, `/operator`.
-  - Desktop launches on Linux and completes core playback/control workflows against Linux server runtime.
-  - Linux runtime is validated for both tray-capable and tray-unavailable environments, with headless fallback behavior when tray support is unavailable.
-  - Linux runtime dependency prerequisites are explicit and reproducible.
-  - No new client-local authoritative mutation paths are introduced.
-- **Verification evidence**:
-  - Linux runtime smoke checks pass for server surfaces and desktop connect/playback flows.
-  - Evidence includes at least one tray-capable Linux environment run and one tray-unavailable/headless fallback run.
-  - Automated gate pass includes:
-    - `dotnet build ReelRoulette.sln`
-    - `dotnet test ReelRoulette.sln`
-    - `npm run verify` (`src/clients/web/ReelRoulette.WebUI`)
-    - Linux run/smoke command evidence for server + desktop startup.
-
-### P10b - Linux Packaging (Server + Desktop)
-
-- **Status**: ⏳ Planned
-- **Goal**: Produce distributable Linux artifacts for both server and desktop using repo-owned packaging scripts.
-- **Scope**:
-  - Add Linux packaging scripts (portable first):
-    - server portable package (`tar.gz`),
-    - desktop portable package (`tar.gz`).
-  - Ensure packaged runtime supports best-effort tray enablement where available while preserving deterministic headless fallback where unavailable.
-  - Ensure server Linux package includes built WebUI assets in `wwwroot`.
-  - Ensure packaging preserves version metadata and release naming conventions.
-  - Ensure executable bits and launch scripts are correctly staged for Linux artifacts.
-  - Keep Windows packaging behavior unchanged.
-- **Acceptance criteria**:
-  - Linux server and desktop portable artifacts are produced deterministically by scripts.
-  - Server package includes API/SSE/media/WebUI/Operator runtime assets.
-  - Artifact naming/version metadata align with release version.
-  - Packaged Linux apps launch successfully in both tray-capable environments and tray-unavailable environments (headless fallback path).
-  - Packaged apps launch successfully on the supported Linux baseline.
-- **Verification evidence**:
-  - Packaging scripts produce expected Linux artifacts under `artifacts/packages/`.
-  - Packaging smoke evidence captures both tray-enabled launch behavior and tray-unavailable fallback behavior.
-  - Install/run smoke checks from packaged artifacts pass on Linux baseline host.
-  - `docs/checklists/testing-checklist.md` packaging checklist includes Linux package checks.
-
-### P10c - CI Linux Distribution Gates
-
-- **Status**: ⏳ Planned
-- **Goal**: Add Linux build/test/package verification to CI so Linux distribution quality is continuously enforced.
-- **Scope**:
-  - Add Linux CI jobs for build/test/web verify parity.
-  - Add Linux packaging jobs for server + desktop artifact generation.
-  - Add Linux smoke checks for packaged runtime startup and key endpoint reachability.
-  - Add CI validation for Linux tray capability handling:
-    - verify deterministic startup when tray capability is unavailable (headless fallback required),
-    - where feasible, verify tray-capability detection behavior on a tray-capable Linux runner/image.
-  - Publish Linux artifacts from CI packaging workflow.
-- **Acceptance criteria**:
-  - CI runs Linux build/test/web verify successfully on default branch/PR paths.
-  - Linux package workflow produces downloadable server + desktop artifacts.
-  - Linux smoke checks fail deterministically on runtime/package regressions.
-  - CI fails deterministically when Linux startup regresses in either tray-capable or tray-unavailable/fallback execution paths.
-  - Windows CI/package gates remain green and unchanged in intent.
-- **Verification evidence**:
-  - Workflow files include Linux jobs and artifact upload steps.
-  - CI evidence includes tray-capability handling checks and fallback-path validation.
-  - CI run evidence shows passing Linux gates and generated artifacts.
-
-### P10d - Linux Documentation and Operator Runbook
-
-- **Status**: ⏳ Planned
-- **Goal**: Make Linux setup, packaging, and troubleshooting workflows first-class and self-serve for contributors/operators.
-- **Scope**:
-  - Update `README.md` with Linux run/package command paths.
-  - Update `docs/dev-setup.md` with Linux prerequisites, runtime notes, and packaging flow.
-  - Update `docs/checklists/testing-checklist.md` with Linux-specific validation checklist entries.
-  - Update `docs/domain-inventory.md` to include Linux packaging/runtime surfaces.
-  - Document Linux tray support as best-effort, including environment/session variability and headless fallback expectations.
-  - Add Linux troubleshooting guidance:
-    - native dependency resolution,
-    - permissions/executable-bit issues,
-    - display/audio/runtime edge cases,
-    - missing tray icon or unsupported tray session behavior.
-- **Acceptance criteria**:
-  - Linux setup and packaging instructions are complete and executable without ad-hoc tribal knowledge.
-  - Testing guide includes Linux validation paths for server + desktop distribution.
-  - Documentation explicitly distinguishes guaranteed Linux runtime support from best-effort tray support and includes fallback/headless operator guidance.
-  - Domain inventory reflects Linux ownership/tooling surfaces accurately.
-- **Verification evidence**:
-  - Doc set updates merged and internally consistent with scripts/workflows.
-  - Manual doc dry-run evidence includes both tray-capable and tray-unavailable/headless operator flows.
-  - Manual dry-run of documented Linux commands succeeds on baseline host.
-
-### P10e - Linux Release Readiness and Sign-off
-
-- **Status**: ⏳ Planned
-- **Goal**: Complete release-quality Linux validation for server + desktop and capture final evidence for sign-off.
-- **Scope**:
-  - Execute full automated + manual Linux validation matrix.
-  - Validate server/web/desktop parity on migrated API/SSE flows.
-  - Validate Linux tray support as best-effort capability and confirm deterministic headless fallback where tray support is unavailable.
-  - Validate packaged artifact install/run behavior end-to-end.
-  - Capture evidence and finalize release-tracking docs.
-- **Acceptance criteria**:
-  - Linux automated gates pass (build/test/web verify/package/smoke).
-  - Linux manual validation checklist is completed with PASS/FAIL evidence.
-  - No critical Linux-only runtime regressions remain for server or desktop.
-  - Release sign-off explicitly confirms tray-capable validation results and tray-unavailable fallback validation results.
-  - Release tracking docs are synchronized to final Linux-ready state.
-- **Verification evidence**:
-  - Completed Linux checklist entries in `docs/checklists/testing-checklist.md`.
-  - Final evidence bundle includes tested Linux environment matrix noting tray-capable vs tray-unavailable outcomes.
-  - CI evidence for Linux packaging + smoke checks.
-  - Updated `MILESTONES.md`, `CHANGELOG.md`, and `COMMIT_MESSAGE.txt` entries reflecting final Linux-release-readiness state.
 
 ---
 

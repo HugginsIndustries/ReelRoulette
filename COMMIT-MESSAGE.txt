@@ -19,8 +19,9 @@ Instructions:
 
 Commit Message:
 
-Bugfix: unify JSON backup filename timestamps (local + UTC offset)
+Docs: refresh Linux and cross-platform server tray roadmap
 
-- add shared `BackupFileNaming` in core for timestamp suffixes and UTC-based file ordering used by library/core-settings and desktop-settings backups.
-- switch core backups from UTC-only filename stamps to the shared suffix; align desktop settings backups to the same format and UTC ordering for min-gap/retention.
-- add unit tests for suffix encoding and ordering helper behavior.
+- Update milestone planning for an Avalonia server host tray (replacing WinForms) with parity for tray actions, restart/stop, and headless fallback.
+- Require Linux autostart via XDG (`*.desktop`) with toggle parity alongside existing Windows registry behavior; call out CachyOS as the primary Linux sign-off baseline.
+- Standardize wording for `desktop` path segments versus Desktop client naming and scope repo rename from legacy `windows` paths.
+- Extend packaging, CI, documentation, and sign-off slices to cover autostart, tray fallbacks, and renamed Desktop deliverables.
