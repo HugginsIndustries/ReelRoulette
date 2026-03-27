@@ -19,13 +19,11 @@ Instructions:
 
 Commit Message:
 
-M9a: establish Linux runtime baseline (server + desktop)
+Docs: reshape post-M9a Linux milestones and add library migration track
 
-- Switch ServerApp tray host to a cross-platform Avalonia tray with headless fallback and Linux XDG autostart support.
-- Upgrade repo to .NET 10 and align CI with `net10.0`.
-- Rename the legacy Windows client to the cross-platform Desktop client (`src/clients/windows` -> `src/clients/desktop`) and align the on-disk folder with the `.csproj` (`ReelRoulette.DesktopApp/`) across solution, tests, scripts, and current docs.
-- Harden refresh pipeline + desktop projection sync to tolerate legacy enum serialization shapes.
-- Hydrate desktop grid thumbnails after refresh completion and as the visible grid window changes (no full library rebuild).
-- Bump Avalonia packages to 11.3.12 (desktop + ServerApp).
-- Add server `fingerprintScan` refresh stage plus persisted `fingerprintScanMaxDegreeOfParallelism` refresh setting (desktop Settings) and desktop completion-line Fingerprint summary.
-- Consolidate `tools/scripts` to cross-platform `.ps1` only: remove `.sh` counterparts; portable `Join-Path`; Windows-only `Start-Process` options guarded; leading `#!/usr/bin/env pwsh` plus Git `+x` on each script for direct execution on Unix; README/dev-setup prerequisites for PowerShell Core (`pwsh`, including Arch-based distros via AUR `powershell-bin` with `paru`/`yay`); contributor docs use POSIX repo-relative paths (`./src/...`) and forward slashes in Windows `%...%` examples.
+- Expand Linux Packaging planning: self-contained `linux-x64` tarballs, stripped symbols, shell launch wrappers, native prereq documentation, artifact naming aligned with Windows releases, and author pre-land extract/launch checks; defer AppImage, GitHub install script, and menu registration to Linux Installation UX.
+- Add Linux Installation UX: AppImage builds for server and Desktop, user-local install script from GitHub Releases, and automatic application-menu (`.desktop`) registration paths.
+- Rework CI Linux Distribution Gates around a `package-linux.yml` peer to `package-windows.yml`, producing portable and AppImage artifacts and uploading Linux release assets on tag push.
+- Extend Linux Documentation and Operator Runbook scope to cover AppImage and install-script workflows.
+- Add Cross-Platform Library Migration: export/import zip with `export-manifest.json`, per-source remapping (including skip), optional thumbnails and backups, symmetric Windows/Linux moves without a data-model change.
+- Renumber Linux Release Readiness and Sign-off and fold deferred verification from the new packaging and installation milestones (including AppImage and install-script matrix items).

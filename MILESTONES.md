@@ -96,45 +96,91 @@ Last milestone completed: M9a
 - **Status**: ⏳ Planned
 - **Goal**: Produce distributable Linux artifacts for server and the renamed **Desktop** client using repo-owned packaging scripts.
 - **Scope**:
-  - Add Linux packaging scripts (portable first):
-    - server portable package (`tar.gz`) including WebUI assets in `wwwroot`,
-    - **Desktop** client portable package (`tar.gz`) using `desktop`-segment naming and layout aligned with post-rename project output.
-  - Package runtime must support **Avalonia server tray** when a tray-capable environment is available, and **headless** fallback otherwise (same policy as baseline milestone).
-  - Preserve version metadata and release naming conventions; correct executable bits and launch helpers on Linux.
-  - **Windows**-OS packaging for **Desktop** deliverables: unchanged **intent**; update script paths/names if the rename moves `.csproj` or output names.
+  - Add Linux packaging scripts under `tools/scripts/` (portable first):
+    - Server portable package (`ReelRoulette-Server-{Version}-linux-x64.tar.gz`) including WebUI assets in `wwwroot`.
+    - **Desktop** client portable package (`ReelRoulette-Desktop-{Version}-linux-x64.tar.gz`) using `desktop`-segment naming and layout aligned with post-rename project output.
+  - Both packages are **self-contained** (`linux-x64`, `--self-contained true`) — .NET runtime is bundled; no .NET install required on the target machine.
+  - Symbols are **stripped** from packaged binaries (prod-appropriate size; no `.pdb` files in the artifact).
+  - Each package includes a **shell wrapper script** (`run-server.sh` / `run-desktop.sh` or equivalent) that sets up the environment (e.g. `LD_LIBRARY_PATH`, working directory) and launches the binary; correct executable bits set on wrapper and binary.
+  - Each package includes a bundled `README` (or inline comments in the wrapper) documenting **native prerequisites**: `ffmpeg`/`ffprobe` and LibVLC must be present on the target system and are not bundled.
+  - The packaged server binary must start in **headless mode** when no tray or display is available, without hanging — the same fallback behavior established in M9a applies to packaged artifacts.
+  - **Windows**-OS packaging for **Desktop** deliverables: unchanged intent; update script paths/names in `tools/scripts/` if the rename moves `.csproj` or output names.
 - **Acceptance criteria**:
-  - Linux server and **Desktop** client portable artifacts build deterministically from scripts.
+  - Linux server and **Desktop** client portable artifacts build deterministically from scripts in `tools/scripts/`.
+  - Artifacts are self-contained: no .NET runtime required on the target; symbols stripped.
   - Server package includes API/SSE/media/WebUI/Operator assets and whatever the Avalonia tray host requires at runtime.
-  - Artifact names align with **`desktop` paths** and **Desktop** branding (not legacy **`windows`** paths or **Windows**-centric client naming).
+  - Each artifact includes a shell wrapper with correct executable bits and native prereq documentation.
+  - Artifact names follow the pattern `ReelRoulette-{Component}-{Version}-linux-x64.tar.gz`, consistent with Windows release naming (`ReelRoulette-Server-*`, `ReelRoulette-Desktop-*`); no legacy `windows`-path or Windows-centric client naming in Linux outputs.
   - Packaged apps run on the supported Linux baseline in both tray-available and headless/fallback scenarios.
 - **Verification evidence**:
-  - Artifacts under `artifacts/packages/` (or documented equivalent).
-  - Scripts and docs for producing Linux packages are landable without requiring full packaging smoke on every host; comprehensive packaged-artifact verification (tray + headless, **CachyOS** or CI-chosen Linux, plus cross-platform checklist completion) is **deferred** to **Linux Release Readiness and Sign-off**.
+  - Before landing, packaging author manually verifies: artifact extracts cleanly, shell wrapper is executable, and the binary launches to a successful health-check response or `--help` output.
+  - Artifacts land under `artifacts/packages/` (or documented equivalent).
+  - Scripts and docs for producing Linux packages are landable without requiring comprehensive packaging smoke on every host; full packaged-artifact verification (tray + headless, **CachyOS** or CI-chosen Linux, plus cross-platform checklist completion) is **deferred** to **Linux Release Readiness and Sign-off**.
   - `docs/checklists/testing-checklist.md` gains Linux package checklist items when packaging lands; completing every checklist item remains deferred to **Linux Release Readiness and Sign-off** unless explicitly scoped here.
 - **Deferrals / Follow-ups**:
   - Full Linux packaging smoke matrix and cross-platform checklist completion → **Linux Release Readiness and Sign-off**.
+  - AppImage builds, GitHub Releases install script, and application menu (`.desktop`) registration → **Linux Installation UX** (planned).
 
-### M9c - CI Linux Distribution Gates
+### M9c - Linux Installation UX
 
 - **Status**: ⏳ Planned
-- **Goal**: Enforce Linux build/test/package quality in CI, including the **unified Avalonia server tray** and **Desktop** client.
+- **Goal**: Provide polished, low-friction installation paths for Linux users beyond the portable `tar.gz`: an **AppImage** for both server and **Desktop** client, a one-liner GitHub Releases install script, and application menu (`.desktop`) registration handled automatically during install.
 - **Scope**:
-  - Linux jobs: `dotnet build`, `dotnet test`, `npm run verify` parity where applicable.
-  - Linux packaging jobs for server + **Desktop** client; publish artifacts.
+  - **AppImage** packaging for server and **Desktop** client:
+    - Build scripts under `tools/scripts/` producing `ReelRoulette-Server-{Version}-linux-x64.AppImage` and `ReelRoulette-Desktop-{Version}-linux-x64.AppImage`.
+    - AppImage bundles carry embedded `.desktop` entry and icon metadata; application menu integration is automatic when `appimaged` is running or via an explicit `--install` flag pattern.
+    - AppImage artifacts are self-contained (`linux-x64`) and strip symbols consistent with portable `tar.gz` policy.
+    - Native prerequisites (ffmpeg/ffprobe, LibVLC) remain undocumented-as-bundled; document as prereqs in the embedded AppImage `README` or `--help` output, consistent with portable package policy.
+  - **GitHub Releases install script** (`tools/scripts/install.sh` or equivalent):
+    - Fetches the latest release artifact (AppImage preferred; portable `tar.gz` as fallback) from the GitHub Releases API.
+    - Extracts or places the artifact in a conventional user-local location (e.g. `~/.local/bin/`, `~/.local/share/ReelRoulette/`).
+    - Registers a `.desktop` entry in `~/.local/share/applications/` and runs `update-desktop-database` so the app appears in the application menu.
+    - Supports both server and **Desktop** client as install targets (via argument or interactive prompt).
+    - Does not require `sudo`; targets the current user only.
+  - **Application menu registration** is handled for both install paths (AppImage via embedded metadata + `appimaged` / `--install`; install script via explicit `.desktop` drop + database update); no manual post-install step required for menu integration.
+  - Tray/headless fallback policy inherited unchanged from the baseline milestone: the packaged server must start headless when no tray or display is available, without hanging.
+  - **Windows** packaging: unchanged; this milestone is Linux installation UX only.
+- **Acceptance criteria**:
+  - AppImage artifacts build deterministically from `tools/scripts/` for both server and **Desktop** client.
+  - Artifact names follow `ReelRoulette-{Component}-{Version}-linux-x64.AppImage`, consistent with release naming conventions.
+  - On a fresh install via AppImage or install script, the application appears in the desktop application menu without any manual post-install step.
+  - Install script successfully fetches and installs the latest release artifact on the **CachyOS** baseline; user-local install requires no `sudo`.
+  - Native prereqs are documented in embedded help/README; nothing is silently missing at launch.
+- **Verification evidence**:
+  - Before landing, packaging author manually verifies: AppImage launches on **CachyOS**, application menu entry appears, and install script completes end-to-end on a clean user profile.
+  - Artifacts land under `artifacts/packages/` alongside portable `tar.gz` outputs.
+  - Comprehensive matrix verification (AppImage + install script across tray-capable and headless environments, full checklist pass) is **deferred** to **Linux Release Readiness and Sign-off**.
+  - `docs/checklists/testing-checklist.md` gains AppImage and install script checklist items when this milestone lands; completing every item remains deferred to **Linux Release Readiness and Sign-off**.
+- **Deferrals / Follow-ups**:
+  - Full AppImage + install script smoke matrix and cross-platform checklist completion → **Linux Release Readiness and Sign-off**.
+
+### M9d - CI Linux Distribution Gates
+
+- **Status**: ⏳ Planned
+- **Goal**: Enforce Linux build/test/package quality in CI, including the **unified Avalonia server tray** and **Desktop** client; publish Linux artifacts to GitHub Releases on tag, mirroring the existing Windows packaging workflow.
+- **Scope**:
+  - Build/test/verify gates for Linux already exist in `ci.yml` (`build-test-linux`, `web-verify` jobs); `package-linux.yml` is packaging-only, consistent with `package-windows.yml`. No new build/test jobs are required in this milestone unless `ci.yml` needs adjustment for renamed **`desktop`** paths.
+  - Add `package-linux.yml` as a peer to `package-windows.yml` — same trigger shape (`workflow_dispatch` + tag push), same version normalization pattern, `ubuntu-latest` runner, bash throughout.
+  - `package-linux.yml` runs the Linux packaging scripts from `tools/scripts/` and produces all Linux artifact types established by the time this milestone lands: portable `tar.gz` packages (server + **Desktop**) and AppImage packages (server + **Desktop**).
+  - On tag push, `package-linux.yml` uploads all Linux artifacts (`.tar.gz` + `.AppImage`) to the existing GitHub release via `gh release upload`, mirroring the `package-windows.yml` upload behavior.
+  - CI artifact uploads (via `actions/upload-artifact`) publish packages to the workflow run for non-tag builds.
   - Smoke checks: packaged server reachability (health/version/operator); optional **headless** server boot without display.
   - Tray-related checks: when feasible, runner verifies **headless fallback**; tray-on-runner validation only where the image/session supports it (do not make CI flaky on absent status notifier).
-  - **Windows** jobs remain green; adjust only for renamed **`desktop`** project paths / **Desktop** `.csproj` location.
+  - **Windows** jobs remain green; adjust `package-windows.yml` only for renamed **`desktop`** project paths / **Desktop** `.csproj` location if needed.
 - **Acceptance criteria**:
+  - `package-linux.yml` exists as a standalone workflow file, structurally consistent with `package-windows.yml`.
   - Default-branch/PR Linux pipeline passes and catches Linux-only regressions in server, **Desktop** client, and packaging.
+  - On tag push, all Linux artifacts (`.tar.gz` + `.AppImage` for server and **Desktop**) are uploaded to the GitHub release alongside Windows artifacts.
   - Headless server startup remains deterministic in CI (no hard dependency on GUI session for green builds).
 - **Verification evidence**:
-  - Workflow updates with Linux matrix steps and artifact uploads.
+  - `package-linux.yml` workflow file present and passing.
   - Links or logs showing passing Linux gates.
-  - Using CI green builds as the bar for this milestone does not replace the full manual + packaged-artifact sign-off matrix; that broader verification remains **deferred** to **Linux Release Readiness and Sign-off**.
+  - On a tag build, GitHub release contains the expected Linux artifact set alongside Windows artifacts.
+  - CI green builds as the bar for this milestone do not replace the full manual + packaged-artifact sign-off matrix; that broader verification remains **deferred** to **Linux Release Readiness and Sign-off**.
 - **Deferrals / Follow-ups**:
   - Full cross-platform manual verification and checklist completion beyond CI gates → **Linux Release Readiness and Sign-off**.
 
-### M9d - Linux Documentation and Operator Runbook
+### M9e - Linux Documentation and Operator Runbook
 
 - **Status**: ⏳ Planned
 - **Goal**: First-class Linux contributor/operator docs: **Avalonia server tray**, **`desktop` paths** and **Desktop** naming, **XDG Autostart** behavior, **CachyOS** baseline, troubleshooting.
@@ -142,9 +188,11 @@ Last milestone completed: M9a
   - Update `README.md`, `docs/dev-setup.md`, `CONTEXT.md`/`docs/architecture.md`/`docs/domain-inventory.md` as needed: Linux run/package commands, **`desktop` client paths** and **Desktop** naming, ffmpeg/VLC, tray vs headless, **Launch Server on Startup** on Linux (XDG `*.desktop` autostart entry, toggle semantics, where the file lives, and how to verify or remove it manually).
   - Document **CachyOS (Arch-based)** as the primary development/sign-off distro for this series; note other distros as best-effort unless expanded later.
   - `docs/checklists/testing-checklist.md`: Linux + tray + packaging + autostart entries.
+  - Document **AppImage** and install script (`install.sh`) usage: how to find and download the latest release artifact from GitHub Releases, how to run the install script, and how to verify application menu registration post-install.
   - Troubleshooting: native deps, permissions, display/audio, missing tray/status area, **Avalonia**/LibVLC hints for Linux, autostart entry conflicts.
 - **Acceptance criteria**:
   - A new contributor can build, run server (tray or headless), and run the **Desktop** client on Linux using only the docs.
+  - A user can install via AppImage or install script and reach a working application without consulting anything beyond the docs.
   - Tray best-effort vs guaranteed core runtime is explicit; headless operator path documented; **Linux** autostart behavior is explicit and testable from the docs.
 - **Verification evidence**:
   - Doc consistency with scripts/workflows and renamed paths.
@@ -152,13 +200,52 @@ Last milestone completed: M9a
 - **Deferrals / Follow-ups**:
   - Formal doc validation dry-runs and exhaustive checklist completion → **Linux Release Readiness and Sign-off**.
 
-### M9e - Linux Release Readiness and Sign-off
+### M9f - Cross-Platform Library Migration
+
+- **Status**: ⏳ Planned
+- **Goal**: Allow users to export their ReelRoulette library from one install and import it on another — including across **Windows** and **Linux** — with a guided source folder remapping step to handle path differences between systems.
+- **Scope**:
+  - **Export** (`Library > Export Library…`):
+    - Produces a single `.zip` archive containing: `library.json`, `core-settings.json`, `desktop-settings.json`, `presets.json`, and an `export-manifest.json`.
+    - `export-manifest.json` records: source OS, app version, and the list of unique source folder paths present in the library — used to drive the import remapping UI.
+    - Optional checkbox: **Include thumbnails** — if checked, the `thumbnails/` directory is included in the zip. Default unchecked (keeps zip small; thumbnails regenerate on use).
+    - Optional checkbox: **Include backups** — if checked, the `backups/` folder from the config directory is included in the zip. Default unchecked.
+    - Export writes to a user-chosen location; suggested filename: `ReelRoulette-Library-{timestamp}.zip`.
+  - **Import** (`Library > Import Library…`):
+    - User picks a previously exported `.zip` via file picker.
+    - App parses `export-manifest.json` and `library.json` to enumerate all unique source folder paths from the export.
+    - A **remapping dialog** presents each source folder path from the export with a **Browse…** button (to locate the equivalent folder on the current system) and a **Skip** option (source remains in library but is treated as offline/missing, consistent with existing missing-source behavior).
+    - After the user confirms remapping, app writes updated config files to the correct platform-specific locations (`~/.config/ReelRoulette/` on Linux; `%APPDATA%/ReelRoulette/` on Windows) with all source paths replaced by the remapped values.
+    - If the zip includes thumbnails, copies them to the platform-appropriate local cache location (`~/.local/share/ReelRoulette/thumbnails/` on Linux; `%LOCALAPPDATA%/ReelRoulette/thumbnails/` on Windows).
+    - If the zip includes backups, copies the `backups/` folder to the config directory on the target system (`~/.config/ReelRoulette/backups/` on Linux; `%APPDATA%/ReelRoulette/backups/` on Windows).
+    - If an existing library is present, prompts the user before overwriting.
+  - Path translation is performed entirely in-memory during import — paths in the zip are stored as-is from the source system; no normalization is applied at export time.
+  - Feature works symmetrically: **Windows → Linux**, **Linux → Windows**, and same-OS machine-to-machine migrations all follow the same code path.
+  - No changes to the internal library data model; migration is a read/transform/write operation on existing JSON structures.
+- **Acceptance criteria**:
+  - User can export a `.zip` from a Windows install and successfully import it on a Linux install (and vice versa) after remapping source folders.
+  - Remapping dialog lists every unique source folder from the export; each can be remapped or skipped independently.
+  - Skipped sources appear in the library as offline/missing without error on import.
+  - Thumbnails are included in the zip when the checkbox is checked and copied to the correct location on import; import succeeds cleanly when thumbnails are absent.
+  - Backups are included in the zip when the checkbox is checked and written to the correct config-directory location on import; import succeeds cleanly when backups are absent.
+  - Existing library overwrite prompt appears when a library is already present on the target install.
+  - `export-manifest.json` is present in every export zip and contains OS, version, and source path list.
+- **Verification evidence**:
+  - Author manually verifies round-trip: export from **Windows**, import on **CachyOS** (and vice versa if both environments are available); library loads with remapped sources functional.
+  - Same-OS round-trip (e.g. machine-to-machine on **CachyOS**) verified as a simpler baseline case.
+  - Thumbnail include/exclude checkbox verified on export; thumbnail presence/absence handled correctly on import.
+- **Deferrals / Follow-ups**:
+  - Automated cross-platform migration test coverage → future test milestone if warranted.
+  - Partial-remap recovery (re-opening remapping dialog after a failed import) → follow-up if needed post-verification.
+
+### M9g - Linux Release Readiness and Sign-off
 
 - **Status**: ⏳ Planned
 - **Goal**: Final Linux + cross-platform tray sign-off for server and **Desktop** client distribution.
 - **Scope**:
-  - **Owns** the comprehensive automated + manual verification **deferred** from **Avalonia Server Tray + Linux Runtime Baseline**, **Linux Packaging (Server + Desktop)**, **CI Linux Distribution Gates**, and **Linux Documentation and Operator Runbook**: full cross-platform matrix (**Windows** + **Linux**), completed `docs/checklists/testing-checklist.md` with PASS/FAIL evidence, and packaged-artifact smokes where applicable.
+  - **Owns** the comprehensive automated + manual verification **deferred** from **Avalonia Server Tray + Linux Runtime Baseline**, **Linux Packaging (Server + Desktop)**, **Linux Installation UX**, **CI Linux Distribution Gates**, and **Linux Documentation and Operator Runbook**: full cross-platform matrix (**Windows** + **Linux**), completed `docs/checklists/testing-checklist.md` with PASS/FAIL evidence, and packaged-artifact smokes where applicable.
   - Full automated + manual matrix on **CachyOS** (`linux-x64`): server (Avalonia tray + headless), **Desktop** client, WebUI/operator against server; include **XDG Autostart** on/off validation for **Launch Server on Startup** on **Linux**.
+  - AppImage launch, application menu registration, and install script end-to-end on a clean **CachyOS** user profile verified in both tray-capable and headless scenarios.
   - Confirm **Windows** tray parity after Avalonia port (no regression vs accepted baseline behaviors), including **Windows** autostart toggle behavior.
   - End-to-end packaged install/run; release notes and tracking updates.
 - **Acceptance criteria**:
