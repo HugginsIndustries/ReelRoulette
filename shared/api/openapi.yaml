@@ -2093,6 +2093,10 @@ components:
         autoRefreshIntervalMinutes:
           type: integer
           format: int32
+        fingerprintScanMaxDegreeOfParallelism:
+          type: integer
+          format: int32
+          description: Max parallel fingerprint hashes during core refresh (1-16).
 
     DuplicateScanRequest:
       type: object

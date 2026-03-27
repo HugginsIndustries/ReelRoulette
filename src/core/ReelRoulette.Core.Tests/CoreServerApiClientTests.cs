@@ -362,7 +362,7 @@ public sealed class CoreServerApiClientTests
             {
                 return new HttpResponseMessage(HttpStatusCode.OK)
                 {
-                    Content = new StringContent("{\"autoRefreshEnabled\":true,\"autoRefreshIntervalMinutes\":15,\"forceRescanLoudness\":false,\"forceRescanDuration\":false}", Encoding.UTF8, "application/json")
+                    Content = new StringContent("{\"autoRefreshEnabled\":true,\"autoRefreshIntervalMinutes\":15,\"forceRescanLoudness\":false,\"forceRescanDuration\":false,\"fingerprintScanMaxDegreeOfParallelism\":4}", Encoding.UTF8, "application/json")
                 };
             }
 
@@ -380,18 +380,21 @@ public sealed class CoreServerApiClientTests
             AutoRefreshEnabled = false,
             AutoRefreshIntervalMinutes = 20,
             ForceRescanLoudness = true,
-            ForceRescanDuration = true
+            ForceRescanDuration = true,
+            FingerprintScanMaxDegreeOfParallelism = 8
         });
 
         Assert.NotNull(existing);
         Assert.True(existing!.AutoRefreshEnabled);
         Assert.Equal(15, existing.AutoRefreshIntervalMinutes);
+        Assert.Equal(4, existing.FingerprintScanMaxDegreeOfParallelism);
 
         Assert.NotNull(updated);
         Assert.False(updated!.AutoRefreshEnabled);
         Assert.Equal(20, updated.AutoRefreshIntervalMinutes);
         Assert.True(updated.ForceRescanLoudness);
         Assert.True(updated.ForceRescanDuration);
+        Assert.Equal(8, updated.FingerprintScanMaxDegreeOfParallelism);
 
         Assert.False(string.IsNullOrWhiteSpace(updatePayload));
         using var doc = JsonDocument.Parse(updatePayload!);
@@ -399,6 +402,7 @@ public sealed class CoreServerApiClientTests
         Assert.Equal(20, doc.RootElement.GetProperty("autoRefreshIntervalMinutes").GetInt32());
         Assert.True(doc.RootElement.GetProperty("forceRescanLoudness").GetBoolean());
         Assert.True(doc.RootElement.GetProperty("forceRescanDuration").GetBoolean());
+        Assert.Equal(8, doc.RootElement.GetProperty("fingerprintScanMaxDegreeOfParallelism").GetInt32());
     }
 
     [Fact]

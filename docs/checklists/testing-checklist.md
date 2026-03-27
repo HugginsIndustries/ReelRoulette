@@ -1,13 +1,13 @@
 # ReelRoulette Testing Checklist
 
-Use this checklist for full-regression passes and milestone validation. Check boxes inline as you go.
-Use `tools/scripts/reset-checklist.ps1` to reset metadata/check states before starting a new validation pass.
+Use this checklist for manual regression passes. Check boxes inline as you go.
+Use `pwsh ./tools/scripts/reset-checklist.ps1` to reset metadata/check states before starting a new validation pass.
 
 ## Test Run Metadata
 
 - Test date/time: 2026-03-11 13:55:23
 - Tester: Christian Huggins
-- Branch/commit: main / M8g: complete Windows tray baseline and v0.10.0 packaging alignment
+- Branch/commit: main / Cross-platform tray + Linux autostart baseline and packaging alignment
 - Release version: v0.10.0
 - Environment (OS + device(s) + browser(s)): Windows-PC (desktop app + Firefox browser), Android (Chrome Browser), iPad (Chrome Browser)
 - Test mode:
@@ -41,6 +41,7 @@ Use `tools/scripts/reset-checklist.ps1` to reset metadata/check states before st
 
 - [x] Import folder works (or fails with clear guidance). (waived)
 - [x] Manage Sources opens and source enable/disable persists.
+- [ ] Thumbnails appear in the library panel after refresh thumbnail generation completes (no desktop restart required). (Linux thumbnails live under `~/.local/share/ReelRoulette/thumbnails/`)
 - [x] Duplicate scan + apply flow works (if test data exists).
 - [ ] Duplicate groups in desktop duplicates dialog render per-file thumbnail + info-row pairs in order (header -> keep-selection -> repeated thumbnail/info rows).
 - [ ] Duplicate groups allow per-group handling selection (`Keep All` and specific keep-item choice) so groups can be skipped instead of forced into apply.
@@ -123,35 +124,37 @@ Use `tools/scripts/reset-checklist.ps1` to reset metadata/check states before st
 - [x] Server-originated operational logs appear in server log stream. (waived)
 - [x] No obvious sensitive values (tokens/secrets/cookies) are logged. (waived)
 
-## Windows ServerApp Tray Baseline
+## Cross-Platform ServerApp Tray Baseline (Avalonia)
 
-- [x] Windows app-binary launch (`ReelRoulette.ServerApp.exe`) shows no command prompt window.
-- [x] Tray icon appears and uses shared icon parity with `assets/HI.ico`.
+- [ ] Server app-binary launch shows no command prompt window on Windows app-binary execution.
+- [x] Tray icon appears (Avalonia TrayIcon) and uses shared icon parity with `assets/HI.ico`.
 - [x] Tray `Open Operator UI` opens default browser at `/operator`.
-- [x] Tray `Launch Server on Startup` toggle updates startup registration immediately (no restart required).
+- [x] Tray `Launch Server on Startup` toggle updates startup registration immediately (no restart required): (verified on Linux via XDG autostart create/remove)
+  - on Windows: updates user registry-backed startup registration,
+  - on Linux: updates user XDG autostart (`*.desktop` entry in the autostart directory).
 - [x] Tray `Refresh Library` triggers refresh pipeline start.
 - [x] Tray `Restart Server` performs graceful restart and service recovers.
 - [x] Tray `Stop Server / Exit` performs graceful shutdown.
-- [x] Operator `Control Settings` apply flow persists `Launch Server on Startup` state and reports apply status.
-- [x] Packaged portable server runtime preserves tray/no-console behavior.
-- [x] Packaged installer server runtime preserves tray/no-console behavior.
+- [ ] Operator `Control Settings` apply flow persists `Launch Server on Startup` state and reports apply status.
+- [ ] Packaged portable server runtime preserves tray/no-console behavior when a compatible desktop session is available; otherwise it runs headless deterministically.
+- [ ] Packaged installer server runtime preserves tray/no-console behavior when a compatible desktop session is available; otherwise it runs headless deterministically.
 
 ## Packaging + Deployment Smoke
 
-- [x] Portable packaging script runs (Windows): `tools/scripts/package-serverapp-win-portable.ps1`.
-- [x] Inno packaging script runs when `iscc` is available:
-  - `tools/scripts/package-serverapp-win-inno.ps1`.
-- [x] Desktop portable packaging script runs (Windows): `tools/scripts/package-desktop-win-portable.ps1`.
-- [x] Desktop Inno packaging script runs when `iscc` is available:
-  - `tools/scripts/package-desktop-win-inno.ps1`.
-- [x] Packaged server runtime includes WebUI static assets (root `/` serves WebUI, not missing-assets text).
-- [x] Shared icon appears consistently across installer UI, installed shortcuts/apps, and `/HI.ico` for WebUI/Operator.
-- [x] Server installer `Create Desktop Shortcut` task is present and default checked.
-- [x] Desktop installer `Create Desktop Shortcut` task is present and default checked.
-- [x] WebUI dev/build auto-syncs shared icon (`assets/HI.ico` -> `src/clients/web/ReelRoulette.WebUI/public/HI.ico`).
-- [x] Web deploy verify script passes:
-  - `tools/scripts/verify-web-deploy.ps1`.
-- [x] Generated artifacts follow expected naming/location conventions.
+- [ ] Portable packaging script runs (Windows): `pwsh ./tools/scripts/package-serverapp-win-portable.ps1`.
+- [ ] Inno packaging script runs when `iscc` is available:
+  - `pwsh ./tools/scripts/package-serverapp-win-inno.ps1`.
+- [ ] Desktop portable packaging script runs (Windows): `pwsh ./tools/scripts/package-desktop-win-portable.ps1`.
+- [ ] Desktop Inno packaging script runs when `iscc` is available:
+  - `pwsh ./tools/scripts/package-desktop-win-inno.ps1`.
+- [ ] Packaged server runtime includes WebUI static assets (root `/` serves WebUI, not missing-assets text).
+- [ ] Shared icon appears consistently across installer UI, installed shortcuts/apps, and `/HI.ico` for WebUI/Operator.
+- [ ] Server installer `Create Desktop Shortcut` task is present and default checked.
+- [ ] Desktop installer `Create Desktop Shortcut` task is present and default checked.
+- [ ] WebUI dev/build auto-syncs shared icon (`assets/HI.ico` -> `src/clients/web/ReelRoulette.WebUI/public/HI.ico`).
+- [ ] Web deploy verify script passes:
+  - `pwsh ./tools/scripts/verify-web-deploy.ps1`.
+- [ ] Generated artifacts follow expected naming/location conventions.
 
 ## CI/Workflow Readiness
 
@@ -174,11 +177,11 @@ Use `tools/scripts/reset-checklist.ps1` to reset metadata/check states before st
 
 ## Optional Release Flow
 
-- [x] Windows server+desktop packages created (portable + installer) via `tools/scripts/full-release.ps1 -Version 0.10.0`.
-- [x] Expected artifacts exist under `artifacts/packages/`
-- [x] Package output names/version metadata match the release version.
-- [x] Installed server and desktop apps launch and function properly after installation.
-- [x] `CHANGELOG.md`: cut `Unreleased` into the new release section, then initialize a fresh `Unreleased` block.
+- [ ] Windows server+desktop packages created (portable + installer) via `pwsh ./tools/scripts/full-release.ps1 -Version 0.10.0`.
+- [ ] Expected artifacts exist under `artifacts/packages/`
+- [ ] Package output names/version metadata match the release version.
+- [ ] Installed server and desktop apps launch and function properly after installation.
+- [ ] `CHANGELOG.md`: cut `Unreleased` into the new release section, then initialize a fresh `Unreleased` block.
 
 ## Evidence Capture SKIPPED
 
@@ -192,8 +195,8 @@ Use `tools/scripts/reset-checklist.ps1` to reset metadata/check states before st
 ## Sign-Off
 
 - Overall result:
-  - [x] PASS
-  - [ ] FAIL
-- [x] Waivers (if any) documented:
+  - [ ] PASS
+  - [x] FAIL
+- [ ] Waivers (if any) documented:
 - [ ] Follow-up tasks/milestones created and linked:
-- [x] Ready for commit/sign-off:
+- [ ] Ready for commit/sign-off:

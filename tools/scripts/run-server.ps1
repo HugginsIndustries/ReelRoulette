@@ -1,3 +1,4 @@
+#!/usr/bin/env pwsh
 param(
     [int]$Port = 45123,
     [switch]$RequireAuth,
@@ -17,7 +18,9 @@ if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
 $listenHost = if ($BindOnLan.IsPresent) { "0.0.0.0" } else { "localhost" }
 $listenUrl = "http://$listenHost`:$Port"
 $healthUrl = "http://localhost:$Port/health"
-$defaultWebUiDist = Join-Path (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path "src\clients\web\ReelRoulette.WebUI\dist"
+$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot ".." "..")).Path
+$defaultWebUiDist = Join-Path $repoRoot "src" "clients" "web" "ReelRoulette.WebUI" "dist"
+$serverAppProject = Join-Path $repoRoot "src" "core" "ReelRoulette.ServerApp" "ReelRoulette.ServerApp.csproj"
 
 $env:CoreServer__ListenUrl = $listenUrl
 $env:CoreServer__RequireAuth = if ($RequireAuth.IsPresent) { "true" } else { "false" }
@@ -41,12 +44,12 @@ if ($RequireAuth.IsPresent) {
 Write-Host "Verification hint: GET $healthUrl"
 
 $framework = if ([string]::IsNullOrWhiteSpace($Framework)) {
-    if ($IsWindows) { "net9.0-windows" } else { "net9.0" }
+    if ($IsWindows) { "net10.0-windows" } else { "net10.0" }
 }
 else {
     $Framework
 }
-dotnet run --framework $framework --project ".\src\core\ReelRoulette.ServerApp\ReelRoulette.ServerApp.csproj"
+dotnet run --framework $framework --project $serverAppProject
 if ($LASTEXITCODE -ne 0) {
     Write-Error "ServerApp exited with code $LASTEXITCODE"
     exit $LASTEXITCODE

@@ -23,6 +23,7 @@ public sealed class ServerRuntimeOptions
     public int AutoRefreshIntervalMinutes { get; set; } = 15;
     public bool ForceRescanLoudness { get; set; }
     public bool ForceRescanDuration { get; set; }
+    public int FingerprintScanMaxDegreeOfParallelism { get; set; } = 4;
     public bool BackupEnabled { get; set; } = true;
     public int MinimumBackupGapMinutes { get; set; } = 360;
     public int NumberOfBackups { get; set; } = 8;
@@ -64,6 +65,7 @@ public sealed class ServerRuntimeOptions
         }
 
         options.AutoRefreshIntervalMinutes = Math.Clamp(options.AutoRefreshIntervalMinutes, 5, 1440);
+        options.FingerprintScanMaxDegreeOfParallelism = Math.Clamp(options.FingerprintScanMaxDegreeOfParallelism, 1, 16);
         options.MinimumBackupGapMinutes = Math.Clamp(options.MinimumBackupGapMinutes, 1, 10080);
         options.NumberOfBackups = Math.Clamp(options.NumberOfBackups, 1, 100);
         options.ControlAdminAuthMode = NormalizeControlAuthMode(options.ControlAdminAuthMode);

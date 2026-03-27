@@ -1,3 +1,4 @@
+#!/usr/bin/env pwsh
 param(
     [int]$ServerPort = 51312
 )
@@ -5,30 +6,38 @@ param(
 $ErrorActionPreference = "Stop"
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
-$webUiPath = Join-Path $repoRoot "src\clients\web\ReelRoulette.WebUI"
+$webUiPath = Join-Path $repoRoot "src" "clients" "web" "ReelRoulette.WebUI"
 $distPath = Join-Path $webUiPath "dist"
-$serverProject = Join-Path $repoRoot "src\core\ReelRoulette.ServerApp\ReelRoulette.ServerApp.csproj"
+$serverProject = Join-Path $repoRoot "src" "core" "ReelRoulette.ServerApp" "ReelRoulette.ServerApp.csproj"
 $serverOutLogPath = Join-Path $repoRoot ".verify-web-deploy-server.out.log"
 $serverErrLogPath = Join-Path $repoRoot ".verify-web-deploy-server.err.log"
 
 Push-Location $webUiPath
 try {
     npm install
+    if ($LASTEXITCODE -ne 0) {
+        throw "npm install failed with exit code $LASTEXITCODE."
+    }
     npm run build
+    if ($LASTEXITCODE -ne 0) {
+        throw "npm run build failed with exit code $LASTEXITCODE."
+    }
 }
 finally {
     Pop-Location
 }
 
 $listenUrl = "http://localhost:$ServerPort"
-$framework = if ($IsWindows) { "net9.0-windows" } else { "net9.0" }
+$framework = if ($IsWindows) { "net10.0-windows" } else { "net10.0" }
 if (Test-Path $serverOutLogPath) {
     Remove-Item $serverOutLogPath -Force
 }
 if (Test-Path $serverErrLogPath) {
     Remove-Item $serverErrLogPath -Force
 }
-$serverProcess = Start-Process dotnet -ArgumentList @(
+$startProcessArgs = @{
+    FilePath = "dotnet"
+    ArgumentList = @(
     "run",
     "--framework",
     $framework,
@@ -37,7 +46,15 @@ $serverProcess = Start-Process dotnet -ArgumentList @(
     "--",
     "--CoreServer:ListenUrl=$listenUrl",
     "--ServerApp:WebUiStaticRootPath=$distPath"
-) -PassThru -WindowStyle Hidden -RedirectStandardOutput $serverOutLogPath -RedirectStandardError $serverErrLogPath
+    )
+    PassThru = $true
+    RedirectStandardOutput = $serverOutLogPath
+    RedirectStandardError = $serverErrLogPath
+}
+if ($IsWindows) {
+    $startProcessArgs.WindowStyle = "Hidden"
+}
+$serverProcess = Start-Process @startProcessArgs
 
 try {
     $healthUrl = "$listenUrl/health"

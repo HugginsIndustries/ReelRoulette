@@ -524,7 +524,8 @@ public sealed class CoreServerApiClient
         using var reader = new StreamReader(stream);
         var dataBuilder = new StringBuilder();
 
-        while (!reader.EndOfStream && !cancellationToken.IsCancellationRequested)
+        // Avoid using StreamReader.EndOfStream in async loops; instead, rely on ReadLineAsync returning null at EOF.
+        while (!cancellationToken.IsCancellationRequested)
         {
             var line = await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false);
             if (line == null)
@@ -976,6 +977,7 @@ public sealed class CoreRefreshSettingsSnapshot
     public int AutoRefreshIntervalMinutes { get; set; } = 15;
     public bool ForceRescanLoudness { get; set; }
     public bool ForceRescanDuration { get; set; }
+    public int FingerprintScanMaxDegreeOfParallelism { get; set; } = 4;
 }
 
 public sealed class CoreBackupSettingsSnapshot

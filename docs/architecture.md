@@ -66,7 +66,7 @@ flowchart LR
 
 ### Client Layers
 
-- Desktop client (`src/clients/windows/ReelRoulette.WindowsApp/`) and WebUI (`src/clients/web/ReelRoulette.WebUI`) are orchestration/render layers.
+- Desktop client (`src/clients/desktop/ReelRoulette.DesktopApp/`, Avalonia) and WebUI (`src/clients/web/ReelRoulette.WebUI`) are orchestration/render layers.
 - Clients issue command/query calls through APIs and project state from API plus SSE.
 - Clients must not reintroduce local authoritative mutation fallbacks for migrated domains.
 
@@ -121,6 +121,7 @@ Operator UI is an operational surface and does not own domain logic.
 
 - Refresh orchestration and scheduling are core/server-owned.
 - Refresh state is exposed through API and SSE projection updates.
+- The refresh pipeline includes a `fingerprintScan` stage (server-side full-file SHA-256 for items that need hashing) before duration/loudness/thumbnail work; parallelism is configurable via core refresh settings.
 - Thumbnail generation is pipeline-owned and retrieval is API-served.
 - Clients render status and results; they do not own processing authority.
 
@@ -132,8 +133,8 @@ Operator UI is an operational surface and does not own domain logic.
 
 ## Packaging and Delivery
 
-- Windows packaging supports portable and installer outputs through repository scripts.
-- Windows ServerApp runtime targets `net9.0-windows` `WinExe` behavior for no-console launch; non-Windows runtime remains `net9.0` headless path.
+- Packaging supports portable and installer outputs through repository scripts.
+- ServerApp runtime uses an Avalonia-hosted tray when a compatible desktop session is available; otherwise it runs deterministically in a headless mode.
 - CI/workflow gates validate build/test/contract/web checks and packaging paths.
 - Release version metadata should remain aligned across contract, runtime, project, and package surfaces.
 
@@ -143,7 +144,7 @@ Operator UI is an operational surface and does not own domain logic.
 - `src/core/ReelRoulette.Server`: transport/composition layer.
 - `src/core/ReelRoulette.ServerApp`: default runtime host and operator surface.
 - `src/clients/web/ReelRoulette.WebUI`: web client orchestration.
-- `src/clients/windows/ReelRoulette.WindowsApp/`: desktop client orchestration and rendering.
+- `src/clients/desktop/ReelRoulette.DesktopApp/`: Desktop client orchestration and rendering (Avalonia).
 - `shared/api/openapi.yaml`: canonical API contract source.
 
 ## Guardrails
@@ -152,7 +153,7 @@ Operator UI is an operational surface and does not own domain logic.
 - Preserve API-authoritative behavior for migrated flows.
 - Keep desktop and web behavior aligned through shared contracts and SSE semantics.
 - Avoid client-local authoritative fallback paths in migrated domains.
-- Keep this file current-state only; roadmap and milestone history live elsewhere.
+- Keep this file current-state only; avoid historical/future narrative here.
 
 ## Related Documents
 

@@ -1,3 +1,4 @@
+#!/usr/bin/env pwsh
 param(
     [switch]$SkipInstall
 )
@@ -9,7 +10,7 @@ if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
     exit 1
 }
 
-$webProjectDir = Join-Path $PSScriptRoot "..\..\src\clients\web\ReelRoulette.WebUI"
+$webProjectDir = Join-Path $PSScriptRoot ".." ".." "src" "clients" "web" "ReelRoulette.WebUI"
 $resolvedWebProjectDir = (Resolve-Path $webProjectDir).Path
 
 Push-Location $resolvedWebProjectDir

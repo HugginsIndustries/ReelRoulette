@@ -2,6 +2,7 @@ using Avalonia;
 using LibVLCSharp.Shared;
 using System;
 using System.IO;
+using System.Threading.Tasks;
 
 namespace ReelRoulette;
 
@@ -35,6 +36,30 @@ class Program
             }
             errorMsg += "\n===========================";
             Log(errorMsg);
+            if (ex is OperationCanceledException oce && IsExpectedLinuxShutdownCancellation(oce))
+            {
+                Environment.Exit(0);
+            }
+        };
+
+        // Linux/DBus tray teardown can leave TaskCanceledException on a thread-pool continuation with no task observer.
+        TaskScheduler.UnobservedTaskException += (_, e) =>
+        {
+            var inners = e.Exception.Flatten().InnerExceptions;
+            var allExpectedShutdownNoise = true;
+            foreach (var inner in inners)
+            {
+                if (inner is not OperationCanceledException oce || !IsExpectedLinuxShutdownCancellation(oce))
+                {
+                    allExpectedShutdownNoise = false;
+                    break;
+                }
+            }
+
+            if (inners.Count > 0 && allExpectedShutdownNoise)
+            {
+                e.SetObserved();
+            }
         };
 
         // Initialize LibVLC core before starting Avalonia
@@ -120,8 +145,15 @@ class Program
             Log($"LibVLC initialized successfully from: {libVlcSource}");
         }
         
-        BuildAvaloniaApp()
-            .StartWithClassicDesktopLifetime(args);
+        try
+        {
+            BuildAvaloniaApp()
+                .StartWithClassicDesktopLifetime(args);
+        }
+        catch (OperationCanceledException ex) when (IsExpectedLinuxShutdownCancellation(ex))
+        {
+            Log($"Ignoring expected Linux shutdown cancellation: {ex.Message}");
+        }
     }
 
     // Avalonia configuration, don't remove; also used by visual designer.
@@ -130,4 +162,16 @@ class Program
             .UsePlatformDetect()
             .WithInterFont()
             .LogToTrace();
+
+    private static bool IsExpectedLinuxShutdownCancellation(OperationCanceledException ex)
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return false;
+        }
+
+        var stack = ex.StackTrace ?? string.Empty;
+        return stack.Contains("Tmds.DBus.Protocol", StringComparison.Ordinal) ||
+               stack.Contains("Avalonia.Threading", StringComparison.Ordinal);
+    }
 }

@@ -22,6 +22,7 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Timers;
@@ -123,6 +124,7 @@ namespace ReelRoulette
         private int _autoRefreshIntervalMinutes = 60;
         private bool _forceRescanLoudnessOnNextRefresh;
         private bool _forceRescanDurationOnNextRefresh;
+        private int _fingerprintScanMaxDegreeOfParallelism = 4;
         private bool _autoRefreshOnlyWhenIdle = false;
         private int _autoRefreshIdleThresholdMinutes = 1;
 
@@ -3902,6 +3904,8 @@ namespace ReelRoulette
                 _lastLoggedLibraryGridVisibleEndExclusive = endExclusive;
                 Log($"LibraryGridVirtualizer: Visible rows {firstVisibleRow}-{endExclusive - 1} (count={_libraryGridVisibleRows.Count}), topSpacer={LibraryGridTopSpacerHeight:F0}px, bottomSpacer={LibraryGridBottomSpacerHeight:F0}px, offsetY={LibraryGridScrollViewer.Offset.Y:F0}");
             }
+
+            HydrateThumbnailsForVisibleGridItems();
         }
 
         private void LibraryGridScrollViewer_ScrollChanged(object? sender, ScrollChangedEventArgs e)
@@ -3942,6 +3946,71 @@ namespace ReelRoulette
                 {
                     item.ThumbnailWidth = fallbackWidth;
                     item.ThumbnailHeight = fallbackHeight;
+                }
+            }
+        }
+
+        private void HydrateThumbnailsForVisibleGridItems()
+        {
+            if (!_libraryGridViewEnabled || _libraryGridVisibleRows.Count == 0)
+            {
+                return;
+            }
+
+            var items = new List<LibraryItem>(256);
+            foreach (var row in _libraryGridVisibleRows)
+            {
+                if (row?.Items == null || row.Items.Count == 0)
+                {
+                    continue;
+                }
+
+                foreach (var tile in row.Items)
+                {
+                    if (tile?.Item != null)
+                    {
+                        items.Add(tile.Item);
+                    }
+                }
+            }
+
+            if (items.Count == 0)
+            {
+                return;
+            }
+
+            HydrateThumbnailsForItems(items);
+        }
+
+        private void HydrateThumbnailsForItems(IReadOnlyList<LibraryItem> items)
+        {
+            var thumbRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ReelRoulette", "thumbnails");
+            var metadata = LoadThumbnailMetadata(thumbRoot);
+
+            for (var i = 0; i < items.Count; i++)
+            {
+                var item = items[i];
+                if (item == null || string.IsNullOrWhiteSpace(item.Id))
+                {
+                    continue;
+                }
+
+                if (string.IsNullOrWhiteSpace(item.ThumbnailPath))
+                {
+                    var thumbnailFilePath = Path.Combine(thumbRoot, $"{item.Id}.jpg");
+                    if (File.Exists(thumbnailFilePath))
+                    {
+                        item.ThumbnailPath = thumbnailFilePath;
+                    }
+                }
+
+                if (metadata.TryGetValue(item.Id, out var dims) &&
+                    dims.Width > 0 &&
+                    dims.Height > 0 &&
+                    (item.ThumbnailWidth <= 0 || item.ThumbnailHeight <= 0))
+                {
+                    item.ThumbnailWidth = dims.Width;
+                    item.ThumbnailHeight = dims.Height;
                 }
             }
         }
@@ -6682,7 +6751,18 @@ namespace ReelRoulette
                     return false;
                 }
 
-                var projection = JsonSerializer.Deserialize<LibraryIndex>(payload.Value.GetRawText());
+                var projection = JsonSerializer.Deserialize<LibraryIndex>(
+                    payload.Value.GetRawText(),
+                    new JsonSerializerOptions(JsonSerializerDefaults.Web)
+                    {
+                        PropertyNameCaseInsensitive = true,
+                        // Server emits string enum values (e.g. "Video"/"Photo", "Pending"/"Ready") but the desktop
+                        // models use enums with numeric underlying values; accept string + integer forms.
+                        Converters =
+                        {
+                            new JsonStringEnumConverter(allowIntegerValues: true)
+                        }
+                    });
                 if (projection == null)
                 {
                     Log("CoreProjection: Failed to deserialize projection payload into LibraryIndex.");
@@ -7052,6 +7132,13 @@ namespace ReelRoulette
                     UpdateLibraryInfoText();
                     UpdateFilterSummaryText();
                     RecalculateGlobalStats();
+
+                    var thumbnailStage = snapshot.Stages.FirstOrDefault(stage =>
+                        string.Equals(stage.Stage, "thumbnailGeneration", StringComparison.OrdinalIgnoreCase));
+                    if (thumbnailStage?.IsComplete == true && _libraryGridViewEnabled)
+                    {
+                        Dispatcher.UIThread.Post(HydrateThumbnailsForVisibleGridItems);
+                    }
                 }
             }
 
@@ -7076,12 +7163,13 @@ namespace ReelRoulette
                 }
 
                 var sourceSummary = BuildSourceRefreshSummary(GetStageMessage("sourceRefresh"));
+                var fingerprintSummary = BuildFingerprintScanSummary(GetStageMessage("fingerprintScan"));
                 var durationSummary = BuildDurationScanSummary(GetStageMessage("durationScan"));
                 var loudnessSummary = BuildLoudnessScanSummary(GetStageMessage("loudnessScan"));
                 var thumbnailSummary = BuildThumbnailSummary(GetStageMessage("thumbnailGeneration"));
 
                 var finalMessage =
-                    $"Core refresh complete | Source: {sourceSummary} | Duration: {durationSummary} | Loudness: {loudnessSummary} | Thumbnails: {thumbnailSummary}";
+                    $"Core refresh complete | Source: {sourceSummary} | Fingerprint: {fingerprintSummary} | Duration: {durationSummary} | Loudness: {loudnessSummary} | Thumbnails: {thumbnailSummary}";
                 SetStatusMessage(finalMessage, 0);
             }
         }
@@ -7187,6 +7275,32 @@ namespace ReelRoulette
             }
 
             return string.Join(", ", tokens);
+        }
+
+        private static string BuildFingerprintScanSummary(string? stageMessage)
+        {
+            if (string.IsNullOrWhiteSpace(stageMessage))
+            {
+                return "no data";
+            }
+
+            if (ContainsUnavailableToken(stageMessage))
+            {
+                return "unavailable";
+            }
+
+            var counts = ParseStageCounts(stageMessage);
+            if (counts.Count == 0)
+            {
+                return "no data";
+            }
+
+            var tokens = new List<string>();
+            AddNonZeroToken(tokens, "hashed", GetCount(counts, "hashed"));
+            AddNonZeroToken(tokens, "ready", GetCount(counts, "ready"));
+            AddNonZeroToken(tokens, "failed", GetCount(counts, "failed"));
+            AddNonZeroToken(tokens, "skipped", GetCount(counts, "skipped"));
+            return tokens.Count == 0 ? "none" : string.Join(", ", tokens);
         }
 
         private static string BuildThumbnailSummary(string? stageMessage)
@@ -7367,6 +7481,7 @@ namespace ReelRoulette
                 _autoRefreshIntervalMinutes = Math.Clamp(settings.AutoRefreshIntervalMinutes, 5, 1440);
                 _forceRescanLoudnessOnNextRefresh = settings.ForceRescanLoudness;
                 _forceRescanDurationOnNextRefresh = settings.ForceRescanDuration;
+                _fingerprintScanMaxDegreeOfParallelism = Math.Clamp(settings.FingerprintScanMaxDegreeOfParallelism, 1, 16);
                 _autoRefreshOnlyWhenIdle = false;
                 _autoRefreshIdleThresholdMinutes = 1;
             }
@@ -8053,6 +8168,7 @@ namespace ReelRoulette
             _autoRefreshIntervalMinutes = 60;
             _forceRescanLoudnessOnNextRefresh = false;
             _forceRescanDurationOnNextRefresh = false;
+            _fingerprintScanMaxDegreeOfParallelism = 4;
             _autoRefreshOnlyWhenIdle = false;
             _autoRefreshIdleThresholdMinutes = 1;
             _libraryGridViewEnabled = settings.LibraryGridViewEnabled;
@@ -9214,6 +9330,7 @@ namespace ReelRoulette
                     _autoRefreshIntervalMinutes,
                     _forceRescanLoudnessOnNextRefresh,
                     _forceRescanDurationOnNextRefresh,
+                    _fingerprintScanMaxDegreeOfParallelism,
                     _autoRefreshOnlyWhenIdle,
                     _autoRefreshIdleThresholdMinutes,
                     _coreServerBaseUrl,
@@ -9285,6 +9402,7 @@ namespace ReelRoulette
                         var oldAutoRefreshInterval = _autoRefreshIntervalMinutes;
                         var oldForceLoudnessRescan = _forceRescanLoudnessOnNextRefresh;
                         var oldForceDurationRescan = _forceRescanDurationOnNextRefresh;
+                        var oldFingerprintParallelism = _fingerprintScanMaxDegreeOfParallelism;
                         var oldAutoRefreshIdleOnly = _autoRefreshOnlyWhenIdle;
                         var oldAutoRefreshIdleThreshold = _autoRefreshIdleThresholdMinutes;
                         var oldWebRemoteEnabled = _webRemoteEnabled;
@@ -9333,11 +9451,12 @@ namespace ReelRoulette
                     _autoRefreshIntervalMinutes = Math.Clamp(dialog.GetAutoRefreshIntervalMinutes(), 5, 1440);
                     _forceRescanLoudnessOnNextRefresh = dialog.GetForceRescanLoudness();
                     _forceRescanDurationOnNextRefresh = dialog.GetForceRescanDuration();
+                    _fingerprintScanMaxDegreeOfParallelism = Math.Clamp(dialog.GetFingerprintScanMaxDegreeOfParallelism(), 1, 16);
                     _autoRefreshOnlyWhenIdle = false;
                     _autoRefreshIdleThresholdMinutes = 1;
                     _coreServerBaseUrl = dialog.GetCoreServerBaseUrl();
                     ClientLogRelay.SetBaseUrl(_coreServerBaseUrl);
-                    Log($"Settings: Auto-refresh settings changed - Enabled: {oldAutoRefreshEnabled} -> {_autoRefreshSourcesEnabled}, Interval: {oldAutoRefreshInterval} -> {_autoRefreshIntervalMinutes} minutes, ForceLoudness: {oldForceLoudnessRescan} -> {_forceRescanLoudnessOnNextRefresh}, ForceDuration: {oldForceDurationRescan} -> {_forceRescanDurationOnNextRefresh} (idle settings are core-owned and disabled)");
+                    Log($"Settings: Auto-refresh settings changed - Enabled: {oldAutoRefreshEnabled} -> {_autoRefreshSourcesEnabled}, Interval: {oldAutoRefreshInterval} -> {_autoRefreshIntervalMinutes} minutes, ForceLoudness: {oldForceLoudnessRescan} -> {_forceRescanLoudnessOnNextRefresh}, ForceDuration: {oldForceDurationRescan} -> {_forceRescanDurationOnNextRefresh}, FingerprintParallelism: {oldFingerprintParallelism} -> {_fingerprintScanMaxDegreeOfParallelism} (idle settings are core-owned and disabled)");
 
                     // Update Web UI settings
                     _webRemoteEnabled = dialog.GetWebRemoteEnabled();
@@ -9372,6 +9491,7 @@ namespace ReelRoulette
                             oldAutoRefreshInterval != _autoRefreshIntervalMinutes ||
                             oldForceLoudnessRescan != _forceRescanLoudnessOnNextRefresh ||
                             oldForceDurationRescan != _forceRescanDurationOnNextRefresh ||
+                            oldFingerprintParallelism != _fingerprintScanMaxDegreeOfParallelism ||
                             oldAutoRefreshIdleOnly != _autoRefreshOnlyWhenIdle ||
                             oldAutoRefreshIdleThreshold != _autoRefreshIdleThresholdMinutes ||
                             oldWebRemoteEnabled != _webRemoteEnabled ||
@@ -9386,6 +9506,7 @@ namespace ReelRoulette
                             oldAutoRefreshInterval != _autoRefreshIntervalMinutes ||
                             oldForceLoudnessRescan != _forceRescanLoudnessOnNextRefresh ||
                             oldForceDurationRescan != _forceRescanDurationOnNextRefresh ||
+                            oldFingerprintParallelism != _fingerprintScanMaxDegreeOfParallelism ||
                             oldAutoRefreshIdleOnly != _autoRefreshOnlyWhenIdle ||
                             oldAutoRefreshIdleThreshold != _autoRefreshIdleThresholdMinutes;
 
@@ -9466,7 +9587,8 @@ namespace ReelRoulette
                                     AutoRefreshEnabled = _autoRefreshSourcesEnabled,
                                     AutoRefreshIntervalMinutes = _autoRefreshIntervalMinutes,
                                     ForceRescanLoudness = _forceRescanLoudnessOnNextRefresh,
-                                    ForceRescanDuration = _forceRescanDurationOnNextRefresh
+                                    ForceRescanDuration = _forceRescanDurationOnNextRefresh,
+                                    FingerprintScanMaxDegreeOfParallelism = _fingerprintScanMaxDegreeOfParallelism
                                 }, refreshSettingsTimeoutCts.Token);
 
                                 if (updated != null)
@@ -9475,6 +9597,7 @@ namespace ReelRoulette
                                     _autoRefreshIntervalMinutes = Math.Clamp(updated.AutoRefreshIntervalMinutes, 5, 1440);
                                     _forceRescanLoudnessOnNextRefresh = updated.ForceRescanLoudness;
                                     _forceRescanDurationOnNextRefresh = updated.ForceRescanDuration;
+                                    _fingerprintScanMaxDegreeOfParallelism = Math.Clamp(updated.FingerprintScanMaxDegreeOfParallelism, 1, 16);
                                     _autoRefreshOnlyWhenIdle = false;
                                     _autoRefreshIdleThresholdMinutes = 1;
                                     Log("Settings: Core refresh settings updated via API.");

@@ -27,7 +27,7 @@ SolidCompression=yes
 WizardStyle=modern
 ArchitecturesInstallIn64BitMode=x64compatible
 SetupIconFile={#SharedIconPath}
-UninstallDisplayIcon={app}\ReelRoulette.WindowsApp.exe
+UninstallDisplayIcon={app}\ReelRoulette.DesktopApp.exe
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -39,8 +39,8 @@ Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion
 Name: "desktopicon"; Description: "Create Desktop Shortcut"
 
 [Icons]
-Name: "{autoprograms}\ReelRoulette Desktop"; Filename: "{app}\ReelRoulette.WindowsApp.exe"; IconFilename: "{app}\ReelRoulette.WindowsApp.exe"
-Name: "{autodesktop}\ReelRoulette Desktop"; Filename: "{app}\ReelRoulette.WindowsApp.exe"; IconFilename: "{app}\ReelRoulette.WindowsApp.exe"; Tasks: desktopicon
+Name: "{autoprograms}\ReelRoulette Desktop"; Filename: "{app}\ReelRoulette.DesktopApp.exe"; IconFilename: "{app}\ReelRoulette.DesktopApp.exe"
+Name: "{autodesktop}\ReelRoulette Desktop"; Filename: "{app}\ReelRoulette.DesktopApp.exe"; IconFilename: "{app}\ReelRoulette.DesktopApp.exe"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\ReelRoulette.WindowsApp.exe"; Description: "Launch ReelRoulette Desktop"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\ReelRoulette.DesktopApp.exe"; Description: "Launch ReelRoulette Desktop"; Flags: nowait postinstall skipifsilent

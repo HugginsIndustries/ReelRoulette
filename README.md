@@ -18,6 +18,8 @@ ReelRoulette is a server-first media randomizer with thin desktop and web client
 
 - .NET SDK version compatible with this repo's `TargetFramework` values.
 - Node.js and npm (for WebUI build/verify flows).
+- PowerShell Core (`pwsh`) for `tools/scripts/*.ps1` helpers (for example `pwsh ./tools/scripts/run-server.ps1`).
+  - Linux (Arch Linux, CachyOS, and similar): install from the AUR, for example `paru -S powershell-bin` or `yay -S powershell-bin`; that package provides `pwsh` on your PATH.
 
 ## Quick Start
 
@@ -31,26 +33,26 @@ Run the server app:
 
 ```bash
 # Windows (tray + no-console path):
-dotnet run --framework net9.0-windows --project .\src\core\ReelRoulette.ServerApp\ReelRoulette.ServerApp.csproj
+dotnet run --framework net10.0-windows --project ./src/core/ReelRoulette.ServerApp/ReelRoulette.ServerApp.csproj
 
 # Windows (system tray validation via app binary):
-dotnet build .\src\core\ReelRoulette.ServerApp\ReelRoulette.ServerApp.csproj -f net9.0-windows
-.\src\core\ReelRoulette.ServerApp\bin\Debug\net9.0-windows\ReelRoulette.ServerApp.exe
+dotnet build ./src/core/ReelRoulette.ServerApp/ReelRoulette.ServerApp.csproj -f net10.0-windows
+./src/core/ReelRoulette.ServerApp/bin/Debug/net10.0-windows/ReelRoulette.ServerApp.exe
 
-# Linux/macOS (headless path):
-dotnet run --framework net9.0 --project .\src\core\ReelRoulette.ServerApp\ReelRoulette.ServerApp.csproj
+# Linux/macOS (tray when available, otherwise headless):
+dotnet run --framework net10.0 --project ./src/core/ReelRoulette.ServerApp/ReelRoulette.ServerApp.csproj
 ```
 
 Run the desktop client:
 
 ```bash
-dotnet run --project .\src\clients\windows\ReelRoulette.WindowsApp\ReelRoulette.WindowsApp.csproj
+dotnet run --project ./src/clients/desktop/ReelRoulette.DesktopApp/ReelRoulette.DesktopApp.csproj
 ```
 
 Run the WebUI dev server:
 
 ```bash
-cd .\src\clients\web\ReelRoulette.WebUI
+cd ./src/clients/web/ReelRoulette.WebUI
 npm install
 npm run dev
 ```
@@ -65,9 +67,7 @@ npm run dev
 Run server app directly:
 
 ```bash
-.\tools\scripts\run-server.ps1
-# or
-./tools/scripts/run-server.sh
+pwsh ./tools/scripts/run-server.ps1
 ```
 
 Default listen URL: `http://localhost:45123`.
@@ -81,15 +81,13 @@ Windows runtime note:
 Build WebUI and run server app:
 
 ```bash
-.\tools\scripts\run-server-rebuild.ps1
-# or
-./tools/scripts/run-server-rebuild.sh
+pwsh ./tools/scripts/run-server-rebuild.ps1
 ```
 
 Set release-aligned version surfaces in one step:
 
-```powershell
-.\tools\scripts\set-release-version.ps1 -Version 0.11.0-dev -UpdateDesktopVersion -RegenerateContracts -RunVerify
+```bash
+pwsh ./tools/scripts/set-release-version.ps1 -Version 0.11.0-dev -UpdateDesktopVersion -RegenerateContracts -RunVerify
 ```
 
 ## Verification
@@ -103,38 +101,36 @@ dotnet test ReelRoulette.sln
 WebUI verify gate:
 
 ```bash
-cd .\src\clients\web\ReelRoulette.WebUI
+cd ./src/clients/web/ReelRoulette.WebUI
 npm run verify
 ```
 
 Single-origin server/web deploy smoke verification:
 
 ```bash
-.\tools\scripts\verify-web-deploy.ps1
-# or
-./tools/scripts/verify-web-deploy.sh
+pwsh ./tools/scripts/verify-web-deploy.ps1
 ```
 
 Optional core system checks:
 
 ```bash
-dotnet run --project .\src\core\ReelRoulette.Core.SystemChecks\ReelRoulette.Core.SystemChecks.csproj -- --verbose
+dotnet run --project ./src/core/ReelRoulette.Core.SystemChecks/ReelRoulette.Core.SystemChecks.csproj -- --verbose
 ```
 
 Manual test guide:
 
 - `docs/checklists/testing-checklist.md`
-- `tools/scripts/reset-checklist.ps1` resets testing-checklist metadata/checklist state for a new pass.
+- `pwsh ./tools/scripts/reset-checklist.ps1` resets testing-checklist metadata/checklist state for a new pass.
 
 ## Packaging (Windows)
 
-- Server portable package: `tools/scripts/package-serverapp-win-portable.ps1`
-- Server Inno installer package: `tools/scripts/package-serverapp-win-inno.ps1`
-- Desktop portable package: `tools/scripts/package-desktop-win-portable.ps1`
-- Desktop Inno installer package: `tools/scripts/package-desktop-win-inno.ps1`
+- Server portable package: `pwsh ./tools/scripts/package-serverapp-win-portable.ps1`
+- Server Inno installer package: `pwsh ./tools/scripts/package-serverapp-win-inno.ps1`
+- Desktop portable package: `pwsh ./tools/scripts/package-desktop-win-portable.ps1`
+- Desktop Inno installer package: `pwsh ./tools/scripts/package-desktop-win-inno.ps1`
 - If `-Version` is omitted:
   - server packaging scripts auto-use `src/core/ReelRoulette.ServerApp/ReelRoulette.ServerApp.csproj` `<Version>`,
-  - desktop packaging scripts auto-use `src/clients/windows/ReelRoulette.WindowsApp/ReelRoulette.WindowsApp.csproj` `<Version>`.
+  - desktop packaging scripts auto-use `src/clients/desktop/ReelRoulette.DesktopApp/ReelRoulette.DesktopApp.csproj` `<Version>`.
 - Server packaging scripts rebuild and bundle WebUI static assets into published output (`wwwroot`), including `/HI.ico`.
 - Server runtime publish output includes `HI.ico` at app root for tray icon loading, sourced from shared `assets/HI.ico`.
 - Desktop packaging scripts stage native desktop dependencies into published output (`runtimes/win-x64/native`) during packaging.
@@ -145,8 +141,8 @@ Manual test guide:
 
 Simple release flow (example `0.11.0-dev`):
 
-```powershell
-.\tools\scripts\full-release.ps1 -Version 0.11.0-dev
+```bash
+pwsh ./tools/scripts/full-release.ps1 -Version 0.11.0-dev
 ```
 
 GitHub release asset flow:
@@ -159,10 +155,11 @@ GitHub release asset flow:
 ## Documentation Map
 
 - Current implemented capability inventory: `CONTEXT.md`
-- Migration roadmap and milestone verification: `MILESTONES.md`
+- Milestone planning and tracking: `MILESTONES.md`
 - API contract and endpoint/event behavior: `docs/api.md`
 - Local setup and development workflows: `docs/dev-setup.md`
 - Domain-level implementation inventory: `docs/domain-inventory.md`
+- Contributor/agent workflow notes: `AGENTS.md`
 
 ## Third-Party Components
 

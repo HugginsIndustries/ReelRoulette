@@ -1,3 +1,4 @@
+#!/usr/bin/env pwsh
 param(
     [string]$Runtime = "win-x64",
     [string]$Configuration = "Release",
@@ -204,7 +205,7 @@ if (-not $isccPath) {
 }
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
-$projectPath = Join-Path $repoRoot "src\clients\windows\ReelRoulette.WindowsApp\ReelRoulette.WindowsApp.csproj"
+$projectPath = Join-Path $repoRoot "src\clients\desktop\ReelRoulette.DesktopApp\ReelRoulette.DesktopApp.csproj"
 $sharedIconPath = Join-Path $repoRoot "assets\HI.ico"
 
 if ([string]::IsNullOrWhiteSpace($Version)) {

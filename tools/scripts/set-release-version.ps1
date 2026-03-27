@@ -1,3 +1,4 @@
+#!/usr/bin/env pwsh
 param(
     [Parameter(Mandatory = $true)]
     [string]$Version,
@@ -35,7 +36,7 @@ function Set-FileContentIfChanged {
 }
 
 function Update-OpenApiVersion {
-    $path = Join-Path $repoRoot "shared\api\openapi.yaml"
+    $path = Join-Path $repoRoot "shared" "api" "openapi.yaml"
     $raw = Get-Content -Path $path -Raw
     $pattern = '(?s)(info:\s*\r?\n\s*title:\s*ReelRoulette API\s*\r?\n\s*version:\s*)([^\r\n]+)'
     if (-not [regex]::IsMatch($raw, $pattern)) {
@@ -46,7 +47,7 @@ function Update-OpenApiVersion {
 }
 
 function Update-ServerAssetsVersion {
-    $path = Join-Path $repoRoot "src\core\ReelRoulette.Server\Services\ServerStateService.cs"
+    $path = Join-Path $repoRoot "src" "core" "ReelRoulette.Server" "Services" "ServerStateService.cs"
     $raw = Get-Content -Path $path -Raw
     $pattern = 'assetsVersion:\s*"[^"]+"'
     if (-not [regex]::IsMatch($raw, $pattern)) {
@@ -57,7 +58,7 @@ function Update-ServerAssetsVersion {
 }
 
 function Update-ContractTestsAssetsVersion {
-    $path = Join-Path $repoRoot "src\core\ReelRoulette.Core.Tests\ServerContractTests.cs"
+    $path = Join-Path $repoRoot "src" "core" "ReelRoulette.Core.Tests" "ServerContractTests.cs"
     $raw = Get-Content -Path $path -Raw
     if (-not [regex]::IsMatch($raw, 'assetsVersion:\s*"[^"]+"')) {
         throw "Failed to find test assetsVersion fixture in $path"
@@ -72,7 +73,7 @@ function Update-ContractTestsAssetsVersion {
 }
 
 function Update-WebAuthBootstrapTestAssetsVersion {
-    $path = Join-Path $repoRoot "src\clients\web\ReelRoulette.WebUI\src\test\authBootstrap.test.ts"
+    $path = Join-Path $repoRoot "src" "clients" "web" "ReelRoulette.WebUI" "src" "test" "authBootstrap.test.ts"
     $raw = Get-Content -Path $path -Raw
     if (-not [regex]::IsMatch($raw, 'assetsVersion:\s*"[^"]+"')) {
         throw "Failed to find auth bootstrap test assetsVersion in $path"
@@ -103,7 +104,7 @@ function Update-ReadmeVersionExamples {
 }
 
 function Update-DevSetupVersionExamples {
-    $path = Join-Path $repoRoot "docs\dev-setup.md"
+    $path = Join-Path $repoRoot "docs" "dev-setup.md"
     $raw = Get-Content -Path $path -Raw
 
     if (-not [regex]::IsMatch($raw, 'set-release-version\.ps1 -Version [^\s`]+')) {
@@ -167,9 +168,9 @@ try {
     Update-ContractTestsAssetsVersion
     Update-WebAuthBootstrapTestAssetsVersion
 
-    Set-ProjectVersion -ProjectPath (Join-Path $repoRoot "src\core\ReelRoulette.ServerApp\ReelRoulette.ServerApp.csproj")
+    Set-ProjectVersion -ProjectPath (Join-Path $repoRoot "src" "core" "ReelRoulette.ServerApp" "ReelRoulette.ServerApp.csproj")
     if ($UpdateDesktopVersion.IsPresent) {
-        Set-ProjectVersion -ProjectPath (Join-Path $repoRoot "src\clients\windows\ReelRoulette.WindowsApp\ReelRoulette.WindowsApp.csproj")
+        Set-ProjectVersion -ProjectPath (Join-Path $repoRoot "src" "clients" "desktop" "ReelRoulette.DesktopApp" "ReelRoulette.DesktopApp.csproj")
     }
     if (-not $NoDocUpdates.IsPresent) {
         Update-ReleaseDocsVersion
@@ -177,7 +178,7 @@ try {
 
     if ($RegenerateContracts.IsPresent) {
         Write-Host "Regenerating WebUI OpenAPI contracts..."
-        Push-Location (Join-Path $repoRoot "src\clients\web\ReelRoulette.WebUI")
+        Push-Location (Join-Path $repoRoot "src" "clients" "web" "ReelRoulette.WebUI")
         try {
             npm run generate:contracts
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -195,7 +196,7 @@ try {
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
         Write-Host "Running WebUI verify..."
-        Push-Location (Join-Path $repoRoot "src\clients\web\ReelRoulette.WebUI")
+        Push-Location (Join-Path $repoRoot "src" "clients" "web" "ReelRoulette.WebUI")
         try {
             npm run verify
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -205,7 +206,7 @@ try {
         }
 
         Write-Host "Running single-origin deploy smoke verify..."
-        .\tools\scripts\verify-web-deploy.ps1
+        & (Join-Path $PSScriptRoot "verify-web-deploy.ps1")
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     }
 

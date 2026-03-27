@@ -1,0 +1,9 @@
+<Project>
+  <PropertyGroup>
+    <!--
+      .NET 10 can require prune-package metadata for Microsoft.AspNetCore.App.
+      In some environments the metadata may be missing; this keeps build/test unblocked.
+    -->
+    <AllowMissingPrunePackageData>true</AllowMissingPrunePackageData>
+  </PropertyGroup>
+</Project>

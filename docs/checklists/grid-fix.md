@@ -7,7 +7,7 @@ This temporary checklist tracks fixes for desktop library panel grid issues:
 
 ## Scope
 
-- Target: `src/clients/windows/ReelRoulette.WindowsApp/MainWindow.axaml.cs`
+- Target: `src/clients/desktop/ReelRoulette.DesktopApp/MainWindow.axaml.cs`
 - Focus area: grid row layout width calculation, visible-row virtualization refresh, width-change reflow timing
 
 ## Implementation Checklist

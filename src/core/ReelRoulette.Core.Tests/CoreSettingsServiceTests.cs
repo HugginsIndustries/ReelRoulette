@@ -24,6 +24,7 @@ public sealed class CoreSettingsServiceTests : IDisposable
         Assert.Equal(15, refresh.AutoRefreshIntervalMinutes);
         Assert.False(refresh.ForceRescanLoudness);
         Assert.False(refresh.ForceRescanDuration);
+        Assert.Equal(4, refresh.FingerprintScanMaxDegreeOfParallelism);
         Assert.True(backup.Enabled);
         Assert.Equal(360, backup.MinimumBackupGapMinutes);
         Assert.Equal(8, backup.NumberOfBackups);
@@ -232,7 +233,8 @@ public sealed class CoreSettingsServiceTests : IDisposable
     "autoRefreshEnabled": true,
     "autoRefreshIntervalMinutes": 15,
     "forceRescanLoudness": false,
-    "forceRescanDuration": false
+    "forceRescanDuration": false,
+    "fingerprintScanMaxDegreeOfParallelism": 4
   },
   "backup": {
     "enabled": true,

@@ -6,12 +6,14 @@ This guide covers local setup, run paths, verification gates, packaging, and rel
 
 - .NET SDK (matching solution target; verify with `dotnet --version`)
 - Node.js + npm (for WebUI build/verify; verify with `node --version` and `npm --version`)
+- PowerShell Core (`pwsh`) for repository scripts under `tools/scripts/` (for example `pwsh ./tools/scripts/run-server.ps1`).
+  - Linux (Arch Linux, CachyOS, and similar): install from the AUR, for example `paru -S powershell-bin` or `yay -S powershell-bin`; that package provides `pwsh` on your PATH.
 - Windows packaging only:
   - Inno Setup 6 (for installer builds)
 
 ## Key Projects
 
-- Desktop app: `src/clients/windows/ReelRoulette.WindowsApp/ReelRoulette.WindowsApp.csproj`
+- Desktop app: `src/clients/desktop/ReelRoulette.DesktopApp/ReelRoulette.DesktopApp.csproj`
 - Core domain: `src/core/ReelRoulette.Core/ReelRoulette.Core.csproj`
 - Server transport: `src/core/ReelRoulette.Server/ReelRoulette.Server.csproj`
 - Default runtime host: `src/core/ReelRoulette.ServerApp/ReelRoulette.ServerApp.csproj`
@@ -24,11 +26,10 @@ This guide covers local setup, run paths, verification gates, packaging, and rel
 ### Run ServerApp (default consolidated runtime)
 
 - Direct:
-  - Windows tray path: `dotnet run --framework net9.0-windows --project .\src\core\ReelRoulette.ServerApp\ReelRoulette.ServerApp.csproj`
-  - Linux/macOS headless path: `dotnet run --framework net9.0 --project .\src\core\ReelRoulette.ServerApp\ReelRoulette.ServerApp.csproj`
-- Scripted:
-  - `tools/scripts/run-server.ps1`
-  - `tools/scripts/run-server.sh`
+  - Windows (`net10.0-windows`): `dotnet run --framework net10.0-windows --project ./src/core/ReelRoulette.ServerApp/ReelRoulette.ServerApp.csproj`
+  - Linux/macOS (`net10.0`): `dotnet run --framework net10.0 --project ./src/core/ReelRoulette.ServerApp/ReelRoulette.ServerApp.csproj` (Avalonia tray when the session supports it; otherwise headless)
+- Scripted (from repo root):
+  - `pwsh ./tools/scripts/run-server.ps1`
 
 Runtime notes:
 
@@ -36,19 +37,18 @@ Runtime notes:
 - Operator UI is available at `/operator`.
 - Runtime config for WebUI is served at `/runtime-config.json` when WebUI is enabled.
 - Default listen URL/port is `http://localhost:45123` unless overridden by runtime settings or script parameters.
-- Windows runtime uses tray-hosted ServerApp behavior (no visible command prompt when launched as app binary).
+- Windows runtime uses tray-hosted ServerApp behavior (no visible command prompt when launched as app binary). On Linux, tray appears when a status notifier/tray is available; otherwise the host runs headless deterministically.
 - `Launch Server on Startup` can be toggled from tray and Operator control settings and applies immediately (no restart required).
 
 ### Run ServerApp with WebUI rebuild
 
 Use when you want to ensure web assets are freshly rebuilt before startup:
 
-- `tools/scripts/run-server-rebuild.ps1`
-- `tools/scripts/run-server-rebuild.sh`
+- `pwsh ./tools/scripts/run-server-rebuild.ps1`
 
 ### Run Desktop app
 
-- `dotnet run --project .\src\clients\windows\ReelRoulette.WindowsApp\ReelRoulette.WindowsApp.csproj`
+- `dotnet run --project ./src/clients/desktop/ReelRoulette.DesktopApp/ReelRoulette.DesktopApp.csproj`
 
 Desktop behavior notes:
 
@@ -93,14 +93,14 @@ From `src/clients/web/ReelRoulette.WebUI`:
 
 Optional helper scripts:
 
-- `tools/scripts/verify-web.ps1`
-- `tools/scripts/verify-web.sh`
-- `tools/scripts/verify-web-deploy.ps1`
-- `tools/scripts/verify-web-deploy.sh`
+- `pwsh ./tools/scripts/verify-web.ps1`
+- `pwsh ./tools/scripts/verify-web-deploy.ps1`
 
 ### Optional system checks
 
-- `dotnet run --project .\src\core\ReelRoulette.Core.SystemChecks\ReelRoulette.Core.SystemChecks.csproj -- --verbose`
+- `dotnet run --project ./src/core/ReelRoulette.Core.SystemChecks/ReelRoulette.Core.SystemChecks.csproj -- --verbose`
+
+For broader manual passes, use `docs/checklists/testing-checklist.md` and `pwsh ./tools/scripts/reset-checklist.ps1`.
 
 ## Auth, CORS, and Runtime Settings Notes
 
@@ -115,22 +115,29 @@ Optional helper scripts:
   - `POST /api/logs/client`
 - Connected client/session diagnostics are available in Operator UI and `/control/status`.
 
+## User data locations
+
+Per-user data uses .NET `Environment.SpecialFolder` mappings:
+
+- **Linux** (XDG): config / roaming (`ApplicationData`) → `~/.config/ReelRoulette/` (includes `library.json`). Local cache (`LocalApplicationData`) → `~/.local/share/ReelRoulette/` (thumbnails in `thumbnails/`).
+- **Windows**: config / roaming (`ApplicationData`) → `%APPDATA%/ReelRoulette/`. Local cache (`LocalApplicationData`) → `%LOCALAPPDATA%/ReelRoulette/` (thumbnails in `thumbnails/`).
+
 ## Windows Packaging
 
 ### Portable package
 
-- `tools/scripts/package-serverapp-win-portable.ps1`
-- `tools/scripts/package-desktop-win-portable.ps1`
+- `pwsh ./tools/scripts/package-serverapp-win-portable.ps1`
+- `pwsh ./tools/scripts/package-desktop-win-portable.ps1`
 
 ### Inno installer package
 
-- `tools/scripts/package-serverapp-win-inno.ps1`
-- `tools/scripts/package-desktop-win-inno.ps1`
+- `pwsh ./tools/scripts/package-serverapp-win-inno.ps1`
+- `pwsh ./tools/scripts/package-desktop-win-inno.ps1`
 
 Packaging notes:
 
 - Server packaging scripts auto-detect version from `src/core/ReelRoulette.ServerApp/ReelRoulette.ServerApp.csproj` when `-Version` is not passed.
-- Desktop packaging scripts auto-detect version from `src/clients/windows/ReelRoulette.WindowsApp/ReelRoulette.WindowsApp.csproj` when `-Version` is not passed.
+- Desktop packaging scripts auto-detect version from `src/clients/desktop/ReelRoulette.DesktopApp/ReelRoulette.DesktopApp.csproj` when `-Version` is not passed.
 - Desktop packaging scripts stage native desktop runtime dependencies into publish output (`runtimes/win-x64/native`) at package time.
 - Desktop native dependency staging prefers local repo runtimes when available; otherwise scripts acquire dependencies via Chocolatey (`ffmpeg` for `ffprobe.exe`, `vlc` for LibVLC files).
 - Server packaging scripts run WebUI build and bundle static assets into ServerApp publish output (`wwwroot`) so packaged runtime includes WebUI and Operator favicon.
@@ -146,7 +153,7 @@ Packaging notes:
 
 Use one command to align release-version surfaces:
 
-- `tools/scripts/set-release-version.ps1 -Version 0.11.0-dev -UpdateDesktopVersion -RegenerateContracts -RunVerify`
+- `pwsh ./tools/scripts/set-release-version.ps1 -Version 0.11.0-dev -UpdateDesktopVersion -RegenerateContracts -RunVerify`
 - By default, this script also updates release command examples in `README.md` and `docs/dev-setup.md`.
 - Use `-NoDocUpdates` to skip those docs updates when needed.
 
@@ -160,18 +167,18 @@ This updates:
 
 Then package server and desktop as needed:
 
-- `tools/scripts/package-serverapp-win-portable.ps1`
-- `tools/scripts/package-serverapp-win-inno.ps1`
-- `tools/scripts/package-desktop-win-portable.ps1`
-- `tools/scripts/package-desktop-win-inno.ps1`
+- `pwsh ./tools/scripts/package-serverapp-win-portable.ps1`
+- `pwsh ./tools/scripts/package-serverapp-win-inno.ps1`
+- `pwsh ./tools/scripts/package-desktop-win-portable.ps1`
+- `pwsh ./tools/scripts/package-desktop-win-inno.ps1`
 - or run the chained flow:
-  - `tools/scripts/full-release.ps1 -Version 0.11.0-dev`
+  - `pwsh ./tools/scripts/full-release.ps1 -Version 0.11.0-dev`
 
 Reset manual testing checklist state for a fresh run:
 
-- `tools/scripts/reset-checklist.ps1`
-- `tools/scripts/reset-checklist.ps1 -KeepMetadata`
-- `tools/scripts/reset-checklist.ps1 -RemoveWaived`
+- `pwsh ./tools/scripts/reset-checklist.ps1`
+- `pwsh ./tools/scripts/reset-checklist.ps1 -KeepMetadata`
+- `pwsh ./tools/scripts/reset-checklist.ps1 -RemoveWaived`
 
 GitHub release asset upload flow:
 
@@ -183,7 +190,7 @@ GitHub release asset upload flow:
 ## Troubleshooting
 
 - WebUI changes not appearing:
-  - run `tools/scripts/run-server-rebuild.ps1` (or `.sh`) to rebuild before run.
+  - run `pwsh ./tools/scripts/run-server-rebuild.ps1` to rebuild before run.
 - Version/capability startup blocks:
   - check `/api/version` and `/api/capabilities` output against expected client requirements.
 - Installer build fails:

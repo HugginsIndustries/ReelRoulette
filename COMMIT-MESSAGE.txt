@@ -19,9 +19,13 @@ Instructions:
 
 Commit Message:
 
-Docs: refresh Linux and cross-platform server tray roadmap
+M9a: establish Linux runtime baseline (server + desktop)
 
-- Update milestone planning for an Avalonia server host tray (replacing WinForms) with parity for tray actions, restart/stop, and headless fallback.
-- Require Linux autostart via XDG (`*.desktop`) with toggle parity alongside existing Windows registry behavior; call out CachyOS as the primary Linux sign-off baseline.
-- Standardize wording for `desktop` path segments versus Desktop client naming and scope repo rename from legacy `windows` paths.
-- Extend packaging, CI, documentation, and sign-off slices to cover autostart, tray fallbacks, and renamed Desktop deliverables.
+- Switch ServerApp tray host to a cross-platform Avalonia tray with headless fallback and Linux XDG autostart support.
+- Upgrade repo to .NET 10 and align CI with `net10.0`.
+- Rename the legacy Windows client to the cross-platform Desktop client (`src/clients/windows` -> `src/clients/desktop`) and align the on-disk folder with the `.csproj` (`ReelRoulette.DesktopApp/`) across solution, tests, scripts, and current docs.
+- Harden refresh pipeline + desktop projection sync to tolerate legacy enum serialization shapes.
+- Hydrate desktop grid thumbnails after refresh completion and as the visible grid window changes (no full library rebuild).
+- Bump Avalonia packages to 11.3.12 (desktop + ServerApp).
+- Add server `fingerprintScan` refresh stage plus persisted `fingerprintScanMaxDegreeOfParallelism` refresh setting (desktop Settings) and desktop completion-line Fingerprint summary.
+- Consolidate `tools/scripts` to cross-platform `.ps1` only: remove `.sh` counterparts; portable `Join-Path`; Windows-only `Start-Process` options guarded; leading `#!/usr/bin/env pwsh` plus Git `+x` on each script for direct execution on Unix; README/dev-setup prerequisites for PowerShell Core (`pwsh`, including Arch-based distros via AUR `powershell-bin` with `paru`/`yay`); contributor docs use POSIX repo-relative paths (`./src/...`) and forward slashes in Windows `%...%` examples.

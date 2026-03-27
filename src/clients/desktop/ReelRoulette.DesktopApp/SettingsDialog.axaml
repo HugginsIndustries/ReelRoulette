@@ -162,6 +162,26 @@
                             <CheckBox Content="Force duration rescan on next refresh"
                                       IsChecked="{Binding ForceRescanDuration}"
                                       Margin="20,4,0,0"/>
+                            <Grid ColumnDefinitions="Auto,Auto,Auto" ColumnSpacing="8" Margin="20,4,0,4">
+                                <TextBlock Grid.Column="0"
+                                           Text="Fingerprint scan parallelism:"
+                                           VerticalAlignment="Center"/>
+                                <NumericUpDown Grid.Column="1"
+                                               Value="{Binding FingerprintScanMaxDegreeOfParallelism}"
+                                               Minimum="1"
+                                               Maximum="16"
+                                               FormatString="0"
+                                               Increment="1"
+                                               ShowButtonSpinner="True"
+                                               HorizontalAlignment="Left"
+                                               Width="150"
+                                               ToolTip.Tip="Max parallel file hashes during core refresh (1-16)."/>
+                                <TextBlock Grid.Column="2"
+                                           Text="(1-16)"
+                                           VerticalAlignment="Center"
+                                           Foreground="Gray"
+                                           FontSize="12"/>
+                            </Grid>
                             <TextBlock Text="Auto-refresh runs in core and applies to enabled sources only."
                                        FontSize="11"
                                        Foreground="Gray"

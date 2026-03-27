@@ -1125,6 +1125,11 @@ export interface components {
             autoRefreshEnabled: boolean;
             /** Format: int32 */
             autoRefreshIntervalMinutes: number;
+            /**
+             * Format: int32
+             * @description Max parallel fingerprint hashes during core refresh (1-16).
+             */
+            fingerprintScanMaxDegreeOfParallelism?: number;
         };
         DuplicateScanRequest: {
             /** @enum {string} */

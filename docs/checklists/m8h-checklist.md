@@ -14,26 +14,26 @@ It captures what appears complete now and what still needs implementation/verifi
   - Evidence: `assets/fonts/MaterialSymbolsOutlined.var.ttf`
   - Evidence: `assets/fonts/README.md`
 - [x] Desktop app wires the Material Symbols font asset into Avalonia resources.
-  - Evidence: `src/clients/windows/ReelRoulette.WindowsApp/ReelRoulette.WindowsApp.csproj`
+  - Evidence: `src/clients/desktop/ReelRoulette.DesktopApp/ReelRoulette.DesktopApp.csproj`
 - [x] Shared desktop icon style foundation exists.
-  - Evidence: `TextBlock.MaterialSymbolIcon` style in `src/clients/windows/ReelRoulette.WindowsApp/App.axaml`
-  - Evidence: `Button.IconGlyphBase` + `ToggleButton.IconGlyphBase` base styles in `src/clients/windows/ReelRoulette.WindowsApp/App.axaml`
-  - Evidence: `IconGlyphButton` + `IconGlyphToggle` wrapper behavior in `src/clients/windows/ReelRoulette.WindowsApp/App.axaml`
+  - Evidence: `TextBlock.MaterialSymbolIcon` style in `src/clients/desktop/ReelRoulette.DesktopApp/App.axaml`
+  - Evidence: `Button.IconGlyphBase` + `ToggleButton.IconGlyphBase` base styles in `src/clients/desktop/ReelRoulette.DesktopApp/App.axaml`
+  - Evidence: `IconGlyphButton` + `IconGlyphToggle` wrapper behavior in `src/clients/desktop/ReelRoulette.DesktopApp/App.axaml`
 - [x] Main desktop transport/control icons are migrated to shared Material Symbols styles.
-  - Evidence: multiple controls in `src/clients/windows/ReelRoulette.WindowsApp/MainWindow.axaml` use `Classes="IconGlyphBase ..."` + `TextBlock.MaterialSymbolIcon`.
+  - Evidence: multiple controls in `src/clients/desktop/ReelRoulette.DesktopApp/MainWindow.axaml` use `Classes="IconGlyphBase ..."` + `TextBlock.MaterialSymbolIcon`.
 - [x] Desktop tag editor icon controls are migrated to Material Symbols with shared no-box icon styles.
-  - Evidence: `src/clients/windows/ReelRoulette.WindowsApp/ItemTagsDialog.axaml`
-  - Evidence: category expand/collapse symbol swapping via `ExpandIconSymbol` in `src/clients/windows/ReelRoulette.WindowsApp/ItemTagsDialog.axaml.cs`
-  - Evidence: rounded category headers and responsive variable-width tag chips with multiline tag wrapping in `src/clients/windows/ReelRoulette.WindowsApp/ItemTagsDialog.axaml`
+  - Evidence: `src/clients/desktop/ReelRoulette.DesktopApp/ItemTagsDialog.axaml`
+  - Evidence: category expand/collapse symbol swapping via `ExpandIconSymbol` in `src/clients/desktop/ReelRoulette.DesktopApp/ItemTagsDialog.axaml.cs`
+  - Evidence: rounded category headers and responsive variable-width tag chips with multiline tag wrapping in `src/clients/desktop/ReelRoulette.DesktopApp/ItemTagsDialog.axaml`
 - [x] Keep selected desktop emoji/text icon surfaces as-is by UX choice.
   - Confirmed acceptable to leave existing emoji indicators in:
-    - `src/clients/windows/ReelRoulette.WindowsApp/MainWindow.axaml` (library context menu/list indicators)
-    - `src/clients/windows/ReelRoulette.WindowsApp/ManageSourcesDialog.axaml`
+    - `src/clients/desktop/ReelRoulette.DesktopApp/MainWindow.axaml` (library context menu/list indicators)
+    - `src/clients/desktop/ReelRoulette.DesktopApp/ManageSourcesDialog.axaml`
 
 ## Remaining Implementation Work
 
-- [x] Implement Windows tray context-menu system theme parity (light/dark at runtime).
-  - Current state: `src/core/ReelRoulette.ServerApp/Hosting/WindowsNotifyIconHostUi.cs` creates `ContextMenuStrip` but has no explicit theme detection/rendering handling.
+- [x] Implement Avalonia server tray context-menu system theme parity (light/dark at runtime, Windows where supported).
+  - Current state: `src/core/ReelRoulette.ServerApp/Hosting/AvaloniaTrayHostUi.cs` provides the native menu surface; theme parity handling is validated via tray host behavior.
 
 - [x] Migrate WebUI icon system to Material Symbols using the same local font file (no external font links).
   - [x] Add WebUI font asset path using shared repo font:

@@ -1,3 +1,4 @@
+#!/usr/bin/env pwsh
 param(
     [string]$Runtime = "win-x64",
     [string]$Configuration = "Release",
@@ -110,7 +111,7 @@ try {
 
     dotnet publish $projectPath `
         -c $Configuration `
-        -f net9.0-windows `
+        -f net10.0-windows `
         -r $Runtime `
         --self-contained true `
         -p:PublishSingleFile=false `

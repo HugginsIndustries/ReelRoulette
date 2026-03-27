@@ -1,3 +1,4 @@
+#!/usr/bin/env pwsh
 param(
     [string]$Runtime = "win-x64",
     [string]$Configuration = "Release",
@@ -158,7 +159,7 @@ function Ensure-WinDesktopNativeAssets {
 }
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
-$projectPath = Join-Path $repoRoot "src\clients\windows\ReelRoulette.WindowsApp\ReelRoulette.WindowsApp.csproj"
+$projectPath = Join-Path $repoRoot "src\clients\desktop\ReelRoulette.DesktopApp\ReelRoulette.DesktopApp.csproj"
 
 if ([string]::IsNullOrWhiteSpace($Version)) {
     [xml]$projectXml = Get-Content -Path $projectPath -Raw
@@ -206,7 +207,7 @@ try {
         "Version: $Version",
         "Runtime: $Runtime",
         "",
-        "Run: ReelRoulette.WindowsApp.exe"
+        "Run: ReelRoulette.DesktopApp.exe"
     ) | Set-Content -Path (Join-Path $stagingDir "PACKAGE_INFO.txt")
 
     Compress-Archive -Path (Join-Path $stagingDir "*") -DestinationPath $zipPath

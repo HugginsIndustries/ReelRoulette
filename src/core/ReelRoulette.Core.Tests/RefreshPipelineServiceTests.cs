@@ -58,7 +58,9 @@ public sealed class RefreshPipelineServiceTests
 
         var final = await WaitForCompletionAsync(service, TimeSpan.FromSeconds(10));
         Assert.False(final.IsRunning);
-        Assert.Equal(["sourceRefresh", "durationScan", "loudnessScan", "thumbnailGeneration"], final.Stages.Select(s => s.Stage).ToArray());
+        Assert.Equal(
+            ["sourceRefresh", "fingerprintScan", "durationScan", "loudnessScan", "thumbnailGeneration"],
+            final.Stages.Select(s => s.Stage).ToArray());
         Assert.All(final.Stages, stage => Assert.True(stage.IsComplete));
 
         var replay = state.GetReplayAfter(0);
@@ -573,6 +575,40 @@ public sealed class RefreshPipelineServiceTests
 
         var parsed = InvokeParseLoudness(output, exitCode: 1);
         Assert.Null(parsed);
+    }
+
+    [Fact]
+    public async Task FingerprintStage_ShouldHashPendingItem_WhenFileExists()
+    {
+        using var scope = new AppDataScope();
+        var mediaPath = Path.Combine(scope.RootPath, "fingerprint-pending.png");
+        await WriteTinyPngAsync(mediaPath);
+        await SeedLibraryAsync(scope.LibraryPath, new JsonObject
+        {
+            ["sources"] = new JsonArray(),
+            ["items"] = new JsonArray
+            {
+                new JsonObject
+                {
+                    ["id"] = "fp-pending-1",
+                    ["mediaType"] = 1,
+                    ["fullPath"] = mediaPath,
+                    ["fingerprintStatus"] = "Pending"
+                }
+            }
+        });
+
+        var service = CreateService(new ServerStateService(), scope.RootPath);
+        await service.RunFingerprintStageAsync(CancellationToken.None);
+
+        var root = await LoadLibraryAsync(scope.LibraryPath);
+        var items = root["items"] as JsonArray;
+        Assert.NotNull(items);
+        var item = Assert.Single(items!.OfType<JsonObject>());
+        Assert.Equal("Ready", item["fingerprintStatus"]?.GetValue<string>());
+        var fp = item["fingerprint"]?.GetValue<string>();
+        Assert.False(string.IsNullOrWhiteSpace(fp));
+        Assert.Equal(ComputeSha256(mediaPath), fp, StringComparer.OrdinalIgnoreCase);
     }
 
     private static RefreshPipelineService CreateService(ServerStateService state, string appDataPathOverride)

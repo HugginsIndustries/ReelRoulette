@@ -1,13 +1,13 @@
 # Domain Inventory (Current State)
 
 This is the canonical implementation inventory for ReelRoulette.
-It is ownership-first (not milestone-first) and reflects current state only.
+It is ownership-first and reflects current state only.
 
 ## Scope and Update Rules
 
 - Purpose: map where authoritative behavior lives across core/server/clients.
 - Keep this file current when features/workflows/contracts are added, changed, or removed.
-- Do not use this file as milestone history; use `MILESTONES.md` for roadmap/evidence.
+- Keep entries current-state only; avoid narrative history in this file.
 - Prefer concise entries: ownership + key files + notable boundaries.
 
 ---
@@ -21,7 +21,7 @@ Core/server domain services own business rules and persisted state semantics.
 - `src/core/ReelRoulette.Server/Services/LibraryOperationsService.cs`
   - source import, duplicate scan/apply, auto-tag scan/apply, playback-stats clear, related command orchestration.
 - `src/core/ReelRoulette.Server/Services/RefreshPipelineService.cs`
-  - unified refresh pipeline stage execution, overlap guards, status snapshots, thumbnail generation/invalidation.
+  - unified refresh pipeline stage execution (including `fingerprintScan` for per-file SHA-256 backfill), overlap guards, status snapshots, thumbnail generation/invalidation.
 - `src/core/ReelRoulette.Server/Services/ServerStateService.cs`
   - revisioned event publication, replay/resync behavior, state projection support.
 - `src/core/ReelRoulette.Server/Services/CoreSettingsService.cs`
@@ -62,12 +62,14 @@ Boundary:
   - single-process host for API + SSE + media + WebUI static assets + `/operator`.
 - `src/core/ReelRoulette.ServerApp/Hosting/IHostUi.cs`
   - host-UI abstraction boundary keeping server runtime tray-agnostic.
-- `src/core/ReelRoulette.ServerApp/Hosting/WindowsNotifyIconHostUi.cs`
-  - Windows-only tray runtime controls (Open Operator UI, Launch Server on Startup, Refresh Library, Restart Server, Stop Server / Exit) using shared `assets/HI.ico`.
+- `src/core/ReelRoulette.ServerApp/Hosting/AvaloniaTrayHostUi.cs`
+  - Cross-platform tray runtime controls (Open Operator UI, Launch Server on Startup, Refresh Library, Restart Server, Stop Server / Exit) using shared `assets/HI.ico`, with deterministic headless fallback when tray is unavailable.
 - `src/core/ReelRoulette.ServerApp/Hosting/HeadlessHostUi.cs`
   - non-Windows headless host path for runtime compatibility.
 - `src/core/ReelRoulette.ServerApp/Hosting/WindowsStartupLaunchService.cs`
   - Windows startup-launch registration and state reconciliation (`HKCU` Run key) for immediate tray/operator toggles.
+- `src/core/ReelRoulette.ServerApp/Hosting/LinuxXdgStartupLaunchService.cs`
+  - Linux startup-launch registration and state reconciliation via XDG autostart (`*.desktop` in the user autostart location) for immediate tray/operator toggles.
 - `src/core/ReelRoulette.ServerApp/Hosting/HeadlessStartupLaunchService.cs`
   - non-Windows startup-launch no-op/unsupported path for host portability.
 - `src/core/ReelRoulette.Server/Services/ConnectedClientTracker.cs`
@@ -85,21 +87,21 @@ Includes:
 
 ---
 
-## Desktop Client Orchestration (`src/clients/windows/ReelRoulette.WindowsApp/`)
+## Desktop Client Orchestration (`src/clients/desktop/ReelRoulette.DesktopApp/`)
 
 Desktop is orchestration/render for migrated flows.
 
-- `src/clients/windows/ReelRoulette.WindowsApp/MainWindow.axaml.cs`
+- `src/clients/desktop/ReelRoulette.DesktopApp/MainWindow.axaml.cs`
   - API/SSE lifecycle orchestration, reconnect/resync guidance, compatibility gating, playback orchestration.
-- `src/clients/windows/ReelRoulette.WindowsApp/CoreServerApiClient.cs`
+- `src/clients/desktop/ReelRoulette.DesktopApp/CoreServerApiClient.cs`
   - typed desktop API adapter (commands/queries/SSE wiring).
-- `src/clients/windows/ReelRoulette.WindowsApp/ManageSourcesDialog.axaml.cs`
+- `src/clients/desktop/ReelRoulette.DesktopApp/ManageSourcesDialog.axaml.cs`
   - API-backed source/duplicate orchestration behavior.
-- `src/clients/windows/ReelRoulette.WindowsApp/AutoTagDialog.axaml.cs`
+- `src/clients/desktop/ReelRoulette.DesktopApp/AutoTagDialog.axaml.cs`
   - API-backed auto-tag scan/apply orchestration.
-- `src/clients/windows/ReelRoulette.WindowsApp/SettingsDialog.axaml(.cs)`
+- `src/clients/desktop/ReelRoulette.DesktopApp/SettingsDialog.axaml(.cs)`
   - client-side settings orchestration including playback policy toggle UX.
-- `src/clients/windows/ReelRoulette.WindowsApp/ClientLogRelay.cs`
+- `src/clients/desktop/ReelRoulette.DesktopApp/ClientLogRelay.cs`
   - client log relay to server-side log ingestion API.
 
 Boundary:
@@ -165,7 +167,7 @@ Canonical gates:
 - `dotnet build ReelRoulette.sln`
 - `dotnet test ReelRoulette.sln`
 - `npm run verify` (WebUI)
-- `tools/scripts/verify-web-deploy.ps1` / `.sh`
+- `pwsh ./tools/scripts/verify-web-deploy.ps1`
 
 ---
 
@@ -173,25 +175,25 @@ Canonical gates:
 
 Runtime scripts:
 
-- `tools/scripts/run-server.ps1` / `.sh`
-- `tools/scripts/run-server-rebuild.ps1` / `.sh`
-- scripts select `net9.0-windows` framework on Windows and `net9.0` on non-Windows for ServerApp startup.
+- `tools/scripts/run-server.ps1`
+- `tools/scripts/run-server-rebuild.ps1`
+- scripts select `net10.0-windows` framework on Windows and `net10.0` on non-Windows for ServerApp startup.
 - `tools/scripts/set-release-version.ps1` (release-aligned version fan-out for OpenAPI/runtime/tests/project metadata plus README/dev-setup release command examples; use `-NoDocUpdates` to skip docs updates)
 - `tools/scripts/full-release.ps1` (chained release flow: version fan-out + verify + server/desktop packaging)
 - `tools/scripts/reset-checklist.ps1` (resets `docs/checklists/testing-checklist.md` metadata/checklist state; preserves waived checks by default, supports `-RemoveWaived`)
 
 Web verification:
 
-- `tools/scripts/verify-web.ps1` / `.sh`
-- `tools/scripts/verify-web-deploy.ps1` / `.sh`
-- `tools/scripts/publish-web.ps1` / `.sh` (compat/deploy tooling)
+- `tools/scripts/verify-web.ps1`
+- `tools/scripts/verify-web-deploy.ps1`
+- `tools/scripts/publish-web.ps1` (compat/deploy tooling)
 
 Packaging:
 
-- `tools/scripts/package-serverapp-win-portable.ps1`
-- `tools/scripts/package-serverapp-win-inno.ps1`
-- `tools/scripts/package-desktop-win-portable.ps1`
-- `tools/scripts/package-desktop-win-inno.ps1`
+- `pwsh ./tools/scripts/package-serverapp-win-portable.ps1`
+- `pwsh ./tools/scripts/package-serverapp-win-inno.ps1`
+- `pwsh ./tools/scripts/package-desktop-win-portable.ps1`
+- `pwsh ./tools/scripts/package-desktop-win-inno.ps1`
 - `tools/installer/ReelRoulette.ServerApp.iss`
 - `tools/installer/ReelRoulette.Desktop.iss`
 - shared icon asset: `assets/HI.ico`

@@ -20,6 +20,10 @@ obj/
 # Cursor
 .cursor/*
 
+# Local .NET CLI/XDG scratch (dev-only)
+.dotnet/
+.xdg-data/
+
 # OS files
 .DS_Store
 Thumbs.db

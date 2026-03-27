@@ -7,7 +7,7 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ReelRoulette.Core", "src\co
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ReelRoulette.Server", "src\core\ReelRoulette.Server\ReelRoulette.Server.csproj", "{D29CDB08-4F7E-4B53-8F46-D128DA765301}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ReelRoulette.WindowsApp", "src\clients\windows\ReelRoulette.WindowsApp\ReelRoulette.WindowsApp.csproj", "{4C93ACF8-7BE8-4D68-A6A3-8BAFAF198501}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ReelRoulette.DesktopApp", "src\clients\desktop\ReelRoulette.DesktopApp\ReelRoulette.DesktopApp.csproj", "{4C93ACF8-7BE8-4D68-A6A3-8BAFAF198501}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ReelRoulette.WebUI", "src\clients\web\ReelRoulette.WebUI\ReelRoulette.WebUI.csproj", "{C44A50A8-6C3A-4C90-B7D2-770701592601}"
 EndProject

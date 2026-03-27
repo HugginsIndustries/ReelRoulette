@@ -1,31 +1,20 @@
-using Microsoft.Win32;
-
 namespace ReelRoulette.ServerApp.Hosting;
 
-internal sealed class WindowsStartupLaunchService : IStartupLaunchService
+internal sealed class LinuxXdgStartupLaunchService : IStartupLaunchService
 {
-    private const string RunSubKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
-    private const string RunValueName = "ReelRoulette.ServerApp";
-    private readonly ILogger<WindowsStartupLaunchService> _logger;
+    private const string DesktopEntryFileName = "reelroulette-server.desktop";
+    private readonly ILogger<LinuxXdgStartupLaunchService> _logger;
 
-    public WindowsStartupLaunchService(ILogger<WindowsStartupLaunchService> logger)
+    public LinuxXdgStartupLaunchService(ILogger<LinuxXdgStartupLaunchService> logger)
     {
         _logger = logger;
     }
 
     public Task<StartupLaunchStatus> GetStatusAsync(CancellationToken cancellationToken)
     {
-        if (!OperatingSystem.IsWindows())
-        {
-            return Task.FromResult(new StartupLaunchStatus(
-                Supported: false,
-                LaunchServerOnStartup: false,
-                Message: "Launch Server on Startup is supported only on Windows."));
-        }
-
         try
         {
-            var executablePath = Environment.ProcessPath;
+            var executablePath = ResolveExecutablePath();
             if (string.IsNullOrWhiteSpace(executablePath))
             {
                 return Task.FromResult(new StartupLaunchStatus(
@@ -42,10 +31,17 @@ internal sealed class WindowsStartupLaunchService : IStartupLaunchService
                     Message: "Launch Server on Startup is available only for app-binary runtime."));
             }
 
-            using var runKey = Registry.CurrentUser.OpenSubKey(RunSubKeyPath, writable: false);
-            var raw = runKey?.GetValue(RunValueName)?.ToString();
-            var expected = QuoteExecutable(executablePath);
-            var enabled = string.Equals(raw?.Trim(), expected, StringComparison.OrdinalIgnoreCase);
+            var desktopEntryPath = GetDesktopEntryPath();
+            if (!File.Exists(desktopEntryPath))
+            {
+                return Task.FromResult(new StartupLaunchStatus(
+                    Supported: true,
+                    LaunchServerOnStartup: false,
+                    Message: "Launch Server on Startup is disabled."));
+            }
+
+            var content = File.ReadAllText(desktopEntryPath);
+            var enabled = content.Contains("Hidden=true", StringComparison.OrdinalIgnoreCase) == false;
             return Task.FromResult(new StartupLaunchStatus(
                 Supported: true,
                 LaunchServerOnStartup: enabled,
@@ -55,7 +51,7 @@ internal sealed class WindowsStartupLaunchService : IStartupLaunchService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to read Windows startup registration.");
+            _logger.LogWarning(ex, "Failed to read Linux XDG autostart registration.");
             return Task.FromResult(new StartupLaunchStatus(
                 Supported: true,
                 LaunchServerOnStartup: false,
@@ -65,18 +61,9 @@ internal sealed class WindowsStartupLaunchService : IStartupLaunchService
 
     public Task<StartupLaunchResult> SetEnabledAsync(bool enabled, string reason, CancellationToken cancellationToken)
     {
-        if (!OperatingSystem.IsWindows())
-        {
-            return Task.FromResult(new StartupLaunchResult(
-                Accepted: false,
-                Supported: false,
-                LaunchServerOnStartup: false,
-                Message: "Launch Server on Startup is supported only on Windows."));
-        }
-
         try
         {
-            var executablePath = Environment.ProcessPath;
+            var executablePath = ResolveExecutablePath();
             if (string.IsNullOrWhiteSpace(executablePath))
             {
                 return Task.FromResult(new StartupLaunchResult(
@@ -95,21 +82,23 @@ internal sealed class WindowsStartupLaunchService : IStartupLaunchService
                     Message: "Launch Server on Startup requires app-binary runtime."));
             }
 
-            using var runKey = Registry.CurrentUser.OpenSubKey(RunSubKeyPath, writable: true) ??
-                               Registry.CurrentUser.CreateSubKey(RunSubKeyPath, writable: true);
-            if (runKey is null)
+            var desktopEntryPath = GetDesktopEntryPath();
+            var autostartDir = Path.GetDirectoryName(desktopEntryPath);
+            if (string.IsNullOrWhiteSpace(autostartDir))
             {
                 return Task.FromResult(new StartupLaunchResult(
                     Accepted: false,
                     Supported: true,
                     LaunchServerOnStartup: false,
-                    Message: "Unable to open Windows startup registry key."));
+                    Message: "Unable to resolve XDG autostart directory."));
             }
+
+            Directory.CreateDirectory(autostartDir);
 
             if (enabled)
             {
-                runKey.SetValue(RunValueName, QuoteExecutable(executablePath), RegistryValueKind.String);
-                _logger.LogInformation("Launch Server on Startup enabled ({Reason}).", reason);
+                File.WriteAllText(desktopEntryPath, BuildDesktopEntryContent(executablePath));
+                _logger.LogInformation("Launch Server on Startup enabled via XDG autostart ({Reason}).", reason);
                 return Task.FromResult(new StartupLaunchResult(
                     Accepted: true,
                     Supported: true,
@@ -117,8 +106,12 @@ internal sealed class WindowsStartupLaunchService : IStartupLaunchService
                     Message: "Launch Server on Startup enabled."));
             }
 
-            runKey.DeleteValue(RunValueName, throwOnMissingValue: false);
-            _logger.LogInformation("Launch Server on Startup disabled ({Reason}).", reason);
+            if (File.Exists(desktopEntryPath))
+            {
+                File.Delete(desktopEntryPath);
+            }
+
+            _logger.LogInformation("Launch Server on Startup disabled via XDG autostart ({Reason}).", reason);
             return Task.FromResult(new StartupLaunchResult(
                 Accepted: true,
                 Supported: true,
@@ -127,7 +120,7 @@ internal sealed class WindowsStartupLaunchService : IStartupLaunchService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to update Windows startup registration ({Reason}).", reason);
+            _logger.LogWarning(ex, "Failed to update Linux XDG autostart registration ({Reason}).", reason);
             return Task.FromResult(new StartupLaunchResult(
                 Accepted: false,
                 Supported: true,
@@ -136,9 +129,34 @@ internal sealed class WindowsStartupLaunchService : IStartupLaunchService
         }
     }
 
-    private static string QuoteExecutable(string executablePath)
+    private static string BuildDesktopEntryContent(string executablePath)
     {
-        return $"\"{executablePath}\"";
+        return string.Join(
+            Environment.NewLine,
+            [
+                "[Desktop Entry]",
+                "Type=Application",
+                "Version=1.0",
+                "Name=ReelRoulette Server",
+                $"Exec=\"{executablePath}\"",
+                "Terminal=false",
+                "X-GNOME-Autostart-enabled=true",
+                "Comment=ReelRoulette Server"
+            ]) + Environment.NewLine;
+    }
+
+    private static string ResolveExecutablePath()
+    {
+        return Environment.ProcessPath ?? string.Empty;
+    }
+
+    private static string GetDesktopEntryPath()
+    {
+        var xdgConfigHome = Environment.GetEnvironmentVariable("XDG_CONFIG_HOME");
+        var configRoot = string.IsNullOrWhiteSpace(xdgConfigHome)
+            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config")
+            : xdgConfigHome;
+        return Path.Combine(configRoot, "autostart", DesktopEntryFileName);
     }
 
     private static bool IsDotnetHostExecutable(string processPath)

@@ -7,21 +7,31 @@ This file follows a Keep a Changelog style format.
 
 ### Added
 
+- Add repo-local build support for constrained environments via `Directory.Build.props` (`AllowMissingPrunePackageData=true`).
 - Add startup-launch host support for `ReelRoulette.ServerApp` (Windows `HKCU` registration), including control-plane APIs and tray/Operator toggles for immediate apply behavior.
 - Add installer desktop-shortcut task options with default-checked behavior for both server and desktop installers.
 - Add Material Symbols desktop icon-font foundation (`assets/fonts/MaterialSymbolsOutlined.var.ttf`) with shared glyph styles and grid-tile favorite/blacklist overlays.
 - Add core-authoritative contracts/client support for library stats, library item state reads, and backup settings synchronization.
 - Add one-shot `Force Rescan (Loudness)` and `Force Rescan (Duration)` settings flow from desktop settings to the core refresh pipeline.
+- Add server refresh `fingerprintScan` stage: full-file SHA-256 for library items that are Pending, Failed, Stale, or missing a fingerprint, with `fingerprintScanMaxDegreeOfParallelism` in core refresh settings (default 4, clamped 1–16) editable from desktop Settings.
 
 ### Changed
 
+- Standardize contributor-facing docs to POSIX repo-relative paths (`./src/...`, forward slashes) and unified user-data notes in `docs/dev-setup.md` (Windows `%...%` examples use `/` as well).
+- Consolidate `tools/scripts` to cross-platform `.ps1` only and align script docs/examples around `pwsh` usage.
+- Rename desktop client directory to `src/clients/desktop/ReelRoulette.DesktopApp/` to match `ReelRoulette.DesktopApp.csproj` (update solution, test compile links, packaging/version scripts, and current docs; historical changelog entries unchanged).
+- Bump Avalonia packages to **11.3.12** for the desktop client and ServerApp tray host (from 11.3.9).
+- Upgrade repo to .NET 10 (`net10.0` / `net10.0-windows`) including CI and run/verify/packaging scripts.
+- Switch ServerApp tray host from Windows-only WinForms/`NotifyIcon` to a cross-platform Avalonia tray with deterministic headless fallback when tray is unavailable.
+- Implement Linux startup launch via XDG autostart (`*.desktop`) with immediate apply behavior via tray and Operator control surfaces.
+- Rename desktop client path and identifiers from legacy `windows` naming to `desktop` naming (keep `Windows` for the OS).
 - Polish duplicate-review UX: duplicate groups now render per-item thumbnail previews in review order with explicit desktop bitmap loading from `/api/thumbnail/{itemId}`.
 - Add per-group duplicate handling selection: groups can use `Keep All` or a per-item keep selection, with persisted desktop default behavior (`Keep All` or `Select Best`).
 - Improve duplicate delete confirmation UX by summarizing groups/files before destructive apply and skipping the confirmation prompt when no groups are selected.
 - Improve duplicate item comparison signals: item metadata now includes `Tags: {count}`, and keep-selection dropdown labels now include filename + plays/tags/favorite/blacklisted fields for side-by-side decisions.
 - Update filter `Tags` layout to responsive wrapping for parity with tag editor behavior.
 - Refine desktop tag-chip visuals toward WebUI parity: white glyph/text, stronger text/icon shadows, and state-specific inset shadows.
-- Improve desktop core refresh completion status: single `Core refresh complete | Source | Duration | Loudness | Thumbnails` summary with compact tokens parsed from stage messages (for example source `no changes`, duration/loudness `files N, all cached`, thumbnail counts emitted only when non-zero).
+- Improve desktop core refresh completion status: single `Core refresh complete | Source | Fingerprint | Duration | Loudness | Thumbnails` summary with compact tokens parsed from stage messages (for example source `no changes`, fingerprint `hashed`/`ready`/`failed`/`skipped` only when non-zero, duration/loudness `files N, all cached`, thumbnail counts emitted only when non-zero).
 - Complete desktop Material Symbols migration with shared no-box controls, standardized glyph sizing/checked-state tint and transport layout cleanup, plus `ItemTagsDialog` parity refinements (icon-only footer actions, rounded category bars, responsive wrapping chips, and session-scoped category collapse-state persistence).
 - Migrate WebUI overlay and tag-editor controls to Material Symbols, including explicit `play_arrow`/`pause` glyph swapping and local Material Symbols font sync from shared assets.
 - Align WebUI tag-editor styling with desktop parity: dark rounded inputs, category header bars, shared orange/lime/violet tag-chip tokens, and stronger consistent text/glyph shadows.
@@ -42,6 +52,10 @@ This file follows a Keep a Changelog style format.
 - Improve dynamic-filter refresh behavior (for example `OnlyNeverPlayed`) by adding targeted panel refresh triggers for playback/stat and metadata-related filter changes.
 - Ensure playback projection updates apply for same-session events via authoritative projection sync instead of local writebacks.
 - Fix edit-tag category display so newly created categories resolve to human-readable names instead of fallback GUID text.
+- Ignore repo-local scratch directories for dev runs (`.dotnet/`, `.xdg-data/`).
+- Fix server refresh pipeline failures when legacy `library.json` stores enum fields as strings (`mediaType`, `fingerprintStatus`).
+- Fix desktop crash when core library projection sends string enum values by accepting both string + integer enum forms during JSON deserialization.
+- Fix desktop grid thumbnails not appearing until restart by hydrating thumbnail paths for visible tiles after thumbnail generation completes and as the visible grid window changes.
 
 ## v0.10.0 - Platform and Experience Update (2026-03-11)
 

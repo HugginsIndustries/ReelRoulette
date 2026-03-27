@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <IsTestProject>true</IsTestProject>
@@ -13,6 +13,6 @@
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="..\..\clients\windows\ReelRoulette.WindowsApp\CoreServerApiClient.cs" Link="CoreServerApiClient.cs" />
+    <Compile Include="..\..\clients\desktop\ReelRoulette.DesktopApp\CoreServerApiClient.cs" Link="CoreServerApiClient.cs" />
   </ItemGroup>
 </Project>

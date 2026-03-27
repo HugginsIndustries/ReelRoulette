@@ -1,3 +1,4 @@
+#!/usr/bin/env pwsh
 param(
     [int]$Port = 45123,
     [switch]$RequireAuth,
@@ -18,12 +19,13 @@ if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
     exit 1
 }
 
-$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
-$distPath = Join-Path $repoRoot "src\clients\web\ReelRoulette.WebUI\dist"
+$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot ".." "..")).Path
+$webProjectDir = Join-Path $repoRoot "src" "clients" "web" "ReelRoulette.WebUI"
+$distPath = Join-Path $webProjectDir "dist"
 Push-Location $repoRoot
 try {
     Write-Host "Building WebUI for ServerApp static serving..."
-    Push-Location "src\clients\web\ReelRoulette.WebUI"
+    Push-Location $webProjectDir
     try {
         npm run build
         if ($LASTEXITCODE -ne 0) {
@@ -41,12 +43,18 @@ try {
     }
 
     $env:ServerApp__WebUiStaticRootPath = $distPath
-    $framework = if ($IsWindows) { "net9.0-windows" } else { "net9.0" }
+    $framework = if ($IsWindows) { "net10.0-windows" } else { "net10.0" }
+
+    $runServerScript = Join-Path $PSScriptRoot "run-server.ps1"
+    $pwsh = Get-Command pwsh -ErrorAction SilentlyContinue
+    if (-not $pwsh) {
+        Write-Error "pwsh was not found in PATH."
+        exit 1
+    }
 
     $scriptArgs = @(
         "-NoProfile",
-        "-ExecutionPolicy", "Bypass",
-        "-File", (Join-Path $PSScriptRoot "run-server.ps1"),
+        "-File", $runServerScript,
         "-Port", $Port.ToString(),
         "-Framework", $framework,
         "-PairingToken", $PairingToken
@@ -55,7 +63,7 @@ try {
     if ($BindOnLan.IsPresent) { $scriptArgs += "-BindOnLan" }
     if ($DisableLocalhostTrust.IsPresent) { $scriptArgs += "-DisableLocalhostTrust" }
 
-    & powershell @scriptArgs
+    & $pwsh @scriptArgs
     if ($LASTEXITCODE -ne 0) {
         Write-Error "run-server.ps1 exited with code $LASTEXITCODE."
         exit $LASTEXITCODE

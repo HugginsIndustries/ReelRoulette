@@ -261,6 +261,11 @@ public sealed class RefreshSettingsSnapshot
     public int AutoRefreshIntervalMinutes { get; set; } = 15;
     public bool ForceRescanLoudness { get; set; }
     public bool ForceRescanDuration { get; set; }
+
+    /// <summary>
+    /// Max parallel fingerprint hash operations during refresh (clamped server-side).
+    /// </summary>
+    public int FingerprintScanMaxDegreeOfParallelism { get; set; } = 4;
 }
 
 public sealed class BackupSettingsSnapshot

@@ -53,7 +53,8 @@ public sealed class CoreSettingsService
                 AutoRefreshEnabled = _refreshSettings.AutoRefreshEnabled,
                 AutoRefreshIntervalMinutes = _refreshSettings.AutoRefreshIntervalMinutes,
                 ForceRescanLoudness = _refreshSettings.ForceRescanLoudness,
-                ForceRescanDuration = _refreshSettings.ForceRescanDuration
+                ForceRescanDuration = _refreshSettings.ForceRescanDuration,
+                FingerprintScanMaxDegreeOfParallelism = _refreshSettings.FingerprintScanMaxDegreeOfParallelism
             };
         }
     }
@@ -66,6 +67,8 @@ public sealed class CoreSettingsService
             _refreshSettings.AutoRefreshIntervalMinutes = Math.Clamp(snapshot.AutoRefreshIntervalMinutes, 5, 1440);
             _refreshSettings.ForceRescanLoudness = snapshot.ForceRescanLoudness;
             _refreshSettings.ForceRescanDuration = snapshot.ForceRescanDuration;
+            _refreshSettings.FingerprintScanMaxDegreeOfParallelism =
+                Math.Clamp(snapshot.FingerprintScanMaxDegreeOfParallelism, 1, 16);
             PersistSettings();
             return GetRefreshSettings();
         }
@@ -211,7 +214,8 @@ public sealed class CoreSettingsService
             AutoRefreshEnabled = options.AutoRefreshEnabled,
             AutoRefreshIntervalMinutes = options.AutoRefreshIntervalMinutes,
             ForceRescanLoudness = options.ForceRescanLoudness,
-            ForceRescanDuration = options.ForceRescanDuration
+            ForceRescanDuration = options.ForceRescanDuration,
+            FingerprintScanMaxDegreeOfParallelism = Math.Clamp(options.FingerprintScanMaxDegreeOfParallelism, 1, 16)
         };
         var backup = new BackupSettingsSnapshot
         {
@@ -242,6 +246,12 @@ public sealed class CoreSettingsService
                         refresh.AutoRefreshIntervalMinutes = Math.Clamp(parsed.Refresh.AutoRefreshIntervalMinutes, 5, 1440);
                         refresh.ForceRescanLoudness = parsed.Refresh.ForceRescanLoudness;
                         refresh.ForceRescanDuration = parsed.Refresh.ForceRescanDuration;
+                        refresh.FingerprintScanMaxDegreeOfParallelism = Math.Clamp(
+                            parsed.Refresh.FingerprintScanMaxDegreeOfParallelism > 0
+                                ? parsed.Refresh.FingerprintScanMaxDegreeOfParallelism
+                                : 4,
+                            1,
+                            16);
                     }
 
                     if (parsed.Backup != null)
@@ -319,7 +329,8 @@ public sealed class CoreSettingsService
                 !HasObjectProperty(refresh, "autoRefreshEnabled") ||
                 !HasObjectProperty(refresh, "autoRefreshIntervalMinutes") ||
                 !HasObjectProperty(refresh, "forceRescanLoudness") ||
-                !HasObjectProperty(refresh, "forceRescanDuration"))
+                !HasObjectProperty(refresh, "forceRescanDuration") ||
+                !HasObjectProperty(refresh, "fingerprintScanMaxDegreeOfParallelism"))
             {
                 return true;
             }

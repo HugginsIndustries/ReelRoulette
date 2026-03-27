@@ -19,16 +19,18 @@ ReelRoulette is migrating from a monolithic desktop app to a thin-client, API-fi
   - Operator testing mode supports deterministic fault simulation (version/capability mismatch, API unavailable, media missing, SSE disconnect).
   - mDNS LAN hostname advertisement for WebUI when enabled.
   - Host-UI abstraction keeps server runtime tray-agnostic:
-    - Windows uses native `NotifyIcon` tray host with lifecycle/refresh/operator shortcuts.
-    - non-Windows remains headless-compatible.
-  - Windows startup-launch registration is host-managed and user-scoped (`HKCU`), with immediate toggle support through tray and Operator control settings.
+    - Uses a cross-platform Avalonia tray host when available (lifecycle/refresh/operator shortcuts).
+    - Falls back to a deterministic headless host when a tray cannot be created.
+  - Startup-launch registration is host-managed with immediate toggle support through tray and Operator control settings:
+    - Windows: user-scoped `HKCU` registration.
+    - Linux: XDG autostart (`*.desktop`).
 
 - **Domain execution (`src/core/ReelRoulette.Core` + server services)**
   - API-authoritative library operations (import, duplicates, auto-tag, playback stats, refresh pipeline).
   - Unified refresh pipeline with stage/status projection and thumbnail generation.
   - Replay-aware SSE envelope with reconnect recovery (`Last-Event-ID`, `resyncRequired`, authoritative requery).
 
-- **Desktop client (`src/clients/windows/ReelRoulette.WindowsApp/`)**
+- **Desktop client (`src/clients/desktop/ReelRoulette.DesktopApp/`)**
   - Thin-client for migrated flows: API command/query + SSE projection (no dual-writer core-state mutation).
   - Local-first playback with deterministic API fallback (`ForceApiPlayback` option).
   - Server version/capability compatibility gating with reconnect/resync guidance.
@@ -65,7 +67,7 @@ Authoritative roadmap details live in `MILESTONES.md`. Near-term focus areas:
   - `ReelRoulette.Core.Tests` and `ReelRoulette.Core.SystemChecks`.
 - `src/clients/`:
   - `web/ReelRoulette.WebUI`: active web client.
-  - `windows/ReelRoulette.WindowsApp`: shipping desktop client location (Avalonia).
+  - `desktop/ReelRoulette.DesktopApp`: shipping Desktop client location (Avalonia).
 - `shared/api/openapi.yaml`: API contract source of truth.
 - `tools/scripts/`: runtime/verify/package scripts (`run-server*`, `verify-web*`, `verify-web-deploy*`, `publish-web*`, packaging scripts).
   - includes `set-release-version.ps1` for release-aligned version fan-out (with optional docs update skip via `-NoDocUpdates`) and `reset-checklist.ps1` for testing-guide reset workflows.
@@ -76,10 +78,10 @@ For full setup/run details use `README.md` and `docs/dev-setup.md`. Core command
 
 - `dotnet build ReelRoulette.sln`
 - `dotnet test ReelRoulette.sln`
-- `dotnet run --framework net9.0-windows --project .\src\core\ReelRoulette.ServerApp\ReelRoulette.ServerApp.csproj` (Windows tray path)
-- `dotnet run --framework net9.0 --project .\src\core\ReelRoulette.ServerApp\ReelRoulette.ServerApp.csproj` (non-Windows headless path)
-- `dotnet run --project .\src\clients\windows\ReelRoulette.WindowsApp\ReelRoulette.WindowsApp.csproj`
-- `.\tools\scripts\run-server.ps1` / `.\tools\scripts\run-server-rebuild.ps1`
+- `dotnet run --framework net10.0-windows --project ./src/core/ReelRoulette.ServerApp/ReelRoulette.ServerApp.csproj` (Windows runtime; tray when available, otherwise headless)
+- `dotnet run --framework net10.0 --project ./src/core/ReelRoulette.ServerApp/ReelRoulette.ServerApp.csproj` (non-Windows runtime; tray when available, otherwise headless)
+- `dotnet run --project ./src/clients/desktop/ReelRoulette.DesktopApp/ReelRoulette.DesktopApp.csproj`
+- `pwsh ./tools/scripts/run-server.ps1` / `pwsh ./tools/scripts/run-server-rebuild.ps1`
 - `npm run verify` (in `src/clients/web/ReelRoulette.WebUI`)
 
 ## Guardrails for Contributors and Agents

@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
+using Avalonia.Threading;
 using System;
 
 namespace ReelRoulette;
@@ -19,6 +20,22 @@ public partial class App : Application
 
     public override void OnFrameworkInitializationCompleted()
     {
+        Dispatcher.UIThread.UnhandledExceptionFilter += (_, e) =>
+        {
+            if (IsExpectedLinuxDbusShutdownException(e.Exception))
+            {
+                e.RequestCatch = false;
+            }
+        };
+
+        Dispatcher.UIThread.UnhandledException += (_, e) =>
+        {
+            if (IsExpectedLinuxDbusShutdownException(e.Exception))
+            {
+                e.Handled = true;
+            }
+        };
+
         try
         {
             Log("App.OnFrameworkInitializationCompleted: Starting...");
@@ -49,5 +66,22 @@ public partial class App : Application
             Log(errorMsg);
             throw;
         }
+    }
+
+    private static bool IsExpectedLinuxDbusShutdownException(Exception? ex)
+    {
+        if (ex is not OperationCanceledException oce)
+        {
+            return false;
+        }
+
+        if (!OperatingSystem.IsLinux())
+        {
+            return false;
+        }
+
+        var stack = oce.StackTrace ?? string.Empty;
+        return stack.Contains("Tmds.DBus.Protocol", StringComparison.Ordinal) ||
+               stack.Contains("Avalonia.Threading", StringComparison.Ordinal);
     }
 }

@@ -1,3 +1,4 @@
+#!/usr/bin/env pwsh
 param(
     [switch]$KeepMetadata,
     [switch]$RemoveWaived
@@ -6,8 +7,8 @@ param(
 $ErrorActionPreference = "Stop"
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
-$checklistPath = Join-Path $repoRoot "docs\checklists\testing-checklist.md"
-$serverAppProjectPath = Join-Path $repoRoot "src\core\ReelRoulette.ServerApp\ReelRoulette.ServerApp.csproj"
+$checklistPath = Join-Path $repoRoot "docs" "checklists" "testing-checklist.md"
+$serverAppProjectPath = Join-Path $repoRoot "src" "core" "ReelRoulette.ServerApp" "ReelRoulette.ServerApp.csproj"
 
 if (-not (Test-Path $checklistPath)) {
     throw "Checklist file not found: $checklistPath"
@@ -86,7 +87,7 @@ foreach ($line in $lines) {
     $updatedLines.Add($nextLine)
 }
 
-$nextRaw = [string]::Join("`r`n", $updatedLines)
+$nextRaw = [string]::Join([System.Environment]::NewLine, $updatedLines)
 if ($raw -ceq $nextRaw) {
     Write-Host "No change: $checklistPath"
     exit 0

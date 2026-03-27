@@ -17,7 +17,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: "9.0.x"
+          dotnet-version: "10.0.x"
 
       - name: Install ffmpeg
         run: |
@@ -25,10 +25,10 @@ jobs:
           sudo apt-get install -y ffmpeg
 
       - name: Build solution
-        run: dotnet build ReelRoulette.sln --configuration Release -p:TargetFramework=net9.0 -p:EnableWindowsTargeting=true -m:1
+        run: dotnet build ReelRoulette.sln --configuration Release -p:TargetFramework=net10.0 -p:EnableWindowsTargeting=true -m:1
 
       - name: Test solution
-        run: dotnet test ReelRoulette.sln --configuration Release --no-build -p:TargetFramework=net9.0 -p:EnableWindowsTargeting=true -m:1
+        run: dotnet test ReelRoulette.sln --configuration Release --no-build -p:TargetFramework=net10.0 -p:EnableWindowsTargeting=true -m:1
 
   build-test-windows:
     runs-on: windows-latest
@@ -39,7 +39,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: "9.0.x"
+          dotnet-version: "10.0.x"
 
       - name: Install ffmpeg
         shell: pwsh

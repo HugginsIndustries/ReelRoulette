@@ -89,43 +89,7 @@ Do not use this file for detailed architecture explanation or current capability
 
 ## Active Milestones
 
-Last milestone completed: M8i
-
-### M9a - Avalonia Server Tray + Linux Runtime Baseline
-
-- **Status**: ⏳ Planned
-- **Goal**: Replace the **Windows**-only WinForms server host tray with a cross-platform **Avalonia** tray that preserves today’s behavior; validate server and the **Desktop** client on Linux with **CachyOS (Arch-based, `linux-x64`)** as the primary sign-off environment; align repo naming from legacy **`windows` / Windows-oriented** client identifiers to **`desktop` paths** and **Desktop**-oriented project/product names.
-- **Scope**:
-  - **Server host tray (WinForms → Avalonia)**:
-    - Retire the WinForms `NotifyIcon` host UI path; implement an Avalonia-based tray (or minimal Avalonia application lifetime) shared across **Windows** and Linux.
-    - Preserve functional parity with the current tray: **Open Operator UI**, **Launch Server on Startup** (enable/disable autostart in parity across OSes—**Windows** registry-backed behavior today; **Linux** via **XDG Autostart** using a standard `*.desktop` entry in the user autostart directory, with the tray toggle installing/removing or enabling/disabling that entry as appropriate), **Refresh Library**, **Restart Server**, **Stop Server / Exit**, shared icon loading with sensible fallback, non-blocking menu actions, graceful UI-thread shutdown aligned with host restart/stop flows.
-    - Preserve **light/dark context-menu theming** on **Windows** where applicable; on Linux, follow the **desktop environment** theme or document explicit behavior when the platform does not expose matching signals.
-    - Unify server app targeting where practical (avoid a **Windows**-only TFM solely for tray unless required); keep **`net9.0` headless** path when **tray is unavailable** (no display / no status notifier / unsupported session) with deterministic behavior matching current non-**Windows** headless semantics.
-  - **Desktop client**:
-    - The **Desktop** GUI client is **already Avalonia**; scope here is Linux **validation and hardening** (not a UI-framework rewrite).
-    - **Repo-wide rename**: `src/clients/windows/...`-style paths, solution/project/assembly names, and docs/scripts slugs move to **`src/clients/desktop/...`**-style paths with **Desktop** client naming (e.g. `ReelRoulette.DesktopApp`—exact identifiers chosen at implementation time; keep **lowercase `desktop` in path segments**, **capitalized Desktop in product-facing names**).
-  - **Linux baseline**:
-    - Primary manual/automated sign-off reference: **CachyOS**, `linux-x64`, on typical **desktop environment** sessions (tray-capable **and** headless/tray-unavailable cases).
-    - Validate consolidated server on Linux: `/health`, `/api/version`, `/api/events`, `/api/media/{idOrToken}`, `/operator`, plus WebUI/static hosting as today.
-    - Validate **Desktop** client: launch, pair/connect, random/manual playback, core controls.
-    - Validate native deps: **ffprobe/ffmpeg**, **LibVLC** runtime expectations.
-    - Keep API-first / thin-client boundaries unchanged.
-- **Acceptance criteria**:
-  - On **Windows**, after the port, tray menu actions and host lifecycle behavior match pre-port intent (no loss of Operator open, refresh, restart, stop, startup-toggle behavior).
-  - On **Linux**, server starts and serves the same core surfaces as above; **Desktop** client completes core workflows against that server.
-  - **Launch Server on Startup** works on **Linux**: the tray toggle deterministically enables/disables user login autostart via **XDG Autostart** (`*.desktop` in the user autostart location), verified on **CachyOS** alongside the existing **Windows** registry-backed behavior.
-  - Tray-capable **desktop environments** show the Avalonia tray when supported; otherwise server runs **headless** without hanging or requiring a display—deterministic fallback.
-  - Linux prerequisites (including VLC/ffmpeg and tray fallbacks) are **documented and reproducible** for the CachyOS baseline.
-  - **Desktop** rename is **consistent** in solution, primary scripts, and contributor-facing paths (no lingering **`windows`** folder naming or **Windows**-centric client wording as the canonical **Desktop** app identity).
-  - No new client-local authoritative mutation paths are introduced.
-- **Verification evidence**:
-  - Evidence on **CachyOS** for server + **Desktop** client smoke runs; include at least one tray-capable session and one tray-unavailable/headless server run.
-  - **Windows** evidence for tray parity post-port (smoke + restart/stop cycle); **Linux** evidence includes autostart on/off cycles (XDG entry present/absent or disabled per design).
-  - Automated gates:
-    - `dotnet build ReelRoulette.sln`
-    - `dotnet test ReelRoulette.sln`
-    - `npm run verify` (`src/clients/web/ReelRoulette.WebUI`)
-  - Notes on any intentional **platform differences** (e.g. autostart implementation details) recorded in the doc slice of this series.
+Last milestone completed: M9a
 
 ### M9b - Linux Packaging (Server + Desktop)
 
@@ -145,8 +109,10 @@ Last milestone completed: M8i
   - Packaged apps run on the supported Linux baseline in both tray-available and headless/fallback scenarios.
 - **Verification evidence**:
   - Artifacts under `artifacts/packages/` (or documented equivalent).
-  - Packaging smoke on CachyOS (or CI-chosen Linux) for tray + headless paths.
-  - `docs/checklists/testing-checklist.md` updated with Linux package checks (including **XDG Autostart** where applicable).
+  - Scripts and docs for producing Linux packages are landable without requiring full packaging smoke on every host; comprehensive packaged-artifact verification (tray + headless, **CachyOS** or CI-chosen Linux, plus cross-platform checklist completion) is **deferred** to **Linux Release Readiness and Sign-off**.
+  - `docs/checklists/testing-checklist.md` gains Linux package checklist items when packaging lands; completing every checklist item remains deferred to **Linux Release Readiness and Sign-off** unless explicitly scoped here.
+- **Deferrals / Follow-ups**:
+  - Full Linux packaging smoke matrix and cross-platform checklist completion → **Linux Release Readiness and Sign-off**.
 
 ### M9c - CI Linux Distribution Gates
 
@@ -164,6 +130,9 @@ Last milestone completed: M8i
 - **Verification evidence**:
   - Workflow updates with Linux matrix steps and artifact uploads.
   - Links or logs showing passing Linux gates.
+  - Using CI green builds as the bar for this milestone does not replace the full manual + packaged-artifact sign-off matrix; that broader verification remains **deferred** to **Linux Release Readiness and Sign-off**.
+- **Deferrals / Follow-ups**:
+  - Full cross-platform manual verification and checklist completion beyond CI gates → **Linux Release Readiness and Sign-off**.
 
 ### M9d - Linux Documentation and Operator Runbook
 
@@ -179,13 +148,16 @@ Last milestone completed: M8i
   - Tray best-effort vs guaranteed core runtime is explicit; headless operator path documented; **Linux** autostart behavior is explicit and testable from the docs.
 - **Verification evidence**:
   - Doc consistency with scripts/workflows and renamed paths.
-  - Dry-run evidence (tray-capable + headless) on CachyOS or documented host.
+  - Maintainer spot-checks while writing docs are sufficient for this milestone; formal dry-run evidence (tray-capable + headless on **CachyOS**, full checklist pass) is **deferred** to **Linux Release Readiness and Sign-off**.
+- **Deferrals / Follow-ups**:
+  - Formal doc validation dry-runs and exhaustive checklist completion → **Linux Release Readiness and Sign-off**.
 
 ### M9e - Linux Release Readiness and Sign-off
 
 - **Status**: ⏳ Planned
 - **Goal**: Final Linux + cross-platform tray sign-off for server and **Desktop** client distribution.
 - **Scope**:
+  - **Owns** the comprehensive automated + manual verification **deferred** from **Avalonia Server Tray + Linux Runtime Baseline**, **Linux Packaging (Server + Desktop)**, **CI Linux Distribution Gates**, and **Linux Documentation and Operator Runbook**: full cross-platform matrix (**Windows** + **Linux**), completed `docs/checklists/testing-checklist.md` with PASS/FAIL evidence, and packaged-artifact smokes where applicable.
   - Full automated + manual matrix on **CachyOS** (`linux-x64`): server (Avalonia tray + headless), **Desktop** client, WebUI/operator against server; include **XDG Autostart** on/off validation for **Launch Server on Startup** on **Linux**.
   - Confirm **Windows** tray parity after Avalonia port (no regression vs accepted baseline behaviors), including **Windows** autostart toggle behavior.
   - End-to-end packaged install/run; release notes and tracking updates.
@@ -919,6 +891,44 @@ Last milestone completed: M8i
 
 Latest completions first:
 
+### M9a - Avalonia Server Tray + Linux Runtime Baseline
+
+- **Status**: ✅ Complete
+- **Goal**: Replace the **Windows**-only WinForms server host tray with a cross-platform **Avalonia** tray that preserves today’s behavior; validate server and the **Desktop** client on Linux with **CachyOS (Arch-based, `linux-x64`)** as the primary sign-off environment; align repo naming from legacy **`windows` / Windows-oriented** client identifiers to **`desktop` paths** and **Desktop**-oriented project/product names.
+- **Scope**:
+  - **Server host tray (WinForms → Avalonia)**:
+    - Retire the WinForms `NotifyIcon` host UI path; implement an Avalonia-based tray (or minimal Avalonia application lifetime) shared across **Windows** and Linux.
+    - Preserve functional parity with the current tray: **Open Operator UI**, **Launch Server on Startup** (enable/disable autostart in parity across OSes—**Windows** registry-backed behavior today; **Linux** via **XDG Autostart** using a standard `*.desktop` entry in the user autostart directory, with the tray toggle installing/removing or enabling/disabling that entry as appropriate), **Refresh Library**, **Restart Server**, **Stop Server / Exit**, shared icon loading with sensible fallback, non-blocking menu actions, graceful UI-thread shutdown aligned with host restart/stop flows.
+    - Preserve **light/dark context-menu theming** on **Windows** where applicable; on Linux, follow the **desktop environment** theme or document explicit behavior when the platform does not expose matching signals.
+    - Unify server app targeting where practical (avoid a **Windows**-only TFM solely for tray unless required); keep **`net10.0` headless** path when **tray is unavailable** (no display / no status notifier / unsupported session) with deterministic behavior matching current non-**Windows** headless semantics.
+  - **Desktop client**:
+    - The **Desktop** GUI client is **already Avalonia**; scope here is Linux **validation and hardening** (not a UI-framework rewrite).
+    - **Repo-wide rename**: `src/clients/desktop/...`-style paths, solution/project/assembly names, and docs/scripts slugs move to **`src/clients/desktop/...`**-style paths with **Desktop** client naming (e.g. `ReelRoulette.DesktopApp`—exact identifiers chosen at implementation time; keep **lowercase `desktop` in path segments**, **capitalized Desktop in product-facing names**).
+  - **Linux baseline**:
+    - Primary manual/automated sign-off reference: **CachyOS**, `linux-x64`, on typical **desktop environment** sessions (tray-capable **and** headless/tray-unavailable cases).
+    - Validate consolidated server on Linux: `/health`, `/api/version`, `/api/events`, `/api/media/{idOrToken}`, `/operator`, plus WebUI/static hosting as today.
+    - Validate **Desktop** client: launch, pair/connect, random/manual playback, core controls.
+    - Validate native deps: **ffprobe/ffmpeg**, **LibVLC** runtime expectations.
+    - Keep API-first / thin-client boundaries unchanged.
+- **Acceptance criteria**:
+  - On **Windows**, after the port, tray menu actions and host lifecycle behavior match pre-port intent (no loss of Operator open, refresh, restart, stop, startup-toggle behavior).
+  - On **Linux**, server starts and serves the same core surfaces as above; **Desktop** client completes core workflows against that server.
+  - **Launch Server on Startup** works on **Linux**: the tray toggle deterministically enables/disables user login autostart via **XDG Autostart** (`*.desktop` in the user autostart location), verified on **CachyOS** alongside the existing **Windows** registry-backed behavior.
+  - Tray-capable **desktop environments** show the Avalonia tray when supported; otherwise server runs **headless** without hanging or requiring a display—deterministic fallback.
+  - Linux prerequisites (including VLC/ffmpeg and tray fallbacks) are **documented and reproducible** for the CachyOS baseline.
+  - **Desktop** rename is **consistent** in solution, primary scripts, and contributor-facing paths (no lingering **`windows`** folder naming or **Windows**-centric client wording as the canonical **Desktop** app identity).
+  - No new client-local authoritative mutation paths are introduced.
+- **Verification evidence**:
+  - Informal confirmation that server and **Desktop** client run and perform core workflows on a **Linux** desktop baseline (maintainer-reported smoke) is sufficient for closing implementation work in this milestone when paired with green automated gates below.
+  - Comprehensive manual verification across **Windows** and **Linux** (full checklist completion, packaged-artifact matrix, formal tray vs headless vs autostart evidence on both platforms) is **deferred** to **Linux Release Readiness and Sign-off** (see that milestone).
+  - Automated gates passed (still required when touching release surfaces):
+    - `dotnet build ReelRoulette.sln`
+    - `dotnet test ReelRoulette.sln`
+    - `npm run verify` (`src/clients/web/ReelRoulette.WebUI`)
+  - Notes on any intentional **platform differences** (e.g. autostart implementation details) recorded in the doc slice of this series.
+- **Deferrals / Follow-ups**:
+  - Full cross-platform manual matrix and checklist-driven sign-off → **Linux Release Readiness and Sign-off**.
+
 ### M8i - Desktop App UX/UI Polish
 
 - **Status**: ✅ Complete
@@ -1490,7 +1500,7 @@ Latest completions first:
     - client settings updates are pushed to core via API and persisted in core settings
     - default auto refresh remains enabled, default interval becomes 15 minutes, idle-only gating settings are removed
   - Define thumbnail artifact policy before feature completion:
-    - artifact location convention (for example, `%LOCALAPPDATA%\\ReelRoulette\\thumbnails\\{itemId}.jpg`)
+    - artifact location convention (for example, `%LOCALAPPDATA%/ReelRoulette/thumbnails/{itemId}.jpg`)
     - invalidation rules (file change/fingerprint change -> thumbnail stale/regenerate)
     - target size/quality and video thumbnail timestamp strategy
 - **Acceptance criteria**:

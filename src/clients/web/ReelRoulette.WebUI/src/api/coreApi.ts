@@ -6,6 +6,21 @@ const SESSION_ID_KEY = "rr_sessionId";
 let fallbackClientId: string | null = null;
 let fallbackSessionId: string | null = null;
 
+type StorageLike = Pick<Storage, "getItem" | "setItem">;
+
+function tryGetStorage(storage: unknown): StorageLike | null {
+  if (!storage || typeof storage !== "object") {
+    return null;
+  }
+
+  const candidate = storage as Partial<StorageLike>;
+  if (typeof candidate.getItem !== "function" || typeof candidate.setItem !== "function") {
+    return null;
+  }
+
+  return candidate as StorageLike;
+}
+
 function buildApiUrl(config: RuntimeConfig, path: string): string {
   return new URL(path, `${config.apiBaseUrl}/`).toString();
 }
@@ -15,13 +30,14 @@ function createGuidFallback(): string {
 }
 
 export function getClientId(): string {
-  let id = typeof localStorage === "undefined" ? fallbackClientId : localStorage.getItem(CLIENT_ID_KEY);
+  const storage = tryGetStorage((globalThis as unknown as { localStorage?: unknown }).localStorage);
+  let id = storage ? storage.getItem(CLIENT_ID_KEY) : fallbackClientId;
   if (!id) {
     id = crypto.randomUUID ? crypto.randomUUID() : createGuidFallback();
-    if (typeof localStorage === "undefined") {
+    if (!storage) {
       fallbackClientId = id;
     } else {
-      localStorage.setItem(CLIENT_ID_KEY, id);
+      storage.setItem(CLIENT_ID_KEY, id);
     }
   }
 
@@ -29,13 +45,14 @@ export function getClientId(): string {
 }
 
 export function getSessionId(): string {
-  let id = typeof sessionStorage === "undefined" ? fallbackSessionId : sessionStorage.getItem(SESSION_ID_KEY);
+  const storage = tryGetStorage((globalThis as unknown as { sessionStorage?: unknown }).sessionStorage);
+  let id = storage ? storage.getItem(SESSION_ID_KEY) : fallbackSessionId;
   if (!id) {
     id = crypto.randomUUID ? crypto.randomUUID() : createGuidFallback();
-    if (typeof sessionStorage === "undefined") {
+    if (!storage) {
       fallbackSessionId = id;
     } else {
-      sessionStorage.setItem(SESSION_ID_KEY, id);
+      storage.setItem(SESSION_ID_KEY, id);
     }
   }
 

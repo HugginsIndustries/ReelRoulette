@@ -1,3 +1,4 @@
+#!/usr/bin/env pwsh
 param(
     [string]$VersionId = "",
     [string]$DeployRoot = "",
@@ -12,7 +13,7 @@ if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
 }
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
-$webProjectDir = (Resolve-Path (Join-Path $repoRoot "src\clients\web\ReelRoulette.WebUI")).Path
+$webProjectDir = (Resolve-Path (Join-Path $repoRoot "src" "clients" "web" "ReelRoulette.WebUI")).Path
 if ([string]::IsNullOrWhiteSpace($DeployRoot)) {
     $DeployRoot = Join-Path $repoRoot ".web-deploy"
 }
@@ -21,7 +22,7 @@ if ([string]::IsNullOrWhiteSpace($VersionId)) {
     $VersionId = [DateTimeOffset]::UtcNow.ToString("yyyyMMddHHmmss")
 }
 
-$versionDir = Join-Path $DeployRoot "versions\$VersionId"
+$versionDir = Join-Path $DeployRoot "versions" $VersionId
 if (Test-Path $versionDir) {
     throw "Version '$VersionId' already exists at '$versionDir'."
 }
@@ -43,7 +44,7 @@ try {
     }
 
     New-Item -ItemType Directory -Force -Path $versionDir | Out-Null
-    Copy-Item -Path (Join-Path $webProjectDir "dist\*") -Destination $versionDir -Recurse -Force
+    Copy-Item -Path (Join-Path $webProjectDir "dist" "*") -Destination $versionDir -Recurse -Force
 }
 finally {
     Pop-Location

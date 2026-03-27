@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Reflection;
 using System.Text.Json;
+using System.Threading.Tasks;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Logging.Abstractions;
 using ReelRoulette.ServerApp;
@@ -9,7 +10,23 @@ using ReelRoulette.Server.Contracts;
 using ReelRoulette.Server.Hosting;
 using ReelRoulette.Server.Services;
 
-await RunAsync(args);
+// Linux/DBus tray teardown can surface TaskCanceledException on a thread-pool continuation; mark as observed so the host does not print an unhandled exception on shutdown.
+TaskScheduler.UnobservedTaskException += (_, e) =>
+{
+    if (IsLinuxTrayShutdownNoiseException(e.Exception))
+    {
+        e.SetObserved();
+    }
+};
+
+try
+{
+    await RunAsync(args);
+}
+catch (OperationCanceledException ex) when (IsExpectedLinuxShutdownCancellation(ex))
+{
+    Console.Error.WriteLine($"Ignoring expected Linux shutdown cancellation: {ex.Message}");
+}
 
 static async Task RunAsync(string[] args)
 {
@@ -69,11 +86,73 @@ static async Task RunAsync(string[] args)
 
         app.Lifetime.ApplicationStopping.Register(() =>
         {
-            _ = hostUi.StopAsync(CancellationToken.None);
+            // Complete tray/DBus teardown before the web host finishes stopping. Fire-and-forget StopAsync races
+            // Avalonia shutdown and can yield unhandled TaskCanceledException and non-zero exit on Linux.
+            try
+            {
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(45));
+                hostUi.StopAsync(cts.Token).GetAwaiter().GetResult();
+            }
+            catch (OperationCanceledException ex) when (IsExpectedLinuxShutdownCancellation(ex))
+            {
+            }
+            catch (OperationCanceledException)
+            {
+                app.Logger.LogWarning("Host UI stop timed out during shutdown; continuing host teardown.");
+            }
+            catch (Exception ex)
+            {
+                app.Logger.LogDebug(ex, "Host UI stop completed with a non-fatal error.");
+            }
+
             app.Logger.LogInformation("ReelRoulette.ServerApp is shutting down.");
         });
 
         await app.RunAsync();
+}
+
+static bool IsLinuxTrayShutdownNoiseException(Exception exception)
+{
+    if (exception is AggregateException agg)
+    {
+        var inners = agg.Flatten().InnerExceptions;
+        if (inners.Count == 0)
+        {
+            return false;
+        }
+
+        foreach (var inner in inners)
+        {
+            if (inner is not OperationCanceledException oce || !IsExpectedLinuxShutdownCancellation(oce))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    return exception is OperationCanceledException single && IsExpectedLinuxShutdownCancellation(single);
+}
+
+static bool IsExpectedLinuxShutdownCancellation(OperationCanceledException ex)
+{
+    if (!OperatingSystem.IsLinux())
+    {
+        return false;
+    }
+
+    for (Exception? e = ex; e is not null; e = e.InnerException)
+    {
+        var stack = e.StackTrace ?? string.Empty;
+        if (stack.Contains("Tmds.DBus.Protocol", StringComparison.Ordinal) ||
+            stack.Contains("Avalonia.Threading", StringComparison.Ordinal))
+        {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 static IHostUi CreateHostUi(
@@ -86,11 +165,10 @@ static IHostUi CreateHostUi(
         var operatorUrl = BuildOperatorUrl(runtimeOptions.ListenUrl, serverAppOptions.OperatorUiPath);
         var sharedIconPath = ResolveSharedIconPath(app.Environment.ContentRootPath);
 
-#if WINDOWS
-        if (OperatingSystem.IsWindows())
+        if (SupportsTrayHostUi())
         {
-            return new WindowsNotifyIconHostUi(
-                loggerFactory.CreateLogger<WindowsNotifyIconHostUi>(),
+            return new AvaloniaTrayHostUi(
+                loggerFactory.CreateLogger<AvaloniaTrayHostUi>(),
                 operatorUrl,
                 sharedIconPath,
                 onRefreshLibrary: cancellationToken =>
@@ -125,7 +203,6 @@ static IHostUi CreateHostUi(
                     return startupLaunchService.SetEnabledAsync(enabled, "tray-menu-toggle", cancellationToken);
                 });
         }
-#endif
 
         return new HeadlessHostUi();
 }
@@ -139,7 +216,32 @@ static IStartupLaunchService CreateStartupLaunchService(WebApplication app)
         return new WindowsStartupLaunchService(loggerFactory.CreateLogger<WindowsStartupLaunchService>());
     }
 #endif
+    if (OperatingSystem.IsLinux())
+    {
+        return new LinuxXdgStartupLaunchService(loggerFactory.CreateLogger<LinuxXdgStartupLaunchService>());
+    }
+
     return new HeadlessStartupLaunchService();
+}
+
+static bool SupportsTrayHostUi()
+{
+    if (OperatingSystem.IsWindows() || OperatingSystem.IsMacOS())
+    {
+        return true;
+    }
+
+    if (OperatingSystem.IsLinux())
+    {
+        var display = Environment.GetEnvironmentVariable("DISPLAY");
+        var wayland = Environment.GetEnvironmentVariable("WAYLAND_DISPLAY");
+        var hasSessionBus = Environment.GetEnvironmentVariable("DBUS_SESSION_BUS_ADDRESS");
+        return !string.IsNullOrWhiteSpace(display) ||
+               !string.IsNullOrWhiteSpace(wayland) ||
+               !string.IsNullOrWhiteSpace(hasSessionBus);
+    }
+
+    return false;
 }
 
 static string BuildOperatorUrl(string listenUrl, string operatorPath)
@@ -1064,13 +1166,21 @@ file sealed class RestartCoordinator
         try
         {
             _logger.LogInformation("Server restart requested ({Reason}).", reason);
-            if (enableSelfRestart && TryLaunchReplacementProcess(out var launchMessage))
+            if (enableSelfRestart)
             {
-                _logger.LogInformation("Replacement server process launch succeeded ({Message}).", launchMessage);
-            }
-            else if (enableSelfRestart)
-            {
-                _logger.LogWarning("Replacement server process launch failed; proceeding with graceful shutdown only.");
+                // Launch the replacement only after we have fully stopped listening, otherwise the
+                // replacement process can race and exit with "address already in use" (observed on Linux).
+                _lifetime.ApplicationStopped.Register(() =>
+                {
+                    if (TryLaunchReplacementProcess(out var launchMessage))
+                    {
+                        _logger.LogInformation("Replacement server process launch succeeded ({Message}).", launchMessage);
+                    }
+                    else
+                    {
+                        _logger.LogWarning("Replacement server process launch failed; restart will behave like stop-only.");
+                    }
+                });
             }
 
             _ = Task.Run(async () =>
@@ -1178,8 +1288,29 @@ file sealed class RestartCoordinator
                     return false;
                 }
 
-                fileName = processPath;
-                arguments = $"\"{entryAssemblyPath}\"";
+                // When running via `dotnet ...dll`, Linux can race: we start the replacement before the
+                // current process releases its listen port, and the replacement immediately exits.
+                // Wait until the listen port is actually free before launching the replacement.
+                if (OperatingSystem.IsWindows())
+                {
+                    fileName = processPath;
+                    arguments = $"\"{entryAssemblyPath}\"";
+                }
+                else
+                {
+                    var waitHost = "127.0.0.1";
+                    var waitPort = 45123;
+                    if (Uri.TryCreate(effectiveListenUrl, UriKind.Absolute, out var listenUri))
+                    {
+                        waitPort = listenUri.Port > 0 ? listenUri.Port : waitPort;
+                        waitHost = listenUri.Host is "0.0.0.0" or "::" ? "127.0.0.1" : listenUri.Host;
+                    }
+
+                    fileName = "/bin/bash";
+                    arguments =
+                        "-lc " +
+                        $"\"for i in {{1..80}}; do (echo > /dev/tcp/{waitHost}/{waitPort}) >/dev/null 2>&1 && sleep 0.1 || break; done; exec \\\"{processPath}\\\" \\\"{entryAssemblyPath}\\\"\"";
+                }
             }
             else
             {

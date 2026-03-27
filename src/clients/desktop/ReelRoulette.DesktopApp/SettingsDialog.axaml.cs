@@ -387,6 +387,7 @@ namespace ReelRoulette
         private int _autoRefreshIntervalMinutes = 60;
         private bool _forceRescanLoudness;
         private bool _forceRescanDuration;
+        private int _fingerprintScanMaxDegreeOfParallelism = 4;
         private bool _autoRefreshOnlyWhenIdle = true;
         private int _autoRefreshIdleThresholdMinutes = 3;
         private string _coreServerBaseUrl = "http://localhost:45123";
@@ -621,6 +622,20 @@ namespace ReelRoulette
             }
         }
 
+        public int FingerprintScanMaxDegreeOfParallelism
+        {
+            get => _fingerprintScanMaxDegreeOfParallelism;
+            set
+            {
+                var next = Math.Clamp(value, 1, 16);
+                if (_fingerprintScanMaxDegreeOfParallelism != next)
+                {
+                    _fingerprintScanMaxDegreeOfParallelism = next;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
         public bool AutoRefreshOnlyWhenIdle
         {
             get => _autoRefreshOnlyWhenIdle;
@@ -790,6 +805,7 @@ namespace ReelRoulette
             int autoRefreshIntervalMinutes = 60,
             bool forceRescanLoudness = false,
             bool forceRescanDuration = false,
+            int fingerprintScanMaxDegreeOfParallelism = 4,
             bool autoRefreshOnlyWhenIdle = true,
             int autoRefreshIdleThresholdMinutes = 3,
             string? coreServerBaseUrl = "http://localhost:45123",
@@ -927,12 +943,14 @@ namespace ReelRoulette
             _autoRefreshIntervalMinutes = autoRefreshIntervalMinutes;
             _forceRescanLoudness = forceRescanLoudness;
             _forceRescanDuration = forceRescanDuration;
+            _fingerprintScanMaxDegreeOfParallelism = Math.Clamp(fingerprintScanMaxDegreeOfParallelism, 1, 16);
             _autoRefreshOnlyWhenIdle = autoRefreshOnlyWhenIdle;
             _autoRefreshIdleThresholdMinutes = autoRefreshIdleThresholdMinutes;
             OnPropertyChanged(nameof(AutoRefreshSourcesEnabled));
             OnPropertyChanged(nameof(AutoRefreshIntervalMinutes));
             OnPropertyChanged(nameof(ForceRescanLoudness));
             OnPropertyChanged(nameof(ForceRescanDuration));
+            OnPropertyChanged(nameof(FingerprintScanMaxDegreeOfParallelism));
             OnPropertyChanged(nameof(AutoRefreshOnlyWhenIdle));
             OnPropertyChanged(nameof(AutoRefreshIdleThresholdMinutes));
             OnPropertyChanged(nameof(AutoRefreshIdleThresholdEnabled));
@@ -990,6 +1008,7 @@ namespace ReelRoulette
         public int GetAutoRefreshIntervalMinutes() => _autoRefreshIntervalMinutes;
         public bool GetForceRescanLoudness() => _forceRescanLoudness;
         public bool GetForceRescanDuration() => _forceRescanDuration;
+        public int GetFingerprintScanMaxDegreeOfParallelism() => _fingerprintScanMaxDegreeOfParallelism;
         public bool GetAutoRefreshOnlyWhenIdle() => _autoRefreshOnlyWhenIdle;
         public int GetAutoRefreshIdleThresholdMinutes() => _autoRefreshIdleThresholdMinutes;
         public string GetCoreServerBaseUrl() => string.IsNullOrWhiteSpace(_coreServerBaseUrl) ? "http://localhost:45123" : _coreServerBaseUrl.Trim();
