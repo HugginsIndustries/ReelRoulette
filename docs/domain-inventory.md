@@ -178,8 +178,8 @@ Runtime scripts:
 - `tools/scripts/run-server.ps1`
 - `tools/scripts/run-server-rebuild.ps1`
 - scripts select `net10.0-windows` framework on Windows and `net10.0` on non-Windows for ServerApp startup.
-- `tools/scripts/set-release-version.ps1` (release-aligned version fan-out for OpenAPI/runtime/tests/project metadata plus README/dev-setup release command examples; use `-NoDocUpdates` to skip docs updates)
-- `tools/scripts/full-release.ps1` (chained release flow: version fan-out + verify + server/desktop packaging)
+- `tools/scripts/set-release-version.ps1` (release-aligned version fan-out for OpenAPI/runtime/tests/server+desktop project metadata, optional WebUI contract regen and verify gates, plus README/dev-setup release command examples; use `-NoDocUpdates` / `-NoUpdateDesktopVersion` / `-NoRegenerateContracts` / `-NoRunVerify` to skip pieces)
+- `tools/scripts/full-release.ps1` (chained release: optional `-Version` runs `set-release-version.ps1` with forwarded `-No*` switches, then server/desktop packaging; omit `-Version` to package from `.csproj` versions only)
 - `tools/scripts/reset-checklist.ps1` (resets `docs/checklists/testing-checklist.md` metadata/checklist state; preserves waived checks by default, supports `-RemoveWaived`)
 
 Web verification:
@@ -196,9 +196,13 @@ Packaging:
 - `pwsh ./tools/scripts/package-desktop-win-inno.ps1`
 - `./tools/scripts/package-serverapp-linux-portable.sh`
 - `./tools/scripts/package-desktop-linux-portable.sh`
+- `./tools/scripts/package-serverapp-linux-appimage.sh`
+- `./tools/scripts/package-desktop-linux-appimage.sh`
+- `./tools/scripts/install-linux-from-github.sh`
+- `tools/scripts/lib/appimage-helpers.sh` (sourced by Linux AppImage package scripts)
 - `tools/installer/ReelRoulette.ServerApp.iss`
 - `tools/installer/ReelRoulette.Desktop.iss`
-- shared icon asset: `assets/HI.ico`
+- shared icon assets: `assets/HI.ico`, `assets/HI-256.png`, `assets/HI-512.png` (Linux menu / AppImage)
 
 CI:
 

@@ -7,6 +7,8 @@ This file follows a Keep a Changelog style format.
 
 ### Added
 
+- Add Linux AppImage packaging (`tools/scripts/package-serverapp-linux-appimage.sh`, `package-desktop-linux-appimage.sh`, `tools/scripts/lib/appimage-helpers.sh`): outputs under `artifacts/packages/appimage/`, built from portable tarballs; `AppRun` supports `--help` (prereqs) and `--install` (user-local `.desktop` + icons). 
+- Add `tools/scripts/install-linux-from-github.sh` to install the latest GitHub release (AppImage preferred, portable tarball fallback; default repo `HugginsIndustries/ReelRoulette`, overridable). Extend `full-release.ps1` on Linux to run AppImage scripts after portable packaging.
 - Add Linux portable packaging scripts (`tools/scripts/package-serverapp-linux-portable.sh`, `package-desktop-linux-portable.sh`): self-contained `linux-x64` tarballs under `artifacts/packages/portable/`, WebUI bundled into server `wwwroot`, stripped symbols / no `.pdb` in package tree, `run-server.sh` / `run-desktop.sh` and `README.txt` for native prerequisites.
 - Extend `full-release.ps1` to run the Linux portable scripts on Linux after set-release-version; Inno steps remain Windows-only.
 - Add repo-local build support for constrained environments via `Directory.Build.props` (`AllowMissingPrunePackageData=true`).
@@ -19,6 +21,9 @@ This file follows a Keep a Changelog style format.
 
 ### Changed
 
+- `set-release-version.ps1` now updates desktop `<Version>`, runs WebUI `generate:contracts`, and runs build/test/WebUI/deploy-smoke verify by default; opt out with `-NoUpdateDesktopVersion`, `-NoRegenerateContracts`, and/or `-NoRunVerify`. `full-release.ps1` forwards those `-No*` switches (and `-NoDocUpdates`) when `-Version` is set; omit `-Version` on `full-release.ps1` to skip `set-release-version` and package using each `.csproj` `<Version>`. Document behavior in `README.md`, `docs/dev-setup.md`, `CONTEXT.md`, and `docs/domain-inventory.md`.
+- Expand `README.md` Quick Start with end-user install paths: Windows installers and portable ZIPs from GitHub Releases, Linux install script / AppImage / tarball, FFmpeg–VLC note, and a separate “Developing from source” subsection for contributors.
+- Restructure `README.md` **Packaging** into **Linux**, **Windows**, and **General** subsections with full Linux script commands and shared release/GitHub notes.
 - Mark every file under `tools/scripts/` as executable in Git (`100755`) so they can be run as `./tools/scripts/<name>.ps1` or `./tools/scripts/<name>.sh` on Unix when the shebang resolves (`pwsh` / `bash`).
 - Expand `README.md` Prerequisites (`bash`/`tar`, Inno Setup, FFmpeg/VLC) and clarify third-party bundling (Windows portable vs Linux/system) in Third-Party Components; align `docs/dev-setup.md` Prerequisites with FFmpeg/VLC notes.
 - Linux portable packaging uses executable `tools/scripts/package-*-linux-portable.sh` scripts (invoked directly or from `full-release.ps1` on Linux) alongside existing `pwsh` Windows packaging scripts.

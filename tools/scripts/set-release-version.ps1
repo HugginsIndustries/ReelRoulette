@@ -2,10 +2,10 @@
 param(
     [Parameter(Mandatory = $true)]
     [string]$Version,
-    [switch]$UpdateDesktopVersion,
     [switch]$NoDocUpdates,
-    [switch]$RegenerateContracts,
-    [switch]$RunVerify
+    [switch]$NoUpdateDesktopVersion,
+    [switch]$NoRegenerateContracts,
+    [switch]$NoRunVerify
 )
 
 $ErrorActionPreference = "Stop"
@@ -92,14 +92,13 @@ function Update-ReadmeVersionExamples {
     if (-not [regex]::IsMatch($raw, 'full-release\.ps1 -Version [^\s`]+')) {
         throw "Failed to find full-release command version in $path"
     }
-    if (-not [regex]::IsMatch($raw, 'Simple release flow \(example `[^`]+`\):')) {
-        throw "Failed to find simple release flow example line in $path"
+    if (-not [regex]::IsMatch($raw, '- \*\*Chained release build\*\*:\s')) {
+        throw "Failed to find Chained release build bullet in $path"
     }
 
     $next = $raw
     $next = [regex]::Replace($next, 'set-release-version\.ps1 -Version [^\s`]+', "set-release-version.ps1 -Version $Version", 1)
     $next = [regex]::Replace($next, 'full-release\.ps1 -Version [^\s`]+', "full-release.ps1 -Version $Version", 1)
-    $next = [regex]::Replace($next, 'Simple release flow \(example `[^`]+`\):', ('Simple release flow (example `' + $Version + '`):'), 1)
     Set-FileContentIfChanged -Path $path -NewContent $next | Out-Null
 }
 
@@ -169,14 +168,14 @@ try {
     Update-WebAuthBootstrapTestAssetsVersion
 
     Set-ProjectVersion -ProjectPath (Join-Path $repoRoot "src" "core" "ReelRoulette.ServerApp" "ReelRoulette.ServerApp.csproj")
-    if ($UpdateDesktopVersion.IsPresent) {
+    if (-not $NoUpdateDesktopVersion.IsPresent) {
         Set-ProjectVersion -ProjectPath (Join-Path $repoRoot "src" "clients" "desktop" "ReelRoulette.DesktopApp" "ReelRoulette.DesktopApp.csproj")
     }
     if (-not $NoDocUpdates.IsPresent) {
         Update-ReleaseDocsVersion
     }
 
-    if ($RegenerateContracts.IsPresent) {
+    if (-not $NoRegenerateContracts.IsPresent) {
         Write-Host "Regenerating WebUI OpenAPI contracts..."
         Push-Location (Join-Path $repoRoot "src" "clients" "web" "ReelRoulette.WebUI")
         try {
@@ -188,7 +187,7 @@ try {
         }
     }
 
-    if ($RunVerify.IsPresent) {
+    if (-not $NoRunVerify.IsPresent) {
         Write-Host "Running solution build+test..."
         dotnet build ReelRoulette.sln
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

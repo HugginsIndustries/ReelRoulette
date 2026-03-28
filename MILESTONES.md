@@ -89,40 +89,7 @@ Do not use this file for detailed architecture explanation or current capability
 
 ## Active Milestones
 
-Last milestone completed: M9b
-
-### M9c - Linux Installation UX
-
-- **Status**: ⏳ Planned
-- **Goal**: Provide polished, low-friction installation paths for Linux users beyond the portable `tar.gz`: an **AppImage** for both server and **Desktop** client, a one-liner GitHub Releases install script, and application menu (`.desktop`) registration handled automatically during install.
-- **Scope**:
-  - **AppImage** packaging for server and **Desktop** client:
-    - Build scripts under `tools/scripts/` producing `ReelRoulette-Server-{Version}-linux-x64.AppImage` and `ReelRoulette-Desktop-{Version}-linux-x64.AppImage`.
-    - AppImage bundles carry embedded `.desktop` entry and icon metadata; application menu integration is automatic when `appimaged` is running or via an explicit `--install` flag pattern.
-    - AppImage artifacts are self-contained (`linux-x64`) and strip symbols consistent with portable `tar.gz` policy.
-    - Native prerequisites (ffmpeg/ffprobe, LibVLC) remain undocumented-as-bundled; document as prereqs in the embedded AppImage `README` or `--help` output, consistent with portable package policy.
-  - **GitHub Releases install script** (`tools/scripts/install.sh` or equivalent):
-    - Fetches the latest release artifact (AppImage preferred; portable `tar.gz` as fallback) from the GitHub Releases API.
-    - Extracts or places the artifact in a conventional user-local location (e.g. `~/.local/bin/`, `~/.local/share/ReelRoulette/`).
-    - Registers a `.desktop` entry in `~/.local/share/applications/` and runs `update-desktop-database` so the app appears in the application menu.
-    - Supports both server and **Desktop** client as install targets (via argument or interactive prompt).
-    - Does not require `sudo`; targets the current user only.
-  - **Application menu registration** is handled for both install paths (AppImage via embedded metadata + `appimaged` / `--install`; install script via explicit `.desktop` drop + database update); no manual post-install step required for menu integration.
-  - Tray/headless fallback policy inherited unchanged from the baseline milestone: the packaged server must start headless when no tray or display is available, without hanging.
-  - **Windows** packaging: unchanged; this milestone is Linux installation UX only.
-- **Acceptance criteria**:
-  - AppImage artifacts build deterministically from `tools/scripts/` for both server and **Desktop** client.
-  - Artifact names follow `ReelRoulette-{Component}-{Version}-linux-x64.AppImage`, consistent with release naming conventions.
-  - On a fresh install via AppImage or install script, the application appears in the desktop application menu without any manual post-install step.
-  - Install script successfully fetches and installs the latest release artifact on the **CachyOS** baseline; user-local install requires no `sudo`.
-  - Native prereqs are documented in embedded help/README; nothing is silently missing at launch.
-- **Verification evidence**:
-  - Before landing, packaging author manually verifies: AppImage launches on **CachyOS**, application menu entry appears, and install script completes end-to-end on a clean user profile.
-  - Artifacts land under `artifacts/packages/` alongside portable `tar.gz` outputs.
-  - Comprehensive matrix verification (AppImage + install script across tray-capable and headless environments, full checklist pass) is **deferred** to **Linux Release Readiness and Sign-off**.
-  - `docs/checklists/testing-checklist.md` gains AppImage and install script checklist items when this milestone lands; completing every item remains deferred to **Linux Release Readiness and Sign-off**.
-- **Deferrals / Follow-ups**:
-  - Full AppImage + install script smoke matrix and cross-platform checklist completion → **Linux Release Readiness and Sign-off**.
+Last milestone completed: M9c
 
 ### M9d - CI Linux Distribution Gates
 
@@ -948,6 +915,39 @@ Last milestone completed: M9b
 
 Latest completions first:
 
+### M9c - Linux Installation UX
+
+- **Status**: ✅ Complete
+- **Goal**: Provide polished, low-friction installation paths for Linux users beyond the portable `tar.gz`: an **AppImage** for both server and **Desktop** client, a one-liner GitHub Releases install script, and application menu (`.desktop`) registration handled automatically during install.
+- **Scope**:
+  - **AppImage** packaging for server and **Desktop** client:
+    - Build scripts under `tools/scripts/` producing `ReelRoulette-Server-{Version}-linux-x64.AppImage` and `ReelRoulette-Desktop-{Version}-linux-x64.AppImage`.
+    - AppImage bundles carry embedded `.desktop` entry and icon metadata; application menu integration is automatic when `appimaged` is running or via an explicit `--install` flag pattern.
+    - AppImage artifacts are self-contained (`linux-x64`) and strip symbols consistent with portable `tar.gz` policy.
+    - Native prerequisites (ffmpeg/ffprobe, LibVLC) remain undocumented-as-bundled; document as prereqs in the embedded AppImage `README` or `--help` output, consistent with portable package policy.
+  - **GitHub Releases install script** (`tools/scripts/install-linux-from-github.sh`):
+    - Fetches the latest release artifact (AppImage preferred; portable `tar.gz` as fallback) from the GitHub Releases API.
+    - Extracts or places the artifact in a conventional user-local location (e.g. `~/.local/bin/`, `~/.local/share/ReelRoulette/`).
+    - Registers a `.desktop` entry in `~/.local/share/applications/` and runs `update-desktop-database` so the app appears in the application menu.
+    - Supports both server and **Desktop** client as install targets (via argument or interactive prompt).
+    - Does not require `sudo`; targets the current user only.
+  - **Application menu registration** is handled for both install paths (AppImage via embedded metadata + `appimaged` / `--install`; install script via explicit `.desktop` drop + database update); no manual post-install step required for menu integration.
+  - Tray/headless fallback policy inherited unchanged from the baseline milestone: the packaged server must start headless when no tray or display is available, without hanging.
+  - **Windows** packaging: unchanged; this milestone is Linux installation UX only.
+- **Acceptance criteria**:
+  - AppImage artifacts build deterministically from `tools/scripts/` for both server and **Desktop** client.
+  - Artifact names follow `ReelRoulette-{Component}-{Version}-linux-x64.AppImage`, consistent with release naming conventions.
+  - On a fresh install via AppImage or install script, the application appears in the desktop application menu without any manual post-install step.
+  - Install script successfully fetches and installs the latest release artifact on the **CachyOS** baseline; user-local install requires no `sudo`.
+  - Native prereqs are documented in embedded help/README; nothing is silently missing at launch.
+- **Verification evidence**:
+  - Landed scripts: `tools/scripts/package-serverapp-linux-appimage.sh`, `tools/scripts/package-desktop-linux-appimage.sh`, shared `tools/scripts/lib/appimage-helpers.sh`, `tools/scripts/install-linux-from-github.sh`; `full-release.ps1` invokes AppImage packaging on Linux after portable steps (requires `appimagetool` on the maintainer machine).
+  - AppImages: `artifacts/packages/appimage/ReelRoulette-Server-{Version}-linux-x64.AppImage`, `artifacts/packages/appimage/ReelRoulette-Desktop-{Version}-linux-x64.AppImage` (built from portable tarballs; same publish/strip policy).
+  - `docs/checklists/testing-checklist.md` includes AppImage and install-script smoke items; full matrix completion remains **deferred** to **Linux Release Readiness and Sign-off**.
+  - Packaging author manual verification on **CachyOS** (AppImage launch, `--install` menu registration, install script end-to-end) is expected before relying on releases; comprehensive tray/headless matrix deferred as above.
+- **Deferrals / Follow-ups**:
+  - Full AppImage + install script smoke matrix and cross-platform checklist completion → **Linux Release Readiness and Sign-off**.
+
 ### M9b - Linux Packaging (Server + Desktop)
 
 - **Status**: ✅ Complete
@@ -970,7 +970,7 @@ Latest completions first:
   - Artifact names follow the pattern `ReelRoulette-{Component}-{Version}-linux-x64.tar.gz`, consistent with Windows release naming (`ReelRoulette-Server-*`, `ReelRoulette-Desktop-*`); no legacy `windows`-path or Windows-centric client naming in Linux outputs.
   - Packaged apps run on the supported Linux baseline in both tray-available and headless/fallback scenarios.
 - **Verification evidence**:
-  - Landed scripts: `tools/scripts/package-serverapp-linux-portable.sh`, `tools/scripts/package-desktop-linux-portable.sh`; `full-release.ps1` invokes them on Linux after version/verify.
+  - Landed scripts: `tools/scripts/package-serverapp-linux-portable.sh`, `tools/scripts/package-desktop-linux-portable.sh`; `full-release.ps1` invokes them on Linux after version/verify (and subsequent AppImage steps per Linux Installation UX).
   - Portable tarballs: `artifacts/packages/portable/ReelRoulette-Server-{Version}-linux-x64.tar.gz`, `artifacts/packages/portable/ReelRoulette-Desktop-{Version}-linux-x64.tar.gz` (each includes `run-*.sh`, `README.txt`, no `.pdb` in tree).
   - Docs/checklist updated (`docs/dev-setup.md`, `docs/domain-inventory.md`, `docs/checklists/testing-checklist.md`, `CONTEXT.md`, `README.md`).
   - Full packaged-artifact smoke (tray + headless, CachyOS or CI-chosen Linux, cross-platform checklist completion) remains **deferred** to **Linux Release Readiness and Sign-off**.

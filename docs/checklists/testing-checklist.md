@@ -150,6 +150,9 @@ Use `pwsh ./tools/scripts/reset-checklist.ps1` to reset metadata/check states be
 - [ ] Desktop Inno packaging script runs when `iscc` is available:
   - `pwsh ./tools/scripts/package-desktop-win-inno.ps1`.
 - [ ] Linux portable packaging scripts run: `./tools/scripts/package-serverapp-linux-portable.sh` and `./tools/scripts/package-desktop-linux-portable.sh`.
+- [ ] Linux AppImage packaging scripts run (requires `appimagetool` on `PATH`): `./tools/scripts/package-serverapp-linux-appimage.sh` and `./tools/scripts/package-desktop-linux-appimage.sh`; outputs under `artifacts/packages/appimage/` match `ReelRoulette-{Server|Desktop}-{Version}-linux-x64.AppImage`.
+- [ ] Linux AppImage `--help` lists native prerequisites (ffmpeg/ffprobe, LibVLC) consistent with portable policy; `--install` registers `~/.local/share/applications/reelroulette-{server|desktop}.desktop` and hicolor icons without a manual menu step.
+- [ ] Linux install-from-release script runs (`curl` + `jq` on `PATH`): `./tools/scripts/install-linux-from-github.sh server` and `... desktop` against a release that includes matching assets; install uses `~/.local/bin` and `~/.local/share` only (no sudo).
 - [ ] Linux portable tarballs extract with a single top-level directory; `run-server.sh` and `run-desktop.sh` are executable (`chmod +x` preserved after extract).
 - [ ] Linux portable tree contains no `.pdb` files; `README.txt` in each package documents ffmpeg/ffprobe and LibVLC as system prerequisites (not bundled in Desktop tarball).
 - [ ] Packaged Linux server starts and responds on `/health` at the configured base URL (or documented equivalent check).

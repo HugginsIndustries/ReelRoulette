@@ -133,7 +133,7 @@ Operator UI is an operational surface and does not own domain logic.
 
 ## Packaging and Delivery
 
-- Packaging supports portable and installer outputs through repository scripts.
+- Packaging supports portable and installer outputs through repository scripts; on Linux, scripts also produce AppImages and a GitHub latest-release install helper for user-local installs.
 - ServerApp runtime uses an Avalonia-hosted tray when a compatible desktop session is available; otherwise it runs deterministically in a headless mode.
 - CI/workflow gates validate build/test/contract/web checks and packaging paths.
 - Release version metadata should remain aligned across contract, runtime, project, and package surfaces.

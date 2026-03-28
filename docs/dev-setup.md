@@ -154,9 +154,10 @@ Packaging notes:
 
 Use one command to align release-version surfaces:
 
-- `pwsh ./tools/scripts/set-release-version.ps1 -Version 0.11.0-dev -UpdateDesktopVersion -RegenerateContracts -RunVerify`
-- By default, this script also updates release command examples in `README.md` and `docs/dev-setup.md`.
-- Use `-NoDocUpdates` to skip those docs updates when needed.
+- `pwsh ./tools/scripts/set-release-version.ps1 -Version 0.11.0-dev`
+- By default, the script also updates the desktop app `<Version>`, runs `npm run generate:contracts` in WebUI, runs solution build/test plus WebUI verify and `verify-web-deploy.ps1`, and updates release command examples in `README.md` and `docs/dev-setup.md`.
+- Use `-NoDocUpdates` to skip the README/dev-setup example updates.
+- Use `-NoUpdateDesktopVersion`, `-NoRegenerateContracts`, and/or `-NoRunVerify` to skip desktop version, contract regeneration, or the verify steps respectively.
 
 This updates:
 
@@ -173,7 +174,7 @@ Then package server and desktop as needed:
 - `pwsh ./tools/scripts/package-desktop-win-portable.ps1`
 - `pwsh ./tools/scripts/package-desktop-win-inno.ps1`
 - or run the chained flow:
-  - `pwsh ./tools/scripts/full-release.ps1 -Version 0.11.0-dev`
+  - `pwsh ./tools/scripts/full-release.ps1 -Version 0.11.0-dev` (optional `-NoDocUpdates`, `-NoUpdateDesktopVersion`, `-NoRegenerateContracts`, `-NoRunVerify` are passed through to `set-release-version.ps1`). Run without `-Version` to skip `set-release-version` and use each `.csproj` `<Version>` in package outputs.
 
 Reset manual testing checklist state for a fresh run:
 
@@ -215,7 +216,29 @@ Each archive contains a single top-level directory with the executable, `run-ser
 
 When `-Version` is omitted, scripts read `<Version>` from the corresponding `.csproj` (same behavior as Windows packaging scripts).
 
-On Linux, `pwsh ./tools/scripts/full-release.ps1 -Version <ver>` runs `set-release-version` (with your flags), then the two Linux portable scripts above, and skips Inno installer steps (Windows-only).
+### Linux AppImage (server + Desktop)
+
+Requires [`appimagetool`](https://github.com/AppImage/AppImageKit) on `PATH` in addition to the portable prerequisites. The AppImage scripts invoke the portable scripts first (full publish + tar), then assemble the image.
+
+From the repository root:
+
+```bash
+./tools/scripts/package-serverapp-linux-appimage.sh
+./tools/scripts/package-desktop-linux-appimage.sh
+```
+
+Artifacts: `artifacts/packages/appimage/ReelRoulette-Server-{Version}-linux-x64.AppImage` and `ReelRoulette-Desktop-{Version}-linux-x64.AppImage`. Run `./ReelRoulette-*.AppImage --help` for native prerequisites; run with `--install` once to register a user-local menu entry and icons (no sudo).
+
+### Install latest release from GitHub (Linux)
+
+Requires `curl` and `jq` on `PATH`. Default repository is `HugginsIndustries/ReelRoulette` (override with `REELROULETTE_GITHUB_REPO` or `-Repo owner/name`). Prefers an AppImage asset on the latest release; falls back to the portable `.tar.gz`.
+
+```bash
+./tools/scripts/install-linux-from-github.sh server
+./tools/scripts/install-linux-from-github.sh desktop
+```
+
+On Linux, `pwsh ./tools/scripts/full-release.ps1 -Version <ver>` runs `set-release-version.ps1` with the same defaults documented under **Release Versioning** above (and any `-No*` switches you pass), then the two Linux portable scripts, then the two Linux AppImage scripts, and skips Inno installer steps (Windows-only). With no `-Version`, it skips `set-release-version` and packages using `.csproj` versions. AppImage steps require `appimagetool`.
 
 ## Troubleshooting
 

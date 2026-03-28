@@ -49,6 +49,7 @@ ReelRoulette is migrating from a monolithic desktop app to a thin-client, API-fi
   - Manual validation guide/checklist at `docs/checklists/testing-checklist.md`.
   - Windows packaging scripts and CI workflows are present for build/verify/package gates.
   - Linux portable packaging: `tools/scripts/package-serverapp-linux-portable.sh` and `package-desktop-linux-portable.sh` produce self-contained `linux-x64` tarballs under `artifacts/packages/portable/` (`run-server.sh` / `run-desktop.sh`, bundled `README.txt` for native prereqs).
+  - Linux AppImage packaging: `tools/scripts/package-serverapp-linux-appimage.sh` and `package-desktop-linux-appimage.sh` (shared `tools/scripts/lib/appimage-helpers.sh`) produce `artifacts/packages/appimage/*.AppImage` from those portable tarballs; `AppRun` supports `--help` (prereqs) and `--install` (user-local menu entry and icons). GitHub latest-release installer: `tools/scripts/install-linux-from-github.sh` (AppImage preferred, portable tarball fallback; `curl` + `jq`; default repo overridable for forks).
   - Windows installers expose desktop shortcut install tasks (checked by default for server and desktop installers).
 
 ## Near-Term Planned Work
@@ -71,7 +72,7 @@ Authoritative roadmap details live in `MILESTONES.md`. Near-term focus areas:
   - `desktop/ReelRoulette.DesktopApp`: shipping Desktop client location (Avalonia).
 - `shared/api/openapi.yaml`: API contract source of truth.
 - `tools/scripts/`: runtime/verify/package scripts (`run-server*`, `verify-web*`, `verify-web-deploy*`, `publish-web*`, Windows `package-*-win-*.ps1`, Linux portable `package-*-linux-portable.sh`).
-  - includes `set-release-version.ps1` for release-aligned version fan-out (with optional docs update skip via `-NoDocUpdates`) and `reset-checklist.ps1` for testing-guide reset workflows.
+  - includes `set-release-version.ps1` for release-aligned version fan-out (by default updates desktop `<Version>`, regenerates WebUI contracts, runs build/test/WebUI/deploy-smoke verify, and syncs README/dev-setup examples; skip pieces with `-NoUpdateDesktopVersion`, `-NoRegenerateContracts`, `-NoRunVerify`, `-NoDocUpdates`); `full-release.ps1` forwards those switches when `-Version` is set and skips `set-release-version` when `-Version` is omitted (packaging then uses each `.csproj` `<Version>`); `reset-checklist.ps1` for testing-guide reset workflows; Linux AppImage scripts and `install-linux-from-github.sh` live alongside portable `package-*-linux-portable.sh`.
 
 ## Working Commands (Canonical Set)
 
