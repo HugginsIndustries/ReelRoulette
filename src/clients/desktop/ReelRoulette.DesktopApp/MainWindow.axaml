@@ -257,6 +257,10 @@
                 <MenuItem x:Name="ImportFolderMenuItem"
                           Header="Import Folder"
                           Click="ImportFolderMenuItem_Click"/>
+                <MenuItem Header="Export Library…"
+                          Click="ExportLibraryMenuItem_Click"/>
+                <MenuItem Header="Import Library…"
+                          Click="ImportLibraryMenuItem_Click"/>
                 <MenuItem Header="Auto Tag"
                           Click="AutoTagMenuItem_Click"/>
                 <MenuItem x:Name="ManageSourcesMenuItem"

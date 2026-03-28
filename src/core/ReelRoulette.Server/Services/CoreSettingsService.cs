@@ -16,6 +16,7 @@ public sealed class CoreSettingsService
 
     private readonly object _lock = new();
     private readonly ILogger<CoreSettingsService> _logger;
+    private readonly ServerRuntimeOptions _serverRuntimeOptions;
     private readonly string _settingsPath;
     private readonly string _backupDirectory;
     private readonly RefreshSettingsSnapshot _refreshSettings;
@@ -30,6 +31,7 @@ public sealed class CoreSettingsService
         string? appDataPathOverride = null)
     {
         _logger = logger;
+        _serverRuntimeOptions = options;
         var roamingAppData = appDataPathOverride ??
                              Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ReelRoulette");
         Directory.CreateDirectory(roamingAppData);
@@ -42,6 +44,80 @@ public sealed class CoreSettingsService
             PersistSettings(createBackup: false);
         }
         CreateBackupIfNeeded();
+    }
+
+    /// <summary>
+    /// Reloads settings from disk into this service (for example after library migration import).
+    /// </summary>
+    public void ReloadFromDisk()
+    {
+        WebRuntimeSettingsSnapshot previousWeb;
+        WebRuntimeSettingsSnapshot currentWeb;
+        lock (_lock)
+        {
+            previousWeb = new WebRuntimeSettingsSnapshot
+            {
+                Enabled = _webRuntimeSettings.Enabled,
+                Port = _webRuntimeSettings.Port,
+                BindOnLan = _webRuntimeSettings.BindOnLan,
+                LanHostname = _webRuntimeSettings.LanHostname,
+                AuthMode = _webRuntimeSettings.AuthMode,
+                SharedToken = _webRuntimeSettings.SharedToken
+            };
+
+            var loaded = LoadSettings(_serverRuntimeOptions);
+            ApplyLoadedSettings(loaded.Settings);
+
+            currentWeb = new WebRuntimeSettingsSnapshot
+            {
+                Enabled = _webRuntimeSettings.Enabled,
+                Port = _webRuntimeSettings.Port,
+                BindOnLan = _webRuntimeSettings.BindOnLan,
+                LanHostname = _webRuntimeSettings.LanHostname,
+                AuthMode = _webRuntimeSettings.AuthMode,
+                SharedToken = _webRuntimeSettings.SharedToken
+            };
+        }
+
+        var webChanged =
+            previousWeb.Enabled != currentWeb.Enabled ||
+            previousWeb.Port != currentWeb.Port ||
+            previousWeb.BindOnLan != currentWeb.BindOnLan ||
+            !string.Equals(previousWeb.LanHostname, currentWeb.LanHostname, StringComparison.Ordinal) ||
+            !string.Equals(previousWeb.AuthMode, currentWeb.AuthMode, StringComparison.Ordinal) ||
+            !string.Equals(previousWeb.SharedToken, currentWeb.SharedToken, StringComparison.Ordinal);
+
+        if (webChanged)
+        {
+            WebRuntimeSettingsChanged?.Invoke(currentWeb);
+        }
+    }
+
+    private void ApplyLoadedSettings((
+        RefreshSettingsSnapshot Refresh,
+        BackupSettingsSnapshot Backup,
+        WebRuntimeSettingsSnapshot WebRuntime,
+        ControlRuntimeSettingsSnapshot ControlRuntime) loaded)
+    {
+        _refreshSettings.AutoRefreshEnabled = loaded.Refresh.AutoRefreshEnabled;
+        _refreshSettings.AutoRefreshIntervalMinutes = loaded.Refresh.AutoRefreshIntervalMinutes;
+        _refreshSettings.ForceRescanLoudness = loaded.Refresh.ForceRescanLoudness;
+        _refreshSettings.ForceRescanDuration = loaded.Refresh.ForceRescanDuration;
+        _refreshSettings.FingerprintScanMaxDegreeOfParallelism = loaded.Refresh.FingerprintScanMaxDegreeOfParallelism;
+
+        _backupSettings.Enabled = loaded.Backup.Enabled;
+        _backupSettings.MinimumBackupGapMinutes = loaded.Backup.MinimumBackupGapMinutes;
+        _backupSettings.NumberOfBackups = loaded.Backup.NumberOfBackups;
+
+        _webRuntimeSettings.Enabled = loaded.WebRuntime.Enabled;
+        _webRuntimeSettings.Port = loaded.WebRuntime.Port;
+        _webRuntimeSettings.BindOnLan = loaded.WebRuntime.BindOnLan;
+        _webRuntimeSettings.LanHostname = loaded.WebRuntime.LanHostname;
+        _webRuntimeSettings.AuthMode = loaded.WebRuntime.AuthMode;
+        _webRuntimeSettings.SharedToken = loaded.WebRuntime.SharedToken;
+
+        _controlRuntimeSettings.AdminAuthMode = loaded.ControlRuntime.AdminAuthMode;
+        _controlRuntimeSettings.AdminSharedToken = loaded.ControlRuntime.AdminSharedToken;
     }
 
     public RefreshSettingsSnapshot GetRefreshSettings()

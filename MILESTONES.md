@@ -89,11 +89,11 @@ Do not use this file for detailed architecture explanation or current capability
 
 ## Active Milestones
 
-Last milestone completed: M9d
+Last milestone completed: M9e
 
 ### M9e - Cross-Platform Library Migration
 
-- **Status**: ⏳ Planned
+- **Status**: ✅ Implemented — author cross-OS verification still required for final sign-off
 - **Goal**: Allow users to export their ReelRoulette library from one install and import it on another — including across **Windows** and **Linux** — with a guided source folder remapping step to handle path differences between systems.
 - **Scope**:
   - **Export** (`Library > Export Library…`):
@@ -122,6 +122,7 @@ Last milestone completed: M9d
   - Existing library overwrite prompt appears when a library is already present on the target install.
   - `export-manifest.json` is present in every export zip and contains OS, version, and source path list.
 - **Verification evidence**:
+  - Implementation: server `POST /api/library/export` + `POST /api/library/import`, Core `LibraryMigration` + tests, desktop `Library → Export Library…` / `Import Library…` with remap/skip + overwrite confirm + local `desktop-settings.json` write; docs/OpenAPI/checklist updated.
   - Author manually verifies round-trip: export from **Windows**, import on **CachyOS** (and vice versa if both environments are available); library loads with remapped sources functional.
   - Same-OS round-trip (e.g. machine-to-machine on **CachyOS**) verified as a simpler baseline case.
   - Thumbnail include/exclude checkbox verified on export; thumbnail presence/absence handled correctly on import.

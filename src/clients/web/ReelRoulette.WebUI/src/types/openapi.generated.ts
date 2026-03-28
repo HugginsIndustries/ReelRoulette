@@ -301,6 +301,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/library/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Export library, core settings, presets, and optional thumbnails/backups as a zip */
+        post: operations["postLibraryExport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/library/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Import a library export zip with a JSON remapping plan (multipart) */
+        post: operations["postLibraryImport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sources/{sourceId}/enabled": {
         parameters: {
             query?: never;
@@ -956,6 +990,30 @@ export interface components {
         };
         LibraryProjectionResponse: {
             [key: string]: unknown;
+        };
+        LibraryExportRequest: {
+            /** @default false */
+            includeThumbnails: boolean;
+            /** @default false */
+            includeBackups: boolean;
+        };
+        /** @description Exact source rootPath strings from the export must appear as keys in remap or in skippedRoots */
+        LibraryImportPlan: {
+            /** @description Map of exported rootPath to new folder path on this system */
+            remap?: {
+                [key: string]: string;
+            };
+            /** @description Exported rootPath values to leave unchanged (offline or missing sources) */
+            skippedRoots?: string[];
+        };
+        LibraryImportAcceptedResponse: {
+            accepted: boolean;
+            message?: string | null;
+            restartRecommended: boolean;
+        };
+        LibraryImportConflictResponse: {
+            error: string;
+            needsForce: boolean;
         };
         RandomRequest: {
             presetId?: string;
@@ -2015,6 +2073,110 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LibraryProjectionResponse"];
+                };
+            };
+        };
+    };
+    postLibraryExport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["LibraryExportRequest"];
+            };
+        };
+        responses: {
+            /** @description Zip archive (application/zip) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/zip": string;
+                };
+            };
+            /** @description Invalid request (for example no library to export) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized when auth is required and request is not paired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    postLibraryImport: {
+        parameters: {
+            query?: {
+                /** @description When true, allows replacing a non-empty existing library after user confirmation */
+                force?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /**
+                     * Format: binary
+                     * @description Library export zip from POST /api/library/export
+                     */
+                    file: string;
+                    /** @description JSON object (LibraryImportPlan) with remap and skippedRoots */
+                    plan: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Import completed; clients should resync */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LibraryImportAcceptedResponse"];
+                };
+            };
+            /** @description Invalid zip, plan, or remapping error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized when auth is required and request is not paired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Non-empty library exists and force was not set */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LibraryImportConflictResponse"];
                 };
             };
         };

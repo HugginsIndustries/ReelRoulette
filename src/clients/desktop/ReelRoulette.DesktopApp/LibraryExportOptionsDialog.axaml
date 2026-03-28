@@ -1,0 +1,38 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ReelRoulette.LibraryExportOptionsDialog"
+        Title="Export Library"
+        Width="420"
+        Height="220"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False">
+    <Grid RowDefinitions="Auto,*,Auto" Margin="16">
+        <TextBlock Grid.Row="0"
+                   Text="Choose what to include in the export archive. The server must be running."
+                   TextWrapping="Wrap"
+                   Margin="0,0,0,12"/>
+        <StackPanel Grid.Row="1" Spacing="10">
+            <CheckBox x:Name="IncludeThumbnailsCheckBox"
+                      Content="Include thumbnails (larger archive; otherwise thumbnails regenerate on use)"
+                      IsChecked="False"/>
+            <CheckBox x:Name="IncludeBackupsCheckBox"
+                      Content="Include backups folder from config directory"
+                      IsChecked="False"/>
+        </StackPanel>
+        <StackPanel Grid.Row="2"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Spacing="8"
+                    Margin="0,16,0,0">
+            <Button x:Name="OkButton"
+                    Content="Continue"
+                    MinWidth="88"
+                    IsDefault="True"
+                    Click="OkButton_Click"/>
+            <Button Content="Cancel"
+                    MinWidth="88"
+                    IsCancel="True"
+                    Click="CancelButton_Click"/>
+        </StackPanel>
+    </Grid>
+</Window>

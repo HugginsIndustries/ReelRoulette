@@ -15,6 +15,8 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
+using System.IO.Compression;
+using System.Text;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
@@ -8788,6 +8790,239 @@ namespace ReelRoulette
                 {
                     StatusTextBlock.Text = $"Error importing folder: {ex.Message}";
                 }
+            }
+        }
+
+        private static string ReadZipEntryText(string zipPath, string entryName)
+        {
+            using var archive = ZipFile.OpenRead(zipPath);
+            var entry = archive.GetEntry(entryName) ?? archive.GetEntry(entryName.Replace('/', '\\'));
+            if (entry == null)
+            {
+                throw new InvalidOperationException($"Missing '{entryName}' in archive.");
+            }
+
+            using var reader = new StreamReader(entry.Open(), Encoding.UTF8);
+            return reader.ReadToEnd();
+        }
+
+        private async void ExportLibraryMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            Log("UI ACTION: Export Library clicked");
+            try
+            {
+                if (!await EnsureCoreRuntimeAvailableAsync())
+                {
+                    StatusTextBlock.Text = "Core runtime unavailable. Start ReelRoulette ServerApp and retry.";
+                    return;
+                }
+
+                var version = await _coreServerApiClient.GetVersionAsync(_coreServerBaseUrl);
+                if (version?.Capabilities?.Contains("api.library.migration", StringComparer.OrdinalIgnoreCase) != true)
+                {
+                    StatusTextBlock.Text = "This server does not support library export. Update ReelRoulette Server.";
+                    return;
+                }
+
+                var optionsDialog = new LibraryExportOptionsDialog();
+                var optionsResult = await optionsDialog.ShowDialog<bool?>(this);
+                if (optionsResult != true)
+                {
+                    return;
+                }
+
+                var suggested = $"ReelRoulette-Library-{DateTime.UtcNow:yyyyMMdd-HHmmss}Z.zip";
+                var saveTarget = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+                {
+                    Title = "Export Library",
+                    SuggestedFileName = suggested,
+                    DefaultExtension = "zip",
+                    ShowOverwritePrompt = true,
+                    FileTypeChoices =
+                    [
+                        new FilePickerFileType("Zip archive")
+                        {
+                            Patterns = ["*.zip"]
+                        }
+                    ]
+                });
+
+                if (saveTarget == null)
+                {
+                    return;
+                }
+
+                var outPath = saveTarget.Path.LocalPath;
+                StatusTextBlock.Text = "Exporting library…";
+                var exportResult = await _coreServerLongRunningApiClient.PostLibraryExportToFileAsync(
+                    _coreServerBaseUrl,
+                    outPath,
+                    optionsDialog.IncludeThumbnails,
+                    optionsDialog.IncludeBackups);
+
+                if (!exportResult.Ok)
+                {
+                    StatusTextBlock.Text = $"Export failed: {exportResult.ErrorMessage ?? "unknown error"}";
+                    return;
+                }
+
+                StatusTextBlock.Text = $"Library exported to {outPath}";
+            }
+            catch (Exception ex)
+            {
+                StatusTextBlock.Text = $"Export error: {ex.Message}";
+                Log($"ExportLibraryMenuItem_Click: {ex}");
+            }
+        }
+
+        private async void ImportLibraryMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            Log("UI ACTION: Import Library clicked");
+            try
+            {
+                if (!await EnsureCoreRuntimeAvailableAsync())
+                {
+                    StatusTextBlock.Text = "Core runtime unavailable. Start ReelRoulette ServerApp and retry.";
+                    return;
+                }
+
+                var version = await _coreServerApiClient.GetVersionAsync(_coreServerBaseUrl);
+                if (version?.Capabilities?.Contains("api.library.migration", StringComparer.OrdinalIgnoreCase) != true)
+                {
+                    StatusTextBlock.Text = "This server does not support library import. Update ReelRoulette Server.";
+                    return;
+                }
+
+                var pick = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+                {
+                    Title = "Select library export zip",
+                    AllowMultiple = false,
+                    FileTypeFilter =
+                    [
+                        new FilePickerFileType("Zip archive")
+                        {
+                            Patterns = ["*.zip"]
+                        }
+                    ]
+                });
+
+                if (pick.Count == 0 || pick[0] == null)
+                {
+                    return;
+                }
+
+                var zipPath = pick[0].Path.LocalPath;
+
+                string libraryJson;
+                try
+                {
+                    libraryJson = ReadZipEntryText(zipPath, "library.json");
+                }
+                catch (Exception ex)
+                {
+                    StatusTextBlock.Text = $"Could not read library from zip: {ex.Message}";
+                    return;
+                }
+
+                var libRoot = JsonNode.Parse(libraryJson) as JsonObject;
+                if (libRoot == null)
+                {
+                    StatusTextBlock.Text = "Invalid library.json in zip.";
+                    return;
+                }
+
+                var roots = LibraryMigration.CollectUniqueSourceRootPaths(libRoot);
+                if (roots.Count == 0)
+                {
+                    StatusTextBlock.Text = "This export has no source folders to map.";
+                    return;
+                }
+
+                var remapDialog = new LibraryImportRemapDialog(roots);
+                var remapOk = await remapDialog.ShowDialog<bool?>(this);
+                if (remapOk != true || string.IsNullOrWhiteSpace(remapDialog.PlanJson))
+                {
+                    return;
+                }
+
+                var stats = await _coreServerApiClient.GetLibraryStatsAsync(_coreServerBaseUrl);
+                var hasExisting = stats is { Global.TotalMedia: > 0 } || (stats?.Sources?.Count ?? 0) > 0;
+                var force = false;
+                if (hasExisting)
+                {
+                    var confirm = new LibraryOverwriteConfirmDialog();
+                    var replace = await confirm.ShowDialog<bool?>(this);
+                    if (replace != true)
+                    {
+                        return;
+                    }
+
+                    force = true;
+                }
+
+                StatusTextBlock.Text = "Importing library…";
+                var importResult = await _coreServerLongRunningApiClient.PostLibraryImportAsync(
+                    _coreServerBaseUrl,
+                    zipPath,
+                    remapDialog.PlanJson,
+                    force);
+
+                if (!importResult.Success)
+                {
+                    if (importResult.NeedsForce)
+                    {
+                        var confirmRetry = new LibraryOverwriteConfirmDialog();
+                        var replace = await confirmRetry.ShowDialog<bool?>(this);
+                        if (replace != true)
+                        {
+                            StatusTextBlock.Text = "Import cancelled.";
+                            return;
+                        }
+
+                        importResult = await _coreServerLongRunningApiClient.PostLibraryImportAsync(
+                            _coreServerBaseUrl,
+                            zipPath,
+                            remapDialog.PlanJson,
+                            force: true);
+                    }
+
+                    if (!importResult.Success)
+                    {
+                        StatusTextBlock.Text = $"Import failed: {importResult.Error ?? "unknown error"}";
+                        return;
+                    }
+                }
+
+                try
+                {
+                    var desktopJson = ReadZipEntryText(zipPath, "desktop-settings.json");
+                    var dest = AppDataManager.GetSettingsPath();
+                    var dir = Path.GetDirectoryName(dest);
+                    if (!string.IsNullOrEmpty(dir))
+                    {
+                        Directory.CreateDirectory(dir);
+                    }
+
+                    await File.WriteAllTextAsync(dest, desktopJson).ConfigureAwait(true);
+                }
+                catch (Exception ex)
+                {
+                    Log($"ImportLibraryMenuItem_Click: desktop-settings.json not written: {ex.Message}");
+                }
+
+                await SyncLibraryProjectionFromCoreAsync();
+                _ = SyncSourcesFromCoreAsync();
+                _ = SyncPresetsFromCoreAsync();
+
+                var tail = importResult.RestartRecommended
+                    ? " Restart the server if listen/WebUI/auth settings changed."
+                    : string.Empty;
+                StatusTextBlock.Text = $"Import complete.{tail}";
+            }
+            catch (Exception ex)
+            {
+                StatusTextBlock.Text = $"Import error: {ex.Message}";
+                Log($"ImportLibraryMenuItem_Click: {ex}");
             }
         }
 

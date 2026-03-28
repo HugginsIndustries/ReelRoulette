@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Reflection;
 using System.Text.Json;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Logging.Abstractions;
 using ReelRoulette.ServerApp;
@@ -60,6 +61,10 @@ static async Task RunAsync(string[] args)
             });
         });
         builder.Services.AddReelRouletteServer();
+        builder.Services.Configure<FormOptions>(options =>
+        {
+            options.MultipartBodyLengthLimit = 512L * 1024 * 1024;
+        });
 
         var app = builder.Build();
         app.MapReelRouletteEndpoints(runtimeOptions);

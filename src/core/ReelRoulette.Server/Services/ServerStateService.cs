@@ -25,6 +25,7 @@ public sealed class ServerStateService
         "api.duplicates",
         "api.autotag",
         "api.playback.clearStats",
+        "api.library.migration",
         "api.logs.client",
         "control.status",
         "control.settings",
@@ -788,6 +789,37 @@ public sealed class ServerStateService
         {
             _logger.LogWarning(ex, "Failed to bootstrap server state from '{Path}'.", _libraryPath);
         }
+    }
+
+    /// <summary>
+    /// Clears in-memory library/preset projection and reloads from disk (for example after library migration import).
+    /// </summary>
+    public void ReloadLibraryAndPresetsFromDisk()
+    {
+        lock (_filterSessionLock)
+        {
+            _presetCatalog = [];
+        }
+
+        lock (_sourceLock)
+        {
+            _sources.Clear();
+        }
+
+        lock (_tagLock)
+        {
+            _tagCategories.Clear();
+            _tags.Clear();
+        }
+
+        lock (_itemStatesLock)
+        lock (_tagLock)
+        {
+            _itemStates.Clear();
+            _itemTags.Clear();
+        }
+
+        BootstrapFromDisk();
     }
 
     private HashSet<string> GetOrCreateItemTags(string itemId)

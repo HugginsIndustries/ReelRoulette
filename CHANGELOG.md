@@ -7,6 +7,7 @@ This file follows a Keep a Changelog style format.
 
 ### Added
 
+- Server library migration API: `POST /api/library/export` (zip of `library.json`, `core-settings.json`, `presets.json`, `desktop-settings.json`, `export-manifest.json`, optional thumbnails/backups) and `POST /api/library/import` (multipart zip + JSON remapping plan; query `force` optional, default false, set `force=true` only after confirming replace when the server already has library data); core `LibraryMigration` helpers for manifest/remap/zip validation; desktop `Library → Export Library…` / `Import Library…` with folder remapping UI and local `desktop-settings.json` write after success.
 - Add `.github/workflows/package-linux.yml`: Linux portable + AppImage packaging on `ubuntu-latest` (.NET 10, Node 22, `ffmpeg`, pinned AppImageKit 12 `appimagetool`), `verify-linux-packaged-server-smoke.sh`, workflow artifacts, and tag `gh release upload` for `*.tar.gz` / `*.AppImage`.
 - Add `tools/scripts/verify-linux-packaged-server-smoke.sh` for headless packaged server HTTP checks (`/health`, `/api/version`, `/control/status`, `/operator`) after Linux CI packaging.
 - Add Linux AppImage packaging (`tools/scripts/package-serverapp-linux-appimage.sh`, `package-desktop-linux-appimage.sh`, `tools/scripts/lib/appimage-helpers.sh`): outputs under `artifacts/packages/appimage/`, built from portable tarballs; `AppRun` supports `--help` (prereqs) and `--install` (user-local `.desktop` + icons). 

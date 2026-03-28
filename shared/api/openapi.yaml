@@ -529,6 +529,91 @@ paths:
               schema:
                 $ref: "#/components/schemas/LibraryProjectionResponse"
 
+  /api/library/export:
+    post:
+      summary: Export library, core settings, presets, and optional thumbnails/backups as a zip
+      operationId: postLibraryExport
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LibraryExportRequest"
+      responses:
+        "200":
+          description: Zip archive (application/zip)
+          content:
+            application/zip:
+              schema:
+                type: string
+                format: binary
+        "400":
+          description: Invalid request (for example no library to export)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized when auth is required and request is not paired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/library/import:
+    post:
+      summary: Import a library export zip with a JSON remapping plan (multipart)
+      operationId: postLibraryImport
+      parameters:
+        - name: force
+          in: query
+          description: When true, allows replacing a non-empty existing library after user confirmation
+          schema:
+            type: boolean
+            default: false
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+                - plan
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Library export zip from POST /api/library/export
+                plan:
+                  type: string
+                  description: JSON object (LibraryImportPlan) with remap and skippedRoots
+      responses:
+        "200":
+          description: Import completed; clients should resync
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LibraryImportAcceptedResponse"
+        "400":
+          description: Invalid zip, plan, or remapping error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized when auth is required and request is not paired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Non-empty library exists and force was not set
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LibraryImportConflictResponse"
+
   /api/sources/{sourceId}/enabled:
     post:
       summary: Update global enabled state for a source
@@ -1664,6 +1749,56 @@ components:
     LibraryProjectionResponse:
       type: object
       additionalProperties: true
+
+    LibraryExportRequest:
+      type: object
+      properties:
+        includeThumbnails:
+          type: boolean
+          default: false
+        includeBackups:
+          type: boolean
+          default: false
+
+    LibraryImportPlan:
+      type: object
+      description: Exact source rootPath strings from the export must appear as keys in remap or in skippedRoots
+      properties:
+        remap:
+          type: object
+          additionalProperties:
+            type: string
+          description: Map of exported rootPath to new folder path on this system
+        skippedRoots:
+          type: array
+          items:
+            type: string
+          description: Exported rootPath values to leave unchanged (offline or missing sources)
+
+    LibraryImportAcceptedResponse:
+      type: object
+      required:
+        - accepted
+        - restartRecommended
+      properties:
+        accepted:
+          type: boolean
+        message:
+          type: string
+          nullable: true
+        restartRecommended:
+          type: boolean
+
+    LibraryImportConflictResponse:
+      type: object
+      required:
+        - error
+        - needsForce
+      properties:
+        error:
+          type: string
+        needsForce:
+          type: boolean
 
     RandomRequest:
       type: object
