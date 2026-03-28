@@ -19,9 +19,7 @@ Instructions:
 
 Commit Message:
 
-M9d: CI Linux package workflow and headless server smoke
+Docs: Expand planned M9e scope in MILESTONES
 
-- Add `.github/workflows/package-linux.yml` (tag + `workflow_dispatch`, .NET 10, Node 22, ffmpeg, pinned AppImageKit 12 `appimagetool`, AppImage packaging scripts, `verify-linux-packaged-server-smoke.sh`, artifacts + tag `gh release upload` for tarballs and AppImages).
-- Add `tools/scripts/verify-linux-packaged-server-smoke.sh` for headless packaged-server HTTP checks (`/health`, `/api/version`, `/control/status`, `/operator`) after Linux packaging.
-- Bump `package-windows.yml` to .NET SDK 10.0.x for packaging parity.
-- Update README/dev-setup release upload notes, `docs/architecture.md` packaging/CI line, CONTEXT operational surfaces, domain-inventory, testing checklist, CHANGELOG, and MILESTONES (complete M9d; tracker `Last milestone completed`).
+- Reframe the active milestone as end-user `README.md` vs contributor `docs/dev-setup.md`, with explicit doc set (CONTEXT, architecture, domain-inventory, api, testing checklist, Documentation Map / AGENTS as needed).
+- Require Linux runtime and dev-setup coverage for Debian/Ubuntu-family, Fedora-family, and Arch-based distros (CachyOS as Arch-style sign-off baseline).

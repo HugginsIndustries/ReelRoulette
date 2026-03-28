@@ -91,23 +91,42 @@ Do not use this file for detailed architecture explanation or current capability
 
 Last milestone completed: M9d
 
-### M9e - Linux Documentation and Operator Runbook
+### M9e - End-User README and Contributor Dev Documentation
 
 - **Status**: ⏳ Planned
-- **Goal**: First-class Linux contributor/operator docs: **Avalonia server tray**, **`desktop` paths** and **Desktop** naming, **XDG Autostart** behavior, **CachyOS** baseline, troubleshooting.
+- **Goal**: Make `README.md` the primary, non-technical guide for installing and running ReelRoulette on **Windows** and on **Linux**, with **Debian/Ubuntu-family**, **Fedora-family**, and **Arch-based** distributions explicitly documented for runtime setup—while concentrating contributor and developer detail in `docs/dev-setup.md` with a single canonical command/script reference.
 - **Scope**:
-  - Update `README.md`, `docs/dev-setup.md`, `CONTEXT.md`/`docs/architecture.md`/`docs/domain-inventory.md` as needed: Linux run/package commands, **`desktop` client paths** and **Desktop** naming, ffmpeg/VLC, tray vs headless, **Launch Server on Startup** on Linux (XDG `*.desktop` autostart entry, toggle semantics, where the file lives, and how to verify or remove it manually).
-  - Document **CachyOS (Arch-based)** as the primary development/sign-off distro for this series; note other distros as best-effort unless expanded later.
-  - `docs/checklists/testing-checklist.md`: Linux + tray + packaging + autostart entries.
-  - Document **AppImage** and install script (`install.sh`) usage: how to find and download the latest release artifact from GitHub Releases, how to run the install script, and how to verify application menu registration post-install.
-  - Troubleshooting: native deps, permissions, display/audio, missing tray/status area, **Avalonia**/LibVLC hints for Linux, autostart entry conflicts.
+  - **`README.md` (end users and operators)**:
+    - Refocus the body on installation and day-to-day use; **point developers and contributors explicitly to `docs/dev-setup.md`** for building from source, tooling, and workflow depth.
+    - Add a **table of contents** immediately after the introduction.
+    - Provide a **full manual** for getting server and **Desktop** client running on **Windows** and on **Linux**, with **explicit sections (or equivalent tables) for all of**: **Debian / Ubuntu** (and derivatives using `apt`), **Fedora** (and close RHEL-family derivatives using `dnf` where applicable), and **Arch-based** distros (including **CachyOS** as the documented Arch-style example). Cover **package-manager commands** for native prerequisites (**FFmpeg**/**ffprobe**, **VLC**/**LibVLC**), optional vs required steps, and any notable differences (paths, package names, codecs).
+    - **`README.md` prerequisites**: list only what is needed to **run** the shipped apps (including native runtime deps such as FFmpeg/VLC where the product expects them); do **not** fold full SDK/editor prerequisites for development into the README—those belong in dev-setup.
+    - **Retain** the existing **Documentation Map** and **Third-Party Components** sections (update their surrounding prose only as needed for consistency).
+    - Preserve or improve coverage of **Linux**-specific operator concerns already in this series: **Avalonia** server tray vs **headless** fallback, **Launch Server on Startup** via **XDG Autostart** (`*.desktop` location, toggle semantics, manual verify/remove), **`desktop` paths** and **Desktop** naming where it helps end users.
+    - Document **release install paths** clearly: GitHub Releases (Windows installers/portables; Linux AppImage, portable tarball, **`install-linux-from-github.sh`** where applicable), how to obtain artifacts, first launch, and verifying application menu registration on Linux where relevant.
+    - **Troubleshooting** (in README or clearly linked subsections): native deps, permissions, display/audio, missing tray/status area, **LibVLC**/media hints on Linux, autostart conflicts.
+  - **`docs/dev-setup.md` (contributors)**:
+    - **Move** any README content that is **developer-focused** into dev-setup if it is not already covered there (build, test, package, CI context, editor/SDK installs).
+    - Ensure **all development prerequisites** (for example .NET SDK, Node, optional PowerShell, Inno Setup, `appimagetool`, etc.) are documented here, not as primary README install requirements.
+    - Add near the **top** of the document a **full commands list**: repository scripts and canonical commands with **short explanations each** (cover **all** `tools/scripts/*` entrypoints and other recurring commands such as `dotnet`/`npm` invocations the repo expects). Where contributor setup depends on the host OS, include **Debian/Ubuntu**, **Fedora**, and **Arch-based** variants (install .NET SDK, Node, `ffmpeg`/`vlc`, etc.) so the dev path matches the README’s end-user distro coverage.
+  - **`CONTEXT.md`**: refresh **current implemented capabilities**, **operational surfaces**, and **repository map** so they match the README/dev-setup split (what end users do vs what contributors run); keep **`desktop`** paths and **Desktop** naming consistent.
+  - **`docs/architecture.md`**: update **packaging and delivery**, **CI/workflow**, and related runtime-boundary prose so it stays accurate alongside the new README and dev-setup (no duplicate end-user install steps—link to README where appropriate).
+  - **`docs/domain-inventory.md`**: reconcile **packaging**, **verify**, **runtime**, and **CI** inventories with the canonical dev-setup command/script list and current workflow filenames.
+  - **`docs/api.md`**: align contributor-facing references and any README-cited entrypoints (health, operator, control plane) if cross-links or descriptions drift during the doc pass; no API contract edits unless a separate change requires them.
+  - **`docs/checklists/testing-checklist.md`**: full pass for **Linux**, **tray**, **packaging**, **autostart**, and **install-from-release** flows so checklist items match the updated README and dev-setup.
+  - **`AGENTS.md` / `README.md` Documentation Map**: ensure the map lists the right owning docs after the split (README vs dev-setup vs CONTEXT vs architecture vs domain-inventory vs api); update **Documentation Map** section prose in README accordingly.
+  - Document **CachyOS (Arch-based)** as the **primary development/sign-off** Linux baseline for this series; **beyond** the required **Debian/Ubuntu**, **Fedora**, and **Arch-based** coverage, additional distros remain **best-effort** unless expanded later.
 - **Acceptance criteria**:
-  - A new contributor can build, run server (tray or headless), and run the **Desktop** client on Linux using only the docs.
-  - A user can install via AppImage or install script and reach a working application without consulting anything beyond the docs.
-  - Tray best-effort vs guaranteed core runtime is explicit; headless operator path documented; **Linux** autostart behavior is explicit and testable from the docs.
+  - A **non-developer** can follow **README.md** alone to install prerequisites (for running), install server and **Desktop** client on **Windows** and on **Linux** using the documented steps for **Debian/Ubuntu-family**, **Fedora-family**, and **Arch-based** systems, and reach a working setup including operator/WebUI access as documented.
+  - A **contributor** can rely on **`docs/dev-setup.md`** for environment setup, build/test/package workflows, and a complete script/command reference without hunting through README for developer steps.
+  - README prerequisites reflect **runtime/use** only; dev-setup lists **full dev** prerequisites with no important gap vs current repo tooling.
+  - Tray vs headless behavior, headless operator path, and **Linux** autostart behavior are explicit and actionable from the docs.
+  - **`CONTEXT.md`**, **`docs/architecture.md`**, **`docs/domain-inventory.md`**, **`docs/api.md`**, and **`docs/checklists/testing-checklist.md`** all read as current relative to the shipped scripts, workflows, and **`desktop`** layout—no stale install or contributor paths.
 - **Verification evidence**:
-  - Doc consistency with scripts/workflows and renamed paths.
-  - Maintainer spot-checks while writing docs are sufficient for this milestone; formal dry-run evidence (tray-capable + headless on **CachyOS**, full checklist pass) is **deferred** to **Linux Release Readiness and Sign-off**.
+  - README contains TOC after intro, Documentation Map, Third-Party Components, and developer pointer to dev-setup; Linux install/prerequisite guidance names **Debian/Ubuntu**, **Fedora**, and **Arch-based** (with **CachyOS** as the Arch-style sign-off example); dev-setup opens with the consolidated commands/scripts list and matches those distro families for contributor prereqs where OS-specific commands apply.
+  - Landed updates across **`CONTEXT.md`**, **`docs/architecture.md`**, **`docs/domain-inventory.md`**, **`docs/api.md`**, and **`docs/checklists/testing-checklist.md`** (plus **`AGENTS.md`** only if Documentation Map / agent workflow boundaries need a one-line sync).
+  - Cross-doc consistency with scripts, workflows, and **`desktop`** paths.
+  - Maintainer spot-checks while writing docs are sufficient for closing this milestone; formal dry-run evidence (tray-capable + headless on **CachyOS**, full checklist pass) remains **deferred** to **Linux Release Readiness and Sign-off**.
 - **Deferrals / Follow-ups**:
   - Formal doc validation dry-runs and exhaustive checklist completion → **Linux Release Readiness and Sign-off**.
 
