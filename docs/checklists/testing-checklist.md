@@ -169,7 +169,7 @@ Use `pwsh ./tools/scripts/reset-checklist.ps1` to reset metadata/check states be
 
 - [x] Workflow YAML files are valid and committed in `.github/workflows`.
 - [x] Default CI gates map to required checks (`build`, `test`, web verify).
-- [x] Packaging workflow path is defined and runnable.
+- [x] Packaging workflow paths are defined and runnable: `package-windows.yml` and `package-linux.yml` (tag + `workflow_dispatch`; Linux job includes headless packaged-server smoke).
 
 ## Documentation Sync
 

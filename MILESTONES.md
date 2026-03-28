@@ -89,33 +89,7 @@ Do not use this file for detailed architecture explanation or current capability
 
 ## Active Milestones
 
-Last milestone completed: M9c
-
-### M9d - CI Linux Distribution Gates
-
-- **Status**: ⏳ Planned
-- **Goal**: Enforce Linux build/test/package quality in CI, including the **unified Avalonia server tray** and **Desktop** client; publish Linux artifacts to GitHub Releases on tag, mirroring the existing Windows packaging workflow.
-- **Scope**:
-  - Build/test/verify gates for Linux already exist in `ci.yml` (`build-test-linux`, `web-verify` jobs); `package-linux.yml` is packaging-only, consistent with `package-windows.yml`. No new build/test jobs are required in this milestone unless `ci.yml` needs adjustment for renamed **`desktop`** paths.
-  - Add `package-linux.yml` as a peer to `package-windows.yml` — same trigger shape (`workflow_dispatch` + tag push), same version normalization pattern, `ubuntu-latest` runner, bash throughout.
-  - `package-linux.yml` runs the Linux packaging scripts from `tools/scripts/` and produces all Linux artifact types established by the time this milestone lands: portable `tar.gz` packages (server + **Desktop**) and AppImage packages (server + **Desktop**).
-  - On tag push, `package-linux.yml` uploads all Linux artifacts (`.tar.gz` + `.AppImage`) to the existing GitHub release via `gh release upload`, mirroring the `package-windows.yml` upload behavior.
-  - CI artifact uploads (via `actions/upload-artifact`) publish packages to the workflow run for non-tag builds.
-  - Smoke checks: packaged server reachability (health/version/operator); optional **headless** server boot without display.
-  - Tray-related checks: when feasible, runner verifies **headless fallback**; tray-on-runner validation only where the image/session supports it (do not make CI flaky on absent status notifier).
-  - **Windows** jobs remain green; adjust `package-windows.yml` only for renamed **`desktop`** project paths / **Desktop** `.csproj` location if needed.
-- **Acceptance criteria**:
-  - `package-linux.yml` exists as a standalone workflow file, structurally consistent with `package-windows.yml`.
-  - Default-branch/PR Linux pipeline passes and catches Linux-only regressions in server, **Desktop** client, and packaging.
-  - On tag push, all Linux artifacts (`.tar.gz` + `.AppImage` for server and **Desktop**) are uploaded to the GitHub release alongside Windows artifacts.
-  - Headless server startup remains deterministic in CI (no hard dependency on GUI session for green builds).
-- **Verification evidence**:
-  - `package-linux.yml` workflow file present and passing.
-  - Links or logs showing passing Linux gates.
-  - On a tag build, GitHub release contains the expected Linux artifact set alongside Windows artifacts.
-  - CI green builds as the bar for this milestone do not replace the full manual + packaged-artifact sign-off matrix; that broader verification remains **deferred** to **Linux Release Readiness and Sign-off**.
-- **Deferrals / Follow-ups**:
-  - Full cross-platform manual verification and checklist completion beyond CI gates → **Linux Release Readiness and Sign-off**.
+Last milestone completed: M9d
 
 ### M9e - Linux Documentation and Operator Runbook
 
@@ -914,6 +888,32 @@ Last milestone completed: M9c
 ## Completed Milestones
 
 Latest completions first:
+
+### M9d - CI Linux Distribution Gates
+
+- **Status**: ✅ Complete
+- **Goal**: Enforce Linux build/test/package quality in CI, including the **unified Avalonia server tray** and **Desktop** client; publish Linux artifacts to GitHub Releases on tag, mirroring the existing Windows packaging workflow.
+- **Scope**:
+  - Build/test/verify gates for Linux already exist in `ci.yml` (`build-test-linux`, `web-verify` jobs); `package-linux.yml` is packaging-only, consistent with `package-windows.yml`. No new build/test jobs are required in this milestone unless `ci.yml` needs adjustment for renamed **`desktop`** paths.
+  - Add `package-linux.yml` as a peer to `package-windows.yml` — same trigger shape (`workflow_dispatch` + tag push), same version normalization pattern, `ubuntu-latest` runner, bash throughout.
+  - `package-linux.yml` runs the Linux packaging scripts from `tools/scripts/` and produces all Linux artifact types established by the time this milestone lands: portable `tar.gz` packages (server + **Desktop**) and AppImage packages (server + **Desktop**).
+  - On tag push, `package-linux.yml` uploads all Linux artifacts (`.tar.gz` + `.AppImage`) to the existing GitHub release via `gh release upload`, mirroring the `package-windows.yml` upload behavior.
+  - CI artifact uploads (via `actions/upload-artifact`) publish packages to the workflow run for non-tag builds.
+  - Smoke checks: packaged server reachability (health/version/operator); optional **headless** server boot without display.
+  - Tray-related checks: when feasible, runner verifies **headless fallback**; tray-on-runner validation only where the image/session supports it (do not make CI flaky on absent status notifier).
+  - **Windows** jobs remain green; adjust `package-windows.yml` only for renamed **`desktop`** project paths / **Desktop** `.csproj` location if needed.
+- **Acceptance criteria**:
+  - `package-linux.yml` exists as a standalone workflow file, structurally consistent with `package-windows.yml`.
+  - Default-branch/PR Linux pipeline passes and catches Linux-only regressions in server, **Desktop** client, and packaging.
+  - On tag push, all Linux artifacts (`.tar.gz` + `.AppImage` for server and **Desktop**) are uploaded to the GitHub release alongside Windows artifacts.
+  - Headless server startup remains deterministic in CI (no hard dependency on GUI session for green builds).
+- **Verification evidence**:
+  - Landed `.github/workflows/package-linux.yml`: `ubuntu-latest`, .NET SDK 10.0.x, Node 22, `ffmpeg`, AppImageKit **12** `appimagetool` install, version normalization, `package-serverapp-linux-appimage.sh` + `package-desktop-linux-appimage.sh`, headless smoke via `tools/scripts/verify-linux-packaged-server-smoke.sh` (unsets display/DBus session variables for the server process; curls `/health`, `/api/version`, `/control/status`, `/operator`), `actions/upload-artifact`, tag path `gh release view` + `gh release upload` for `*.tar.gz` and `*.AppImage`.
+  - `package-windows.yml` packaging job updated to .NET SDK **10.0.x** (aligned with solution TFMs and Linux packaging).
+  - Default-branch PR CI remains `ci.yml` Linux/Windows build+test and WebUI verify; full tag/release artifact spot-check on GitHub Releases is expected on the next shipping tag (maintainer-verified).
+  - CI green builds as the bar for this milestone do not replace the full manual + packaged-artifact sign-off matrix; that broader verification remains **deferred** to **Linux Release Readiness and Sign-off**.
+- **Deferrals / Follow-ups**:
+  - Full cross-platform manual verification and checklist completion beyond CI gates → **Linux Release Readiness and Sign-off**.
 
 ### M9c - Linux Installation UX
 

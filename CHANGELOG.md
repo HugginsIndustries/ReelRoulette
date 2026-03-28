@@ -7,6 +7,8 @@ This file follows a Keep a Changelog style format.
 
 ### Added
 
+- Add `.github/workflows/package-linux.yml`: Linux portable + AppImage packaging on `ubuntu-latest` (.NET 10, Node 22, `ffmpeg`, pinned AppImageKit 12 `appimagetool`), `verify-linux-packaged-server-smoke.sh`, workflow artifacts, and tag `gh release upload` for `*.tar.gz` / `*.AppImage`.
+- Add `tools/scripts/verify-linux-packaged-server-smoke.sh` for headless packaged server HTTP checks (`/health`, `/api/version`, `/control/status`, `/operator`) after Linux CI packaging.
 - Add Linux AppImage packaging (`tools/scripts/package-serverapp-linux-appimage.sh`, `package-desktop-linux-appimage.sh`, `tools/scripts/lib/appimage-helpers.sh`): outputs under `artifacts/packages/appimage/`, built from portable tarballs; `AppRun` supports `--help` (prereqs) and `--install` (user-local `.desktop` + icons). 
 - Add `tools/scripts/install-linux-from-github.sh` to install the latest GitHub release (AppImage preferred, portable tarball fallback; default repo `HugginsIndustries/ReelRoulette`, overridable). Extend `full-release.ps1` on Linux to run AppImage scripts after portable packaging.
 - Add Linux portable packaging scripts (`tools/scripts/package-serverapp-linux-portable.sh`, `package-desktop-linux-portable.sh`): self-contained `linux-x64` tarballs under `artifacts/packages/portable/`, WebUI bundled into server `wwwroot`, stripped symbols / no `.pdb` in package tree, `run-server.sh` / `run-desktop.sh` and `README.txt` for native prerequisites.
@@ -21,6 +23,8 @@ This file follows a Keep a Changelog style format.
 
 ### Changed
 
+- `package-windows.yml` uses .NET SDK **10.0.x** for packaging (aligned with solution TFMs and Linux package workflow).
+- `docs/architecture.md`: packaging/CI note now covers Linux tag packaging workflow and headless smoke.
 - `set-release-version.ps1` now updates desktop `<Version>`, runs WebUI `generate:contracts`, and runs build/test/WebUI/deploy-smoke verify by default; opt out with `-NoUpdateDesktopVersion`, `-NoRegenerateContracts`, and/or `-NoRunVerify`. `full-release.ps1` forwards those `-No*` switches (and `-NoDocUpdates`) when `-Version` is set; omit `-Version` on `full-release.ps1` to skip `set-release-version` and package using each `.csproj` `<Version>`. Document behavior in `README.md`, `docs/dev-setup.md`, `CONTEXT.md`, and `docs/domain-inventory.md`.
 - Expand `README.md` Quick Start with end-user install paths: Windows installers and portable ZIPs from GitHub Releases, Linux install script / AppImage / tarball, FFmpeg–VLC note, and a separate “Developing from source” subsection for contributors.
 - Restructure `README.md` **Packaging** into **Linux**, **Windows**, and **General** subsections with full Linux script commands and shared release/GitHub notes.

@@ -1,0 +1,110 @@
+name: Package Linux
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Package version label"
+        required: true
+        default: "0.9.0"
+  push:
+    tags:
+      - "v*"
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      PACKAGE_VERSION: ${{ inputs.version || github.ref_name }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install ffmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Install appimagetool
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          wget -qO "$tmp/appimagetool.ai" "https://github.com/AppImage/AppImageKit/releases/download/12/appimagetool-x86_64.AppImage"
+          chmod +x "$tmp/appimagetool.ai"
+          (cd "$tmp" && "$tmp/appimagetool.ai" --appimage-extract)
+          tool="$(find "$tmp/squashfs-root" -name appimagetool -type f | head -1)"
+          if [[ -z "$tool" ]]; then
+            echo "appimagetool binary not found after extracting AppImageKit release 12." >&2
+            exit 1
+          fi
+          sudo install -m0755 "$tool" /usr/local/bin/appimagetool
+
+      - name: Normalize package version
+        run: |
+          set -euo pipefail
+          version="$(printf '%s' "$PACKAGE_VERSION" | tr -d '\r\n')"
+          version="${version#"${version%%[![:space:]]*}"}"
+          version="${version%"${version##*[![:space:]]}"}"
+          if [[ "$version" == v* ]]; then
+            version="${version#v}"
+          fi
+          if [[ -z "$version" ]]; then
+            echo "PACKAGE_VERSION is empty after normalization." >&2
+            exit 1
+          fi
+          echo "PACKAGE_VERSION=$version" >> "$GITHUB_ENV"
+          echo "Normalized PACKAGE_VERSION=$version"
+
+      - name: Build server AppImage (includes portable tarball)
+        run: ./tools/scripts/package-serverapp-linux-appimage.sh -Version "$PACKAGE_VERSION"
+
+      - name: Build desktop AppImage (includes portable tarball)
+        run: ./tools/scripts/package-desktop-linux-appimage.sh -Version "$PACKAGE_VERSION"
+
+      - name: Smoke test packaged server (headless)
+        run: ./tools/scripts/verify-linux-packaged-server-smoke.sh
+
+      - name: Upload package artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: reelroulette-linux-packages
+          path: artifacts/packages/**
+
+      - name: Verify release exists for tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME:?GITHUB_REF_NAME is empty}"
+          gh release view "$tag" --repo "$GITHUB_REPOSITORY"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload packages to existing GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME:?GITHUB_REF_NAME is empty}"
+          mapfile -t assets < <(find artifacts/packages -type f \( -name '*.tar.gz' -o -name '*.AppImage' \) | sort)
+          if [[ "${#assets[@]}" -eq 0 ]]; then
+            echo "No .tar.gz or .AppImage files found under artifacts/packages." >&2
+            exit 1
+          fi
+          gh release upload "$tag" "${assets[@]}" --clobber --repo "$GITHUB_REPOSITORY"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -47,7 +47,7 @@ ReelRoulette is migrating from a monolithic desktop app to a thin-client, API-fi
 
 - **Operational surfaces**
   - Manual validation guide/checklist at `docs/checklists/testing-checklist.md`.
-  - Windows packaging scripts and CI workflows are present for build/verify/package gates.
+  - Windows and Linux packaging scripts and CI workflows: `ci.yml` (build/test + WebUI verify), `package-windows.yml` and `package-linux.yml` (tag + `workflow_dispatch`, upload artifacts; tag builds attach packages to the existing GitHub release). Linux packaging CI runs `verify-linux-packaged-server-smoke.sh` after producing portable + AppImage outputs.
   - Linux portable packaging: `tools/scripts/package-serverapp-linux-portable.sh` and `package-desktop-linux-portable.sh` produce self-contained `linux-x64` tarballs under `artifacts/packages/portable/` (`run-server.sh` / `run-desktop.sh`, bundled `README.txt` for native prereqs).
   - Linux AppImage packaging: `tools/scripts/package-serverapp-linux-appimage.sh` and `package-desktop-linux-appimage.sh` (shared `tools/scripts/lib/appimage-helpers.sh`) produce `artifacts/packages/appimage/*.AppImage` from those portable tarballs; `AppRun` supports `--help` (prereqs) and `--install` (user-local menu entry and icons). GitHub latest-release installer: `tools/scripts/install-linux-from-github.sh` (AppImage preferred, portable tarball fallback; `curl` + `jq`; default repo overridable for forks).
   - Windows installers expose desktop shortcut install tasks (checked by default for server and desktop installers).
@@ -71,8 +71,8 @@ Authoritative roadmap details live in `MILESTONES.md`. Near-term focus areas:
   - `web/ReelRoulette.WebUI`: active web client.
   - `desktop/ReelRoulette.DesktopApp`: shipping Desktop client location (Avalonia).
 - `shared/api/openapi.yaml`: API contract source of truth.
-- `tools/scripts/`: runtime/verify/package scripts (`run-server*`, `verify-web*`, `verify-web-deploy*`, `publish-web*`, Windows `package-*-win-*.ps1`, Linux portable `package-*-linux-portable.sh`).
-  - includes `set-release-version.ps1` for release-aligned version fan-out (by default updates desktop `<Version>`, regenerates WebUI contracts, runs build/test/WebUI/deploy-smoke verify, and syncs README/dev-setup examples; skip pieces with `-NoUpdateDesktopVersion`, `-NoRegenerateContracts`, `-NoRunVerify`, `-NoDocUpdates`); `full-release.ps1` forwards those switches when `-Version` is set and skips `set-release-version` when `-Version` is omitted (packaging then uses each `.csproj` `<Version>`); `reset-checklist.ps1` for testing-guide reset workflows; Linux AppImage scripts and `install-linux-from-github.sh` live alongside portable `package-*-linux-portable.sh`.
+- `tools/scripts/`: runtime/verify/package scripts (`run-server*`, `verify-web*`, `verify-web-deploy*`, `verify-linux-packaged-server-smoke.sh`, `publish-web*`, Windows `package-*-win-*.ps1`, Linux portable `package-*-linux-portable.sh`).
+  - includes `set-release-version.ps1` for release-aligned version fan-out (by default updates desktop `<Version>`, regenerates WebUI contracts, runs build/test/WebUI/deploy-smoke verify, and syncs README/dev-setup examples; skip pieces with `-NoUpdateDesktopVersion`, `-NoRegenerateContracts`, `-NoRunVerify`, `-NoDocUpdates`); `full-release.ps1` forwards those switches when `-Version` is set and skips `set-release-version` when `-Version` is omitted (packaging then uses each `.csproj` `<Version>`); `reset-checklist.ps1` for testing-guide reset workflows; Linux AppImage scripts, `install-linux-from-github.sh`, and packaged-server smoke helper live alongside portable `package-*-linux-portable.sh`.
 
 ## Working Commands (Canonical Set)
 

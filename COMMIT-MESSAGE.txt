@@ -19,10 +19,9 @@ Instructions:
 
 Commit Message:
 
-M9c: Linux AppImage packaging and GitHub install script
+M9d: CI Linux package workflow and headless server smoke
 
-- Add `package-serverapp-linux-appimage.sh`, `package-desktop-linux-appimage.sh`, and `tools/scripts/lib/appimage-helpers.sh` (portable tar in, `artifacts/packages/appimage/*.AppImage` out; `--help` / `--install` on `AppRun`).
-- Add `install-linux-from-github.sh` (latest release via API; AppImage preferred, tar.gz fallback; user-local install, no sudo).
-- Run AppImage scripts from `full-release.ps1` on Linux after portable packaging.
-- `set-release-version.ps1`: desktop version, contract regen, and verify default on (`-No*` to skip). `full-release.ps1`: optional `-Version` (skip set-release when omitted); forward `-NoDocUpdates` / `-No*` to `set-release-version` when version set; README/dev-setup/domain-inventory updated.
-- Update dev-setup, README (Quick Start + Packaging: Linux/Windows/General), architecture, domain-inventory, CONTEXT, testing checklist, and MILESTONES (complete M9c; tracker `Last milestone completed`).
+- Add `.github/workflows/package-linux.yml` (tag + `workflow_dispatch`, .NET 10, Node 22, ffmpeg, pinned AppImageKit 12 `appimagetool`, AppImage packaging scripts, `verify-linux-packaged-server-smoke.sh`, artifacts + tag `gh release upload` for tarballs and AppImages).
+- Add `tools/scripts/verify-linux-packaged-server-smoke.sh` for headless packaged-server HTTP checks (`/health`, `/api/version`, `/control/status`, `/operator`) after Linux packaging.
+- Bump `package-windows.yml` to .NET SDK 10.0.x for packaging parity.
+- Update README/dev-setup release upload notes, `docs/architecture.md` packaging/CI line, CONTEXT operational surfaces, domain-inventory, testing checklist, CHANGELOG, and MILESTONES (complete M9d; tracker `Last milestone completed`).

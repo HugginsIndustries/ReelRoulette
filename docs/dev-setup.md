@@ -186,7 +186,9 @@ GitHub release asset upload flow:
 
 - Push your final release commit.
 - Manually create/publish the tag release on GitHub with your own release notes.
-- `package-windows.yml` runs on `v*` tag push, builds packages, verifies the release exists for that tag, and uploads generated `.zip`/`.exe` files to that release.
+- On `v*` tag push, **`package-windows.yml`** and **`package-linux.yml`** each run on their respective runners. They build platform packages, verify the release exists for that tag, then upload assets (`gh release upload --clobber` on reruns):
+  - Windows: `.zip` / `.exe` under `artifacts/packages/`
+  - Linux: `.tar.gz` / `.AppImage` under `artifacts/packages/` (Linux job installs `ffmpeg`, Node 22, .NET SDK 10, and a pinned AppImageKit **12** `appimagetool`; runs `verify-linux-packaged-server-smoke.sh` after packaging for a headless server HTTP smoke against `/health`, `/api/version`, `/control/status`, and `/operator`).
 - Re-runs replace matching asset names via `gh release upload --clobber`.
 
 ## Linux packaging (portable)

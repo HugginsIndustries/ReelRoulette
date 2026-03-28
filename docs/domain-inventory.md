@@ -187,6 +187,7 @@ Web verification:
 - `tools/scripts/verify-web.ps1`
 - `tools/scripts/verify-web-deploy.ps1`
 - `tools/scripts/publish-web.ps1` (compat/deploy tooling)
+- `./tools/scripts/verify-linux-packaged-server-smoke.sh` (headless packaged Linux server tarball: curls `/health`, `/api/version`, `/control/status`, `/operator`; Linux packaging CI and local runs after producing a portable tarball)
 
 Packaging:
 
@@ -208,3 +209,4 @@ CI:
 
 - `.github/workflows/ci.yml`
 - `.github/workflows/package-windows.yml`
+- `.github/workflows/package-linux.yml`

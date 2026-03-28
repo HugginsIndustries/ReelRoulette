@@ -240,10 +240,13 @@ pwsh ./tools/scripts/full-release.ps1 -Version 0.11.0-dev
 
 On **Linux**, this produces `artifacts/packages/portable/*.tar.gz` and `artifacts/packages/appimage/*.AppImage` for server and desktop (AppImage steps require `appimagetool`); Inno installer steps are skipped. On **Windows**, it produces portable `.zip` outputs and Inno **`.exe`** installers.
 
-**GitHub Releases upload (Windows packages on tag today):**
+**GitHub Releases upload (Windows + Linux packages on tag):**
 
 - Push your final release commit, then create/publish the GitHub tag and release with your notes.
-- A `v*` tag push runs `package-windows.yml`, which builds server and desktop packages, checks that the release exists for that tag, and uploads `artifacts/packages/**/*.zip` and `artifacts/packages/**/*.exe` to that release (`gh release upload --clobber` on reruns).
+- A `v*` tag push runs **`package-windows.yml`** and **`package-linux.yml`** in parallel. Each workflow builds its platform’s packages, checks that the release already exists for that tag, then uploads assets to that release (`gh release upload --clobber` on reruns):
+  - Windows: `artifacts/packages/**/*.zip` and `artifacts/packages/**/*.exe`
+  - Linux: `artifacts/packages/**/*.tar.gz` and `artifacts/packages/**/*.AppImage`
+- You can also run either workflow manually via **Actions → Package Windows / Package Linux → Run workflow** (optional version input).
 
 ## Documentation Map
 
