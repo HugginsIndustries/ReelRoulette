@@ -10,6 +10,7 @@ This guide covers local setup, run paths, verification gates, packaging, and rel
   - Linux (Arch Linux, CachyOS, and similar): install from the AUR, for example `paru -S powershell-bin` or `yay -S powershell-bin`; that package provides `pwsh` on your PATH.
 - Windows packaging only:
   - Inno Setup 6 (for installer builds)
+- FFmpeg (with `ffprobe` on `PATH`) and VLC / LibVLC for full desktop playback and media helper behavior; required for Linux portable desktop tarballs (not bundled there). Windows desktop portable packaging can stage native copies via `package-desktop-win-portable.ps1` when not using repo-local `runtimes/` assets.
 
 ## Key Projects
 
@@ -186,6 +187,35 @@ GitHub release asset upload flow:
 - Manually create/publish the tag release on GitHub with your own release notes.
 - `package-windows.yml` runs on `v*` tag push, builds packages, verifies the release exists for that tag, and uploads generated `.zip`/`.exe` files to that release.
 - Re-runs replace matching asset names via `gh release upload --clobber`.
+
+## Linux packaging (portable)
+
+From the repository root (requires `bash`, `dotnet`, `npm`, `tar` on `PATH`):
+
+- Server portable tarball (WebUI built and copied into published `wwwroot`, self-contained `linux-x64`, symbols omitted from the package tree):
+
+```bash
+./tools/scripts/package-serverapp-linux-portable.sh
+```
+
+- Desktop portable tarball (self-contained `linux-x64`; **does not** bundle `ffmpeg`/`ffprobe` or LibVLC—install distro packages so playback and helpers resolve):
+
+```bash
+./tools/scripts/package-desktop-linux-portable.sh
+```
+
+Optional arguments for both scripts: `-Version <ver>`, `-Configuration <cfg>`, `-OutputRoot <path>` (default `artifacts/packages`).
+
+Artifacts:
+
+- `artifacts/packages/portable/ReelRoulette-Server-{Version}-linux-x64.tar.gz`
+- `artifacts/packages/portable/ReelRoulette-Desktop-{Version}-linux-x64.tar.gz`
+
+Each archive contains a single top-level directory with the executable, `run-server.sh` or `run-desktop.sh` (executable), `README.txt`, and `PACKAGE_INFO.txt`. Extract, then run `./run-server.sh` or `./run-desktop.sh` from that directory.
+
+When `-Version` is omitted, scripts read `<Version>` from the corresponding `.csproj` (same behavior as Windows packaging scripts).
+
+On Linux, `pwsh ./tools/scripts/full-release.ps1 -Version <ver>` runs `set-release-version` (with your flags), then the two Linux portable scripts above, and skips Inno installer steps (Windows-only).
 
 ## Troubleshooting
 

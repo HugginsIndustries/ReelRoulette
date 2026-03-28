@@ -89,37 +89,7 @@ Do not use this file for detailed architecture explanation or current capability
 
 ## Active Milestones
 
-Last milestone completed: M9a
-
-### M9b - Linux Packaging (Server + Desktop)
-
-- **Status**: ⏳ Planned
-- **Goal**: Produce distributable Linux artifacts for server and the renamed **Desktop** client using repo-owned packaging scripts.
-- **Scope**:
-  - Add Linux packaging scripts under `tools/scripts/` (portable first):
-    - Server portable package (`ReelRoulette-Server-{Version}-linux-x64.tar.gz`) including WebUI assets in `wwwroot`.
-    - **Desktop** client portable package (`ReelRoulette-Desktop-{Version}-linux-x64.tar.gz`) using `desktop`-segment naming and layout aligned with post-rename project output.
-  - Both packages are **self-contained** (`linux-x64`, `--self-contained true`) — .NET runtime is bundled; no .NET install required on the target machine.
-  - Symbols are **stripped** from packaged binaries (prod-appropriate size; no `.pdb` files in the artifact).
-  - Each package includes a **shell wrapper script** (`run-server.sh` / `run-desktop.sh` or equivalent) that sets up the environment (e.g. `LD_LIBRARY_PATH`, working directory) and launches the binary; correct executable bits set on wrapper and binary.
-  - Each package includes a bundled `README` (or inline comments in the wrapper) documenting **native prerequisites**: `ffmpeg`/`ffprobe` and LibVLC must be present on the target system and are not bundled.
-  - The packaged server binary must start in **headless mode** when no tray or display is available, without hanging — the same fallback behavior established in M9a applies to packaged artifacts.
-  - **Windows**-OS packaging for **Desktop** deliverables: unchanged intent; update script paths/names in `tools/scripts/` if the rename moves `.csproj` or output names.
-- **Acceptance criteria**:
-  - Linux server and **Desktop** client portable artifacts build deterministically from scripts in `tools/scripts/`.
-  - Artifacts are self-contained: no .NET runtime required on the target; symbols stripped.
-  - Server package includes API/SSE/media/WebUI/Operator assets and whatever the Avalonia tray host requires at runtime.
-  - Each artifact includes a shell wrapper with correct executable bits and native prereq documentation.
-  - Artifact names follow the pattern `ReelRoulette-{Component}-{Version}-linux-x64.tar.gz`, consistent with Windows release naming (`ReelRoulette-Server-*`, `ReelRoulette-Desktop-*`); no legacy `windows`-path or Windows-centric client naming in Linux outputs.
-  - Packaged apps run on the supported Linux baseline in both tray-available and headless/fallback scenarios.
-- **Verification evidence**:
-  - Before landing, packaging author manually verifies: artifact extracts cleanly, shell wrapper is executable, and the binary launches to a successful health-check response or `--help` output.
-  - Artifacts land under `artifacts/packages/` (or documented equivalent).
-  - Scripts and docs for producing Linux packages are landable without requiring comprehensive packaging smoke on every host; full packaged-artifact verification (tray + headless, **CachyOS** or CI-chosen Linux, plus cross-platform checklist completion) is **deferred** to **Linux Release Readiness and Sign-off**.
-  - `docs/checklists/testing-checklist.md` gains Linux package checklist items when packaging lands; completing every checklist item remains deferred to **Linux Release Readiness and Sign-off** unless explicitly scoped here.
-- **Deferrals / Follow-ups**:
-  - Full Linux packaging smoke matrix and cross-platform checklist completion → **Linux Release Readiness and Sign-off**.
-  - AppImage builds, GitHub Releases install script, and application menu (`.desktop`) registration → **Linux Installation UX** (planned).
+Last milestone completed: M9b
 
 ### M9c - Linux Installation UX
 
@@ -977,6 +947,36 @@ Last milestone completed: M9a
 ## Completed Milestones
 
 Latest completions first:
+
+### M9b - Linux Packaging (Server + Desktop)
+
+- **Status**: ✅ Complete
+- **Goal**: Produce distributable Linux artifacts for server and the renamed **Desktop** client using repo-owned packaging scripts.
+- **Scope**:
+  - Add Linux packaging scripts under `tools/scripts/` (portable first):
+    - Server portable package (`ReelRoulette-Server-{Version}-linux-x64.tar.gz`) including WebUI assets in `wwwroot`.
+    - **Desktop** client portable package (`ReelRoulette-Desktop-{Version}-linux-x64.tar.gz`) using `desktop`-segment naming and layout aligned with post-rename project output.
+  - Both packages are **self-contained** (`linux-x64`, `--self-contained true`) — .NET runtime is bundled; no .NET install required on the target machine.
+  - Symbols are **stripped** from packaged binaries (prod-appropriate size; no `.pdb` files in the artifact).
+  - Each package includes a **shell wrapper script** (`run-server.sh` / `run-desktop.sh` or equivalent) that sets up the environment (e.g. `LD_LIBRARY_PATH`, working directory) and launches the binary; correct executable bits set on wrapper and binary.
+  - Each package includes a bundled `README` (or inline comments in the wrapper) documenting **native prerequisites**: `ffmpeg`/`ffprobe` and LibVLC must be present on the target system and are not bundled.
+  - The packaged server binary must start in **headless mode** when no tray or display is available, without hanging — the same fallback behavior established in M9a applies to packaged artifacts.
+  - **Windows**-OS packaging for **Desktop** deliverables: unchanged intent; update script paths/names in `tools/scripts/` if the rename moves `.csproj` or output names.
+- **Acceptance criteria**:
+  - Linux server and **Desktop** client portable artifacts build deterministically from scripts in `tools/scripts/`.
+  - Artifacts are self-contained: no .NET runtime required on the target; symbols stripped.
+  - Server package includes API/SSE/media/WebUI/Operator assets and whatever the Avalonia tray host requires at runtime.
+  - Each artifact includes a shell wrapper with correct executable bits and native prereq documentation.
+  - Artifact names follow the pattern `ReelRoulette-{Component}-{Version}-linux-x64.tar.gz`, consistent with Windows release naming (`ReelRoulette-Server-*`, `ReelRoulette-Desktop-*`); no legacy `windows`-path or Windows-centric client naming in Linux outputs.
+  - Packaged apps run on the supported Linux baseline in both tray-available and headless/fallback scenarios.
+- **Verification evidence**:
+  - Landed scripts: `tools/scripts/package-serverapp-linux-portable.sh`, `tools/scripts/package-desktop-linux-portable.sh`; `full-release.ps1` invokes them on Linux after version/verify.
+  - Portable tarballs: `artifacts/packages/portable/ReelRoulette-Server-{Version}-linux-x64.tar.gz`, `artifacts/packages/portable/ReelRoulette-Desktop-{Version}-linux-x64.tar.gz` (each includes `run-*.sh`, `README.txt`, no `.pdb` in tree).
+  - Docs/checklist updated (`docs/dev-setup.md`, `docs/domain-inventory.md`, `docs/checklists/testing-checklist.md`, `CONTEXT.md`, `README.md`).
+  - Full packaged-artifact smoke (tray + headless, CachyOS or CI-chosen Linux, cross-platform checklist completion) remains **deferred** to **Linux Release Readiness and Sign-off**.
+- **Deferrals / Follow-ups**:
+  - Full Linux packaging smoke matrix and cross-platform checklist completion → **Linux Release Readiness and Sign-off**.
+  - AppImage builds, GitHub Releases install script, and application menu (`.desktop`) registration → **Linux Installation UX** (planned).
 
 ### M9a - Avalonia Server Tray + Linux Runtime Baseline
 

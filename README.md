@@ -20,6 +20,9 @@ ReelRoulette is a server-first media randomizer with thin desktop and web client
 - Node.js and npm (for WebUI build/verify flows).
 - PowerShell Core (`pwsh`) for `tools/scripts/*.ps1` helpers (for example `pwsh ./tools/scripts/run-server.ps1`).
   - Linux (Arch Linux, CachyOS, and similar): install from the AUR, for example `paru -S powershell-bin` or `yay -S powershell-bin`; that package provides `pwsh` on your PATH.
+- `bash` and `tar` on your `PATH` if you run Linux portable packaging (`./tools/scripts/package-serverapp-linux-portable.sh`, `./tools/scripts/package-desktop-linux-portable.sh`); both are available by default on typical Linux and macOS environments.
+- Windows installer builds additionally need Inno Setup 6 (`iscc`); see `docs/dev-setup.md`.
+- **FFmpeg** (including **`ffprobe` on your `PATH`**) and **VLC / LibVLC** are recommended for full media behavior (desktop playback, probing, and server-side features that shell out to these tools). Install them from your OS or distro packages when developing or running **Linux** portable tarballs—those artifacts **do not** bundle FFmpeg or LibVLC. **Windows** desktop portable packaging can stage `ffprobe` and LibVLC into the output when you run `package-desktop-win-portable.ps1` (see `docs/dev-setup.md`).
 
 ## Quick Start
 
@@ -122,7 +125,11 @@ Manual test guide:
 - `docs/checklists/testing-checklist.md`
 - `pwsh ./tools/scripts/reset-checklist.ps1` resets testing-checklist metadata/checklist state for a new pass.
 
-## Packaging (Windows)
+## Packaging
+
+Linux portable (self-contained `linux-x64` tarballs, `bash` + `dotnet` + `npm` + `tar`): see `docs/dev-setup.md` (`package-serverapp-linux-portable.sh`, `package-desktop-linux-portable.sh`). On Linux, `pwsh ./tools/scripts/full-release.ps1 -Version …` builds Linux portables and skips Inno installers.
+
+### Windows
 
 - Server portable package: `pwsh ./tools/scripts/package-serverapp-win-portable.ps1`
 - Server Inno installer package: `pwsh ./tools/scripts/package-serverapp-win-inno.ps1`
@@ -145,6 +152,8 @@ Simple release flow (example `0.11.0-dev`):
 pwsh ./tools/scripts/full-release.ps1 -Version 0.11.0-dev
 ```
 
+On Linux hosts this runs version alignment and produces `artifacts/packages/portable/*.tar.gz` for server and desktop; Windows hosts produce `.zip` portable outputs and Inno installers as before.
+
 GitHub release asset flow:
 
 - Push your final release commit.
@@ -163,4 +172,6 @@ GitHub release asset flow:
 
 ## Third-Party Components
 
-This program bundles VLC (VideoLAN) and FFprobe from FFmpeg. They are licensed under the GNU GPL and LGPL respectively. See the `licenses/` folder for license texts and [https://www.videolan.org](https://www.videolan.org) and [https://ffmpeg.org](https://ffmpeg.org) for source code.
+ReelRoulette integrates **VideoLAN VLC / LibVLC** and **FFmpeg** (including **ffprobe**). They are licensed under the GNU GPL and LGPL respectively. See the `licenses/` folder for license texts and [https://www.videolan.org](https://www.videolan.org) and [https://ffmpeg.org](https://ffmpeg.org) for source code.
+
+Windows desktop **portable** packages built with the repo script may **include** copies of those native components in the publish output. **Linux** portable desktop packages and typical **Linux/macOS dev** setups use **system-installed** FFmpeg and VLC instead (not shipped inside the tarball).

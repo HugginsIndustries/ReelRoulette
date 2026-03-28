@@ -7,6 +7,8 @@ This file follows a Keep a Changelog style format.
 
 ### Added
 
+- Add Linux portable packaging scripts (`tools/scripts/package-serverapp-linux-portable.sh`, `package-desktop-linux-portable.sh`): self-contained `linux-x64` tarballs under `artifacts/packages/portable/`, WebUI bundled into server `wwwroot`, stripped symbols / no `.pdb` in package tree, `run-server.sh` / `run-desktop.sh` and `README.txt` for native prerequisites.
+- Extend `full-release.ps1` to run the Linux portable scripts on Linux after set-release-version; Inno steps remain Windows-only.
 - Add repo-local build support for constrained environments via `Directory.Build.props` (`AllowMissingPrunePackageData=true`).
 - Add startup-launch host support for `ReelRoulette.ServerApp` (Windows `HKCU` registration), including control-plane APIs and tray/Operator toggles for immediate apply behavior.
 - Add installer desktop-shortcut task options with default-checked behavior for both server and desktop installers.
@@ -17,6 +19,9 @@ This file follows a Keep a Changelog style format.
 
 ### Changed
 
+- Mark every file under `tools/scripts/` as executable in Git (`100755`) so they can be run as `./tools/scripts/<name>.ps1` or `./tools/scripts/<name>.sh` on Unix when the shebang resolves (`pwsh` / `bash`).
+- Expand `README.md` Prerequisites (`bash`/`tar`, Inno Setup, FFmpeg/VLC) and clarify third-party bundling (Windows portable vs Linux/system) in Third-Party Components; align `docs/dev-setup.md` Prerequisites with FFmpeg/VLC notes.
+- Linux portable packaging uses executable `tools/scripts/package-*-linux-portable.sh` scripts (invoked directly or from `full-release.ps1` on Linux) alongside existing `pwsh` Windows packaging scripts.
 - Standardize contributor-facing docs to POSIX repo-relative paths (`./src/...`, forward slashes) and unified user-data notes in `docs/dev-setup.md` (Windows `%...%` examples use `/` as well).
 - Consolidate `tools/scripts` to cross-platform `.ps1` only and align script docs/examples around `pwsh` usage.
 - Rename desktop client directory to `src/clients/desktop/ReelRoulette.DesktopApp/` to match `ReelRoulette.DesktopApp.csproj` (update solution, test compile links, packaging/version scripts, and current docs; historical changelog entries unchanged).

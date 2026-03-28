@@ -194,6 +194,8 @@ Packaging:
 - `pwsh ./tools/scripts/package-serverapp-win-inno.ps1`
 - `pwsh ./tools/scripts/package-desktop-win-portable.ps1`
 - `pwsh ./tools/scripts/package-desktop-win-inno.ps1`
+- `./tools/scripts/package-serverapp-linux-portable.sh`
+- `./tools/scripts/package-desktop-linux-portable.sh`
 - `tools/installer/ReelRoulette.ServerApp.iss`
 - `tools/installer/ReelRoulette.Desktop.iss`
 - shared icon asset: `assets/HI.ico`

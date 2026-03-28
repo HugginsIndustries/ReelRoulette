@@ -19,11 +19,9 @@ Instructions:
 
 Commit Message:
 
-Docs: reshape post-M9a Linux milestones and add library migration track
+M9b: Linux portable packaging for server and desktop
 
-- Expand Linux Packaging planning: self-contained `linux-x64` tarballs, stripped symbols, shell launch wrappers, native prereq documentation, artifact naming aligned with Windows releases, and author pre-land extract/launch checks; defer AppImage, GitHub install script, and menu registration to Linux Installation UX.
-- Add Linux Installation UX: AppImage builds for server and Desktop, user-local install script from GitHub Releases, and automatic application-menu (`.desktop`) registration paths.
-- Rework CI Linux Distribution Gates around a `package-linux.yml` peer to `package-windows.yml`, producing portable and AppImage artifacts and uploading Linux release assets on tag push.
-- Extend Linux Documentation and Operator Runbook scope to cover AppImage and install-script workflows.
-- Add Cross-Platform Library Migration: export/import zip with `export-manifest.json`, per-source remapping (including skip), optional thumbnails and backups, symmetric Windows/Linux moves without a data-model change.
-- Renumber Linux Release Readiness and Sign-off and fold deferred verification from the new packaging and installation milestones (including AppImage and install-script matrix items).
+- Add `package-serverapp-linux-portable.sh` and `package-desktop-linux-portable.sh` (self-contained `linux-x64`, tar.gz under `artifacts/packages/portable/`, wrappers and README for native prereqs, no PDBs in staged output).
+- Run those scripts from `full-release.ps1` on Linux; keep Inno steps Windows-only.
+- Set executable bit in Git for all `tools/scripts/*` (`.ps1` and `.sh`) for direct `./` launch on Unix.
+- Update dev-setup (Prerequisites: FFmpeg/VLC), README (Prerequisites + Third-Party), CONTEXT, domain-inventory, testing checklist, and MILESTONES status/evidence.

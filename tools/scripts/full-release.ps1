@@ -42,8 +42,12 @@ try {
         if ($IsWindows) {
             & (Join-Path $PSScriptRoot "package-serverapp-win-portable.ps1") -Version $Version
         }
+        elseif ($IsLinux) {
+            $scriptPath = Join-Path $PSScriptRoot "package-serverapp-linux-portable.sh"
+            & bash @($scriptPath, "-Version", $Version)
+        }
         else {
-            Write-Host "Skipping Windows packaging (not running on Windows)."
+            Write-Host "Skipping server portable packaging (requires Windows or Linux)."
             $global:LASTEXITCODE = 0
         }
     }
@@ -53,7 +57,7 @@ try {
             & (Join-Path $PSScriptRoot "package-serverapp-win-inno.ps1") -Version $Version
         }
         else {
-            Write-Host "Skipping Windows packaging (not running on Windows)."
+            Write-Host "Skipping Inno server installer (Windows-only)."
             $global:LASTEXITCODE = 0
         }
     }
@@ -62,8 +66,12 @@ try {
         if ($IsWindows) {
             & (Join-Path $PSScriptRoot "package-desktop-win-portable.ps1") -Version $Version
         }
+        elseif ($IsLinux) {
+            $scriptPath = Join-Path $PSScriptRoot "package-desktop-linux-portable.sh"
+            & bash @($scriptPath, "-Version", $Version)
+        }
         else {
-            Write-Host "Skipping Windows packaging (not running on Windows)."
+            Write-Host "Skipping desktop portable packaging (requires Windows or Linux)."
             $global:LASTEXITCODE = 0
         }
     }
@@ -73,7 +81,7 @@ try {
             & (Join-Path $PSScriptRoot "package-desktop-win-inno.ps1") -Version $Version
         }
         else {
-            Write-Host "Skipping Windows packaging (not running on Windows)."
+            Write-Host "Skipping Inno desktop installer (Windows-only)."
             $global:LASTEXITCODE = 0
         }
     }

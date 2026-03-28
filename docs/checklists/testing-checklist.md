@@ -1,5 +1,7 @@
 # ReelRoulette Testing Checklist
 
+**Rule:** Items here must be **testable checks** a maintainer can execute and mark pass or fail. Do not add roadmap text, deferrals, or other non-test process notes as checklist rows (keep those in `MILESTONES.md` and related docs). Intended use is **manual validation before releases** (full or targeted regression).
+
 Use this checklist for manual regression passes. Check boxes inline as you go.
 Use `pwsh ./tools/scripts/reset-checklist.ps1` to reset metadata/check states before starting a new validation pass.
 
@@ -147,6 +149,10 @@ Use `pwsh ./tools/scripts/reset-checklist.ps1` to reset metadata/check states be
 - [ ] Desktop portable packaging script runs (Windows): `pwsh ./tools/scripts/package-desktop-win-portable.ps1`.
 - [ ] Desktop Inno packaging script runs when `iscc` is available:
   - `pwsh ./tools/scripts/package-desktop-win-inno.ps1`.
+- [ ] Linux portable packaging scripts run: `./tools/scripts/package-serverapp-linux-portable.sh` and `./tools/scripts/package-desktop-linux-portable.sh`.
+- [ ] Linux portable tarballs extract with a single top-level directory; `run-server.sh` and `run-desktop.sh` are executable (`chmod +x` preserved after extract).
+- [ ] Linux portable tree contains no `.pdb` files; `README.txt` in each package documents ffmpeg/ffprobe and LibVLC as system prerequisites (not bundled in Desktop tarball).
+- [ ] Packaged Linux server starts and responds on `/health` at the configured base URL (or documented equivalent check).
 - [ ] Packaged server runtime includes WebUI static assets (root `/` serves WebUI, not missing-assets text).
 - [ ] Shared icon appears consistently across installer UI, installed shortcuts/apps, and `/HI.ico` for WebUI/Operator.
 - [ ] Server installer `Create Desktop Shortcut` task is present and default checked.

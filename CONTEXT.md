@@ -48,6 +48,7 @@ ReelRoulette is migrating from a monolithic desktop app to a thin-client, API-fi
 - **Operational surfaces**
   - Manual validation guide/checklist at `docs/checklists/testing-checklist.md`.
   - Windows packaging scripts and CI workflows are present for build/verify/package gates.
+  - Linux portable packaging: `tools/scripts/package-serverapp-linux-portable.sh` and `package-desktop-linux-portable.sh` produce self-contained `linux-x64` tarballs under `artifacts/packages/portable/` (`run-server.sh` / `run-desktop.sh`, bundled `README.txt` for native prereqs).
   - Windows installers expose desktop shortcut install tasks (checked by default for server and desktop installers).
 
 ## Near-Term Planned Work
@@ -69,7 +70,7 @@ Authoritative roadmap details live in `MILESTONES.md`. Near-term focus areas:
   - `web/ReelRoulette.WebUI`: active web client.
   - `desktop/ReelRoulette.DesktopApp`: shipping Desktop client location (Avalonia).
 - `shared/api/openapi.yaml`: API contract source of truth.
-- `tools/scripts/`: runtime/verify/package scripts (`run-server*`, `verify-web*`, `verify-web-deploy*`, `publish-web*`, packaging scripts).
+- `tools/scripts/`: runtime/verify/package scripts (`run-server*`, `verify-web*`, `verify-web-deploy*`, `publish-web*`, Windows `package-*-win-*.ps1`, Linux portable `package-*-linux-portable.sh`).
   - includes `set-release-version.ps1` for release-aligned version fan-out (with optional docs update skip via `-NoDocUpdates`) and `reset-checklist.ps1` for testing-guide reset workflows.
 
 ## Working Commands (Canonical Set)
