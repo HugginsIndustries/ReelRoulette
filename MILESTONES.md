@@ -905,7 +905,6 @@ Last milestone completed: M9e
   - Long-duration media processing is resumable/retry-safe and operationally observable.
   - Recognition/identity features remain explicitly out of scope unless separately approved.
 
-
 ---
 
 ## Completed Milestones
