@@ -19,6 +19,6 @@ Instructions:
 
 Commit Message:
 
-Chore: bump actions/setup-node to v5 in CI workflows
+Docs: Update MILESTONES.md to finalize M9e - Cross-Platform Library Migration
 
-- Replace `actions/setup-node@v4` with `@v5` in `ci.yml` (web-verify), `package-linux.yml`, and `package-windows.yml` to match Node 24–forced action runtimes and remove the deprecated Node 20 annotation; document under `CHANGELOG.md` `[Unreleased]` **Changed**.
+- Mark M9e as complete, detailing the export and import functionality for cross-platform library migration between Windows and Linux.

@@ -91,46 +91,6 @@ Do not use this file for detailed architecture explanation or current capability
 
 Last milestone completed: M9e
 
-### M9e - Cross-Platform Library Migration
-
-- **Status**: ✅ Implemented — author cross-OS verification still required for final sign-off
-- **Goal**: Allow users to export their ReelRoulette library from one install and import it on another — including across **Windows** and **Linux** — with a guided source folder remapping step to handle path differences between systems.
-- **Scope**:
-  - **Export** (`Library > Export Library…`):
-    - Produces a single `.zip` archive containing: `library.json`, `core-settings.json`, `desktop-settings.json`, `presets.json`, and an `export-manifest.json`.
-    - `export-manifest.json` records: source OS, app version, and the list of unique source folder paths present in the library — used to drive the import remapping UI.
-    - Optional checkbox: **Include thumbnails** — if checked, the `thumbnails/` directory is included in the zip. Default unchecked (keeps zip small; thumbnails regenerate on use).
-    - Optional checkbox: **Include backups** — if checked, the `backups/` folder from the config directory is included in the zip. Default unchecked.
-    - Export writes to a user-chosen location; suggested filename: `ReelRoulette-Library-{timestamp}.zip`.
-  - **Import** (`Library > Import Library…`):
-    - User picks a previously exported `.zip` via file picker.
-    - App parses `export-manifest.json` and `library.json` to enumerate all unique source folder paths from the export.
-    - A **remapping dialog** presents each source folder path from the export with a **Browse…** button (to locate the equivalent folder on the current system) and a **Skip** option (source remains in library but is treated as offline/missing, consistent with existing missing-source behavior).
-    - After the user confirms remapping, app writes updated config files to the correct platform-specific locations (`~/.config/ReelRoulette/` on Linux; `%APPDATA%/ReelRoulette/` on Windows) with all source paths replaced by the remapped values.
-    - If the zip includes thumbnails, copies them to the platform-appropriate local cache location (`~/.local/share/ReelRoulette/thumbnails/` on Linux; `%LOCALAPPDATA%/ReelRoulette/thumbnails/` on Windows).
-    - If the zip includes backups, copies the `backups/` folder to the config directory on the target system (`~/.config/ReelRoulette/backups/` on Linux; `%APPDATA%/ReelRoulette/backups/` on Windows).
-    - If an existing library is present, prompts the user before overwriting.
-  - Path translation is performed entirely in-memory during import — paths in the zip are stored as-is from the source system; no normalization is applied at export time.
-  - Feature works symmetrically: **Windows → Linux**, **Linux → Windows**, and same-OS machine-to-machine migrations all follow the same code path.
-  - No changes to the internal library data model; migration is a read/transform/write operation on existing JSON structures.
-- **Acceptance criteria**:
-  - User can export a `.zip` from a Windows install and successfully import it on a Linux install (and vice versa) after remapping source folders.
-  - Remapping dialog lists every unique source folder from the export; each can be remapped or skipped independently.
-  - Skipped sources appear in the library as offline/missing without error on import.
-  - Thumbnails are included in the zip when the checkbox is checked and copied to the correct location on import; import succeeds cleanly when thumbnails are absent.
-  - Backups are included in the zip when the checkbox is checked and written to the correct config-directory location on import; import succeeds cleanly when backups are absent.
-  - Existing library overwrite prompt appears when a library is already present on the target install.
-  - `export-manifest.json` is present in every export zip and contains OS, version, and source path list.
-- **Verification evidence**:
-  - Implementation: `ReelRoulette.LibraryArchive` + `ReelRoulette.DesktopApp.Tests`, desktop `Library → Export Library…` / `Import Library…` (local disk zip I/O, remap/skip + overwrite confirm + import “server stopped” acknowledgment + **Import to disk** + local `desktop-settings.json` write); docs/checklist updated for current behavior.
-  - Author manually verifies round-trip: export from **Windows**, import on **CachyOS** (and vice versa if both environments are available); library loads with remapped sources functional.
-  - Same-OS round-trip (e.g. machine-to-machine on **CachyOS**) verified as a simpler baseline case.
-  - Thumbnail include/exclude checkbox verified on export; thumbnail presence/absence handled correctly on import.
-  - Backup include/exclude checkbox verified on export; backup presence/absence handled correctly on import.
-- **Deferrals / Follow-ups**:
-  - Automated cross-platform migration test coverage → future test milestone if warranted.
-  - Partial-remap recovery (re-opening remapping dialog after a failed import) → follow-up if needed post-verification.
-
 ### M9f - End-User README and Contributor Dev Documentation
 
 - **Status**: ⏳ Planned
@@ -910,6 +870,46 @@ Last milestone completed: M9e
 ## Completed Milestones
 
 Latest completions first:
+
+### M9e - Cross-Platform Library Migration
+
+- **Status**: ✅ Complete
+- **Goal**: Allow users to export their ReelRoulette library from one install and import it on another — including across **Windows** and **Linux** — with a guided source folder remapping step to handle path differences between systems.
+- **Scope**:
+  - **Export** (`Library > Export Library…`):
+    - Produces a single `.zip` archive containing: `library.json`, `core-settings.json`, `desktop-settings.json`, `presets.json`, and an `export-manifest.json`.
+    - `export-manifest.json` records: source OS, app version, and the list of unique source folder paths present in the library — used to drive the import remapping UI.
+    - Optional checkbox: **Include thumbnails** — if checked, the `thumbnails/` directory is included in the zip. Default unchecked (keeps zip small; thumbnails regenerate on use).
+    - Optional checkbox: **Include backups** — if checked, the `backups/` folder from the config directory is included in the zip. Default unchecked.
+    - Export writes to a user-chosen location; suggested filename: `ReelRoulette-Library-{timestamp}.zip`.
+  - **Import** (`Library > Import Library…`):
+    - User picks a previously exported `.zip` via file picker.
+    - App parses `export-manifest.json` and `library.json` to enumerate all unique source folder paths from the export.
+    - A **remapping dialog** presents each source folder path from the export with a **Browse…** button (to locate the equivalent folder on the current system) and a **Skip** option (source remains in library but is treated as offline/missing, consistent with existing missing-source behavior).
+    - After the user confirms remapping, app writes updated config files to the correct platform-specific locations (`~/.config/ReelRoulette/` on Linux; `%APPDATA%/ReelRoulette/` on Windows) with all source paths replaced by the remapped values.
+    - If the zip includes thumbnails, copies them to the platform-appropriate local cache location (`~/.local/share/ReelRoulette/thumbnails/` on Linux; `%LOCALAPPDATA%/ReelRoulette/thumbnails/` on Windows).
+    - If the zip includes backups, copies the `backups/` folder to the config directory on the target system (`~/.config/ReelRoulette/backups/` on Linux; `%APPDATA%/ReelRoulette/backups/` on Windows).
+    - If an existing library is present, prompts the user before overwriting.
+  - Path translation is performed entirely in-memory during import — paths in the zip are stored as-is from the source system; no normalization is applied at export time.
+  - Feature works symmetrically: **Windows → Linux**, **Linux → Windows**, and same-OS machine-to-machine migrations all follow the same code path.
+  - No changes to the internal library data model; migration is a read/transform/write operation on existing JSON structures.
+- **Acceptance criteria**:
+  - User can export a `.zip` from a Windows install and successfully import it on a Linux install (and vice versa) after remapping source folders.
+  - Remapping dialog lists every unique source folder from the export; each can be remapped or skipped independently.
+  - Skipped sources appear in the library as offline/missing without error on import.
+  - Thumbnails are included in the zip when the checkbox is checked and copied to the correct location on import; import succeeds cleanly when thumbnails are absent.
+  - Backups are included in the zip when the checkbox is checked and written to the correct config-directory location on import; import succeeds cleanly when backups are absent.
+  - Existing library overwrite prompt appears when a library is already present on the target install.
+  - `export-manifest.json` is present in every export zip and contains OS, version, and source path list.
+- **Verification evidence**:
+  - Implementation: `ReelRoulette.LibraryArchive` + `ReelRoulette.DesktopApp.Tests`, desktop `Library → Export Library…` / `Import Library…` (local disk zip I/O, remap/skip + overwrite confirm + import “server stopped” acknowledgment + **Import to disk** + local `desktop-settings.json` write); docs/checklist updated for current behavior.
+  - Author manually verifies round-trip: export from **Windows**, import on **CachyOS** (and vice versa if both environments are available); library loads with remapped sources functional.
+  - Same-OS round-trip (e.g. machine-to-machine on **CachyOS**) verified as a simpler baseline case.
+  - Thumbnail include/exclude checkbox verified on export; thumbnail presence/absence handled correctly on import.
+  - Backup include/exclude checkbox verified on export; backup presence/absence handled correctly on import.
+- **Deferrals / Follow-ups**:
+  - Automated cross-platform migration test coverage → future test milestone if warranted.
+  - Partial-remap recovery (re-opening remapping dialog after a failed import) → follow-up if needed post-verification.
 
 ### M9d - CI Linux Distribution Gates
 
