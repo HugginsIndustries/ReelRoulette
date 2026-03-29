@@ -25,6 +25,7 @@ This file follows a Keep a Changelog style format.
 
 ### Changed
 
+- GitHub Actions: `actions/setup-node@v5` in `ci.yml`, `package-linux.yml`, and `package-windows.yml` (replacing v4) so JavaScript actions align with Node 24–forced runners and drop the deprecated Node 20 runtime warning.
 - `install-linux-from-github.sh` installs AppImages under `~/.local/share/ReelRoulette/` using stable names `ReelRoulette-{Server|Desktop}-linux-x64.AppImage` (same convention as the local install script; `REELROULETTE_LOCAL_APPIMAGE_DIR` override). Portable tarball behavior is unchanged (`~/.local/bin` symlink).
 - Bump Avalonia packages to **11.3.13** (desktop client and ServerApp tray host); harden `AvaloniaTrayHostUi` by applying `NativeMenuItem` state updates on `Dispatcher.UIThread` after async server/registry work (Windows tray stability).
 - `package-windows.yml` uses .NET SDK **10.0.x** for packaging (aligned with solution TFMs and Linux package workflow).

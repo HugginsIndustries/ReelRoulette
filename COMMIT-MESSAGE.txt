@@ -19,10 +19,6 @@ Instructions:
 
 Commit Message:
 
-Bugfix: server library relativePath, cross-OS archive import remap, desktop portal storage paths, and Linux AppImage install layout
+Chore: bump actions/setup-node to v5 in CI workflows
 
-- Server `relativePath` now uses `Path.GetRelativePath` via `ReelRoulette.Core.Storage.LibraryRelativePath` (replacing `Uri.MakeRelativeUri`) in `RefreshPipelineService` and `LibraryOperationsService`, fixing spurious leading `..` when roots use trailing separators.
-- Library import remapping repairs stored `relativePath` values that start with `..` by recomputing from the item `fullPath` and old source root using segment-based cross-platform logic (Windows drive and slash normalization so Linux imports of Windows exports work); `CombineRootAndRelative` uses `NormalizeRelativeForDestinationRoot` for opposite-separator and stray `X:` relatives on Unix.
-- Added `LibraryRelativePathTests` (including Windows/Linux synthetic paths) and `LibraryArchiveMigration` remap/`CombineRootAndRelative` coverage.
-- Add `tools/scripts/install-linux-local.sh` and align `install-linux-from-github.sh` AppImage installs to the same `~/.local/share/ReelRoulette` stable filenames (`REELROULETTE_LOCAL_APPIMAGE_DIR`); document in README, `docs/dev-setup.md`, `CONTEXT.md`, `docs/domain-inventory.md`, CHANGELOG, and testing checklist.
-- Desktop storage pickers use `StorageProviderExtensions.TryGetLocalPath` with a shared `StoragePickerPath` helper so library import remap, zip import/export, and **Import Folder** get real paths when portal pickers leave `Path.LocalPath` empty; remap dialog uses `ClearValue` for normal path text color instead of `Foreground = null`.
+- Replace `actions/setup-node@v4` with `@v5` in `ci.yml` (web-verify), `package-linux.yml`, and `package-windows.yml` to match Node 24–forced action runtimes and remove the deprecated Node 20 annotation; document under `CHANGELOG.md` `[Unreleased]` **Changed**.
