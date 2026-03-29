@@ -178,6 +178,14 @@ Manual test guide:
 - `docs/checklists/testing-checklist.md`
 - `pwsh ./tools/scripts/reset-checklist.ps1` resets testing-checklist metadata/checklist state for a new pass.
 
+## Known Issues
+
+### Windows: Avalonia system tray reliability
+
+`ReelRoulette.ServerApp` shows a **system tray** icon when a desktop session is available. On **Windows**, that UI uses **Avalonia** (`TrayIcon` / notification area integration). On some setups the tray can be **unreliable** compared to Linux or macOS—for example the icon or context menu may not appear, may appear late, or may not survive Explorer/shell restarts the way native Win32 tray apps typically do.
+
+The **HTTP server and Operator UI are unaffected**. If the tray is missing or unusable, open **[http://localhost:45123/operator](http://localhost:45123/operator)** (or your configured listen URL with `/operator`) for refresh, restart, stop, and settings. The process may still be running even when no tray icon is visible; use Operator or Task Manager to confirm.
+
 ## Packaging
 
 Scripts run from the **repository root** unless noted. Optional flags (`-Version`, `-Configuration`, `-OutputRoot`) are documented in `docs/dev-setup.md`.

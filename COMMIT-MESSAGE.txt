@@ -19,7 +19,6 @@ Instructions:
 
 Commit Message:
 
-Bugfix: Avalonia 11.3.13 and tray UI dispatcher hardening
+Docs: README Known Issues (Windows Avalonia tray)
 
-- Bump Avalonia package references to **11.3.13** in ServerApp and DesktopApp.
-- Marshal `NativeMenuItem` updates in `AvaloniaTrayHostUi` through `Dispatcher.UIThread` after async callbacks (`ConfigureAwait(false)` on server awaits).
+- Add a **Known Issues** section documenting unreliable Avalonia-based ServerApp tray behavior on Windows and steering users to Operator UI when the tray icon is missing.
