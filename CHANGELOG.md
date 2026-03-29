@@ -10,7 +10,7 @@ This file follows a Keep a Changelog style format.
 - Server library migration API: `POST /api/library/export` (zip of `library.json`, `core-settings.json`, `presets.json`, `desktop-settings.json`, `export-manifest.json`, optional thumbnails/backups) and `POST /api/library/import` (multipart zip + JSON remapping plan; query `force` optional, default false, set `force=true` only after confirming replace when the server already has library data); core `LibraryMigration` helpers for manifest/remap/zip validation; desktop `Library → Export Library…` / `Import Library…` with folder remapping UI and local `desktop-settings.json` write after success.
 - Add `.github/workflows/package-linux.yml`: Linux portable + AppImage packaging on `ubuntu-latest` (.NET 10, Node 22, `ffmpeg`, pinned AppImageKit 12 `appimagetool`), `verify-linux-packaged-server-smoke.sh`, workflow artifacts, and tag `gh release upload` for `*.tar.gz` / `*.AppImage`.
 - Add `tools/scripts/verify-linux-packaged-server-smoke.sh` for headless packaged server HTTP checks (`/health`, `/api/version`, `/control/status`, `/operator`) after Linux CI packaging.
-- Add Linux AppImage packaging (`tools/scripts/package-serverapp-linux-appimage.sh`, `package-desktop-linux-appimage.sh`, `tools/scripts/lib/appimage-helpers.sh`): outputs under `artifacts/packages/appimage/`, built from portable tarballs; `AppRun` supports `--help` (prereqs) and `--install` (user-local `.desktop` + icons). 
+- Add Linux AppImage packaging (`tools/scripts/package-serverapp-linux-appimage.sh`, `package-desktop-linux-appimage.sh`, `tools/scripts/lib/appimage-helpers.sh`): outputs under `artifacts/packages/appimage/`, built from portable tarballs; `AppRun` supports `--help` (prereqs) and `--install` (user-local `.desktop` + icons).
 - Add `tools/scripts/install-linux-from-github.sh` to install the latest GitHub release (AppImage preferred, portable tarball fallback; default repo `HugginsIndustries/ReelRoulette`, overridable). Extend `full-release.ps1` on Linux to run AppImage scripts after portable packaging.
 - Add Linux portable packaging scripts (`tools/scripts/package-serverapp-linux-portable.sh`, `package-desktop-linux-portable.sh`): self-contained `linux-x64` tarballs under `artifacts/packages/portable/`, WebUI bundled into server `wwwroot`, stripped symbols / no `.pdb` in package tree, `run-server.sh` / `run-desktop.sh` and `README.txt` for native prerequisites.
 - Extend `full-release.ps1` to run the Linux portable scripts on Linux after set-release-version; Inno steps remain Windows-only.
@@ -24,6 +24,7 @@ This file follows a Keep a Changelog style format.
 
 ### Changed
 
+- Bump Avalonia packages to **11.3.13** (desktop client and ServerApp tray host); harden `AvaloniaTrayHostUi` by applying `NativeMenuItem` state updates on `Dispatcher.UIThread` after async server/registry work (Windows tray stability).
 - `package-windows.yml` uses .NET SDK **10.0.x** for packaging (aligned with solution TFMs and Linux package workflow).
 - `docs/architecture.md`: packaging/CI note now covers Linux tag packaging workflow and headless smoke.
 - `set-release-version.ps1` now updates desktop `<Version>`, runs WebUI `generate:contracts`, and runs build/test/WebUI/deploy-smoke verify by default; opt out with `-NoUpdateDesktopVersion`, `-NoRegenerateContracts`, and/or `-NoRunVerify`. `full-release.ps1` forwards those `-No*` switches (and `-NoDocUpdates`) when `-Version` is set; omit `-Version` on `full-release.ps1` to skip `set-release-version` and package using each `.csproj` `<Version>`. Document behavior in `README.md`, `docs/dev-setup.md`, `CONTEXT.md`, and `docs/domain-inventory.md`.
@@ -35,7 +36,6 @@ This file follows a Keep a Changelog style format.
 - Standardize contributor-facing docs to POSIX repo-relative paths (`./src/...`, forward slashes) and unified user-data notes in `docs/dev-setup.md` (Windows `%...%` examples use `/` as well).
 - Consolidate `tools/scripts` to cross-platform `.ps1` only and align script docs/examples around `pwsh` usage.
 - Rename desktop client directory to `src/clients/desktop/ReelRoulette.DesktopApp/` to match `ReelRoulette.DesktopApp.csproj` (update solution, test compile links, packaging/version scripts, and current docs; historical changelog entries unchanged).
-- Bump Avalonia packages to **11.3.12** for the desktop client and ServerApp tray host (from 11.3.9).
 - Upgrade repo to .NET 10 (`net10.0` / `net10.0-windows`) including CI and run/verify/packaging scripts.
 - Switch ServerApp tray host from Windows-only WinForms/`NotifyIcon` to a cross-platform Avalonia tray with deterministic headless fallback when tray is unavailable.
 - Implement Linux startup launch via XDG autostart (`*.desktop`) with immediate apply behavior via tray and Operator control surfaces.

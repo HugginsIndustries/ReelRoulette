@@ -19,9 +19,7 @@ Instructions:
 
 Commit Message:
 
-M9e: Cross-platform library export/import
+Bugfix: Avalonia 11.3.13 and tray UI dispatcher hardening
 
-- Add Core `LibraryMigration` helpers (manifest, remap, zip validation) with unit tests.
-- Add server `LibraryMigrationService`, `POST /api/library/export` and `POST /api/library/import`, reload hooks on `ServerStateService` / `CoreSettingsService`, and capability `api.library.migration`.
-- Add desktop Library menu export/import flows, remapping and overwrite dialogs, and `CoreServerApiClient` support; write imported `desktop-settings.json` locally after success.
-- Update OpenAPI, API baseline, domain inventory, dev-setup multipart note, testing checklist, and changelog/context.
+- Bump Avalonia package references to **11.3.13** in ServerApp and DesktopApp.
+- Marshal `NativeMenuItem` updates in `AvaloniaTrayHostUi` through `Dispatcher.UIThread` after async callbacks (`ConfigureAwait(false)` on server awaits).

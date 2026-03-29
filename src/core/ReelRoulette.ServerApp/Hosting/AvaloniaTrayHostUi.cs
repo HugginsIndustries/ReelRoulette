@@ -384,13 +384,13 @@ internal sealed class AvaloniaTrayHostUi : IHostUi
     {
         try
         {
-            var status = await _getStartupLaunchStatus(CancellationToken.None);
-            await SetStartupMenuStateAsync(status.Supported, status.LaunchServerOnStartup);
+            var status = await _getStartupLaunchStatus(CancellationToken.None).ConfigureAwait(false);
+            await SetStartupMenuStateAsync(status.Supported, status.LaunchServerOnStartup).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to load startup-launch status for tray menu.");
-            await SetStartupMenuStateAsync(supported: true, enabled: false);
+            await SetStartupMenuStateAsync(supported: true, enabled: false).ConfigureAwait(false);
         }
     }
 
@@ -401,24 +401,33 @@ internal sealed class AvaloniaTrayHostUi : IHostUi
             return;
         }
 
-        var startupItem = _startupItem;
-        if (startupItem is null)
+        var prep = await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            var item = _startupItem;
+            if (item is null)
+            {
+                return (HasItem: false, Requested: false);
+            }
+
+            item.IsEnabled = false;
+            return (HasItem: true, Requested: !item.IsChecked);
+        });
+
+        if (!prep.HasItem)
         {
             return;
         }
 
-        var requestedEnabled = !startupItem.IsChecked;
         try
         {
-            startupItem.IsEnabled = false;
-            var result = await _setStartupLaunchEnabled(requestedEnabled, CancellationToken.None);
+            var result = await _setStartupLaunchEnabled(prep.Requested, CancellationToken.None).ConfigureAwait(false);
             if (!result.Accepted)
             {
                 _logger.LogWarning("Tray startup-launch toggle was rejected: {Message}", result.Message);
                 return;
             }
 
-            await SetStartupMenuStateAsync(result.Supported, result.LaunchServerOnStartup);
+            await SetStartupMenuStateAsync(result.Supported, result.LaunchServerOnStartup).ConfigureAwait(false);
             _logger.LogInformation("Tray startup-launch toggle applied: {Message}", result.Message);
         }
         catch (Exception ex)
@@ -427,24 +436,29 @@ internal sealed class AvaloniaTrayHostUi : IHostUi
         }
         finally
         {
-            if (_startupItem is not null)
+            await Dispatcher.UIThread.InvokeAsync(() =>
             {
-                _startupItem.IsEnabled = true;
-            }
+                if (_startupItem is not null)
+                {
+                    _startupItem.IsEnabled = true;
+                }
+            });
         }
     }
 
     private Task SetStartupMenuStateAsync(bool supported, bool enabled)
     {
-        var startupItem = _startupItem;
-        if (startupItem is null)
+        return Dispatcher.UIThread.InvokeAsync(() =>
         {
-            return Task.CompletedTask;
-        }
+            var startupItem = _startupItem;
+            if (startupItem is null)
+            {
+                return;
+            }
 
-        startupItem.IsChecked = supported && enabled;
-        startupItem.IsEnabled = supported;
-        return Task.CompletedTask;
+            startupItem.IsChecked = supported && enabled;
+            startupItem.IsEnabled = supported;
+        });
     }
 
     private sealed class TrayApp : Application

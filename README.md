@@ -182,7 +182,7 @@ Manual test guide:
 
 Scripts run from the **repository root** unless noted. Optional flags (`-Version`, `-Configuration`, `-OutputRoot`) are documented in `docs/dev-setup.md`.
 
-### Linux
+### Linux Packaging
 
 **Prerequisites:** `bash`, `dotnet`, `npm`, and `tar` on your `PATH` for portable tarballs; **[`appimagetool`](https://github.com/AppImage/AppImageKit)** on your `PATH` as well if you build AppImages.
 
@@ -213,7 +213,7 @@ Outputs: `artifacts/packages/appimage/ReelRoulette-Server-{Version}-linux-x64.Ap
 
 Linux portable and AppImage packages **do not** bundle FFmpeg or LibVLC; the install script and AppImage `--help` describe expecting distro packages on the target system.
 
-### Windows
+### Windows Packaging
 
 **Prerequisites:** `dotnet`, `npm`, and `pwsh`; **Inno Setup 6** (`iscc`) for installer builds. See `docs/dev-setup.md`.
 
