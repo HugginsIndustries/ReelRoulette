@@ -25,7 +25,6 @@ public sealed class ServerStateService
         "api.duplicates",
         "api.autotag",
         "api.playback.clearStats",
-        "api.library.migration",
         "api.logs.client",
         "control.status",
         "control.settings",

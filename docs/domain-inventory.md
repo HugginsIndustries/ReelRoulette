@@ -18,12 +18,8 @@ Core/server domain services own business rules and persisted state semantics.
 
 - `src/core/ReelRoulette.Core/*`
   - filtering/randomization helpers, storage abstractions, verification modules.
-- `src/core/ReelRoulette.Core/Storage/LibraryMigration.cs`
-  - pure helpers for library export manifest, source-root remapping on `JsonObject` library roots, and zip entry validation (including zip-slip rejection).
 - `src/core/ReelRoulette.Server/Services/LibraryOperationsService.cs`
   - source import, duplicate scan/apply, auto-tag scan/apply, playback-stats clear, related command orchestration.
-- `src/core/ReelRoulette.Server/Services/LibraryMigrationService.cs`
-  - builds library export zips from server app-data paths; imports a zip with in-memory path remapping, atomic JSON writes, optional thumbnail/backup extraction, then reloads `ServerStateService` + `CoreSettingsService` snapshots from disk.
 - `src/core/ReelRoulette.Server/Services/RefreshPipelineService.cs`
   - unified refresh pipeline stage execution (including `fingerprintScan` for per-file SHA-256 backfill), overlap guards, status snapshots, thumbnail generation/invalidation.
 - `src/core/ReelRoulette.Server/Services/ServerStateService.cs`
@@ -95,6 +91,10 @@ Includes:
 
 Desktop is orchestration/render for migrated flows.
 
+- `src/clients/desktop/ReelRoulette.LibraryArchive/`
+  - shared `net10.0` library: library zip export/import (manifest, source-root remap/skip, zip validation, atomic writes, optional thumbnails/backups) against roaming + local cache paths.
+- `src/clients/desktop/ReelRoulette.DesktopApp.Tests/`
+  - xUnit tests for `ReelRoulette.LibraryArchive` migration helpers and export→import round-trip.
 - `src/clients/desktop/ReelRoulette.DesktopApp/MainWindow.axaml.cs`
   - API/SSE lifecycle orchestration, reconnect/resync guidance, compatibility gating, playback orchestration.
 - `src/clients/desktop/ReelRoulette.DesktopApp/CoreServerApiClient.cs`
@@ -102,7 +102,7 @@ Desktop is orchestration/render for migrated flows.
 - `src/clients/desktop/ReelRoulette.DesktopApp/ManageSourcesDialog.axaml.cs`
   - API-backed source/duplicate orchestration behavior.
 - `src/clients/desktop/ReelRoulette.DesktopApp/LibraryExportOptionsDialog.*`, `LibraryImportRemapDialog.*`, `LibraryOverwriteConfirmDialog.*`
-  - desktop UI for `POST /api/library/export` / `POST /api/library/import` (options, per-source remap/skip, overwrite confirm); writes imported `desktop-settings.json` locally after successful import.
+  - desktop UI for local-disk library zip export/import (options, per-source remap/skip, overwrite confirm, server-stopped acknowledgment on import); writes imported `desktop-settings.json` locally after successful import.
 - `src/clients/desktop/ReelRoulette.DesktopApp/AutoTagDialog.axaml.cs`
   - API-backed auto-tag scan/apply orchestration.
 - `src/clients/desktop/ReelRoulette.DesktopApp/SettingsDialog.axaml(.cs)`

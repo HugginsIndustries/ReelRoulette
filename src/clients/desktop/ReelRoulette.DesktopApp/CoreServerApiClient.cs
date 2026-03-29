@@ -111,120 +111,6 @@ public sealed class CoreServerApiClient
         return await JsonSerializer.DeserializeAsync<CoreLibraryStatsResponse>(stream, _serializerOptions, cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task<CoreLibraryExportResult> PostLibraryExportToFileAsync(
-        string baseUrl,
-        string destinationPath,
-        bool includeThumbnails,
-        bool includeBackups,
-        CancellationToken cancellationToken = default)
-    {
-        var payload = new LibraryExportPayload
-        {
-            IncludeThumbnails = includeThumbnails,
-            IncludeBackups = includeBackups
-        };
-        using var content = SerializeJson(payload);
-        using var response = await _httpClient
-            .PostAsync($"{baseUrl.TrimEnd('/')}/api/library/export", content, cancellationToken)
-            .ConfigureAwait(false);
-        if (!response.IsSuccessStatusCode)
-        {
-            var snippet = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-            return new CoreLibraryExportResult
-            {
-                Ok = false,
-                ErrorMessage = $"HTTP {(int)response.StatusCode}: {snippet}"
-            };
-        }
-
-        await using var fileStream = new FileStream(
-            destinationPath,
-            FileMode.Create,
-            FileAccess.Write,
-            FileShare.None,
-            bufferSize: 81920,
-            FileOptions.Asynchronous);
-        await response.Content.CopyToAsync(fileStream, cancellationToken).ConfigureAwait(false);
-        return new CoreLibraryExportResult { Ok = true };
-    }
-
-    public async Task<CoreLibraryImportResult> PostLibraryImportAsync(
-        string baseUrl,
-        string zipFilePath,
-        string planJson,
-        bool force,
-        CancellationToken cancellationToken = default)
-    {
-        using var multipart = new MultipartFormDataContent();
-        await using (var fs = File.OpenRead(zipFilePath))
-        {
-            var fileContent = new StreamContent(fs);
-            fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/zip");
-            multipart.Add(fileContent, "file", Path.GetFileName(zipFilePath));
-            multipart.Add(new StringContent(planJson, Encoding.UTF8, "application/json"), "plan");
-
-            var url = $"{baseUrl.TrimEnd('/')}/api/library/import";
-            if (force)
-            {
-                url += "?force=true";
-            }
-
-            using var response = await _httpClient.PostAsync(url, multipart, cancellationToken).ConfigureAwait(false);
-            var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-            var code = (int)response.StatusCode;
-
-            if (code == 409)
-            {
-                var needsForce = false;
-                try
-                {
-                    var node = JsonNode.Parse(body) as JsonObject;
-                    if (node?["needsForce"]?.GetValue<bool>() == true)
-                    {
-                        needsForce = true;
-                    }
-                }
-                catch
-                {
-                }
-
-                return new CoreLibraryImportResult
-                {
-                    Success = false,
-                    StatusCode = code,
-                    NeedsForce = needsForce,
-                    Error = TryReadJsonError(body)
-                };
-            }
-
-            if (!response.IsSuccessStatusCode)
-            {
-                return new CoreLibraryImportResult
-                {
-                    Success = false,
-                    StatusCode = code,
-                    Error = TryReadJsonError(body)
-                };
-            }
-
-            try
-            {
-                var node = JsonNode.Parse(body) as JsonObject;
-                return new CoreLibraryImportResult
-                {
-                    Success = true,
-                    StatusCode = code,
-                    Message = node?["message"]?.GetValue<string>(),
-                    RestartRecommended = node?["restartRecommended"]?.GetValue<bool>() ?? false
-                };
-            }
-            catch
-            {
-                return new CoreLibraryImportResult { Success = true, StatusCode = code };
-            }
-        }
-    }
-
     private static string? TryReadJsonError(string body)
     {
         try
@@ -236,12 +122,6 @@ public sealed class CoreServerApiClient
         {
             return body;
         }
-    }
-
-    private sealed class LibraryExportPayload
-    {
-        public bool IncludeThumbnails { get; set; }
-        public bool IncludeBackups { get; set; }
     }
 
     public async Task<CoreSourceResponse?> UpdateSourceEnabledAsync(string baseUrl, string sourceId, bool isEnabled, CancellationToken cancellationToken = default)
@@ -821,22 +701,6 @@ public sealed class CoreSourceStatsResponse
     public int VideosWithoutAudio { get; set; }
     public double TotalDurationSeconds { get; set; }
     public double? AverageDurationSeconds { get; set; }
-}
-
-public sealed class CoreLibraryExportResult
-{
-    public bool Ok { get; set; }
-    public string? ErrorMessage { get; set; }
-}
-
-public sealed class CoreLibraryImportResult
-{
-    public bool Success { get; set; }
-    public int StatusCode { get; set; }
-    public bool NeedsForce { get; set; }
-    public string? Error { get; set; }
-    public string? Message { get; set; }
-    public bool RestartRecommended { get; set; }
 }
 
 public sealed class CoreUpdateSourceEnabledRequest

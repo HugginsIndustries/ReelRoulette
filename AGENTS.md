@@ -21,9 +21,9 @@ Keep this file short and enforceable. For details, use `CONTEXT.md`, `MILESTONES
 ## Commit + Docs Discipline
 
 - Assume nothing is committed until the user explicitly confirms a commit occurred.
-- If no commit yet: update existing `COMMIT_MESSAGE.txt` and `CHANGELOG.md` entries in place (final state only).
-- Keep existing `Mx` entry style in `COMMIT_MESSAGE.txt` unless user asks to replace it.
-- After a user-confirmed commit: start a new `COMMIT_MESSAGE.txt` entry and new changelog entry.
+- If no commit yet: update existing `COMMIT-MESSAGE.txt` and `CHANGELOG.md` entries in place (final state only).
+- Keep existing entry style in `COMMIT-MESSAGE.txt` unless user asks to replace it.
+- After a user-confirmed commit: start a new `COMMIT-MESSAGE.txt` entry and new changelog entry.
 - Keep milestone/docs synchronized with final state:
   - `MILESTONES.md` = roadmap/tracking/evidence
   - `CONTEXT.md` = current implemented capabilities
@@ -32,7 +32,7 @@ Keep this file short and enforceable. For details, use `CONTEXT.md`, `MILESTONES
 - When updating documentation for **current** behavior, do not rewrite **historical** `CHANGELOG.md` or `MILESTONES.md` entries (released version sections, past milestone write-ups, or other archival bullets). Change only the active surfaces (for example `CHANGELOG.md` **`[Unreleased]`**, `MILESTONES.md` **Active Milestones** / tracker lines, and completion evidence you are explicitly landing)—unless the user asks to correct historical text.
 - Milestone naming hygiene:
   - Do not add milestone IDs/references (for example `M8f`, `M9a`) in current-state docs or code artifacts (scripts, comments, log/status messages, user-facing copy).
-  - Milestone references are allowed only in `MILESTONES.md`, `CHANGELOG.md`, `COMMIT_MESSAGE.txt`, and the `## Near-Term Planned Work` section of `CONTEXT.md` unless the user explicitly requests an exception.
+  - Milestone references are allowed only in `MILESTONES.md`, `CHANGELOG.md`, `COMMIT-MESSAGE.txt`, and the `## Near-Term Planned Work` section of `CONTEXT.md` unless the user explicitly requests an exception.
 
 ## Commands + Communication
 

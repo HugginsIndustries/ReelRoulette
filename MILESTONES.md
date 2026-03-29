@@ -122,7 +122,7 @@ Last milestone completed: M9e
   - Existing library overwrite prompt appears when a library is already present on the target install.
   - `export-manifest.json` is present in every export zip and contains OS, version, and source path list.
 - **Verification evidence**:
-  - Implementation: server `POST /api/library/export` + `POST /api/library/import`, Core `LibraryMigration` + tests, desktop `Library → Export Library…` / `Import Library…` with remap/skip + overwrite confirm + local `desktop-settings.json` write; docs/OpenAPI/checklist updated.
+  - Implementation: `ReelRoulette.LibraryArchive` + `ReelRoulette.DesktopApp.Tests`, desktop `Library → Export Library…` / `Import Library…` (local disk zip I/O, remap/skip + overwrite confirm + import “server stopped” acknowledgment + **Import to disk** + local `desktop-settings.json` write); docs/checklist updated for current behavior.
   - Author manually verifies round-trip: export from **Windows**, import on **CachyOS** (and vice versa if both environments are available); library loads with remapped sources functional.
   - Same-OS round-trip (e.g. machine-to-machine on **CachyOS**) verified as a simpler baseline case.
   - Thumbnail include/exclude checkbox verified on export; thumbnail presence/absence handled correctly on import.

@@ -3,6 +3,7 @@
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\ReelRoulette.LibraryArchive\ReelRoulette.LibraryArchive.csproj" />
     <ProjectReference Include="..\..\..\core\ReelRoulette.Core\ReelRoulette.Core.csproj" />
   </ItemGroup>
   <PropertyGroup>

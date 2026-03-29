@@ -253,7 +253,8 @@
                 <MenuItem Header="Clear Playback Stats"
                           Click="ClearPlaybackStats_Click"/>
             </MenuItem>
-            <MenuItem Header="_Library">
+            <MenuItem x:Name="LibraryMenuItem"
+                      Header="_Library">
                 <MenuItem x:Name="ImportFolderMenuItem"
                           Header="Import Folder"
                           Click="ImportFolderMenuItem_Click"/>
@@ -328,11 +329,20 @@
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
-            <TextBlock x:Name="StatusTextBlock"
-                       Grid.Column="0"
-                       FontSize="11"
-                       Foreground="Gray"
-                       VerticalAlignment="Center"/>
+            <Grid Grid.Column="0"
+                  MinHeight="18"
+                  VerticalAlignment="Center">
+                <TextBlock x:Name="StatusTextBlock"
+                           FontSize="11"
+                           Foreground="Gray"
+                           VerticalAlignment="Center"/>
+                <ProgressBar x:Name="StatusLibraryArchiveProgressBar"
+                             Height="6"
+                             VerticalAlignment="Center"
+                             IsIndeterminate="True"
+                             IsVisible="False"
+                             MinWidth="80"/>
+            </Grid>
             <TextBlock x:Name="StatusTimeTextBlock"
                        Grid.Column="1"
                        FontSize="11"

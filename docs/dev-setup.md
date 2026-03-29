@@ -109,7 +109,7 @@ For broader manual passes, use `docs/checklists/testing-checklist.md` and `pwsh 
 - Pairing/auth is server enforced via `/api/pair` and runtime policy.
 - Browser-client CORS and cookie behavior is controlled by `CoreServer` settings.
 - Some settings changes require restart to fully apply (for example listen/auth/WebUI availability changes); use `/control/restart` or restart the process.
-- `POST /api/library/import` allows multipart uploads up to **512 MB** (`FormOptions.MultipartBodyLengthLimit` in `src/core/ReelRoulette.ServerApp/Program.cs`). Raise the limit there if you routinely import very large thumbnail archives.
+- `FormOptions.MultipartBodyLengthLimit` is set to **512 MB** in `src/core/ReelRoulette.ServerApp/Program.cs` for any future multipart endpoints; **no shipped API route currently uses multipart uploads**, so this is host-level configuration only for now.
 
 ## Logging and Diagnostics
 

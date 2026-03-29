@@ -31,6 +31,11 @@ public partial class LibraryImportRemapDialog : Window
     {
         InitializeComponent();
 
+        ServerStoppedCheckBox.IsCheckedChanged += (_, _) =>
+        {
+            ConfirmButton.IsEnabled = ServerStoppedCheckBox.IsChecked == true;
+        };
+
         foreach (var path in sourceRootPaths)
         {
             var pickedText = new TextBlock
@@ -142,6 +147,11 @@ public partial class LibraryImportRemapDialog : Window
 
     private async void ConfirmButton_Click(object? sender, RoutedEventArgs e)
     {
+        if (ServerStoppedCheckBox.IsChecked != true)
+        {
+            return;
+        }
+
         var remap = new Dictionary<string, string>(StringComparer.Ordinal);
         var skipped = new List<string>();
 
@@ -189,7 +199,7 @@ public partial class LibraryImportRemapDialog : Window
         Close(false);
     }
 
-    private sealed class LibraryImportPlanPayload
+    public sealed class LibraryImportPlanPayload
     {
         public Dictionary<string, string> Remap { get; set; } = new(StringComparer.Ordinal);
         public List<string> SkippedRoots { get; set; } = [];

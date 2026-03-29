@@ -27,6 +27,7 @@ using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
+using ReelRoulette.LibraryArchive;
 using System.Timers;
 using ReelRoulette.Core.State;
 using ReelRoulette.Core.Storage;
@@ -203,6 +204,8 @@ namespace ReelRoulette
         private DateTime _lastStatusMessageTime = DateTime.MinValue;
         private CancellationTokenSource? _statusMessageCancellation;
         private readonly object _statusMessageLock = new object();
+        private volatile bool _suppressStatusUpdatesForLibraryArchive;
+        private Cursor? _libraryArchiveCursorRestore;
         
         // Prevent recursive SaveSettings calls when updating UI from settings
         private bool _isApplyingSettings = false;
@@ -5185,6 +5188,11 @@ namespace ReelRoulette
 
         private void SetStatusMessage(string message, int minimumDisplayMilliseconds = 1000)
         {
+            if (_suppressStatusUpdatesForLibraryArchive)
+            {
+                return;
+            }
+
             CancellationTokenSource? previousCts;
             CancellationTokenSource? newCts;
             double delayMs;
@@ -5225,6 +5233,11 @@ namespace ReelRoulette
                             return;
                         }
 
+                        if (_suppressStatusUpdatesForLibraryArchive)
+                        {
+                            return;
+                        }
+
                         lock (_statusMessageLock)
                         {
                             if (!ReferenceEquals(_statusMessageCancellation, newCts))
@@ -5246,6 +5259,26 @@ namespace ReelRoulette
                     Log($"SetStatusMessage: ERROR scheduling status update - Exception: {ex.GetType().Name}, Message: {ex.Message}");
                 }
             });
+        }
+
+        private void BeginLibraryArchiveOperationUI()
+        {
+            _suppressStatusUpdatesForLibraryArchive = true;
+            LibraryMenuItem.IsEnabled = false;
+            _libraryArchiveCursorRestore = Cursor;
+            Cursor = new Cursor(StandardCursorType.Wait);
+            StatusTextBlock.IsVisible = false;
+            StatusLibraryArchiveProgressBar.IsVisible = true;
+        }
+
+        private void EndLibraryArchiveOperationUI()
+        {
+            _suppressStatusUpdatesForLibraryArchive = false;
+            LibraryMenuItem.IsEnabled = true;
+            Cursor = _libraryArchiveCursorRestore;
+            _libraryArchiveCursorRestore = null;
+            StatusLibraryArchiveProgressBar.IsVisible = false;
+            StatusTextBlock.IsVisible = true;
         }
 
         private void InitializeUserActivityTracking()
@@ -8811,19 +8844,6 @@ namespace ReelRoulette
             Log("UI ACTION: Export Library clicked");
             try
             {
-                if (!await EnsureCoreRuntimeAvailableAsync())
-                {
-                    StatusTextBlock.Text = "Core runtime unavailable. Start ReelRoulette ServerApp and retry.";
-                    return;
-                }
-
-                var version = await _coreServerApiClient.GetVersionAsync(_coreServerBaseUrl);
-                if (version?.Capabilities?.Contains("api.library.migration", StringComparer.OrdinalIgnoreCase) != true)
-                {
-                    StatusTextBlock.Text = "This server does not support library export. Update ReelRoulette Server.";
-                    return;
-                }
-
                 var optionsDialog = new LibraryExportOptionsDialog();
                 var optionsResult = await optionsDialog.ShowDialog<bool?>(this);
                 if (optionsResult != true)
@@ -8853,24 +8873,41 @@ namespace ReelRoulette
                 }
 
                 var outPath = saveTarget.Path.LocalPath;
-                StatusTextBlock.Text = "Exporting library…";
-                var exportResult = await _coreServerLongRunningApiClient.PostLibraryExportToFileAsync(
-                    _coreServerBaseUrl,
-                    outPath,
-                    optionsDialog.IncludeThumbnails,
-                    optionsDialog.IncludeBackups);
-
-                if (!exportResult.Ok)
+                await Dispatcher.UIThread.InvokeAsync(BeginLibraryArchiveOperationUI);
+                try
                 {
-                    StatusTextBlock.Text = $"Export failed: {exportResult.ErrorMessage ?? "unknown error"}";
-                    return;
+                    await using (var fileStream = new FileStream(
+                                     outPath,
+                                     FileMode.Create,
+                                     FileAccess.Write,
+                                     FileShare.None,
+                                     bufferSize: 81920,
+                                     FileOptions.Asynchronous))
+                    {
+                        await LibraryArchiveMigration.WriteExportZipAsync(
+                            fileStream,
+                            optionsDialog.IncludeThumbnails,
+                            optionsDialog.IncludeBackups,
+                            CancellationToken.None).ConfigureAwait(true);
+                    }
+                }
+                finally
+                {
+                    await Dispatcher.UIThread.InvokeAsync(EndLibraryArchiveOperationUI);
                 }
 
-                StatusTextBlock.Text = $"Library exported to {outPath}";
+                SetStatusMessage("Library export complete.", 0);
             }
             catch (Exception ex)
             {
-                StatusTextBlock.Text = $"Export error: {ex.Message}";
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    if (_suppressStatusUpdatesForLibraryArchive)
+                    {
+                        EndLibraryArchiveOperationUI();
+                    }
+                });
+                SetStatusMessage($"Export error: {ex.Message}", 0);
                 Log($"ExportLibraryMenuItem_Click: {ex}");
             }
         }
@@ -8880,19 +8917,6 @@ namespace ReelRoulette
             Log("UI ACTION: Import Library clicked");
             try
             {
-                if (!await EnsureCoreRuntimeAvailableAsync())
-                {
-                    StatusTextBlock.Text = "Core runtime unavailable. Start ReelRoulette ServerApp and retry.";
-                    return;
-                }
-
-                var version = await _coreServerApiClient.GetVersionAsync(_coreServerBaseUrl);
-                if (version?.Capabilities?.Contains("api.library.migration", StringComparer.OrdinalIgnoreCase) != true)
-                {
-                    StatusTextBlock.Text = "This server does not support library import. Update ReelRoulette Server.";
-                    return;
-                }
-
                 var pick = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
                 {
                     Title = "Select library export zip",
@@ -8931,7 +8955,7 @@ namespace ReelRoulette
                     return;
                 }
 
-                var roots = LibraryMigration.CollectUniqueSourceRootPaths(libRoot);
+                var roots = LibraryArchiveMigration.CollectUniqueSourceRootPaths(libRoot);
                 if (roots.Count == 0)
                 {
                     StatusTextBlock.Text = "This export has no source folders to map.";
@@ -8945,8 +8969,32 @@ namespace ReelRoulette
                     return;
                 }
 
-                var stats = await _coreServerApiClient.GetLibraryStatsAsync(_coreServerBaseUrl);
-                var hasExisting = stats is { Global.TotalMedia: > 0 } || (stats?.Sources?.Count ?? 0) > 0;
+                LibraryImportRemapDialog.LibraryImportPlanPayload? planPayload;
+                try
+                {
+                    planPayload = JsonSerializer.Deserialize<LibraryImportRemapDialog.LibraryImportPlanPayload>(
+                        remapDialog.PlanJson!,
+                        new JsonSerializerOptions(JsonSerializerDefaults.Web)
+                        {
+                            PropertyNameCaseInsensitive = true
+                        });
+                }
+                catch (Exception ex)
+                {
+                    StatusTextBlock.Text = $"Invalid import plan: {ex.Message}";
+                    return;
+                }
+
+                if (planPayload == null)
+                {
+                    StatusTextBlock.Text = "Invalid import plan.";
+                    return;
+                }
+
+                var remap = planPayload.Remap ?? new Dictionary<string, string>(StringComparer.Ordinal);
+                var skipped = new HashSet<string>(planPayload.SkippedRoots ?? [], StringComparer.Ordinal);
+
+                var hasExisting = LibraryArchiveMigration.LibraryExistsWithContentOnDisk(AppDataManager.AppDataDirectory);
                 var force = false;
                 if (hasExisting)
                 {
@@ -8960,68 +9008,89 @@ namespace ReelRoulette
                     force = true;
                 }
 
-                StatusTextBlock.Text = "Importing library…";
-                var importResult = await _coreServerLongRunningApiClient.PostLibraryImportAsync(
-                    _coreServerBaseUrl,
-                    zipPath,
-                    remapDialog.PlanJson,
-                    force);
-
-                if (!importResult.Success)
-                {
-                    if (importResult.NeedsForce)
-                    {
-                        var confirmRetry = new LibraryOverwriteConfirmDialog();
-                        var replace = await confirmRetry.ShowDialog<bool?>(this);
-                        if (replace != true)
-                        {
-                            StatusTextBlock.Text = "Import cancelled.";
-                            return;
-                        }
-
-                        importResult = await _coreServerLongRunningApiClient.PostLibraryImportAsync(
-                            _coreServerBaseUrl,
-                            zipPath,
-                            remapDialog.PlanJson,
-                            force: true);
-                    }
-
-                    if (!importResult.Success)
-                    {
-                        StatusTextBlock.Text = $"Import failed: {importResult.Error ?? "unknown error"}";
-                        return;
-                    }
-                }
-
+                string? importErrorStatus = null;
+                await Dispatcher.UIThread.InvokeAsync(BeginLibraryArchiveOperationUI);
                 try
                 {
-                    var desktopJson = ReadZipEntryText(zipPath, "desktop-settings.json");
-                    var dest = AppDataManager.GetSettingsPath();
-                    var dir = Path.GetDirectoryName(dest);
-                    if (!string.IsNullOrEmpty(dir))
+                    LibraryArchiveImportResult importResult;
+                    await using (var zipStream = File.OpenRead(zipPath))
                     {
-                        Directory.CreateDirectory(dir);
+                        importResult = LibraryArchiveMigration.ImportFromZipStream(zipStream, remap, skipped, force);
                     }
 
-                    await File.WriteAllTextAsync(dest, desktopJson).ConfigureAwait(true);
+                    if (!importResult.Accepted)
+                    {
+                        if (importResult.NeedsForceConfirmation)
+                        {
+                            var confirmRetry = new LibraryOverwriteConfirmDialog();
+                            var replace = await confirmRetry.ShowDialog<bool?>(this);
+                            if (replace != true)
+                            {
+                                importErrorStatus = "Import cancelled.";
+                            }
+                            else
+                            {
+                                await using var zipRetry = File.OpenRead(zipPath);
+                                importResult = LibraryArchiveMigration.ImportFromZipStream(zipRetry, remap, skipped, force: true);
+                            }
+                        }
+
+                        if (importErrorStatus == null && !importResult.Accepted)
+                        {
+                            importErrorStatus = $"Import failed: {importResult.Message ?? "unknown error"}";
+                        }
+                    }
+
+                    if (importErrorStatus == null)
+                    {
+                        try
+                        {
+                            var desktopJson = ReadZipEntryText(zipPath, "desktop-settings.json");
+                            var dest = AppDataManager.GetSettingsPath();
+                            var dir = Path.GetDirectoryName(dest);
+                            if (!string.IsNullOrEmpty(dir))
+                            {
+                                Directory.CreateDirectory(dir);
+                            }
+
+                            await File.WriteAllTextAsync(dest, desktopJson).ConfigureAwait(true);
+                        }
+                        catch (Exception ex)
+                        {
+                            Log($"ImportLibraryMenuItem_Click: desktop-settings.json not written: {ex.Message}");
+                        }
+
+                        if (await EnsureCoreRuntimeAvailableAsync())
+                        {
+                            await SyncLibraryProjectionFromCoreAsync();
+                            _ = SyncSourcesFromCoreAsync();
+                            _ = SyncPresetsFromCoreAsync();
+                        }
+                    }
                 }
-                catch (Exception ex)
+                finally
                 {
-                    Log($"ImportLibraryMenuItem_Click: desktop-settings.json not written: {ex.Message}");
+                    await Dispatcher.UIThread.InvokeAsync(EndLibraryArchiveOperationUI);
                 }
 
-                await SyncLibraryProjectionFromCoreAsync();
-                _ = SyncSourcesFromCoreAsync();
-                _ = SyncPresetsFromCoreAsync();
+                if (importErrorStatus != null)
+                {
+                    StatusTextBlock.Text = importErrorStatus;
+                    return;
+                }
 
-                var tail = importResult.RestartRecommended
-                    ? " Restart the server if listen/WebUI/auth settings changed."
-                    : string.Empty;
-                StatusTextBlock.Text = $"Import complete.{tail}";
+                SetStatusMessage("Library import complete.", 0);
             }
             catch (Exception ex)
             {
-                StatusTextBlock.Text = $"Import error: {ex.Message}";
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    if (_suppressStatusUpdatesForLibraryArchive)
+                    {
+                        EndLibraryArchiveOperationUI();
+                    }
+                });
+                SetStatusMessage($"Import error: {ex.Message}", 0);
                 Log($"ImportLibraryMenuItem_Click: {ex}");
             }
         }

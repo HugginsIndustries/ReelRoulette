@@ -29,7 +29,6 @@ ReelRoulette is migrating from a monolithic desktop app to a thin-client, API-fi
   - API-authoritative library operations (import, duplicates, auto-tag, playback stats, refresh pipeline).
   - Unified refresh pipeline with stage/status projection and thumbnail generation.
   - Replay-aware SSE envelope with reconnect recovery (`Last-Event-ID`, `resyncRequired`, authoritative requery).
-  - Library migration API (`POST /api/library/export`, `POST /api/library/import`, capability `api.library.migration`): zip packaging of library + core/desktop settings + presets + `export-manifest.json`, optional thumbnails/backups, in-memory path remapping on import, atomic writes and in-process reload of library/preset/core-settings state.
 
 - **Desktop client (`src/clients/desktop/ReelRoulette.DesktopApp/`)**
   - Thin-client for migrated flows: API command/query + SSE projection (no dual-writer core-state mutation).
@@ -38,7 +37,7 @@ ReelRoulette is migrating from a monolithic desktop app to a thin-client, API-fi
   - API-backed source import, duplicate scan/apply, auto-tag scan/apply, and playback-stats clear.
   - Duplicate review dialog renders per-item thumbnail previews via server thumbnail endpoint paths for faster keep/delete validation.
   - Duplicate review dialog supports per-group handling selection with a persisted default behavior (`Keep All` or `Select Best`) from desktop settings.
-  - `Library → Export Library…` / `Import Library…` orchestrate migration APIs: export options, per-source remap or skip, overwrite confirmation when the connected server already has a library, and writing imported `desktop-settings.json` locally after a successful import.
+  - `Library → Export Library…` / `Import Library…` use `ReelRoulette.LibraryArchive` to read and write migration zips against the same on-disk bundle the server consumes (`library.json`, `core-settings.json`, `presets.json`, `desktop-settings.json`, optional `thumbnails/` and `backups/` under roaming + local app data): zip layout with `export-manifest.json`, per-source remap/skip, atomic JSON writes; no server HTTP endpoint for this path. Export warns if the core may still be running; import requires an explicit server-stopped acknowledgment and **Import to disk**; overwrite confirmation when a non-empty library already exists; writes imported `desktop-settings.json` locally; resync projection/sources/presets when the core is reachable afterward.
   - Duplicate review comparison metadata now includes per-item tag counts and enriched keep-selection labels (filename + plays/tags/favorite/blacklisted) for faster keep decisions.
   - Tag editor and filter `Tags` tab share theme-compatible category/chip surfaces in light/dark mode while preserving filter control behavior boundaries.
 
@@ -72,6 +71,7 @@ Authoritative roadmap details live in `MILESTONES.md`. Near-term focus areas:
 - `src/clients/`:
   - `web/ReelRoulette.WebUI`: active web client.
   - `desktop/ReelRoulette.DesktopApp`: shipping Desktop client location (Avalonia).
+  - `desktop/ReelRoulette.LibraryArchive`: desktop-local library zip export/import helpers (referenced by the Desktop app and its tests).
 - `shared/api/openapi.yaml`: API contract source of truth.
 - `tools/scripts/`: runtime/verify/package scripts (`run-server*`, `verify-web*`, `verify-web-deploy*`, `verify-linux-packaged-server-smoke.sh`, `publish-web*`, Windows `package-*-win-*.ps1`, Linux portable `package-*-linux-portable.sh`).
   - includes `set-release-version.ps1` for release-aligned version fan-out (by default updates desktop `<Version>`, regenerates WebUI contracts, runs build/test/WebUI/deploy-smoke verify, and syncs README/dev-setup examples; skip pieces with `-NoUpdateDesktopVersion`, `-NoRegenerateContracts`, `-NoRunVerify`, `-NoDocUpdates`); `full-release.ps1` forwards those switches when `-Version` is set and skips `set-release-version` when `-Version` is omitted (packaging then uses each `.csproj` `<Version>`); `reset-checklist.ps1` for testing-guide reset workflows; Linux AppImage scripts, `install-linux-from-github.sh`, and packaged-server smoke helper live alongside portable `package-*-linux-portable.sh`.

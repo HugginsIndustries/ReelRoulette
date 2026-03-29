@@ -36,12 +36,6 @@ public static class ServerHostComposition
         services.AddSingleton<ConnectedClientTracker>();
         services.AddSingleton<OperatorTestingService>();
         services.AddSingleton<ServerLogService>();
-        services.AddSingleton(sp =>
-        {
-            var logger = sp.GetRequiredService<ILogger<LibraryMigrationService>>();
-            var appDataRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ReelRoulette");
-            return new LibraryMigrationService(logger, appDataRoot);
-        });
         services.AddHostedService(sp => sp.GetRequiredService<RefreshPipelineService>());
     }
 
@@ -297,83 +291,6 @@ public static class ServerHostComposition
         app.MapGet("/api/library/stats", (LibraryOperationsService operations) =>
         {
             return Results.Ok(operations.GetLibraryStats());
-        });
-
-        app.MapPost("/api/library/export", async Task (HttpContext http, LibraryExportRequest? body, LibraryMigrationService migration) =>
-        {
-            var request = body ?? new LibraryExportRequest();
-            var fileName = $"ReelRoulette-Library-{DateTime.UtcNow:yyyyMMdd-HHmmss}Z.zip";
-            http.Response.ContentType = "application/zip";
-            http.Response.Headers.ContentDisposition = $"attachment; filename=\"{fileName}\"";
-            await migration.WriteExportZipAsync(http.Response.Body, request, http.RequestAborted).ConfigureAwait(false);
-        });
-
-        app.MapPost("/api/library/import", async Task<IResult> (
-                HttpContext http,
-                LibraryMigrationService migration,
-                RefreshPipelineService refresh,
-                ServerStateService state,
-                CoreSettingsService settings,
-                bool force = false) =>
-        {
-            var form = await http.Request.ReadFormAsync(http.RequestAborted).ConfigureAwait(false);
-            var file = form.Files.GetFile("file");
-            if (file == null || file.Length == 0)
-            {
-                return Results.BadRequest(new { error = "Multipart field 'file' (zip archive) is required." });
-            }
-
-            var planRaw = form["plan"].FirstOrDefault() ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(planRaw))
-            {
-                return Results.BadRequest(new { error = "Multipart field 'plan' (JSON object) is required." });
-            }
-
-            LibraryImportPlanDto? plan;
-            try
-            {
-                plan = JsonSerializer.Deserialize<LibraryImportPlanDto>(planRaw, new JsonSerializerOptions(JsonSerializerDefaults.Web)
-                {
-                    PropertyNameCaseInsensitive = true
-                });
-            }
-            catch
-            {
-                return Results.BadRequest(new { error = "Field 'plan' must be valid JSON." });
-            }
-
-            if (plan == null)
-            {
-                return Results.BadRequest(new { error = "Field 'plan' could not be parsed." });
-            }
-
-            await using var buffer = new MemoryStream();
-            await using (var upload = file.OpenReadStream())
-            {
-                await upload.CopyToAsync(buffer, http.RequestAborted).ConfigureAwait(false);
-            }
-
-            buffer.Position = 0;
-            var result = migration.ImportFromZipStream(buffer, plan, force, refresh, state, settings);
-            if (!result.Accepted)
-            {
-                if (result.NeedsForceConfirmation)
-                {
-                    return Results.Json(
-                        new { error = result.Message, needsForce = true },
-                        statusCode: StatusCodes.Status409Conflict);
-                }
-
-                return Results.BadRequest(new { error = result.Message });
-            }
-
-            state.PublishExternal("resyncRequired", new { reason = "libraryImported" });
-            return Results.Ok(new
-            {
-                accepted = true,
-                message = result.Message,
-                restartRecommended = result.RestartRecommended
-            });
         });
 
         app.MapPost("/api/sources/{sourceId}/enabled", (string sourceId, UpdateSourceEnabledRequest request, ServerStateService state) =>

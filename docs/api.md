@@ -33,8 +33,6 @@ Client expectations:
 - Clients validate required capability flags at startup.
 - Capability checks are used to gate behavior when server support is missing.
 
-Optional capability `api.library.migration` indicates `POST /api/library/export` and `POST /api/library/import` are available.
-
 `GET /api/capabilities` exposes explicit runtime capabilities for feature detection.
 
 ## Auth and Pairing
@@ -139,8 +137,6 @@ Reconnect/resync behavior:
 - `POST /api/sources/{sourceId}/enabled`
 - `GET /api/library/projection`
 - `GET /api/library/stats`
-- `POST /api/library/export` — JSON body `LibraryExportRequest` (`includeThumbnails`, `includeBackups`); response is `application/zip` with `Content-Disposition` filename `ReelRoulette-Library-{utc-timestamp}.zip`.
-- `POST /api/library/import` — `multipart/form-data` with `file` (zip) and `plan` (JSON string: `remap` map of exported `rootPath` → new path, `skippedRoots` array). Query `force=true` after user confirms overwrite when a non-empty library already exists. On success, server reloads library/preset/core-settings from disk and emits `resyncRequired` with `reason: libraryImported`. `409` returns `{ error, needsForce: true }` when overwrite confirmation is required.
 - `POST /api/library-states`
 - `POST /api/favorite`
 - `POST /api/blacklist`

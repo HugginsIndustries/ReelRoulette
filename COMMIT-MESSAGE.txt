@@ -19,6 +19,10 @@ Instructions:
 
 Commit Message:
 
-Docs: README Known Issues (Windows Avalonia tray)
+M9e: Desktop-only library zip migration
 
-- Add a **Known Issues** section documenting unreliable Avalonia-based ServerApp tray behavior on Windows and steering users to Operator UI when the tray icon is missing.
+- Remove the in-repo server HTTP migration path: `POST /api/library/export` and `POST /api/library/import`, `LibraryMigrationService`, Core `LibraryMigration` (+ tests), `api.library.migration`, and the matching OpenAPI/WebUI contract surface.
+- Reimplement library zip export/import as desktop-local disk I/O in new `ReelRoulette.LibraryArchive` (`net10.0`), referenced from the Desktop app; drop the corresponding API client methods.
+- Wire **Library → Export Library…** / **Import Library…** to that path (export warning when core may be running; import server-stopped acknowledgment and **Import to disk**; overwrite confirm; local `desktop-settings.json`; resync when core is reachable), with `ReelRoulette.DesktopApp.Tests` coverage.
+- MainWindow: indeterminate status progress + suppressed status churn + Library menu disable + wait cursor during export/import; explicit completion status strings.
+- Sync CONTEXT, api, domain-inventory, dev-setup, testing-checklist, MILESTONES evidence, and `CHANGELOG.md` `[Unreleased]`; regenerate WebUI `openapi.generated.ts`.

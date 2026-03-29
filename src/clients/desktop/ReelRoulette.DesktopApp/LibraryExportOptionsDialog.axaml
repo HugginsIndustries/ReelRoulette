@@ -8,7 +8,7 @@
         CanResize="False">
     <Grid RowDefinitions="Auto,*,Auto" Margin="16">
         <TextBlock Grid.Row="0"
-                   Text="Choose what to include in the export archive. The server must be running."
+                   Text="Choose what to include in the export archive. For a consistent snapshot, stop the ReelRoulette server first; a running server may hold locks or change files while the archive is built."
                    TextWrapping="Wrap"
                    Margin="0,0,0,12"/>
         <StackPanel Grid.Row="1" Spacing="10">

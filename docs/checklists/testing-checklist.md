@@ -61,12 +61,12 @@ Use `pwsh ./tools/scripts/reset-checklist.ps1` to reset metadata/check states be
 
 ## Desktop library export / import (cross-machine)
 
-Requires a running server that advertises capability `api.library.migration`.
+Desktop-only: reads/writes roaming `ReelRoulette` data and local thumbnails (no HTTP migration endpoints). For a clean import, stop the server first and confirm the import dialog checkbox.
 
 - [ ] **Export**: `Library → Export Library…` saves a `.zip` with default name pattern `ReelRoulette-Library-*Z.zip`; with both checkboxes off the archive omits `thumbnails/` and `backups/` trees; with each checkbox on, the matching tree appears at zip root.
 - [ ] **Import remap**: `Library → Import Library…` lists every unique source `rootPath` from the zip; each row can be mapped with **Browse…** or **Skip**; skipped sources keep exported paths (offline until fixed).
-- [ ] **Import overwrite**: When the server already has library items or sources, a replace confirmation appears; declining cancels without changing the server.
-- [ ] **Import success**: After import, library projection/sources refresh; `desktop-settings.json` from the zip is written to the desktop app data path; status text notes restart if listen/WebUI/auth settings may need a process restart.
+- [ ] **Import overwrite**: When a non-empty library already exists on disk, a replace confirmation appears; declining cancels without changing files.
+- [ ] **Import success**: After import, start or restart the server and resync the desktop client when needed; `desktop-settings.json` from the zip is written to the desktop app data path; status text notes restart if listen/WebUI/auth settings may need a process restart.
 - [ ] **Round-trip sanity**: Export on one OS (or machine), import on another with remapping, confirm media plays when paths exist.
 
 ## WebUI Core UX (Localhost)

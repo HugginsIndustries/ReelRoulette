@@ -1,10 +1,10 @@
 using System.Text.Json.Nodes;
-using ReelRoulette.Core.Storage;
+using ReelRoulette.LibraryArchive;
 using Xunit;
 
-namespace ReelRoulette.Core.Tests;
+namespace ReelRoulette.DesktopApp.Tests;
 
-public sealed class LibraryMigrationTests
+public sealed class LibraryArchiveMigrationTests
 {
     [Fact]
     public void CollectUniqueSourceRootPaths_Dedupes_And_Sorts()
@@ -21,7 +21,7 @@ public sealed class LibraryMigrationTests
             """) as JsonObject;
 
         Assert.NotNull(root);
-        var paths = LibraryMigration.CollectUniqueSourceRootPaths(root);
+        var paths = LibraryArchiveMigration.CollectUniqueSourceRootPaths(root);
         Assert.Equal(new[] { "/a", "/z" }, paths);
     }
 
@@ -52,7 +52,7 @@ public sealed class LibraryMigrationTests
         };
         var skipped = new HashSet<string>(StringComparer.Ordinal);
 
-        var result = LibraryMigration.ApplySourceRemapping(root, remap, skipped);
+        var result = LibraryArchiveMigration.ApplySourceRemapping(root, remap, skipped);
         Assert.True(result.Success, result.ErrorMessage);
 
         var src = root["sources"]![0]!;
@@ -88,7 +88,7 @@ public sealed class LibraryMigrationTests
         var remap = new Dictionary<string, string>(StringComparer.Ordinal);
         var skipped = new HashSet<string>(StringComparer.Ordinal) { "/old" };
 
-        var result = LibraryMigration.ApplySourceRemapping(root, remap, skipped);
+        var result = LibraryArchiveMigration.ApplySourceRemapping(root, remap, skipped);
         Assert.True(result.Success, result.ErrorMessage);
 
         Assert.Equal("/old", root["sources"]![0]!["rootPath"]!.GetValue<string>());
@@ -106,7 +106,7 @@ public sealed class LibraryMigrationTests
             """) as JsonObject;
 
         Assert.NotNull(root);
-        var result = LibraryMigration.ApplySourceRemapping(
+        var result = LibraryArchiveMigration.ApplySourceRemapping(
             root,
             new Dictionary<string, string>(StringComparer.Ordinal),
             new HashSet<string>(StringComparer.Ordinal));
@@ -118,22 +118,22 @@ public sealed class LibraryMigrationTests
     [Fact]
     public void IsSafeZipEntryName_Rejects_Slip_And_Absolute()
     {
-        Assert.False(LibraryMigration.IsSafeZipEntryName("../etc/passwd"));
-        Assert.False(LibraryMigration.IsSafeZipEntryName("foo/../../bar"));
-        Assert.False(LibraryMigration.IsSafeZipEntryName("/abs"));
-        Assert.True(LibraryMigration.IsSafeZipEntryName("library.json"));
-        Assert.True(LibraryMigration.IsSafeZipEntryName("thumbnails/ab/cd.jpg"));
+        Assert.False(LibraryArchiveMigration.IsSafeZipEntryName("../etc/passwd"));
+        Assert.False(LibraryArchiveMigration.IsSafeZipEntryName("foo/../../bar"));
+        Assert.False(LibraryArchiveMigration.IsSafeZipEntryName("/abs"));
+        Assert.True(LibraryArchiveMigration.IsSafeZipEntryName("library.json"));
+        Assert.True(LibraryArchiveMigration.IsSafeZipEntryName("thumbnails/ab/cd.jpg"));
     }
 
     [Fact]
     public void ValidateExportZipHasRequiredFiles_Requires_Root_Files()
     {
         var ok = new[] { "library.json", "core-settings.json", "presets.json", "desktop-settings.json", "export-manifest.json" };
-        Assert.Null(LibraryMigration.ValidateExportZipHasRequiredFiles(ok));
+        Assert.Null(LibraryArchiveMigration.ValidateExportZipHasRequiredFiles(ok));
 
-        Assert.NotNull(LibraryMigration.ValidateExportZipHasRequiredFiles(["library.json"]));
+        Assert.NotNull(LibraryArchiveMigration.ValidateExportZipHasRequiredFiles(["library.json"]));
 
-        Assert.NotNull(LibraryMigration.ValidateExportZipHasRequiredFiles(
+        Assert.NotNull(LibraryArchiveMigration.ValidateExportZipHasRequiredFiles(
             ["nested/library.json", "core-settings.json", "presets.json", "desktop-settings.json", "export-manifest.json"]));
     }
 
@@ -145,8 +145,57 @@ public sealed class LibraryMigrationTests
             """) as JsonObject;
 
         Assert.NotNull(lib);
-        var json = LibraryMigration.BuildExportManifestJson(lib, "Linux", "9.9.9");
+        var json = LibraryArchiveMigration.BuildExportManifestJson(lib, "Linux", "9.9.9");
         Assert.Contains("\"sourceRootPaths\"", json, StringComparison.Ordinal);
         Assert.Contains("/v", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Export_Then_Import_RoundTrip_With_Explicit_Paths()
+    {
+        var tempRoot = Path.Combine(Path.GetTempPath(), "rr-desktop-migration-test-" + Guid.NewGuid().ToString("N"));
+        var roaming = Path.Combine(tempRoot, "roaming");
+        var thumbs = Path.Combine(tempRoot, "thumbnails");
+        var backups = Path.Combine(roaming, "backups");
+        Directory.CreateDirectory(roaming);
+        Directory.CreateDirectory(thumbs);
+
+        var paths = new LibraryArchiveDataPaths(roaming, thumbs, backups);
+
+        var libraryJson = """
+            {"sources":[{"id":"s1","rootPath":"/from","displayName":"x","isEnabled":true}],"items":[]}
+            """;
+        await File.WriteAllTextAsync(Path.Combine(roaming, "library.json"), libraryJson);
+        await File.WriteAllTextAsync(Path.Combine(roaming, "presets.json"), "[]");
+        await File.WriteAllTextAsync(Path.Combine(roaming, "core-settings.json"), "{}");
+        await File.WriteAllTextAsync(Path.Combine(roaming, "desktop-settings.json"), "{}");
+
+        await using (var zipOut = new MemoryStream())
+        {
+            await LibraryArchiveMigration.WriteExportZipAsync(zipOut, false, false, CancellationToken.None, paths);
+            zipOut.Position = 0;
+
+            var destRoaming = Path.Combine(tempRoot, "dest");
+            var destThumbs = Path.Combine(tempRoot, "dest-thumbs");
+            Directory.CreateDirectory(destRoaming);
+            var destPaths = new LibraryArchiveDataPaths(destRoaming, destThumbs, Path.Combine(destRoaming, "backups"));
+
+            var remap = new Dictionary<string, string>(StringComparer.Ordinal) { ["/from"] = "/to" };
+            var skipped = new HashSet<string>(StringComparer.Ordinal);
+            var result = LibraryArchiveMigration.ImportFromZipStream(zipOut, remap, skipped, force: true, destPaths);
+            Assert.True(result.Accepted, result.Message);
+            Assert.True(File.Exists(Path.Combine(destRoaming, "library.json")));
+            var imported = await File.ReadAllTextAsync(Path.Combine(destRoaming, "library.json"));
+            Assert.Contains("/to", imported, StringComparison.Ordinal);
+        }
+
+        try
+        {
+            Directory.Delete(tempRoot, recursive: true);
+        }
+        catch
+        {
+            // best-effort cleanup
+        }
     }
 }
