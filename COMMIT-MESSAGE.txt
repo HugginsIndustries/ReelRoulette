@@ -19,6 +19,6 @@ Instructions:
 
 Commit Message:
 
-Bugfix: Avalonia tray startup menu — await UI-thread invoke
+Bugfix: Linux AppImage --install menu registration
 
-- `SetStartupMenuStateAsync` now `await`s `Dispatcher.UIThread.InvokeAsync` so Release publish compiles (`DispatcherOperation` is not assignable to `Task`).
+- Generated `AppRun` now uses `printf` with `%%U` so the `.desktop` `Exec=` line includes Freedesktop literal `%U`; fixes bash `printf: 'U': invalid format character` for server and desktop AppImages (`tools/scripts/lib/appimage-helpers.sh`).

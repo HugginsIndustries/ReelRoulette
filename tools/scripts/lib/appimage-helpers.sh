@@ -173,7 +173,7 @@ EOS
     echo '    echo "Name='"$desktop_name"'"'
     echo '    echo "Comment='"$desktop_comment"'"'
     echo '    echo "Icon=${ICON_STEM}"'
-    echo '    printf "Exec=%q %U\n" "$TARGET"'
+    echo '    printf "Exec=%q %%U\n" "$TARGET"'
     echo '    echo "Terminal=false"'
     echo "    echo \"Categories=$desktop_categories\""
     echo '  } > "$DESKTOP_FILE"'
