@@ -446,9 +446,9 @@ internal sealed class AvaloniaTrayHostUi : IHostUi
         }
     }
 
-    private Task SetStartupMenuStateAsync(bool supported, bool enabled)
+    private async Task SetStartupMenuStateAsync(bool supported, bool enabled)
     {
-        return Dispatcher.UIThread.InvokeAsync(() =>
+        await Dispatcher.UIThread.InvokeAsync(() =>
         {
             var startupItem = _startupItem;
             if (startupItem is null)
