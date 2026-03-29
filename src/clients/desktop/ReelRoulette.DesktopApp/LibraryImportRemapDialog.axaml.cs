@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text.Json;
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
@@ -22,6 +23,36 @@ public partial class LibraryImportRemapDialog : Window
 
     private readonly List<Row> _rows = [];
 
+    private static void SetPickedPathTextStyle(TextBlock tb, bool placeholder)
+    {
+        if (placeholder)
+        {
+            tb.Foreground = Brushes.Gray;
+        }
+        else
+        {
+            tb.ClearValue(TextBlock.ForegroundProperty);
+        }
+    }
+
+    private async Task ShowPathResolveErrorAsync(string detail)
+    {
+        var err = new Window
+        {
+            Title = "Import Library",
+            Width = 480,
+            Height = 200,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            Content = new TextBlock
+            {
+                Text = detail,
+                Margin = new Thickness(16),
+                TextWrapping = TextWrapping.Wrap
+            }
+        };
+        await err.ShowDialog(this).ConfigureAwait(true);
+    }
+
     private static readonly JsonSerializerOptions PlanJsonOptions = new(JsonSerializerDefaults.Web)
     {
         PropertyNameCaseInsensitive = true
@@ -42,9 +73,9 @@ public partial class LibraryImportRemapDialog : Window
             {
                 Text = "(choose folder)",
                 TextWrapping = TextWrapping.Wrap,
-                Foreground = Brushes.Gray,
                 VerticalAlignment = VerticalAlignment.Center
             };
+            SetPickedPathTextStyle(pickedText, placeholder: true);
             var skip = new CheckBox
             {
                 Content = "Skip",
@@ -78,9 +109,20 @@ public partial class LibraryImportRemapDialog : Window
                     return;
                 }
 
-                rowState.PickedPath = result[0].Path.LocalPath;
-                pickedText.Text = rowState.PickedPath;
-                pickedText.Foreground = null;
+                if (!StoragePickerPath.TryGetLocalFilesystemPath(result[0], out var resolved) ||
+                    string.IsNullOrWhiteSpace(resolved))
+                {
+                    await ShowPathResolveErrorAsync(
+                            "Could not resolve a local filesystem path for the selected folder. " +
+                            "This can happen with sandboxed or portal-based folder dialogs on Linux. " +
+                            "Try again, or use a runtime that returns real paths from the picker.")
+                        .ConfigureAwait(true);
+                    return;
+                }
+
+                rowState.PickedPath = resolved;
+                pickedText.Text = resolved;
+                SetPickedPathTextStyle(pickedText, placeholder: false);
             };
 
             skip.IsCheckedChanged += (_, _) =>
@@ -91,12 +133,12 @@ public partial class LibraryImportRemapDialog : Window
                 {
                     rowState.PickedPath = null;
                     pickedText.Text = "(skipped)";
-                    pickedText.Foreground = Brushes.Gray;
+                    SetPickedPathTextStyle(pickedText, placeholder: true);
                 }
                 else
                 {
                     pickedText.Text = rowState.PickedPath ?? "(choose folder)";
-                    pickedText.Foreground = rowState.PickedPath != null ? null : Brushes.Gray;
+                    SetPickedPathTextStyle(pickedText, placeholder: rowState.PickedPath == null);
                 }
             };
 

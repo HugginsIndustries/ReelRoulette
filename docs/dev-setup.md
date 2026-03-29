@@ -233,6 +233,16 @@ From the repository root:
 
 Artifacts: `artifacts/packages/appimage/ReelRoulette-Server-{Version}-linux-x64.AppImage` and `ReelRoulette-Desktop-{Version}-linux-x64.AppImage`. Run `./ReelRoulette-*.AppImage --help` for native prerequisites; run with `--install` once to register a user-local menu entry and icons (no sudo).
 
+### Install local AppImage build (Linux)
+
+After the AppImage scripts above, copy the artifacts into a fixed location and refresh Freedesktop integration (stable filenames without the version segment so repeat installs overwrite the same files):
+
+```bash
+./tools/scripts/install-linux-local.sh
+```
+
+Default install directory: `~/.local/share/ReelRoulette/` (`ReelRoulette-Server-linux-x64.AppImage`, `ReelRoulette-Desktop-linux-x64.AppImage`). Override with `REELROULETTE_LOCAL_APPIMAGE_DIR`. The script runs each installed AppImage with `--install` and best-effort `update-desktop-database` on `~/.local/share/applications`.
+
 ### Install latest release from GitHub (Linux)
 
 Requires `curl` and `jq` on `PATH`. Default repository is `HugginsIndustries/ReelRoulette` (override with `REELROULETTE_GITHUB_REPO` or `-Repo owner/name`). Prefers an AppImage asset on the latest release; falls back to the portable `.tar.gz`.
@@ -241,6 +251,8 @@ Requires `curl` and `jq` on `PATH`. Default repository is `HugginsIndustries/Ree
 ./tools/scripts/install-linux-from-github.sh server
 ./tools/scripts/install-linux-from-github.sh desktop
 ```
+
+AppImage installs go to `~/.local/share/ReelRoulette/` as `ReelRoulette-{Server|Desktop}-linux-x64.AppImage` (version stripped; same as `install-linux-local.sh`). Override directory with `REELROULETTE_LOCAL_APPIMAGE_DIR`. Portable tarball fallback still extracts under `~/.local/share/ReelRoulette/<server|desktop>/<version>/` and adds a launcher symlink in `~/.local/bin/`.
 
 On Linux, `pwsh ./tools/scripts/full-release.ps1 -Version <ver>` runs `set-release-version.ps1` with the same defaults documented under **Release Versioning** above (and any `-No*` switches you pass), then the two Linux portable scripts, then the two Linux AppImage scripts, and skips Inno installer steps (Windows-only). With no `-Version`, it skips `set-release-version` and packages using `.csproj` versions. AppImage steps require `appimagetool`.
 

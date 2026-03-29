@@ -949,7 +949,7 @@ Latest completions first:
     - Native prerequisites (ffmpeg/ffprobe, LibVLC) remain undocumented-as-bundled; document as prereqs in the embedded AppImage `README` or `--help` output, consistent with portable package policy.
   - **GitHub Releases install script** (`tools/scripts/install-linux-from-github.sh`):
     - Fetches the latest release artifact (AppImage preferred; portable `tar.gz` as fallback) from the GitHub Releases API.
-    - Extracts or places the artifact in a conventional user-local location (e.g. `~/.local/bin/`, `~/.local/share/ReelRoulette/`).
+    - Places AppImages under `~/.local/share/ReelRoulette/` with stable filenames; portable tarball fallback uses `~/.local/share/ReelRoulette/<target>/<version>/` plus a `~/.local/bin/` launcher symlink.
     - Registers a `.desktop` entry in `~/.local/share/applications/` and runs `update-desktop-database` so the app appears in the application menu.
     - Supports both server and **Desktop** client as install targets (via argument or interactive prompt).
     - Does not require `sudo`; targets the current user only.

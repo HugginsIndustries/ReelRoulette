@@ -26,6 +26,204 @@ public sealed class LibraryArchiveMigrationTests
     }
 
     [Fact]
+    public void ApplySourceRemapping_Repairs_LegacyUriStyleRelative_And_Remaps_FullPath()
+    {
+        var temp = Path.Combine(Path.GetTempPath(), "rr-legacy-import-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var moviesDir = Path.Combine(temp, "Movies");
+            var filePath = Path.Combine(moviesDir, "Nest", "a.mp4");
+            Directory.CreateDirectory(Path.GetDirectoryName(filePath)!);
+            File.WriteAllText(filePath, "");
+
+            var oldRoot = moviesDir + Path.DirectorySeparatorChar;
+            var newRoot = Path.Combine(temp, "ImportedMovies");
+            Directory.CreateDirectory(newRoot);
+
+            var wrongRel = ".." + Path.DirectorySeparatorChar + "Nest" + Path.DirectorySeparatorChar + "a.mp4";
+
+            var root = new JsonObject
+            {
+                ["sources"] = new JsonArray
+                {
+                    new JsonObject
+                    {
+                        ["id"] = "s1",
+                        ["rootPath"] = oldRoot,
+                        ["displayName"] = "M",
+                        ["isEnabled"] = true
+                    }
+                },
+                ["items"] = new JsonArray
+                {
+                    new JsonObject
+                    {
+                        ["id"] = "i1",
+                        ["sourceId"] = "s1",
+                        ["fullPath"] = filePath,
+                        ["relativePath"] = wrongRel,
+                        ["fileName"] = "a.mp4"
+                    }
+                }
+            };
+
+            var remap = new Dictionary<string, string>(StringComparer.Ordinal) { [oldRoot] = newRoot };
+            var skipped = new HashSet<string>(StringComparer.Ordinal);
+
+            var result = LibraryArchiveMigration.ApplySourceRemapping(root, remap, skipped);
+            Assert.True(result.Success, result.ErrorMessage);
+
+            var item = root["items"]![0]!;
+            var expectedFull = Path.GetFullPath(Path.Combine(newRoot, "Nest", "a.mp4"));
+            Assert.Equal(expectedFull, item["fullPath"]!.GetValue<string>());
+
+            var newRel = item["relativePath"]!.GetValue<string>();
+            var expectedRel = Path.GetRelativePath(Path.GetFullPath(newRoot), expectedFull);
+            Assert.Equal(expectedRel, newRel);
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(temp))
+                {
+                    Directory.Delete(temp, recursive: true);
+                }
+            }
+            catch
+            {
+                // best-effort cleanup
+            }
+        }
+    }
+
+    [Fact]
+    public void ApplySourceRemapping_WindowsStyleExport_LegacyRelative_Remaps_OnAnyHost()
+    {
+        var temp = Path.Combine(Path.GetTempPath(), "rr-winexport-remap-" + Guid.NewGuid().ToString("N"));
+        var newRoot = Path.Combine(temp, "ImportedMedia");
+        Directory.CreateDirectory(newRoot);
+        try
+        {
+            const string oldRoot = @"Z:\Movies\";
+            var wrongRel = ".." + Path.DirectorySeparatorChar + "Nest" + Path.DirectorySeparatorChar + "a.mp4";
+
+            var root = new JsonObject
+            {
+                ["sources"] = new JsonArray
+                {
+                    new JsonObject
+                    {
+                        ["id"] = "s1",
+                        ["rootPath"] = oldRoot,
+                        ["displayName"] = "M",
+                        ["isEnabled"] = true
+                    }
+                },
+                ["items"] = new JsonArray
+                {
+                    new JsonObject
+                    {
+                        ["id"] = "i1",
+                        ["sourceId"] = "s1",
+                        ["fullPath"] = @"Z:\Movies\Nest\a.mp4",
+                        ["relativePath"] = wrongRel,
+                        ["fileName"] = "a.mp4"
+                    }
+                }
+            };
+
+            var remap = new Dictionary<string, string>(StringComparer.Ordinal) { [oldRoot] = newRoot };
+            var skipped = new HashSet<string>(StringComparer.Ordinal);
+
+            var result = LibraryArchiveMigration.ApplySourceRemapping(root, remap, skipped);
+            Assert.True(result.Success, result.ErrorMessage);
+
+            var item = root["items"]![0]!;
+            var expectedFull = Path.GetFullPath(Path.Combine(newRoot, "Nest", "a.mp4"));
+            Assert.Equal(expectedFull, item["fullPath"]!.GetValue<string>());
+            Assert.Equal("Nest/a.mp4", item["relativePath"]!.GetValue<string>().Replace('\\', '/'));
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(temp))
+                {
+                    Directory.Delete(temp, recursive: true);
+                }
+            }
+            catch
+            {
+                // best-effort cleanup
+            }
+        }
+    }
+
+    [Fact]
+    public void ApplySourceRemapping_LinuxStyleExport_LegacyRelative_Remaps_OnAnyHost()
+    {
+        var temp = Path.Combine(Path.GetTempPath(), "rr-linexport-remap-" + Guid.NewGuid().ToString("N"));
+        var newRoot = Path.Combine(temp, "ImportedMedia");
+        Directory.CreateDirectory(newRoot);
+        try
+        {
+            const string oldRoot = "/home/user/VideoLibrary/";
+            const string wrongRel = "../Clips/sub/a.mp4";
+
+            var root = new JsonObject
+            {
+                ["sources"] = new JsonArray
+                {
+                    new JsonObject
+                    {
+                        ["id"] = "s1",
+                        ["rootPath"] = oldRoot,
+                        ["displayName"] = "V",
+                        ["isEnabled"] = true
+                    }
+                },
+                ["items"] = new JsonArray
+                {
+                    new JsonObject
+                    {
+                        ["id"] = "i1",
+                        ["sourceId"] = "s1",
+                        ["fullPath"] = "/home/user/VideoLibrary/Clips/sub/a.mp4",
+                        ["relativePath"] = wrongRel,
+                        ["fileName"] = "a.mp4"
+                    }
+                }
+            };
+
+            var remap = new Dictionary<string, string>(StringComparer.Ordinal) { [oldRoot] = newRoot };
+            var skipped = new HashSet<string>(StringComparer.Ordinal);
+
+            var result = LibraryArchiveMigration.ApplySourceRemapping(root, remap, skipped);
+            Assert.True(result.Success, result.ErrorMessage);
+
+            var item = root["items"]![0]!;
+            var expectedFull = Path.GetFullPath(Path.Combine(newRoot, "Clips", "sub", "a.mp4"));
+            Assert.Equal(expectedFull, item["fullPath"]!.GetValue<string>());
+            Assert.Equal("Clips/sub/a.mp4", item["relativePath"]!.GetValue<string>().Replace('\\', '/'));
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(temp))
+                {
+                    Directory.Delete(temp, recursive: true);
+                }
+            }
+            catch
+            {
+                // best-effort cleanup
+            }
+        }
+    }
+
+    [Fact]
     public void ApplySourceRemapping_Updates_Source_And_Item_FullPath()
     {
         var root = JsonNode.Parse("""
@@ -113,6 +311,31 @@ public sealed class LibraryArchiveMigrationTests
 
         Assert.False(result.Success);
         Assert.Contains("neither skipped nor remapped", result.ErrorMessage ?? "", StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void CombineRootAndRelative_OnNonWindows_StripsWindowsDriveFromStoredRelative()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var combined = LibraryArchiveMigration.CombineRootAndRelative("/mnt/media", @"Z:\folder\file.mp4");
+        Assert.Equal(Path.GetFullPath(Path.Combine("/mnt", "media", "folder", "file.mp4")), combined);
+    }
+
+    [Fact]
+    public void CombineRootAndRelative_OnWindows_NormalizesForwardSlashRelative()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var root = Path.Combine(Path.GetTempPath(), "rr-combine-win-" + Guid.NewGuid().ToString("N"));
+        var combined = LibraryArchiveMigration.CombineRootAndRelative(root, "unix/style/file.mp4");
+        Assert.Equal(Path.GetFullPath(Path.Combine(root, "unix", "style", "file.mp4")), combined);
     }
 
     [Fact]

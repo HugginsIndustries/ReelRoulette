@@ -8,8 +8,9 @@
 #   curl -fsSL https://raw.githubusercontent.com/HugginsIndustries/ReelRoulette/main/tools/scripts/install-linux-from-github.sh | bash -s -- server
 #
 # Environment:
-#   REELROULETTE_GITHUB_REPO   owner/repo (default: HugginsIndustries/ReelRoulette)
-#   REELROULETTE_ICONS_BRANCH  branch for raw icon URLs when using tarball fallback (default: main)
+#   REELROULETTE_GITHUB_REPO        owner/repo (default: HugginsIndustries/ReelRoulette)
+#   REELROULETTE_ICONS_BRANCH       branch for raw icon URLs when using tarball fallback (default: main)
+#   REELROULETTE_LOCAL_APPIMAGE_DIR AppImage install directory (default: ~/.local/share/ReelRoulette)
 #
 set -euo pipefail
 
@@ -18,7 +19,8 @@ DEFAULT_ICONS_BRANCH="main"
 
 usage() {
   echo "Usage: $0 [-Repo owner/repo] [-Branch icons-branch] server|desktop" >&2
-  echo "  Installs to ~/.local/bin and ~/.local/share (no sudo)." >&2
+  echo "  AppImage: ~/.local/share/ReelRoulette/ with stable filenames (override: REELROULETTE_LOCAL_APPIMAGE_DIR)." >&2
+  echo "  Portable tarball: ~/.local/share/ReelRoulette/<target>/<version> + ~/.local/bin symlink (no sudo)." >&2
 }
 
 REPO="${REELROULETTE_GITHUB_REPO:-$DEFAULT_REPO}"
@@ -102,7 +104,7 @@ if [[ -z "$APPIMAGE_URL" && -z "$TAR_URL" ]]; then
   exit 1
 fi
 
-mkdir -p "$HOME/.local/bin"
+APPIMAGE_INSTALL_DIR="${REELROULETTE_LOCAL_APPIMAGE_DIR:-$HOME/.local/share/ReelRoulette}"
 mkdir -p "$HOME/.local/share/ReelRoulette"
 
 TMP="$(mktemp -d)"
@@ -110,15 +112,19 @@ trap 'rm -rf "$TMP"' EXIT
 
 if [[ -n "$APPIMAGE_URL" ]]; then
   NAME="$(basename "$APPIMAGE_URL")"
-  DEST="$HOME/.local/bin/$NAME"
+  STABLE_NAME="$(echo "$NAME" | sed 's/^\(ReelRoulette-\(Server\|Desktop\)\)-.*-\(linux-x64\.AppImage\)$/\1-\3/')"
+  mkdir -p "$APPIMAGE_INSTALL_DIR"
+  DEST="$APPIMAGE_INSTALL_DIR/$STABLE_NAME"
   echo "Downloading AppImage: $NAME" >&2
-  curl -fsSL "$APPIMAGE_URL" -o "$TMP/download"
-  install -m0755 "$TMP/download" "$DEST"
+  curl -fsSL "$APPIMAGE_URL" -o "$TMP/$NAME"
+  install -m0755 "$TMP/$NAME" "$DEST"
   echo "Running --install to register menu entry and icons ..." >&2
   "$DEST" --install
   echo "Installed: $DEST" >&2
   exit 0
 fi
+
+mkdir -p "$HOME/.local/bin"
 
 NAME="$(basename "$TAR_URL")"
 echo "Downloading portable package: $NAME (no AppImage on this release)" >&2

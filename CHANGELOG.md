@@ -7,6 +7,7 @@ This file follows a Keep a Changelog style format.
 
 ### Added
 
+- Add `./tools/scripts/install-linux-local.sh`: after a local Linux AppImage build, copies `artifacts/packages/appimage/ReelRoulette-*.AppImage` to stable names under `~/.local/share/ReelRoulette` and runs each with `--install` to refresh menu entries (`REELROULETTE_LOCAL_APPIMAGE_DIR` overrides the install directory).
 - Add desktop **Library → Export Library…** / **Import Library…** for cross-install library moves, implemented in `ReelRoulette.LibraryArchive` (`net10.0`) with `ReelRoulette.DesktopApp.Tests` coverage: migration zips follow the standard on-disk bundle (library, core/desktop settings, presets, export manifest; optional thumbnails and backups), support per-source remap or skip and overwrite confirmation when a non-empty library already exists, show an export warning when the core may still be running, require an explicit server-stopped acknowledgment and **Import to disk** before applying an archive, write imported `desktop-settings.json` into the desktop app data path, and resync projection/sources/presets from the core when it is reachable afterward; during zip write and import apply, indeterminate status-line progress with competing status updates suppressed, Library menu disabled, and wait cursor until finished, then **Library export complete.** / **Library import complete.**
 - Add `.github/workflows/package-linux.yml`: Linux portable + AppImage packaging on `ubuntu-latest` (.NET 10, Node 22, `ffmpeg`, pinned AppImageKit 12 `appimagetool`), `verify-linux-packaged-server-smoke.sh`, workflow artifacts, and tag `gh release upload` for `*.tar.gz` / `*.AppImage`.
 - Add `tools/scripts/verify-linux-packaged-server-smoke.sh` for headless packaged server HTTP checks (`/health`, `/api/version`, `/control/status`, `/operator`) after Linux CI packaging.
@@ -24,6 +25,7 @@ This file follows a Keep a Changelog style format.
 
 ### Changed
 
+- `install-linux-from-github.sh` installs AppImages under `~/.local/share/ReelRoulette/` using stable names `ReelRoulette-{Server|Desktop}-linux-x64.AppImage` (same convention as the local install script; `REELROULETTE_LOCAL_APPIMAGE_DIR` override). Portable tarball behavior is unchanged (`~/.local/bin` symlink).
 - Bump Avalonia packages to **11.3.13** (desktop client and ServerApp tray host); harden `AvaloniaTrayHostUi` by applying `NativeMenuItem` state updates on `Dispatcher.UIThread` after async server/registry work (Windows tray stability).
 - `package-windows.yml` uses .NET SDK **10.0.x** for packaging (aligned with solution TFMs and Linux package workflow).
 - `docs/architecture.md`: packaging/CI note now covers Linux tag packaging workflow and headless smoke.
@@ -62,6 +64,9 @@ This file follows a Keep a Changelog style format.
 
 ### Fixed
 
+- Desktop folder and file pickers resolve local paths with `StorageProviderExtensions.TryGetLocalPath` before falling back to `IStorageItem.Path.LocalPath`, fixing empty remap labels and broken import/export paths when xdg-desktop-portal returns storage items without a populated `LocalPath` (Linux AppImage and similar).
+- Library `relativePath` computation on the server now uses `Path.GetRelativePath` instead of `Uri.MakeRelativeUri`, avoiding incorrect leading `..` segments (common with trailing-slash source roots on Windows and Linux). Desktop library import remapping recomputes legacy `..`-prefixed `relativePath` values using segment-based logic (strip Windows drive letters, unify slashes) so Windows exports repair correctly on Linux hosts; `CombineRootAndRelative` normalizes foreign separators and strips stray `X:` prefixes from stored relatives on Unix. Cross-machine imports no longer fail with “Resolved path escapes the destination root” for these cases.
+- Linux `install-linux-local.sh` / `install-linux-from-github.sh` stable AppImage renames: handle version segments with extra hyphens (for example `0.11.0-dev`) so installs land on `ReelRoulette-{Server|Desktop}-linux-x64.AppImage` as documented.
 - Improve grid-view stability by combining exact row-offset virtualization with drag-aware update gating and anchor/inset offset restoration.
 - Keep projection sync as the single trigger for core refresh completion updates to the library panel.
 - Improve dynamic-filter refresh behavior (for example `OnlyNeverPlayed`) by adding targeted panel refresh triggers for playback/stat and metadata-related filter changes.

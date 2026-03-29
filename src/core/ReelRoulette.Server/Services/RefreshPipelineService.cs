@@ -1320,18 +1320,8 @@ public sealed class RefreshPipelineService : BackgroundService
         }
     }
 
-    private static string GetRelativePath(string rootPath, string fullPath)
-    {
-        if (string.IsNullOrWhiteSpace(rootPath) || string.IsNullOrWhiteSpace(fullPath))
-        {
-            return string.Empty;
-        }
-
-        var rootUri = new Uri(Path.GetFullPath(rootPath) + Path.DirectorySeparatorChar);
-        var fileUri = new Uri(Path.GetFullPath(fullPath));
-        var relativeUri = rootUri.MakeRelativeUri(fileUri);
-        return Uri.UnescapeDataString(relativeUri.ToString().Replace('/', Path.DirectorySeparatorChar));
-    }
+    private static string GetRelativePath(string rootPath, string fullPath) =>
+        ReelRoulette.Core.Storage.LibraryRelativePath.GetRelativePath(rootPath, fullPath);
 
     private static void EnsureIdentityAndFingerprintDefaults(JsonObject item)
     {

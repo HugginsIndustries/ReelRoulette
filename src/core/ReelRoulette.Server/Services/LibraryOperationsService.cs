@@ -1359,13 +1359,8 @@ public sealed class LibraryOperationsService
             .TrimEnd('/');
     }
 
-    private static string GetRelativePath(string rootPath, string fullPath)
-    {
-        var rootUri = new Uri(Path.GetFullPath(rootPath) + Path.DirectorySeparatorChar);
-        var fileUri = new Uri(Path.GetFullPath(fullPath));
-        var relativeUri = rootUri.MakeRelativeUri(fileUri);
-        return Uri.UnescapeDataString(relativeUri.ToString().Replace('/', Path.DirectorySeparatorChar));
-    }
+    private static string GetRelativePath(string rootPath, string fullPath) =>
+        ReelRoulette.Core.Storage.LibraryRelativePath.GetRelativePath(rootPath, fullPath);
 
     private static bool ItemMatchesTag(JsonObject item, string tagName)
     {

@@ -206,6 +206,7 @@ Packaging:
 - `./tools/scripts/package-serverapp-linux-appimage.sh`
 - `./tools/scripts/package-desktop-linux-appimage.sh`
 - `./tools/scripts/install-linux-from-github.sh`
+- `./tools/scripts/install-linux-local.sh` (copy local `artifacts/packages/appimage/*.AppImage` to stable names under `~/.local/share/ReelRoulette` and run `--install`)
 - `tools/scripts/lib/appimage-helpers.sh` (sourced by Linux AppImage package scripts)
 - `tools/installer/ReelRoulette.ServerApp.iss`
 - `tools/installer/ReelRoulette.Desktop.iss`

@@ -8790,7 +8790,15 @@ namespace ReelRoulette
             var result = await StorageProvider.OpenFolderPickerAsync(options);
             if (result.Count > 0 && result[0] != null)
             {
-                var path = result[0].Path.LocalPath;
+                if (!StoragePickerPath.TryGetLocalFilesystemPath(result[0], out var path) ||
+                    string.IsNullOrWhiteSpace(path))
+                {
+                    StatusTextBlock.Text =
+                        "Could not resolve folder path from picker. Try again or check desktop portal settings.";
+                    Log("UI ACTION: ImportFolder folder selected but no local path (portal/sandbox picker).");
+                    return;
+                }
+
                 Log($"UI ACTION: ImportFolder folder selected: {path}");
                 try
                 {
@@ -8872,7 +8880,13 @@ namespace ReelRoulette
                     return;
                 }
 
-                var outPath = saveTarget.Path.LocalPath;
+                if (!StoragePickerPath.TryGetLocalFilesystemPath(saveTarget, out var outPath) ||
+                    string.IsNullOrWhiteSpace(outPath))
+                {
+                    StatusTextBlock.Text = "Could not resolve export path from picker.";
+                    return;
+                }
+
                 await Dispatcher.UIThread.InvokeAsync(BeginLibraryArchiveOperationUI);
                 try
                 {
@@ -8935,7 +8949,12 @@ namespace ReelRoulette
                     return;
                 }
 
-                var zipPath = pick[0].Path.LocalPath;
+                if (!StoragePickerPath.TryGetLocalFilesystemPath(pick[0], out var zipPath) ||
+                    string.IsNullOrWhiteSpace(zipPath))
+                {
+                    StatusTextBlock.Text = "Could not resolve zip path from picker.";
+                    return;
+                }
 
                 string libraryJson;
                 try

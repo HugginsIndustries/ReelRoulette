@@ -64,10 +64,11 @@ Use `pwsh ./tools/scripts/reset-checklist.ps1` to reset metadata/check states be
 Desktop-only: reads/writes roaming `ReelRoulette` data and local thumbnails (no HTTP migration endpoints). For a clean import, stop the server first and confirm the import dialog checkbox.
 
 - [ ] **Export**: `Library → Export Library…` saves a `.zip` with default name pattern `ReelRoulette-Library-*Z.zip`; with both checkboxes off the archive omits `thumbnails/` and `backups/` trees; with each checkbox on, the matching tree appears at zip root.
-- [ ] **Import remap**: `Library → Import Library…` lists every unique source `rootPath` from the zip; each row can be mapped with **Browse…** or **Skip**; skipped sources keep exported paths (offline until fixed).
+- [ ] **Import remap**: `Library → Import Library…` lists every unique source `rootPath` from the zip; each row can be mapped with **Browse…** or **Skip**; skipped sources keep exported paths (offline until fixed). On Linux (including AppImage), **Browse…** shows the chosen folder path and does not clear the placeholder without a path; if the dialog cannot resolve a local path, an error explains portal/sandbox limitations.
 - [ ] **Import overwrite**: When a non-empty library already exists on disk, a replace confirmation appears; declining cancels without changing files.
 - [ ] **Import success**: After import, start or restart the server and resync the desktop client when needed; `desktop-settings.json` from the zip is written to the desktop app data path; status text notes restart if listen/WebUI/auth settings may need a process restart.
 - [ ] **Round-trip sanity**: Export on one OS (or machine), import on another with remapping, confirm media plays when paths exist.
+- [ ] **Import legacy relativePath**: If an export still has `..`-prefixed `relativePath` entries (older server builds), import remap succeeds and written `fullPath`/`relativePath` match the chosen destination roots; a refresh run rewrites `relativePath` to the current server format. Cross-OS: Windows-exported `Z:\`-style roots and backslashes remap on Linux without “escapes the destination root”; Linux POSIX paths remap on Windows.
 
 ## WebUI Core UX (Localhost)
 
@@ -161,8 +162,9 @@ Desktop-only: reads/writes roaming `ReelRoulette` data and local thumbnails (no 
   - `pwsh ./tools/scripts/package-desktop-win-inno.ps1`.
 - [ ] Linux portable packaging scripts run: `./tools/scripts/package-serverapp-linux-portable.sh` and `./tools/scripts/package-desktop-linux-portable.sh`.
 - [ ] Linux AppImage packaging scripts run (requires `appimagetool` on `PATH`): `./tools/scripts/package-serverapp-linux-appimage.sh` and `./tools/scripts/package-desktop-linux-appimage.sh`; outputs under `artifacts/packages/appimage/` match `ReelRoulette-{Server|Desktop}-{Version}-linux-x64.AppImage`.
+- [ ] `./tools/scripts/install-linux-local.sh` copies built AppImages to stable names under `~/.local/share/ReelRoulette` and `--install` refreshes `~/.local/share/applications` entries without error.
 - [ ] Linux AppImage `--help` lists native prerequisites (ffmpeg/ffprobe, LibVLC) consistent with portable policy; `--install` registers `~/.local/share/applications/reelroulette-{server|desktop}.desktop` and hicolor icons without a manual menu step.
-- [ ] Linux install-from-release script runs (`curl` + `jq` on `PATH`): `./tools/scripts/install-linux-from-github.sh server` and `... desktop` against a release that includes matching assets; install uses `~/.local/bin` and `~/.local/share` only (no sudo).
+- [ ] Linux install-from-release script runs (`curl` + `jq` on `PATH`): `./tools/scripts/install-linux-from-github.sh server` and `... desktop` against a release that includes matching assets; AppImage installs to `~/.local/share/ReelRoulette/` with stable `ReelRoulette-{Server|Desktop}-linux-x64.AppImage` names (portable fallback still uses `~/.local/bin` symlink + `~/.local/share`); no sudo.
 - [ ] Linux portable tarballs extract with a single top-level directory; `run-server.sh` and `run-desktop.sh` are executable (`chmod +x` preserved after extract).
 - [ ] Linux portable tree contains no `.pdb` files; `README.txt` in each package documents ffmpeg/ffprobe and LibVLC as system prerequisites (not bundled in Desktop tarball).
 - [ ] Packaged Linux server starts and responds on `/health` at the configured base URL (or documented equivalent check).

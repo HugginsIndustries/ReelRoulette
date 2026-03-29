@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using ReelRoulette.Core.Storage;
 
 namespace ReelRoulette.LibraryArchive;
 
@@ -154,6 +155,11 @@ public static class LibraryArchiveMigration
                 continue;
             }
 
+            if (!sourceIdToOldRoot.TryGetValue(sourceId, out var oldRoot))
+            {
+                return LibraryArchiveRemapResult.Fail($"Item references sourceId '{sourceId}' without a root path.");
+            }
+
             var relativePath = itemNode["relativePath"]?.GetValue<string>()?.Trim();
             if (string.IsNullOrWhiteSpace(relativePath))
             {
@@ -161,9 +167,17 @@ public static class LibraryArchiveMigration
                     $"Item for remapped source '{sourceId}' is missing relativePath.");
             }
 
+            var oldFullPath = itemNode["fullPath"]?.GetValue<string>()?.Trim();
+            var effectiveRelative = relativePath;
+            if (LibraryRelativePath.TryGetLegacyRepairRelativePath(relativePath, oldRoot, oldFullPath, out var repaired))
+            {
+                effectiveRelative = repaired;
+                itemNode["relativePath"] = repaired;
+            }
+
             try
             {
-                itemNode["fullPath"] = CombineRootAndRelative(newRoot, relativePath);
+                itemNode["fullPath"] = CombineRootAndRelative(newRoot, effectiveRelative);
             }
             catch (ArgumentException ex)
             {
@@ -549,20 +563,10 @@ public static class LibraryArchiveMigration
             throw new ArgumentException("New root path is empty.", nameof(newRoot));
         }
 
-        var rel = (relativePath ?? string.Empty).Trim();
+        var rel = LibraryRelativePath.NormalizeRelativeForDestinationRoot(relativePath);
         if (string.IsNullOrEmpty(rel))
         {
             throw new ArgumentException("Relative path is empty.", nameof(relativePath));
-        }
-
-        rel = rel.Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar);
-        if (Path.IsPathRooted(rel))
-        {
-            rel = rel.TrimStart(Path.DirectorySeparatorChar);
-            if (Path.VolumeSeparatorChar == ':' && rel.Length >= 2 && rel[1] == ':')
-            {
-                rel = rel[2..].TrimStart(Path.DirectorySeparatorChar);
-            }
         }
 
         var combined = Path.GetFullPath(Path.Combine(root, rel));

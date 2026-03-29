@@ -51,7 +51,7 @@ Official downloads live on **[GitHub Releases](https://github.com/HugginsIndustr
    ./tools/scripts/install-linux-from-github.sh desktop
    ```
 
-   …or download and pipe the script (same effect; installs under `~/.local/bin` and `~/.local/share` only, **no sudo**):
+   …or download and pipe the script (same effect; AppImages install to `~/.local/share/ReelRoulette/` under stable filenames; portable tarball fallback uses `~/.local/share` and a `~/.local/bin` symlink; **no sudo**):
 
    ```bash
    curl -fsSL https://raw.githubusercontent.com/HugginsIndustries/ReelRoulette/main/tools/scripts/install-linux-from-github.sh | bash -s -- server
@@ -74,6 +74,8 @@ Official downloads live on **[GitHub Releases](https://github.com/HugginsIndustr
 
 4. **Media tools on Linux**  
    Linux packages **do not** bundle FFmpeg or VLC. Install **`ffmpeg`** (with **`ffprobe`** on your `PATH`) and **VLC / LibVLC** from your distribution for full server and desktop media behavior.
+
+**Local build install (developers):** After packaging AppImages (`./tools/scripts/package-serverapp-linux-appimage.sh` and `./tools/scripts/package-desktop-linux-appimage.sh`), run `./tools/scripts/install-linux-local.sh` to copy them to `~/.local/share/ReelRoulette/` under stable names and re-register menu entries (`--install`). See `docs/dev-setup.md`.
 
 ### Developing from source
 
@@ -211,6 +213,8 @@ Outputs: `artifacts/packages/portable/ReelRoulette-Server-{Version}-linux-x64.ta
 ```
 
 Outputs: `artifacts/packages/appimage/ReelRoulette-Server-{Version}-linux-x64.AppImage` and `ReelRoulette-Desktop-{Version}-linux-x64.AppImage`.
+
+**Local install** (copies those AppImages to `~/.local/share/ReelRoulette/` with stable names and runs `--install`): `./tools/scripts/install-linux-local.sh`.
 
 **End-user install helper** (fetches latest GitHub release; prefers AppImage, falls back to portable `.tar.gz`; needs `curl` and `jq`):
 
