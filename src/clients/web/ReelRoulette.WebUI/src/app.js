@@ -1,3 +1,5 @@
+import { buildRefreshStatusMessage, coerceRefreshSnapshot } from "./events/refreshStatusProjection";
+
 const CLIENT_ID_KEY = "rr_clientId";
 const SESSION_ID_KEY = "rr_sessionId";
 const PHOTO_DURATION_KEY = "rr_photoDuration";
@@ -159,11 +161,13 @@ export function startApp(config) {
     tagEditorPending: null,
     tagEditorCollapsedCategories: new Set(),
     tagEditorItemIds: [],
+    tagEditorCategoryOrderDirty: false,
     tagEditContext: null,
     tagEditorWasPlaying: false,
     tagEditorPhotoTimerRunning: false,
     compatibilityBlocked: false,
-    playAttemptId: 0
+    playAttemptId: 0,
+    videoMuted: false
   };
 
   const video = getElement("video");
@@ -190,6 +194,7 @@ export function startApp(config) {
   const loopBtn = getElement("loop-btn");
   const autoplayBtn = getElement("autoplay-btn");
   const fullscreenBtn = getElement("fullscreen-btn");
+  const muteBtn = getElement("mute-btn");
   const tagEditBtn = getElement("tag-edit-btn");
   const tagEditor = getElement("tag-editor");
   const tagEditorBody = getElement("tag-editor-body");
@@ -213,13 +218,15 @@ export function startApp(config) {
     !video || !photo || !statusEl || !presetSelect || !pairSection || !pairToken || !pairBtn ||
     !mediaContainer || !seekRow || !seekSlider || !timeDisplay || !nowPlaying || !nowPlayingName ||
     !nowPlayingDuration || !favoriteBtn || !blacklistBtn || !prevBtn || !playBtn || !nextBtn ||
-    !loopBtn || !autoplayBtn || !fullscreenBtn || !tagEditBtn || !tagEditor || !tagEditorBody ||
+    !loopBtn || !autoplayBtn || !fullscreenBtn || !muteBtn || !tagEditBtn || !tagEditor || !tagEditorBody ||
     !tagEditorCloseBtn || !tagEditorRefreshBtn || !tagEditorAddCategoryBtn || !tagEditorCategorySelect ||
     !tagEditorNewTag || !tagEditorAddTagBtn || !tagEditorApplyBtn || !tagEditModal || !tagEditName ||
     !tagEditCategory || !tagEditCancelBtn || !tagEditSaveBtn || !photoDurationInput || !emptyState
   ) {
     throw new Error("Legacy WebUI bootstrap failed: missing required DOM elements.");
   }
+
+  pairSection.style.display = "none";
 
   let photoTimerId = null;
   let eventSource = null;
@@ -320,7 +327,7 @@ export function startApp(config) {
       ...options
     });
     if (response.status === 401) {
-      pairSection.style.display = "block";
+      pairSection.style.display = "flex";
       throw new Error("Unauthorized");
     }
     if (!response.ok) {
@@ -377,6 +384,20 @@ export function startApp(config) {
       video.style.display !== "none" &&
       !video.paused;
     setButtonSymbol(playBtn, shouldShowPause ? "pause" : "play_arrow");
+  }
+
+  function updateMuteUi() {
+    const videoActive = video.style.display !== "none" && !!video.src;
+    if (videoActive) {
+      video.muted = state.videoMuted;
+      muteBtn.disabled = false;
+      muteBtn.classList.toggle("active", state.videoMuted);
+      setButtonSymbol(muteBtn, state.videoMuted ? "volume_off" : "volume_up");
+    } else {
+      muteBtn.disabled = true;
+      muteBtn.classList.remove("active");
+      setButtonSymbol(muteBtn, "volume_up");
+    }
   }
 
   function clearPhotoTimer() {
@@ -528,11 +549,13 @@ export function startApp(config) {
         tracePlayback("warn", "video-onerror", { mediaUrl });
         setStatus("Video file not found.");
       };
+      video.muted = state.videoMuted;
       void video.play().catch(() => {});
     }
 
     updateToggleButtons();
     updatePlayButtonGlyph();
+    updateMuteUi();
   }
 
   async function loadPresets() {
@@ -566,6 +589,7 @@ export function startApp(config) {
         return false;
       }
       state.compatibilityBlocked = false;
+      pairSection.style.display = "none";
       setStatus(`Ready (API ${version.apiVersion || "unknown"})`);
       return true;
     } catch {
@@ -602,7 +626,7 @@ export function startApp(config) {
         })
       });
       if (response.status === 401) {
-        pairSection.style.display = "block";
+        pairSection.style.display = "flex";
         setStatus("Unauthorized. Pair first.");
         return;
       }
@@ -699,6 +723,7 @@ export function startApp(config) {
   function resetTagEditorPending() {
     state.tagEditorSelections = new Map();
     state.tagEditorPending = createTagEditorPending();
+    state.tagEditorCategoryOrderDirty = false;
   }
 
   function normalizeTagKey(tagName) {
@@ -876,6 +901,7 @@ export function startApp(config) {
     movable[nextIndex] = temp;
     const hasUncategorized = order.some((value) => isUncategorizedCategoryId(value));
     state.tagEditorCategoryOrder = hasUncategorized ? movable.concat([UNCATEGORIZED_CATEGORY_ID]) : movable;
+    state.tagEditorCategoryOrderDirty = true;
     renderTagEditor();
   }
 
@@ -909,13 +935,16 @@ export function startApp(config) {
 
   function hasPendingTagEditorMutations() {
     const pending = state.tagEditorPending;
-    if (!pending) return state.tagEditorSelections.size > 0;
-    return state.tagEditorSelections.size > 0 ||
+    if (!pending) return state.tagEditorSelections.size > 0 || state.tagEditorCategoryOrderDirty;
+    return (
+      state.tagEditorCategoryOrderDirty ||
+      state.tagEditorSelections.size > 0 ||
       pending.upsertCategories.size > 0 ||
       pending.deleteCategoryIds.size > 0 ||
       pending.upsertTags.size > 0 ||
       pending.renameTags.size > 0 ||
-      pending.deleteTags.size > 0;
+      pending.deleteTags.size > 0
+    );
   }
 
   function openTagEditModal(tag, categories) {
@@ -1380,15 +1409,9 @@ export function startApp(config) {
     });
     eventSource.addEventListener("refreshStatusChanged", (event) => {
       const payload = parseEnvelopePayload(event.data);
-      const snapshot = payload?.snapshot || payload?.Snapshot;
-      if (!snapshot) return;
-      if (snapshot.isRunning) {
-        setStatus(`Core refresh: ${snapshot.currentStage || "running"}...`);
-      } else if (snapshot.lastError) {
-        setStatus(`Core refresh failed: ${snapshot.lastError}`);
-      } else if (snapshot.completedUtc) {
-        setStatus("Core refresh complete.");
-      }
+      const raw = payload?.snapshot || payload?.Snapshot;
+      if (!raw) return;
+      setStatus(buildRefreshStatusMessage(coerceRefreshSnapshot(raw)));
     });
     eventSource.addEventListener("resyncRequired", async () => {
       try {
@@ -1490,6 +1513,12 @@ export function startApp(config) {
   nextBtn.addEventListener("click", (event) => {
     event.stopPropagation();
     goNext();
+  });
+  muteBtn.addEventListener("click", (event) => {
+    event.stopPropagation();
+    if (muteBtn.disabled) return;
+    state.videoMuted = !state.videoMuted;
+    updateMuteUi();
   });
   favoriteBtn.addEventListener("click", (event) => {
     event.stopPropagation();
@@ -1719,7 +1748,5 @@ export function startApp(config) {
 
   if (config.pairToken) {
     void pairAndConnect();
-  } else {
-    pairSection.style.display = "block";
   }
 }

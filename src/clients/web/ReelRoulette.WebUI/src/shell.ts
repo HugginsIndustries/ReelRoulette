@@ -6,10 +6,10 @@ export function renderApp(container: HTMLElement, config: RuntimeConfig): void {
     <header class="top-bar">
       <div class="top-bar-title">
         <h1>ReelRoulette</h1>
-        <div id="pair-section" class="pair-section" style="display:none">
-          <label>Pairing token: <input type="text" id="pair-token" placeholder="Enter token"></label>
-          <button id="pair-btn">Pair</button>
-        </div>
+      </div>
+      <div id="pair-section" class="pair-section" style="display:none">
+        <label class="pair-section-label"><span class="pair-section-label-hint">Pairing token:</span> <input type="text" id="pair-token" placeholder="Enter token"></label>
+        <button id="pair-btn">Pair</button>
       </div>
       <select id="preset-select" aria-label="Choose preset">
         <option value="">Loading...</option>
@@ -35,13 +35,14 @@ export function renderApp(container: HTMLElement, config: RuntimeConfig): void {
         <img id="photo" alt="Photo" style="display:none">
         <div id="empty-state" class="empty-state">Select a preset and click here</div>
         <div id="overlay-controls" class="overlay-controls">
+          <button id="tag-edit-btn" class="overlay-btn icon-glyph-base icon-glyph-button overlay-corner-btn" aria-label="Edit Tags" title="Edit Tags"><span class="material-symbol-icon">tag</span></button>
           <button id="favorite-btn" class="overlay-btn icon-glyph-base icon-glyph-toggle overlay-toggle overlay-corner-btn" aria-label="Favorite" title="Favorite"><span class="material-symbol-icon">favorite</span></button>
           <button id="blacklist-btn" class="overlay-btn icon-glyph-base icon-glyph-toggle overlay-toggle overlay-corner-btn" aria-label="Blacklist" title="Blacklist"><span class="material-symbol-icon">thumb_down</span></button>
-          <div class="overlay-controls-row">
+          <div class="overlay-controls-row overlay-controls-transport">
             <button id="prev-btn" class="overlay-btn icon-glyph-base icon-glyph-button" aria-label="Previous" title="Previous"><span class="material-symbol-icon">skip_previous</span></button>
             <button id="play-btn" class="overlay-btn icon-glyph-base icon-glyph-button overlay-btn-play" aria-label="Play/Pause" title="Play/Pause"><span class="material-symbol-icon">play_arrow</span></button>
             <button id="next-btn" class="overlay-btn icon-glyph-base icon-glyph-button" aria-label="Next" title="Next"><span class="material-symbol-icon">skip_next</span></button>
-            <button id="tag-edit-btn" class="overlay-btn icon-glyph-base icon-glyph-button" aria-label="Edit Tags" title="Edit Tags"><span class="material-symbol-icon">tag</span></button>
+            <button id="mute-btn" class="overlay-btn icon-glyph-base icon-glyph-toggle overlay-toggle" aria-label="Mute" title="Mute"><span class="material-symbol-icon">volume_up</span></button>
             <button id="loop-btn" class="overlay-btn icon-glyph-base icon-glyph-toggle overlay-toggle" aria-label="Loop" title="Loop"><span class="material-symbol-icon">repeat_one</span></button>
             <button id="autoplay-btn" class="overlay-btn icon-glyph-base icon-glyph-toggle overlay-toggle" aria-label="Autoplay" title="Autoplay"><span class="material-symbol-icon">autoplay</span></button>
             <button id="fullscreen-btn" class="overlay-btn icon-glyph-base icon-glyph-button" aria-label="Fullscreen" title="Fullscreen"><span class="material-symbol-icon">fullscreen</span></button>

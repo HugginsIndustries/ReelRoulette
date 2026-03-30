@@ -89,33 +89,7 @@ Do not use this file for detailed architecture explanation or current capability
 
 ## Active Milestones
 
-Last milestone completed: M9e
-
-### M9f - WebUI UX/UI Polish
-
-- **Status**: 🚧 In Progress
-- **Goal**: Deliver WebUI UX/UI polish and theme parity with desktop behavior without changing core API-first ownership boundaries.
-- **Scope**:
-  - Web refresh-status projections provide actionable stage/progress detail comparable to desktop, including parity for the consolidated refresh-complete summary (`Core refresh complete | Source | Duration | Loudness | Thumbnails`) using the same compact formatting rules as the desktop app (non-zero-only segments where applicable, `all cached` phrasing for duration/loudness no-scan cases, aligned thumbnail/source token vocabulary).
-  - Add WebUI runtime theme detection (system/device dark or light mode) and apply matching theme behavior automatically.
-  - Ensure WebUI styling parity with desktop for tag editor and related tag-surface visuals in both light and dark modes.
-  - WebUI automatically follows device/system dark-light preference at runtime and keeps styling parity with desktop in both modes.
-  - Keep WebUI tag chips visually consistent with desktop across themes:
-    - chip text/icons remain white in both light and dark modes,
-    - apply consistent chip drop-shadow styling matching desktop.
-  - Fix WebUI tag editor category reorder behavior so move-up/move-down operations are treated as apply-worthy changes and activate apply/save affordances.
-  - Update WebUI media-container controls layout to match desktop intent:
-    - replace the bottom-center edit-tags control with a mute control matching desktop mute-button behavior,
-    - move edit-tags action to the top-right controls cluster, positioned left of favorite.
-  - Add control-only shadow treatment on the WebUI media container controls (do not dim or shadow the full media container surface).
-- **Acceptance criteria**:
-  - Web refresh-status projections provide actionable stage/progress detail comparable to desktop, including parity for the consolidated refresh-complete summary (`Core refresh complete | Source | Duration | Loudness | Thumbnails`) using the same compact formatting rules as the desktop app (non-zero-only segments where applicable, `all cached` phrasing for duration/loudness no-scan cases, aligned thumbnail/source token vocabulary).
-  - WebUI category move-up/move-down actions in tag editor activate apply/save state and persist correctly when applied.
-  - WebUI media controls include a desktop-matching mute button in the bottom-center controls position, and edit-tags is moved to top-right immediately left of favorite.
-  - WebUI media-container control chrome uses control-only shadow treatment without darkening the full media container background.
-  - WebUI automatically follows device/system dark-light preference at runtime and keeps styling parity with desktop in both modes.
-  - WebUI tag chips preserve white text/icons with consistent drop-shadow treatment in both light and dark modes.
-  - No regressions to previously completed reliability fixes (compatibility gating, reconnect/resync, deterministic testing simulations).
+Last milestone completed: M9f
 
 ### M9g - Linux Release Readiness and Sign-off
 
@@ -870,6 +844,38 @@ Last milestone completed: M9e
 ## Completed Milestones
 
 Latest completions first:
+
+### M9f - WebUI UX/UI Polish
+
+- **Status**: ✅ Complete
+- **Goal**: Deliver WebUI UX/UI polish and theme parity with desktop behavior without changing core API-first ownership boundaries.
+- **Scope**:
+  - Web refresh-status projections provide actionable stage/progress detail comparable to desktop, including parity for the consolidated refresh-complete summary (`Core refresh complete | Source | Duration | Loudness | Thumbnails`) using the same compact formatting rules as the desktop app (non-zero-only segments where applicable, `all cached` phrasing for duration/loudness no-scan cases, aligned thumbnail/source token vocabulary).
+  - Add WebUI runtime theme detection (system/device dark or light mode) and apply matching theme behavior automatically.
+  - Ensure WebUI styling parity with desktop for tag editor and related tag-surface visuals in both light and dark modes.
+  - WebUI automatically follows device/system dark-light preference at runtime and keeps styling parity with desktop in both modes.
+  - Keep WebUI tag chips visually consistent with desktop across themes:
+    - chip text/icons remain white in both light and dark modes,
+    - apply consistent chip drop-shadow styling matching desktop.
+  - Fix WebUI tag editor category reorder behavior so move-up/move-down operations are treated as apply-worthy changes and activate apply/save affordances.
+  - Update WebUI media-container controls layout to match desktop intent:
+    - replace the bottom-center edit-tags control with a mute control matching desktop mute-button behavior,
+    - move edit-tags action to the top-right controls cluster, positioned left of favorite.
+  - Add control-only shadow treatment on the WebUI media container controls (do not dim or shadow the full media container surface).
+- **Acceptance criteria**:
+  - Web refresh-status projections provide actionable stage/progress detail comparable to desktop, including parity for the consolidated refresh-complete summary (`Core refresh complete | Source | Duration | Loudness | Thumbnails`) using the same compact formatting rules as the desktop app (non-zero-only segments where applicable, `all cached` phrasing for duration/loudness no-scan cases, aligned thumbnail/source token vocabulary).
+  - WebUI category move-up/move-down actions in tag editor activate apply/save state and persist correctly when applied.
+  - WebUI media controls include a desktop-matching mute button in the bottom-center controls position, and edit-tags is moved to top-right immediately left of favorite.
+  - WebUI media-container control chrome uses control-only shadow treatment without darkening the full media container background.
+  - WebUI automatically follows device/system dark-light preference at runtime and keeps styling parity with desktop in both modes.
+  - WebUI tag chips preserve white text/icons with consistent drop-shadow treatment in both light and dark modes.
+  - No regressions to previously completed reliability fixes (compatibility gating, reconnect/resync, deterministic testing simulations).
+- **Verification evidence**:
+  - Automated: `dotnet build ReelRoulette.sln`, `dotnet test ReelRoulette.sln`, WebUI `npm run verify` (contracts, typecheck, Vitest including refresh projection cases, production build + output verify).
+  - Implementation: `src/clients/web/ReelRoulette.WebUI` — `refreshStatusProjection.ts` + `coerceRefreshSnapshot` wired from `app.js` for SSE refresh lines; tag editor `tagEditorCategoryOrderDirty`; `shell.ts` overlay layout (mute in transport row, tag edit top-right); `styles.css` control-only drop shadows and `theme-light`/`theme-dark` via `prefers-color-scheme` in `main.ts`; tag-chip styling unchanged for white glyphs + text shadows across themes.
+  - Docs: `CHANGELOG.md` `[Unreleased]`, `CONTEXT.md`, `docs/checklists/testing-checklist.md`, `COMMIT-MESSAGE.txt` updated for this landing.
+- **Deferrals / Follow-ups**:
+  - WebUI `localStorage` persistence for mute preference (desktop persists volume/mute in settings) remains optional future UX if desired.
 
 ### M9e - Cross-Platform Library Migration
 

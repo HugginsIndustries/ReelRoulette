@@ -19,8 +19,12 @@ Instructions:
 
 Commit Message:
 
-Docs: Near-term milestone reorder (M9f–M10) and M9g sign-off refinements
+M9f: WebUI polish — refresh parity, theme, controls, tag reorder
 
-- **M9f** is **WebUI UX/UI Polish** (in progress); **M9g** is **Linux Release Readiness and Sign-off**; **M10** is **End-User README and Contributor Dev Documentation**—single ordered block after M9e, with duplicate trailing **M9g**/**M10** sections removed.
-- **M9g** deferred “Owns” list drops the README/dev doc milestone (**M10** is scheduled after **M9g**, so **M9g** does not own its deferrals).
-- **M9g** **Windows** server tray: scope and acceptance call for **review/documentation** and **release-tracking** notes for known Avalonia Win32 tray issues instead of blocking closure on full parity.
+- Align WebUI refresh status with desktop completion summary and running-stage formatting; SSE path uses `buildRefreshStatusMessage` + `coerceRefreshSnapshot` from `refreshStatusProjection.ts`.
+- Tag editor: category move up/down sets `tagEditorCategoryOrderDirty` so Apply enables and existing upsert-category apply persists order.
+- Overlay: mute in bottom transport row (video-only), edit-tags top-right left of favorite; control-only drop shadows (no full media scrim).
+- System light/dark via `prefers-color-scheme` (`theme-light` / `theme-dark`) and CSS variables for shell + tag editor surfaces.
+- Milestone/docs: `MILESTONES.md` completion entry, `CHANGELOG.md` `[Unreleased]`, `CONTEXT.md`, `docs/checklists/testing-checklist.md`.
+- WebUI pairing chrome: themed `.pair-section`; sibling of title with flex-wrap (inline between title and preset on wide viewports, stacked under 600px); non-shrinking `#app > header`, no errant `flex-grow` on title/pair rows; under 600px token field flex-fills width with **Pair** on one line (`pair-section-label-hint`).
+- WebUI pairing visibility: strip hidden by default; show on **401** from APIs (e.g. `fetchJson`, random play); hide after successful `/api/version` so auth-off or existing session does not require `pairToken` in runtime config.
