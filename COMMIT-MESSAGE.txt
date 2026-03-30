@@ -19,11 +19,8 @@ Instructions:
 
 Commit Message:
 
-Refactor: Thin desktop media/refresh; unified Windows native deps
+Docs: Near-term milestone reorder (M9f–M10) and M9g sign-off refinements
 
-- Desktop: remove dead local ffprobe duration path; trim NativeBinaryHelper to LibVLC only; library duration / ffprobe refresh stay server-authoritative.
-- Desktop: remove orphaned client auto-refresh timer and pointer idle tracking; drop unused ParseLoudnessFromFFmpegOutput; keep settings → core sync for server refresh policy.
-- Desktop Settings: remove legacy auto-refresh “only when idle” / idle-threshold state (server-owned scheduling).
-- Add `tools/scripts/fetch-native-deps.ps1` (gyan.dev FFmpeg ZIP + LibVLC from NuGet cache or VideoLAN mirror; `.versions.json`, SHA-256, `-Force`); gitignore `runtimes/`, remove tracked `libvlc` tree, add `VideoLAN.LibVLC.Windows` to the desktop project.
-- Windows packaging invokes fetch when `runtimes/win-x64/native/` is incomplete; stage ffmpeg/ffprobe into server publish and LibVLC into desktop publish (no Chocolatey).
-- Align README, dev-setup, CONTEXT, domain-inventory, testing-checklist, and CHANGELOG [Unreleased].
+- **M9f** is **WebUI UX/UI Polish** (in progress); **M9g** is **Linux Release Readiness and Sign-off**; **M10** is **End-User README and Contributor Dev Documentation**—single ordered block after M9e, with duplicate trailing **M9g**/**M10** sections removed.
+- **M9g** deferred “Owns” list drops the README/dev doc milestone (**M10** is scheduled after **M9g**, so **M9g** does not own its deferrals).
+- **M9g** **Windows** server tray: scope and acceptance call for **review/documentation** and **release-tracking** notes for known Avalonia Win32 tray issues instead of blocking closure on full parity.

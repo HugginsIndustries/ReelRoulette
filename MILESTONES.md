@@ -91,7 +91,54 @@ Do not use this file for detailed architecture explanation or current capability
 
 Last milestone completed: M9e
 
-### M9f - End-User README and Contributor Dev Documentation
+### M9f - WebUI UX/UI Polish
+
+- **Status**: 🚧 In Progress
+- **Goal**: Deliver WebUI UX/UI polish and theme parity with desktop behavior without changing core API-first ownership boundaries.
+- **Scope**:
+  - Web refresh-status projections provide actionable stage/progress detail comparable to desktop, including parity for the consolidated refresh-complete summary (`Core refresh complete | Source | Duration | Loudness | Thumbnails`) using the same compact formatting rules as the desktop app (non-zero-only segments where applicable, `all cached` phrasing for duration/loudness no-scan cases, aligned thumbnail/source token vocabulary).
+  - Add WebUI runtime theme detection (system/device dark or light mode) and apply matching theme behavior automatically.
+  - Ensure WebUI styling parity with desktop for tag editor and related tag-surface visuals in both light and dark modes.
+  - WebUI automatically follows device/system dark-light preference at runtime and keeps styling parity with desktop in both modes.
+  - Keep WebUI tag chips visually consistent with desktop across themes:
+    - chip text/icons remain white in both light and dark modes,
+    - apply consistent chip drop-shadow styling matching desktop.
+  - Fix WebUI tag editor category reorder behavior so move-up/move-down operations are treated as apply-worthy changes and activate apply/save affordances.
+  - Update WebUI media-container controls layout to match desktop intent:
+    - replace the bottom-center edit-tags control with a mute control matching desktop mute-button behavior,
+    - move edit-tags action to the top-right controls cluster, positioned left of favorite.
+  - Add control-only shadow treatment on the WebUI media container controls (do not dim or shadow the full media container surface).
+- **Acceptance criteria**:
+  - Web refresh-status projections provide actionable stage/progress detail comparable to desktop, including parity for the consolidated refresh-complete summary (`Core refresh complete | Source | Duration | Loudness | Thumbnails`) using the same compact formatting rules as the desktop app (non-zero-only segments where applicable, `all cached` phrasing for duration/loudness no-scan cases, aligned thumbnail/source token vocabulary).
+  - WebUI category move-up/move-down actions in tag editor activate apply/save state and persist correctly when applied.
+  - WebUI media controls include a desktop-matching mute button in the bottom-center controls position, and edit-tags is moved to top-right immediately left of favorite.
+  - WebUI media-container control chrome uses control-only shadow treatment without darkening the full media container background.
+  - WebUI automatically follows device/system dark-light preference at runtime and keeps styling parity with desktop in both modes.
+  - WebUI tag chips preserve white text/icons with consistent drop-shadow treatment in both light and dark modes.
+  - No regressions to previously completed reliability fixes (compatibility gating, reconnect/resync, deterministic testing simulations).
+
+### M9g - Linux Release Readiness and Sign-off
+
+- **Status**: ⏳ Planned
+- **Goal**: Final Linux + cross-platform tray sign-off for server and **Desktop** client distribution.
+- **Scope**:
+  - **Owns** the comprehensive automated + manual verification **deferred** from **Avalonia Server Tray + Linux Runtime Baseline**, **Linux Packaging (Server + Desktop)**, **Linux Installation UX**, and **CI Linux Distribution Gates**: full cross-platform matrix (**Windows** + **Linux**), completed `docs/checklists/testing-checklist.md` with PASS/FAIL evidence, and packaged-artifact smokes where applicable.
+  - Full automated + manual matrix on **CachyOS** (`linux-x64`): server (Avalonia tray + headless), **Desktop** client, WebUI/operator against server; include **XDG Autostart** on/off validation for **Launch Server on Startup** on **Linux**.
+  - AppImage launch, application menu registration, and install script end-to-end on a clean **CachyOS** user profile verified in both tray-capable and headless scenarios.
+  - **Windows** server tray and autostart: status **reviewed and documented** against the current baseline; **known open issues** with Avalonia/Win32 tray (if any remain) are **called out in release tracking**—this milestone is **not** blocked on full tray parity alone.
+  - End-to-end packaged install/run; release notes and tracking updates.
+- **Acceptance criteria**:
+  - All automated gates green (build/test/web verify/package/smoke) for Linux and **Windows**.
+  - Manual checklist complete with PASS/FAIL evidence (tray-capable vs tray-unavailable on Linux; **Linux** autostart on/off evidence).
+  - No critical Linux-only regressions; **Desktop** client behaviors accepted by spot-check matrix where exercised; **Windows** server tray status **reviewed and documented**, with any unresolved Avalonia Win32 tray reliability called out in **release tracking** (does not indefinitely defer this milestone).
+  - Tracking docs and changelog reflect **Desktop** naming (`desktop` paths) and Linux-ready state.
+- **Verification evidence**:
+  - Completed checklist entries in `docs/checklists/testing-checklist.md`.
+  - Environment matrix (CachyOS + Windows) noted in evidence bundle.
+  - CI evidence for Linux artifacts.
+  - Updated `MILESTONES.md`, `CHANGELOG.md`, and `COMMIT_MESSAGE.txt` entries for final state.
+
+### M10 - End-User README and Contributor Dev Documentation
 
 - **Status**: ⏳ Planned
 - **Goal**: Make `README.md` the primary, non-technical guide for installing and running ReelRoulette on **Windows** and on **Linux**, with **Debian/Ubuntu-family**, **Fedora-family**, and **Arch-based** distributions explicitly documented for runtime setup—while concentrating contributor and developer detail in `docs/dev-setup.md` with a single canonical command/script reference.
@@ -131,53 +178,6 @@ Last milestone completed: M9e
   - Maintainer spot-checks while writing docs are sufficient for closing this milestone; formal dry-run evidence (tray-capable + headless on **CachyOS**, full checklist pass) remains **deferred** to **Linux Release Readiness and Sign-off**.
 - **Deferrals / Follow-ups**:
   - Formal doc validation dry-runs and exhaustive checklist completion → **Linux Release Readiness and Sign-off**.
-
-### M9g - Linux Release Readiness and Sign-off
-
-- **Status**: ⏳ Planned
-- **Goal**: Final Linux + cross-platform tray sign-off for server and **Desktop** client distribution.
-- **Scope**:
-  - **Owns** the comprehensive automated + manual verification **deferred** from **Avalonia Server Tray + Linux Runtime Baseline**, **Linux Packaging (Server + Desktop)**, **Linux Installation UX**, **CI Linux Distribution Gates**, and **End-User README and Contributor Dev Documentation**: full cross-platform matrix (**Windows** + **Linux**), completed `docs/checklists/testing-checklist.md` with PASS/FAIL evidence, and packaged-artifact smokes where applicable.
-  - Full automated + manual matrix on **CachyOS** (`linux-x64`): server (Avalonia tray + headless), **Desktop** client, WebUI/operator against server; include **XDG Autostart** on/off validation for **Launch Server on Startup** on **Linux**.
-  - AppImage launch, application menu registration, and install script end-to-end on a clean **CachyOS** user profile verified in both tray-capable and headless scenarios.
-  - Confirm **Windows** tray parity after Avalonia port (no regression vs accepted baseline behaviors), including **Windows** autostart toggle behavior.
-  - End-to-end packaged install/run; release notes and tracking updates.
-- **Acceptance criteria**:
-  - All automated gates green (build/test/web verify/package/smoke) for Linux and **Windows**.
-  - Manual checklist complete with PASS/FAIL evidence (tray-capable vs tray-unavailable on Linux; **Linux** autostart on/off evidence).
-  - No critical Linux-only regressions; **Windows** server tray and **Desktop** client behaviors accepted by spot-check matrix.
-  - Tracking docs and changelog reflect **Desktop** naming (`desktop` paths) and Linux-ready state.
-- **Verification evidence**:
-  - Completed checklist entries in `docs/checklists/testing-checklist.md`.
-  - Environment matrix (CachyOS + Windows) noted in evidence bundle.
-  - CI evidence for Linux artifacts.
-  - Updated `MILESTONES.md`, `CHANGELOG.md`, and `COMMIT_MESSAGE.txt` entries for final state.
-
-### M10 - WebUI UX/UI Polish
-
-- **Status**: 🚧 In Progress
-- **Goal**: Deliver WebUI UX/UI polish and theme parity with desktop behavior without changing core API-first ownership boundaries.
-- **Scope**:
-  - Web refresh-status projections provide actionable stage/progress detail comparable to desktop, including parity for the consolidated refresh-complete summary (`Core refresh complete | Source | Duration | Loudness | Thumbnails`) using the same compact formatting rules as the desktop app (non-zero-only segments where applicable, `all cached` phrasing for duration/loudness no-scan cases, aligned thumbnail/source token vocabulary).
-  - Add WebUI runtime theme detection (system/device dark or light mode) and apply matching theme behavior automatically.
-  - Ensure WebUI styling parity with desktop for tag editor and related tag-surface visuals in both light and dark modes.
-  - WebUI automatically follows device/system dark-light preference at runtime and keeps styling parity with desktop in both modes.
-  - Keep WebUI tag chips visually consistent with desktop across themes:
-    - chip text/icons remain white in both light and dark modes,
-    - apply consistent chip drop-shadow styling matching desktop.
-  - Fix WebUI tag editor category reorder behavior so move-up/move-down operations are treated as apply-worthy changes and activate apply/save affordances.
-  - Update WebUI media-container controls layout to match desktop intent:
-    - replace the bottom-center edit-tags control with a mute control matching desktop mute-button behavior,
-    - move edit-tags action to the top-right controls cluster, positioned left of favorite.
-  - Add control-only shadow treatment on the WebUI media container controls (do not dim or shadow the full media container surface).
-- **Acceptance criteria**:
-  - Web refresh-status projections provide actionable stage/progress detail comparable to desktop, including parity for the consolidated refresh-complete summary (`Core refresh complete | Source | Duration | Loudness | Thumbnails`) using the same compact formatting rules as the desktop app (non-zero-only segments where applicable, `all cached` phrasing for duration/loudness no-scan cases, aligned thumbnail/source token vocabulary).
-  - WebUI category move-up/move-down actions in tag editor activate apply/save state and persist correctly when applied.
-  - WebUI media controls include a desktop-matching mute button in the bottom-center controls position, and edit-tags is moved to top-right immediately left of favorite.
-  - WebUI media-container control chrome uses control-only shadow treatment without darkening the full media container background.
-  - WebUI automatically follows device/system dark-light preference at runtime and keeps styling parity with desktop in both modes.
-  - WebUI tag chips preserve white text/icons with consistent drop-shadow treatment in both light and dark modes.
-  - No regressions to previously completed reliability fixes (compatibility gating, reconnect/resync, deterministic testing simulations).
 
 ### M11a - Structured JSONL Schema + Server Writer Foundation
 
