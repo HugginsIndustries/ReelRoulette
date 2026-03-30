@@ -17,6 +17,39 @@ if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
     exit 1
 }
 
+function Invoke-EnsureWinX64NativeDeps {
+    param([Parameter(Mandatory = $true)][string]$Root)
+    if ($Runtime -ne "win-x64") {
+        return
+    }
+    $nativeRoot = Join-Path $Root "runtimes\win-x64\native"
+    $need = -not (Test-Path (Join-Path $nativeRoot "ffmpeg.exe")) `
+        -or -not (Test-Path (Join-Path $nativeRoot "ffprobe.exe")) `
+        -or -not (Test-Path (Join-Path $nativeRoot "libvlc\libvlc.dll"))
+    if ($need) {
+        $fetch = Join-Path $PSScriptRoot "fetch-native-deps.ps1"
+        & $fetch -RepoRoot $Root
+    }
+}
+
+function Ensure-WinServerNativeAssets {
+    param(
+        [Parameter(Mandatory = $true)][string]$RepoRoot,
+        [Parameter(Mandatory = $true)][string]$PublishDir
+    )
+    $src = Join-Path $RepoRoot "runtimes\win-x64\native"
+    $dest = Join-Path $PublishDir "runtimes\win-x64\native"
+    New-Item -ItemType Directory -Force -Path $dest | Out-Null
+    foreach ($exe in @("ffmpeg.exe", "ffprobe.exe")) {
+        $from = Join-Path $src $exe
+        if (-not (Test-Path -LiteralPath $from)) {
+            Write-Error "Missing $exe under $src. Run pwsh ./tools/scripts/fetch-native-deps.ps1 from the repo root."
+            exit 1
+        }
+        Copy-Item -LiteralPath $from -Destination (Join-Path $dest $exe) -Force
+    }
+}
+
 function Resolve-IsccPath {
     $fromPath = Get-Command iscc -ErrorAction SilentlyContinue
     if ($fromPath) {
@@ -83,6 +116,8 @@ New-Item -ItemType Directory -Force -Path $installerOutDir | Out-Null
 
 Push-Location $repoRoot
 try {
+    Invoke-EnsureWinX64NativeDeps -Root $repoRoot
+
     Push-Location $webUiProjectDir
     try {
         npm install
@@ -128,6 +163,10 @@ try {
     New-Item -ItemType Directory -Force -Path $publishWebRoot | Out-Null
     Copy-Item -Recurse -Force (Join-Path $webUiDistPath "*") $publishWebRoot
     Copy-Item -Force $sharedIconPath (Join-Path $publishWebRoot "HI.ico")
+
+    if ($Runtime -eq "win-x64") {
+        Ensure-WinServerNativeAssets -RepoRoot $repoRoot -PublishDir $publishDir
+    }
 
     & $isccPath `
         "/DAppVersion=$Version" `

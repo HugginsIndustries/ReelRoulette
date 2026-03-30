@@ -128,8 +128,6 @@ namespace ReelRoulette
         private bool _forceRescanLoudnessOnNextRefresh;
         private bool _forceRescanDurationOnNextRefresh;
         private int _fingerprintScanMaxDegreeOfParallelism = 4;
-        private bool _autoRefreshOnlyWhenIdle = false;
-        private int _autoRefreshIdleThresholdMinutes = 1;
 
         // Web UI settings
         private bool _webRemoteEnabled = false;
@@ -178,27 +176,6 @@ namespace ReelRoulette
             "api.random.filterState",
             "api.presets.match"
         ];
-
-        // Duration scanning
-        private CancellationTokenSource? _scanCancellationSource = null;
-        private static SemaphoreSlim? _ffprobeSemaphore;
-        private static readonly object _ffprobeSemaphoreLock = new object();
-        private DateTime _lastDurationStatusUpdate = DateTime.MinValue;
-        private readonly object _durationStatusUpdateLock = new object();
-        private bool _isDurationScanRunning = false;
-
-        // Loudness scanning
-        private static readonly object _ffmpegSemaphoreLock = new object();
-        private DateTime _lastLoudnessStatusUpdate = DateTime.MinValue;
-        private readonly object _loudnessStatusUpdateLock = new object();
-        private bool _isLoudnessScanRunning = false;
-
-        // Auto-refresh sources
-        private System.Timers.Timer? _autoRefreshSourcesTimer;
-        private bool _isAutoRefreshRunning = false;
-        private DateTime _lastUserInteractionUtc = DateTime.UtcNow;
-        private DateTime _lastAutoRefreshProgressLogUtc = DateTime.MinValue;
-        private readonly object _autoRefreshLock = new object();
 
         // Status message throttling (minimum display window + coalescing)
         private DateTime _lastStatusMessageTime = DateTime.MinValue;
@@ -1105,7 +1082,6 @@ namespace ReelRoulette
             this.AddHandler(KeyDownEvent, OnGlobalKeyDown, 
                 RoutingStrategies.Tunnel, 
                 handledEventsToo: true);
-            InitializeUserActivityTracking();
 
             // Listen to WindowState changes to keep fullscreen state in sync
             // Note: This subscribes to Avalonia's PropertyChanged (from AvaloniaObject), not INotifyPropertyChanged
@@ -1149,10 +1125,7 @@ namespace ReelRoulette
         protected override void OnClosed(EventArgs e)
         {
             Log("OnClosed: Window closing, saving settings...");
-            
-            // Cancel any ongoing scan
-            _scanCancellationSource?.Cancel();
-            _scanCancellationSource?.Dispose();
+
             _coreEventsCancellationSource?.Cancel();
             StopCoreReconnectLoop();
 
@@ -1189,9 +1162,6 @@ namespace ReelRoulette
                 _autoPlayTimer.Dispose();
                 _autoPlayTimer = null;
             }
-            
-            // Clean up auto-refresh timer
-            StopAutoRefreshTimer();
 
             // Clean up photo display timer
             if (_photoDisplayTimer != null)
@@ -2143,196 +2113,6 @@ namespace ReelRoulette
             });
         }
 
-        private static async Task<TimeSpan?> GetVideoDurationAsync(string filePath, CancellationToken cancellationToken)
-        {
-            // Initialize semaphore on first use (thread-safe)
-            if (_ffprobeSemaphore == null)
-            {
-                lock (_ffprobeSemaphoreLock)
-                {
-                    if (_ffprobeSemaphore == null)
-                    {
-                        var maxConcurrency = Math.Clamp(Environment.ProcessorCount / 2, 2, 8);
-                        _ffprobeSemaphore = new SemaphoreSlim(maxConcurrency, maxConcurrency);
-                        Log($"GetVideoDurationAsync: Initialized FFprobe semaphore with max concurrency: {maxConcurrency}");
-                    }
-                }
-            }
-
-            bool semaphoreAcquired = false;
-            try
-            {
-                await _ffprobeSemaphore.WaitAsync(cancellationToken);
-                semaphoreAcquired = true;
-                Log($"GetVideoDurationAsync: Acquired semaphore for file: {Path.GetFileName(filePath)}");
-                // Get FFprobe path (bundled or system)
-                var ffprobePath = NativeBinaryHelper.GetFFprobePath();
-                if (string.IsNullOrEmpty(ffprobePath))
-                {
-                    // Fall back to system ffprobe on PATH
-                    ffprobePath = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "ffprobe.exe" : "ffprobe";
-                    Log($"GetVideoDurationAsync: Using system FFprobe: {ffprobePath}");
-                }
-                else
-                {
-                    Log($"GetVideoDurationAsync: Using bundled FFprobe: {ffprobePath}");
-                }
-
-                var startInfo = new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = ffprobePath,
-                    UseShellExecute = false,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    CreateNoWindow = true
-                };
-
-                // Use ArgumentList to safely handle paths with spaces and special characters
-                startInfo.ArgumentList.Add("-v");
-                startInfo.ArgumentList.Add("error");
-                startInfo.ArgumentList.Add("-select_streams");
-                startInfo.ArgumentList.Add("v:0");
-                startInfo.ArgumentList.Add("-show_entries");
-                startInfo.ArgumentList.Add("format=duration,stream=duration");
-                startInfo.ArgumentList.Add("-of");
-                startInfo.ArgumentList.Add("json");
-                startInfo.ArgumentList.Add("-i");
-                startInfo.ArgumentList.Add(filePath);
-
-                using var process = new System.Diagnostics.Process { StartInfo = startInfo };
-                using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-                using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
-
-                var outputTask = Task.Run(async () =>
-                {
-                    try
-                    {
-                        process.Start();
-                        // Read both stdout and stderr to prevent deadlocks
-                        var stdoutTask = process.StandardOutput.ReadToEndAsync(linkedCts.Token);
-                        var stderrTask = process.StandardError.ReadToEndAsync(linkedCts.Token);
-                        await process.WaitForExitAsync(linkedCts.Token);
-                        await Task.WhenAll(stdoutTask, stderrTask);
-                        return await stdoutTask;
-                    }
-                    catch (OperationCanceledException)
-                    {
-                        try
-                        {
-                            if (!process.HasExited)
-                            {
-                                process.Kill();
-                            }
-                        }
-                        catch (Exception killEx)
-                        {
-                            Log($"GetVideoDurationAsync: ERROR killing process after cancellation - Exception: {killEx.GetType().Name}, Message: {killEx.Message}");
-                        }
-                        throw;
-                    }
-                }, linkedCts.Token);
-
-                try
-                {
-                    var output = await outputTask;
-                    
-                    if (process.ExitCode != 0 || string.IsNullOrWhiteSpace(output))
-                    {
-                        Log($"GetVideoDurationAsync: FFprobe failed for {Path.GetFileName(filePath)} - Exit code: {process.ExitCode}, Output empty: {string.IsNullOrWhiteSpace(output)}");
-                        return null;
-                    }
-
-                    // Parse JSON output
-                    using var doc = JsonDocument.Parse(output);
-                    var root = doc.RootElement;
-
-                    // Prefer format.duration if present and > 0
-                    if (root.TryGetProperty("format", out var format) &&
-                        format.TryGetProperty("duration", out var formatDuration) &&
-                        formatDuration.ValueKind == JsonValueKind.String)
-                    {
-                        if (double.TryParse(formatDuration.GetString(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var durationSeconds) &&
-                            durationSeconds > 0)
-                        {
-                            var duration = TimeSpan.FromSeconds(durationSeconds);
-                            Log($"GetVideoDurationAsync: Successfully got duration from format.duration for {Path.GetFileName(filePath)}: {duration.TotalSeconds:F2}s");
-                            return duration;
-                        }
-                    }
-
-                    // Fall back to stream duration
-                    if (root.TryGetProperty("streams", out var streams) &&
-                        streams.ValueKind == JsonValueKind.Array &&
-                        streams.GetArrayLength() > 0)
-                    {
-                        var firstStream = streams[0];
-                        if (firstStream.TryGetProperty("duration", out var streamDuration) &&
-                            streamDuration.ValueKind == JsonValueKind.String)
-                        {
-                            if (double.TryParse(streamDuration.GetString(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var durationSeconds) &&
-                                durationSeconds > 0)
-                            {
-                                var duration = TimeSpan.FromSeconds(durationSeconds);
-                                Log($"GetVideoDurationAsync: Successfully got duration from stream.duration for {Path.GetFileName(filePath)}: {duration.TotalSeconds:F2}s");
-                                return duration;
-                            }
-                        }
-                    }
-
-                    Log($"GetVideoDurationAsync: Could not parse duration from FFprobe output for {Path.GetFileName(filePath)}");
-                    return null;
-                }
-                catch (OperationCanceledException)
-                {
-                    Log($"GetVideoDurationAsync: Operation cancelled or timed out for {Path.GetFileName(filePath)}");
-                    // Timeout or cancellation - ensure process is killed
-                    try
-                    {
-                        if (!process.HasExited)
-                        {
-                            process.Kill();
-                            Log($"GetVideoDurationAsync: Killed FFprobe process for {Path.GetFileName(filePath)}");
-                        }
-                    }
-                    catch (Exception killEx)
-                    {
-                        Log($"GetVideoDurationAsync: ERROR killing process - {killEx.Message}");
-                    }
-                    return null;
-                }
-                catch (JsonException ex)
-                {
-                    Log($"GetVideoDurationAsync: JSON parse error for {Path.GetFileName(filePath)} - Exception: {ex.GetType().Name}, Message: {ex.Message}");
-                    Log($"GetVideoDurationAsync: ERROR - Stack trace: {ex.StackTrace}");
-                    if (ex.InnerException != null)
-                    {
-                        Log($"GetVideoDurationAsync: ERROR - Inner exception: {ex.InnerException.GetType().Name}, Message: {ex.InnerException.Message}");
-                    }
-                    // Invalid JSON - file might be corrupted or not a video
-                    return null;
-                }
-                catch (Exception ex)
-                {
-                    Log($"GetVideoDurationAsync: ERROR processing {Path.GetFileName(filePath)} - Exception: {ex.GetType().Name}, Message: {ex.Message}");
-                    Log($"GetVideoDurationAsync: ERROR - Stack trace: {ex.StackTrace}");
-                    if (ex.InnerException != null)
-                    {
-                        Log($"GetVideoDurationAsync: ERROR - Inner exception: {ex.InnerException.GetType().Name}, Message: {ex.InnerException.Message}");
-                    }
-                    // Other errors - return null to skip this file
-                    return null;
-                }
-            }
-            finally
-            {
-                if (semaphoreAcquired)
-                {
-                    _ffprobeSemaphore.Release();
-                    Log($"GetVideoDurationAsync: Released semaphore for {Path.GetFileName(filePath)}");
-                }
-            }
-        }
-
         private void StartLoudnessScan(string rootFolder, bool rescanAll = false)
         {
             Log($"StartLoudnessScan: Delegating loudness scan request to core refresh pipeline for folder: {rootFolder}, RescanAll: {rescanAll}");
@@ -2344,193 +2124,6 @@ namespace ReelRoulette
                     SetStatusMessage("Loudness scan request deferred: core refresh unavailable or already running.", 0);
                 }
             });
-        }
-
-                private FileLoudnessInfo? ParseLoudnessFromFFmpegOutput(string output, int exitCode = 0)
-        {
-            // Parse loudness from ffmpeg stderr output
-            // Supports both new ebur128 format and legacy volumedetect format for backward compatibility
-            
-            double? integratedLoudness = null;
-            double? peakDb = null;
-            bool hasAudio = false;
-
-            var lines = output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-            
-            // Try to parse ebur128 format first (new, more accurate)
-            foreach (var line in lines)
-            {
-                // Look for integrated loudness: "I:         -23.0 LUFS"
-                if (line.Contains("I:") && line.Contains("LUFS"))
-                {
-                    var parts = line.Split(new[] { ':' }, StringSplitOptions.RemoveEmptyEntries);
-                    if (parts.Length >= 2)
-                    {
-                        var valueStr = parts[1].Replace("LUFS", "").Trim();
-                        if (double.TryParse(valueStr, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var loudness))
-                        {
-                            integratedLoudness = loudness;
-                            hasAudio = true;
-                            Log($"ParseLoudnessFromFFmpegOutput: Parsed EBU R128 integrated loudness: {loudness:F2} LUFS");
-                        }
-                    }
-                }
-                
-                // Look for true peak: "Peak:       -5.2 dBFS" or "True peak:    -5.2 dBFS"
-                if ((line.Contains("Peak:") || line.Contains("True peak:")) && line.Contains("dBFS"))
-                {
-                    var parts = line.Split(new[] { ':' }, StringSplitOptions.RemoveEmptyEntries);
-                    if (parts.Length >= 2)
-                    {
-                        var valueStr = parts[1].Replace("dBFS", "").Trim();
-                        if (double.TryParse(valueStr, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var peak))
-                        {
-                            peakDb = peak;
-                            Log($"ParseLoudnessFromFFmpegOutput: Parsed EBU R128 true peak: {peak:F2} dBFS");
-                        }
-                    }
-                }
-            }
-            
-            // If ebur128 parsing found data, use it
-            if (integratedLoudness.HasValue)
-            {
-                Log($"ParseLoudnessFromFFmpegOutput: Using EBU R128 data - Integrated: {integratedLoudness:F2} LUFS, Peak: {peakDb?.ToString("F2") ?? "N/A"} dBFS");
-                return new FileLoudnessInfo
-                {
-                    HasAudio = true,
-                    MeanVolumeDb = integratedLoudness.Value,
-                    PeakDb = peakDb ?? -5.0 // Default peak if not found
-                };
-            }
-            
-            // Fall back to legacy volumedetect format for backward compatibility
-            Log("ParseLoudnessFromFFmpegOutput: EBU R128 data not found, trying legacy volumedetect format");
-            
-            double? meanVolumeDb = null;
-            
-            foreach (var line in lines)
-            {
-                // Look for mean_volume
-                var meanIndex = line.IndexOf("mean_volume:", StringComparison.OrdinalIgnoreCase);
-                if (meanIndex >= 0)
-                {
-                    var dbIndex = line.IndexOf("dB", meanIndex, StringComparison.OrdinalIgnoreCase);
-                    if (dbIndex > meanIndex)
-                    {
-                        var valueStr = line.Substring(meanIndex + "mean_volume:".Length, dbIndex - meanIndex - "mean_volume:".Length).Trim();
-                        if (double.TryParse(valueStr, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var meanValue))
-                        {
-                            meanVolumeDb = meanValue;
-                            hasAudio = true;
-                        }
-                    }
-                }
-
-                // Look for max_volume
-                var maxIndex = line.IndexOf("max_volume:", StringComparison.OrdinalIgnoreCase);
-                if (maxIndex >= 0)
-                {
-                    var dbIndex = line.IndexOf("dB", maxIndex, StringComparison.OrdinalIgnoreCase);
-                    if (dbIndex > maxIndex)
-                    {
-                        var valueStr = line.Substring(maxIndex + "max_volume:".Length, dbIndex - maxIndex - "max_volume:".Length).Trim();
-                        if (double.TryParse(valueStr, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var maxValue))
-                        {
-                            peakDb = maxValue;
-                        }
-                    }
-                }
-            }
-
-            if (meanVolumeDb.HasValue)
-            {
-                Log($"ParseLoudnessFromFFmpegOutput: Using legacy volumedetect data - Mean: {meanVolumeDb:F2} dB, Peak: {peakDb?.ToString("F2") ?? "N/A"} dB");
-                // Check for -91.0 dB placeholder (no real audio)
-                // Mean of -91.0 indicates no audio regardless of whether peak data is available
-                if (Math.Abs(meanVolumeDb.Value - (-91.0)) < 0.1 && (!peakDb.HasValue || Math.Abs(peakDb.Value - (-91.0)) < 0.1))
-                {
-                    Log("ParseLoudnessFromFFmpegOutput: Detected -91.0 dB placeholder - no audio");
-                    return new FileLoudnessInfo
-                    {
-                        MeanVolumeDb = 0.0,
-                        PeakDb = 0.0,
-                        HasAudio = false
-                    };
-                }
-                
-                return new FileLoudnessInfo
-                {
-                    HasAudio = hasAudio,
-                    MeanVolumeDb = meanVolumeDb.Value,
-                    PeakDb = peakDb ?? -5.0
-                };
-            }
-
-            // Check if file was opened successfully
-            // With -vn flag, we should still see "Input #0" if the file opened
-            bool fileOpenedSuccessfully = output.Contains("Input #0", StringComparison.OrdinalIgnoreCase);
-            
-            // Check if file has video stream but no audio stream
-            // This is the key indicator: we see "Stream #0:" for video but no "Stream #0:" for audio
-            bool hasVideoStream = output.Contains("Stream #0:") && output.Contains("Video:", StringComparison.OrdinalIgnoreCase);
-            bool hasAudioStream = output.Contains("Stream #0:") && output.Contains("Audio:", StringComparison.OrdinalIgnoreCase);
-            
-            // Check for "no audio stream" messages - comprehensive detection patterns
-            // Common ffmpeg messages when no audio stream exists:
-            bool hasExplicitNoAudioMessage = 
-                output.Contains("does not contain any audio stream", StringComparison.OrdinalIgnoreCase) ||
-                output.Contains("matches no streams", StringComparison.OrdinalIgnoreCase) ||
-                output.Contains("no audio stream", StringComparison.OrdinalIgnoreCase) ||
-                output.Contains("Stream map '0:a' matches no streams", StringComparison.OrdinalIgnoreCase) ||
-                output.Contains("no audio streams found", StringComparison.OrdinalIgnoreCase) ||
-                (output.Contains("Could not find codec parameters", StringComparison.OrdinalIgnoreCase) && 
-                 output.Contains("audio", StringComparison.OrdinalIgnoreCase));
-
-            // Check for the specific error pattern when -vn is used on a file with no audio:
-            // "Output file does not contain any stream" - this happens because there's nothing to output
-            // when we suppress video (-vn) and there's no audio to process
-            bool hasNoStreamOutputError = output.Contains("Output file does not contain any stream", StringComparison.OrdinalIgnoreCase) ||
-                                         (output.Contains("Error opening output file", StringComparison.OrdinalIgnoreCase) && 
-                                          output.Contains("Invalid argument", StringComparison.OrdinalIgnoreCase));
-
-            // Check for fatal errors that indicate the file couldn't be processed at all
-            // These are errors that mean we couldn't even open/read the file
-            // BUT exclude the "no stream" error which is expected for no-audio files with -vn
-            bool hasFatalError = 
-                (!fileOpenedSuccessfully && output.Length > 0 && exitCode != 0) ||
-                output.Contains("Invalid data found", StringComparison.OrdinalIgnoreCase) ||
-                (output.Contains("Error opening", StringComparison.OrdinalIgnoreCase) && 
-                 !hasNoStreamOutputError && 
-                 !output.Contains("output file", StringComparison.OrdinalIgnoreCase)) ||
-                output.Contains("Permission denied", StringComparison.OrdinalIgnoreCase) ||
-                output.Contains("No such file", StringComparison.OrdinalIgnoreCase) ||
-                output.Contains("cannot open", StringComparison.OrdinalIgnoreCase) ||
-                output.Contains("does not exist", StringComparison.OrdinalIgnoreCase) ||
-                output.Contains("No space left", StringComparison.OrdinalIgnoreCase);
-
-            // Determine if this is a no-audio file (not an error)
-            // Key indicators:
-            // 1. File opened successfully (Input #0 appears)
-            // 2. Has video stream but NO audio stream
-            // 3. Exit code might be -22 (EINVAL) or other non-zero when no audio to process
-            // 4. Specific error about "Output file does not contain any stream" (expected with -vn and no audio)
-            // 5. No loudness data found
-            if (hasExplicitNoAudioMessage || 
-                (fileOpenedSuccessfully && hasVideoStream && !hasAudioStream && !meanVolumeDb.HasValue && !peakDb.HasValue) ||
-                (fileOpenedSuccessfully && hasNoStreamOutputError && !hasFatalError))
-            {
-                // This is a no-audio file, not an error
-                return new FileLoudnessInfo
-                {
-                    MeanVolumeDb = 0.0,
-                    PeakDb = 0.0,
-                    HasAudio = false
-                };
-            }
-
-            // Otherwise, parsing failed and no clear "no audio" message - this is a genuine error
-            return null;
         }
 
         private long? ParseDurationFilter(object? selectedItem)
@@ -5281,137 +4874,6 @@ namespace ReelRoulette
             StatusTextBlock.IsVisible = true;
         }
 
-        private void InitializeUserActivityTracking()
-        {
-            _lastUserInteractionUtc = DateTime.UtcNow;
-
-            this.AddHandler(PointerPressedEvent, (_, __) => { _lastUserInteractionUtc = DateTime.UtcNow; }, RoutingStrategies.Tunnel, true);
-            this.AddHandler(PointerMovedEvent, (_, __) => { _lastUserInteractionUtc = DateTime.UtcNow; }, RoutingStrategies.Tunnel, true);
-            this.AddHandler(PointerWheelChangedEvent, (_, __) => { _lastUserInteractionUtc = DateTime.UtcNow; }, RoutingStrategies.Tunnel, true);
-        }
-
-        private bool IsAutoRefreshAllowedNow(out string reason)
-        {
-            if (!_autoRefreshSourcesEnabled)
-            {
-                reason = "disabled";
-                return false;
-            }
-
-            if (_isDurationScanRunning || _isLoudnessScanRunning)
-            {
-                reason = "another library job is running";
-                return false;
-            }
-
-            if (_autoRefreshOnlyWhenIdle)
-            {
-                var idleThreshold = TimeSpan.FromMinutes(Math.Max(1, _autoRefreshIdleThresholdMinutes));
-                if (DateTime.UtcNow - _lastUserInteractionUtc < idleThreshold)
-                {
-                    reason = $"idle threshold not met ({_autoRefreshIdleThresholdMinutes}m)";
-                    return false;
-                }
-            }
-
-            reason = "allowed";
-            return true;
-        }
-
-        private void StartOrRestartAutoRefreshTimer()
-        {
-            StopAutoRefreshTimer();
-
-            if (!_autoRefreshSourcesEnabled)
-            {
-                Log("AutoRefresh: Timer not started (disabled)");
-                return;
-            }
-
-            var minutes = Math.Clamp(_autoRefreshIntervalMinutes, 5, 1440);
-            _autoRefreshIntervalMinutes = minutes;
-
-            _autoRefreshSourcesTimer = new System.Timers.Timer(TimeSpan.FromMinutes(minutes).TotalMilliseconds);
-            _autoRefreshSourcesTimer.AutoReset = true;
-            _autoRefreshSourcesTimer.Elapsed += AutoRefreshSourcesTimer_Elapsed;
-            _autoRefreshSourcesTimer.Start();
-            Log($"AutoRefresh: Timer started (interval={minutes}m, idleOnly={_autoRefreshOnlyWhenIdle}, idleThreshold={_autoRefreshIdleThresholdMinutes}m)");
-        }
-
-        private void StopAutoRefreshTimer()
-        {
-            if (_autoRefreshSourcesTimer != null)
-            {
-                _autoRefreshSourcesTimer.Stop();
-                _autoRefreshSourcesTimer.Elapsed -= AutoRefreshSourcesTimer_Elapsed;
-                _autoRefreshSourcesTimer.Dispose();
-                _autoRefreshSourcesTimer = null;
-                Log("AutoRefresh: Timer stopped");
-            }
-        }
-
-        private void AutoRefreshSourcesTimer_Elapsed(object? sender, ElapsedEventArgs e)
-        {
-            _ = Task.Run(async () => await RunAutoRefreshAsync());
-        }
-
-        private async Task RunAutoRefreshAsync()
-        {
-            lock (_autoRefreshLock)
-            {
-                if (_isAutoRefreshRunning)
-                {
-                    return;
-                }
-                _isAutoRefreshRunning = true;
-            }
-
-            try
-            {
-                if (!IsAutoRefreshAllowedNow(out var skipReason))
-                {
-                    Log($"AutoRefresh: Deferred - {skipReason}");
-                    return;
-                }
-
-                if (_libraryIndex == null)
-                {
-                    Log("AutoRefresh: Deferred - library projection unavailable");
-                    return;
-                }
-
-                var enabledSources = _libraryIndex.Sources.Count(s => s.IsEnabled);
-                if (enabledSources == 0)
-                {
-                    Log("AutoRefresh: Deferred - no enabled sources");
-                    return;
-                }
-
-                Log($"AutoRefresh: Requesting server refresh for {enabledSources} enabled source(s)");
-                var accepted = await RequestCoreRefreshAsync();
-                if (!accepted)
-                {
-                    Log("AutoRefresh: Core refresh already running or unavailable");
-                    return;
-                }
-
-                SetStatusMessage("Auto refresh: requested in core runtime.", 0);
-            }
-            catch (Exception ex)
-            {
-                SetStatusMessage($"Auto refresh: error - {ex.Message}", 0);
-                Log($"AutoRefresh: ERROR - {ex.GetType().Name}: {ex.Message}");
-                Log($"AutoRefresh: ERROR - Stack trace: {ex.StackTrace}");
-            }
-            finally
-            {
-                lock (_autoRefreshLock)
-                {
-                    _isAutoRefreshRunning = false;
-                }
-            }
-        }
-
         private void OpenFileLocation(string? path)
         {
             Log($"OpenFileLocation: Opening file location for: {path ?? "null"}");
@@ -7517,8 +6979,6 @@ namespace ReelRoulette
                 _forceRescanLoudnessOnNextRefresh = settings.ForceRescanLoudness;
                 _forceRescanDurationOnNextRefresh = settings.ForceRescanDuration;
                 _fingerprintScanMaxDegreeOfParallelism = Math.Clamp(settings.FingerprintScanMaxDegreeOfParallelism, 1, 16);
-                _autoRefreshOnlyWhenIdle = false;
-                _autoRefreshIdleThresholdMinutes = 1;
             }
             catch (Exception ex)
             {
@@ -8204,8 +7664,6 @@ namespace ReelRoulette
             _forceRescanLoudnessOnNextRefresh = false;
             _forceRescanDurationOnNextRefresh = false;
             _fingerprintScanMaxDegreeOfParallelism = 4;
-            _autoRefreshOnlyWhenIdle = false;
-            _autoRefreshIdleThresholdMinutes = 1;
             _libraryGridViewEnabled = settings.LibraryGridViewEnabled;
             Log("LoadSettings: Using core-owned refresh settings defaults until API sync.");
 
@@ -9654,8 +9112,6 @@ namespace ReelRoulette
                     _forceRescanLoudnessOnNextRefresh,
                     _forceRescanDurationOnNextRefresh,
                     _fingerprintScanMaxDegreeOfParallelism,
-                    _autoRefreshOnlyWhenIdle,
-                    _autoRefreshIdleThresholdMinutes,
                     _coreServerBaseUrl,
                     _webRemoteEnabled,
                     _webRemotePort,
@@ -9726,8 +9182,6 @@ namespace ReelRoulette
                         var oldForceLoudnessRescan = _forceRescanLoudnessOnNextRefresh;
                         var oldForceDurationRescan = _forceRescanDurationOnNextRefresh;
                         var oldFingerprintParallelism = _fingerprintScanMaxDegreeOfParallelism;
-                        var oldAutoRefreshIdleOnly = _autoRefreshOnlyWhenIdle;
-                        var oldAutoRefreshIdleThreshold = _autoRefreshIdleThresholdMinutes;
                         var oldWebRemoteEnabled = _webRemoteEnabled;
                         var oldWebRemotePort = _webRemotePort;
                         var oldWebRemoteBindOnLan = _webRemoteBindOnLan;
@@ -9775,11 +9229,9 @@ namespace ReelRoulette
                     _forceRescanLoudnessOnNextRefresh = dialog.GetForceRescanLoudness();
                     _forceRescanDurationOnNextRefresh = dialog.GetForceRescanDuration();
                     _fingerprintScanMaxDegreeOfParallelism = Math.Clamp(dialog.GetFingerprintScanMaxDegreeOfParallelism(), 1, 16);
-                    _autoRefreshOnlyWhenIdle = false;
-                    _autoRefreshIdleThresholdMinutes = 1;
                     _coreServerBaseUrl = dialog.GetCoreServerBaseUrl();
                     ClientLogRelay.SetBaseUrl(_coreServerBaseUrl);
-                    Log($"Settings: Auto-refresh settings changed - Enabled: {oldAutoRefreshEnabled} -> {_autoRefreshSourcesEnabled}, Interval: {oldAutoRefreshInterval} -> {_autoRefreshIntervalMinutes} minutes, ForceLoudness: {oldForceLoudnessRescan} -> {_forceRescanLoudnessOnNextRefresh}, ForceDuration: {oldForceDurationRescan} -> {_forceRescanDurationOnNextRefresh}, FingerprintParallelism: {oldFingerprintParallelism} -> {_fingerprintScanMaxDegreeOfParallelism} (idle settings are core-owned and disabled)");
+                    Log($"Settings: Auto-refresh settings changed - Enabled: {oldAutoRefreshEnabled} -> {_autoRefreshSourcesEnabled}, Interval: {oldAutoRefreshInterval} -> {_autoRefreshIntervalMinutes} minutes, ForceLoudness: {oldForceLoudnessRescan} -> {_forceRescanLoudnessOnNextRefresh}, ForceDuration: {oldForceDurationRescan} -> {_forceRescanDurationOnNextRefresh}, FingerprintParallelism: {oldFingerprintParallelism} -> {_fingerprintScanMaxDegreeOfParallelism} (server owns refresh scheduling)");
 
                     // Update Web UI settings
                     _webRemoteEnabled = dialog.GetWebRemoteEnabled();
@@ -9815,8 +9267,6 @@ namespace ReelRoulette
                             oldForceLoudnessRescan != _forceRescanLoudnessOnNextRefresh ||
                             oldForceDurationRescan != _forceRescanDurationOnNextRefresh ||
                             oldFingerprintParallelism != _fingerprintScanMaxDegreeOfParallelism ||
-                            oldAutoRefreshIdleOnly != _autoRefreshOnlyWhenIdle ||
-                            oldAutoRefreshIdleThreshold != _autoRefreshIdleThresholdMinutes ||
                             oldWebRemoteEnabled != _webRemoteEnabled ||
                             oldWebRemotePort != _webRemotePort ||
                             oldWebRemoteBindOnLan != _webRemoteBindOnLan ||
@@ -9829,9 +9279,7 @@ namespace ReelRoulette
                             oldAutoRefreshInterval != _autoRefreshIntervalMinutes ||
                             oldForceLoudnessRescan != _forceRescanLoudnessOnNextRefresh ||
                             oldForceDurationRescan != _forceRescanDurationOnNextRefresh ||
-                            oldFingerprintParallelism != _fingerprintScanMaxDegreeOfParallelism ||
-                            oldAutoRefreshIdleOnly != _autoRefreshOnlyWhenIdle ||
-                            oldAutoRefreshIdleThreshold != _autoRefreshIdleThresholdMinutes;
+                            oldFingerprintParallelism != _fingerprintScanMaxDegreeOfParallelism;
 
                         var backupSettingsChanged =
                             oldBackupEnabled != _backupLibraryEnabled ||
@@ -9921,8 +9369,6 @@ namespace ReelRoulette
                                     _forceRescanLoudnessOnNextRefresh = updated.ForceRescanLoudness;
                                     _forceRescanDurationOnNextRefresh = updated.ForceRescanDuration;
                                     _fingerprintScanMaxDegreeOfParallelism = Math.Clamp(updated.FingerprintScanMaxDegreeOfParallelism, 1, 16);
-                                    _autoRefreshOnlyWhenIdle = false;
-                                    _autoRefreshIdleThresholdMinutes = 1;
                                     Log("Settings: Core refresh settings updated via API.");
                                 }
                                 else

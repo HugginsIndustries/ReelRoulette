@@ -47,7 +47,6 @@ AppData/
 *.temp
 
 # Local docs
-# COMMIT-MESSAGE.txt
 PROMPTS.txt
 
 # Node/web artifacts
@@ -59,8 +58,6 @@ coverage/
 .web-deploy-smoke/
 artifacts/
 
-# FFmpeg binaries (too large for GitHub)
-ffprobe.exe
-*/ffprobe.exe
-**/ffprobe.exe
+# Windows native deps (ffmpeg/ffprobe/LibVLC) — acquire via tools/scripts/fetch-native-deps.ps1
+runtimes/
 

@@ -135,7 +135,7 @@
                                        Margin="0,0,0,4"/>
                             <CheckBox Content="Auto-refresh sources"
                                       IsChecked="{Binding AutoRefreshSourcesEnabled}"
-                                      ToolTip.Tip="Automatically refresh enabled library sources in the background on a timer."/>
+                                      ToolTip.Tip="When enabled, the core/server refreshes library sources on the interval below."/>
                             <Grid ColumnDefinitions="Auto * Auto" ColumnSpacing="8" Margin="20,4,0,4">
                                 <TextBlock Grid.Column="0"
                                            Text="Refresh interval (minutes):"

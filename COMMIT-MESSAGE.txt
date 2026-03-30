@@ -19,6 +19,11 @@ Instructions:
 
 Commit Message:
 
-Docs: Update MILESTONES.md to finalize M9e - Cross-Platform Library Migration
+Refactor: Thin desktop media/refresh; unified Windows native deps
 
-- Mark M9e as complete, detailing the export and import functionality for cross-platform library migration between Windows and Linux.
+- Desktop: remove dead local ffprobe duration path; trim NativeBinaryHelper to LibVLC only; library duration / ffprobe refresh stay server-authoritative.
+- Desktop: remove orphaned client auto-refresh timer and pointer idle tracking; drop unused ParseLoudnessFromFFmpegOutput; keep settings → core sync for server refresh policy.
+- Desktop Settings: remove legacy auto-refresh “only when idle” / idle-threshold state (server-owned scheduling).
+- Add `tools/scripts/fetch-native-deps.ps1` (gyan.dev FFmpeg ZIP + LibVLC from NuGet cache or VideoLAN mirror; `.versions.json`, SHA-256, `-Force`); gitignore `runtimes/`, remove tracked `libvlc` tree, add `VideoLAN.LibVLC.Windows` to the desktop project.
+- Windows packaging invokes fetch when `runtimes/win-x64/native/` is incomplete; stage ffmpeg/ffprobe into server publish and LibVLC into desktop publish (no Chocolatey).
+- Align README, dev-setup, CONTEXT, domain-inventory, testing-checklist, and CHANGELOG [Unreleased].

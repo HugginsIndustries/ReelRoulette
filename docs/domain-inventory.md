@@ -21,7 +21,7 @@ Core/server domain services own business rules and persisted state semantics.
 - `src/core/ReelRoulette.Server/Services/LibraryOperationsService.cs`
   - source import, duplicate scan/apply, auto-tag scan/apply, playback-stats clear, related command orchestration.
 - `src/core/ReelRoulette.Server/Services/RefreshPipelineService.cs`
-  - unified refresh pipeline stage execution (including `fingerprintScan` for per-file SHA-256 backfill), overlap guards, status snapshots, thumbnail generation/invalidation.
+  - unified refresh pipeline stage execution (including `fingerprintScan` for per-file SHA-256 backfill), overlap guards, status snapshots, thumbnail generation/invalidation, duration/loudness scans, and server-scheduled **auto-refresh** (clients surface settings only).
 - `src/core/ReelRoulette.Server/Services/ServerStateService.cs`
   - revisioned event publication, replay/resync behavior, state projection support.
 - `src/core/ReelRoulette.Server/Services/CoreSettingsService.cs`

@@ -11,7 +11,8 @@ This guide covers local setup, run paths, verification gates, packaging, and rel
   - Linux (Arch Linux, CachyOS, and similar): install from the AUR, for example `paru -S powershell-bin` or `yay -S powershell-bin`; that package provides `pwsh` on your PATH.
 - Windows packaging only:
   - Inno Setup 6 (for installer builds)
-- FFmpeg (with `ffprobe` on `PATH`) and VLC / LibVLC for full desktop playback and media helper behavior; required for Linux portable desktop tarballs (not bundled there). Windows desktop portable packaging can stage native copies via `package-desktop-win-portable.ps1` when not using repo-local `runtimes/` assets.
+- **Windows developers:** after cloning, run **`pwsh ./tools/scripts/fetch-native-deps.ps1`** once from the repository root. This downloads **FFmpeg/ffprobe** (gyan.dev release essentials ZIP, SHA-256 verified) and materializes **LibVLC** (prefer **VideoLAN.LibVLC.Windows** from the NuGet global cache after `dotnet restore`, else the official VideoLAN mirror with SHA-256 verification) into **`runtimes/win-x64/native/`** (gitignored). Then `dotnet run` for **ServerApp** and **DesktopApp** resolves bundled tools from that path. Pass **`-Force`** to ignore skip rules and re-fetch.
+- VLC / LibVLC for desktop video playback; FFmpeg (with `ffprobe` on `PATH`) on the **server** for library refresh (duration, loudness, thumbnails). Linux portable tarballs do not bundle LibVLC or FFmpeg (install from your distro). Windows **packaging** scripts call `fetch-native-deps.ps1` automatically when `runtimes/win-x64/native/` is incomplete, then stage **ffmpeg.exe** / **ffprobe.exe** into the **server** publish tree and **LibVLC** into the **desktop** publish tree—same source folder for both.
 
 ## Key Projects
 
@@ -27,6 +28,7 @@ This guide covers local setup, run paths, verification gates, packaging, and rel
 
 ### Run ServerApp (default consolidated runtime)
 
+- **Windows:** run `pwsh ./tools/scripts/fetch-native-deps.ps1` first if `runtimes/win-x64/native/ffmpeg.exe` is missing (see Prerequisites).
 - Direct:
   - Windows (`net10.0-windows`): `dotnet run --framework net10.0-windows --project ./src/core/ReelRoulette.ServerApp/ReelRoulette.ServerApp.csproj`
   - Linux/macOS (`net10.0`): `dotnet run --framework net10.0 --project ./src/core/ReelRoulette.ServerApp/ReelRoulette.ServerApp.csproj` (Avalonia tray when the session supports it; otherwise headless)
@@ -50,6 +52,7 @@ Use when you want to ensure web assets are freshly rebuilt before startup:
 
 ### Run Desktop app
 
+- **Windows:** run `pwsh ./tools/scripts/fetch-native-deps.ps1` first if `runtimes/win-x64/native/libvlc` is not populated (see Prerequisites).
 - `dotnet run --project ./src/clients/desktop/ReelRoulette.DesktopApp/ReelRoulette.DesktopApp.csproj`
 
 Desktop behavior notes:
@@ -141,8 +144,7 @@ Packaging notes:
 
 - Server packaging scripts auto-detect version from `src/core/ReelRoulette.ServerApp/ReelRoulette.ServerApp.csproj` when `-Version` is not passed.
 - Desktop packaging scripts auto-detect version from `src/clients/desktop/ReelRoulette.DesktopApp/ReelRoulette.DesktopApp.csproj` when `-Version` is not passed.
-- Desktop packaging scripts stage native desktop runtime dependencies into publish output (`runtimes/win-x64/native`) at package time.
-- Desktop native dependency staging prefers local repo runtimes when available; otherwise scripts acquire dependencies via Chocolatey (`ffmpeg` for `ffprobe.exe`, `vlc` for LibVLC files).
+- Windows packaging scripts ensure **`runtimes/win-x64/native/`** via **`fetch-native-deps.ps1`** when **ffmpeg.exe**, **ffprobe.exe**, or **libvlc** are missing, then copy **FFmpeg/ffprobe** into the **server** publish output and **LibVLC** into the **desktop** publish output under `runtimes/win-x64/native/`. Duration and other ffprobe work run in the **server** refresh pipeline, not in the desktop app.
 - Server packaging scripts run WebUI build and bundle static assets into ServerApp publish output (`wwwroot`) so packaged runtime includes WebUI and Operator favicon.
 - Server publish output includes `HI.ico` at app root for tray icon loading (from shared `assets/HI.ico`).
 - Shared app/installer/web icon source is `assets/HI.ico`.
@@ -203,7 +205,7 @@ From the repository root (requires `bash`, `dotnet`, `npm`, `tar` on `PATH`):
 ./tools/scripts/package-serverapp-linux-portable.sh
 ```
 
-- Desktop portable tarball (self-contained `linux-x64`; **does not** bundle `ffmpeg`/`ffprobe` or LibVLC—install distro packages so playback and helpers resolve):
+- Desktop portable tarball (self-contained `linux-x64`; **does not** bundle LibVLC or FFmpeg—install **VLC/LibVLC** for playback; install **ffmpeg**/**ffprobe** on the **server** host for library refresh):
 
 ```bash
 ./tools/scripts/package-desktop-linux-portable.sh

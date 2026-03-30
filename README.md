@@ -22,7 +22,7 @@ ReelRoulette is a server-first media randomizer with thin desktop and web client
   - Linux (Arch Linux, CachyOS, and similar): install from the AUR, for example `paru -S powershell-bin` or `yay -S powershell-bin`; that package provides `pwsh` on your PATH.
 - `bash` and `tar` on your `PATH` if you run Linux portable packaging (`./tools/scripts/package-serverapp-linux-portable.sh`, `./tools/scripts/package-desktop-linux-portable.sh`); both are available by default on typical Linux and macOS environments.
 - Windows installer builds additionally need Inno Setup 6 (`iscc`); see `docs/dev-setup.md`.
-- **FFmpeg** (including **`ffprobe` on your `PATH`**) and **VLC / LibVLC** are recommended for full media behavior (desktop playback, probing, and server-side features that shell out to these tools). Install them from your OS or distro packages when developing or running **Linux** portable tarballs—those artifacts **do not** bundle FFmpeg or LibVLC. **Windows** desktop portable packaging can stage `ffprobe` and LibVLC into the output when you run `package-desktop-win-portable.ps1` (see `docs/dev-setup.md`).
+- **VLC / LibVLC** for **desktop** video playback. **FFmpeg** (including **`ffprobe` on your `PATH`**) on the **server** host for library refresh (duration, loudness, thumbnails, and related probes). Linux portable tarballs **do not** bundle these; install from your distro. On **Windows**, after cloning, run **`pwsh ./tools/scripts/fetch-native-deps.ps1` once** so `runtimes/win-x64/native/` contains **FFmpeg/ffprobe** (server) and **LibVLC** (desktop); packaging scripts fetch the same artifacts automatically when that folder is incomplete. Use **`-Force`** on that script to re-download. Official **Windows** portable/installer builds from this repo **bundle** those binaries into the published output; **Linux** users rely on distro packages instead.
 
 ## Quick Start
 
@@ -73,7 +73,7 @@ Official downloads live on **[GitHub Releases](https://github.com/HugginsIndustr
    Download `ReelRoulette-Server-…-linux-x64.tar.gz` and/or `ReelRoulette-Desktop-…-linux-x64.tar.gz`, extract, then from the extracted folder run `./run-server.sh` or `./run-desktop.sh`.
 
 4. **Media tools on Linux**  
-   Linux packages **do not** bundle FFmpeg or VLC. Install **`ffmpeg`** (with **`ffprobe`** on your `PATH`) and **VLC / LibVLC** from your distribution for full server and desktop media behavior.
+   Linux packages **do not** bundle FFmpeg or VLC. Install **VLC / LibVLC** for desktop playback. For the **server**, install **`ffmpeg`** with **`ffprobe`** on your **`PATH`** for library refresh (duration, loudness, thumbnails).
 
 **Local build install (developers):** After packaging AppImages (`./tools/scripts/package-serverapp-linux-appimage.sh` and `./tools/scripts/package-desktop-linux-appimage.sh`), run `./tools/scripts/install-linux-local.sh` to copy them to `~/.local/share/ReelRoulette/` under stable names and re-register menu entries (`--install`). See `docs/dev-setup.md`.
 
@@ -84,6 +84,8 @@ From the repository root:
 ```bash
 dotnet build ReelRoulette.sln
 ```
+
+On **Windows**, from the repo root, run native dependency acquisition once before local server/desktop runs (see **Prerequisites**): `pwsh ./tools/scripts/fetch-native-deps.ps1`.
 
 Run the server app:
 
@@ -236,7 +238,7 @@ pwsh ./tools/scripts/package-desktop-win-portable.ps1
 pwsh ./tools/scripts/package-desktop-win-inno.ps1
 ```
 
-- Desktop packaging stages native dependencies into `runtimes/win-x64/native` when possible; otherwise the script uses Chocolatey to pull **`ffmpeg`** and **`vlc`** for staging.
+- Windows packaging calls **`fetch-native-deps.ps1`** when `runtimes/win-x64/native/` is missing **ffmpeg.exe**, **ffprobe.exe**, or **libvlc** assets, then stages **FFmpeg/ffprobe** into the **server** publish output and **LibVLC** into the **desktop** publish output from that same folder (see `docs/dev-setup.md`).
 - Installer metadata (setup, Start Menu, uninstall entry) uses shared `assets/HI.ico`.
 - Server and desktop installers include a **Create Desktop Shortcut** task (checked by default).
 
@@ -273,4 +275,4 @@ On **Linux**, this produces `artifacts/packages/portable/*.tar.gz` and `artifact
 
 ReelRoulette integrates **VideoLAN VLC / LibVLC** and **FFmpeg** (including **ffprobe**). They are licensed under the GNU GPL and LGPL respectively. See the `licenses/` folder for license texts and [https://www.videolan.org](https://www.videolan.org) and [https://ffmpeg.org](https://ffmpeg.org) for source code.
 
-Windows desktop **portable** packages built with the repo script may **include** copies of those native components in the publish output. **Linux** portable desktop packages and typical **Linux/macOS dev** setups use **system-installed** FFmpeg and VLC instead (not shipped inside the tarball).
+**Windows** release **server** packages produced by this repository bundle **FFmpeg** and **ffprobe** from the [gyan.dev](https://www.gyan.dev/ffmpeg/builds/) **release essentials** build. **Windows** **desktop** packages bundle **LibVLC** from the **VideoLAN.LibVLC.Windows** NuGet layout (or the official VideoLAN mirror when the cache is unavailable). **Linux** users install **FFmpeg/ffprobe** (server refresh) and **VLC/LibVLC** (desktop playback) from their distribution; Linux portable tarballs do not ship those binaries inside the archive.

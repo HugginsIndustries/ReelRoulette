@@ -388,8 +388,6 @@ namespace ReelRoulette
         private bool _forceRescanLoudness;
         private bool _forceRescanDuration;
         private int _fingerprintScanMaxDegreeOfParallelism = 4;
-        private bool _autoRefreshOnlyWhenIdle = true;
-        private int _autoRefreshIdleThresholdMinutes = 3;
         private string _coreServerBaseUrl = "http://localhost:45123";
 
         // Web UI settings
@@ -636,35 +634,6 @@ namespace ReelRoulette
             }
         }
 
-        public bool AutoRefreshOnlyWhenIdle
-        {
-            get => _autoRefreshOnlyWhenIdle;
-            set
-            {
-                if (_autoRefreshOnlyWhenIdle != value)
-                {
-                    _autoRefreshOnlyWhenIdle = value;
-                    OnPropertyChanged();
-                    OnPropertyChanged(nameof(AutoRefreshIdleThresholdEnabled));
-                }
-            }
-        }
-
-        public int AutoRefreshIdleThresholdMinutes
-        {
-            get => _autoRefreshIdleThresholdMinutes;
-            set
-            {
-                if (_autoRefreshIdleThresholdMinutes != value)
-                {
-                    _autoRefreshIdleThresholdMinutes = value;
-                    OnPropertyChanged();
-                }
-            }
-        }
-
-        public bool AutoRefreshIdleThresholdEnabled => _autoRefreshOnlyWhenIdle;
-
         public string CoreServerBaseUrl
         {
             get => _coreServerBaseUrl;
@@ -806,8 +775,6 @@ namespace ReelRoulette
             bool forceRescanLoudness = false,
             bool forceRescanDuration = false,
             int fingerprintScanMaxDegreeOfParallelism = 4,
-            bool autoRefreshOnlyWhenIdle = true,
-            int autoRefreshIdleThresholdMinutes = 3,
             string? coreServerBaseUrl = "http://localhost:45123",
             bool webRemoteEnabled = false,
             int webRemotePort = 45123,
@@ -944,16 +911,11 @@ namespace ReelRoulette
             _forceRescanLoudness = forceRescanLoudness;
             _forceRescanDuration = forceRescanDuration;
             _fingerprintScanMaxDegreeOfParallelism = Math.Clamp(fingerprintScanMaxDegreeOfParallelism, 1, 16);
-            _autoRefreshOnlyWhenIdle = autoRefreshOnlyWhenIdle;
-            _autoRefreshIdleThresholdMinutes = autoRefreshIdleThresholdMinutes;
             OnPropertyChanged(nameof(AutoRefreshSourcesEnabled));
             OnPropertyChanged(nameof(AutoRefreshIntervalMinutes));
             OnPropertyChanged(nameof(ForceRescanLoudness));
             OnPropertyChanged(nameof(ForceRescanDuration));
             OnPropertyChanged(nameof(FingerprintScanMaxDegreeOfParallelism));
-            OnPropertyChanged(nameof(AutoRefreshOnlyWhenIdle));
-            OnPropertyChanged(nameof(AutoRefreshIdleThresholdMinutes));
-            OnPropertyChanged(nameof(AutoRefreshIdleThresholdEnabled));
             _coreServerBaseUrl = string.IsNullOrWhiteSpace(coreServerBaseUrl) ? "http://localhost:45123" : coreServerBaseUrl.Trim();
             OnPropertyChanged(nameof(CoreServerBaseUrl));
 
@@ -1009,8 +971,6 @@ namespace ReelRoulette
         public bool GetForceRescanLoudness() => _forceRescanLoudness;
         public bool GetForceRescanDuration() => _forceRescanDuration;
         public int GetFingerprintScanMaxDegreeOfParallelism() => _fingerprintScanMaxDegreeOfParallelism;
-        public bool GetAutoRefreshOnlyWhenIdle() => _autoRefreshOnlyWhenIdle;
-        public int GetAutoRefreshIdleThresholdMinutes() => _autoRefreshIdleThresholdMinutes;
         public string GetCoreServerBaseUrl() => string.IsNullOrWhiteSpace(_coreServerBaseUrl) ? "http://localhost:45123" : _coreServerBaseUrl.Trim();
 
         public bool GetWebRemoteEnabled() => _webRemoteEnabled;
@@ -1065,10 +1025,6 @@ namespace ReelRoulette
             
             // Validate auto-refresh settings
             if (_autoRefreshIntervalMinutes < 5 || _autoRefreshIntervalMinutes > 1440)
-            {
-                return false;
-            }
-            if (_autoRefreshIdleThresholdMinutes < 1 || _autoRefreshIdleThresholdMinutes > 60)
             {
                 return false;
             }

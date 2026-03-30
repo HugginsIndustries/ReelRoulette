@@ -154,6 +154,7 @@ Desktop-only: reads/writes roaming `ReelRoulette` data and local thumbnails (no 
 
 ## Packaging + Deployment Smoke
 
+- [ ] `pwsh ./tools/scripts/fetch-native-deps.ps1` succeeds on a clean Windows tree (downloads FFmpeg/ffprobe with SHA-256 check; LibVLC from NuGet cache after restore or VideoLAN mirror); packaging scripts call it automatically when `runtimes/win-x64/native/` is incomplete.
 - [ ] Portable packaging script runs (Windows): `pwsh ./tools/scripts/package-serverapp-win-portable.ps1`.
 - [ ] Inno packaging script runs when `iscc` is available:
   - `pwsh ./tools/scripts/package-serverapp-win-inno.ps1`.
@@ -163,10 +164,10 @@ Desktop-only: reads/writes roaming `ReelRoulette` data and local thumbnails (no 
 - [ ] Linux portable packaging scripts run: `./tools/scripts/package-serverapp-linux-portable.sh` and `./tools/scripts/package-desktop-linux-portable.sh`.
 - [ ] Linux AppImage packaging scripts run (requires `appimagetool` on `PATH`): `./tools/scripts/package-serverapp-linux-appimage.sh` and `./tools/scripts/package-desktop-linux-appimage.sh`; outputs under `artifacts/packages/appimage/` match `ReelRoulette-{Server|Desktop}-{Version}-linux-x64.AppImage`.
 - [ ] `./tools/scripts/install-linux-local.sh` copies built AppImages to stable names under `~/.local/share/ReelRoulette` and `--install` refreshes `~/.local/share/applications` entries without error.
-- [ ] Linux AppImage `--help` lists native prerequisites (ffmpeg/ffprobe, LibVLC) consistent with portable policy; `--install` registers `~/.local/share/applications/reelroulette-{server|desktop}.desktop` and hicolor icons without a manual menu step.
+- [ ] Linux AppImage `--help` lists native prerequisites consistent with portable policy (server: ffmpeg/ffprobe; desktop: LibVLC/VLC for playback); `--install` registers `~/.local/share/applications/reelroulette-{server|desktop}.desktop` and hicolor icons without a manual menu step.
 - [ ] Linux install-from-release script runs (`curl` + `jq` on `PATH`): `./tools/scripts/install-linux-from-github.sh server` and `... desktop` against a release that includes matching assets; AppImage installs to `~/.local/share/ReelRoulette/` with stable `ReelRoulette-{Server|Desktop}-linux-x64.AppImage` names (portable fallback still uses `~/.local/bin` symlink + `~/.local/share`); no sudo.
 - [ ] Linux portable tarballs extract with a single top-level directory; `run-server.sh` and `run-desktop.sh` are executable (`chmod +x` preserved after extract).
-- [ ] Linux portable tree contains no `.pdb` files; `README.txt` in each package documents ffmpeg/ffprobe and LibVLC as system prerequisites (not bundled in Desktop tarball).
+- [ ] Linux portable tree contains no `.pdb` files; `README.txt` documents prerequisites (desktop: LibVLC/VLC; server: ffmpeg/ffprobe for refresh)—not bundled in tarballs.
 - [ ] Packaged Linux server starts and responds on `/health` at the configured base URL (or documented equivalent check).
 - [ ] Packaged server runtime includes WebUI static assets (root `/` serves WebUI, not missing-assets text).
 - [ ] Shared icon appears consistently across installer UI, installed shortcuts/apps, and `/HI.ico` for WebUI/Operator.

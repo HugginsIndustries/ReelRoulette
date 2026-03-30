@@ -108,8 +108,7 @@ Usage: ReelRoulette-Server-*.AppImage [options]
 This bundle includes a self-contained .NET runtime.
 
 Native prerequisites are not bundled. Install from your distribution:
-  - ffmpeg (including ffprobe) for media features that depend on them
-  - VLC / LibVLC where server media features require them
+  - ffmpeg (including ffprobe on PATH) for library refresh (duration, loudness, thumbnails, and related probes)
 
 Operator UI (default): http://localhost:45123/operator
 Health check: GET /health on the configured HTTP listen URL.
@@ -126,9 +125,9 @@ Usage: ReelRoulette-Desktop-*.AppImage [options]
 
 This bundle includes a self-contained .NET runtime.
 
-Native prerequisites are not bundled. Install:
-  - ffmpeg (ffprobe on PATH) for duration and related media helpers
-  - VLC / LibVLC for video playback (system packages are used when nothing is bundled)
+Native prerequisites are not bundled. Install from your distribution:
+  - VLC / LibVLC for video playback in this desktop client
+  - ffmpeg (including ffprobe on PATH) on the ReelRoulette Server host for library refresh (duration, loudness, thumbnails); the server runs that work, not this AppImage
 EOS
 )"
   fi

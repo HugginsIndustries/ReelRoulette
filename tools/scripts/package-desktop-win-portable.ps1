@@ -13,141 +13,41 @@ if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
     exit 1
 }
 
-function Install-ChocoPackageIfMissing {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$PackageName
-    )
-
-    if (-not (Get-Command choco -ErrorAction SilentlyContinue)) {
-        Write-Error "choco is required to acquire native dependencies when runtimes are not present in the repo."
-        exit 1
-    }
-
-    $installedOutput = choco list --local-only --exact $PackageName 2>$null
-    if ($LASTEXITCODE -eq 0 -and ($installedOutput | Select-String -Pattern "^$PackageName\s")) {
+function Invoke-EnsureWinX64NativeDeps {
+    param([Parameter(Mandatory = $true)][string]$Root)
+    if ($Runtime -ne "win-x64") {
         return
     }
-
-    choco install $PackageName -y --no-progress | Out-Null
-    if ($LASTEXITCODE -ne 0) {
-        Write-Error "choco install $PackageName failed with code $LASTEXITCODE"
-        exit $LASTEXITCODE
+    $nativeRoot = Join-Path $Root "runtimes\win-x64\native"
+    $need = -not (Test-Path (Join-Path $nativeRoot "ffmpeg.exe")) `
+        -or -not (Test-Path (Join-Path $nativeRoot "ffprobe.exe")) `
+        -or -not (Test-Path (Join-Path $nativeRoot "libvlc\libvlc.dll"))
+    if ($need) {
+        $fetch = Join-Path $PSScriptRoot "fetch-native-deps.ps1"
+        & $fetch -RepoRoot $Root
     }
-}
-
-function Get-UniqueNonEmptyPaths {
-    param(
-        [Parameter(Mandatory = $true)]
-        [AllowNull()]
-        [AllowEmptyCollection()]
-        [object[]]$Paths
-    )
-
-    return @($Paths |
-        Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } |
-        ForEach-Object { [string]$_ } |
-        Select-Object -Unique)
-}
-
-function Resolve-FFprobeSourcePath {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$RepoRoot
-    )
-
-    $repoPath = Join-Path $RepoRoot "runtimes\win-x64\native\ffprobe.exe"
-    if (Test-Path $repoPath) {
-        return $repoPath
-    }
-
-    Install-ChocoPackageIfMissing -PackageName "ffmpeg"
-    $chocoRoot = if ([string]::IsNullOrWhiteSpace($env:ChocolateyInstall)) { "C:\ProgramData\chocolatey" } else { $env:ChocolateyInstall }
-    $candidates = @()
-    $ffmpegLibRoot = Join-Path $chocoRoot "lib"
-    if (Test-Path $ffmpegLibRoot) {
-        $candidates += Get-ChildItem -Path $ffmpegLibRoot -Recurse -Filter "ffprobe.exe" -File -ErrorAction SilentlyContinue |
-            Sort-Object Length -Descending |
-            Select-Object -ExpandProperty FullName
-    }
-    $candidates += (Join-Path $chocoRoot "bin\ffprobe.exe")
-
-    foreach ($candidate in (Get-UniqueNonEmptyPaths -Paths $candidates)) {
-        if (Test-Path -LiteralPath $candidate) {
-            return [string]$candidate
-        }
-    }
-
-    Write-Error "ffprobe.exe could not be resolved from repo runtimes or chocolatey install."
-    exit 1
-}
-
-function Resolve-LibVlcSourceDir {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$RepoRoot
-    )
-
-    $repoDir = Join-Path $RepoRoot "runtimes\win-x64\native\libvlc"
-    if (Test-Path (Join-Path $repoDir "libvlc.dll")) {
-        return $repoDir
-    }
-
-    Install-ChocoPackageIfMissing -PackageName "vlc"
-    $chocoRoot = if ([string]::IsNullOrWhiteSpace($env:ChocolateyInstall)) { "C:\ProgramData\chocolatey" } else { $env:ChocolateyInstall }
-    $candidates = @()
-    if (-not [string]::IsNullOrWhiteSpace($env:ProgramFiles)) {
-        $candidates += (Join-Path $env:ProgramFiles "VideoLAN\VLC")
-    }
-    $programFilesX86 = ${env:ProgramFiles(x86)}
-    if (-not [string]::IsNullOrWhiteSpace($programFilesX86)) {
-        $candidates += (Join-Path $programFilesX86 "VideoLAN\VLC")
-    }
-    if (-not [string]::IsNullOrWhiteSpace($chocoRoot)) {
-        $candidates += (Join-Path $chocoRoot "lib\vlc\tools\VLC")
-    }
-
-    foreach ($candidate in (Get-UniqueNonEmptyPaths -Paths $candidates)) {
-        if (Test-Path -LiteralPath (Join-Path $candidate "libvlc.dll")) {
-            return [string]$candidate
-        }
-    }
-
-    Write-Error "VLC native files could not be resolved from repo runtimes or chocolatey install."
-    exit 1
 }
 
 function Ensure-WinDesktopNativeAssets {
     param(
-        [Parameter(Mandatory = $true)]
-        [string]$RepoRoot,
-        [Parameter(Mandatory = $true)]
-        [string]$PublishDir
+        [Parameter(Mandatory = $true)][string]$RepoRoot,
+        [Parameter(Mandatory = $true)][string]$PublishDir
     )
 
     $nativeDir = Join-Path $PublishDir "runtimes\win-x64\native"
     $libVlcTargetDir = Join-Path $nativeDir "libvlc"
+    $libVlcSourceDir = Join-Path $RepoRoot "runtimes\win-x64\native\libvlc"
     New-Item -ItemType Directory -Force -Path $nativeDir | Out-Null
+    if (-not (Test-Path (Join-Path $libVlcSourceDir "libvlc.dll"))) {
+        Write-Error "LibVLC not found at $libVlcSourceDir. Run pwsh ./tools/scripts/fetch-native-deps.ps1 from the repo root."
+        exit 1
+    }
+    if (Test-Path $libVlcTargetDir) {
+        Remove-Item -Recurse -Force $libVlcTargetDir
+    }
     New-Item -ItemType Directory -Force -Path $libVlcTargetDir | Out-Null
+    Copy-Item -Recurse -Force (Join-Path $libVlcSourceDir "*") $libVlcTargetDir
 
-    $ffprobeSourcePath = Resolve-FFprobeSourcePath -RepoRoot $RepoRoot
-    if (($ffprobeSourcePath -is [array]) -or [string]::IsNullOrWhiteSpace([string]$ffprobeSourcePath)) {
-        Write-Error "ffprobe source path resolved to empty value."
-        exit 1
-    }
-    Copy-Item -Force -LiteralPath ([string]$ffprobeSourcePath) (Join-Path $nativeDir "ffprobe.exe")
-
-    $libVlcSourceDir = Resolve-LibVlcSourceDir -RepoRoot $RepoRoot
-    if (($libVlcSourceDir -is [array]) -or [string]::IsNullOrWhiteSpace([string]$libVlcSourceDir)) {
-        Write-Error "LibVLC source directory resolved to empty value."
-        exit 1
-    }
-    Copy-Item -Recurse -Force (Join-Path ([string]$libVlcSourceDir) "*") $libVlcTargetDir
-
-    if (-not (Test-Path (Join-Path $nativeDir "ffprobe.exe"))) {
-        Write-Error "Desktop package is missing ffprobe.exe after native asset staging."
-        exit 1
-    }
     if (-not (Test-Path (Join-Path $libVlcTargetDir "libvlc.dll"))) {
         Write-Error "Desktop package is missing libvlc.dll after native asset staging."
         exit 1
@@ -183,6 +83,8 @@ New-Item -ItemType Directory -Force -Path $stagingDir | Out-Null
 
 Push-Location $repoRoot
 try {
+    Invoke-EnsureWinX64NativeDeps -Root $repoRoot
+
     dotnet publish $projectPath `
         -c $Configuration `
         -r $Runtime `

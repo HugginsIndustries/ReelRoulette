@@ -27,11 +27,11 @@ ReelRoulette is migrating from a monolithic desktop app to a thin-client, API-fi
 
 - **Domain execution (`src/core/ReelRoulette.Core` + server services)**
   - API-authoritative library operations (import, duplicates, auto-tag, playback stats, refresh pipeline).
-  - Unified refresh pipeline with stage/status projection and thumbnail generation.
+  - Unified refresh pipeline: stage/status projection, thumbnail generation, library **duration** / **loudness** via **ffmpeg**/**ffprobe**, and server-scheduled **auto-refresh**; clients send refresh **settings** (for example enable/interval) and consume library state via API/SSE only (no authoritative client-side refresh stages or local ffprobe for catalog duration).
   - Replay-aware SSE envelope with reconnect recovery (`Last-Event-ID`, `resyncRequired`, authoritative requery).
 
 - **Desktop client (`src/clients/desktop/ReelRoulette.DesktopApp/`)**
-  - Thin-client for migrated flows: API command/query + SSE projection (no dual-writer core-state mutation).
+  - Thin-client for migrated flows: API command/query + SSE projection (no dual-writer core-state mutation). Shows library projection from the server (including durations) and syncs refresh-related **settings** to the core; **LibVLC**-backed local playback via `NativeBinaryHelper` / bundled `runtimes/.../native/libvlc` on Windows when present.
   - Local-first playback with deterministic API fallback (`ForceApiPlayback` option).
   - Server version/capability compatibility gating with reconnect/resync guidance.
   - API-backed source import, duplicate scan/apply, auto-tag scan/apply, and playback-stats clear.
@@ -52,14 +52,7 @@ ReelRoulette is migrating from a monolithic desktop app to a thin-client, API-fi
   - Linux portable packaging: `tools/scripts/package-serverapp-linux-portable.sh` and `package-desktop-linux-portable.sh` produce self-contained `linux-x64` tarballs under `artifacts/packages/portable/` (`run-server.sh` / `run-desktop.sh`, bundled `README.txt` for native prereqs).
   - Linux AppImage packaging: `tools/scripts/package-serverapp-linux-appimage.sh` and `package-desktop-linux-appimage.sh` (shared `tools/scripts/lib/appimage-helpers.sh`) produce `artifacts/packages/appimage/*.AppImage` from those portable tarballs; `AppRun` supports `--help` (prereqs) and `--install` (user-local menu entry and icons). GitHub latest-release installer: `tools/scripts/install-linux-from-github.sh` (AppImage preferred, portable tarball fallback; `curl` + `jq`; AppImages install to `~/.local/share/ReelRoulette` with stable names; `REELROULETTE_LOCAL_APPIMAGE_DIR` override; default repo overridable for forks). Local build: `tools/scripts/install-linux-local.sh` copies those AppImages to the same location and re-runs `--install`.
   - Windows installers expose desktop shortcut install tasks (checked by default for server and desktop installers).
-
-## Near-Term Planned Work
-
-Authoritative roadmap details live in `MILESTONES.md`. Near-term focus areas:
-
-- `M9*`: structured logging pipeline and migration rollout.
-- `M10`: UX/UI polish.
-- `M11*`: playback-session pipeline rollout.
+  - Windows dev and packaging: **`tools/scripts/fetch-native-deps.ps1`** fills gitignored **`runtimes/win-x64/native/`** (FFmpeg/ffprobe + LibVLC); packaging copies **ffmpeg/ffprobe** into the **server** publish tree and **LibVLC** into the **desktop** publish tree (`docs/dev-setup.md`).
 
 ## Repository Map (High Signal)
 
