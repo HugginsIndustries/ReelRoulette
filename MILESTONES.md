@@ -91,6 +91,34 @@ Do not use this file for detailed architecture explanation or current capability
 
 Last milestone completed: M9g
 
+### M9h - WebUI Filter Dialog Parity
+
+- **Status**: 🚧 In Progress
+- **Goal**: Bring WebUI playback filtering to parity with the desktop **Filter Media** experience: full filter state editing, tag selection with the same AND/OR semantics (global category combination and per-category local modes), tri-state tag chips, and preset catalog management (create, edit, rename, delete, reorder, update-from-current), while keeping a **quick preset** combobox for fast apply—API-authoritative state only, matching existing tag-editor parity patterns.
+- **Scope**:
+  - Replace **preset-only** WebUI playback filtering with a desktop-equivalent **filter** UI: **full-screen overlay** implemented the same way as the WebUI tag editor/dialog (layout/shell parity), with desktop-mirroring tabs/sections: **General** (basic flags, media type, client source inclusion, audio filter, duration min/max with **the same free-text format, parsing, validation, and “no min / no max” checkbox semantics as the desktop Filter Media dialog**—e.g. `HH:MM:SS` style inputs, not a divergent mobile-only shortcut), **Tags** (category combination mode, per-category local AND/OR, expandable categories, include/exclude tri-state chips aligned with desktop filter behavior), and **Presets** (list management, header/summary behavior for the **client-held** active preset name, save-as-new, update existing, discard/revert flows as on desktop).
+  - **Chrome**: keep the **preset combobox** in its **current** location (shell placement unchanged); add a dedicated **Filter…** control that opens the filter overlay, placed in the **top-right media controls cluster** **to the left of** the tag-edit control (order: … **filter** → **tag** → **favorite** …), using the same **Material Symbols** glyph as desktop (**`filter_alt`**, same tooltip intent as desktop “Select filters…”).
+  - Wire filter and preset behavior through existing server APIs (no client-local authoritative preset catalog or server-side filter overrides): **`GET`/`POST /api/presets`**, **`POST /api/presets/match`**, **`POST /api/random`** (request body carries either `filterState` or `presetId`), **`GET /api/sources`** (General tab), **`POST /api/tag-editor/model`** (Tags tab). Continue existing **SSE / `resyncRequired`** handling; **`POST /api/library-states`** is only for **favorite/blacklist item snapshots** on reconnect/resync—not for filter or preset payloads. **Preset list order is API-canonical**; verify OpenAPI and handlers expose every **filter JSON field** and ordering behavior WebUI needs; fix contract/server gaps if found.
+  - **Preset catalog freshness:** refetch **`GET /api/presets`** when opening the filter overlay, after every successful **`POST /api/presets`**, and when **`resyncRequired`** is handled (same resync path as other WebUI reloads), so other tabs/clients cannot leave the UI silently stale.
+  - **Active preset (UI concept):** the server does not store a per-session “active preset”; WebUI holds the active preset name (and current filter JSON) locally and uses **`POST /api/presets/match`** when a named preset needs to be resolved or labeled—same mental model as desktop’s combo + dialog.
+  - Pairing/auth for these endpoints follows the **existing WebUI** and tag-editor gates (no separate auth model).
+  - Reuse WebUI theming and chip/surface patterns established for tag editor parity (light/dark, shadows, category rows) so filter and tag UIs feel consistent with desktop and with each other.
+- **Acceptance criteria**:
+  - Every filter and tag option available in the desktop **Filter Media** dialog is available and persisted via the API from WebUI with the same eligibility semantics for random/next/previous/history playback, for **mouse and touch** workflows; **keyboard parity is best-effort** and not a gate for this milestone.
+  - Every **`POST /api/random`** that requests a **new** random pick (including **Next** when not stepping through local history) sends either **`presetId`** **or** the **full serialized `filterState`**—including when **“None” / no named preset** is selected—so eligibility matches desktop for ad-hoc filters.
+  - Tag logic matches desktop: global category combination (AND/OR), per-category local ALL/ANY, and tri-state per-tag include/exclude/none behavior including edge cases covered by desktop (empty selection, legacy preset shapes if still supported server-side).
+  - Preset operations match desktop intent: create, rename, delete, reorder, set active from list, load preset into editor, update preset from current filter state, and “None” / clear active preset where applicable; preset catalog order matches **GET/POST `/api/presets`** everywhere (combobox + dialog).
+  - Quick preset combobox remains usable for one-step apply; full filter overlay is reachable via the dedicated control for all editing workflows.
+  - Automated checks green: `dotnet build` / `dotnet test` for the solution, WebUI `npm run verify` (plus any new unit tests for filter/preset client logic); OpenAPI/regenerated clients stay in sync if contracts change.
+  - Docs and testing checklist updated for WebUI filter/preset parity (manual spot-check steps vs desktop).
+- **Verification evidence**:
+  - Commands run and brief outcome notes (build, test, WebUI verify).
+  - Short manual matrix: WebUI vs desktop for representative filter/tag/preset scenarios (documented in testing checklist or milestone notes).
+  - `CHANGELOG.md` `[Unreleased]`, `CONTEXT.md` WebUI bullets, `docs/checklists/testing-checklist.md`, and `COMMIT-MESSAGE.txt` updated when work lands.
+- **Deferrals / Follow-ups**:
+  - Full keyboard/shortcut parity for the filter overlay → optional later milestone or polish pass.
+  - Record any other server-only or UX deferrals here if scope must shrink during implementation.
+
 ### M10 - End-User README and Contributor Dev Documentation
 
 - **Status**: ⏳ Planned
