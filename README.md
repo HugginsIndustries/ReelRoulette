@@ -136,6 +136,11 @@ Windows runtime note:
 - Tray menu provides quick actions for opening `/operator`, starting library refresh, restarting server, and stop/exit.
 - Tray and Operator UI both expose `Launch Server on Startup` control; changes apply immediately and do not require restart.
 
+Linux runtime note:
+
+- Tray is used when a graphical session is available; otherwise the server runs headless.
+- Tray and Operator expose the same `Launch Server on Startup` toggle; it writes `reelroulette-server.desktop` under your XDG autostart directory with `Exec=` targeting the stable server binary (from **`APPIMAGE`** when you run the **AppImage**, otherwise the process path) and `Path=` set to that binary’s directory so login startup matches `./run-server.sh` working-directory behavior. If you use the AppImage and an older autostart entry still points at `/tmp/.mount_*`, toggle startup off and on once to refresh it.
+
 Build WebUI and run server app:
 
 ```bash

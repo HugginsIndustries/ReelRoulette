@@ -902,7 +902,7 @@ namespace ReelRoulette
                 WindowStartupLocation = WindowStartupLocation.CenterOwner
             };
 
-            var textBox = new TextBox { Watermark = "Category name", Margin = new Thickness(16, 16, 16, 8) };
+            var textBox = new TextBox { PlaceholderText = "Category name", Margin = new Thickness(16, 16, 16, 8) };
             var buttonPanel = new StackPanel
             {
                 Orientation = Avalonia.Layout.Orientation.Horizontal,

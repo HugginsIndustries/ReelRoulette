@@ -557,7 +557,7 @@ namespace ReelRoulette
             _nameTextBox = new TextBox
             {
                 Text = currentName,
-                Watermark = "Enter source name"
+                PlaceholderText = "Enter source name"
             };
 
             var okButton = new Button

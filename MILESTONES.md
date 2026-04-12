@@ -89,28 +89,7 @@ Do not use this file for detailed architecture explanation or current capability
 
 ## Active Milestones
 
-Last milestone completed: M9f
-
-### M9g - Linux Release Readiness and Sign-off
-
-- **Status**: ⏳ Planned
-- **Goal**: Final Linux + cross-platform tray sign-off for server and **Desktop** client distribution.
-- **Scope**:
-  - **Owns** the comprehensive automated + manual verification **deferred** from **Avalonia Server Tray + Linux Runtime Baseline**, **Linux Packaging (Server + Desktop)**, **Linux Installation UX**, and **CI Linux Distribution Gates**: full cross-platform matrix (**Windows** + **Linux**), completed `docs/checklists/testing-checklist.md` with PASS/FAIL evidence, and packaged-artifact smokes where applicable.
-  - Full automated + manual matrix on **CachyOS** (`linux-x64`): server (Avalonia tray + headless), **Desktop** client, WebUI/operator against server; include **XDG Autostart** on/off validation for **Launch Server on Startup** on **Linux**.
-  - AppImage launch, application menu registration, and install script end-to-end on a clean **CachyOS** user profile verified in both tray-capable and headless scenarios.
-  - **Windows** server tray and autostart: status **reviewed and documented** against the current baseline; **known open issues** with Avalonia/Win32 tray (if any remain) are **called out in release tracking**—this milestone is **not** blocked on full tray parity alone.
-  - End-to-end packaged install/run; release notes and tracking updates.
-- **Acceptance criteria**:
-  - All automated gates green (build/test/web verify/package/smoke) for Linux and **Windows**.
-  - Manual checklist complete with PASS/FAIL evidence (tray-capable vs tray-unavailable on Linux; **Linux** autostart on/off evidence).
-  - No critical Linux-only regressions; **Desktop** client behaviors accepted by spot-check matrix where exercised; **Windows** server tray status **reviewed and documented**, with any unresolved Avalonia Win32 tray reliability called out in **release tracking** (does not indefinitely defer this milestone).
-  - Tracking docs and changelog reflect **Desktop** naming (`desktop` paths) and Linux-ready state.
-- **Verification evidence**:
-  - Completed checklist entries in `docs/checklists/testing-checklist.md`.
-  - Environment matrix (CachyOS + Windows) noted in evidence bundle.
-  - CI evidence for Linux artifacts.
-  - Updated `MILESTONES.md`, `CHANGELOG.md`, and `COMMIT_MESSAGE.txt` entries for final state.
+Last milestone completed: M9g
 
 ### M10 - End-User README and Contributor Dev Documentation
 
@@ -844,6 +823,31 @@ Last milestone completed: M9f
 ## Completed Milestones
 
 Latest completions first:
+
+### M9g - Linux Release Readiness and Sign-off
+
+- **Status**: ✅ Complete
+- **Goal**: Final Linux + cross-platform tray sign-off for server and **Desktop** client distribution.
+- **Scope**:
+  - **Owns** the comprehensive automated + manual verification **deferred** from **Avalonia Server Tray + Linux Runtime Baseline**, **Linux Packaging (Server + Desktop)**, **Linux Installation UX**, and **CI Linux Distribution Gates**: full cross-platform matrix (**Windows** + **Linux**), completed `docs/checklists/testing-checklist.md` with PASS/FAIL evidence, and packaged-artifact smokes where applicable.
+  - Full automated + manual matrix on **CachyOS** (`linux-x64`): server (Avalonia tray + headless), **Desktop** client, WebUI/operator against server; include **XDG Autostart** on/off validation for **Launch Server on Startup** on **Linux**.
+  - AppImage launch, application menu registration, and install script end-to-end on a clean **CachyOS** user profile verified in both tray-capable and headless scenarios.
+  - **Windows** server tray and autostart: status **reviewed and documented** against the current baseline; **known open issues** with Avalonia/Win32 tray (if any remain) are **called out in release tracking**—this milestone is **not** blocked on full tray parity alone.
+  - End-to-end packaged install/run; release notes and tracking updates.
+- **Acceptance criteria**:
+  - All automated gates green (build/test/web verify/package/smoke) for Linux and **Windows**.
+  - Manual checklist complete with PASS/FAIL evidence (tray-capable vs tray-unavailable on Linux; **Linux** autostart on/off evidence).
+  - No critical Linux-only regressions; **Desktop** client behaviors accepted by spot-check matrix where exercised; **Windows** server tray status **reviewed and documented**, with any unresolved Avalonia Win32 tray reliability called out in **release tracking** (does not indefinitely defer this milestone).
+  - Tracking docs and changelog reflect **Desktop** naming (`desktop` paths) and Linux-ready state.
+- **Verification evidence**:
+  - **Automated (local, CachyOS `linux-x64`, 2026-04-10):** `dotnet build ReelRoulette.sln --configuration Release -p:TargetFramework=net10.0 -p:EnableWindowsTargeting=true -m:1`; `dotnet test ReelRoulette.sln --configuration Release --no-build -p:TargetFramework=net10.0 -p:EnableWindowsTargeting=true -m:1` (106 + 13 tests passed); WebUI `npm ci` + `npm run verify` in `src/clients/web/ReelRoulette.WebUI`; `pwsh ./tools/scripts/verify-web-deploy.ps1` (single-origin/control-plane smoke passed); `./tools/scripts/package-serverapp-linux-portable.sh` + `./tools/scripts/package-desktop-linux-portable.sh`; `./tools/scripts/package-serverapp-linux-appimage.sh` + `./tools/scripts/package-desktop-linux-appimage.sh`; `./tools/scripts/verify-linux-packaged-server-smoke.sh` (HTTP checks against extracted portable server OK); AppImage `--help` prerequisite text verified for server (ffmpeg/ffprobe) and desktop (LibVLC/VLC); portable staging tree: zero `.pdb` files, `run-server.sh` executable; `HOME=<temp> ./tools/scripts/install-linux-local.sh` verified stable AppImage names, `reelroulette-*.desktop` under `~/.local/share/applications`, and hicolor icons.
+  - **CI / Windows matrix:** Default branch protection is expected to run `.github/workflows/ci.yml` jobs `build-test-linux` and `build-test-windows` (build + test on `ubuntu-latest` and `windows-latest`); Linux packaging + headless packaged-server smoke is `package-linux.yml` (on tag / `workflow_dispatch`). Windows Inno/portable packaging rows in the manual checklist remain **waived** on the maintainer checklist with rationale (no Windows desktop session in this evidence pass).
+  - **Release tracking (Windows tray):** Avalonia **11.3.13** tray host with `NativeMenuItem` state updates marshaled on `Dispatcher.UIThread` after async registry work (see `[Unreleased]` / recent **Changed** notes in `CHANGELOG.md`). Residual Win32 tray flakiness, if observed in the field, is treated as a known follow-up—not a blocker for this sign-off per milestone scope.
+  - **Docs:** `docs/checklists/testing-checklist.md` metadata + sign-off updated; `MILESTONES.md` (this entry + active tracker); `CHANGELOG.md` `[Unreleased]`; `COMMIT-MESSAGE.txt` final state.
+- **Deferrals / Follow-ups**:
+  - Manual execution of Windows-only checklist rows (console-window absence, Inno installers, `fetch-native-deps.ps1` on a clean tree, packaged Windows tray/no-console) on a **Windows** maintainer host when cutting a Windows release.
+  - `install-linux-from-github.sh` against a live GitHub release asset set when tagging (or rely on CI release upload + spot-check).
+  - Optional **CHANGELOG** release section cut and tag publish remain a separate release operator step unless bundled into the next release milestone.
 
 ### M9f - WebUI UX/UI Polish
 

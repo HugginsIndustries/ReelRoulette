@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Reflection;
 using System.Text.Json;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -31,7 +32,13 @@ catch (OperationCanceledException ex) when (IsExpectedLinuxShutdownCancellation(
 
 static async Task RunAsync(string[] args)
 {
-        var builder = WebApplication.CreateBuilder(args);
+        // Content root defaults to cwd; XDG autostart and desktop shortcuts often start with $HOME or / as cwd.
+        // Pin to the install directory so appsettings.json, wwwroot, and related files resolve for packaged/portable runs.
+        var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+        {
+            Args = args,
+            ContentRootPath = AppContext.BaseDirectory
+        });
         var runtimeOptions = ServerRuntimeOptions.FromConfiguration(builder.Configuration);
         var startupSettings = new CoreSettingsService(NullLogger<CoreSettingsService>.Instance, runtimeOptions);
         var startupWebRuntime = startupSettings.GetWebRuntimeSettings();

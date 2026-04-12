@@ -46,7 +46,8 @@ flowchart LR
   - non-Windows host path remains headless-compatible.
 - Owns host-level startup-launch registration behavior:
   - Windows path uses per-user startup registration and exposes immediate toggle control via tray and Operator UI.
-  - non-Windows path reports unsupported without affecting server-core behavior.
+  - Linux path uses XDG autostart (`*.desktop`) with `Exec=`/`Path=` aimed at the stable binary (AppImage: **`APPIMAGE`** on-disk path, not the `/tmp/.mount_*` process path); the host pins ASP.NET content root to `AppContext.BaseDirectory` so autostart works when the session manager uses a non-install cwd.
+  - Other non-Windows hosts without Linux XDG use a no-op startup-launch service without affecting server-core behavior.
 
 ### Server Transport Layer
 

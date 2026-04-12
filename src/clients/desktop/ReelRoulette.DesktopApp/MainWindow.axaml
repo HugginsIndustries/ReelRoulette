@@ -468,8 +468,7 @@
                           ToolTip.Tip="Loop"
                           IsChecked="True"
                           Margin="0,0,8,0"
-                          Checked="LoopToggle_Changed"
-                          Unchecked="LoopToggle_Changed">
+                          IsCheckedChanged="LoopToggle_Changed">
                 <TextBlock x:Name="LoopGlyph"
                            Classes="MaterialSymbolIcon"
                            Text="repeat_one"
@@ -483,8 +482,7 @@
                           ToolTip.Tip="Auto-play next (A)"
                           IsChecked="True"
                           Margin="0"
-                          Checked="AutoPlayNext_Changed"
-                          Unchecked="AutoPlayNext_Changed">
+                          IsCheckedChanged="AutoPlayNext_Changed">
                 <TextBlock Classes="MaterialSymbolIcon"
                            Text="autoplay"
                            FontSize="32"
@@ -525,8 +523,7 @@
                           Classes="IconGlyphBase IconGlyphToggle"
                           ToolTip.Tip="Favorite (F)"
                           Margin="0,0,8,0"
-                          Checked="FavoriteToggle_Changed"
-                          Unchecked="FavoriteToggle_Changed">
+                          IsCheckedChanged="FavoriteToggle_Changed">
                 <TextBlock Classes="MaterialSymbolIcon"
                            Text="favorite"
                            FontSize="32"
@@ -538,8 +535,7 @@
                           Classes="IconGlyphBase IconGlyphToggle"
                           ToolTip.Tip="Blacklist (B)"
                           Margin="0,0,8,0"
-                          Checked="BlacklistToggle_Changed"
-                          Unchecked="BlacklistToggle_Changed">
+                          IsCheckedChanged="BlacklistToggle_Changed">
                 <TextBlock Classes="MaterialSymbolIcon"
                            Text="thumb_down"
                            FontSize="32"
@@ -563,8 +559,7 @@
                           Grid.Column="15"
                           Classes="IconGlyphBase IconGlyphToggle"
                           ToolTip.Tip="Mute / Unmute (M)"
-                          Checked="MuteButton_Checked"
-                          Unchecked="MuteButton_Unchecked">
+                          IsCheckedChanged="MuteButton_IsCheckedChanged">
                 <TextBlock x:Name="MuteGlyph"
                            Classes="MaterialSymbolIcon"
                            Text="volume_up"
@@ -632,8 +627,7 @@
                                     Grid.Column="1"
                                     Classes="IconGlyphBase IconGlyphToggle"
                                     ToolTip.Tip="Grid view"
-                                    Checked="LibraryGridViewToggle_Changed"
-                                    Unchecked="LibraryGridViewToggle_Changed">
+                                    IsCheckedChanged="LibraryGridViewToggle_Changed">
                             <TextBlock Classes="MaterialSymbolIcon"
                                        Text="gallery_thumbnail"
                                        FontSize="32"
@@ -695,7 +689,7 @@
                     <!-- Row 6: Search box -->
                     <TextBox x:Name="LibrarySearchTextBox"
                             Grid.Row="6"
-                            Watermark="Search..."
+                            PlaceholderText="Search..."
                             Margin="0,0,0,8"
                             TextChanged="LibrarySearchTextBox_TextChanged"/>
                     

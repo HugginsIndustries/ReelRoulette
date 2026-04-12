@@ -270,7 +270,7 @@ internal sealed class AvaloniaTrayHostUi : IHostUi
 
         var startupItem = new NativeMenuItem("Launch Server on Startup")
         {
-            ToggleType = NativeMenuItemToggleType.CheckBox
+            ToggleType = MenuItemToggleType.CheckBox
         };
         startupItem.Click += (_, _) => _ = ToggleStartupLaunchAsync();
         _startupItem = startupItem;

@@ -43,6 +43,7 @@ Runtime notes:
 - Default listen URL/port is `http://localhost:45123` unless overridden by runtime settings or script parameters.
 - Windows runtime uses tray-hosted ServerApp behavior (no visible command prompt when launched as app binary). On Linux, tray appears when a status notifier/tray is available; otherwise the host runs headless deterministically.
 - `Launch Server on Startup` can be toggled from tray and Operator control settings and applies immediately (no restart required).
+- **Linux packaged/binary:** XDG autostart writes `reelroulette-server.desktop` with `Exec=`/`Path=` from the stable server path (**`APPIMAGE`** when running an AppImage, so autostart does not capture `/tmp/.mount_*`); ServerApp sets ASP.NET `ContentRootPath` to `AppContext.BaseDirectory` so login autostart still loads `appsettings` and `wwwroot` when cwd is not the install folder.
 
 ### Run ServerApp with WebUI rebuild
 
@@ -256,7 +257,7 @@ Requires `curl` and `jq` on `PATH`. Default repository is `HugginsIndustries/Ree
 
 AppImage installs go to `~/.local/share/ReelRoulette/` as `ReelRoulette-{Server|Desktop}-linux-x64.AppImage` (version stripped; same as `install-linux-local.sh`). Override directory with `REELROULETTE_LOCAL_APPIMAGE_DIR`. Portable tarball fallback still extracts under `~/.local/share/ReelRoulette/<server|desktop>/<version>/` and adds a launcher symlink in `~/.local/bin/`.
 
-On Linux, `pwsh ./tools/scripts/full-release.ps1 -Version <ver>` runs `set-release-version.ps1` with the same defaults documented under **Release Versioning** above (and any `-No*` switches you pass), then the two Linux portable scripts, then the two Linux AppImage scripts, and skips Inno installer steps (Windows-only). With no `-Version`, it skips `set-release-version` and packages using `.csproj` versions. AppImage steps require `appimagetool`.
+On Linux, `pwsh ./tools/scripts/full-release.ps1 -Version 0.11.0-dev` runs `set-release-version.ps1` with the same defaults documented under **Release Versioning** above (and any `-No*` switches you pass), then the two Linux portable scripts, then the two Linux AppImage scripts, and skips Inno installer steps (Windows-only). With no `-Version`, it skips `set-release-version` and packages using `.csproj` versions. AppImage steps require `appimagetool`.
 
 ## Troubleshooting
 

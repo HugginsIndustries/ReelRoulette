@@ -3,6 +3,7 @@ namespace ReelRoulette.ServerApp.Hosting;
 internal sealed class LinuxXdgStartupLaunchService : IStartupLaunchService
 {
     private const string DesktopEntryFileName = "reelroulette-server.desktop";
+    private const string AppImagePathEnvironmentVariable = "APPIMAGE";
     private readonly ILogger<LinuxXdgStartupLaunchService> _logger;
 
     public LinuxXdgStartupLaunchService(ILogger<LinuxXdgStartupLaunchService> logger)
@@ -98,7 +99,10 @@ internal sealed class LinuxXdgStartupLaunchService : IStartupLaunchService
             if (enabled)
             {
                 File.WriteAllText(desktopEntryPath, BuildDesktopEntryContent(executablePath));
-                _logger.LogInformation("Launch Server on Startup enabled via XDG autostart ({Reason}).", reason);
+                _logger.LogInformation(
+                    "Launch Server on Startup enabled via XDG autostart ({Reason}); Exec={ExecutablePath}.",
+                    reason,
+                    executablePath);
                 return Task.FromResult(new StartupLaunchResult(
                     Accepted: true,
                     Supported: true,
@@ -131,22 +135,49 @@ internal sealed class LinuxXdgStartupLaunchService : IStartupLaunchService
 
     private static string BuildDesktopEntryContent(string executablePath)
     {
-        return string.Join(
-            Environment.NewLine,
-            [
-                "[Desktop Entry]",
-                "Type=Application",
-                "Version=1.0",
-                "Name=ReelRoulette Server",
-                $"Exec=\"{executablePath}\"",
-                "Terminal=false",
-                "X-GNOME-Autostart-enabled=true",
-                "Comment=ReelRoulette Server"
-            ]) + Environment.NewLine;
+        var lines = new List<string>
+        {
+            "[Desktop Entry]",
+            "Type=Application",
+            "Version=1.0",
+            "Name=ReelRoulette Server"
+        };
+
+        var exeDir = Path.GetDirectoryName(executablePath);
+        if (!string.IsNullOrEmpty(exeDir))
+        {
+            // Freedesktop Path= sets the working directory for Exec=; matches portable run-server.sh behavior.
+            lines.Add($"Path={exeDir}");
+        }
+
+        lines.Add($"Exec=\"{executablePath}\"");
+        lines.Add("Terminal=false");
+        lines.Add("X-GNOME-Autostart-enabled=true");
+        lines.Add("Comment=ReelRoulette Server");
+
+        return string.Join(Environment.NewLine, lines) + Environment.NewLine;
     }
 
+    // Prefer APPIMAGE over ProcessPath: the latter lives under /tmp/.mount_* and breaks login autostart after reboot.
     private static string ResolveExecutablePath()
     {
+        var appImage = Environment.GetEnvironmentVariable(AppImagePathEnvironmentVariable);
+        if (!string.IsNullOrWhiteSpace(appImage))
+        {
+            try
+            {
+                var full = Path.GetFullPath(appImage.Trim());
+                if (File.Exists(full))
+                {
+                    return full;
+                }
+            }
+            catch (ArgumentException)
+            {
+                // Invalid path characters; fall back to process path.
+            }
+        }
+
         return Environment.ProcessPath ?? string.Empty;
     }
 

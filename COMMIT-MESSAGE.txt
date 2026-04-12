@@ -19,12 +19,12 @@ Instructions:
 
 Commit Message:
 
-M9f: WebUI polish — refresh parity, theme, controls, tag reorder
+M9g: Linux sign-off, XDG autostart content-root fix, Avalonia 12 + dependency refresh
 
-- Align WebUI refresh status with desktop completion summary and running-stage formatting; SSE path uses `buildRefreshStatusMessage` + `coerceRefreshSnapshot` from `refreshStatusProjection.ts`.
-- Tag editor: category move up/down sets `tagEditorCategoryOrderDirty` so Apply enables and existing upsert-category apply persists order.
-- Overlay: mute in bottom transport row (video-only), edit-tags top-right left of favorite; control-only drop shadows (no full media scrim).
-- System light/dark via `prefers-color-scheme` (`theme-light` / `theme-dark`) and CSS variables for shell + tag editor surfaces.
-- Milestone/docs: `MILESTONES.md` completion entry, `CHANGELOG.md` `[Unreleased]`, `CONTEXT.md`, `docs/checklists/testing-checklist.md`.
-- WebUI pairing chrome: themed `.pair-section`; sibling of title with flex-wrap (inline between title and preset on wide viewports, stacked under 600px); non-shrinking `#app > header`, no errant `flex-grow` on title/pair rows; under 600px token field flex-fills width with **Pair** on one line (`pair-section-label-hint`).
-- WebUI pairing visibility: strip hidden by default; show on **401** from APIs (e.g. `fetchJson`, random play); hide after successful `/api/version` so auth-off or existing session does not require `pairToken` in runtime config.
+- Complete **Linux Release Readiness and Sign-off**: move milestone to **Completed** in `MILESTONES.md` with CachyOS `linux-x64` command evidence (Release `dotnet build`/`test` + `EnableWindowsTargeting`, WebUI `npm run verify`, `verify-web-deploy.ps1`, Linux portable + AppImage packaging, `verify-linux-packaged-server-smoke.sh`, AppImage `--help`, `install-linux-local.sh` with isolated `HOME`).
+- Update `docs/checklists/testing-checklist.md` metadata, packaging/tray rows, sign-off **PASS**, and explicit waivers for Windows-only installer/packaging checks and live `install-linux-from-github.sh` against a tag.
+- `CHANGELOG.md` `[Unreleased]`, `CONTEXT.md`, `README.md`, `docs/architecture.md`, and `docs/domain-inventory.md`: Linux autostart / host behavior and this sign-off.
+- **Bugfix:** `ReelRoulette.ServerApp` uses `WebApplication.CreateBuilder` with `ContentRootPath = AppContext.BaseDirectory`; `LinuxXdgStartupLaunchService` writes `reelroulette-server.desktop` with `Exec=`/`Path=` from a stable path (prefers **`APPIMAGE`** for AppImage so autostart is not pinned to `/tmp/.mount_*`) so login startup resolves `appsettings`/`wwwroot` and cwd matches portable `run-server.sh`.
+- **Dependencies:** **Avalonia** **12.0.0** (ServerApp + DesktopApp); drop **Avalonia.Diagnostics** (no 12.x on NuGet; unused `WithDevTools()`); **Tmds.DBus.Protocol** **0.92.0** on ServerApp + DesktopApp (**NU1903** / **GHSA-xrw6-gwf8-vvr9**); **SkiaSharp** **3.119.2**, **LibVLCSharp.Avalonia** **3.9.6**, **VideoLAN.LibVLC.Windows** **3.0.23**, test SDK/xunit bumps—see **`CHANGELOG.md` `[Unreleased]`**.
+- Avalonia 12 code follow-ups: **ToggleButton** `IsCheckedChanged`, clipboard **`ClipboardExtensions`**, **`MenuItemToggleType`**, **`TextBox.PlaceholderText`** (replaces **`Watermark`**), thumbnail scaling **`SKSamplingOptions`**.
+- **Known issue:** **Desktop** client is not usable at runtime on Avalonia **12** until **LibVLCSharp** publishes **Avalonia 12**–compatible **`LibVLCSharp.Avalonia`** (current **3.9.6** targets older Avalonia APIs); waiting on upstream.

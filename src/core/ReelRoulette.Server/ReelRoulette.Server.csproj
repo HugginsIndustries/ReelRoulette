@@ -11,7 +11,7 @@
     <ProjectReference Include="..\ReelRoulette.Core\ReelRoulette.Core.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="SkiaSharp" Version="2.88.9" />
-  <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="2.88.9" />
+    <PackageReference Include="SkiaSharp" Version="3.119.2" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="3.119.2" />
   </ItemGroup>
 </Project>

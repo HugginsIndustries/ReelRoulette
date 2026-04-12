@@ -69,7 +69,7 @@ Boundary:
 - `src/core/ReelRoulette.ServerApp/Hosting/WindowsStartupLaunchService.cs`
   - Windows startup-launch registration and state reconciliation (`HKCU` Run key) for immediate tray/operator toggles.
 - `src/core/ReelRoulette.ServerApp/Hosting/LinuxXdgStartupLaunchService.cs`
-  - Linux startup-launch registration and state reconciliation via XDG autostart (`*.desktop` in the user autostart location) for immediate tray/operator toggles.
+  - Linux startup-launch registration and state reconciliation via XDG autostart (`*.desktop` in the user autostart location, `Path=` + `Exec=` resolved from **`APPIMAGE`** when present for AppImage runs) for immediate tray/operator toggles; complements `Program.cs` content root pinned to `AppContext.BaseDirectory` for session autostart.
 - `src/core/ReelRoulette.ServerApp/Hosting/HeadlessStartupLaunchService.cs`
   - non-Windows startup-launch no-op/unsupported path for host portability.
 - `src/core/ReelRoulette.Server/Services/ConnectedClientTracker.cs`

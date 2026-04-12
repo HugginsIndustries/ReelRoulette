@@ -215,7 +215,7 @@
             <TextBox x:Name="NewTagTextBox"
                      Grid.Column="2"
                      Height="36"
-                     Watermark="New tag name"
+                     PlaceholderText="New tag name"
                      KeyDown="NewTagTextBox_KeyDown"/>
             <Button Grid.Column="3"
                     ToolTip.Tip="Add tag"

@@ -122,7 +122,7 @@
                                            MinWidth="50"/>
                                 <TextBox x:Name="MinDurationTextBox"
                                          Grid.Column="1"
-                                         Watermark="HH:MM:SS or leave empty"
+                                         PlaceholderText="HH:MM:SS or leave empty"
                                          Text="{Binding MinDurationText}"/>
                                 <CheckBox x:Name="NoMinDurationCheckBox"
                                           Grid.Column="2"
@@ -137,7 +137,7 @@
                                            MinWidth="50"/>
                                 <TextBox x:Name="MaxDurationTextBox"
                                          Grid.Column="1"
-                                         Watermark="HH:MM:SS or leave empty"
+                                         PlaceholderText="HH:MM:SS or leave empty"
                                          Text="{Binding MaxDurationText}"/>
                                 <CheckBox x:Name="NoMaxDurationCheckBox"
                                           Grid.Column="2"
@@ -335,7 +335,7 @@
                         <Grid ColumnDefinitions="* Auto" ColumnSpacing="8">
                             <TextBox x:Name="NewPresetNameTextBox"
                                      Grid.Column="0"
-                                     Watermark="Enter preset name"
+                                     PlaceholderText="Enter preset name"
                                      KeyDown="NewPresetNameTextBox_KeyDown"/>
                             <Button Grid.Column="1"
                                     Content="Add Preset"

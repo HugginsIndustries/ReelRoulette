@@ -1659,12 +1659,12 @@ public sealed class RefreshPipelineService : BackgroundService
 
                 var canvas = surface.Canvas;
                 canvas.Clear(SKColors.Transparent);
-                using var paint = new SKPaint
-                {
-                    FilterQuality = SKFilterQuality.High,
-                    IsAntialias = true
-                };
-                canvas.DrawImage(image, new SKRect(0, 0, targetWidth, targetHeight), paint);
+                using var paint = new SKPaint { IsAntialias = true };
+                canvas.DrawImage(
+                    image,
+                    new SKRect(0, 0, targetWidth, targetHeight),
+                    new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.Linear),
+                    paint);
                 canvas.Flush();
 
                 using var snapshot = surface.Snapshot();

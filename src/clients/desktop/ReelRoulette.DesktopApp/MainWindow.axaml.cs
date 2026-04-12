@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Data.Converters;
 using Avalonia.Input;
+using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Platform.Storage;
@@ -10703,6 +10704,23 @@ namespace ReelRoulette
             {
                 ApplyVolumeChange(_pendingVolumeValue.Value);
                 _pendingVolumeValue = null; // Clear to prevent duplicate application
+            }
+        }
+
+        private void MuteButton_IsCheckedChanged(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            if (sender is not ToggleButton tb)
+            {
+                return;
+            }
+
+            if (tb.IsChecked == true)
+            {
+                MuteButton_Checked(sender, e);
+            }
+            else
+            {
+                MuteButton_Unchecked(sender, e);
             }
         }
 

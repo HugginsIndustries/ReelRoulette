@@ -1662,7 +1662,7 @@ namespace ReelRoulette
             _nameTextBox = new TextBox
             {
                 Text = currentName,
-                Watermark = "Enter preset name"
+                PlaceholderText = "Enter preset name"
             };
             
             // Select all text for easy editing

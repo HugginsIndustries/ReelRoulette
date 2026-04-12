@@ -17,7 +17,7 @@
                   Margin="0,0,0,8"/>
         <TextBox Grid.Row="1"
                 x:Name="TagNameTextBox"
-                Watermark="Enter tag name"
+                PlaceholderText="Enter tag name"
                 Margin="0,0,0,16"/>
 
         <!-- Category -->
@@ -40,7 +40,7 @@
                       FontWeight="SemiBold"
                       Margin="0,0,0,8"/>
             <TextBox x:Name="NewCategoryNameTextBox"
-                    Watermark="Enter category name"/>
+                    PlaceholderText="Enter category name"/>
         </StackPanel>
 
         <!-- Buttons -->

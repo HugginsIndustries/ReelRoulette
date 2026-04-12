@@ -172,7 +172,7 @@ namespace ReelRoulette
 
             var input = new TextBox
             {
-                Watermark = "Type DELETE to confirm",
+                PlaceholderText = "Type DELETE to confirm",
                 Margin = new Avalonia.Thickness(16, 6, 16, 6)
             };
 

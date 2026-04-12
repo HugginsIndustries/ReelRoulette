@@ -23,7 +23,7 @@ ReelRoulette is migrating from a monolithic desktop app to a thin-client, API-fi
     - Falls back to a deterministic headless host when a tray cannot be created.
   - Startup-launch registration is host-managed with immediate toggle support through tray and Operator control settings:
     - Windows: user-scoped `HKCU` registration.
-    - Linux: XDG autostart (`*.desktop`).
+    - Linux: XDG autostart (`*.desktop` under `~/.config/autostart/` or `$XDG_CONFIG_HOME/autostart/`, with `Exec=`/`Path=` derived from the stable app path—**`APPIMAGE`** when running an AppImage, otherwise the process path—and host content root pinned to `AppContext.BaseDirectory` so session autostart finds config and WebUI assets).
 
 - **Domain execution (`src/core/ReelRoulette.Core` + server services)**
   - API-authoritative library operations (import, duplicates, auto-tag, playback stats, refresh pipeline).

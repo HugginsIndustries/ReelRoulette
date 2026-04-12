@@ -201,7 +201,7 @@
                                 <TextBox Grid.Column="1"
                                          Text="{Binding CoreServerBaseUrl}"
                                          Width="320"
-                                         Watermark="http://localhost:45123"/>
+                                         PlaceholderText="http://localhost:45123"/>
                             </Grid>
                             <TextBlock Text="Desktop uses this URL to call core APIs."
                                        FontSize="11"
@@ -562,7 +562,7 @@
                                 <TextBox Grid.Column="1"
                                          Text="{Binding WebRemoteLanHostname}"
                                          Width="180"
-                                         Watermark="reel"/>
+                                         PlaceholderText="reel"/>
                             </Grid>
                             <TextBlock Text="Used for local hostname access on supporting networks/devices (example: reel -> reel.local)."
                                        FontSize="11"
@@ -587,7 +587,7 @@
                                              IsChecked="{Binding WebRemoteAuthTokenRequired}"
                                              Margin="0,4,0,0"/>
                                 <TextBox x:Name="WebRemoteSharedTokenTextBox"
-                                         Watermark="Shared token (leave empty to generate on first use)"
+                                         PlaceholderText="Shared token (leave empty to generate on first use)"
                                          Text="{Binding WebRemoteSharedToken}"
                                          Margin="20,8,0,0"
                                          IsVisible="{Binding WebRemoteAuthTokenRequired}"/>
