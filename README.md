@@ -28,7 +28,7 @@ ReelRoulette is a server-first media randomizer with thin desktop and web client
 
 These paths are for **people who want to run packaged builds**. If you are changing code, skip to [Developing from source](#developing-from-source).
 
-Official downloads live on **[GitHub Releases](https://github.com/HugginsIndustries/ReelRoulette/releases)**. You usually want **two pieces**: the **server** (hosts your library, API, WebUI, Operator) and optionally the **desktop** app (a native client). The **WebUI** is served by the server at the root URL once the server is running; it supports the same API-backed playback filters and presets as the desktop **Filter Media** dialog (overlay control with a `filter_alt` icon).
+Official downloads live on **[GitHub Releases](https://github.com/HugginsIndustries/ReelRoulette/releases)**. You usually want **two pieces**: the **server** (hosts your library, API, WebUI, Operator) and optionally the **desktop** app (a native client). The **WebUI** is served by the server at the root URL once the server is running; it supports the same API-backed playback filters and presets as the desktop **Filter Media** dialog (overlay control with a `filter_alt` icon), and a tabbed tag overlay (**Edit Tags** / **Auto Tag**) aligned with the desktop Auto Tag workflow over the API.
 
 ### Windows
 

@@ -121,11 +121,11 @@ Boundary:
 WebUI is runtime-config-driven API/SSE client orchestration.
 
 - `src/clients/web/ReelRoulette.WebUI/src/app.js`
-  - main client runtime behavior and orchestration.
+  - main client runtime behavior and orchestration (playback, filter dialog, tag overlay with **Edit Tags** + **Auto Tag** API flows).
 - `src/clients/web/ReelRoulette.WebUI/src/filter/filterStateModel.ts`
   - filter JSON serialize/parse aligned with desktop/server `FilterState`.
 - `src/clients/web/ReelRoulette.WebUI/src/shell.ts`
-  - static layout including tag editor and filter overlay chrome.
+  - static layout including tabbed tag overlay and filter overlay chrome.
 - `src/clients/web/ReelRoulette.WebUI/src/main.ts`
   - bootstrap entrypoint.
 - `src/clients/web/ReelRoulette.WebUI/src/api/coreApi.ts`

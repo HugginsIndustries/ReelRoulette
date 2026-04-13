@@ -79,12 +79,12 @@ Desktop-only: reads/writes roaming `ReelRoulette` data and local thumbnails (no 
 - [x] Manual controls (prev/play-next) work.
 - [x] Loop/autoplay toggles work.
 - [x] Favorite/blacklist actions work.
-- [x] Tag editor flows work (open/edit/apply/close).
+- [x] Tag editor flows work (open/edit/save/close); **Auto Tag** tab: scan (full library on/off vs enabled sources), **View all matches**, select/deselect, unified **Save** and **`Discard changes?`** on Close/Refresh when pending; in-flight scan disables Close/Refresh/Scan/Save.
 - [x] SSE status transitions are user-friendly (`connected`, `reconnecting`, `resync` paths).
 - [x] After a core refresh completes, status shows desktop-style segmented summary (`Core refresh complete | Source: … | Fingerprint: … | Duration: … | Loudness: … | Thumbnails: …`).
 - [x] System light/dark: with WebUI open, change OS theme; shell and tag editor match (`theme-light` / `theme-dark`) and tag chips stay readable (white glyphs).
 - [x] Video: mute in transport row toggles audio and glyph (`volume_up` / `volume_off`); edit-tags is top-right immediately left of favorite; overlay shadows apply to controls only (video/image not dimmed by a full scrim).
-- [x] Tag editor: move category up/down only → Apply enables → apply → reopen editor and confirm order persisted.
+- [x] Tag editor: move category up/down only → Save enables → save → reopen editor and confirm order persisted.
 
 ## Mobile Web UX (LAN)
 

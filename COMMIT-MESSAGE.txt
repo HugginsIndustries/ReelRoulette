@@ -19,6 +19,8 @@ Instructions:
 
 Commit Message:
 
-Docs: MILESTONES M9i WebUI Auto Tag parity
+M9i: WebUI Auto Tag parity and desktop scan scope
 
-- Add **M9i** in `MILESTONES.md`: Auto Tag tab beside Edit Tags, API scan/apply, post-mutation resync, `localStorage` scan default, filter-overlay tab pattern.
+- WebUI tag overlay: **Edit Tags** / **Auto Tag** tabs, API scan/apply, projection-based scope, unified **Save** and discard on Close/Refresh.
+- Desktop: Auto Tag with **Scan full library** off limits candidates to **enabled sources** only (no filter/search narrowing).
+- Docs: `README.md`, `MILESTONES.md` (M9i complete + verification evidence), `CONTEXT.md`, `docs/api.md`, `docs/architecture.md`, `docs/domain-inventory.md`, `docs/checklists/testing-checklist.md`, `CHANGELOG.md` `[Unreleased]`.

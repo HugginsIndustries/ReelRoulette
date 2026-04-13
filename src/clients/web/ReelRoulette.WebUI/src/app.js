@@ -18,6 +18,7 @@ const SESSION_ID_KEY = "rr_sessionId";
 const PHOTO_DURATION_KEY = "rr_photoDuration";
 const RANDOMIZATION_MODE_KEY = "rr_randomizationMode";
 const TAG_EDITOR_COLLAPSED_KEY = "rr_tagEditorCollapsed";
+const AUTO_TAG_SCAN_FULL_KEY = "rr_autoTagScanFullLibrary";
 const FILTER_DIALOG_COLLAPSED_KEY = "rr_filterDialogCollapsedCategories";
 /** Session key for filter Tags tab "Uncategorized" orphan row collapse state. */
 const FILTER_DIALOG_UNCATEGORIZED_COLLAPSE_KEY = "__filter_uncategorized__";
@@ -181,6 +182,10 @@ export function startApp(config) {
     tagEditContext: null,
     tagEditorWasPlaying: false,
     tagEditorPhotoTimerRunning: false,
+    tagEditorActiveTab: "edit",
+    autoTagScanInFlight: false,
+    autoTagRows: [],
+    autoTagScanHasRun: false,
     compatibilityBlocked: false,
     playAttemptId: 0,
     videoMuted: false,
@@ -224,6 +229,16 @@ export function startApp(config) {
   const tagEditorNewTag = getElement("tag-editor-new-tag");
   const tagEditorAddTagBtn = getElement("tag-editor-add-tag-btn");
   const tagEditorApplyBtn = getElement("tag-editor-apply-btn");
+  const tagEditorPanelEdit = getElement("tag-editor-panel-edit");
+  const tagEditorPanelAutotag = getElement("tag-editor-panel-autotag");
+  const tagAutotagScanFull = getElement("tag-autotag-scan-full");
+  const tagAutotagViewAll = getElement("tag-autotag-view-all");
+  const tagAutotagSelectAll = getElement("tag-autotag-select-all");
+  const tagAutotagDeselectAll = getElement("tag-autotag-deselect-all");
+  const tagAutotagScanBtn = getElement("tag-autotag-scan-btn");
+  const tagAutotagProgress = getElement("tag-autotag-progress");
+  const tagAutotagStatus = getElement("tag-autotag-status");
+  const tagAutotagResults = getElement("tag-autotag-results");
   const tagEditModal = getElement("tag-edit-modal");
   const tagEditName = getElement("tag-edit-name");
   const tagEditCategory = getElement("tag-edit-category");
@@ -250,7 +265,9 @@ export function startApp(config) {
     !nowPlayingDuration || !favoriteBtn || !blacklistBtn || !prevBtn || !playBtn || !nextBtn ||
     !loopBtn || !autoplayBtn || !fullscreenBtn || !muteBtn || !filterEditBtn || !tagEditBtn || !tagEditor || !tagEditorBody ||
     !tagEditorCloseBtn || !tagEditorRefreshBtn || !tagEditorAddCategoryBtn || !tagEditorCategorySelect ||
-    !tagEditorNewTag || !tagEditorAddTagBtn || !tagEditorApplyBtn || !tagEditModal || !tagEditName ||
+    !tagEditorNewTag || !tagEditorAddTagBtn || !tagEditorApplyBtn || !tagEditorPanelEdit || !tagEditorPanelAutotag ||
+    !tagAutotagScanFull || !tagAutotagViewAll || !tagAutotagSelectAll || !tagAutotagDeselectAll || !tagAutotagScanBtn ||
+    !tagAutotagProgress || !tagAutotagStatus || !tagAutotagResults || !tagEditModal || !tagEditName ||
     !tagEditCategory || !tagEditCancelBtn || !tagEditSaveBtn || !photoDurationInput || !emptyState ||
     !filterDialog || !filterDialogHeading || !filterDialogRefreshBtn || !filterDialogCloseBtn ||
     !filterPanelGeneral || !filterPanelTags || !filterPanelPresets || !filterClearAllBtn ||
@@ -1762,6 +1779,310 @@ export function startApp(config) {
     );
   }
 
+  function loadPersistedAutoTagScanFull() {
+    try {
+      return localStorage.getItem(AUTO_TAG_SCAN_FULL_KEY) === "true";
+    } catch {
+      return false;
+    }
+  }
+
+  function persistAutoTagScanFull(value) {
+    try {
+      localStorage.setItem(AUTO_TAG_SCAN_FULL_KEY, value ? "true" : "false");
+    } catch {
+      // best effort
+    }
+  }
+
+  function resetAutoTagState() {
+    state.autoTagRows = [];
+    state.autoTagScanHasRun = false;
+    state.autoTagScanInFlight = false;
+    if (tagAutotagStatus) tagAutotagStatus.textContent = "";
+    if (tagAutotagProgress) tagAutotagProgress.style.display = "none";
+    if (tagAutotagResults) tagAutotagResults.innerHTML = "";
+  }
+
+  function getAutoTagViewAllMatches() {
+    return !!(tagAutotagViewAll && tagAutotagViewAll.checked);
+  }
+
+  function findAutoTagRowByRowId(rid) {
+    const n = Number(rid);
+    return state.autoTagRows.find((r) => r._rowId === n) || null;
+  }
+
+  function getVisibleAutoTagFiles(row) {
+    const viewAll = getAutoTagViewAllMatches();
+    const files = Array.isArray(row.files) ? row.files : [];
+    return files.filter((f) => viewAll || f.needsChange);
+  }
+
+  function getAutoTagVisibleRowIndices() {
+    const viewAll = getAutoTagViewAllMatches();
+    const indices = [];
+    state.autoTagRows.forEach((row, idx) => {
+      if (viewAll || (row.wouldChangeCount || 0) > 0) {
+        indices.push(idx);
+      }
+    });
+    indices.sort((a, b) =>
+      String(state.autoTagRows[a].tagName || "").localeCompare(String(state.autoTagRows[b].tagName || ""), undefined, {
+        sensitivity: "base"
+      })
+    );
+    return indices;
+  }
+
+  function syncAutoTagRowHeaderCheckbox(row) {
+    const visible = getVisibleAutoTagFiles(row);
+    const input = tagAutotagResults && tagAutotagResults.querySelector(`input[data-autotag-row-check="${row._rowId}"]`);
+    if (!input || visible.length === 0) return;
+    const n = visible.filter((f) => f.selected).length;
+    input.indeterminate = n > 0 && n < visible.length;
+    input.checked = n === visible.length && n > 0;
+  }
+
+  function updateAutoTagStatusSummary() {
+    if (!tagAutotagStatus || !state.autoTagScanHasRun) return;
+    if (state.autoTagRows.length === 0) {
+      tagAutotagStatus.textContent = "Scan complete: no matching tags found.";
+      return;
+    }
+    const matchingTags = state.autoTagRows.length;
+    let totalMatches = 0;
+    let totalWouldChange = 0;
+    let selectedChanges = 0;
+    for (const row of state.autoTagRows) {
+      totalMatches += row.totalMatchedCount || 0;
+      totalWouldChange += row.wouldChangeCount || 0;
+      for (const f of getVisibleAutoTagFiles(row)) {
+        if (f.needsChange && f.selected) selectedChanges += 1;
+      }
+    }
+    tagAutotagStatus.textContent = `Scan complete: ${matchingTags} matching tags, ${totalMatches} matches, ${selectedChanges}/${totalWouldChange} selected changes.`;
+  }
+
+  function hasAutoTagApplyPending() {
+    if (!state.autoTagScanHasRun || state.autoTagRows.length === 0) return false;
+    for (const row of state.autoTagRows) {
+      for (const f of getVisibleAutoTagFiles(row)) {
+        if (f.needsChange && f.selected) return true;
+      }
+    }
+    return false;
+  }
+
+  function shouldConfirmDiscardTagOverlay() {
+    return hasPendingTagEditorMutations() || hasAutoTagApplyPending();
+  }
+
+  function buildAutoTagAssignments() {
+    const assignments = [];
+    for (const row of state.autoTagRows) {
+      const paths = [];
+      for (const f of getVisibleAutoTagFiles(row)) {
+        if (f.selected && f.fullPath) paths.push(String(f.fullPath));
+      }
+      if (paths.length > 0) {
+        assignments.push({ tagName: String(row.tagName || ""), itemPaths: paths });
+      }
+    }
+    return assignments;
+  }
+
+  function updateTagOverlaySaveButtonState() {
+    const manual = hasPendingTagEditorMutations();
+    const autoP = hasAutoTagApplyPending();
+    const hasAny = manual || autoP;
+    const block = state.autoTagScanInFlight;
+    tagEditorApplyBtn.classList.toggle("has-pending", hasAny);
+    tagEditorApplyBtn.disabled = !hasAny || block;
+  }
+
+  function updateAutotagChromeDisabled() {
+    const busy = state.autoTagScanInFlight;
+    if (tagAutotagScanBtn) tagAutotagScanBtn.disabled = busy;
+    if (tagEditorCloseBtn) tagEditorCloseBtn.disabled = busy;
+    if (tagEditorRefreshBtn) tagEditorRefreshBtn.disabled = busy;
+    updateTagOverlaySaveButtonState();
+  }
+
+  async function fetchAutoTagScopeItemIds() {
+    const proj = await fetchJson("/api/library/projection");
+    const sources = Array.isArray(proj.sources) ? proj.sources : [];
+    const enabled = new Set();
+    for (const s of sources) {
+      if (s && s.id != null && s.isEnabled !== false) {
+        enabled.add(String(s.id));
+      }
+    }
+    const items = Array.isArray(proj.items) ? proj.items : [];
+    const paths = [];
+    const seen = new Set();
+    for (const item of items) {
+      const sid = item.sourceId != null ? String(item.sourceId) : "";
+      if (!enabled.has(sid)) continue;
+      const fp = item.fullPath != null ? String(item.fullPath).trim() : "";
+      if (!fp) continue;
+      const low = fp.toLowerCase();
+      if (seen.has(low)) continue;
+      seen.add(low);
+      paths.push(fp);
+    }
+    return paths;
+  }
+
+  function renderAutoTagPanel() {
+    if (!tagAutotagResults) return;
+    if (!state.autoTagScanHasRun) {
+      tagAutotagResults.innerHTML = "";
+      return;
+    }
+    if (state.autoTagRows.length === 0) {
+      tagAutotagResults.innerHTML = '<p class="tag-autotag-hint">Scan complete: no matching tags found.</p>';
+      updateAutoTagStatusSummary();
+      updateTagOverlaySaveButtonState();
+      return;
+    }
+    const visIdx = getAutoTagVisibleRowIndices();
+    if (visIdx.length === 0) {
+      tagAutotagResults.innerHTML = '<p class="tag-autotag-hint">No rows to show.</p>';
+      updateTagOverlaySaveButtonState();
+      return;
+    }
+    const head = `<div class="tag-autotag-table-head"><span></span><span>Apply</span><span>Tag / File</span><span>Total matched</span><span>To be changed</span></div>`;
+    const parts = [head];
+    for (const idx of visIdx) {
+      const row = state.autoTagRows[idx];
+      const visibleFiles = getVisibleAutoTagFiles(row);
+      const exp = row.expanded ? "expand_more" : "chevron_right";
+      const filesHtml = visibleFiles
+        .map((f) => {
+          const rid = row._rowId;
+          const pathAttr = encodeURIComponent(String(f.fullPath || ""));
+          return `<div class="tag-autotag-file-row"><label><input type="checkbox" data-autotag-file data-row-id="${rid}" data-path="${pathAttr}" ${f.selected ? "checked" : ""}></label><span class="tag-autotag-file-path" title="${escapeHtml(f.fullPath || "")}">${escapeHtml(f.displayPath || f.fullPath || "")}</span></div>`;
+        })
+        .join("");
+      const rowHtml = `<div class="tag-autotag-row" data-autotag-row="${row._rowId}">
+        <div class="tag-autotag-row-main">
+          <button type="button" class="icon-glyph-base icon-glyph-button" data-autotag-expand="${row._rowId}" aria-label="${row.expanded ? "Collapse" : "Expand"}"><span class="material-symbol-icon">${exp}</span></button>
+          <input type="checkbox" data-autotag-row-check="${row._rowId}">
+          <span style="font-weight:600">${escapeHtml(row.tagName || "")}</span>
+          <span>${row.totalMatchedCount}</span>
+          <span>${row.wouldChangeCount}</span>
+        </div>
+        <div class="tag-autotag-row-files" style="display:${row.expanded ? "block" : "none"}">${filesHtml}</div>
+      </div>`;
+      parts.push(rowHtml);
+    }
+    tagAutotagResults.innerHTML = parts.join("");
+    for (const idx of visIdx) {
+      const row = state.autoTagRows[idx];
+      syncAutoTagRowHeaderCheckbox(row);
+    }
+    updateAutoTagStatusSummary();
+    updateTagOverlaySaveButtonState();
+  }
+
+  function switchTagEditorTab(tab, silent) {
+    const t = tab === "autotag" ? "autotag" : "edit";
+    state.tagEditorActiveTab = t;
+    const strip = tagEditor && tagEditor.querySelector(".tag-editor-tabstrip");
+    if (strip) {
+      strip.querySelectorAll("[data-tag-editor-tab]").forEach((btn) => {
+        const on = btn.getAttribute("data-tag-editor-tab") === t;
+        btn.classList.toggle("is-active", on);
+        btn.setAttribute("aria-selected", on ? "true" : "false");
+      });
+    }
+    if (tagEditorPanelEdit) tagEditorPanelEdit.style.display = t === "edit" ? "flex" : "none";
+    if (tagEditorPanelAutotag) tagEditorPanelAutotag.style.display = t === "autotag" ? "flex" : "none";
+    if (!silent && t === "autotag") {
+      renderAutoTagPanel();
+    }
+  }
+
+  async function runAutoTagScan() {
+    if (state.autoTagScanInFlight) return;
+    state.autoTagScanInFlight = true;
+    updateAutotagChromeDisabled();
+    if (tagAutotagProgress) tagAutotagProgress.style.display = "block";
+    if (tagAutotagStatus) tagAutotagStatus.textContent = "Scanning…";
+    try {
+      const scanFull = !!(tagAutotagScanFull && tagAutotagScanFull.checked);
+      /** @type {{ scanFullLibrary: boolean, itemIds: string[] }} */
+      const payload = { scanFullLibrary: scanFull, itemIds: [] };
+      if (!scanFull) {
+        const ids = await fetchAutoTagScopeItemIds();
+        if (ids.length === 0) {
+          if (tagAutotagStatus) tagAutotagStatus.textContent = "No items available in this scan scope.";
+          state.autoTagRows = [];
+          state.autoTagScanHasRun = true;
+          renderAutoTagPanel();
+          return;
+        }
+        payload.itemIds = ids;
+      }
+      const resp = await apiPost("/api/autotag/scan", payload);
+      if (!resp.ok) {
+        throw new Error(String(resp.status));
+      }
+      const data = await resp.json();
+      const rowsIn = Array.isArray(data.rows) ? data.rows : [];
+      state.autoTagRows = [];
+      let rid = 0;
+      for (const r of rowsIn) {
+        const files = Array.isArray(r.files) ? r.files : [];
+        if (files.length === 0) continue;
+        state.autoTagRows.push({
+          _rowId: rid++,
+          tagName: r.tagName,
+          totalMatchedCount: r.totalMatchedCount,
+          wouldChangeCount: r.wouldChangeCount,
+          expanded: false,
+          files: files.map((f) => ({
+            fullPath: f.fullPath,
+            displayPath: f.displayPath,
+            needsChange: !!f.needsChange,
+            selected: false
+          }))
+        });
+      }
+      state.autoTagScanHasRun = true;
+      renderAutoTagPanel();
+    } catch {
+      if (tagAutotagStatus) {
+        tagAutotagStatus.textContent = "Auto-tag scan failed. Core runtime is unavailable or still recovering.";
+      }
+      state.autoTagRows = [];
+      state.autoTagScanHasRun = true;
+      renderAutoTagPanel();
+    } finally {
+      state.autoTagScanInFlight = false;
+      if (tagAutotagProgress) tagAutotagProgress.style.display = "none";
+      updateAutotagChromeDisabled();
+    }
+  }
+
+  async function applyFullTagOverlayAsync() {
+    if (state.autoTagScanInFlight) return;
+    if (hasPendingTagEditorMutations()) {
+      await applyTagEditorChangesAsync();
+      resetTagEditorPending();
+      await refreshTagEditorModel();
+    }
+    const assignments = buildAutoTagAssignments();
+    if (assignments.length > 0) {
+      const r = await apiPost("/api/autotag/apply", { assignments });
+      if (!r.ok) throw new Error(`Auto-tag apply failed (${r.status})`);
+    }
+    resetTagEditorPending();
+    resetAutoTagState();
+    await refreshTagEditorModel();
+  }
+
   function openTagEditModal(tag, categories) {
     state.tagEditContext = {
       oldName: tag.name,
@@ -2062,10 +2383,8 @@ export function startApp(config) {
       tagEditorBody.appendChild(section);
     });
 
-    const hasPendingChanges = hasPendingTagEditorMutations();
-    tagEditorApplyBtn.classList.toggle("has-pending", hasPendingChanges);
     setButtonSymbol(tagEditorApplyBtn, "save");
-    tagEditorApplyBtn.disabled = !hasPendingChanges;
+    updateTagOverlaySaveButtonState();
   }
 
   async function refreshTagEditorModel() {
@@ -2090,6 +2409,9 @@ export function startApp(config) {
   }
 
   async function applyTagEditorChangesAsync() {
+    if (!hasPendingTagEditorMutations()) {
+      return;
+    }
     const pending = state.tagEditorPending || createTagEditorPending();
     const itemIds = getCurrentTagEditorItemIds();
     const display = buildTagEditorDisplayModel();
@@ -2157,6 +2479,10 @@ export function startApp(config) {
     state.tagEditorCategoryOrder = [];
     state.tagEditorCollapsedCategories = loadTagEditorCollapsedCategories();
     resetTagEditorPending();
+    resetAutoTagState();
+    if (tagAutotagScanFull) tagAutotagScanFull.checked = loadPersistedAutoTagScanFull();
+    if (tagAutotagViewAll) tagAutotagViewAll.checked = false;
+    switchTagEditorTab("edit", true);
     pauseForTagEditor();
     tagEditor.style.display = "flex";
     refreshTagEditorModel().catch((error) => {
@@ -2164,10 +2490,15 @@ export function startApp(config) {
     });
   }
 
-  function closeTagEditor() {
+  function closeTagEditor(skipDiscardConfirm) {
+    if (!skipDiscardConfirm && shouldConfirmDiscardTagOverlay()) {
+      if (!confirm("Discard changes?")) return;
+    }
     closeTagEditModal();
     state.tagEditorOpen = false;
     state.tagEditorItemIds = [];
+    resetAutoTagState();
+    resetTagEditorPending();
     tagEditor.style.display = "none";
     resumeAfterTagEditor();
   }
@@ -2481,6 +2812,87 @@ export function startApp(config) {
     }
   });
 
+  tagEditor.querySelector(".tag-editor-tabstrip")?.addEventListener("click", (event) => {
+    const btn = event.target && event.target.closest ? event.target.closest("[data-tag-editor-tab]") : null;
+    if (!btn) return;
+    const tab = btn.getAttribute("data-tag-editor-tab");
+    if (tab === "edit" || tab === "autotag") {
+      switchTagEditorTab(tab);
+    }
+  });
+
+  tagAutotagScanFull.addEventListener("change", () => {
+    persistAutoTagScanFull(!!tagAutotagScanFull.checked);
+  });
+  tagAutotagViewAll.addEventListener("change", () => {
+    for (const row of state.autoTagRows) {
+      if (getVisibleAutoTagFiles(row).length === 0) row.expanded = false;
+    }
+    renderAutoTagPanel();
+  });
+  tagAutotagSelectAll.addEventListener("click", () => {
+    for (const idx of getAutoTagVisibleRowIndices()) {
+      const row = state.autoTagRows[idx];
+      for (const f of getVisibleAutoTagFiles(row)) {
+        f.selected = true;
+      }
+    }
+    renderAutoTagPanel();
+  });
+  tagAutotagDeselectAll.addEventListener("click", () => {
+    for (const idx of getAutoTagVisibleRowIndices()) {
+      const row = state.autoTagRows[idx];
+      for (const f of getVisibleAutoTagFiles(row)) {
+        f.selected = false;
+      }
+    }
+    renderAutoTagPanel();
+  });
+  tagAutotagScanBtn.addEventListener("click", () => {
+    void runAutoTagScan();
+  });
+
+  tagAutotagResults.addEventListener("change", (e) => {
+    const t = e.target;
+    if (!(t instanceof HTMLInputElement)) return;
+    if (t.hasAttribute("data-autotag-row-check")) {
+      const row = findAutoTagRowByRowId(t.getAttribute("data-autotag-row-check"));
+      if (!row) return;
+      const v = !!t.checked;
+      t.indeterminate = false;
+      for (const f of getVisibleAutoTagFiles(row)) {
+        f.selected = v;
+      }
+      renderAutoTagPanel();
+      return;
+    }
+    if (t.hasAttribute("data-autotag-file")) {
+      const row = findAutoTagRowByRowId(t.getAttribute("data-row-id"));
+      let path = "";
+      try {
+        path = decodeURIComponent(t.getAttribute("data-path") || "");
+      } catch {
+        path = t.getAttribute("data-path") || "";
+      }
+      if (!row || !path) return;
+      const f = row.files.find((x) => normalizePath(x.fullPath) === normalizePath(path));
+      if (f) f.selected = t.checked;
+      syncAutoTagRowHeaderCheckbox(row);
+      updateAutoTagStatusSummary();
+      updateTagOverlaySaveButtonState();
+    }
+  });
+  tagAutotagResults.addEventListener("click", (e) => {
+    const b = e.target && e.target.closest ? e.target.closest("[data-autotag-expand]") : null;
+    if (!b) return;
+    e.preventDefault();
+    const row = findAutoTagRowByRowId(b.getAttribute("data-autotag-expand"));
+    if (row) {
+      row.expanded = !row.expanded;
+      renderAutoTagPanel();
+    }
+  });
+
   filterEditBtn.addEventListener("click", (event) => {
     event.stopPropagation();
     void openFilterDialog();
@@ -2514,9 +2926,15 @@ export function startApp(config) {
     openTagEditor();
   });
   tagEditorCloseBtn.addEventListener("click", () => {
-    closeTagEditor();
+    if (state.autoTagScanInFlight) return;
+    closeTagEditor(false);
   });
   tagEditorRefreshBtn.addEventListener("click", () => {
+    if (state.autoTagScanInFlight) return;
+    if (shouldConfirmDiscardTagOverlay()) {
+      if (!confirm("Discard changes?")) return;
+    }
+    resetAutoTagState();
     resetTagEditorPending();
     state.tagEditorCategoryOrder = [];
     void refreshTagEditorModel().catch((error) => {
@@ -2556,10 +2974,11 @@ export function startApp(config) {
     renderTagEditor();
   });
   tagEditorApplyBtn.addEventListener("click", async () => {
+    if (state.autoTagScanInFlight) return;
     try {
-      await applyTagEditorChangesAsync();
+      await applyFullTagOverlayAsync();
       setStatus("Tag editor changes applied");
-      closeTagEditor();
+      closeTagEditor(true);
     } catch (error) {
       setStatus(error?.message || `Tag apply failed: ${error}`);
     }

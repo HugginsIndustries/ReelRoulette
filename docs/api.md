@@ -183,7 +183,7 @@ Reconnect/resync behavior:
 - Duplicate scan item payload includes per-item duplicate metadata (`itemId`, path/source identity, favorite/blacklist flags, play count) and `tagCount` for faster keep/delete review.
 - `POST /api/duplicates/scan`
 - `POST /api/duplicates/apply`
-- `POST /api/autotag/scan`
+- `POST /api/autotag/scan` — body `scanFullLibrary` and `itemIds` (library item `fullPath` values). When `scanFullLibrary` is **true**, clients may send `itemIds: []` for a full-library scan. When **false**, send a **non-empty** `itemIds` for a scoped scan; **empty** `itemIds` with `scanFullLibrary: false` is treated as full library on the server.
 - `POST /api/autotag/apply`
 
 ### Media, thumbnail, events, client logs

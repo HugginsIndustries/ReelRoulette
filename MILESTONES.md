@@ -89,80 +89,7 @@ Do not use this file for detailed architecture explanation or current capability
 
 ## Active Milestones
 
-Last milestone completed: M9h
-
-### M9i - WebUI Auto Tag Parity
-
-- **Status**: 🚧 In Progress
-- **Goal**: Ship **Auto Tag** in the WebUI with the same **API-level** scan/selection/apply behavior as the **Desktop** **Auto Tag** dialog (full-screen tag overlay with tabs), while using the WebUI’s **shared Save** / **Close**+discard model instead of separate Auto Tag OK/Cancel buttons. **Align Desktop Auto Tag scan scope** with WebUI so **Scan full library** off means **enabled sources only**—not playback/filter state, tag filters, or library search. WebUI integrates into the existing tag experience without duplicating tag logic on the client.
-- **Scope**:
-  - **Desktop — Auto Tag scan scope:** When **Scan full library** is **unchecked**, the candidate item set for scan/apply is **all library items belonging to enabled sources** only. Remove or bypass any narrowing that used **current filter state**, **tag filter**, or **library search** text for that path (for example **`GetCurrentFilteredLibraryItems`** or equivalent). When **Scan full library** is **checked**, behavior remains **all items** (full library) as today. **`POST /api/autotag/scan`** continues to receive **`scanFullLibrary`** plus **`itemIds`** as **`fullPath`** values for the scoped items (or empty / full-library semantics consistent with the server).
-  - Split the WebUI tag overlay into **tabs** using the **same structural pattern** as the WebUI **filter** full-screen overlay: **Edit Tags** retains today’s manual editor; add **Auto Tag** for scan/selection workflows so tab chrome and layout feel consistent across filter and tags.
-  - **Shared chrome (both tabs):** **Header** — title, tab strip, **Refresh**, **Close**. **Footer** — add category/tag controls and **Save** (same as today’s tag overlay). Only the **body** switches between **Edit Tags** and **Auto Tag** content.
-  - **Default tab:** Opening the overlay from the existing **Edit tags** entry lands on **Edit Tags** first; **Auto Tag** is the sibling tab. **No** extra confirmation when switching tabs; pending work may span both tabs until **Save** or discard.
-  - **Auto Tag** tab mirrors **Desktop** scan/selection semantics: **Scan full library**, **View all matches**, explanatory copy (e.g. filename match ignores extension), **Scan Files** → **`POST /api/autotag/scan`**; results list with expand/collapse, row tri-state **Apply**, per-file checkboxes, **Select all** / **Deselect all**, **Total matched** / **To be changed**, status text. **Desktop** uses a separate **OK** / **Cancel** in the Auto Tag **window**; **WebUI** maps **commit** to the shared **Save** and **discard** to **Close** / **Refresh** with **`Discard changes?`** when anything is pending (manual and/or Auto Tag), not separate Auto Tag OK/Cancel buttons.
-  - **Save (WebUI):** Single **Save** applies all pending work in order: **(1)** catalog / tag-structure mutations (existing `POST /api/tag-editor/*` upsert/delete/rename sequence), **(2)** manual item tag apply (`POST /api/tag-editor/apply-item-tags` when applicable), **(3)** **`POST /api/autotag/apply`** when Auto Tag has selected assignments after a scan. If any step fails, **abort** the remainder and show the error. **`Save`** shows pending/active state when **either** manual editor deltas **or** Auto Tag selections are pending.
-  - **Close / Refresh (WebUI):** If manual and/or Auto Tag changes are pending, prompt **`Discard changes?`** before closing the overlay or refreshing the tag model; **no** prompt on tab switch alone.
-  - **Scan request shape (WebUI):** **`scanFullLibrary`** and **`itemIds`** (`fullPath` values) must match the **same scope rules** as **Desktop** after alignment: **off** = items in **enabled sources** only; **on** = full library per server behavior.
-  - **In-flight scan UX (WebUI):** While a scan is running, disable **Scan Files** (no overlapping scans), show a clear **status line** (scanning / success / error), and show an **indeterminate progress** indicator consistent with WebUI patterns. Define interaction for **Close** / **Refresh** during an in-flight scan (e.g. disable or cancel scan first) so behavior is deterministic.
-  - **After Save** that includes **`POST /api/autotag/apply`**, **refresh or resync tag state** the same way as other WebUI tag mutations (**`tagCatalogChanged`**, **`itemTagsChanged`**, **`resyncRequired`**, and/or refetch of the tag editor model) so the **Edit Tags** tab and any visible chips stay aligned with the server.
-  - **Scan full library** default (WebUI): **best-effort `localStorage`** persistence (**Desktop**-style preference), with acceptable fallback if storage is unavailable.
-- **Acceptance criteria**:
-  - **Desktop:** With **Scan full library** off, Auto Tag scan considers only items from **enabled sources**; filter state, tag filter, and library search **do not** shrink the scan set. With it on, full-library behavior is unchanged.
-  - **WebUI:** Scan/selection semantics and **`POST /api/autotag/apply`** payload behavior match **Desktop** Auto Tag for representative libraries (including partial selections and **View all matches**), using the **same** enabled-sources-only rule when **Scan full library** is off.
-  - **Edit Tags** and **Auto Tag** are both available inside one WebUI overlay without leaving the flow; **header/footer** shared; tab UX matches the WebUI filter overlay pattern; default tab is **Edit Tags** when opened from the existing control.
-  - **WebUI:** **Save** commits manual + Auto Tag pending work in the specified order; **Close** / **Refresh** prompt **`Discard changes?`** when pending; **no** tab-switch-only confirm.
-  - During scan, WebUI **in-flight** UX is clear (disabled **Scan Files**, status line, indeterminate progress).
-  - After **Save** (including autotag apply), **Edit Tags** data and tag surfaces reflect applied changes without a manual full reload (same class of handling as other tag operations).
-  - Automated checks: `dotnet build` / `dotnet test`, WebUI `npm run verify`; OpenAPI/clients updated only if a contract gap is found and fixed.
-  - Docs/checklist/`CHANGELOG` `[Unreleased]`/`CONTEXT`/`COMMIT-MESSAGE` updated when work lands, per repo discipline.
-- **Verification evidence**:
-  - Commands run (build, test, WebUI verify).
-  - Manual spot-check: **WebUI** and **Desktop** Auto Tag — **Scan full library** on/off; with it off, confirm scope is **enabled sources** only (e.g. disabled source excluded; filter/search do not exclude items that share an enabled source). **WebUI:** **Save** with combined manual + Auto Tag pending; **Close** / **Refresh** with **`Discard changes?`** when pending.
-- **Deferrals / Follow-ups**:
-  - Server-owned preference for scan scope instead of WebUI `localStorage`, if desired later.
-  - Extra keyboard/ARIA polish on the Auto Tag grid, if not gated here.
-
-### M10 - End-User README and Contributor Dev Documentation
-
-- **Status**: ⏳ Planned
-- **Goal**: Make `README.md` the primary, non-technical guide for installing and running ReelRoulette on **Windows** and on **Linux**, with **Debian/Ubuntu-family**, **Fedora-family**, and **Arch-based** distributions explicitly documented for runtime setup—while concentrating contributor and developer detail in `docs/dev-setup.md` with a single canonical command/script reference.
-- **Scope**:
-  - **`README.md` (end users and operators)**:
-    - Refocus the body on installation and day-to-day use; **point developers and contributors explicitly to `docs/dev-setup.md`** for building from source, tooling, and workflow depth.
-    - Add a **table of contents** immediately after the introduction.
-    - Provide a **full manual** for getting server and **Desktop** client running on **Windows** and on **Linux**, with **explicit sections (or equivalent tables) for all of**: **Debian / Ubuntu** (and derivatives using `apt`), **Fedora** (and close RHEL-family derivatives using `dnf` where applicable), and **Arch-based** distros (including **CachyOS** as the documented Arch-style example). Cover **package-manager commands** for native prerequisites (**FFmpeg**/**ffprobe**, **VLC**/**LibVLC**), optional vs required steps, and any notable differences (paths, package names, codecs).
-    - Provide a **full user manual** covering all features and workflows: server and **Desktop** client installation and first launch, day-to-day use (playback, library management, tags, presets, operator/WebUI access), **Library Export/Import** (export options, import flow, source folder remapping dialog), **Launch Server on Startup** toggle, tray vs headless behavior, and any other user-facing surfaces shipped by the time this milestone lands.
-    - **`README.md` prerequisites**: list only what is needed to **run** the shipped apps (including native runtime deps such as FFmpeg/VLC where the product expects them); do **not** fold full SDK/editor prerequisites for development into the README—those belong in dev-setup.
-    - **Retain** the existing **Documentation Map** and **Third-Party Components** sections (update their surrounding prose only as needed for consistency).
-    - Preserve or improve coverage of **Linux**-specific operator concerns already in this series: **Avalonia** server tray vs **headless** fallback, **Launch Server on Startup** via **XDG Autostart** (`*.desktop` location, toggle semantics, manual verify/remove), **`desktop` paths** and **Desktop** naming where it helps end users.
-    - Document **release install paths** clearly: GitHub Releases (Windows installers/portables; Linux AppImage, portable tarball, **`install-linux-from-github.sh`** where applicable), how to obtain artifacts, first launch, and verifying application menu registration on Linux where relevant.
-    - **Troubleshooting** (in README or clearly linked subsections): native deps, permissions, display/audio, missing tray/status area, **LibVLC**/media hints on Linux, autostart conflicts.
-  - **`docs/dev-setup.md` (contributors)**:
-    - **Move** any README content that is **developer-focused** into dev-setup if it is not already covered there (build, test, package, CI context, editor/SDK installs).
-    - Ensure **all development prerequisites** (for example .NET SDK, Node, optional PowerShell, Inno Setup, `appimagetool`, etc.) are documented here, not as primary README install requirements.
-    - Add near the **top** of the document a **full commands list**: repository scripts and canonical commands with **short explanations each** (cover **all** `tools/scripts/*` entrypoints and other recurring commands such as `dotnet`/`npm` invocations the repo expects). Where contributor setup depends on the host OS, include **Debian/Ubuntu**, **Fedora**, and **Arch-based** variants (install .NET SDK, Node, `ffmpeg`/`vlc`, etc.) so the dev path matches the README’s end-user distro coverage.
-    - Note `appimagetool-git` (not `appimagetool-bin`) as the recommended AUR package on **CachyOS** due to a `squashfuse` conflict with `bambustudio-bin`.
-  - **`CONTEXT.md`**: refresh **current implemented capabilities**, **operational surfaces**, and **repository map** so they match the README/dev-setup split (what end users do vs what contributors run); keep **`desktop`** paths and **Desktop** naming consistent.
-  - **`docs/architecture.md`**: update **packaging and delivery**, **CI/workflow**, and related runtime-boundary prose so it stays accurate alongside the new README and dev-setup (no duplicate end-user install steps—link to README where appropriate).
-  - **`docs/domain-inventory.md`**: reconcile **packaging**, **verify**, **runtime**, and **CI** inventories with the canonical dev-setup command/script list and current workflow filenames.
-  - **`docs/api.md`**: align contributor-facing references and any README-cited entrypoints (health, operator, control plane) if cross-links or descriptions drift during the doc pass; no API contract edits unless a separate change requires them.
-  - **`docs/checklists/testing-checklist.md`**: full pass for **Linux**, **tray**, **packaging**, **autostart**, and **install-from-release** flows so checklist items match the updated README and dev-setup.
-  - **`AGENTS.md` / `README.md` Documentation Map**: ensure the map lists the right owning docs after the split (README vs dev-setup vs CONTEXT vs architecture vs domain-inventory vs api); update **Documentation Map** section prose in README accordingly.
-  - Document **CachyOS (Arch-based)** as the **primary development/sign-off** Linux baseline for this series; **beyond** the required **Debian/Ubuntu**, **Fedora**, and **Arch-based** coverage, additional distros remain **best-effort** unless expanded later.
-- **Acceptance criteria**:
-  - A **non-developer** can follow **README.md** alone to install prerequisites (for running), install server and **Desktop** client on **Windows** and on **Linux** using the documented steps for **Debian/Ubuntu-family**, **Fedora-family**, and **Arch-based** systems, and reach a working setup including operator/WebUI access as documented.
-  - A **contributor** can rely on **`docs/dev-setup.md`** for environment setup, build/test/package workflows, and a complete script/command reference without hunting through README for developer steps.
-  - README prerequisites reflect **runtime/use** only; dev-setup lists **full dev** prerequisites with no important gap vs current repo tooling.
-  - Tray vs headless behavior, headless operator path, and **Linux** autostart behavior are explicit and actionable from the docs.
-  - **`CONTEXT.md`**, **`docs/architecture.md`**, **`docs/domain-inventory.md`**, **`docs/api.md`**, and **`docs/checklists/testing-checklist.md`** all read as current relative to the shipped scripts, workflows, and **`desktop`** layout—no stale install or contributor paths.
-- **Verification evidence**:
-  - README contains TOC after intro, Documentation Map, Third-Party Components, and developer pointer to dev-setup; Linux install/prerequisite guidance names **Debian/Ubuntu**, **Fedora**, and **Arch-based** (with **CachyOS** as the Arch-style sign-off example); dev-setup opens with the consolidated commands/scripts list and matches those distro families for contributor prereqs where OS-specific commands apply.
-  - Landed updates across **`CONTEXT.md`**, **`docs/architecture.md`**, **`docs/domain-inventory.md`**, **`docs/api.md`**, and **`docs/checklists/testing-checklist.md`** (plus **`AGENTS.md`** only if Documentation Map / agent workflow boundaries need a one-line sync).
-  - Cross-doc consistency with scripts, workflows, and **`desktop`** paths.
-  - Maintainer spot-checks while writing docs are sufficient for closing this milestone; formal dry-run evidence (tray-capable + headless on **CachyOS**, full checklist pass) remains **deferred** to **Linux Release Readiness and Sign-off**.
-- **Deferrals / Follow-ups**:
-  - Formal doc validation dry-runs and exhaustive checklist completion → **Linux Release Readiness and Sign-off**.
+Last milestone completed: M9i
 
 ### M11a - Structured JSONL Schema + Server Writer Foundation
 
@@ -512,6 +439,47 @@ Last milestone completed: M9h
 
 ## Planned Milestones
 
+### P1 - End-User README and Contributor Dev Documentation
+
+- **Status**: ⏳ Planned
+- **Goal**: Make `README.md` the primary, non-technical guide for installing and running ReelRoulette on **Windows** and on **Linux**, with **Debian/Ubuntu-family**, **Fedora-family**, and **Arch-based** distributions explicitly documented for runtime setup—while concentrating contributor and developer detail in `docs/dev-setup.md` with a single canonical command/script reference.
+- **Scope**:
+  - **`README.md` (end users and operators)**:
+    - Refocus the body on installation and day-to-day use; **point developers and contributors explicitly to `docs/dev-setup.md`** for building from source, tooling, and workflow depth.
+    - Add a **table of contents** immediately after the introduction.
+    - Provide a **full manual** for getting server and **Desktop** client running on **Windows** and on **Linux**, with **explicit sections (or equivalent tables) for all of**: **Debian / Ubuntu** (and derivatives using `apt`), **Fedora** (and close RHEL-family derivatives using `dnf` where applicable), and **Arch-based** distros (including **CachyOS** as the documented Arch-style example). Cover **package-manager commands** for native prerequisites (**FFmpeg**/**ffprobe**, **VLC**/**LibVLC**), optional vs required steps, and any notable differences (paths, package names, codecs).
+    - Provide a **full user manual** covering all features and workflows: server and **Desktop** client installation and first launch, day-to-day use (playback, library management, tags, presets, operator/WebUI access), **Library Export/Import** (export options, import flow, source folder remapping dialog), **Launch Server on Startup** toggle, tray vs headless behavior, and any other user-facing surfaces shipped by the time this milestone lands.
+    - **`README.md` prerequisites**: list only what is needed to **run** the shipped apps (including native runtime deps such as FFmpeg/VLC where the product expects them); do **not** fold full SDK/editor prerequisites for development into the README—those belong in dev-setup.
+    - **Retain** the existing **Documentation Map** and **Third-Party Components** sections (update their surrounding prose only as needed for consistency).
+    - Preserve or improve coverage of **Linux**-specific operator concerns already in this series: **Avalonia** server tray vs **headless** fallback, **Launch Server on Startup** via **XDG Autostart** (`*.desktop` location, toggle semantics, manual verify/remove), **`desktop` paths** and **Desktop** naming where it helps end users.
+    - Document **release install paths** clearly: GitHub Releases (Windows installers/portables; Linux AppImage, portable tarball, **`install-linux-from-github.sh`** where applicable), how to obtain artifacts, first launch, and verifying application menu registration on Linux where relevant.
+    - **Troubleshooting** (in README or clearly linked subsections): native deps, permissions, display/audio, missing tray/status area, **LibVLC**/media hints on Linux, autostart conflicts.
+  - **`docs/dev-setup.md` (contributors)**:
+    - **Move** any README content that is **developer-focused** into dev-setup if it is not already covered there (build, test, package, CI context, editor/SDK installs).
+    - Ensure **all development prerequisites** (for example .NET SDK, Node, optional PowerShell, Inno Setup, `appimagetool`, etc.) are documented here, not as primary README install requirements.
+    - Add near the **top** of the document a **full commands list**: repository scripts and canonical commands with **short explanations each** (cover **all** `tools/scripts/*` entrypoints and other recurring commands such as `dotnet`/`npm` invocations the repo expects). Where contributor setup depends on the host OS, include **Debian/Ubuntu**, **Fedora**, and **Arch-based** variants (install .NET SDK, Node, `ffmpeg`/`vlc`, etc.) so the dev path matches the README’s end-user distro coverage.
+    - Note `appimagetool-git` (not `appimagetool-bin`) as the recommended AUR package on **CachyOS** due to a `squashfuse` conflict with `bambustudio-bin`.
+  - **`CONTEXT.md`**: refresh **current implemented capabilities**, **operational surfaces**, and **repository map** so they match the README/dev-setup split (what end users do vs what contributors run); keep **`desktop`** paths and **Desktop** naming consistent.
+  - **`docs/architecture.md`**: update **packaging and delivery**, **CI/workflow**, and related runtime-boundary prose so it stays accurate alongside the new README and dev-setup (no duplicate end-user install steps—link to README where appropriate).
+  - **`docs/domain-inventory.md`**: reconcile **packaging**, **verify**, **runtime**, and **CI** inventories with the canonical dev-setup command/script list and current workflow filenames.
+  - **`docs/api.md`**: align contributor-facing references and any README-cited entrypoints (health, operator, control plane) if cross-links or descriptions drift during the doc pass; no API contract edits unless a separate change requires them.
+  - **`docs/checklists/testing-checklist.md`**: full pass for **Linux**, **tray**, **packaging**, **autostart**, and **install-from-release** flows so checklist items match the updated README and dev-setup.
+  - **`AGENTS.md` / `README.md` Documentation Map**: ensure the map lists the right owning docs after the split (README vs dev-setup vs CONTEXT vs architecture vs domain-inventory vs api); update **Documentation Map** section prose in README accordingly.
+  - Document **CachyOS (Arch-based)** as the **primary development/sign-off** Linux baseline for this series; **beyond** the required **Debian/Ubuntu**, **Fedora**, and **Arch-based** coverage, additional distros remain **best-effort** unless expanded later.
+- **Acceptance criteria**:
+  - A **non-developer** can follow **README.md** alone to install prerequisites (for running), install server and **Desktop** client on **Windows** and on **Linux** using the documented steps for **Debian/Ubuntu-family**, **Fedora-family**, and **Arch-based** systems, and reach a working setup including operator/WebUI access as documented.
+  - A **contributor** can rely on **`docs/dev-setup.md`** for environment setup, build/test/package workflows, and a complete script/command reference without hunting through README for developer steps.
+  - README prerequisites reflect **runtime/use** only; dev-setup lists **full dev** prerequisites with no important gap vs current repo tooling.
+  - Tray vs headless behavior, headless operator path, and **Linux** autostart behavior are explicit and actionable from the docs.
+  - **`CONTEXT.md`**, **`docs/architecture.md`**, **`docs/domain-inventory.md`**, **`docs/api.md`**, and **`docs/checklists/testing-checklist.md`** all read as current relative to the shipped scripts, workflows, and **`desktop`** layout—no stale install or contributor paths.
+- **Verification evidence**:
+  - README contains TOC after intro, Documentation Map, Third-Party Components, and developer pointer to dev-setup; Linux install/prerequisite guidance names **Debian/Ubuntu**, **Fedora**, and **Arch-based** (with **CachyOS** as the Arch-style sign-off example); dev-setup opens with the consolidated commands/scripts list and matches those distro families for contributor prereqs where OS-specific commands apply.
+  - Landed updates across **`CONTEXT.md`**, **`docs/architecture.md`**, **`docs/domain-inventory.md`**, **`docs/api.md`**, and **`docs/checklists/testing-checklist.md`** (plus **`AGENTS.md`** only if Documentation Map / agent workflow boundaries need a one-line sync).
+  - Cross-doc consistency with scripts, workflows, and **`desktop`** paths.
+  - Maintainer spot-checks while writing docs are sufficient for closing this milestone; formal dry-run evidence (tray-capable + headless on **CachyOS**, full checklist pass) remains **deferred** to **Linux Release Readiness and Sign-off**.
+- **Deferrals / Follow-ups**:
+  - Formal doc validation dry-runs and exhaustive checklist completion → **Linux Release Readiness and Sign-off**.
+
 ### P2a - Playback Session Contracts and Capability Surface
 
 - **Status**: ⏳ Planned
@@ -855,6 +823,40 @@ Last milestone completed: M9h
 ## Completed Milestones
 
 Latest completions first:
+
+### M9i - WebUI Auto Tag Parity
+
+- **Status**: ✅ Complete
+- **Goal**: Ship **Auto Tag** in the WebUI with the same **API-level** scan/selection/apply behavior as the **Desktop** **Auto Tag** dialog (full-screen tag overlay with tabs), while using the WebUI’s **shared Save** / **Close**+discard model instead of separate Auto Tag OK/Cancel buttons. **Align Desktop Auto Tag scan scope** with WebUI so **Scan full library** off means **enabled sources only**—not playback/filter state, tag filters, or library search. WebUI integrates into the existing tag experience without duplicating tag logic on the client.
+- **Scope**:
+  - **Desktop — Auto Tag scan scope:** When **Scan full library** is **unchecked**, the candidate item set for scan/apply is **all library items belonging to enabled sources** only. Remove or bypass any narrowing that used **current filter state**, **tag filter**, or **library search** text for that path (for example **`GetCurrentFilteredLibraryItems`** or equivalent). When **Scan full library** is **checked**, behavior remains **all items** (full library) as today. **`POST /api/autotag/scan`** continues to receive **`scanFullLibrary`** plus **`itemIds`** as **`fullPath`** values for the scoped items (or empty / full-library semantics consistent with the server).
+  - Split the WebUI tag overlay into **tabs** using the **same structural pattern** as the WebUI **filter** full-screen overlay: **Edit Tags** retains today’s manual editor; add **Auto Tag** for scan/selection workflows so tab chrome and layout feel consistent across filter and tags.
+  - **Shared chrome (both tabs):** **Header** — title, tab strip, **Refresh**, **Close**. **Footer** — add category/tag controls and **Save** (same as today’s tag overlay). Only the **body** switches between **Edit Tags** and **Auto Tag** content.
+  - **Default tab:** Opening the overlay from the existing **Edit tags** entry lands on **Edit Tags** first; **Auto Tag** is the sibling tab. **No** extra confirmation when switching tabs; pending work may span both tabs until **Save** or discard.
+  - **Auto Tag** tab mirrors **Desktop** scan/selection semantics: **Scan full library**, **View all matches**, explanatory copy (e.g. filename match ignores extension), **Scan Files** → **`POST /api/autotag/scan`**; results list with expand/collapse, row tri-state **Apply**, per-file checkboxes, **Select all** / **Deselect all**, **Total matched** / **To be changed**, status text. **Desktop** uses a separate **OK** / **Cancel** in the Auto Tag **window**; **WebUI** maps **commit** to the shared **Save** and **discard** to **Close** / **Refresh** with **`Discard changes?`** when anything is pending (manual and/or Auto Tag), not separate Auto Tag OK/Cancel buttons.
+  - **Save (WebUI):** Single **Save** applies all pending work in order: **(1)** catalog / tag-structure mutations (existing `POST /api/tag-editor/*` upsert/delete/rename sequence), **(2)** manual item tag apply (`POST /api/tag-editor/apply-item-tags` when applicable), **(3)** **`POST /api/autotag/apply`** when Auto Tag has selected assignments after a scan. If any step fails, **abort** the remainder and show the error. **`Save`** shows pending/active state when **either** manual editor deltas **or** Auto Tag selections are pending.
+  - **Close / Refresh (WebUI):** If manual and/or Auto Tag changes are pending, prompt **`Discard changes?`** before closing the overlay or refreshing the tag model; **no** prompt on tab switch alone.
+  - **Scan request shape (WebUI):** **`scanFullLibrary`** and **`itemIds`** (`fullPath` values) must match the **same scope rules** as **Desktop** after alignment: **off** = items in **enabled sources** only; **on** = full library per server behavior.
+  - **In-flight scan UX (WebUI):** While a scan is running, disable **Scan Files** (no overlapping scans), show a clear **status line** (scanning / success / error), and show an **indeterminate progress** indicator consistent with WebUI patterns. Define interaction for **Close** / **Refresh** during an in-flight scan (e.g. disable or cancel scan first) so behavior is deterministic.
+  - **After Save** that includes **`POST /api/autotag/apply`**, **refresh or resync tag state** the same way as other WebUI tag mutations (**`tagCatalogChanged`**, **`itemTagsChanged`**, **`resyncRequired`**, and/or refetch of the tag editor model) so the **Edit Tags** tab and any visible chips stay aligned with the server.
+  - **Scan full library** default (WebUI): **best-effort `localStorage`** persistence (**Desktop**-style preference), with acceptable fallback if storage is unavailable.
+- **Acceptance criteria**:
+  - **Desktop:** With **Scan full library** off, Auto Tag scan considers only items from **enabled sources**; filter state, tag filter, and library search **do not** shrink the scan set. With it on, full-library behavior is unchanged.
+  - **WebUI:** Scan/selection semantics and **`POST /api/autotag/apply`** payload behavior match **Desktop** Auto Tag for representative libraries (including partial selections and **View all matches**), using the **same** enabled-sources-only rule when **Scan full library** is off.
+  - **Edit Tags** and **Auto Tag** are both available inside one WebUI overlay without leaving the flow; **header/footer** shared; tab UX matches the WebUI filter overlay pattern; default tab is **Edit Tags** when opened from the existing control.
+  - **WebUI:** **Save** commits manual + Auto Tag pending work in the specified order; **Close** / **Refresh** prompt **`Discard changes?`** when pending; **no** tab-switch-only confirm.
+  - During scan, WebUI **in-flight** UX is clear (disabled **Scan Files**, status line, indeterminate progress).
+  - After **Save** (including autotag apply), **Edit Tags** data and tag surfaces reflect applied changes without a manual full reload (same class of handling as other tag operations).
+  - Automated checks: `dotnet build` / `dotnet test`, WebUI `npm run verify`; OpenAPI/clients updated only if a contract gap is found and fixed.
+  - Docs/checklist/`CHANGELOG` `[Unreleased]`/`CONTEXT`/`COMMIT-MESSAGE` updated when work lands, per repo discipline.
+- **Verification evidence**:
+  - `dotnet build ReelRoulette.sln` — pass (0 warnings).
+  - `dotnet test ReelRoulette.sln` — pass (DesktopApp.Tests + Core.Tests).
+  - WebUI `npm run verify` (contracts, typecheck, vitest, build, build-output) — pass.
+  - Manual spot-check — **confirmed**: **WebUI** and **Desktop** Auto Tag — **Scan full library** on/off; with it off, scope is **enabled sources** only (e.g. disabled source excluded; filter/search do not exclude items that share an enabled source). **WebUI:** **Save** with combined manual + Auto Tag pending; **Close** / **Refresh** with **`Discard changes?`** when pending.
+- **Deferrals / Follow-ups**:
+  - Server-owned preference for scan scope instead of WebUI `localStorage`, if desired later.
+  - Extra keyboard/ARIA polish on the Auto Tag grid, if not gated here.
 
 ### M9h - WebUI Filter Dialog Parity
 

@@ -2730,7 +2730,13 @@ namespace ReelRoulette
                 return _libraryIndex.Items.ToList();
             }
 
-            return GetCurrentFilteredLibraryItems();
+            var enabledSourceIds = _libraryIndex.Sources
+                .Where(s => s.IsEnabled)
+                .Select(s => s.Id)
+                .ToHashSet();
+            return _libraryIndex.Items
+                .Where(item => enabledSourceIds.Contains(item.SourceId))
+                .ToList();
         }
 
         private List<LibraryItem> GetCurrentFilteredLibraryItems()
