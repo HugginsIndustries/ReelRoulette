@@ -33,8 +33,9 @@ export function renderApp(container: HTMLElement, config: RuntimeConfig): void {
       <div id="media-container" class="media-container">
         <video id="video" playsinline preload="auto" style="display:none"></video>
         <img id="photo" alt="Photo" style="display:none">
-        <div id="empty-state" class="empty-state">Select a preset and click here</div>
+        <div id="empty-state" class="empty-state">Click here to play (choose a preset or open Filter…)</div>
         <div id="overlay-controls" class="overlay-controls">
+          <button id="filter-edit-btn" class="overlay-btn icon-glyph-base icon-glyph-button overlay-corner-btn" aria-label="Select filters" title="Select filters…"><span class="material-symbol-icon">filter_alt</span></button>
           <button id="tag-edit-btn" class="overlay-btn icon-glyph-base icon-glyph-button overlay-corner-btn" aria-label="Edit Tags" title="Edit Tags"><span class="material-symbol-icon">tag</span></button>
           <button id="favorite-btn" class="overlay-btn icon-glyph-base icon-glyph-toggle overlay-toggle overlay-corner-btn" aria-label="Favorite" title="Favorite"><span class="material-symbol-icon">favorite</span></button>
           <button id="blacklist-btn" class="overlay-btn icon-glyph-base icon-glyph-toggle overlay-toggle overlay-corner-btn" aria-label="Blacklist" title="Blacklist"><span class="material-symbol-icon">thumb_down</span></button>
@@ -82,6 +83,30 @@ export function renderApp(container: HTMLElement, config: RuntimeConfig): void {
             <button id="tag-edit-save-btn" type="button">Save</button>
           </div>
         </div>
+      </div>
+    </div>
+    <div id="filter-dialog" class="filter-dialog" style="display:none">
+      <div class="filter-dialog-header">
+        <h2 id="filter-dialog-heading">Filter Media</h2>
+        <div class="filter-dialog-actions">
+          <button id="filter-dialog-refresh-btn" class="icon-glyph-base icon-glyph-button" type="button" title="Refresh" aria-label="Refresh"><span class="material-symbol-icon">refresh</span></button>
+          <button id="filter-dialog-close-btn" class="icon-glyph-base icon-glyph-button" type="button" title="Close" aria-label="Close"><span class="material-symbol-icon">close</span></button>
+        </div>
+      </div>
+      <div class="filter-dialog-tabstrip" role="tablist">
+        <button type="button" class="filter-tab is-active" role="tab" data-filter-tab="general" aria-selected="true">General</button>
+        <button type="button" class="filter-tab" role="tab" data-filter-tab="tags" aria-selected="false">Tags</button>
+        <button type="button" class="filter-tab" role="tab" data-filter-tab="presets" aria-selected="false">Presets</button>
+      </div>
+      <div class="filter-dialog-body">
+        <div id="filter-panel-general" class="filter-panel"></div>
+        <div id="filter-panel-tags" class="filter-panel" style="display:none"></div>
+        <div id="filter-panel-presets" class="filter-panel" style="display:none"></div>
+      </div>
+      <div class="filter-dialog-footer">
+        <button id="filter-clear-all-btn" type="button">Clear all filters</button>
+        <button id="filter-cancel-btn" type="button">Cancel</button>
+        <button id="filter-apply-btn" type="button">Apply</button>
       </div>
     </div>
     <div id="status" class="status status-bottom"></div>

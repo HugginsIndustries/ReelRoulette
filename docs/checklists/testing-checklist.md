@@ -56,7 +56,7 @@ Use `pwsh ./tools/scripts/reset-checklist.ps1` to reset metadata/check states be
 - [x] Tag editor apply/remove updates item tags as expected.
 - [x] Desktop tag editor category rows remain readable in both themes (light-compatible surface/border; dark-mode consistency).
 - [x] Desktop tag chips keep white text/icons with WebUI-like text/icon shadows and state-specific inset chip shadows in both themes.
-- [x] Filter dialog `Tags` tab matches tag editor visual surfaces in both themes while preserving add/remove chip controls, local combine-mode controls, and responsive wrapping chip layout.
+- [x] Filter dialog `Tags` tab matches tag editor visual surfaces in both themes while preserving add/remove chip controls, local combine-mode controls, responsive wrapping chip layout, and per-category (plus **Uncategorized**) collapse toggles persisted in `sessionStorage` under `rr_filterDialogCollapsedCategories` (independent of tag editor collapse state); legacy flat tag model shows one grid without category rows.
 - [x] Clear playback stats flow works with confirmation.
 
 ## Desktop library export / import (cross-machine)
@@ -74,7 +74,8 @@ Desktop-only: reads/writes roaming `ReelRoulette` data and local thumbnails (no 
 
 - [x] WebUI bootstraps without runtime-config errors.
 - [x] Pair/auth flow works for current auth mode. (waived)
-- [x] Random play works.
+- [x] Random play works with **None** (ad-hoc `filterState`) and with a named header preset.
+- [x] **Filter / preset parity (spot-check vs desktop Filter Media):** open **Filter…** (`filter_alt`); General flags, media type, sources, audio, and duration (MM:SS / HH:MM:SS, no min/max) behave sensibly; invalid duration shows a clear error on Apply. Tags tab: global AND/OR, per-category local mode, include/exclude chips. Presets tab: add, rename, delete, reorder, load preset into editor, update preset from current; **Apply** persists catalog via API; header combobox stays ordered like `GET /api/presets`. After **Apply**, random/next eligibility matches expectations. Optional: trigger `resyncRequired` (or second client) and confirm presets refetch.
 - [x] Manual controls (prev/play-next) work.
 - [x] Loop/autoplay toggles work.
 - [x] Favorite/blacklist actions work.

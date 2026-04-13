@@ -135,6 +135,8 @@ Reconnect/resync behavior:
 - `GET /api/sources`
 - `POST /api/sources/import`
 - `POST /api/sources/{sourceId}/enabled`
+
+**Random playback filter payload:** `POST /api/random` accepts optional `presetId` (matches stored preset **name**) and optional inline `filterState` (JSON object). When both are supplied, the server resolves eligibility from **`filterState` first** (inline wins). Clients should send a full `filterState` for ad-hoc filters (header preset **None**). For `minDuration` / `maxDuration`, prefer string **`HH:MM:SS`** (or a numeric duration in seconds) so values align with server `TimeSpan` parsing; two-part `H:MM` strings are interpreted as hours and minutes, not minutes and seconds. `POST /api/presets` replaces the entire preset catalog (array of `{ name, filterState }`).
 - `GET /api/library/projection`
 - `GET /api/library/stats`
 - `POST /api/library-states`

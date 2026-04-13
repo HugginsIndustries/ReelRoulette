@@ -48,6 +48,7 @@ ReelRoulette is migrating from a monolithic desktop app to a thin-client, API-fi
   - Refresh status line uses the same stage parsing and consolidated completion summary as the desktop client (including Fingerprint segment); system light/dark follows `prefers-color-scheme` with themed shell and tag-editor surfaces.
   - Player overlay: edit-tags top-right (left of favorite), mute in the bottom transport row for video (`HTMLVideoElement.muted`, Material `volume_up`/`volume_off`); corner/transport controls use drop-shadow chrome only (media area not dimmed).
   - Tag editor: category reorder enables Apply without other pending mutations; tag chips keep white glyphs/text and shadow treatment in both themes.
+  - Filter Media overlay (full-screen, same shell pattern as the tag editor): General (basic flags, media type, client source inclusion, audio filter, duration text like desktop), Tags (global AND/OR across categories, per-category local AND/OR, include/exclude tri-state chips from `POST /api/tag-editor/model`), and Presets (catalog edit/save via `POST /api/presets`, quick **None** header preset). Random playback sends authoritative `filterState` on every `POST /api/random` and includes `presetId` when a named preset is selected; presets refetch on dialog open, after successful preset catalog save, and when SSE signals `resyncRequired`.
 
 - **Operational surfaces**
   - Manual validation guide/checklist at `docs/checklists/testing-checklist.md`.

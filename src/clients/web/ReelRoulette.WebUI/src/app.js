@@ -1,10 +1,26 @@
 import { buildRefreshStatusMessage, coerceRefreshSnapshot } from "./events/refreshStatusProjection";
+import {
+  AUDIO_FILTER,
+  MEDIA_TYPE_FILTER,
+  TAG_MATCH_MODE,
+  cloneFilterState,
+  createDefaultFilterState,
+  filterStateFromApiObject,
+  filterStatesEqualForPresetMatch,
+  formatDurationForDisplay,
+  parseDurationInputToSeconds,
+  presetsToPostBody,
+  serializeFilterStateForApi
+} from "./filter/filterStateModel.ts";
 
 const CLIENT_ID_KEY = "rr_clientId";
 const SESSION_ID_KEY = "rr_sessionId";
 const PHOTO_DURATION_KEY = "rr_photoDuration";
 const RANDOMIZATION_MODE_KEY = "rr_randomizationMode";
 const TAG_EDITOR_COLLAPSED_KEY = "rr_tagEditorCollapsed";
+const FILTER_DIALOG_COLLAPSED_KEY = "rr_filterDialogCollapsedCategories";
+/** Session key for filter Tags tab "Uncategorized" orphan row collapse state. */
+const FILTER_DIALOG_UNCATEGORIZED_COLLAPSE_KEY = "__filter_uncategorized__";
 const UNCATEGORIZED_CATEGORY_ID = "uncategorized";
 const SWIPE_THRESHOLD = 50;
 const TAP_THRESHOLD = 10;
@@ -167,7 +183,10 @@ export function startApp(config) {
     tagEditorPhotoTimerRunning: false,
     compatibilityBlocked: false,
     playAttemptId: 0,
-    videoMuted: false
+    videoMuted: false,
+    appliedFilterState: createDefaultFilterState(),
+    activePresetName: null,
+    filterDialogOpen: false
   };
 
   const video = getElement("video");
@@ -213,20 +232,802 @@ export function startApp(config) {
   const photoDurationInput = getElement("photo-duration");
   const emptyState = getElement("empty-state");
   const mobileDiagnosticsEl = getElement("mobile-diagnostics");
+  const filterEditBtn = getElement("filter-edit-btn");
+  const filterDialog = getElement("filter-dialog");
+  const filterDialogHeading = getElement("filter-dialog-heading");
+  const filterDialogRefreshBtn = getElement("filter-dialog-refresh-btn");
+  const filterDialogCloseBtn = getElement("filter-dialog-close-btn");
+  const filterPanelGeneral = getElement("filter-panel-general");
+  const filterPanelTags = getElement("filter-panel-tags");
+  const filterPanelPresets = getElement("filter-panel-presets");
+  const filterClearAllBtn = getElement("filter-clear-all-btn");
+  const filterCancelBtn = getElement("filter-cancel-btn");
+  const filterApplyBtn = getElement("filter-apply-btn");
 
   if (
     !video || !photo || !statusEl || !presetSelect || !pairSection || !pairToken || !pairBtn ||
     !mediaContainer || !seekRow || !seekSlider || !timeDisplay || !nowPlaying || !nowPlayingName ||
     !nowPlayingDuration || !favoriteBtn || !blacklistBtn || !prevBtn || !playBtn || !nextBtn ||
-    !loopBtn || !autoplayBtn || !fullscreenBtn || !muteBtn || !tagEditBtn || !tagEditor || !tagEditorBody ||
+    !loopBtn || !autoplayBtn || !fullscreenBtn || !muteBtn || !filterEditBtn || !tagEditBtn || !tagEditor || !tagEditorBody ||
     !tagEditorCloseBtn || !tagEditorRefreshBtn || !tagEditorAddCategoryBtn || !tagEditorCategorySelect ||
     !tagEditorNewTag || !tagEditorAddTagBtn || !tagEditorApplyBtn || !tagEditModal || !tagEditName ||
-    !tagEditCategory || !tagEditCancelBtn || !tagEditSaveBtn || !photoDurationInput || !emptyState
+    !tagEditCategory || !tagEditCancelBtn || !tagEditSaveBtn || !photoDurationInput || !emptyState ||
+    !filterDialog || !filterDialogHeading || !filterDialogRefreshBtn || !filterDialogCloseBtn ||
+    !filterPanelGeneral || !filterPanelTags || !filterPanelPresets || !filterClearAllBtn ||
+    !filterCancelBtn || !filterApplyBtn
   ) {
     throw new Error("Legacy WebUI bootstrap failed: missing required DOM elements.");
   }
 
   pairSection.style.display = "none";
+
+  let filterWorkingPresets = [];
+  let filterWorking = createDefaultFilterState();
+  let filterSources = [];
+  let filterTagModel = null;
+  let filterDialogOriginalJson = "";
+  let filterPresetCatalogDirty = false;
+  let filterActiveTab = "general";
+  /** Preset name selected inside the filter dialog only (header combobox uses `state.activePresetName` after Apply). */
+  let filterDialogActiveName = null;
+  /** Category ids (and uncategorized sentinel) with collapsed tag grids in the filter dialog; persisted in sessionStorage. */
+  let filterDialogCollapsedCategories = new Set();
+
+  function loadFilterDialogCollapsedCategories() {
+    try {
+      const raw = sessionStorage.getItem(FILTER_DIALOG_COLLAPSED_KEY);
+      if (!raw) {
+        return new Set();
+      }
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) {
+        return new Set();
+      }
+      return new Set(parsed.map((id) => String(id ?? "")));
+    } catch {
+      return new Set();
+    }
+  }
+
+  function persistFilterDialogCollapsedCategories() {
+    try {
+      sessionStorage.setItem(
+        FILTER_DIALOG_COLLAPSED_KEY,
+        JSON.stringify(Array.from(filterDialogCollapsedCategories))
+      );
+    } catch {
+      // best effort
+    }
+  }
+
+  function toggleFilterCategoryCollapsed(categoryKey) {
+    const key = String(categoryKey ?? "");
+    if (filterDialogCollapsedCategories.has(key)) {
+      filterDialogCollapsedCategories.delete(key);
+    } else {
+      filterDialogCollapsedCategories.add(key);
+    }
+    persistFilterDialogCollapsedCategories();
+    renderFilterTagsPanel();
+  }
+
+  function tagEqualsCi(a, b) {
+    return String(a || "").toLowerCase() === String(b || "").toLowerCase();
+  }
+
+  function containsTagCi(list, tag) {
+    return list.some((t) => tagEqualsCi(t, tag));
+  }
+
+  function removeTagCi(list, tag) {
+    const idx = list.findIndex((t) => tagEqualsCi(t, tag));
+    if (idx >= 0) {
+      list.splice(idx, 1);
+    }
+  }
+
+  function mapApiPresetsToWorkingRows(presets) {
+    const list = Array.isArray(presets) ? presets : [];
+    return list.map((p) => ({
+      name: String(p.name || p.id || "").trim() || String(p.id || ""),
+      filterState: filterStateFromApiObject(p.filterState)
+    })).filter((r) => r.name);
+  }
+
+  function updateFilterApplyButtonPending() {
+    const now = JSON.stringify(serializeFilterStateForApi(filterWorking));
+    const dirty = now !== filterDialogOriginalJson || filterPresetCatalogDirty;
+    filterApplyBtn.classList.toggle("has-pending", dirty);
+    filterApplyBtn.textContent = dirty ? "Apply*" : "Apply";
+  }
+
+  function setFilterDialogHeading() {
+    if (!state.filterDialogOpen) {
+      return;
+    }
+    if (filterDialogActiveName) {
+      filterDialogHeading.textContent = `Filter Media — Active preset: ${filterDialogActiveName}`;
+    } else {
+      filterDialogHeading.textContent = "Filter Media";
+    }
+  }
+
+  function switchFilterTab(tab) {
+    filterActiveTab = tab;
+    document.querySelectorAll(".filter-tab").forEach((btn) => {
+      const t = btn.getAttribute("data-filter-tab");
+      const on = t === tab;
+      btn.classList.toggle("is-active", on);
+      btn.setAttribute("aria-selected", on ? "true" : "false");
+    });
+    filterPanelGeneral.style.display = tab === "general" ? "block" : "none";
+    filterPanelTags.style.display = tab === "tags" ? "block" : "none";
+    filterPanelPresets.style.display = tab === "presets" ? "block" : "none";
+  }
+
+  function readGeneralPanelIntoWorking() {
+    const fav = document.getElementById("filter-fav-only");
+    const excl = document.getElementById("filter-excl-bl");
+    const nev = document.getElementById("filter-never-played");
+    const okDur = document.getElementById("filter-known-dur");
+    const okLou = document.getElementById("filter-known-loud");
+    if (fav) {
+      filterWorking.favoritesOnly = !!fav.checked;
+    }
+    if (excl) {
+      filterWorking.excludeBlacklisted = !!excl.checked;
+    }
+    if (nev) {
+      filterWorking.onlyNeverPlayed = !!nev.checked;
+    }
+    if (okDur) {
+      filterWorking.onlyKnownDuration = !!okDur.checked;
+    }
+    if (okLou) {
+      filterWorking.onlyKnownLoudness = !!okLou.checked;
+    }
+
+    const mt = document.querySelector("input[name=\"filter-media-type\"]:checked");
+    if (mt) {
+      filterWorking.mediaTypeFilter = Number.parseInt(mt.value, 10) || MEDIA_TYPE_FILTER.All;
+    }
+    const af = document.querySelector("input[name=\"filter-audio\"]:checked");
+    if (af) {
+      filterWorking.audioFilter = Number.parseInt(af.value, 10) || AUDIO_FILTER.PlayAll;
+    }
+
+    const noMin = document.getElementById("filter-no-min-dur");
+    const noMax = document.getElementById("filter-no-max-dur");
+    const minEl = document.getElementById("filter-min-dur-text");
+    const maxEl = document.getElementById("filter-max-dur-text");
+    if (noMin?.checked) {
+      filterWorking.minDurationSeconds = null;
+    } else if (minEl) {
+      const p = parseDurationInputToSeconds(minEl.value || "");
+      if (p === "invalid") {
+        filterWorking.minDurationSeconds = null;
+      } else {
+        filterWorking.minDurationSeconds = p;
+      }
+    }
+    if (noMax?.checked) {
+      filterWorking.maxDurationSeconds = null;
+    } else if (maxEl) {
+      const p = parseDurationInputToSeconds(maxEl.value || "");
+      if (p === "invalid") {
+        filterWorking.maxDurationSeconds = null;
+      } else {
+        filterWorking.maxDurationSeconds = p;
+      }
+    }
+
+    const selectedIds = [];
+    filterSources.forEach((src, idx) => {
+      const cb = document.getElementById(`filter-src-${idx}`);
+      if (cb && cb.checked) {
+        selectedIds.push(src.id);
+      }
+    });
+    if (selectedIds.length === filterSources.length) {
+      filterWorking.includedSourceIds = [];
+    } else {
+      filterWorking.includedSourceIds = selectedIds;
+    }
+  }
+
+  function renderFilterGeneralPanel() {
+    const s = filterWorking;
+    const srcRows = filterSources
+      .map((src, idx) => {
+        const id = `filter-src-${idx}`;
+        const included = s.includedSourceIds.length === 0 || containsTagCi(s.includedSourceIds, src.id);
+        const dis = src.isEnabled === false ? " disabled" : "";
+        const label = src.displayName || src.rootPath || src.id;
+        return `<label><input type="checkbox" id="${id}" data-source-id="${escapeHtml(src.id)}"${included ? " checked" : ""}${dis}/> ${escapeHtml(label)}</label>`;
+      })
+      .join("");
+
+    filterPanelGeneral.innerHTML = `
+      <div class="filter-section">
+        <h3>Basic Filters</h3>
+        <div class="filter-stack">
+          <label><input type="checkbox" id="filter-fav-only"${s.favoritesOnly ? " checked" : ""}/> Favorites only</label>
+          <label><input type="checkbox" id="filter-excl-bl"${s.excludeBlacklisted ? " checked" : ""}/> Exclude blacklisted</label>
+          <label><input type="checkbox" id="filter-never-played"${s.onlyNeverPlayed ? " checked" : ""}/> Only never played</label>
+          <label><input type="checkbox" id="filter-known-dur"${s.onlyKnownDuration ? " checked" : ""}/> Only videos with known duration</label>
+          <label><input type="checkbox" id="filter-known-loud"${s.onlyKnownLoudness ? " checked" : ""}/> Only videos with known loudness</label>
+        </div>
+      </div>
+      <div class="filter-section">
+        <h3>Media Type</h3>
+        <div class="filter-stack">
+          <label><input type="radio" name="filter-media-type" value="${MEDIA_TYPE_FILTER.All}"${s.mediaTypeFilter === MEDIA_TYPE_FILTER.All ? " checked" : ""}/> All (Videos and Photos)</label>
+          <label><input type="radio" name="filter-media-type" value="${MEDIA_TYPE_FILTER.VideosOnly}"${s.mediaTypeFilter === MEDIA_TYPE_FILTER.VideosOnly ? " checked" : ""}/> Videos only</label>
+          <label><input type="radio" name="filter-media-type" value="${MEDIA_TYPE_FILTER.PhotosOnly}"${s.mediaTypeFilter === MEDIA_TYPE_FILTER.PhotosOnly ? " checked" : ""}/> Photos only</label>
+        </div>
+      </div>
+      <div class="filter-section">
+        <h3>Sources (Client Filter)</h3>
+        <p class="filter-hint">Checked sources are included. If all are checked, no source restriction is stored.</p>
+        <div class="filter-stack">${srcRows || "<span class=\"filter-hint\">No sources returned from server.</span>"}</div>
+      </div>
+      <div class="filter-section">
+        <h3>Audio Filter</h3>
+        <div class="filter-stack">
+          <label><input type="radio" name="filter-audio" value="${AUDIO_FILTER.PlayAll}"${s.audioFilter === AUDIO_FILTER.PlayAll ? " checked" : ""}/> All videos</label>
+          <label><input type="radio" name="filter-audio" value="${AUDIO_FILTER.WithAudioOnly}"${s.audioFilter === AUDIO_FILTER.WithAudioOnly ? " checked" : ""}/> Only videos with audio</label>
+          <label><input type="radio" name="filter-audio" value="${AUDIO_FILTER.WithoutAudioOnly}"${s.audioFilter === AUDIO_FILTER.WithoutAudioOnly ? " checked" : ""}/> Only videos without audio</label>
+        </div>
+      </div>
+      <div class="filter-section">
+        <h3>Duration Filter</h3>
+        <div class="filter-stack">
+          <div class="filter-row">
+            <span style="min-width:3rem">Min</span>
+            <input type="text" id="filter-min-dur-text" placeholder="HH:MM:SS or MM:SS" value="${s.minDurationSeconds != null ? escapeHtml(formatDurationForDisplay(s.minDurationSeconds)) : ""}"/>
+            <label><input type="checkbox" id="filter-no-min-dur"${s.minDurationSeconds == null ? " checked" : ""}/> No minimum</label>
+          </div>
+          <div class="filter-row">
+            <span style="min-width:3rem">Max</span>
+            <input type="text" id="filter-max-dur-text" placeholder="HH:MM:SS or MM:SS" value="${s.maxDurationSeconds != null ? escapeHtml(formatDurationForDisplay(s.maxDurationSeconds)) : ""}"/>
+            <label><input type="checkbox" id="filter-no-max-dur"${s.maxDurationSeconds == null ? " checked" : ""}/> No maximum</label>
+          </div>
+        </div>
+      </div>`;
+
+    filterPanelGeneral.querySelectorAll("input,select").forEach((el) => {
+      el.addEventListener("change", () => {
+        readGeneralPanelIntoWorking();
+        updateFilterApplyButtonPending();
+      });
+    });
+    const noMin = filterPanelGeneral.querySelector("#filter-no-min-dur");
+    const noMax = filterPanelGeneral.querySelector("#filter-no-max-dur");
+    const minT = filterPanelGeneral.querySelector("#filter-min-dur-text");
+    const maxT = filterPanelGeneral.querySelector("#filter-max-dur-text");
+    if (noMin && minT) {
+      noMin.addEventListener("change", () => {
+        if (noMin.checked) {
+          minT.value = "";
+          minT.disabled = true;
+        } else {
+          minT.disabled = false;
+        }
+      });
+      minT.disabled = !!noMin.checked;
+    }
+    if (noMax && maxT) {
+      noMax.addEventListener("change", () => {
+        if (noMax.checked) {
+          maxT.value = "";
+          maxT.disabled = true;
+        } else {
+          maxT.disabled = false;
+        }
+      });
+      maxT.disabled = !!noMax.checked;
+    }
+  }
+
+  function escapeHtml(text) {
+    return String(text || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function renderFilterTagsPanel() {
+    const categories = (filterTagModel?.categories || []).slice().sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+    const tags = filterTagModel?.tags || [];
+    const globalAnd = filterWorking.globalMatchMode !== false;
+
+    const catBlocks = [];
+    const processed = new Set();
+
+    for (const cat of categories) {
+      const catTags = tags.filter((t) => t.categoryId === cat.id).sort((a, b) => String(a.name).localeCompare(String(b.name)));
+      if (catTags.length === 0) {
+        continue;
+      }
+      for (const t of catTags) {
+        processed.add(String(t.name).toLowerCase());
+      }
+      const localMode = filterWorking.categoryLocalMatchModes?.[cat.id] ?? TAG_MATCH_MODE.And;
+      const catKey = String(cat.id ?? "");
+      const collapsed = filterDialogCollapsedCategories.has(catKey);
+      const expandIcon = collapsed ? "keyboard_arrow_right" : "keyboard_arrow_down";
+      let chips = "";
+      for (const t of catTags) {
+        const inc = containsTagCi(filterWorking.selectedTags, t.name);
+        const exc = containsTagCi(filterWorking.excludedTags, t.name);
+        let cls = "tag-chip";
+        if (inc) {
+          cls += " state-all";
+        } else if (exc) {
+          cls += " state-none";
+        }
+        chips += `<div class="${cls}" data-filter-cat="${escapeHtml(cat.id)}">
+          <span class="tag-chip-label">${escapeHtml(t.name)}</span>
+          <button type="button" class="chip-btn icon-glyph-base icon-glyph-toggle${inc ? " is-selected" : ""}" data-filter-chip="inc" data-tag="${escapeHtml(t.name)}" title="Include"><span class="material-symbol-icon">add</span></button>
+          <button type="button" class="chip-btn icon-glyph-base icon-glyph-toggle${exc ? " is-selected" : ""}" data-filter-chip="exc" data-tag="${escapeHtml(t.name)}" title="Exclude"><span class="material-symbol-icon">remove</span></button>
+        </div>`;
+      }
+      catBlocks.push(`<div class="tag-editor-category" data-filter-category="${escapeHtml(cat.id)}">
+        <div class="tag-editor-category-header">
+          <div class="tag-editor-category-left">
+            <button type="button" class="tag-editor-category-toggle icon-glyph-base icon-glyph-button" data-filter-category-toggle="${escapeHtml(catKey)}" title="${collapsed ? "Expand category" : "Collapse category"}"><span class="material-symbol-icon">${expandIcon}</span></button>
+            <span class="tag-editor-category-title">${escapeHtml(cat.name)}</span>
+          </div>
+          <div class="tag-editor-category-controls">
+            <label class="filter-hint" style="margin:0">Local:
+              <select class="filter-local-mode" data-cat-id="${escapeHtml(cat.id)}">
+                <option value="${TAG_MATCH_MODE.And}"${localMode === TAG_MATCH_MODE.And ? " selected" : ""}>ALL (AND)</option>
+                <option value="${TAG_MATCH_MODE.Or}"${localMode === TAG_MATCH_MODE.Or ? " selected" : ""}>ANY (OR)</option>
+              </select>
+            </label>
+          </div>
+        </div>
+        <div class="tag-editor-tag-grid"${collapsed ? " style=\"display:none\"" : ""}>${chips}</div>
+      </div>`);
+    }
+
+    const allFilterTags = [...filterWorking.selectedTags, ...filterWorking.excludedTags];
+    const orphans = allFilterTags.filter((n) => !processed.has(String(n).toLowerCase()));
+    if (orphans.length > 0) {
+      const localMode = filterWorking.categoryLocalMatchModes?.[""] ?? TAG_MATCH_MODE.And;
+      const uncCollapsed = filterDialogCollapsedCategories.has(FILTER_DIALOG_UNCATEGORIZED_COLLAPSE_KEY);
+      const uncIcon = uncCollapsed ? "keyboard_arrow_right" : "keyboard_arrow_down";
+      let chips = "";
+      for (const name of [...new Set(orphans)].sort((a, b) => String(a).localeCompare(String(b)))) {
+        const inc = containsTagCi(filterWorking.selectedTags, name);
+        const exc = containsTagCi(filterWorking.excludedTags, name);
+        let cls = "tag-chip";
+        if (inc) {
+          cls += " state-all";
+        } else if (exc) {
+          cls += " state-none";
+        }
+        chips += `<div class="${cls}">
+          <span class="tag-chip-label">${escapeHtml(name)}</span>
+          <button type="button" class="chip-btn icon-glyph-base icon-glyph-toggle${inc ? " is-selected" : ""}" data-filter-chip="inc" data-tag="${escapeHtml(name)}" title="Include"><span class="material-symbol-icon">add</span></button>
+          <button type="button" class="chip-btn icon-glyph-base icon-glyph-toggle${exc ? " is-selected" : ""}" data-filter-chip="exc" data-tag="${escapeHtml(name)}" title="Exclude"><span class="material-symbol-icon">remove</span></button>
+        </div>`;
+      }
+      catBlocks.push(`<div class="tag-editor-category">
+        <div class="tag-editor-category-header">
+          <div class="tag-editor-category-left">
+            <button type="button" class="tag-editor-category-toggle icon-glyph-base icon-glyph-button" data-filter-category-toggle="${FILTER_DIALOG_UNCATEGORIZED_COLLAPSE_KEY}" title="${uncCollapsed ? "Expand category" : "Collapse category"}"><span class="material-symbol-icon">${uncIcon}</span></button>
+            <span class="tag-editor-category-title">Uncategorized</span>
+          </div>
+          <div class="tag-editor-category-controls">
+            <label class="filter-hint" style="margin:0">Local:
+              <select class="filter-local-mode" data-cat-id="">
+                <option value="${TAG_MATCH_MODE.And}"${localMode === TAG_MATCH_MODE.And ? " selected" : ""}>ALL (AND)</option>
+                <option value="${TAG_MATCH_MODE.Or}"${localMode === TAG_MATCH_MODE.Or ? " selected" : ""}>ANY (OR)</option>
+              </select>
+            </label>
+          </div>
+        </div>
+        <div class="tag-editor-tag-grid"${uncCollapsed ? " style=\"display:none\"" : ""}>${chips}</div>
+      </div>`);
+    }
+
+    const legacyFlat = categories.length === 0 && tags.length > 0;
+    if (legacyFlat) {
+      const sorted = tags.slice().sort((a, b) => String(a.name).localeCompare(String(b.name)));
+      let chips = "";
+      for (const t of sorted) {
+        const inc = containsTagCi(filterWorking.selectedTags, t.name);
+        const exc = containsTagCi(filterWorking.excludedTags, t.name);
+        let cls = "tag-chip";
+        if (inc) {
+          cls += " state-all";
+        } else if (exc) {
+          cls += " state-none";
+        }
+        chips += `<div class="${cls}">
+          <span class="tag-chip-label">${escapeHtml(t.name)}</span>
+          <button type="button" class="chip-btn icon-glyph-base icon-glyph-toggle${inc ? " is-selected" : ""}" data-filter-chip="inc" data-tag="${escapeHtml(t.name)}" title="Include"><span class="material-symbol-icon">add</span></button>
+          <button type="button" class="chip-btn icon-glyph-base icon-glyph-toggle${exc ? " is-selected" : ""}" data-filter-chip="exc" data-tag="${escapeHtml(t.name)}" title="Exclude"><span class="material-symbol-icon">remove</span></button>
+        </div>`;
+      }
+      catBlocks.length = 0;
+      catBlocks.push(`<div class="tag-editor-tag-grid">${chips}</div>`);
+    }
+
+    if (catBlocks.length === 0) {
+      filterPanelTags.innerHTML = "<p class=\"filter-hint\">No tags available. Use Edit tags to create tags.</p>";
+      return;
+    }
+
+    filterPanelTags.innerHTML = `
+      <div class="filter-section">
+        <h3>Category Combination</h3>
+        <p class="filter-hint">AND = all categories must match. OR = any category can match.</p>
+        <label>Combine categories using:
+          <select id="filter-global-match">
+            <option value="and"${globalAnd ? " selected" : ""}>AND</option>
+            <option value="or"${!globalAnd ? " selected" : ""}>OR</option>
+          </select>
+        </label>
+      </div>
+      <div class="filter-section">
+        <h3>Tags Filter</h3>
+        ${catBlocks.join("")}
+      </div>`;
+
+    const gm = filterPanelTags.querySelector("#filter-global-match");
+    if (gm) {
+      gm.addEventListener("change", () => {
+        filterWorking.globalMatchMode = gm.value === "and";
+        filterWorking.tagMatchMode = filterWorking.globalMatchMode ? TAG_MATCH_MODE.And : TAG_MATCH_MODE.Or;
+        updateFilterApplyButtonPending();
+      });
+    }
+    filterPanelTags.querySelectorAll(".filter-local-mode").forEach((sel) => {
+      sel.addEventListener("change", () => {
+        const cid = sel.getAttribute("data-cat-id") ?? "";
+        if (!filterWorking.categoryLocalMatchModes) {
+          filterWorking.categoryLocalMatchModes = {};
+        }
+        filterWorking.categoryLocalMatchModes[cid] = Number.parseInt(sel.value, 10) || TAG_MATCH_MODE.And;
+        updateFilterApplyButtonPending();
+      });
+    });
+  }
+
+  function onFilterTagPanelClick(event) {
+    const toggleBtn = event.target.closest("[data-filter-category-toggle]");
+    if (toggleBtn && filterPanelTags.contains(toggleBtn)) {
+      event.preventDefault();
+      const key = toggleBtn.getAttribute("data-filter-category-toggle") ?? "";
+      toggleFilterCategoryCollapsed(key);
+      return;
+    }
+    onFilterTagChipClick(event);
+  }
+
+  function onFilterTagChipClick(event) {
+    const btn = event.target.closest("[data-filter-chip]");
+    if (!btn || !filterPanelTags.contains(btn)) {
+      return;
+    }
+    event.preventDefault();
+    const mode = btn.getAttribute("data-filter-chip");
+    const tag = btn.getAttribute("data-tag");
+    if (!tag) {
+      return;
+    }
+    if (mode === "inc") {
+      if (containsTagCi(filterWorking.selectedTags, tag)) {
+        removeTagCi(filterWorking.selectedTags, tag);
+      } else {
+        removeTagCi(filterWorking.excludedTags, tag);
+        filterWorking.selectedTags.push(tag);
+      }
+    } else if (mode === "exc") {
+      if (containsTagCi(filterWorking.excludedTags, tag)) {
+        removeTagCi(filterWorking.excludedTags, tag);
+      } else {
+        removeTagCi(filterWorking.selectedTags, tag);
+        filterWorking.excludedTags.push(tag);
+      }
+    }
+    renderFilterTagsPanel();
+    updateFilterApplyButtonPending();
+  }
+
+  function renderFilterPresetsPanel() {
+    const names = filterWorkingPresets.map((p) => p.name);
+    const opts = [`<option value="">None</option>`]
+      .concat(names.map((n) => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`))
+      .join("");
+    const rows = filterWorkingPresets
+      .map((p, i) => `<div class="filter-preset-row" data-preset-idx="${i}">
+        <span class="filter-preset-name">${escapeHtml(p.name)}</span>
+        <button type="button" data-preset-up="${i}" title="Move up">↑</button>
+        <button type="button" data-preset-down="${i}" title="Move down">↓</button>
+        <button type="button" data-preset-rename="${i}">Rename</button>
+        <button type="button" data-preset-del="${i}">Delete</button>
+      </div>`)
+      .join("");
+
+    filterPanelPresets.innerHTML = `
+      <div class="filter-section">
+        <h3>Choose Preset</h3>
+        <div class="filter-row">
+          <select id="filter-dialog-preset-select">${opts}</select>
+          <button type="button" id="filter-update-preset-btn">Update Preset</button>
+        </div>
+      </div>
+      <div class="filter-section">
+        <h3>Create New Preset From Current Filter</h3>
+        <div class="filter-row">
+          <input type="text" id="filter-new-preset-name" placeholder="Enter preset name"/>
+          <button type="button" id="filter-add-preset-btn">Add Preset</button>
+        </div>
+      </div>
+      <div class="filter-section">
+        <h3>Manage Presets</h3>
+        <div class="filter-preset-list">${rows || "<span class=\"filter-hint\">No presets</span>"}</div>
+      </div>`;
+
+    const sel = filterPanelPresets.querySelector("#filter-dialog-preset-select");
+    if (sel) {
+      sel.value = filterDialogActiveName && names.includes(filterDialogActiveName) ? filterDialogActiveName : "";
+      sel.addEventListener("change", () => {
+        const v = sel.value;
+        if (!v) {
+          filterDialogActiveName = null;
+          setFilterDialogHeading();
+          updateFilterApplyButtonPending();
+          return;
+        }
+        const preset = filterWorkingPresets.find((p) => p.name === v);
+        if (preset) {
+          filterWorking = cloneFilterState(preset.filterState);
+          filterDialogActiveName = v;
+          renderFilterGeneralPanel();
+          renderFilterTagsPanel();
+          setFilterDialogHeading();
+          updateFilterApplyButtonPending();
+        }
+      });
+    }
+
+    filterPanelPresets.querySelector("#filter-update-preset-btn")?.addEventListener("click", () => {
+      if (!filterDialogActiveName) {
+        setStatus("Select a preset to update.");
+        return;
+      }
+      const idx = filterWorkingPresets.findIndex((p) => tagEqualsCi(p.name, filterDialogActiveName));
+      if (idx < 0) {
+        setStatus("Preset not found.");
+        return;
+      }
+      readGeneralPanelIntoWorking();
+      filterWorkingPresets[idx].filterState = cloneFilterState(filterWorking);
+      filterPresetCatalogDirty = true;
+      setStatus(`Updated preset "${filterDialogActiveName}" locally — Apply to save.`);
+      updateFilterApplyButtonPending();
+    });
+
+    filterPanelPresets.querySelector("#filter-add-preset-btn")?.addEventListener("click", () => {
+      const name = String(filterPanelPresets.querySelector("#filter-new-preset-name")?.value || "").trim();
+      if (!name) {
+        setStatus("Enter a preset name.");
+        return;
+      }
+      if (filterWorkingPresets.some((p) => tagEqualsCi(p.name, name))) {
+        setStatus("A preset with that name already exists.");
+        return;
+      }
+      readGeneralPanelIntoWorking();
+      filterWorkingPresets.push({ name, filterState: cloneFilterState(filterWorking) });
+      filterPresetCatalogDirty = true;
+      filterPanelPresets.querySelector("#filter-new-preset-name").value = "";
+      renderFilterPresetsPanel();
+      switchFilterTab("presets");
+      updateFilterApplyButtonPending();
+    });
+
+    filterPanelPresets.querySelector(".filter-preset-list")?.addEventListener("click", (ev) => {
+      const t = ev.target;
+      if (!(t instanceof HTMLElement)) {
+        return;
+      }
+      const up = t.getAttribute("data-preset-up");
+      const down = t.getAttribute("data-preset-down");
+      const del = t.getAttribute("data-preset-del");
+      const ren = t.getAttribute("data-preset-rename");
+      if (up != null) {
+        const i = Number.parseInt(up, 10);
+        if (i > 0) {
+          const tmp = filterWorkingPresets[i - 1];
+          filterWorkingPresets[i - 1] = filterWorkingPresets[i];
+          filterWorkingPresets[i] = tmp;
+          filterPresetCatalogDirty = true;
+          renderFilterPresetsPanel();
+        }
+      } else if (down != null) {
+        const i = Number.parseInt(down, 10);
+        if (i < filterWorkingPresets.length - 1) {
+          const tmp = filterWorkingPresets[i + 1];
+          filterWorkingPresets[i + 1] = filterWorkingPresets[i];
+          filterWorkingPresets[i] = tmp;
+          filterPresetCatalogDirty = true;
+          renderFilterPresetsPanel();
+        }
+      } else if (del != null) {
+        const i = Number.parseInt(del, 10);
+        const removed = filterWorkingPresets[i];
+        if (!removed) {
+          return;
+        }
+        if (!window.confirm(`Delete preset "${removed.name}"?`)) {
+          return;
+        }
+        filterWorkingPresets.splice(i, 1);
+        if (filterDialogActiveName && tagEqualsCi(filterDialogActiveName, removed.name)) {
+          filterDialogActiveName = null;
+        }
+        filterPresetCatalogDirty = true;
+        renderFilterPresetsPanel();
+        renderFilterGeneralPanel();
+        renderFilterTagsPanel();
+        setFilterDialogHeading();
+      } else if (ren != null) {
+        const i = Number.parseInt(ren, 10);
+        const row = filterWorkingPresets[i];
+        if (!row) {
+          return;
+        }
+        const nn = prompt("Rename preset", row.name);
+        if (!nn || !nn.trim()) {
+          return;
+        }
+        const nt = nn.trim();
+        if (filterWorkingPresets.some((p, pidx) => pidx !== i && tagEqualsCi(p.name, nt))) {
+          setStatus("That name is already in use.");
+          return;
+        }
+        const old = row.name;
+        row.name = nt;
+        if (filterDialogActiveName && tagEqualsCi(filterDialogActiveName, old)) {
+          filterDialogActiveName = nt;
+        }
+        filterPresetCatalogDirty = true;
+        renderFilterPresetsPanel();
+        setFilterDialogHeading();
+      }
+      updateFilterApplyButtonPending();
+    });
+  }
+
+  function renderAllFilterPanels() {
+    renderFilterGeneralPanel();
+    renderFilterTagsPanel();
+    renderFilterPresetsPanel();
+    updateFilterApplyButtonPending();
+  }
+
+  function validateFilterDurationsForApply() {
+    readGeneralPanelIntoWorking();
+    const noMin = document.getElementById("filter-no-min-dur");
+    const noMax = document.getElementById("filter-no-max-dur");
+    const minEl = document.getElementById("filter-min-dur-text");
+    const maxEl = document.getElementById("filter-max-dur-text");
+    if (noMin && !noMin.checked && minEl) {
+      const p = parseDurationInputToSeconds(minEl.value || "");
+      if (p === "invalid") {
+        return "Minimum duration is invalid. Use MM:SS, HH:MM:SS, or seconds.";
+      }
+    }
+    if (noMax && !noMax.checked && maxEl) {
+      const p = parseDurationInputToSeconds(maxEl.value || "");
+      if (p === "invalid") {
+        return "Maximum duration is invalid. Use MM:SS, HH:MM:SS, or seconds.";
+      }
+    }
+    return null;
+  }
+
+  async function refreshFilterDialogRemoteData() {
+    const sources = await fetchJson("/api/sources");
+    const modelResp = await apiPost("/api/tag-editor/model", { itemIds: [] });
+    if (!modelResp.ok) {
+      throw new Error(`tag-editor model ${modelResp.status}`);
+    }
+    const model = await modelResp.json();
+    filterSources = Array.isArray(sources) ? sources : [];
+    filterTagModel = model;
+    await loadPresets();
+    filterWorkingPresets = mapApiPresetsToWorkingRows(state.presets);
+  }
+
+  async function openFilterDialog() {
+    if (state.compatibilityBlocked) {
+      return;
+    }
+    try {
+      await refreshFilterDialogRemoteData();
+    } catch (error) {
+      setStatus(`Filter dialog load failed: ${error?.message || error}`);
+      return;
+    }
+    filterWorking = cloneFilterState(state.appliedFilterState);
+    filterDialogActiveName = state.activePresetName;
+    filterDialogOriginalJson = JSON.stringify(serializeFilterStateForApi(filterWorking));
+    filterPresetCatalogDirty = false;
+    filterDialogCollapsedCategories = loadFilterDialogCollapsedCategories();
+    setFilterDialogHeading();
+    switchFilterTab("general");
+    renderAllFilterPanels();
+    filterDialog.style.display = "flex";
+    state.filterDialogOpen = true;
+    filterPanelTags.addEventListener("click", onFilterTagPanelClick);
+  }
+
+  function closeFilterDialog() {
+    filterPanelTags.removeEventListener("click", onFilterTagPanelClick);
+    filterDialog.style.display = "none";
+    state.filterDialogOpen = false;
+  }
+
+  async function applyFilterDialog() {
+    const err = validateFilterDurationsForApply();
+    if (err) {
+      setStatus(err);
+      switchFilterTab("general");
+      return;
+    }
+    readGeneralPanelIntoWorking();
+    if (filterPresetCatalogDirty) {
+      try {
+        const resp = await apiPost("/api/presets", presetsToPostBody(filterWorkingPresets));
+        if (!resp.ok) {
+          setStatus(`Saving presets failed (${resp.status}).`);
+          return;
+        }
+        filterPresetCatalogDirty = false;
+        const presets = await fetchJson("/api/presets");
+        state.presets = Array.isArray(presets) ? presets : [];
+        filterWorkingPresets = mapApiPresetsToWorkingRows(state.presets);
+      } catch (e) {
+        setStatus(`Saving presets failed: ${e?.message || e}`);
+        return;
+      }
+    }
+
+    readGeneralPanelIntoWorking();
+    const matched = filterWorkingPresets.find((p) => filterStatesEqualForPresetMatch(p.filterState, filterWorking));
+    if (matched) {
+      state.activePresetName = matched.name;
+    } else {
+      state.activePresetName = null;
+    }
+    state.appliedFilterState = cloneFilterState(filterWorking);
+    filterDialogOriginalJson = JSON.stringify(serializeFilterStateForApi(filterWorking));
+    await loadPresets();
+    closeFilterDialog();
+    setStatus("Filters applied.");
+  }
+
+  function clearAllFiltersInDialog() {
+    filterWorking = createDefaultFilterState();
+    filterDialogActiveName = null;
+    filterWorkingPresets = mapApiPresetsToWorkingRows(state.presets);
+    filterPresetCatalogDirty = false;
+    filterDialogOriginalJson = JSON.stringify(serializeFilterStateForApi(filterWorking));
+    renderAllFilterPanels();
+    setFilterDialogHeading();
+    const sel = filterPanelPresets.querySelector("#filter-dialog-preset-select");
+    if (sel) {
+      sel.value = "";
+    }
+    updateFilterApplyButtonPending();
+  }
 
   let photoTimerId = null;
   let eventSource = null;
@@ -567,12 +1368,25 @@ export function startApp(config) {
     try {
       const presets = await fetchJson("/api/presets");
       state.presets = Array.isArray(presets) ? presets : [];
-      presetSelect.innerHTML = "<option value=\"\">Choose preset</option>";
+      presetSelect.innerHTML = "<option value=\"\">None</option>";
       for (const preset of state.presets) {
         const option = document.createElement("option");
         option.value = preset.id;
         option.textContent = preset.name || preset.id;
         presetSelect.appendChild(option);
+      }
+      if (state.activePresetName) {
+        const match = state.presets.find(
+          (p) => tagEqualsCi(p.id, state.activePresetName) || tagEqualsCi(p.name, state.activePresetName)
+        );
+        if (match) {
+          presetSelect.value = match.id;
+        } else {
+          presetSelect.value = "";
+          state.activePresetName = null;
+        }
+      } else {
+        presetSelect.value = "";
       }
     } catch (error) {
       presetSelect.innerHTML = "<option value=\"\">Error loading presets</option>";
@@ -604,10 +1418,18 @@ export function startApp(config) {
       return;
     }
 
-    const presetId = presetSelect.value;
-    if (!presetId) {
-      setStatus("Select a preset.");
-      return;
+    const presetId = String(presetSelect.value || "").trim();
+    const filterState = serializeFilterStateForApi(state.appliedFilterState);
+    const body = {
+      clientId: state.clientId,
+      sessionId: state.sessionId,
+      includeVideos: true,
+      includePhotos: true,
+      randomizationMode: state.randomizationMode,
+      filterState
+    };
+    if (presetId) {
+      body.presetId = presetId;
     }
 
     setStatus("Loading...");
@@ -616,14 +1438,7 @@ export function startApp(config) {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          presetId,
-          clientId: state.clientId,
-          sessionId: state.sessionId,
-          includeVideos: true,
-          includePhotos: true,
-          randomizationMode: state.randomizationMode
-        })
+        body: JSON.stringify(body)
       });
       if (response.status === 401) {
         pairSection.style.display = "flex";
@@ -637,7 +1452,7 @@ export function startApp(config) {
 
       const data = await response.json();
       if (!data?.mediaUrl) {
-        setStatus("No media returned for selected preset.");
+        setStatus("No eligible media for current filters.");
         return;
       }
 
@@ -1423,6 +2238,7 @@ export function startApp(config) {
       } catch {
         // best effort
       }
+      void loadPresets();
     });
   }
 
@@ -1490,6 +2306,16 @@ export function startApp(config) {
 
   presetSelect.addEventListener("change", () => {
     state.currentPresetId = presetSelect.value;
+    const v = String(presetSelect.value || "").trim();
+    if (!v) {
+      state.activePresetName = null;
+      return;
+    }
+    const preset = state.presets.find((p) => p.id === v);
+    if (preset) {
+      state.activePresetName = preset.name || preset.id;
+      state.appliedFilterState = filterStateFromApiObject(preset.filterState);
+    }
   });
   playBtn.addEventListener("click", (event) => {
     event.stopPropagation();
@@ -1579,7 +2405,7 @@ export function startApp(config) {
     }
 
     event.stopPropagation();
-    if (!state.current && presetSelect.value) {
+    if (!state.current) {
       void getRandom();
       return;
     }
@@ -1643,6 +2469,45 @@ export function startApp(config) {
   if (config.pairToken) {
     pairToken.value = config.pairToken;
   }
+
+  filterDialog.querySelector(".filter-dialog-tabstrip")?.addEventListener("click", (event) => {
+    const btn = event.target && event.target.closest ? event.target.closest("[data-filter-tab]") : null;
+    if (!btn) {
+      return;
+    }
+    const tab = btn.getAttribute("data-filter-tab");
+    if (tab) {
+      switchFilterTab(tab);
+    }
+  });
+
+  filterEditBtn.addEventListener("click", (event) => {
+    event.stopPropagation();
+    void openFilterDialog();
+  });
+  filterDialogCloseBtn.addEventListener("click", () => {
+    closeFilterDialog();
+  });
+  filterCancelBtn.addEventListener("click", () => {
+    closeFilterDialog();
+  });
+  filterClearAllBtn.addEventListener("click", () => {
+    clearAllFiltersInDialog();
+  });
+  filterApplyBtn.addEventListener("click", () => {
+    void applyFilterDialog();
+  });
+  filterDialogRefreshBtn.addEventListener("click", () => {
+    void (async () => {
+      try {
+        await refreshFilterDialogRemoteData();
+        renderAllFilterPanels();
+        setStatus("Filter data refreshed.");
+      } catch (error) {
+        setStatus(`Filter refresh failed: ${error?.message || error}`);
+      }
+    })();
+  });
 
   tagEditBtn.addEventListener("click", (event) => {
     event.stopPropagation();

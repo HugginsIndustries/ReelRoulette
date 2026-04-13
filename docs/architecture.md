@@ -68,6 +68,7 @@ flowchart LR
 ### Client Layers
 
 - Desktop client (`src/clients/desktop/ReelRoulette.DesktopApp/`, Avalonia) and WebUI (`src/clients/web/ReelRoulette.WebUI`) are orchestration/render layers.
+- Playback filtering and preset catalogs are edited through API-backed UIs on both clients (no client-authoritative filter catalogs).
 - Clients issue command/query calls through APIs and project state from API plus SSE.
 - Clients must not reintroduce local authoritative mutation fallbacks for migrated domains.
 - Library export/import applies zip packaging and JSON path remapping on the server; the desktop supplies UI and writes only imported `desktop-settings.json` locally after a successful import.
