@@ -91,6 +91,34 @@ Do not use this file for detailed architecture explanation or current capability
 
 Last milestone completed: M9h
 
+### M9i - WebUI Auto Tag Parity
+
+- **Status**: 🚧 In Progress
+- **Goal**: Ship **Auto Tag** in the WebUI with the same functional behavior as the **Desktop** **Auto Tag** dialog (API-only scan/apply, full-screen tag overlay with tabs), and **align Desktop Auto Tag scan scope** with WebUI so **Scan full library** off means **enabled sources only**—not playback/filter state, tag filters, or library search. WebUI integrates into the existing tag experience without duplicating tag logic on the client.
+- **Scope**:
+  - **Desktop — Auto Tag scan scope:** When **Scan full library** is **unchecked**, the candidate item set for scan/apply is **all library items belonging to enabled sources** only. Remove or bypass any narrowing that used **current filter state**, **tag filter**, or **library search** text for that path (for example **`GetCurrentFilteredLibraryItems`** or equivalent). When **Scan full library** is **checked**, behavior remains **all items** (full library) as today. **`POST /api/autotag/scan`** continues to receive **`scanFullLibrary`** plus **`itemIds`** as **`fullPath`** values for the scoped items (or empty / full-library semantics consistent with the server).
+  - Split the WebUI tag overlay into **tabs** using the **same structural pattern** as the WebUI **filter** full-screen overlay: **Edit Tags** retains today’s manual editor; add **Auto Tag** for scan/apply workflows so tab chrome and layout feel consistent across filter and tags.
+  - **Default tab:** Opening the overlay from the existing **Edit tags** entry lands on **Edit Tags** first; **Auto Tag** is the sibling tab.
+  - **Auto Tag** tab mirrors **Desktop**: **Scan full library**, **View all matches**, explanatory copy (e.g. filename match ignores extension), **Scan Files** → **`POST /api/autotag/scan`**; results list with expand/collapse, row tri-state **Apply**, per-file checkboxes, **Select all** / **Deselect all**, **Total matched** / **To be changed**, status text, **OK** / **Cancel** (including apply-none / cancel paths consistent with **Desktop** intent).
+  - **Scan request shape (WebUI):** **`scanFullLibrary`** and **`itemIds`** (`fullPath` values) must match the **same scope rules** as **Desktop** after alignment: **off** = items in **enabled sources** only; **on** = full library per server behavior.
+  - **In-flight scan UX (WebUI):** While a scan is running, disable **Scan Files** (no overlapping scans), show a clear **status line** (scanning / success / error), and show an **indeterminate progress** indicator consistent with WebUI patterns.
+  - **Apply** via **`POST /api/autotag/apply`**; after apply, **refresh or resync tag state** the same way as other WebUI tag mutations (**`tagCatalogChanged`**, **`itemTagsChanged`**, **`resyncRequired`**, and/or refetch of the tag editor model) so the **Edit Tags** tab and any visible chips stay aligned with the server.
+  - **Scan full library** default (WebUI): **best-effort `localStorage`** persistence (**Desktop**-style preference), with acceptable fallback if storage is unavailable.
+- **Acceptance criteria**:
+  - **Desktop:** With **Scan full library** off, Auto Tag scan considers only items from **enabled sources**; filter state, tag filter, and library search **do not** shrink the scan set. With it on, full-library behavior is unchanged.
+  - **WebUI:** Scan/apply behavior and selection semantics match **Desktop** Auto Tag for representative libraries (including partial selections and **View all matches**), using the **same** enabled-sources-only rule when **Scan full library** is off.
+  - **Edit Tags** and **Auto Tag** are both available inside one WebUI overlay without leaving the flow; tab UX matches the WebUI filter overlay pattern; default tab is **Edit Tags** when opened from the existing control.
+  - During scan, WebUI **in-flight** UX is clear (disabled **Scan Files**, status line, indeterminate progress).
+  - Post-apply, **Edit Tags** data and tag surfaces reflect applied changes without a manual full reload (same class of handling as other tag operations).
+  - Automated checks: `dotnet build` / `dotnet test`, WebUI `npm run verify`; OpenAPI/clients updated only if a contract gap is found and fixed.
+  - Docs/checklist/`CHANGELOG` `[Unreleased]`/`CONTEXT`/`COMMIT-MESSAGE` updated when work lands, per repo discipline.
+- **Verification evidence**:
+  - Commands run (build, test, WebUI verify).
+  - Manual spot-check: **WebUI** and **Desktop** Auto Tag — **Scan full library** on/off; with it off, confirm scope is **enabled sources** only (e.g. disabled source excluded; filter/search do not exclude items that share an enabled source).
+- **Deferrals / Follow-ups**:
+  - Server-owned preference for scan scope instead of WebUI `localStorage`, if desired later.
+  - Extra keyboard/ARIA polish on the Auto Tag grid, if not gated here.
+
 ### M10 - End-User README and Contributor Dev Documentation
 
 - **Status**: ⏳ Planned

@@ -19,11 +19,6 @@ Instructions:
 
 Commit Message:
 
-M9h: WebUI filter dialog parity
+Docs: MILESTONES M9i WebUI Auto Tag parity
 
-- Add full-screen filter overlay (General, Tags, Presets) with desktop-equivalent filter JSON, tri-state tags, sources, duration parsing, and preset catalog CRUD via `POST /api/presets`.
-- Wire `POST /api/random` with serialized `filterState` and optional `presetId`; refetch presets on overlay open, after preset save, and on SSE `resyncRequired`.
-- Serialize `minDuration` / `maxDuration` in `filterState` as `HH:MM:SS` so server `TimeSpan` parsing matches desktop (Vitest for API forms); note in `docs/api.md`.
-- Add `filterStateModel.ts` + Vitest coverage; extend shell/styles for `filter_alt` and themed dialog chrome.
-- Filter dialog Tags tab: collapsible categories (and Uncategorized) with dedicated `sessionStorage` key; legacy flat tag model stays a single grid without toggles.
-- Update milestone evidence, CONTEXT, CHANGELOG, api baseline, testing checklist, and domain inventory.
+- Add **M9i** in `MILESTONES.md`: Auto Tag tab beside Edit Tags, API scan/apply, post-mutation resync, `localStorage` scan default, filter-overlay tab pattern.
