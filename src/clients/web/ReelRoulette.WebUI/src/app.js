@@ -206,6 +206,7 @@ export function startApp(config) {
   const nowPlayingName = getElement("now-playing-name");
   const nowPlayingDuration = getElement("now-playing-duration");
   const mediaContainer = getElement("media-container");
+  const fullscreenStage = getElement("fullscreen-stage");
   const overlayControls = getElement("overlay-controls");
   const seekRow = getElement("seek-row");
   const seekSlider = getElement("seek-slider");
@@ -261,7 +262,7 @@ export function startApp(config) {
 
   if (
     !video || !photo || !statusEl || !presetSelect || !pairSection || !pairToken || !pairBtn ||
-    !mediaContainer || !seekRow || !seekSlider || !timeDisplay || !nowPlaying || !nowPlayingName ||
+    !mediaContainer || !fullscreenStage || !seekRow || !seekSlider || !timeDisplay || !nowPlaying || !nowPlayingName ||
     !nowPlayingDuration || !favoriteBtn || !blacklistBtn || !prevBtn || !playBtn || !nextBtn ||
     !loopBtn || !autoplayBtn || !fullscreenBtn || !muteBtn || !filterEditBtn || !tagEditBtn || !tagEditor || !tagEditorBody ||
     !tagEditorCloseBtn || !tagEditorRefreshBtn || !tagEditorAddCategoryBtn || !tagEditorCategorySelect ||
@@ -275,6 +276,80 @@ export function startApp(config) {
   ) {
     throw new Error("Legacy WebUI bootstrap failed: missing required DOM elements.");
   }
+
+  function isIosTouchWebKit() {
+    const ua = navigator.userAgent || "";
+    if (/iPad|iPhone|iPod/i.test(ua)) return true;
+    return navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1;
+  }
+
+  function getFullscreenElement() {
+    return document.fullscreenElement || document.webkitFullscreenElement || null;
+  }
+
+  let pseudoFullscreen = false;
+
+  function isStageFullscreenActive() {
+    if (pseudoFullscreen) return true;
+    return getFullscreenElement() === fullscreenStage;
+  }
+
+  function exitPseudoFullscreen() {
+    if (!pseudoFullscreen) return;
+    pseudoFullscreen = false;
+    fullscreenStage.classList.remove("fullscreen-pseudo");
+  }
+
+  function enterPseudoFullscreen() {
+    pseudoFullscreen = true;
+    fullscreenStage.classList.add("fullscreen-pseudo");
+  }
+
+  function exitApiFullscreen() {
+    const exit = document.exitFullscreen || document.webkitExitFullscreen;
+    if (getFullscreenElement()) {
+      void exit?.call(document)?.catch?.(() => {});
+    }
+  }
+
+  function enterStageFullscreen() {
+    if (isIosTouchWebKit()) {
+      enterPseudoFullscreen();
+      return;
+    }
+    const req = fullscreenStage.requestFullscreen || fullscreenStage.webkitRequestFullscreen;
+    if (!req) {
+      enterPseudoFullscreen();
+      return;
+    }
+    void req.call(fullscreenStage).catch(() => {
+      enterPseudoFullscreen();
+    });
+  }
+
+  function exitStageFullscreen() {
+    if (pseudoFullscreen) {
+      exitPseudoFullscreen();
+      return;
+    }
+    if (getFullscreenElement() === fullscreenStage) {
+      exitApiFullscreen();
+    }
+  }
+
+  function toggleStageFullscreen() {
+    if (isStageFullscreenActive()) {
+      exitStageFullscreen();
+    } else {
+      enterStageFullscreen();
+    }
+  }
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    if (!pseudoFullscreen) return;
+    exitPseudoFullscreen();
+  });
 
   pairSection.style.display = "none";
 
@@ -2714,11 +2789,7 @@ export function startApp(config) {
   });
   fullscreenBtn.addEventListener("click", (event) => {
     event.stopPropagation();
-    if (!document.fullscreenElement) {
-      void mediaContainer.requestFullscreen().catch(() => {});
-    } else {
-      void document.exitFullscreen().catch(() => {});
-    }
+    toggleStageFullscreen();
   });
   seekSlider.addEventListener("input", () => {
     if (!video.duration) return;

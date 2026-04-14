@@ -19,8 +19,9 @@ Instructions:
 
 Commit Message:
 
-M9i: WebUI Auto Tag parity and desktop scan scope
+Bugfix: WebUI fullscreen stage and iOS pseudo-fullscreen
 
-- WebUI tag overlay: **Edit Tags** / **Auto Tag** tabs, API scan/apply, projection-based scope, unified **Save** and discard on Close/Refresh.
-- Desktop: Auto Tag with **Scan full library** off limits candidates to **enabled sources** only (no filter/search narrowing).
-- Docs: `README.md`, `MILESTONES.md` (M9i complete + verification evidence), `CONTEXT.md`, `docs/api.md`, `docs/architecture.md`, `docs/domain-inventory.md`, `docs/checklists/testing-checklist.md`, `CHANGELOG.md` `[Unreleased]`.
+- Fullscreen targets a **stage** that wraps the media area plus tag and filter overlays so those dialogs work while fullscreen on desktop browsers.
+- iPad/iPhone WebKit uses in-page **pseudo-fullscreen** (no Element Fullscreen API) to avoid native video controls replacing custom UI and breaking swipe navigation.
+- Video markup adds inline-playback and remote-playback hints; Escape exits pseudo-fullscreen.
+- Docs: `CONTEXT.md`, `docs/checklists/testing-checklist.md`, `CHANGELOG.md` `[Unreleased]`.

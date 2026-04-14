@@ -29,9 +29,10 @@ export function renderApp(container: HTMLElement, config: RuntimeConfig): void {
         <span id="now-playing-duration" class="muted"></span>
       </div>
     </header>
+    <div id="fullscreen-stage" class="fullscreen-stage">
     <main>
       <div id="media-container" class="media-container">
-        <video id="video" playsinline preload="auto" style="display:none"></video>
+        <video id="video" playsinline webkit-playsinline preload="auto" disablepictureinpicture disableremoteplayback style="display:none"></video>
         <img id="photo" alt="Photo" style="display:none">
         <div id="empty-state" class="empty-state">Click here to play (choose a preset or open Filter…)</div>
         <div id="overlay-controls" class="overlay-controls">
@@ -133,6 +134,7 @@ export function renderApp(container: HTMLElement, config: RuntimeConfig): void {
         <button id="filter-cancel-btn" type="button">Cancel</button>
         <button id="filter-apply-btn" type="button">Apply</button>
       </div>
+    </div>
     </div>
     <div id="status" class="status status-bottom"></div>
     <div id="mobile-diagnostics" class="status diagnostics-mobile" style="display:none"></div>

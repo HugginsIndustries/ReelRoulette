@@ -77,6 +77,7 @@ Desktop-only: reads/writes roaming `ReelRoulette` data and local thumbnails (no 
 - [x] Random play works with **None** (ad-hoc `filterState`) and with a named header preset.
 - [x] **Filter / preset parity (spot-check vs desktop Filter Media):** open **Filter…** (`filter_alt`); General flags, media type, sources, audio, and duration (MM:SS / HH:MM:SS, no min/max) behave sensibly; invalid duration shows a clear error on Apply. Tags tab: global AND/OR, per-category local mode, include/exclude chips. Presets tab: add, rename, delete, reorder, load preset into editor, update preset from current; **Apply** persists catalog via API; header combobox stays ordered like `GET /api/presets`. After **Apply**, random/next eligibility matches expectations. Optional: trigger `resyncRequired` (or second client) and confirm presets refetch.
 - [x] Manual controls (prev/play-next) work.
+- [ ] WebUI **Fullscreen**: custom overlay and swipe prev/next stay usable on iPad/iPhone WebKit; **Filter…** and **Edit Tags** open and close while fullscreen (desktop: Fullscreen API stage includes overlays; iOS: pseudo-fullscreen).
 - [x] Loop/autoplay toggles work.
 - [x] Favorite/blacklist actions work.
 - [x] Tag editor flows work (open/edit/save/close); **Auto Tag** tab: scan (full library on/off vs enabled sources), **View all matches**, select/deselect, unified **Save** and **`Discard changes?`** on Close/Refresh when pending; in-flight scan disables Close/Refresh/Scan/Save.

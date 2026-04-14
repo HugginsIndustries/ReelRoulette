@@ -75,6 +75,7 @@ This file follows a Keep a Changelog style format.
 
 ### Fixed
 
+- WebUI: **Fullscreen** uses a shared **fullscreen stage** (media + tag editor + filter dialog) so overlays stay usable under the Fullscreen API; **iOS WebKit** (all browsers on iPhone/iPad) uses fixed **pseudo-fullscreen** instead so native video chrome does not replace custom controls or swallow swipe prev/next; **Escape** exits pseudo-fullscreen.
 - Linux **Launch Server on Startup** (XDG autostart): `ReelRoulette.ServerApp` now uses `WebApplicationOptions.ContentRootPath = AppContext.BaseDirectory` so `appsettings.json` and `wwwroot` resolve when the session manager starts the app with cwd `$HOME` (or similar). Autostart `.desktop` entries written by `LinuxXdgStartupLaunchService` now include `Path=` to the install directory (alongside `Exec=`) so working directory matches portable `run-server.sh` behavior. Toggle startup off/on once to refresh an existing `~/.config/autostart/reelroulette-server.desktop` from older builds.
 - Linux XDG autostart from **AppImage**: `LinuxXdgStartupLaunchService` resolves **`Exec=`** (and **`Path=`**) from **`APPIMAGE`** when that variable points at an existing on-disk `.AppImage`, instead of **`Environment.ProcessPath`** under ephemeral `/tmp/.mount_*`, so login autostart survives reboot. Toggle startup off/on once if an older `.desktop` still references a mount path.
 - WebUI: pairing token field and **Pair** button use the same theme CSS variables and 6px corner radius as the rest of the shell (no default light control styling in dark mode).
