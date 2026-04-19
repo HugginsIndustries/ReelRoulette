@@ -23,7 +23,7 @@
     <PackageReference Include="Avalonia.Desktop" Version="12.0.0" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="12.0.0" />
     <PackageReference Include="Avalonia.Fonts.Inter" Version="12.0.0" />
-    <PackageReference Include="LibVLCSharp.Avalonia" Version="3.9.6" />
+    <PackageReference Include="LibVLCSharp.Avalonia" Version="3.9.7" />
     <PackageReference Include="Tmds.DBus.Protocol" Version="0.92.0" />
     <PackageReference Include="Makaretu.Dns.Multicast" Version="0.27.0" />
     <PackageReference Include="TagLibSharp" Version="2.3.0" />

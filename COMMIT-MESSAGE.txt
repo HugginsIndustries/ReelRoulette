@@ -19,9 +19,6 @@ Instructions:
 
 Commit Message:
 
-Feature: WebUI PWA metadata and tailscale HTTPS docs
+Chore: bump LibVLCSharp.Avalonia to 3.9.7
 
-- Add WebUI PWA metadata (`manifest.webmanifest`, iOS home-screen tags) and build-synced icons (`sharp`-resized 192/512 + 180×180 touch icon) for installable standalone behavior on HTTPS origins.
-- Remove large-screen max-width cap in Filter Media dialog content so overlay layout stays full-width and responsive across display sizes; Presets manage rows now use Material Symbols controls (`keyboard_arrow_up`, `keyboard_arrow_down`, `edit_note`, `delete`) with disabled up/down boundaries.
-- Extend WebUI build output verification to require manifest and PWA icons in `dist/`.
-- Docs: add Tailscale HTTPS (`tailscale serve`) setup guidance in `README.md`; update `CONTEXT.md`, testing checklist, and `CHANGELOG.md` `[Unreleased]`.
+- Align desktop `LibVLCSharp.Avalonia` with Avalonia 12–supported 3.9.7; record the version in `CHANGELOG.md` `[Unreleased]` dependency line.
