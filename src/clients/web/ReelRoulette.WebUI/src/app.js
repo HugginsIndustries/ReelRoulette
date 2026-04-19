@@ -454,7 +454,7 @@ export function startApp(config) {
     });
     filterPanelGeneral.style.display = tab === "general" ? "block" : "none";
     filterPanelTags.style.display = tab === "tags" ? "block" : "none";
-    filterPanelPresets.style.display = tab === "presets" ? "block" : "none";
+    filterPanelPresets.style.display = tab === "presets" ? "flex" : "none";
   }
 
   function readGeneralPanelIntoWorking() {
@@ -836,13 +836,17 @@ export function startApp(config) {
       .concat(names.map((n) => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`))
       .join("");
     const rows = filterWorkingPresets
-      .map((p, i) => `<div class="filter-preset-row" data-preset-idx="${i}">
+      .map((p, i) => {
+        const isFirst = i === 0;
+        const isLast = i === filterWorkingPresets.length - 1;
+        return `<div class="filter-preset-row" data-preset-idx="${i}">
         <span class="filter-preset-name">${escapeHtml(p.name)}</span>
-        <button type="button" data-preset-up="${i}" title="Move up">↑</button>
-        <button type="button" data-preset-down="${i}" title="Move down">↓</button>
-        <button type="button" data-preset-rename="${i}">Rename</button>
-        <button type="button" data-preset-del="${i}">Delete</button>
-      </div>`)
+        <button type="button" class="icon-glyph-base icon-glyph-button" data-preset-up="${i}" aria-label="Move up" title="Move up"${isFirst ? " disabled" : ""}><span class="material-symbol-icon">keyboard_arrow_up</span></button>
+        <button type="button" class="icon-glyph-base icon-glyph-button" data-preset-down="${i}" aria-label="Move down" title="Move down"${isLast ? " disabled" : ""}><span class="material-symbol-icon">keyboard_arrow_down</span></button>
+        <button type="button" class="icon-glyph-base icon-glyph-button" data-preset-rename="${i}" aria-label="Rename" title="Rename"><span class="material-symbol-icon">edit_note</span></button>
+        <button type="button" class="icon-glyph-base icon-glyph-button" data-preset-del="${i}" aria-label="Delete" title="Delete"><span class="material-symbol-icon">delete</span></button>
+      </div>`;
+      })
       .join("");
 
     filterPanelPresets.innerHTML = `
@@ -860,7 +864,7 @@ export function startApp(config) {
           <button type="button" id="filter-add-preset-btn">Add Preset</button>
         </div>
       </div>
-      <div class="filter-section">
+      <div class="filter-section filter-section-manage">
         <h3>Manage Presets</h3>
         <div class="filter-preset-list">${rows || "<span class=\"filter-hint\">No presets</span>"}</div>
       </div>`;
@@ -925,14 +929,18 @@ export function startApp(config) {
     });
 
     filterPanelPresets.querySelector(".filter-preset-list")?.addEventListener("click", (ev) => {
-      const t = ev.target;
-      if (!(t instanceof HTMLElement)) {
+      const target = ev.target;
+      if (!(target instanceof Element)) {
         return;
       }
-      const up = t.getAttribute("data-preset-up");
-      const down = t.getAttribute("data-preset-down");
-      const del = t.getAttribute("data-preset-del");
-      const ren = t.getAttribute("data-preset-rename");
+      const button = target.closest("[data-preset-up], [data-preset-down], [data-preset-del], [data-preset-rename]");
+      if (!button || !filterPanelPresets.contains(button)) {
+        return;
+      }
+      const up = button.getAttribute("data-preset-up");
+      const down = button.getAttribute("data-preset-down");
+      const del = button.getAttribute("data-preset-del");
+      const ren = button.getAttribute("data-preset-rename");
       if (up != null) {
         const i = Number.parseInt(up, 10);
         if (i > 0) {

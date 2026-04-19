@@ -5,6 +5,10 @@ const cwd = process.cwd();
 const distDir = path.join(cwd, "dist");
 const indexPath = path.join(distDir, "index.html");
 const runtimeConfigPath = path.join(distDir, "runtime-config.json");
+const manifestPath = path.join(distDir, "manifest.webmanifest");
+const pwaIcon192Path = path.join(distDir, "icons", "icon-192.png");
+const pwaIcon512Path = path.join(distDir, "icons", "icon-512.png");
+const appleTouchIconPath = path.join(distDir, "icons", "apple-touch-icon.png");
 const assetsDir = path.join(distDir, "assets");
 
 async function assertExists(targetPath, description) {
@@ -19,6 +23,10 @@ async function run() {
   await assertExists(distDir, "dist directory");
   await assertExists(indexPath, "index.html");
   await assertExists(runtimeConfigPath, "runtime config file");
+  await assertExists(manifestPath, "web app manifest file");
+  await assertExists(pwaIcon192Path, "PWA icon 192");
+  await assertExists(pwaIcon512Path, "PWA icon 512");
+  await assertExists(appleTouchIconPath, "Apple touch icon");
   await assertExists(assetsDir, "assets directory");
 
   const runtimeConfigRaw = await readFile(runtimeConfigPath, "utf8");

@@ -830,10 +830,22 @@ html.theme-light .tag-edit-modal-card {
   background: #111;
 }
 .filter-panel {
-  max-width: 720px;
+  width: 100%;
+  min-width: 0;
+}
+#filter-panel-presets {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
 }
 .filter-section {
   margin-bottom: 20px;
+}
+.filter-section-manage {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
 }
 .filter-section h3 {
   margin: 0 0 8px;
@@ -905,12 +917,14 @@ html.theme-light .tag-edit-modal-card {
   border: 1px solid #444;
   border-radius: 8px;
   padding: 8px;
-  max-height: 40vh;
+  flex: 1;
+  min-height: 0;
+  max-height: none;
   overflow: auto;
 }
 .filter-preset-row {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 6px;
   padding: 6px 4px;
@@ -948,6 +962,9 @@ html.theme-light .filter-dialog button:not(.icon-glyph-base) {
   background: var(--panel-bg);
   color: var(--page-fg);
   border-color: var(--panel-border);
+}
+html.theme-light .filter-dialog button.icon-glyph-base {
+  color: var(--page-fg);
 }
 
 main {

@@ -19,9 +19,9 @@ Instructions:
 
 Commit Message:
 
-Bugfix: WebUI fullscreen stage and iOS pseudo-fullscreen
+Feature: WebUI PWA metadata and tailscale HTTPS docs
 
-- Fullscreen targets a **stage** that wraps the media area plus tag and filter overlays so those dialogs work while fullscreen on desktop browsers.
-- iPad/iPhone WebKit uses in-page **pseudo-fullscreen** (no Element Fullscreen API) to avoid native video controls replacing custom UI and breaking swipe navigation.
-- Video markup adds inline-playback and remote-playback hints; Escape exits pseudo-fullscreen.
-- Docs: `CONTEXT.md`, `docs/checklists/testing-checklist.md`, `CHANGELOG.md` `[Unreleased]`.
+- Add WebUI PWA metadata (`manifest.webmanifest`, iOS home-screen tags) and build-synced icons (`sharp`-resized 192/512 + 180×180 touch icon) for installable standalone behavior on HTTPS origins.
+- Remove large-screen max-width cap in Filter Media dialog content so overlay layout stays full-width and responsive across display sizes; Presets manage rows now use Material Symbols controls (`keyboard_arrow_up`, `keyboard_arrow_down`, `edit_note`, `delete`) with disabled up/down boundaries.
+- Extend WebUI build output verification to require manifest and PWA icons in `dist/`.
+- Docs: add Tailscale HTTPS (`tailscale serve`) setup guidance in `README.md`; update `CONTEXT.md`, testing checklist, and `CHANGELOG.md` `[Unreleased]`.

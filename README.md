@@ -118,6 +118,7 @@ npm run dev
 `npm run dev` and `npm run build` automatically sync shared assets into WebUI `public/`, including:
 
 - app icon: `assets/HI.ico` -> `public/HI.ico`
+- PWA / home-screen icons: `assets/HI-256.png` and `assets/HI-512.png` are resized with **`sharp`** (devDependency) into `public/icons/icon-192.png` (**192×192**), `public/icons/icon-512.png` (**512×512**), and `public/icons/apple-touch-icon.png` (**180×180**) so `manifest.webmanifest` `sizes` matches the PNGs
 - Material Symbols font: `assets/fonts/MaterialSymbolsOutlined.var.ttf` -> `public/assets/fonts/MaterialSymbolsOutlined.var.ttf`
 
 ## Helper Scripts
@@ -140,6 +141,18 @@ Linux runtime note:
 
 - Tray is used when a graphical session is available; otherwise the server runs headless.
 - Tray and Operator expose the same `Launch Server on Startup` toggle; it writes `reelroulette-server.desktop` under your XDG autostart directory with `Exec=` targeting the stable server binary (from **`APPIMAGE`** when you run the **AppImage**, otherwise the process path) and `Path=` set to that binary’s directory so login startup matches `./run-server.sh` working-directory behavior. If you use the AppImage and an older autostart entry still points at `/tmp/.mount_*`, toggle startup off and on once to refresh it.
+
+### WebUI HTTPS on Tailscale (PWA/Home Screen)
+
+If your devices already use Tailscale, the most reliable way to run the WebUI in a secure context is:
+
+1. Ensure the server can be reached from your tailnet (for example enable LAN binding in Control Settings or configure `CoreServer:ListenUrl` to a non-loopback bind such as `http://0.0.0.0:45123`).
+2. Use **Tailscale Serve** to terminate HTTPS on your tailnet domain and proxy to the local server URL (for example `http://127.0.0.1:45123`).
+3. Open the resulting HTTPS URL from another tailnet device (iPad/Android) and use browser install flow (**Add to Home Screen** / **Install app**).
+
+ReelRoulette WebUI runtime config is generated from the incoming request host/scheme (`/runtime-config.json`), so loading via the Tailscale HTTPS origin keeps API and SSE on the same HTTPS origin automatically.
+
+Tailscale CLI flags can vary by version; use the current Tailscale docs for `serve` setup details: [https://tailscale.com/kb/1312/serve](https://tailscale.com/kb/1312/serve).
 
 Build WebUI and run server app:
 
