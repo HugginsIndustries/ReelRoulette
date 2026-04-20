@@ -160,7 +160,7 @@ Packaging notes:
 
 Use one command to align release-version surfaces:
 
-- `pwsh ./tools/scripts/set-release-version.ps1 -Version 0.11.0-dev`
+- `pwsh ./tools/scripts/set-release-version.ps1 -Version 0.11.0`
 - By default, the script also updates the desktop app `<Version>`, runs `npm run generate:contracts` in WebUI, runs solution build/test plus WebUI verify and `verify-web-deploy.ps1`, and updates release command examples in `README.md` and `docs/dev-setup.md`.
 - Use `-NoDocUpdates` to skip the README/dev-setup example updates.
 - Use `-NoUpdateDesktopVersion`, `-NoRegenerateContracts`, and/or `-NoRunVerify` to skip desktop version, contract regeneration, or the verify steps respectively.
@@ -180,7 +180,7 @@ Then package server and desktop as needed:
 - `pwsh ./tools/scripts/package-desktop-win-portable.ps1`
 - `pwsh ./tools/scripts/package-desktop-win-inno.ps1`
 - or run the chained flow:
-  - `pwsh ./tools/scripts/full-release.ps1 -Version 0.11.0-dev` (optional `-NoDocUpdates`, `-NoUpdateDesktopVersion`, `-NoRegenerateContracts`, `-NoRunVerify` are passed through to `set-release-version.ps1`). Run without `-Version` to skip `set-release-version` and use each `.csproj` `<Version>` in package outputs.
+  - `pwsh ./tools/scripts/full-release.ps1 -Version 0.11.0` (optional `-NoDocUpdates`, `-NoUpdateDesktopVersion`, `-NoRegenerateContracts`, `-NoRunVerify` are passed through to `set-release-version.ps1`). Run without `-Version` to skip `set-release-version` and use each `.csproj` `<Version>` in package outputs.
 
 Reset manual testing checklist state for a fresh run:
 
@@ -258,7 +258,7 @@ Requires `curl` and `jq` on `PATH`. Default repository is `HugginsIndustries/Ree
 
 AppImage installs go to `~/.local/share/ReelRoulette/` as `ReelRoulette-{Server|Desktop}-linux-x64.AppImage` (version stripped; same as `install-linux-local.sh`). Override directory with `REELROULETTE_LOCAL_APPIMAGE_DIR`. Portable tarball fallback still extracts under `~/.local/share/ReelRoulette/<server|desktop>/<version>/` and adds a launcher symlink in `~/.local/bin/`.
 
-On Linux, `pwsh ./tools/scripts/full-release.ps1 -Version 0.11.0-dev` runs `set-release-version.ps1` with the same defaults documented under **Release Versioning** above (and any `-No*` switches you pass), then the two Linux portable scripts, then the two Linux AppImage scripts, and skips Inno installer steps (Windows-only). With no `-Version`, it skips `set-release-version` and packages using `.csproj` versions. AppImage steps require `appimagetool`.
+On Linux, `pwsh ./tools/scripts/full-release.ps1 -Version 0.11.0` runs `set-release-version.ps1` with the same defaults documented under **Release Versioning** above (and any `-No*` switches you pass), then the two Linux portable scripts, then the two Linux AppImage scripts, and skips Inno installer steps (Windows-only). With no `-Version`, it skips `set-release-version` and packages using `.csproj` versions. AppImage steps require `appimagetool`.
 
 ## Troubleshooting
 

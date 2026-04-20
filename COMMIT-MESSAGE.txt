@@ -19,7 +19,8 @@ Instructions:
 
 Commit Message:
 
-Docs: changelog and GitHub release notes for v0.11.0
+Chore: v0.11.0 release surfaces and testing checklist refresh
 
-- `CHANGELOG.md`: add summarized `[0.11.0]` release section, reset `[Unreleased]` with empty-section placeholders, align `0.10.0` / `0.9.0` headings.
-- `RELEASE-NOTES.md`: add a short style guide and rewrite v0.11 / v0.10 / v0.9 notes for GitHub releases (user-facing tone, clearer Linux/AppImage startup note).
+- Align `0.11.0-dev` → `0.11.0` on OpenAPI, ServerApp/DesktopApp `<Version>`, server `assetsVersion`, contract/WebUI tests, and README/dev-setup release command examples.
+- Reorganize `docs/checklists/testing-checklist.md` into concise sections with blank run metadata, fold in build/deploy preconditions, and keep items one-line testable checks per the new brevity rule.
+- Remove completed temporary trackers: `docs/checklists/grid-fix.md`, `library-service-removal.md`, `m8h-checklist.md`.

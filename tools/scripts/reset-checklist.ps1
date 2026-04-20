@@ -26,19 +26,6 @@ function Get-CanonicalVersion {
     return [string]$version
 }
 
-function Get-CurrentBranchName {
-    try {
-        $branch = (& git rev-parse --abbrev-ref HEAD 2>$null).Trim()
-        if ([string]::IsNullOrWhiteSpace($branch)) {
-            return "unknown"
-        }
-        return $branch
-    }
-    catch {
-        return "unknown"
-    }
-}
-
 function Update-MetadataLine {
     param(
         [string]$Line,
@@ -54,7 +41,6 @@ function Update-MetadataLine {
 }
 
 $version = Get-CanonicalVersion
-$branch = Get-CurrentBranchName
 $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
 $releaseVersion = "v$version"
 
@@ -67,7 +53,6 @@ foreach ($line in $lines) {
 
     if (-not $KeepMetadata.IsPresent) {
         $nextLine = Update-MetadataLine -Line $nextLine -Prefix "Test date/time" -Value $timestamp
-        $nextLine = Update-MetadataLine -Line $nextLine -Prefix "Branch/commit" -Value "$branch / pending"
         $nextLine = Update-MetadataLine -Line $nextLine -Prefix "Release version" -Value $releaseVersion
     }
 

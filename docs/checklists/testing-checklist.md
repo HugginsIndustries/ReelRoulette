@@ -2,236 +2,189 @@
 
 **Rule:** Items here must be **testable checks** a maintainer can execute and mark pass or fail. Do not add roadmap text, deferrals, or other non-test process notes as checklist rows (keep those in `MILESTONES.md` and related docs). Intended use is **manual validation before releases** (full or targeted regression).
 
+**Rule:** Keep checklist items concise. Do not inline implementation details, file paths, or platform caveats that already exist in other documentation (`README.md`, `docs/dev-setup.md`, `docs/architecture.md`, etc.). A one-line testable check is always preferred over a multi-line re-specification of a feature.
+
 Use this checklist for manual regression passes. Check boxes inline as you go.
 Use `pwsh ./tools/scripts/reset-checklist.ps1` to reset metadata/check states before starting a new validation pass.
 
 ## Test Run Metadata
 
-- Test date/time: 2026-04-10 12:20:00
-- Tester: Christian Huggins
-- Branch/commit: main / M9g Linux release readiness sign-off
-- Release version: v0.11.0
-- Environment (OS + device(s) + browser(s)): CachyOS `linux-x64` (automated build/test, WebUI verify, Linux portable/AppImage packaging, packaged-server smoke, `install-linux-local.sh` with isolated `HOME`); GitHub Actions `ubuntu-latest` + `windows-latest` per `.github/workflows/ci.yml`; prior regression sections also exercised Windows-PC (desktop + Firefox), Android (Chrome), iPad (Chrome) on earlier pass
+- Test date/time:
+- Tester:
+- Release version:
+- Environment (OS + device(s) + browser(s)):
 - Test mode:
-  - [x] Full regression sweep
+  - [ ] Full regression sweep
   - [ ] Targeted regression (list impacted areas):
 
-## Global Preconditions
+---
 
-- [x] `dotnet build ReelRoulette.sln` passes.
-- [x] `dotnet test ReelRoulette.sln` passes.
-- [x] WebUI verify passes (`npm run verify` in `src/clients/web/ReelRoulette.WebUI`).
-- [x] `ReelRoulette.ServerApp` starts without fatal startup errors.
-- [x] Desktop app can connect to server.
-- [x] WebUI reachable from localhost.
-- [x] Mobile web reachable from LAN (if LAN scenario is in scope).
+## Build & Preconditions
 
-## Desktop Core UX
+- [ ] `dotnet build ReelRoulette.sln` passes.
+- [ ] `dotnet test ReelRoulette.sln` passes.
+- [ ] WebUI verify passes (`npm run verify` in `src/clients/web/ReelRoulette.WebUI`).
+- [ ] `pwsh ./tools/scripts/verify-web-deploy.ps1` passes.
 
-- [x] Desktop loads and shows current runtime status without crash.
-- [x] Random play works from active preset.
-- [x] Manual library play works.
-- [x] Previous/next timeline navigation works.
-- [x] Loop toggle works.
-- [x] Autoplay toggle works.
-- [x] Volume/mute controls work.
-- [x] Fullscreen/player-view transitions work.
-- [x] No stale/incorrect status text after playback actions.
-- [x] `View -> Diagnostics` opens and shows `CoreClientId`/`CoreSessionId`.
+## Server Baseline + Tray
 
-## Desktop Library + Tagging + Sources
+- [ ] `ReelRoulette.ServerApp` starts without fatal startup errors.
+- [ ] `/health` and WebUI static assets respond correctly.
+- [ ] Server launches with no command prompt window on Windows.
+- [ ] Tray icon appears and matches expected icon.
+- [ ] Tray `Open Operator UI` opens default browser at `/operator`.
+- [ ] Tray `Launch Server on Startup` toggle applies immediately on Windows (registry) and Linux (XDG autostart).
+- [ ] Tray `Refresh Library` triggers refresh pipeline.
+- [ ] Tray `Restart Server` performs graceful restart and service recovers.
+- [ ] Tray `Stop Server / Exit` performs graceful shutdown.
+- [ ] Packaged portable server runs with tray when a desktop session is available, headless otherwise.
+- [ ] Packaged installer server runs with tray when a desktop session is available, headless otherwise.
 
-- [x] Import folder works (or fails with clear guidance). (waived)
-- [x] Manage Sources opens and source enable/disable persists.
-- [x] Thumbnails appear in the library panel after refresh thumbnail generation completes (no desktop restart required). (Linux thumbnails live under `~/.local/share/ReelRoulette/thumbnails/`)
-- [x] Duplicate scan + apply flow works (if test data exists).
-- [x] Duplicate groups in desktop duplicates dialog render per-file thumbnail + info-row pairs in order (header -> keep-selection -> repeated thumbnail/info rows).
-- [x] Duplicate groups allow per-group handling selection (`Keep All` and specific keep-item choice) so groups can be skipped instead of forced into apply.
-- [x] Settings -> Playback persists `Duplicate Handling Default Behavior` (`Keep All` default, `Select Best` legacy), and new duplicate dialogs honor the selected default.
-- [x] Duplicate delete confirmation shows selected group count + file-delete count, and `Keep All`-only selections short-circuit with a no-selection message (no DELETE prompt).
-- [x] Duplicate per-item metadata includes `Tags: {count}` and dropdown keep-selection labels include filename + plays/tags/favorite/blacklisted for easier comparison.
-- [x] Auto Tag scan + apply works (if test data exists).
-- [x] Favorites toggle updates item state.
-- [x] Blacklist toggle updates item state.
-- [x] Tag editor apply/remove updates item tags as expected.
-- [x] Desktop tag editor category rows remain readable in both themes (light-compatible surface/border; dark-mode consistency).
-- [x] Desktop tag chips keep white text/icons with WebUI-like text/icon shadows and state-specific inset chip shadows in both themes.
-- [x] Filter dialog `Tags` tab matches tag editor visual surfaces in both themes while preserving add/remove chip controls, local combine-mode controls, responsive wrapping chip layout, and per-category (plus **Uncategorized**) collapse toggles persisted in `sessionStorage` under `rr_filterDialogCollapsedCategories` (independent of tag editor collapse state); legacy flat tag model shows one grid without category rows.
-- [x] Clear playback stats flow works with confirmation.
+## Operator UI
 
-## Desktop library export / import (cross-machine)
+- [ ] Page layout renders as expected.
+- [ ] Connected Clients panel shows differentiated rows with expected fields.
+- [ ] Connected Clients `Copy` button works.
+- [ ] Server Logs refresh works without changing filters.
+- [ ] Server Logs copy works.
+- [ ] Incoming/outgoing event tables update during activity.
+- [ ] Control settings apply flow behaves correctly, including `Launch Server on Startup` state.
+- [ ] Restart/stop lifecycle buttons behave correctly.
 
-Desktop-only: reads/writes roaming `ReelRoulette` data and local thumbnails (no HTTP migration endpoints). For a clean import, stop the server first and confirm the import dialog checkbox.
+## Operator Testing Suite
 
-- [x] **Export**: `Library → Export Library…` saves a `.zip` with default name pattern `ReelRoulette-Library-*Z.zip`; with both checkboxes off the archive omits `thumbnails/` and `backups/` trees; with each checkbox on, the matching tree appears at zip root.
-- [x] **Import remap**: `Library → Import Library…` lists every unique source `rootPath` from the zip; each row can be mapped with **Browse…** or **Skip**; skipped sources keep exported paths (offline until fixed). On Linux (including AppImage), **Browse…** shows the chosen folder path and does not clear the placeholder without a path; if the dialog cannot resolve a local path, an error explains portal/sandbox limitations.
-- [x] **Import overwrite**: When a non-empty library already exists on disk, a replace confirmation appears; declining cancels without changing files.
-- [x] **Import success**: After import, start or restart the server and resync the desktop client when needed; `desktop-settings.json` from the zip is written to the desktop app data path; status text notes restart if listen/WebUI/auth settings may need a process restart.
-- [x] **Round-trip sanity**: Export on one OS (or machine), import on another with remapping, confirm media plays when paths exist.
-- [x] **Import legacy relativePath**: If an export still has `..`-prefixed `relativePath` entries (older server builds), import remap succeeds and written `fullPath`/`relativePath` match the chosen destination roots; a refresh run rewrites `relativePath` to the current server format. Cross-OS: Windows-exported `Z:\`-style roots and backslashes remap on Linux without “escapes the destination root”; Linux POSIX paths remap on Windows.
+- [ ] Testing Mode OFF blocks scenario/fault actions.
+- [ ] Testing Mode ON enables scenario/fault actions.
+- [ ] Admin auth policy enforcement matches mode (Off = unauthenticated allowed; TokenRequired = auth required).
+- [ ] API version mismatch scenario produces deterministic client UX.
+- [ ] Capability mismatch scenario produces deterministic client UX.
+- [ ] API unavailable scenario produces recoverable client behavior.
+- [ ] Missing media scenario shows clear playback guidance (no crash).
+- [ ] SSE disconnect scenario triggers reconnect/resync behavior.
+- [ ] Reset scenario flags returns system to baseline behavior.
 
-## WebUI Core UX (Localhost)
+## WebUI
 
-- [x] WebUI bootstraps without runtime-config errors.
-- [ ] WebUI PWA metadata: over HTTPS origin, **Add to Home Screen** / **Install app** opens in standalone shell (no browser toolbar), with app icon from `public/icons/`.
-- [x] Pair/auth flow works for current auth mode. (waived)
-- [x] Random play works with **None** (ad-hoc `filterState`) and with a named header preset.
-- [x] **Filter / preset parity (spot-check vs desktop Filter Media):** open **Filter…** (`filter_alt`); General flags, media type, sources, audio, and duration (MM:SS / HH:MM:SS, no min/max) behave sensibly; invalid duration shows a clear error on Apply. Tags tab: global AND/OR, per-category local mode, include/exclude chips. Presets tab: add, rename, delete, reorder, load preset into editor, update preset from current; **Apply** persists catalog via API; header combobox stays ordered like `GET /api/presets`. After **Apply**, random/next eligibility matches expectations. Optional: trigger `resyncRequired` (or second client) and confirm presets refetch.
-- [ ] Filter dialog uses full available width on large screens (no narrow center column), with Presets manage controls rendered as Material Symbols (`keyboard_arrow_up`, `keyboard_arrow_down`, `edit_note`, `delete`) and disabled up/down at row boundaries; mobile and light/dark theme behavior remain correct.
-- [x] Manual controls (prev/play-next) work.
-- [ ] WebUI **Fullscreen**: custom overlay and swipe prev/next stay usable on iPad/iPhone WebKit; **Filter…** and **Edit Tags** open and close while fullscreen (desktop: Fullscreen API stage includes overlays; iOS: pseudo-fullscreen).
-- [x] Loop/autoplay toggles work.
-- [x] Favorite/blacklist actions work.
-- [x] Tag editor flows work (open/edit/save/close); **Auto Tag** tab: scan (full library on/off vs enabled sources), **View all matches**, select/deselect, unified **Save** and **`Discard changes?`** on Close/Refresh when pending; in-flight scan disables Close/Refresh/Scan/Save.
-- [x] SSE status transitions are user-friendly (`connected`, `reconnecting`, `resync` paths).
-- [x] After a core refresh completes, status shows desktop-style segmented summary (`Core refresh complete | Source: … | Fingerprint: … | Duration: … | Loudness: … | Thumbnails: …`).
-- [x] System light/dark: with WebUI open, change OS theme; shell and tag editor match (`theme-light` / `theme-dark`) and tag chips stay readable (white glyphs).
-- [x] Video: mute in transport row toggles audio and glyph (`volume_up` / `volume_off`); edit-tags is top-right immediately left of favorite; overlay shadows apply to controls only (video/image not dimmed by a full scrim).
-- [x] Tag editor: move category up/down only → Save enables → save → reopen editor and confirm order persisted.
+- [ ] WebUI bootstraps without runtime-config errors from a LAN device.
+- [ ] WebUI PWA metadata: over HTTPS origin, Add to Home Screen / Install app opens in standalone shell with app icon.
+- [ ] Pair/auth flow works for current auth mode.
+- [ ] Core controls are usable on touch.
+- [ ] Random play works with None (ad-hoc filter) and with a named header preset.
+- [ ] Filter Media overlay opens and General, Tags, and Presets tabs function correctly.
+- [ ] Preset catalog add, rename, delete, reorder, and load all work; header combobox stays ordered.
+- [ ] Manual controls (prev/play-next) work.
+- [ ] Loop/autoplay toggles work.
+- [ ] Favorite/blacklist actions work.
+- [ ] Tag editor open/edit/save/close works; Auto Tag scan and apply work correctly.
+- [ ] Tag editor category reorder marks pending and persists after save.
+- [ ] Session mute toggle works and glyph updates correctly.
+- [ ] WebUI Fullscreen: overlays stay usable on desktop; pseudo-fullscreen works correctly on iOS WebKit.
+- [ ] SSE status transitions are user-friendly (connected, reconnecting, resync paths).
+- [ ] After a core refresh completes, status shows the correct segmented summary.
+- [ ] System light/dark theme change is reflected correctly in shell and tag editor.
+- [ ] Diagnostics panel appears below status line.
+- [ ] Client `clientType`/identity appears in Operator Connected Clients.
 
-## Mobile Web UX (LAN)
+## Desktop App
 
-- [x] Mobile web can connect and play media.
-- [x] Core controls are usable on touch.
-- [x] Tiny diagnostics panel appears below status line.
-- [x] Mobile `clientType`/identity appears in Operator Connected Clients.
-
-## Operator UI Core
-
-- [x] Page layout renders in expected order:
-  - ReelRoulette Server
-  - Web Runtime Settings
-  - Control Settings
-  - Operator Testing Suite
-  - Connected Clients
-  - Server Logs
-  - Incoming/Outgoing API Events
-- [x] Connected Clients panel shows differentiated rows (`clientType`, `deviceName`, `clientId`, `sessionId`, `remoteAddress`, `connected`).
-- [x] Connected Clients `Copy` button works.
-- [x] Server Logs refresh works without changing filters.
-- [x] Server Logs copy works.
-- [x] Incoming/outgoing event tables update during activity.
-- [x] Control settings apply flow behaves correctly. (waived)
-- [x] Restart/stop lifecycle buttons behave correctly.
-
-## Operator Testing Suite Scenarios
-
-- [x] Testing Mode OFF blocks scenario/fault actions.
-- [x] Testing Mode ON enables scenario/fault actions.
-- [x] Admin auth policy enforcement matches mode: (waived)
-  - `AdminAuthMode=Off` allows testing actions unauthenticated.
-  - `AdminAuthMode=TokenRequired` requires control auth.
-- [x] API version mismatch scenario produces deterministic client UX.
-- [x] Capability mismatch scenario produces deterministic client UX.
-- [x] API unavailable scenario produces recoverable client behavior.
-- [x] Missing media scenario shows clear playback guidance (no crash).
-- [x] SSE disconnect scenario triggers reconnect/resync behavior.
-- [x] Reset scenario flags returns system to baseline behavior.
+- [ ] Desktop app can connect to server.
+- [ ] Desktop loads and shows current runtime status without crash.
+- [ ] Random play works from active preset.
+- [ ] Manual library play works.
+- [ ] Previous/next timeline navigation works.
+- [ ] Loop toggle works.
+- [ ] Autoplay toggle works.
+- [ ] Volume/mute controls work.
+- [ ] Fullscreen/player-view transitions work.
+- [ ] No stale/incorrect status text after playback actions.
+- [ ] `View -> Diagnostics` opens and shows `CoreClientId`/`CoreSessionId`.
+- [ ] Import folder works (or fails with clear guidance).
+- [ ] Manage Sources opens and source enable/disable persists.
+- [ ] Thumbnails appear in the library panel after refresh thumbnail generation completes (no desktop restart required).
+- [ ] Duplicate scan + apply flow works (if test data exists).
+- [ ] Duplicate groups render per-file thumbnail and info-row pairs in order.
+- [ ] Duplicate groups allow per-group handling selection (Keep All and specific keep-item choice).
+- [ ] Duplicate delete confirmation shows selected group/file counts before applying.
+- [ ] Auto Tag scan + apply works (if test data exists).
+- [ ] Favorites toggle updates item state.
+- [ ] Blacklist toggle updates item state.
+- [ ] Tag editor apply/remove updates item tags as expected.
+- [ ] Tag editor category rows are readable in both light and dark themes.
+- [ ] Tag chips render correctly in both light and dark themes.
+- [ ] Filter dialog Tags tab shows per-category collapse toggles and legacy flat tag model renders correctly.
+- [ ] Clear playback stats flow works with confirmation.
+- [ ] `Library → Export Library…` saves a zip with expected contents based on selected options.
+- [ ] `Library → Import Library…` lists source paths from the zip and allows remap or skip per source.
+- [ ] Import shows an overwrite confirmation when a non-empty library already exists.
+- [ ] After import, server resync succeeds and media plays when paths are valid.
+- [ ] Cross-platform round-trip (Windows ↔ Linux) completes without path errors.
 
 ## Cross-Client Parity + Sync
 
-- [x] Favorite/blacklist changes on desktop reflect in web/mobile.
-- [x] Favorite/blacklist changes on web/mobile reflect in desktop.
-- [x] Tag edits converge across clients.
-- [x] Refresh status projection is consistent across clients.
-- [x] No critical cross-client state divergence observed.
+- [ ] Favorite/blacklist changes on desktop reflect in web/mobile.
+- [ ] Favorite/blacklist changes on web/mobile reflect in desktop.
+- [ ] Tag edits converge across clients.
+- [ ] Refresh status projection is consistent across clients.
+- [ ] No critical cross-client state divergence observed.
 
-## Logging + Diagnostics (Unified last.log Validation)
+## Logging + Diagnostics
 
-- [x] Operator Server Logs shows non-empty log data during active test run.
-- [x] Entries contain clear timestamp/level/source identity.
-- [x] Desktop-originated events appear in server log stream.
-- [x] Web/mobile-originated events appear in server log stream.
-- [x] Server-originated operational logs appear in server log stream. (waived)
-- [x] No obvious sensitive values (tokens/secrets/cookies) are logged. (waived)
-
-## Cross-Platform ServerApp Tray Baseline (Avalonia)
-
-- [x] Server app-binary launch shows no command prompt window on Windows app-binary execution. (waived — Windows desktop session not re-run; see `MILESTONES.md` M9g evidence / CI `windows-latest`)
-- [x] Tray icon appears (Avalonia TrayIcon) and uses shared icon parity with `assets/HI.ico`.
-- [x] Tray `Open Operator UI` opens default browser at `/operator`.
-- [x] Tray `Launch Server on Startup` toggle updates startup registration immediately (no restart required): (verified on Linux via XDG autostart create/remove; AppImage: `Exec=` should reference the on-disk `.AppImage` via **`APPIMAGE`, not `/tmp/.mount_*`)
-  - on Windows: updates user registry-backed startup registration,
-  - on Linux: updates user XDG autostart (`*.desktop` entry in the autostart directory).
-- [x] Tray `Refresh Library` triggers refresh pipeline start.
-- [x] Tray `Restart Server` performs graceful restart and service recovers.
-- [x] Tray `Stop Server / Exit` performs graceful shutdown.
-- [x] Operator `Control Settings` apply flow persists `Launch Server on Startup` state and reports apply status. (waived — not re-run this pass; Linux tray XDG path verified above)
-- [x] Packaged portable server runtime preserves tray/no-console behavior when a compatible desktop session is available; otherwise it runs headless deterministically. (waived — Windows; Linux headless smoke: `verify-linux-packaged-server-smoke.sh`)
-- [x] Packaged installer server runtime preserves tray/no-console behavior when a compatible desktop session is available; otherwise it runs headless deterministically. (waived — Windows Inno session; Linux portable/AppImage builds exercised)
+- [ ] Operator Server Logs shows non-empty log data during active test run.
+- [ ] Entries contain clear timestamp/level/source identity.
+- [ ] Desktop, web/mobile, and server-originated events all appear in server log stream.
+- [ ] No obvious sensitive values (tokens/secrets/cookies) are logged.
 
 ## Packaging + Deployment Smoke
 
-- [x] `pwsh ./tools/scripts/fetch-native-deps.ps1` succeeds on a clean Windows tree (downloads FFmpeg/ffprobe with SHA-256 check; LibVLC from NuGet cache after restore or VideoLAN mirror); packaging scripts call it automatically when `runtimes/win-x64/native/` is incomplete. (waived — Windows host)
-- [x] Portable packaging script runs (Windows): `pwsh ./tools/scripts/package-serverapp-win-portable.ps1`. (waived — Windows host)
-- [x] Inno packaging script runs when `iscc` is available:
-  - `pwsh ./tools/scripts/package-serverapp-win-inno.ps1`. (waived — Windows host + Inno)
-- [x] Desktop portable packaging script runs (Windows): `pwsh ./tools/scripts/package-desktop-win-portable.ps1`. (waived — Windows host)
-- [x] Desktop Inno packaging script runs when `iscc` is available:
-  - `pwsh ./tools/scripts/package-desktop-win-inno.ps1`. (waived — Windows host + Inno)
-- [x] Linux portable packaging scripts run: `./tools/scripts/package-serverapp-linux-portable.sh` and `./tools/scripts/package-desktop-linux-portable.sh`.
-- [x] Linux AppImage packaging scripts run (requires `appimagetool` on `PATH`): `./tools/scripts/package-serverapp-linux-appimage.sh` and `./tools/scripts/package-desktop-linux-appimage.sh`; outputs under `artifacts/packages/appimage/` match `ReelRoulette-{Server|Desktop}-{Version}-linux-x64.AppImage`.
-- [x] `./tools/scripts/install-linux-local.sh` copies built AppImages to stable names under `~/.local/share/ReelRoulette` and `--install` refreshes `~/.local/share/applications` entries without error. (verified with isolated `HOME`; see M9g evidence)
-- [x] Linux AppImage `--help` lists native prerequisites consistent with portable policy (server: ffmpeg/ffprobe; desktop: LibVLC/VLC for playback); `--install` registers `~/.local/share/applications/reelroulette-{server|desktop}.desktop` and hicolor icons without a manual menu step.
-- [x] Linux install-from-release script runs (`curl` + `jq` on `PATH`): `./tools/scripts/install-linux-from-github.sh server` and `... desktop` against a release that includes matching assets; AppImage installs to `~/.local/share/ReelRoulette/` with stable `ReelRoulette-{Server|Desktop}-linux-x64.AppImage` names (portable fallback still uses `~/.local/bin` symlink + `~/.local/share`); no sudo. (waived — no tag fetch this pass; `install-linux-local.sh` exercised for equivalent AppImage + `--install` behavior)
-- [x] Linux portable tarballs extract with a single top-level directory; `run-server.sh` and `run-desktop.sh` are executable (`chmod +x` preserved after extract). (staging dir + tarball layout verified; `run-server.sh` executable in publish tree)
-- [x] Linux portable tree contains no `.pdb` files; `README.txt` documents prerequisites (desktop: LibVLC/VLC; server: ffmpeg/ffprobe for refresh)—not bundled in tarballs.
-- [x] Packaged Linux server starts and responds on `/health` at the configured base URL (or documented equivalent check). (`verify-linux-packaged-server-smoke.sh`)
-- [x] Packaged server runtime includes WebUI static assets (root `/` serves WebUI, not missing-assets text). (`wwwroot/index.html` present in portable tree; smoke hits `/operator`)
-- [x] Shared icon appears consistently across installer UI, installed shortcuts/apps, and `/HI.ico` for WebUI/Operator. (waived — Windows installers; WebUI `sync:icon` during `npm run verify` + AppImage install icons verified)
-- [x] Server installer `Create Desktop Shortcut` task is present and default checked. (waived — Windows Inno)
-- [x] Desktop installer `Create Desktop Shortcut` task is present and default checked. (waived — Windows Inno)
-- [x] WebUI dev/build auto-syncs shared icon (`assets/HI.ico` -> `src/clients/web/ReelRoulette.WebUI/public/HI.ico`).
-- [x] Web deploy verify script passes:
-  - `pwsh ./tools/scripts/verify-web-deploy.ps1`.
-- [x] Generated artifacts follow expected naming/location conventions.
+- [ ] **Windows:** server and desktop portable and installer packages build successfully.
+- [ ] **Linux:** portable tarballs and AppImages build with expected names under `artifacts/packages/`.
+- [ ] **Linux install:** `install-linux-local.sh` installs AppImages with stable names and registers menu entries.
+- [ ] **Linux portable tarball:** single top-level directory, executable run scripts, no `.pdb`, prerequisites documented.
+- [ ] **Branding:** icon parity across shortcuts, menus, and WebUI.
+- [ ] **Inno shortcuts:** server and desktop installers include default-checked desktop shortcut option.
 
 ## CI/Workflow Readiness
 
-- [x] Workflow YAML files are valid and committed in `.github/workflows`.
-- [x] Default CI gates map to required checks (`build`, `test`, web verify).
-- [x] Packaging workflow paths are defined and runnable: `package-windows.yml` and `package-linux.yml` (tag + `workflow_dispatch`; Linux job includes headless packaged-server smoke).
+- [ ] Workflow YAML files are valid and committed in `.github/workflows`.
+- [ ] Default CI gates map to required checks (build, test, web verify).
+- [ ] `package-windows.yml` and `package-linux.yml` are runnable (tag + `workflow_dispatch`).
 
 ## Documentation Sync
 
-- [x] `AGENTS.md` reflects current agent workflow/document ownership rules.
-- [x] `README.md` reflects current runtime scripts/commands and practical onboarding info.
-- [x] `CONTEXT.md` reflects current implemented capability/ownership map.
-- [x] `CHANGELOG.md` follows Keep a Changelog format and reflects only current unreleased delta.
-- [x] `MILESTONES.md` reflects current scope/status/acceptance evidence and deferrals.
-- [x] `docs/api.md` reflects current API/error-path contract behavior.
-- [x] `docs/architecture.md` reflects current architecture/runtime boundaries.
-- [x] `docs/dev-setup.md` reflects current local setup/run/verify workflows.
-- [x] `docs/domain-inventory.md` reflects current ownership-first implementation surfaces.
-- [x] `docs/checklists/testing-checklist.md` checklist sections/items match current feature/workflow reality.
+- [ ] `AGENTS.md` reflects current agent workflow/document ownership rules.
+- [ ] `README.md` reflects current runtime scripts/commands and practical onboarding info.
+- [ ] `CONTEXT.md` reflects current implemented capability/ownership map.
+- [ ] `CHANGELOG.md` follows Keep a Changelog format and reflects only current unreleased delta.
+- [ ] `MILESTONES.md` reflects current scope/status/acceptance evidence and deferrals.
+- [ ] `docs/api.md` reflects current API/error-path contract behavior.
+- [ ] `docs/architecture.md` reflects current architecture/runtime boundaries.
+- [ ] `docs/dev-setup.md` reflects current local setup/run/verify workflows.
+- [ ] `docs/domain-inventory.md` reflects current ownership-first implementation surfaces.
+- [ ] `docs/checklists/testing-checklist.md` checklist sections/items match current feature/workflow reality.
+
+## Release Specific
+
+> Add checks here for features or changes introduced in the current release. Remove this section's items after the release is signed off and the checklist is reset. Do not add permanent checks here — if a check should survive future releases, promote it to the appropriate section above.
 
 ## Optional Release Flow
 
-- [x] Windows server+desktop packages created (portable + installer) via `pwsh ./tools/scripts/full-release.ps1 -Version 0.10.0`. (waived — M9g sign-off without full-release cut; use current `<Version>` when releasing)
-- [x] Expected artifacts exist under `artifacts/packages/`
-- [x] Package output names/version metadata match the release version. (local build used `0.11.0-dev` from `ReelRoulette.ServerApp` / desktop csproj)
-- [x] Installed server and desktop apps launch and function properly after installation. (waived — Windows install UX; Linux portable smoke + AppImage `--install` menu entries verified with isolated `HOME`)
-- [x] `CHANGELOG.md`: cut `Unreleased` into the new release section, then initialize a fresh `Unreleased` block. (waived — release cut deferred; `[Unreleased]` updated for M9g sign-off only)
+- [ ] Server and desktop packages created via `pwsh ./tools/scripts/full-release.ps1 -Version {VERSION}`.
+- [ ] Expected artifacts exist under `artifacts/packages/` with correct names and version metadata.
+- [ ] Installed server and desktop apps launch and function properly after installation.
+- [ ] `CHANGELOG.md`: cut `Unreleased` into the new release section, then initialize a fresh `Unreleased` block.
 
-## Evidence Capture SKIPPED
+## Failure Documentation
 
-- [x] Capture at least one screenshot or log snippet per major section. (waived — command logs captured in `MILESTONES.md` M9g evidence)
-- [x] Capture failures with:
-  - steps to reproduce,
-  - expected vs actual behavior,
-  - impacted client(s)/surface(s),
-  - follow-up owner + milestone/TODO link. (waived — no new defects filed this pass)
+If any check fails, capture:
+- Steps to reproduce
+- Expected vs. actual behavior
+- Impacted client(s) / surface(s)
+- Follow-up owner and milestone/TODO link
 
 ## Sign-Off
 
 - Overall result:
-  - [x] PASS
+  - [ ] PASS
   - [ ] FAIL
-- [x] Waivers (if any) documented:
-  - Windows-only manual rows (console window, Inno/installers, `fetch-native-deps.ps1`, Windows packaged tray/no-console, installer shortcut tasks, Windows install launch) — execute on a Windows maintainer host when cutting Windows releases; CI `windows-latest` build/test provides compile coverage.
-  - `install-linux-from-github.sh` against live GitHub release assets — run when tagging or trust `package-linux.yml` release upload + download spot-check.
-  - Operator **Control Settings** autostart apply — not re-run this pass; Linux XDG autostart via tray toggle exercised in prior checklist note.
-- [x] Follow-up tasks/milestones created and linked:
-  - Windows packaging/installer validation → next Windows release / maintainer checklist pass.
-  - End-user README expansion → planned **End-User README and Contributor Dev Documentation** milestone.
-- [x] Ready for commit/sign-off:
+- [ ] All failures documented with follow-up tasks linked.
+- [ ] Ready for commit/sign-off.
