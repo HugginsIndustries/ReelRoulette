@@ -19,6 +19,7 @@ Instructions:
 
 Commit Message:
 
-Chore: bump LibVLCSharp.Avalonia to 3.9.7
+Docs: changelog and GitHub release notes for v0.11.0
 
-- Align desktop `LibVLCSharp.Avalonia` with Avalonia 12–supported 3.9.7; record the version in `CHANGELOG.md` `[Unreleased]` dependency line.
+- `CHANGELOG.md`: add summarized `[0.11.0]` release section, reset `[Unreleased]` with empty-section placeholders, align `0.10.0` / `0.9.0` headings.
+- `RELEASE-NOTES.md`: add a short style guide and rewrite v0.11 / v0.10 / v0.9 notes for GitHub releases (user-facing tone, clearer Linux/AppImage startup note).

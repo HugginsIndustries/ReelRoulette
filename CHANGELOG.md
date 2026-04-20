@@ -7,97 +7,76 @@ This file follows a Keep a Changelog style format.
 
 ### Added
 
-- WebUI PWA install metadata: `manifest.webmanifest`, iOS home-screen meta tags, and build-synced icon assets under `public/icons/` (`icon-192.png`, `icon-512.png`, `apple-touch-icon.png`) so HTTPS-hosted Add-to-Home-Screen / Install launches in standalone shell on iOS and Android; `npm run sync:icon` uses **`sharp`** to resize shared `assets/HI-256.png` / `HI-512.png` into **192×192**, **512×512**, and **180×180** outputs so manifest `sizes` matches actual PNG dimensions.
-- WebUI: **Auto Tag** tab inside the tag overlay (with **Edit Tags**), API-only scan/apply via `POST /api/autotag/scan` and `POST /api/autotag/apply`, scope from `GET /api/library/projection` when **Scan full library** is off (enabled sources only); shared header/footer, unified **Save** (catalog / manual item tags / autotag apply in order), **`Discard changes?`** on **Close** / **Refresh** when pending, in-flight scan UX, `localStorage` key `rr_autoTagScanFullLibrary` for the scan-full preference.
-- WebUI: full-screen **Filter Media** overlay (General / Tags / Presets) aligned with desktop filtering and preset catalog management over `GET/POST /api/presets`, `GET /api/sources`, `POST /api/tag-editor/model`, and `POST /api/random` with authoritative `filterState` (plus optional `presetId` when a named preset is selected); header **None** quick preset; `filter_alt` control beside tag edit; `src/filter/filterStateModel.ts` + unit tests.
-- WebUI: filter dialog **Tags** tab adds per-category collapse toggles (and **Uncategorized**) with `sessionStorage` key `rr_filterDialogCollapsedCategories` (separate from the tag editor); legacy flat tag model (no categories) still renders one chip grid without section headers.
-- Add **`tools/scripts/fetch-native-deps.ps1`** (Windows): downloads **FFmpeg/ffprobe** from gyan.dev **release essentials** (SHA-256 verified) and **LibVLC** (prefer **VideoLAN.LibVLC.Windows** NuGet cache after restore, else VideoLAN mirror with SHA-256) into gitignored **`runtimes/win-x64/native/`**; tracks **`.versions.json`**, supports **`-Force`**, and is invoked automatically from Windows server/desktop packaging when artifacts are missing. Add explicit **`VideoLAN.LibVLC.Windows`** package reference on the desktop project. **`runtimes/`** is gitignored and previously committed **`libvlc`** trees are removed from version control.
-- Add `./tools/scripts/install-linux-local.sh`: after a local Linux AppImage build, copies `artifacts/packages/appimage/ReelRoulette-*.AppImage` to stable names under `~/.local/share/ReelRoulette` and runs each with `--install` to refresh menu entries (`REELROULETTE_LOCAL_APPIMAGE_DIR` overrides the install directory).
-- Add desktop **Library → Export Library…** / **Import Library…** for cross-install library moves, implemented in `ReelRoulette.LibraryArchive` (`net10.0`) with `ReelRoulette.DesktopApp.Tests` coverage: migration zips follow the standard on-disk bundle (library, core/desktop settings, presets, export manifest; optional thumbnails and backups), support per-source remap or skip and overwrite confirmation when a non-empty library already exists, show an export warning when the core may still be running, require an explicit server-stopped acknowledgment and **Import to disk** before applying an archive, write imported `desktop-settings.json` into the desktop app data path, and resync projection/sources/presets from the core when it is reachable afterward; during zip write and import apply, indeterminate status-line progress with competing status updates suppressed, Library menu disabled, and wait cursor until finished, then **Library export complete.** / **Library import complete.**
-- Add `.github/workflows/package-linux.yml`: Linux portable + AppImage packaging on `ubuntu-latest` (.NET 10, Node 22, `ffmpeg`, pinned AppImageKit 12 `appimagetool`), `verify-linux-packaged-server-smoke.sh`, workflow artifacts, and tag `gh release upload` for `*.tar.gz` / `*.AppImage`.
-- Add `tools/scripts/verify-linux-packaged-server-smoke.sh` for headless packaged server HTTP checks (`/health`, `/api/version`, `/control/status`, `/operator`) after Linux CI packaging.
-- Add Linux AppImage packaging (`tools/scripts/package-serverapp-linux-appimage.sh`, `package-desktop-linux-appimage.sh`, `tools/scripts/lib/appimage-helpers.sh`): outputs under `artifacts/packages/appimage/`, built from portable tarballs; `AppRun` supports `--help` (prereqs) and `--install` (user-local `.desktop` + icons).
-- Add `tools/scripts/install-linux-from-github.sh` to install the latest GitHub release (AppImage preferred, portable tarball fallback; default repo `HugginsIndustries/ReelRoulette`, overridable). Extend `full-release.ps1` on Linux to run AppImage scripts after portable packaging.
-- Add Linux portable packaging scripts (`tools/scripts/package-serverapp-linux-portable.sh`, `package-desktop-linux-portable.sh`): self-contained `linux-x64` tarballs under `artifacts/packages/portable/`, WebUI bundled into server `wwwroot`, stripped symbols / no `.pdb` in package tree, `run-server.sh` / `run-desktop.sh` and `README.txt` for native prerequisites.
-- Extend `full-release.ps1` to run the Linux portable scripts on Linux after set-release-version; Inno steps remain Windows-only.
-- Add repo-local build support for constrained environments via `Directory.Build.props` (`AllowMissingPrunePackageData=true`).
-- Add startup-launch host support for `ReelRoulette.ServerApp` (Windows `HKCU` registration), including control-plane APIs and tray/Operator toggles for immediate apply behavior.
-- Add installer desktop-shortcut task options with default-checked behavior for both server and desktop installers.
-- Add Material Symbols desktop icon-font foundation (`assets/fonts/MaterialSymbolsOutlined.var.ttf`) with shared glyph styles and grid-tile favorite/blacklist overlays.
-- Add core-authoritative contracts/client support for library stats, library item state reads, and backup settings synchronization.
-- Add one-shot `Force Rescan (Loudness)` and `Force Rescan (Duration)` settings flow from desktop settings to the core refresh pipeline.
-- Add server refresh `fingerprintScan` stage: full-file SHA-256 for library items that are Pending, Failed, Stale, or missing a fingerprint, with `fingerprintScanMaxDegreeOfParallelism` in core refresh settings (default 4, clamped 1–16) editable from desktop Settings.
+- *No unreleased changes yet.*
 
 ### Changed
 
-- WebUI filter dialog layout is now fully responsive at large widths (remove panel max-width cap), and Presets manage rows now use Material Symbols action buttons (`keyboard_arrow_up`, `keyboard_arrow_down`, `edit_note`, `delete`) with disabled boundary controls while preserving existing mobile behavior and light/dark theming.
-- WebUI devDependencies: add **`sharp`** (used only by `scripts/sync-shared-icon.mjs` during `predev` / `prebuild` icon sync).
-- `README.md`: add Tailscale HTTPS guidance (`tailscale serve`) for secure WebUI access and PWA home-screen install flows across tailnet devices.
-- Desktop: **Auto Tag** with **Scan full library** off now scans all items from **enabled sources** only (library search, filter state, and tag filters no longer narrow the scan set).
-- Dependencies: **Avalonia** **12.0.0** (desktop + ServerApp tray host), **SkiaSharp** **3.119.2** (server thumbnails), **LibVLCSharp.Avalonia** **3.9.7**, **VideoLAN.LibVLC.Windows** **3.0.23**, **Microsoft.NET.Test.Sdk** **18.4.0**, **xunit** **2.9.3**, **xunit.runner.visualstudio** **3.1.5**; explicit **Tmds.DBus.Protocol** **0.92.0** on ServerApp + DesktopApp to clear **NU1903** / **GHSA-xrw6-gwf8-vvr9**. **Avalonia.Diagnostics** is not published for 12.x on NuGet yet—removed from the desktop project (app did not use `WithDevTools()`). Desktop: **ToggleButton** `Checked`/`Unchecked` → **`IsCheckedChanged`**; clipboard copy via **`ClipboardExtensions`** (`Avalonia.Input.Platform`); **`TextBox.Watermark` → `PlaceholderText`**; tray native menu uses **`MenuItemToggleType`** instead of **`NativeMenuItemToggleType`**.
-- WebUI: refresh status line matches desktop-style running progress and completed-run summary (`Core refresh complete | Source | Fingerprint | Duration | Loudness | Thumbnails`) via shared projection logic in `refreshStatusProjection.ts` wired from `app.js` SSE; tag editor category reorder marks pending so **Save** enables; transport row adds session mute (`volume_up`/`volume_off`) with edit-tags moved top-right before favorite; overlay corners/transport use control-only drop shadows; `prefers-color-scheme` drives `theme-light`/`theme-dark` with shell + tag-editor light styling (`main.ts`, `styles.css`); pairing is its own top-bar row (sibling of the title), inline between title and **Choose preset** when width allows, full-width row between title and preset when stacked under 600px (`shell.ts`, `styles.css`).
-- Desktop: remove dead local **ffprobe** duration path; library duration stays **server** refresh–authoritative. **Windows** desktop packaging stages **LibVLC** only (no bundled `ffprobe.exe`). Update README, dev-setup, Linux desktop package/README and AppImage `--help` text, and testing-checklist prerequisite wording accordingly.
-- Desktop: remove orphaned client-side **auto-refresh timer** and pointer idle tracking (refresh scheduling is **server**-owned); drop unused `ParseLoudnessFromFFmpegOutput` duplicate; settings still sync auto-refresh policy to core.
-- Desktop Settings: remove legacy **auto-refresh only when idle** / idle-threshold state (`SettingsDialog` + `LoadFromSettings`); not applicable with server-owned refresh.
-- GitHub Actions: `actions/setup-node@v5` in `ci.yml`, `package-linux.yml`, and `package-windows.yml` (replacing v4) so JavaScript actions align with Node 24–forced runners and drop the deprecated Node 20 runtime warning.
-- `install-linux-from-github.sh` installs AppImages under `~/.local/share/ReelRoulette/` using stable names `ReelRoulette-{Server|Desktop}-linux-x64.AppImage` (same convention as the local install script; `REELROULETTE_LOCAL_APPIMAGE_DIR` override). Portable tarball behavior is unchanged (`~/.local/bin` symlink).
-- Harden `AvaloniaTrayHostUi` by applying `NativeMenuItem` state updates on `Dispatcher.UIThread` after async server/registry work (Windows tray stability).
-- `package-windows.yml` uses .NET SDK **10.0.x** for packaging (aligned with solution TFMs and Linux package workflow).
-- `docs/architecture.md`: packaging/CI note now covers Linux tag packaging workflow and headless smoke.
-- `set-release-version.ps1` now updates desktop `<Version>`, runs WebUI `generate:contracts`, and runs build/test/WebUI/deploy-smoke verify by default; opt out with `-NoUpdateDesktopVersion`, `-NoRegenerateContracts`, and/or `-NoRunVerify`. `full-release.ps1` forwards those `-No*` switches (and `-NoDocUpdates`) when `-Version` is set; omit `-Version` on `full-release.ps1` to skip `set-release-version` and package using each `.csproj` `<Version>`. Document behavior in `README.md`, `docs/dev-setup.md`, `CONTEXT.md`, and `docs/domain-inventory.md`.
-- Expand `README.md` Quick Start with end-user install paths: Windows installers and portable ZIPs from GitHub Releases, Linux install script / AppImage / tarball, FFmpeg–VLC note, and a separate “Developing from source” subsection for contributors.
-- Restructure `README.md` **Packaging** into **Linux**, **Windows**, and **General** subsections with full Linux script commands and shared release/GitHub notes.
-- Mark every file under `tools/scripts/` as executable in Git (`100755`) so they can be run as `./tools/scripts/<name>.ps1` or `./tools/scripts/<name>.sh` on Unix when the shebang resolves (`pwsh` / `bash`).
-- Expand `README.md` Prerequisites (`bash`/`tar`, Inno Setup, FFmpeg/VLC) and clarify third-party bundling (Windows portable vs Linux/system) in Third-Party Components; align `docs/dev-setup.md` Prerequisites with FFmpeg/VLC notes.
-- Linux portable packaging uses executable `tools/scripts/package-*-linux-portable.sh` scripts (invoked directly or from `full-release.ps1` on Linux) alongside existing `pwsh` Windows packaging scripts.
-- Standardize contributor-facing docs to POSIX repo-relative paths (`./src/...`, forward slashes) and unified user-data notes in `docs/dev-setup.md` (Windows `%...%` examples use `/` as well).
-- Consolidate `tools/scripts` to cross-platform `.ps1` only and align script docs/examples around `pwsh` usage.
-- Rename desktop client directory to `src/clients/desktop/ReelRoulette.DesktopApp/` to match `ReelRoulette.DesktopApp.csproj` (update solution, test compile links, packaging/version scripts, and current docs; historical changelog entries unchanged).
-- Upgrade repo to .NET 10 (`net10.0` / `net10.0-windows`) including CI and run/verify/packaging scripts.
-- Switch ServerApp tray host from Windows-only WinForms/`NotifyIcon` to a cross-platform Avalonia tray with deterministic headless fallback when tray is unavailable.
-- Implement Linux startup launch via XDG autostart (`*.desktop`) with immediate apply behavior via tray and Operator control surfaces.
-- Rename desktop client path and identifiers from legacy `windows` naming to `desktop` naming (keep `Windows` for the OS).
-- Polish duplicate-review UX: duplicate groups now render per-item thumbnail previews in review order with explicit desktop bitmap loading from `/api/thumbnail/{itemId}`.
-- Add per-group duplicate handling selection: groups can use `Keep All` or a per-item keep selection, with persisted desktop default behavior (`Keep All` or `Select Best`).
-- Improve duplicate delete confirmation UX by summarizing groups/files before destructive apply and skipping the confirmation prompt when no groups are selected.
-- Improve duplicate item comparison signals: item metadata now includes `Tags: {count}`, and keep-selection dropdown labels now include filename + plays/tags/favorite/blacklisted fields for side-by-side decisions.
-- Update filter `Tags` layout to responsive wrapping for parity with tag editor behavior.
-- Refine desktop tag-chip visuals toward WebUI parity: white glyph/text, stronger text/icon shadows, and state-specific inset shadows.
-- Improve desktop core refresh completion status: single `Core refresh complete | Source | Fingerprint | Duration | Loudness | Thumbnails` summary with compact tokens parsed from stage messages (for example source `no changes`, fingerprint `hashed`/`ready`/`failed`/`skipped` only when non-zero, duration/loudness `files N, all cached`, thumbnail counts emitted only when non-zero).
-- Complete desktop Material Symbols migration with shared no-box controls, standardized glyph sizing/checked-state tint and transport layout cleanup, plus `ItemTagsDialog` parity refinements (icon-only footer actions, rounded category bars, responsive wrapping chips, and session-scoped category collapse-state persistence).
-- Migrate WebUI overlay and tag-editor controls to Material Symbols, including explicit `play_arrow`/`pause` glyph swapping and local Material Symbols font sync from shared assets.
-- Align WebUI tag-editor styling with desktop parity: dark rounded inputs, category header bars, shared orange/lime/violet tag-chip tokens, and stronger consistent text/glyph shadows.
-- Implement Windows tray context-menu runtime light/dark theme parity with live refresh on system theme changes.
-- Document explicit server `.exe` tray-validation run steps in `README.md`.
-- Simplify library filtering UX by removing `Respect filters`; active filter state now applies consistently when present.
-- Rework large-library panel performance and stability with keyed diff patching, active-filter eligibility groundwork, exact logical row virtualization, anchor/inset restore with drag-aware coalescing, targeted `last.log` virtualizer diagnostics, and list/grid resize repaint hardening (fixed non-overlay scrollbars, viewport-driven grid width with an 8px right visual gutter, debounced splitter reflow, and forced visible-row refresh when layout changes without index-range changes).
-- Add top-right favorite/blacklist indicators on grid thumbnails using Material Symbols with real-time visibility updates.
-- Finalize server-authoritative desktop library behavior by removing `LibraryService`, consolidating persistence-first mutation authority in `LibraryOperationsService` (with `ServerStateService` event publication), and routing favorites/blacklist, tags/categories, playback stats, refresh triggers, and library remove flows through core API + SSE reconciliation.
-- Move Manage Sources statistics to server-owned `/api/library/stats` and harden source/media counting for legacy library data shapes.
-- Finalize backup ownership split: server manages `library.json`/`core-settings.json` backups with no-churn gap policy and retention trimming; desktop backup scope is `desktop-settings.json` only. Timestamped backup filenames use the same format everywhere: local wall time plus a filesystem-safe UTC offset token (`_pHHmm` / `_mHHmm`), while retention/min-gap ordering still uses file UTC timestamps.
-- Improve tag/category apply performance by removing redundant full projection sync/rebuild triggers and relying on targeted SSE-driven updates.
+- *No unreleased changes yet.*
 
 ### Fixed
 
-- WebUI: **Fullscreen** uses a shared **fullscreen stage** (media + tag editor + filter dialog) so overlays stay usable under the Fullscreen API; **iOS WebKit** (all browsers on iPhone/iPad) uses fixed **pseudo-fullscreen** instead so native video chrome does not replace custom controls or swallow swipe prev/next; **Escape** exits pseudo-fullscreen.
-- Linux **Launch Server on Startup** (XDG autostart): `ReelRoulette.ServerApp` now uses `WebApplicationOptions.ContentRootPath = AppContext.BaseDirectory` so `appsettings.json` and `wwwroot` resolve when the session manager starts the app with cwd `$HOME` (or similar). Autostart `.desktop` entries written by `LinuxXdgStartupLaunchService` now include `Path=` to the install directory (alongside `Exec=`) so working directory matches portable `run-server.sh` behavior. Toggle startup off/on once to refresh an existing `~/.config/autostart/reelroulette-server.desktop` from older builds.
-- Linux XDG autostart from **AppImage**: `LinuxXdgStartupLaunchService` resolves **`Exec=`** (and **`Path=`**) from **`APPIMAGE`** when that variable points at an existing on-disk `.AppImage`, instead of **`Environment.ProcessPath`** under ephemeral `/tmp/.mount_*`, so login autostart survives reboot. Toggle startup off/on once if an older `.desktop` still references a mount path.
-- WebUI: pairing token field and **Pair** button use the same theme CSS variables and 6px corner radius as the rest of the shell (no default light control styling in dark mode).
-- WebUI: fix narrow-viewport top bar where `flex-grow` on the title/pairing rows could swallow vertical space and hide preset/mode/duration controls; stack uses content-sized rows, full-width selects, and a non-shrinking header (`styles.css`); under 600px the pairing token field flex-grows on one row with **Pair** (`pair-section-label-hint` + `flex` rules in `styles.css`, `shell.ts`); pairing strip stays hidden until an API returns **401** (auth disabled or already paired/session cookie), not merely when `pairToken` is omitted from runtime config (`app.js`).
-- Desktop folder and file pickers resolve local paths with `StorageProviderExtensions.TryGetLocalPath` before falling back to `IStorageItem.Path.LocalPath`, fixing empty remap labels and broken import/export paths when xdg-desktop-portal returns storage items without a populated `LocalPath` (Linux AppImage and similar).
-- Library `relativePath` computation on the server now uses `Path.GetRelativePath` instead of `Uri.MakeRelativeUri`, avoiding incorrect leading `..` segments (common with trailing-slash source roots on Windows and Linux). Desktop library import remapping recomputes legacy `..`-prefixed `relativePath` values using segment-based logic (strip Windows drive letters, unify slashes) so Windows exports repair correctly on Linux hosts; `CombineRootAndRelative` normalizes foreign separators and strips stray `X:` prefixes from stored relatives on Unix. Cross-machine imports no longer fail with “Resolved path escapes the destination root” for these cases.
-- Linux `install-linux-local.sh` / `install-linux-from-github.sh` stable AppImage renames: handle version segments with extra hyphens (for example `0.11.0-dev`) so installs land on `ReelRoulette-{Server|Desktop}-linux-x64.AppImage` as documented.
-- Improve grid-view stability by combining exact row-offset virtualization with drag-aware update gating and anchor/inset offset restoration.
-- Keep projection sync as the single trigger for core refresh completion updates to the library panel.
-- Improve dynamic-filter refresh behavior (for example `OnlyNeverPlayed`) by adding targeted panel refresh triggers for playback/stat and metadata-related filter changes.
-- Ensure playback projection updates apply for same-session events via authoritative projection sync instead of local writebacks.
-- Fix edit-tag category display so newly created categories resolve to human-readable names instead of fallback GUID text.
-- Ignore repo-local scratch directories for dev runs (`.dotnet/`, `.xdg-data/`).
-- Fix server refresh pipeline failures when legacy `library.json` stores enum fields as strings (`mediaType`, `fingerprintStatus`).
-- Fix desktop crash when core library projection sends string enum values by accepting both string + integer enum forms during JSON deserialization.
-- Fix desktop grid thumbnails not appearing until restart by hydrating thumbnail paths for visible tiles after thumbnail generation completes and as the visible grid window changes.
+- *No unreleased changes yet.*
 
-## v0.10.0 - Platform and Experience Update (2026-03-11)
+---
+
+## [0.11.0] — Cross-Platform Unlocked
+
+### Added
+
+- **Library Export / Import:** Cross-platform library migration via zip archive (library, settings, presets, optional thumbnails and backups). Supports per-source path remapping or skip, overwrite confirmation, and automatic resync from core after import. Handles path differences between Windows and Linux hosts.
+- **WebUI – Filter Media overlay:** Full-screen filter dialog (General / Tags / Presets) with authoritative `filterState`, preset catalog management, per-category tag collapse toggles (persisted per session), and a **None** quick-preset shortcut in the header.
+- **WebUI – Auto Tag tab:** Scan and apply auto-tags via API (`POST /api/autotag/scan` and `POST /api/autotag/apply`); scope can be limited to enabled sources. Integrated into the tag overlay alongside **Edit Tags**, with shared Save/Discard UX and in-flight scan feedback.
+- **WebUI – PWA support:** `manifest.webmanifest`, iOS home-screen meta tags, and build-synced icon assets (`icon-192.png`, `icon-512.png`, `apple-touch-icon.png`). `npm run sync:icon` resizes shared source icons using `sharp`. Enables Add-to-Home-Screen / Install on iOS and Android when hosted over HTTPS.
+- **Linux packaging:** Full Linux distribution support — portable tarballs, AppImages (with `--help` prereqs and `--install` for user-local `.desktop` + icons), GitHub install script (`install-linux-from-github.sh`), and local post-build install script (`install-linux-local.sh`). AppImage and portable paths use stable naming (`ReelRoulette-{Server|Desktop}-linux-x64`).
+- **Linux CI:** GitHub Actions workflow (`package-linux.yml`) for portable + AppImage packaging on `ubuntu-latest`, with headless packaged-server smoke tests and tag-triggered GitHub Release uploads.
+- **Linux startup launch:** XDG autostart for `ReelRoulette.ServerApp` with immediate apply via tray and Operator. `ServerApp` uses `ContentRootPath = AppContext.BaseDirectory` so `appsettings.json` and `wwwroot` resolve when a session manager starts with a non-app working directory; autostart `.desktop` entries include `Path=` alongside `Exec=`; AppImage installs record stable paths via `$APPIMAGE` instead of a temporary `/tmp/.mount_*` location. **AppImage:** copy the server AppImage to the folder where you want to keep it, run it from that folder, then turn on **Launch at startup** in the tray (toggle off and on once if you already enabled autostart during a pre-release build so `~/.config/autostart/` picks up the latest entry).
+- **Windows native dependency automation:** `fetch-native-deps.ps1` downloads and SHA-256 verifies FFmpeg/ffprobe (gyan.dev) and LibVLC (NuGet cache or VideoLAN mirror) into `runtimes/win-x64/native/`, invoked automatically during Windows packaging when artifacts are missing.
+- **Server fingerprint scan stage:** Full-file SHA-256 hashing for library items that are Pending, Failed, Stale, or missing a fingerprint. Max parallelism is configurable from Settings (default 4, range 1–16).
+- **Force Rescan settings:** One-shot **Force Rescan (Loudness)** and **Force Rescan (Duration)** actions in desktop Settings.
+- **Windows startup launch:** `ReelRoulette.ServerApp` supports `HKCU` run-on-login registration, with tray and Operator toggles for immediate apply.
+- **Installer:** Desktop shortcut task options added to both server and desktop installers, default-checked.
+- **Material Symbols icon font:** Shared `MaterialSymbolsOutlined.var.ttf` foundation for desktop, with grid-tile favorite/blacklist overlays.
+- **Constrained-environment builds:** `Directory.Build.props` enables `AllowMissingPrunePackageData=true` so repo-local restores succeed in environments where optional prune metadata is unavailable.
+
+### Changed
+
+- **Upgrade to .NET 10** (`net10.0` / `net10.0-windows`) across the solution, CI, and all run/verify/packaging scripts.
+- **Dependency updates:** Avalonia 12.0.0, SkiaSharp 3.119.2, LibVLCSharp.Avalonia 3.9.7, VideoLAN.LibVLC.Windows 3.0.23, xunit 2.9.3, xunit.runner.visualstudio 3.1.5, Microsoft.NET.Test.Sdk 18.4.0; explicit Tmds.DBus.Protocol 0.92.0 to resolve NU1903/GHSA-xrw6-gwf8-vvr9. Avalonia.Diagnostics removed (not published for 12.x).
+- **ServerApp tray:** Migrated from Windows-only WinForms/`NotifyIcon` to a cross-platform Avalonia tray with headless fallback when tray is unavailable.
+- **Server-authoritative library:** Removed `LibraryService` from desktop; all persistence-first mutation (favorites, blacklist, tags/categories, playback stats, refresh triggers, library remove) now routes through core API + SSE reconciliation. Library stats moved to `/api/library/stats`.
+- **Backup ownership split:** Server manages `library.json` / `core-settings.json` backups with no-churn gap policy and retention trimming. Desktop backup scope is `desktop-settings.json` only. Timestamped filenames use local wall time + filesystem-safe UTC offset token consistently.
+- **Desktop Material Symbols migration:** Shared no-box controls, standardized glyph sizing, checked-state tint, transport layout cleanup, and `ItemTagsDialog` parity (icon-only footer actions, rounded category bars, responsive chip wrapping, session-scoped collapse state).
+- **WebUI Material Symbols migration:** Overlay and tag-editor controls migrated; explicit `play_arrow`/`pause` glyph swapping; local font sync from shared assets. Tag-editor styling aligned with desktop (dark rounded inputs, category header bars, shared color tokens, consistent shadows).
+- **Duplicate review UX:** Per-item thumbnail previews in review order; per-group handling (Keep All or per-item keep selection); delete confirmation summarizes groups/files before applying; keep-selection labels include filename, plays, tags, favorite, and blacklisted fields.
+- **Library panel performance:** Keyed diff patching, exact logical row virtualization, anchor/inset restore with drag-aware coalescing, viewport-driven grid width with 8px right gutter, debounced splitter reflow, and forced visible-row refresh on layout changes.
+- **Core refresh status:** Unified single-line summary — `Core refresh complete | Source | Fingerprint | Duration | Loudness | Thumbnails` — on both desktop and WebUI, with compact stage tokens and zero-suppression for non-notable counts.
+- **WebUI layout and shell:** Filter dialog fully responsive at large widths; top bar is responsive at narrow widths with proper row stacking under 600px; pairing strip hidden until a 401 is returned; light/dark theme driven by `prefers-color-scheme`; overlay corners and transport use control-only drop shadows.
+- **Auto Tag scope:** With **Scan full library** off, scan covers all items from enabled sources only (not narrowed by active filter or tag state).
+- **Filter UX:** Removed `Respect filters`; active filter state applies consistently when present.
+- **Desktop settings cleanup:** Removed legacy auto-refresh-only-when-idle / idle-threshold state and orphaned client-side auto-refresh timer (refresh scheduling is server-owned).
+- **Windows packaging:** LibVLC staged only (no bundled `ffprobe.exe`); dead local ffprobe duration path removed from desktop.
+- **`set-release-version.ps1` / `full-release.ps1`:** Now updates desktop `<Version>`, runs `generate:contracts`, and runs build/test/WebUI/deploy-smoke verify by default; opt-out flags available. `full-release.ps1` forwards all `-No*` switches.
+- **Scripts and tooling:** All `tools/scripts/` files marked executable in Git (`100755`); `runtimes/` gitignored and previously committed LibVLC trees removed from version control; GitHub Actions updated to `actions/setup-node@v5`.
+- **Docs:** `README.md` expanded with end-user install paths (Windows, Linux), Tailscale HTTPS/PWA guidance, packaging section restructured into Linux/Windows/General subsections, and Prerequisites updated. `docs/dev-setup.md`, `docs/architecture.md`, and `CONTEXT.md` aligned throughout.
+- **Naming:** Desktop client directory renamed to `src/clients/desktop/ReelRoulette.DesktopApp/`; `windows`→`desktop` naming throughout identifiers (OS references remain `Windows`).
+
+### Fixed
+
+- **WebUI fullscreen:** Shared fullscreen stage keeps overlays (tag editor, filter dialog) usable under the Fullscreen API. iOS WebKit uses fixed pseudo-fullscreen instead (native video chrome does not replace custom controls or swallow swipe gestures); Escape exits pseudo-fullscreen.
+- **Library `relativePath` computation:** Switched from `Uri.MakeRelativeUri` to `Path.GetRelativePath`, eliminating incorrect leading `..` segments on Windows and Linux. Import remapping repairs legacy `..`-prefixed relatives from Windows exports on Linux hosts; `CombineRootAndRelative` normalizes foreign separators and strips stray drive-letter prefixes on Unix.
+- **Desktop file/folder pickers:** Resolve local paths via `StorageProviderExtensions.TryGetLocalPath` before falling back to `IStorageItem.Path.LocalPath`, fixing empty remap labels and broken import/export paths on Linux AppImage when xdg-desktop-portal omits `LocalPath`.
+- **Linux install scripts:** Stable AppImage renames now handle version strings with extra hyphens (e.g. `0.11.0-dev`).
+- **Server refresh pipeline:** Fixed failures when legacy `library.json` stores enum fields (`mediaType`, `fingerprintStatus`) as strings.
+- **Desktop crash:** Fixed crash when core library projection sends string enum values; deserialization now accepts both string and integer enum forms.
+- **Desktop grid thumbnails:** Thumbnails now hydrate for visible tiles after generation completes and as the visible grid window changes, without requiring a restart.
+- **Dynamic-filter refresh:** Added targeted panel refresh triggers for playback/stat and metadata-related filter changes (e.g. `OnlyNeverPlayed`).
+- **Edit-tag category display:** Newly created categories now resolve to human-readable names instead of fallback GUID text.
+- **WebUI pairing strip:** Token field and Pair button now use consistent theme CSS variables and corner radius; hidden until a 401 is returned (not merely when `pairToken` is absent from runtime config).
+- **Windows tray stability:** `NativeMenuItem` state updates now dispatched on `Dispatcher.UIThread` after async server/registry work.
+
+---
+
+## [0.10.0] — Out of the Terminal (2026-03-11)
 
 ### Added
 
@@ -123,7 +102,9 @@ This file follows a Keep a Changelog style format.
 
 - Reduce intermittent server startup failures from port conflicts by changing the default server/web runtime port from `51234` to `45123` and documenting avoidance of ephemeral port ranges (`49152-65535`) for Web UI port choices.
 
-## v0.9.0 - Initial Release (2026-03-09)
+---
+
+## [0.9.0] — It Started as a Script (2026-03-09)
 
 - **Attach Windows package artifacts to existing GitHub releases** (2026-03-09):
   - Update `package-windows.yml` with `contents: write` permission so workflow can upload release assets.
