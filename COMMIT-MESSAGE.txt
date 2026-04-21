@@ -19,7 +19,8 @@ Instructions:
 
 Commit Message:
 
-Docs: note known 0.11.0 caveats in release notes
+Bugfix: stabilize Linux packaging and remove Node 20 workflow warning
 
-- Add explicit notes for Windows tray non-functionality and Android PWA shortcut behavior in `RELEASE-NOTES.md`.
-- Add a short "What's Coming" callout that these are targeted for upcoming polish.
+- Install `squashfs-tools` in Linux packaging workflow and link `mksquashfs` into `/usr/local/lib/appimagekit/` for extracted `appimagetool`.
+- Keep existing AppImage build scripts unchanged; fix CI toolchain path expected by `appimagetool`.
+- Update `actions/upload-artifact` to `@v5` in both package workflows so artifact upload runs on Node 24 without deprecation warnings.
