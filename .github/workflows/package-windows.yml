@@ -67,7 +67,7 @@ jobs:
         run: ./tools/scripts/package-desktop-win-inno.ps1 -Version "$env:PACKAGE_VERSION"
 
       - name: Upload package artifacts
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: reelroulette-windows-packages
           path: artifacts/packages/**

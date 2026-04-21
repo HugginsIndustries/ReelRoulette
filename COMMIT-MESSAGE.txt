@@ -19,8 +19,7 @@ Instructions:
 
 Commit Message:
 
-Bugfix: stabilize Linux packaging and remove Node 20 workflow warning
+Chore: update packaging workflows to Node 24 action runtime
 
-- Install `squashfs-tools` in Linux packaging workflow and link `mksquashfs` into `/usr/local/lib/appimagekit/` for extracted `appimagetool`.
-- Keep existing AppImage build scripts unchanged; fix CI toolchain path expected by `appimagetool`.
-- Update `actions/upload-artifact` to `@v5` in both package workflows so artifact upload runs on Node 24 without deprecation warnings.
+- Scan all workflows and keep existing `checkout`/`setup-dotnet`/`setup-node` versions unchanged where already current.
+- Upgrade `actions/upload-artifact` from `@v5` to `@v7` in both `package-linux.yml` and `package-windows.yml` to remove Node 20 deprecation warnings.
