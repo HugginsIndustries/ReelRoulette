@@ -19,7 +19,7 @@ Instructions:
 
 Commit Message:
 
-Bugfix: harden Linux AppImage workflow dependency checks
+Chore: align Linux packaging workflow to Ubuntu-native AppImage tooling
 
-- Install `desktop-file-utils` alongside `squashfs-tools` so `desktop-file-validate` is available for `appimagetool`.
-- Add a preflight dependency step to fail fast when required packaging tools or AppImageKit paths are missing.
+- Replace extracted AppImageKit bootstrap with Ubuntu package install (`appimagetool`, `squashfs-tools`, `desktop-file-utils`, `ffmpeg`) for consistent CI toolchains.
+- Simplify preflight to direct `command -v` checks for required packaging tools.
