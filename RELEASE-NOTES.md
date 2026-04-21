@@ -50,6 +50,7 @@ v0.11.0 brings ReelRoulette to **Linux** as a first-class citizen, makes the **W
 
 ## What's Coming
 
+- **Tray and PWA polish:** fixes for the Windows tray and Android standalone install behavior (see notes below).
 - Better visibility into what the server is doing, with clearer operational feedback.
 - Continued UI polish across desktop, web, and Operator.
 - More reliable playback from start to finish, with better session continuity.
@@ -64,6 +65,8 @@ Full build, test, and smoke checks passed. Manual validation covered Linux porta
 
 - **Linux playback** relies on system VLC/LibVLC where packages don't bundle those runtimes. Windows builds continue to stage bundled tools as documented.
 - **Linux AppImage + Launch at Startup:** put the server AppImage where you plan to keep it *before* enabling launch at startup — the saved shortcut uses the path at the time you enable it. If you turned autostart on during a pre-release build, toggle it off and back on once to update the menu entry.
+- **Windows tray:** The tray icon is currently non-functional on Windows in this release. The server runs correctly; use the Operator UI directly at `http://localhost:{PORT}/operator` in the meantime.
+- **Android PWA install:** Install to Home Screen on Android currently adds a shortcut that opens in the browser rather than a standalone shell. Full PWA behavior is working on iOS.
 
 ---
 

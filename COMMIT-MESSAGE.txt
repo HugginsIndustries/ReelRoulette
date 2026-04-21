@@ -19,7 +19,7 @@ Instructions:
 
 Commit Message:
 
-Bugfix: handle binary web metadata in native deps fetch
+Docs: note known 0.11.0 caveats in release notes
 
-- Decode `Invoke-WebRequest` content as UTF-8 when responses are byte arrays before trimming.
-- Fix Windows packaging flow where `.ver` or `.sha256` responses could trigger `Byte.Trim()` failures.
+- Add explicit notes for Windows tray non-functionality and Android PWA shortcut behavior in `RELEASE-NOTES.md`.
+- Add a short "What's Coming" callout that these are targeted for upcoming polish.
