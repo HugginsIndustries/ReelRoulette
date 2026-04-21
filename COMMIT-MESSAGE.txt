@@ -19,7 +19,7 @@ Instructions:
 
 Commit Message:
 
-Chore: align Linux packaging workflow to Ubuntu-native AppImage tooling
+Bugfix: make Linux packaging use a stable appimagetool bootstrap
 
-- Replace extracted AppImageKit bootstrap with Ubuntu package install (`appimagetool`, `squashfs-tools`, `desktop-file-utils`, `ffmpeg`) for consistent CI toolchains.
-- Simplify preflight to direct `command -v` checks for required packaging tools.
+- Keep Ubuntu apt dependencies to available packages (`ffmpeg`, `squashfs-tools`, `desktop-file-utils`) and stop trying to apt-install missing `appimagetool`.
+- Install AppImageKit 12 `appimagetool` by extracting the `.AppImage` to `/opt/appimagetool` and symlinking `/usr/local/bin/appimagetool` to `AppRun` for CI usage.

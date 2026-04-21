@@ -38,7 +38,16 @@ jobs:
       - name: Install Linux packaging dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg squashfs-tools desktop-file-utils appimagetool
+          sudo apt-get install -y ffmpeg squashfs-tools desktop-file-utils
+
+      - name: Install appimagetool (AppImageKit 12, no FUSE)
+        run: |
+          curl -Lo /tmp/appimagetool.AppImage \
+            https://github.com/AppImage/AppImageKit/releases/download/12/appimagetool-x86_64.AppImage
+          chmod +x /tmp/appimagetool.AppImage
+          cd /tmp && /tmp/appimagetool.AppImage --appimage-extract
+          sudo mv /tmp/squashfs-root /opt/appimagetool
+          sudo ln -s /opt/appimagetool/AppRun /usr/local/bin/appimagetool
 
       - name: Preflight packaging dependencies
         run: |
