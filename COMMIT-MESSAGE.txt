@@ -19,7 +19,7 @@ Instructions:
 
 Commit Message:
 
-Chore: update packaging workflows to Node 24 action runtime
+Bugfix: harden Linux AppImage workflow dependency checks
 
-- Scan all workflows and keep existing `checkout`/`setup-dotnet`/`setup-node` versions unchanged where already current.
-- Upgrade `actions/upload-artifact` from `@v5` to `@v7` in both `package-linux.yml` and `package-windows.yml` to remove Node 20 deprecation warnings.
+- Install `desktop-file-utils` alongside `squashfs-tools` so `desktop-file-validate` is available for `appimagetool`.
+- Add a preflight dependency step to fail fast when required packaging tools or AppImageKit paths are missing.

@@ -44,7 +44,7 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y squashfs-tools
+          sudo apt-get install -y squashfs-tools desktop-file-utils
           tmp="$(mktemp -d)"
           trap 'rm -rf "$tmp"' EXIT
           wget -qO "$tmp/appimagetool.ai" "https://github.com/AppImage/AppImageKit/releases/download/12/appimagetool-x86_64.AppImage"
@@ -58,6 +58,33 @@ jobs:
           sudo install -m0755 "$tool" /usr/local/bin/appimagetool
           sudo mkdir -p /usr/local/lib/appimagekit
           sudo ln -sf /usr/bin/mksquashfs /usr/local/lib/appimagekit/mksquashfs
+
+      - name: Preflight packaging dependencies
+        run: |
+          set -euo pipefail
+          required_tools=(
+            dotnet
+            node
+            npm
+            tar
+            appimagetool
+            mksquashfs
+            desktop-file-validate
+          )
+          missing=()
+          for tool in "${required_tools[@]}"; do
+            if ! command -v "$tool" >/dev/null 2>&1; then
+              missing+=("$tool")
+            fi
+          done
+          if [[ ! -x /usr/local/lib/appimagekit/mksquashfs ]]; then
+            missing+=("appimagekit-mksquashfs-path")
+          fi
+          if [[ "${#missing[@]}" -gt 0 ]]; then
+            echo "Missing packaging dependencies: ${missing[*]}" >&2
+            exit 1
+          fi
+          echo "Packaging preflight passed."
 
       - name: Normalize package version
         run: |
