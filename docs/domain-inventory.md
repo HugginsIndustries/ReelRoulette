@@ -157,6 +157,7 @@ Boundary:
   - `src/clients/web/ReelRoulette.WebUI/src/types/openapi.generated.ts`
   - `src/clients/web/ReelRoulette.WebUI/scripts/verify-openapi-contracts-fresh.mjs`
   - `src/clients/web/ReelRoulette.WebUI/scripts/sync-shared-icon.mjs` (copies shared `HI.ico` + font; uses **`sharp`** to resize `HI-256.png` / `HI-512.png` into manifest-accurate PWA PNGs under `public/icons/`)
+  - `src/clients/web/ReelRoulette.WebUI/public/sw.js` + `src/main.ts` service worker registration (Chromium PWA installability; network-only `fetch`)
   - package scripts (`generate:contracts`, `verify:contracts`, `verify`).
 
 ---

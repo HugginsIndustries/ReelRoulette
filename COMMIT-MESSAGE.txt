@@ -19,8 +19,10 @@ Instructions:
 
 Commit Message:
 
-Chore: v0.11.0 release surfaces and testing checklist refresh
+Bugfix: WebUI PWA service worker and desktop LibVLC video embed for Avalonia 12
 
-- Align `0.11.0-dev` → `0.11.0` on OpenAPI, ServerApp/DesktopApp `<Version>`, server `assetsVersion`, contract/WebUI tests, and README/dev-setup release command examples.
-- Reorganize `docs/checklists/testing-checklist.md` into concise sections with blank run metadata, fold in build/deploy preconditions, and keep items one-line testable checks per the new brevity rule.
-- Remove completed temporary trackers: `docs/checklists/grid-fix.md`, `library-service-removal.md`, `m8h-checklist.md`.
+- Add `public/sw.js` (network-only `fetch`) and register from `main.ts` in secure contexts for Chromium installability with the existing manifest.
+- Serve `sw.js` with `Cache-Control: no-store` from WebUI static hosting; require `dist/sw.js` in `verify-build-output.mjs`.
+- Document installability and Android Chrome vs Firefox notes in `README.md`, `docs/dev-setup.md`, `CONTEXT.md`, `docs/architecture.md`, and `docs/domain-inventory.md`; fold service worker into `CHANGELOG.md` **0.11.0** WebUI PWA bullet.
+- Branch docs: complete `docs/checklists/testing-checklist.md` regression pass metadata/checks and add release date to `CHANGELOG.md` **0.11.0** heading.
+- Desktop: `LibVLC` with `--intf dummy` and `EnsureVideoViewMediaPlayerAttached()` (Loaded, `AttachedToVisualTree`, before video `Play`) so `VideoView` gets `Hwnd`/`XWindow` after Avalonia 12 native host timing; log fix under `CHANGELOG.md` **0.11.0** Fixed.

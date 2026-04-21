@@ -96,6 +96,7 @@ From `src/clients/web/ReelRoulette.WebUI`:
 - `npm run dev`/`npm run build` auto-sync shared assets into WebUI `public/`:
   - `assets/HI.ico` -> `public/HI.ico`
   - PWA icons: `scripts/sync-shared-icon.mjs` uses **`sharp`** to write `public/icons/icon-192.png` (192×192), `public/icons/icon-512.png` (512×512), and `public/icons/apple-touch-icon.png` (180×180) from `assets/HI-256.png` / `HI-512.png` (manifest `sizes` must match pixel dimensions)
+  - PWA service worker: `public/sw.js` (copied to `dist/` root) is registered from `src/main.ts` in secure contexts; network-only `fetch` handler satisfies Chromium installability for standalone install on Android Chrome. `ServerApp` sets `Cache-Control: no-store` for `sw.js` when serving WebUI static files.
   - `assets/fonts/MaterialSymbolsOutlined.var.ttf` -> `public/assets/fonts/MaterialSymbolsOutlined.var.ttf`
 
 Optional helper scripts:

@@ -1059,7 +1059,8 @@ static void MapWebUiStaticServing(WebApplication app, ServerAppOptions options, 
         OnPrepareResponse = ctx =>
         {
             if (ctx.File.Name.Equals("index.html", StringComparison.OrdinalIgnoreCase) ||
-                ctx.File.Name.Equals("runtime-config.json", StringComparison.OrdinalIgnoreCase))
+                ctx.File.Name.Equals("runtime-config.json", StringComparison.OrdinalIgnoreCase) ||
+                ctx.File.Name.Equals("sw.js", StringComparison.OrdinalIgnoreCase))
             {
                 ctx.Context.Response.Headers["Cache-Control"] = "no-store";
             }

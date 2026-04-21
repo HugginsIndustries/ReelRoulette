@@ -846,6 +846,24 @@ namespace ReelRoulette
         // Current photo bitmap for display
         private Avalonia.Media.Imaging.Bitmap? _currentPhotoBitmap;
 
+        private static bool MediaPlayerNeedsVideoViewAttach(MediaPlayer? mediaPlayer)
+        {
+            if (mediaPlayer == null) return true;
+            if (OperatingSystem.IsWindows()) return mediaPlayer.Hwnd == IntPtr.Zero;
+            if (OperatingSystem.IsLinux()) return mediaPlayer.XWindow == 0;
+            if (OperatingSystem.IsMacOS()) return mediaPlayer.NsObject == IntPtr.Zero;
+            return true;
+        }
+
+        private void EnsureVideoViewMediaPlayerAttached()
+        {
+            if (VideoView == null || _mediaPlayer == null) return;
+            if (!MediaPlayerNeedsVideoViewAttach(_mediaPlayer)) return;
+            var mp = _mediaPlayer;
+            VideoView.MediaPlayer = null;
+            VideoView.MediaPlayer = mp;
+        }
+
         public MainWindow()
         {
             try
@@ -876,10 +894,12 @@ namespace ReelRoulette
                 }
             };
             
-            // Create LibVLC instances (Core.Initialize() called in Program.cs)
-            _libVLC = new LibVLC();
+            // Create LibVLC instances (Core.Initialize() called in Program.cs).
+            // --intf dummy avoids VLC spawning a separate controller window; embedding uses VideoView's native handle.
+            _libVLC = new LibVLC(enableDebugLogs: false, "--intf", "dummy");
             _mediaPlayer = new MediaPlayer(_libVLC);
             VideoView.MediaPlayer = _mediaPlayer;
+            VideoView.AttachedToVisualTree += (_, _) => EnsureVideoViewMediaPlayerAttached();
 
             // Initialize seek timer (single source of truth for Media → UI updates)
             _seekTimer = new DispatcherTimer
@@ -979,7 +999,8 @@ namespace ReelRoulette
                 try
                 {
                     Log("MainWindow Loaded event: Fired!");
-                    
+                    EnsureVideoViewMediaPlayerAttached();
+
                     // Initialize library panel first so controls are ready
                     Log("MainWindow Loaded event: Initializing Library panel...");
                     InitializeLibraryPanel();
@@ -5391,8 +5412,9 @@ namespace ReelRoulette
                         
                         // Try to get video aspect ratio from tracks immediately
                         UpdateAspectRatioFromTracks();
-                        
+
                         Log("PlayMedia: Starting playback");
+                        EnsureVideoViewMediaPlayerAttached();
                         _mediaPlayer!.Play(_currentMedia!);
                         Log("PlayMedia: Playback started successfully");
                         
@@ -5638,6 +5660,7 @@ namespace ReelRoulette
                     UpdateAspectRatioFromTracks();
                     
                     // Set media and restore playback position
+                    EnsureVideoViewMediaPlayerAttached();
                     _mediaPlayer.Play(_currentMedia);
                     _mediaPlayer.Time = currentTime;
                     
@@ -9519,6 +9542,7 @@ namespace ReelRoulette
                                 UpdateAspectRatioFromTracks();
                                 
                                 // Set media and restore playback position
+                                EnsureVideoViewMediaPlayerAttached();
                                 _mediaPlayer.Play(_currentMedia);
                                 _mediaPlayer.Time = currentTime;
                                 
@@ -11534,6 +11558,7 @@ namespace ReelRoulette
                 if (_mediaPlayer.Media != null)
                 {
                     Log("TogglePlayPause: Media is paused - playing");
+                    EnsureVideoViewMediaPlayerAttached();
                     _mediaPlayer.Play();
                     Log("TogglePlayPause: Media play command issued");
                 }

@@ -119,6 +119,7 @@ npm run dev
 
 - app icon: `assets/HI.ico` -> `public/HI.ico`
 - PWA / home-screen icons: `assets/HI-256.png` and `assets/HI-512.png` are resized with **`sharp`** (devDependency) into `public/icons/icon-192.png` (**192×192**), `public/icons/icon-512.png` (**512×512**), and `public/icons/apple-touch-icon.png` (**180×180**) so `manifest.webmanifest` `sizes` matches the PNGs
+- PWA installability on **Chromium/Android**: `public/sw.js` is a minimal root-scoped service worker (network-only `fetch`) registered from the client in secure contexts so **Install app** can yield a standalone shell together with `manifest.webmanifest`; the server serves `sw.js` with `Cache-Control: no-store` so updates are not stuck behind caching
 - Material Symbols font: `assets/fonts/MaterialSymbolsOutlined.var.ttf` -> `public/assets/fonts/MaterialSymbolsOutlined.var.ttf`
 
 ## Helper Scripts
@@ -148,7 +149,7 @@ If your devices already use Tailscale, the most reliable way to run the WebUI in
 
 1. Ensure the server can be reached from your tailnet (for example enable LAN binding in Control Settings or configure `CoreServer:ListenUrl` to a non-loopback bind such as `http://0.0.0.0:45123`).
 2. Use **Tailscale Serve** to terminate HTTPS on your tailnet domain and proxy to the local server URL (for example `http://127.0.0.1:45123`).
-3. Open the resulting HTTPS URL from another tailnet device (iPad/Android) and use browser install flow (**Add to Home Screen** / **Install app**).
+3. Open the resulting HTTPS URL from another tailnet device (iPad/Android) and use browser install flow (**Add to Home Screen** / **Install app**). On **Android**, prefer **Chrome** (or another Chromium browser) for install so the service worker meets installability; **Firefox for Android** may keep browser chrome for home-screen shortcuts.
 
 ReelRoulette WebUI runtime config is generated from the incoming request host/scheme (`/runtime-config.json`), so loading via the Tailscale HTTPS origin keeps API and SSE on the same HTTPS origin automatically.
 

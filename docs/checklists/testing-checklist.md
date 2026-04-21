@@ -9,158 +9,162 @@ Use `pwsh ./tools/scripts/reset-checklist.ps1` to reset metadata/check states be
 
 ## Test Run Metadata
 
-- Test date/time:
-- Tester:
-- Release version:
-- Environment (OS + device(s) + browser(s)):
+- Test date: 2026-04-20
+- Tester: Christian Huggins
+- Release version: 0.11.0
+- Environment (OS + device(s) + browser(s)): CachyOS (desktop app & server + WebUI on Firefox), iPad (WebUI in Safari), and Google Pixel 8 Pro (WebUI in Chrome)
 - Test mode:
-  - [ ] Full regression sweep
+  - [x] Full regression sweep
   - [ ] Targeted regression (list impacted areas):
 
 ---
 
 ## Build & Preconditions
 
-- [ ] `dotnet build ReelRoulette.sln` passes.
-- [ ] `dotnet test ReelRoulette.sln` passes.
-- [ ] WebUI verify passes (`npm run verify` in `src/clients/web/ReelRoulette.WebUI`).
-- [ ] `pwsh ./tools/scripts/verify-web-deploy.ps1` passes.
+- [x] `dotnet build ReelRoulette.sln` passes.
+- [x] `dotnet test ReelRoulette.sln` passes.
+- [x] WebUI verify passes (`npm run verify` in `src/clients/web/ReelRoulette.WebUI`).
+- [x] `pwsh ./tools/scripts/verify-web-deploy.ps1` passes.
 
 ## Server Baseline + Tray
 
-- [ ] `ReelRoulette.ServerApp` starts without fatal startup errors.
-- [ ] `/health` and WebUI static assets respond correctly.
-- [ ] Server launches with no command prompt window on Windows.
-- [ ] Tray icon appears and matches expected icon.
-- [ ] Tray `Open Operator UI` opens default browser at `/operator`.
-- [ ] Tray `Launch Server on Startup` toggle applies immediately on Windows (registry) and Linux (XDG autostart).
-- [ ] Tray `Refresh Library` triggers refresh pipeline.
-- [ ] Tray `Restart Server` performs graceful restart and service recovers.
-- [ ] Tray `Stop Server / Exit` performs graceful shutdown.
-- [ ] Packaged portable server runs with tray when a desktop session is available, headless otherwise.
-- [ ] Packaged installer server runs with tray when a desktop session is available, headless otherwise.
+- [x] `ReelRoulette.ServerApp` starts without fatal startup errors.
+- [x] `/health` and WebUI static assets respond correctly.
+- [x] Server launches with no command prompt window on Windows.
+- [x] Tray icon appears and matches expected icon.
+- [x] Tray `Open Operator UI` opens default browser at `/operator`.
+- [x] Tray `Launch Server on Startup` toggle applies immediately on Windows (registry) and Linux (XDG autostart).
+- [x] Tray `Refresh Library` triggers refresh pipeline.
+- [x] Tray `Restart Server` performs graceful restart and service recovers.
+- [x] Tray `Stop Server / Exit` performs graceful shutdown.
+- [x] Packaged portable server runs with tray when a desktop session is available, headless otherwise.
+- [x] Packaged installer server runs with tray when a desktop session is available, headless otherwise.
 
 ## Operator UI
 
-- [ ] Page layout renders as expected.
-- [ ] Connected Clients panel shows differentiated rows with expected fields.
-- [ ] Connected Clients `Copy` button works.
-- [ ] Server Logs refresh works without changing filters.
-- [ ] Server Logs copy works.
-- [ ] Incoming/outgoing event tables update during activity.
-- [ ] Control settings apply flow behaves correctly, including `Launch Server on Startup` state.
-- [ ] Restart/stop lifecycle buttons behave correctly.
+- [x] Page layout renders as expected.
+- [x] Connected Clients panel shows differentiated rows with expected fields.
+- [x] Connected Clients `Copy` button works.
+- [x] Server Logs refresh works without changing filters.
+- [x] Server Logs copy works.
+- [x] Incoming/outgoing event tables update during activity.
+- [x] Control settings apply flow behaves correctly, including `Launch Server on Startup` state.
+- [x] Restart/stop lifecycle buttons behave correctly.
 
 ## Operator Testing Suite
 
-- [ ] Testing Mode OFF blocks scenario/fault actions.
-- [ ] Testing Mode ON enables scenario/fault actions.
-- [ ] Admin auth policy enforcement matches mode (Off = unauthenticated allowed; TokenRequired = auth required).
-- [ ] API version mismatch scenario produces deterministic client UX.
-- [ ] Capability mismatch scenario produces deterministic client UX.
-- [ ] API unavailable scenario produces recoverable client behavior.
-- [ ] Missing media scenario shows clear playback guidance (no crash).
-- [ ] SSE disconnect scenario triggers reconnect/resync behavior.
-- [ ] Reset scenario flags returns system to baseline behavior.
+- [x] Testing Mode OFF blocks scenario/fault actions.
+- [x] Testing Mode ON enables scenario/fault actions.
+- [x] Admin auth policy enforcement matches mode (Off = unauthenticated allowed; TokenRequired = auth required).
+- [x] API version mismatch scenario produces deterministic client UX.
+- [x] Capability mismatch scenario produces deterministic client UX.
+- [x] API unavailable scenario produces recoverable client behavior.
+- [x] Missing media scenario shows clear playback guidance (no crash).
+- [x] SSE disconnect scenario triggers reconnect/resync behavior.
+- [x] Reset scenario flags returns system to baseline behavior.
 
 ## WebUI
 
-- [ ] WebUI bootstraps without runtime-config errors from a LAN device.
+- [x] WebUI bootstraps without runtime-config errors from a LAN device.
 - [ ] WebUI PWA metadata: over HTTPS origin, Add to Home Screen / Install app opens in standalone shell with app icon.
-- [ ] Pair/auth flow works for current auth mode.
-- [ ] Core controls are usable on touch.
-- [ ] Random play works with None (ad-hoc filter) and with a named header preset.
-- [ ] Filter Media overlay opens and General, Tags, and Presets tabs function correctly.
-- [ ] Preset catalog add, rename, delete, reorder, and load all work; header combobox stays ordered.
-- [ ] Manual controls (prev/play-next) work.
-- [ ] Loop/autoplay toggles work.
-- [ ] Favorite/blacklist actions work.
-- [ ] Tag editor open/edit/save/close works; Auto Tag scan and apply work correctly.
-- [ ] Tag editor category reorder marks pending and persists after save.
-- [ ] Session mute toggle works and glyph updates correctly.
-- [ ] WebUI Fullscreen: overlays stay usable on desktop; pseudo-fullscreen works correctly on iOS WebKit.
-- [ ] SSE status transitions are user-friendly (connected, reconnecting, resync paths).
-- [ ] After a core refresh completes, status shows the correct segmented summary.
-- [ ] System light/dark theme change is reflected correctly in shell and tag editor.
-- [ ] Diagnostics panel appears below status line.
-- [ ] Client `clientType`/identity appears in Operator Connected Clients.
+  - Issues: PWA on Android is not working (only creates a shortcut that opens in Chrome browser)
+- [x] Pair/auth flow works for current auth mode.
+- [x] Core controls are usable on touch.
+- [x] Random play works with None (ad-hoc filter) and with a named header preset.
+- [x] Filter Media overlay opens and General, Tags, and Presets tabs function correctly.
+- [x] Preset catalog add, rename, delete, reorder, and load all work; header combobox stays ordered.
+- [x] Manual controls (prev/play-next) work.
+- [x] Loop/autoplay toggles work.
+- [x] Favorite/blacklist actions work.
+- [x] Tag editor open/edit/save/close works; Auto Tag scan and apply work correctly.
+- [x] Tag editor category reorder marks pending and persists after save.
+- [x] Session mute toggle works and glyph updates correctly.
+- [x] WebUI Fullscreen: overlays stay usable on desktop; pseudo-fullscreen works correctly on iOS WebKit.
+- [x] SSE status transitions are user-friendly (connected, reconnecting, resync paths).
+- [x] After a core refresh completes, status shows the correct segmented summary.
+- [ ] System light/dark theme change is reflected correctly in shell and tag editor. 
+  - Issues: 1 - filter media tags tab & tag editor chip text is black on light mode 2 - tag editor buttons (outside of tag grid) are always white (should be black on light mode)
+- [x] Diagnostics panel appears below status line.
+- [x] Client `clientType`/identity appears in Operator Connected Clients.
 
 ## Desktop App
 
-- [ ] Desktop app can connect to server.
-- [ ] Desktop loads and shows current runtime status without crash.
-- [ ] Random play works from active preset.
-- [ ] Manual library play works.
-- [ ] Previous/next timeline navigation works.
-- [ ] Loop toggle works.
-- [ ] Autoplay toggle works.
-- [ ] Volume/mute controls work.
-- [ ] Fullscreen/player-view transitions work.
-- [ ] No stale/incorrect status text after playback actions.
-- [ ] `View -> Diagnostics` opens and shows `CoreClientId`/`CoreSessionId`.
-- [ ] Import folder works (or fails with clear guidance).
-- [ ] Manage Sources opens and source enable/disable persists.
-- [ ] Thumbnails appear in the library panel after refresh thumbnail generation completes (no desktop restart required).
-- [ ] Duplicate scan + apply flow works (if test data exists).
-- [ ] Duplicate groups render per-file thumbnail and info-row pairs in order.
-- [ ] Duplicate groups allow per-group handling selection (Keep All and specific keep-item choice).
-- [ ] Duplicate delete confirmation shows selected group/file counts before applying.
-- [ ] Auto Tag scan + apply works (if test data exists).
-- [ ] Favorites toggle updates item state.
-- [ ] Blacklist toggle updates item state.
-- [ ] Tag editor apply/remove updates item tags as expected.
-- [ ] Tag editor category rows are readable in both light and dark themes.
-- [ ] Tag chips render correctly in both light and dark themes.
-- [ ] Filter dialog Tags tab shows per-category collapse toggles and legacy flat tag model renders correctly.
-- [ ] Clear playback stats flow works with confirmation.
-- [ ] `Library → Export Library…` saves a zip with expected contents based on selected options.
-- [ ] `Library → Import Library…` lists source paths from the zip and allows remap or skip per source.
-- [ ] Import shows an overwrite confirmation when a non-empty library already exists.
-- [ ] After import, server resync succeeds and media plays when paths are valid.
-- [ ] Cross-platform round-trip (Windows ↔ Linux) completes without path errors.
+- [x] Desktop app can connect to server.
+- [x] Desktop loads and shows current runtime status without crash.
+- [x] Random play works from active preset.
+- [x] Manual library play works.
+- [x] Previous/next timeline navigation works.
+- [x] Loop toggle works.
+- [x] Autoplay toggle works.
+- [x] Volume/mute controls work.
+- [x] Fullscreen/player-view transitions work.
+- [x] No stale/incorrect status text after playback actions.
+- [x] `View -> Diagnostics` opens and shows `CoreClientId`/`CoreSessionId`.
+- [x] Import folder works (or fails with clear guidance).
+- [x] Manage Sources opens and source enable/disable persists.
+- [x] Thumbnails appear in the library panel after refresh thumbnail generation completes (no desktop restart required).
+- [x] Duplicate scan + apply flow works (if test data exists).
+- [x] Duplicate groups render per-file thumbnail and info-row pairs in order.
+- [x] Duplicate groups allow per-group handling selection (Keep All and specific keep-item choice).
+- [x] Duplicate delete confirmation shows selected group/file counts before applying.
+- [x] Auto Tag scan + apply works (if test data exists).
+- [x] Favorites toggle updates item state.
+- [x] Blacklist toggle updates item state.
+- [x] Tag editor apply/remove updates item tags as expected.
+- [x] Tag editor category rows are readable in both light and dark themes.
+- [x] Tag chips render correctly in both light and dark themes.
+- [x] Filter dialog Tags tab shows per-category collapse toggles and legacy flat tag model renders correctly.
+- [x] Clear playback stats flow works with confirmation.
+- [x] `Library → Export Library…` saves a zip with expected contents based on selected options.
+- [x] `Library → Import Library…` lists source paths from the zip and allows remap or skip per source.
+- [x] Import shows an overwrite confirmation when a non-empty library already exists.
+- [x] After import, server resync succeeds and media plays when paths are valid.
+- [x] Cross-platform round-trip (Windows ↔ Linux) completes without path errors.
 
 ## Cross-Client Parity + Sync
 
-- [ ] Favorite/blacklist changes on desktop reflect in web/mobile.
-- [ ] Favorite/blacklist changes on web/mobile reflect in desktop.
-- [ ] Tag edits converge across clients.
-- [ ] Refresh status projection is consistent across clients.
-- [ ] No critical cross-client state divergence observed.
+- [ ] Overall UI parity between desktop app and WebUI.
+  - Issues: desktop tag chip button toggle state doesn't apply when adding/removing tags (no visual user feedback - should change to HugginsOrange) - overall UI parity is not 100% in the desktop app.
+- [x] Favorite/blacklist changes on desktop reflect in web/mobile.
+- [x] Favorite/blacklist changes on web/mobile reflect in desktop.
+- [x] Tag edits converge across clients.
+- [x] Refresh status projection is consistent across clients.
+- [x] No critical cross-client state divergence observed.
 
 ## Logging + Diagnostics
 
-- [ ] Operator Server Logs shows non-empty log data during active test run.
-- [ ] Entries contain clear timestamp/level/source identity.
-- [ ] Desktop, web/mobile, and server-originated events all appear in server log stream.
-- [ ] No obvious sensitive values (tokens/secrets/cookies) are logged.
+- [x] Operator Server Logs shows non-empty log data during active test run.
+- [x] Entries contain clear timestamp/level/source identity.
+- [x] Desktop, web/mobile, and server-originated events all appear in server log stream.
+- [x] No obvious sensitive values (tokens/secrets/cookies) are logged.
 
 ## Packaging + Deployment Smoke
 
 - [ ] **Windows:** server and desktop portable and installer packages build successfully.
-- [ ] **Linux:** portable tarballs and AppImages build with expected names under `artifacts/packages/`.
-- [ ] **Linux install:** `install-linux-local.sh` installs AppImages with stable names and registers menu entries.
-- [ ] **Linux portable tarball:** single top-level directory, executable run scripts, no `.pdb`, prerequisites documented.
-- [ ] **Branding:** icon parity across shortcuts, menus, and WebUI.
+- [x] **Linux:** portable tarballs and AppImages build with expected names under `artifacts/packages/`.
+- [x] **Linux install:** `install-linux-local.sh` installs AppImages with stable names and registers menu entries.
+- [x] **Linux portable tarball:** single top-level directory, executable run scripts, no `.pdb`, prerequisites documented.
+- [x] **Branding:** icon parity across shortcuts, menus, and WebUI.
 - [ ] **Inno shortcuts:** server and desktop installers include default-checked desktop shortcut option.
 
 ## CI/Workflow Readiness
 
-- [ ] Workflow YAML files are valid and committed in `.github/workflows`.
-- [ ] Default CI gates map to required checks (build, test, web verify).
-- [ ] `package-windows.yml` and `package-linux.yml` are runnable (tag + `workflow_dispatch`).
+- [x] Workflow YAML files are valid and committed in `.github/workflows`.
+- [x] Default CI gates map to required checks (build, test, web verify).
+- [x] `package-windows.yml` and `package-linux.yml` are runnable (tag + `workflow_dispatch`).
 
 ## Documentation Sync
 
-- [ ] `AGENTS.md` reflects current agent workflow/document ownership rules.
-- [ ] `README.md` reflects current runtime scripts/commands and practical onboarding info.
-- [ ] `CONTEXT.md` reflects current implemented capability/ownership map.
-- [ ] `CHANGELOG.md` follows Keep a Changelog format and reflects only current unreleased delta.
-- [ ] `MILESTONES.md` reflects current scope/status/acceptance evidence and deferrals.
-- [ ] `docs/api.md` reflects current API/error-path contract behavior.
-- [ ] `docs/architecture.md` reflects current architecture/runtime boundaries.
-- [ ] `docs/dev-setup.md` reflects current local setup/run/verify workflows.
-- [ ] `docs/domain-inventory.md` reflects current ownership-first implementation surfaces.
-- [ ] `docs/checklists/testing-checklist.md` checklist sections/items match current feature/workflow reality.
+- [x] `AGENTS.md` reflects current agent workflow/document ownership rules.
+- [x] `README.md` reflects current runtime scripts/commands and practical onboarding info.
+- [x] `CONTEXT.md` reflects current implemented capability/ownership map.
+- [x] `CHANGELOG.md` follows Keep a Changelog format and reflects only current unreleased delta.
+- [x] `MILESTONES.md` reflects current scope/status/acceptance evidence and deferrals.
+- [x] `docs/api.md` reflects current API/error-path contract behavior.
+- [x] `docs/architecture.md` reflects current architecture/runtime boundaries.
+- [x] `docs/dev-setup.md` reflects current local setup/run/verify workflows.
+- [x] `docs/domain-inventory.md` reflects current ownership-first implementation surfaces.
+- [x] `docs/checklists/testing-checklist.md` checklist sections/items match current feature/workflow reality.
 
 ## Release Specific
 
@@ -168,10 +172,10 @@ Use `pwsh ./tools/scripts/reset-checklist.ps1` to reset metadata/check states be
 
 ## Optional Release Flow
 
-- [ ] Server and desktop packages created via `pwsh ./tools/scripts/full-release.ps1 -Version {VERSION}`.
-- [ ] Expected artifacts exist under `artifacts/packages/` with correct names and version metadata.
-- [ ] Installed server and desktop apps launch and function properly after installation.
-- [ ] `CHANGELOG.md`: cut `Unreleased` into the new release section, then initialize a fresh `Unreleased` block.
+- [x] Server and desktop packages created via `pwsh ./tools/scripts/full-release.ps1 -Version {VERSION}`.
+- [x] Expected artifacts exist under `artifacts/packages/` with correct names and version metadata.
+- [x] Installed server and desktop apps launch and function properly after installation.
+- [x] `CHANGELOG.md`: cut `Unreleased` into the new release section, then initialize a fresh `Unreleased` block.
 
 ## Failure Documentation
 
@@ -186,5 +190,5 @@ If any check fails, capture:
 - Overall result:
   - [ ] PASS
   - [ ] FAIL
-- [ ] All failures documented with follow-up tasks linked.
+- [x] All failures and skipped checks documented.
 - [ ] Ready for commit/sign-off.

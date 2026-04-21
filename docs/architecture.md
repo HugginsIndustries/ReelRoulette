@@ -68,7 +68,7 @@ flowchart LR
 ### Client Layers
 
 - Desktop client (`src/clients/desktop/ReelRoulette.DesktopApp/`, Avalonia) and WebUI (`src/clients/web/ReelRoulette.WebUI`) are orchestration/render layers.
-- WebUI ships a small **PWA** surface (`manifest.webmanifest`, `index.html` install meta, `public/icons/*`); build-time sync resizes shared PNG sources so declared icon sizes match shipped assets (see `scripts/sync-shared-icon.mjs`).
+- WebUI ships a small **PWA** surface (`manifest.webmanifest`, `index.html` install meta, `public/icons/*`, root `public/sw.js` registered in secure contexts for Chromium installability); build-time sync resizes shared PNG sources so declared icon sizes match shipped assets (see `scripts/sync-shared-icon.mjs`).
 - Playback filtering and preset catalogs are edited through API-backed UIs on both clients (no client-authoritative filter catalogs).
 - Clients issue command/query calls through APIs and project state from API plus SSE.
 - WebUI Auto Tag (like duplicate scan/apply) performs filename/path matching only on the server; the web client sends scan scope and applies selected suggestions via API without client-local tag-matching authority.

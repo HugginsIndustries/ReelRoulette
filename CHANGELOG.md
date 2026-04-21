@@ -19,14 +19,14 @@ This file follows a Keep a Changelog style format.
 
 ---
 
-## [0.11.0] — Cross-Platform Unlocked
+## [0.11.0] — Cross-Platform Unlocked (2026-04-20)
 
 ### Added
 
 - **Library Export / Import:** Cross-platform library migration via zip archive (library, settings, presets, optional thumbnails and backups). Supports per-source path remapping or skip, overwrite confirmation, and automatic resync from core after import. Handles path differences between Windows and Linux hosts.
 - **WebUI – Filter Media overlay:** Full-screen filter dialog (General / Tags / Presets) with authoritative `filterState`, preset catalog management, per-category tag collapse toggles (persisted per session), and a **None** quick-preset shortcut in the header.
 - **WebUI – Auto Tag tab:** Scan and apply auto-tags via API (`POST /api/autotag/scan` and `POST /api/autotag/apply`); scope can be limited to enabled sources. Integrated into the tag overlay alongside **Edit Tags**, with shared Save/Discard UX and in-flight scan feedback.
-- **WebUI – PWA support:** `manifest.webmanifest`, iOS home-screen meta tags, and build-synced icon assets (`icon-192.png`, `icon-512.png`, `apple-touch-icon.png`). `npm run sync:icon` resizes shared source icons using `sharp`. Enables Add-to-Home-Screen / Install on iOS and Android when hosted over HTTPS.
+- **WebUI – PWA support:** `manifest.webmanifest`, iOS home-screen meta tags, build-synced icon assets (`icon-192.png`, `icon-512.png`, `apple-touch-icon.png`), and root `sw.js` (minimal service worker with network-only `fetch`, registered in secure contexts so Chromium meets installability and **Install app** can open in `standalone` on Android Chrome; `ReelRoulette.ServerApp` serves `sw.js` with `Cache-Control: no-store`). `npm run sync:icon` resizes shared source icons using `sharp`. Enables Add-to-Home-Screen / Install on iOS and Android when hosted over HTTPS.
 - **Linux packaging:** Full Linux distribution support — portable tarballs, AppImages (with `--help` prereqs and `--install` for user-local `.desktop` + icons), GitHub install script (`install-linux-from-github.sh`), and local post-build install script (`install-linux-local.sh`). AppImage and portable paths use stable naming (`ReelRoulette-{Server|Desktop}-linux-x64`).
 - **Linux CI:** GitHub Actions workflow (`package-linux.yml`) for portable + AppImage packaging on `ubuntu-latest`, with headless packaged-server smoke tests and tag-triggered GitHub Release uploads.
 - **Linux startup launch:** XDG autostart for `ReelRoulette.ServerApp` with immediate apply via tray and Operator. `ServerApp` uses `ContentRootPath = AppContext.BaseDirectory` so `appsettings.json` and `wwwroot` resolve when a session manager starts with a non-app working directory; autostart `.desktop` entries include `Path=` alongside `Exec=`; AppImage installs record stable paths via `$APPIMAGE` instead of a temporary `/tmp/.mount_*` location. **AppImage:** copy the server AppImage to the folder where you want to keep it, run it from that folder, then turn on **Launch at startup** in the tray (toggle off and on once if you already enabled autostart during a pre-release build so `~/.config/autostart/` picks up the latest entry).
@@ -73,6 +73,7 @@ This file follows a Keep a Changelog style format.
 - **Edit-tag category display:** Newly created categories now resolve to human-readable names instead of fallback GUID text.
 - **WebUI pairing strip:** Token field and Pair button now use consistent theme CSS variables and corner radius; hidden until a 401 is returned (not merely when `pairToken` is absent from runtime config).
 - **Windows tray stability:** `NativeMenuItem` state updates now dispatched on `Dispatcher.UIThread` after async server/registry work.
+- **Desktop video embed (Avalonia 12 / LibVLCSharp):** Video again renders inside `MainWindow` `VideoView` instead of a separate native VLC window — `LibVLC` uses `--intf dummy`, and `MediaPlayer` is re-attached to `VideoView` after the native control exists (including before `Play`) so `Hwnd` / `XWindow` embedding is applied.
 
 ---
 
