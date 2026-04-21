@@ -83,14 +83,25 @@ function Invoke-Download {
     Invoke-WebRequest -Uri $Uri -OutFile $OutFile -UseBasicParsing
 }
 
+function Get-WebContentText {
+    param([Parameter(Mandatory = $true)][string]$Uri)
+
+    $response = Invoke-WebRequest -Uri $Uri -UseBasicParsing
+    $content = $response.Content
+    if ($content -is [byte[]]) {
+        return [System.Text.Encoding]::UTF8.GetString($content).Trim()
+    }
+    return ([string]$content).Trim()
+}
+
 # --- FFmpeg / ffprobe (gyan.dev release essentials ZIP) ---
 $ffZipUrl = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
 $ffShaUrl = "${ffZipUrl}.sha256"
 $ffVerUrl = "${ffZipUrl}.ver"
 
 Write-Host "[native-deps] FFmpeg: checking release build metadata..."
-$remoteFfVer = (Invoke-WebRequest -Uri $ffVerUrl -UseBasicParsing).Content.Trim()
-$expectedFfSha = (Invoke-WebRequest -Uri $ffShaUrl -UseBasicParsing).Content.Trim()
+$remoteFfVer = Get-WebContentText -Uri $ffVerUrl
+$expectedFfSha = Get-WebContentText -Uri $ffShaUrl
 if ($expectedFfSha -match '^([a-fA-F0-9]{64})') {
     $expectedFfSha = $matches[1]
 }
@@ -197,7 +208,7 @@ else {
         $zipPath = Join-Path $tmpRoot "vlc-win64.zip"
         New-Item -ItemType Directory -Force -Path $tmpRoot | Out-Null
         try {
-            $expectedVlcSha = (Invoke-WebRequest -Uri $vlcShaUrl -UseBasicParsing).Content.Trim()
+            $expectedVlcSha = Get-WebContentText -Uri $vlcShaUrl
             if ($expectedVlcSha -match '^([a-fA-F0-9]{64})') {
                 $expectedVlcSha = $matches[1]
             }

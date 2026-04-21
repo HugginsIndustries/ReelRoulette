@@ -19,10 +19,7 @@ Instructions:
 
 Commit Message:
 
-Bugfix: WebUI PWA service worker and desktop LibVLC video embed for Avalonia 12
+Bugfix: handle binary web metadata in native deps fetch
 
-- Add `public/sw.js` (network-only `fetch`) and register from `main.ts` in secure contexts for Chromium installability with the existing manifest.
-- Serve `sw.js` with `Cache-Control: no-store` from WebUI static hosting; require `dist/sw.js` in `verify-build-output.mjs`.
-- Document installability and Android Chrome vs Firefox notes in `README.md`, `docs/dev-setup.md`, `CONTEXT.md`, `docs/architecture.md`, and `docs/domain-inventory.md`; fold service worker into `CHANGELOG.md` **0.11.0** WebUI PWA bullet.
-- Branch docs: complete `docs/checklists/testing-checklist.md` regression pass metadata/checks and add release date to `CHANGELOG.md` **0.11.0** heading.
-- Desktop: `LibVLC` with `--intf dummy` and `EnsureVideoViewMediaPlayerAttached()` (Loaded, `AttachedToVisualTree`, before video `Play`) so `VideoView` gets `Hwnd`/`XWindow` after Avalonia 12 native host timing; log fix under `CHANGELOG.md` **0.11.0** Fixed.
+- Decode `Invoke-WebRequest` content as UTF-8 when responses are byte arrays before trimming.
+- Fix Windows packaging flow where `.ver` or `.sha256` responses could trigger `Byte.Trim()` failures.

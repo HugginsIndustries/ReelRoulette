@@ -140,12 +140,12 @@ Use `pwsh ./tools/scripts/reset-checklist.ps1` to reset metadata/check states be
 
 ## Packaging + Deployment Smoke
 
-- [ ] **Windows:** server and desktop portable and installer packages build successfully.
+- [x] **Windows:** server and desktop portable and installer packages build successfully.
 - [x] **Linux:** portable tarballs and AppImages build with expected names under `artifacts/packages/`.
 - [x] **Linux install:** `install-linux-local.sh` installs AppImages with stable names and registers menu entries.
 - [x] **Linux portable tarball:** single top-level directory, executable run scripts, no `.pdb`, prerequisites documented.
 - [x] **Branding:** icon parity across shortcuts, menus, and WebUI.
-- [ ] **Inno shortcuts:** server and desktop installers include default-checked desktop shortcut option.
+- [x] **Inno shortcuts:** server and desktop installers include default-checked desktop shortcut option.
 
 ## CI/Workflow Readiness
 
@@ -188,7 +188,7 @@ If any check fails, capture:
 ## Sign-Off
 
 - Overall result:
-  - [ ] PASS
+  - [x] PASS
   - [ ] FAIL
 - [x] All failures and skipped checks documented.
-- [ ] Ready for commit/sign-off.
+- [x] Ready for commit/sign-off.
