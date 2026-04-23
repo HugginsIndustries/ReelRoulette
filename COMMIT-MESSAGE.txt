@@ -19,7 +19,6 @@ Instructions:
 
 Commit Message:
 
-Bugfix: make Linux packaging use a stable appimagetool bootstrap
+Chore: bump dev version surfaces to 0.12.0-dev
 
-- Keep Ubuntu apt dependencies to available packages (`ffmpeg`, `squashfs-tools`, `desktop-file-utils`) and stop trying to apt-install missing `appimagetool`.
-- Install AppImageKit 12 `appimagetool` by extracting the `.AppImage` to `/opt/appimagetool` and symlinking `/usr/local/bin/appimagetool` to `AppRun` for CI usage.
+- Set OpenAPI, `.csproj`, server `assetsVersion`, docs examples, and tests to `0.12.0-dev`.

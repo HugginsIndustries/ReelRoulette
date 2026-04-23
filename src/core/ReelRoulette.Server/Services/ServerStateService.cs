@@ -81,7 +81,7 @@ public sealed class ServerStateService
     {
         return ApiContractMapper.MapVersion(
             "1",
-            assetsVersion: "0.11.0",
+            assetsVersion: "0.12.0-dev",
             minimumCompatibleApiVersion: "0",
             supportedApiVersions: SupportedApiVersions,
             capabilities: Capabilities);

@@ -164,7 +164,7 @@ pwsh ./tools/scripts/run-server-rebuild.ps1
 Set release-aligned version surfaces in one step:
 
 ```bash
-pwsh ./tools/scripts/set-release-version.ps1 -Version 0.11.0
+pwsh ./tools/scripts/set-release-version.ps1 -Version 0.12.0-dev
 ```
 
 By default this also updates the desktop app `<Version>`, regenerates WebUI OpenAPI contracts (`npm run generate:contracts`), and runs the same verify steps as `full-release.ps1` when you pass `-Version` there (solution build/test, WebUI verify, deploy smoke). Pass `-NoUpdateDesktopVersion`, `-NoRegenerateContracts`, and/or `-NoRunVerify` to skip any of those. Use `-NoDocUpdates` to leave `README.md` / `docs/dev-setup.md` release command examples unchanged. `full-release.ps1` forwards those `-No*` switches to `set-release-version.ps1` when `-Version` is set; if you omit `-Version` on `full-release.ps1`, the version/verify step is skipped and packaging reads `<Version>` from each `.csproj`.
@@ -268,7 +268,7 @@ pwsh ./tools/scripts/package-desktop-win-inno.ps1
 - **Chained release build**: with `-Version <ver>`, runs `set-release-version.ps1` (same defaults as under **Helper Scripts**; optional `-NoDocUpdates`, `-NoUpdateDesktopVersion`, `-NoRegenerateContracts`, `-NoRunVerify` are forwarded), then platform-appropriate packaging. Omit `-Version` to skip `set-release-version` and package using each component’s `.csproj` `<Version>`.
 
 ```bash
-pwsh ./tools/scripts/full-release.ps1 -Version 0.11.0
+pwsh ./tools/scripts/full-release.ps1 -Version 0.12.0-dev
 ```
 
 On **Linux**, this produces `artifacts/packages/portable/*.tar.gz` and `artifacts/packages/appimage/*.AppImage` for server and desktop (AppImage steps require `appimagetool`); Inno installer steps are skipped. On **Windows**, it produces portable `.zip` outputs and Inno **`.exe`** installers.
