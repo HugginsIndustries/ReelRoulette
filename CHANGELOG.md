@@ -11,7 +11,7 @@ This file follows a Keep a Changelog style format.
 
 ### Changed
 
-- *No unreleased changes yet.*
+- **Desktop cleanup:** Removed unused desktop fingerprint/history wrappers, duplicate/source-stat adapter DTOs, Core state-service boxes, local global-stat aggregation, and duration/loudness scan wrapper methods from the safe migration-cleanup pass.
 
 ### Fixed
 

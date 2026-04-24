@@ -15,6 +15,8 @@ The playback history concept was evidently removed or never fully wired.
 
 **Action:** Remove.
 
+**Status:** Completed — removed the unused desktop `HistoryEntry.cs` file.
+
 ---
 
 ### 1.2 `FileFingerprintService.cs`
@@ -24,6 +26,8 @@ Only referenced inside `FingerprintCoordinator.cs`, which is itself not referenc
 
 **Action:** Remove (once 1.3 is removed).
 
+**Status:** Completed — removed the unused desktop wrapper after removing the coordinator.
+
 ---
 
 ### 1.3 `FingerprintCoordinator.cs`
@@ -32,6 +36,8 @@ Full background fingerprinting queue and worker with `Enqueue`, `ComputeOnDemand
 Not instantiated or called anywhere in `MainWindow.axaml.cs` or any other file — fingerprinting was fully migrated to `RefreshPipelineService` on the server.
 
 **Action:** Remove.
+
+**Status:** Completed — removed the unused desktop fingerprint coordinator.
 
 ---
 
@@ -53,6 +59,8 @@ This method is no longer called from `MainWindow`. Only `GetSettingsPath()` and 
 
 **Action:** Remove `GetLibraryIndexPath()`.
 
+**Status:** Completed — removed `GetLibraryIndexPath()` from `AppDataManager.cs`.
+
 ---
 
 ### 1.6 `DuplicatesModels.cs`
@@ -61,6 +69,8 @@ This method is no longer called from `MainWindow`. Only `GetSettingsPath()` and 
 The adapter mapping is a thin manual copy; these types are redundant given the identically-shaped `CoreDuplicate*` types already defined in `CoreServerApiClient.cs`.
 
 **Action:** Remove; update `DuplicatesDialog` and `ManageSourcesDialog` to use `CoreDuplicate*` types directly.
+
+**Status:** Completed — removed local duplicate DTOs; duplicate dialogs now use `CoreDuplicate*` API DTOs directly.
 
 ---
 
@@ -71,6 +81,8 @@ It is a subset of `CoreSourceStatsResponse`, which is already available from `/a
 The local computation runs against the desktop-local `LibraryIndex` projection, duplicating what the server already exposes.
 
 **Action:** Remove; replace with `CoreSourceStatsResponse` from the API.
+
+**Status:** Completed — removed `SourceStatistics.cs`; `ManageSourcesDialog` now binds source rows to `CoreSourceStatsResponse` from `/api/library/stats`.
 
 ---
 
@@ -135,6 +147,8 @@ In the desktop they serve as glorified local variable holders — the state they
 
 **Action:** Remove the Core state service instances from the desktop; replace with plain fields or a local settings bag.
 
+**Status:** Completed — removed the desktop Core state-service instances and persisted settings directly from local fields.
+
 ---
 
 ### 2.7 `MainWindow.axaml.cs` — `RecalculateGlobalStats()` (local stats aggregation)
@@ -144,6 +158,8 @@ The server exposes identical computed stats via `/api/library/stats` (already po
 The desktop runs a local aggregation in addition to the API fetch, maintaining a parallel computation path against a potentially stale snapshot.
 
 **Action:** Migrate; fetch stats exclusively from `/api/library/stats` and remove the local aggregation loop.
+
+**Status:** Completed — removed the desktop local global-stats aggregation loop; stats now refresh from `/api/library/stats`.
 
 ---
 
@@ -170,3 +186,5 @@ Same structural issue as 2.8: `INotifyPropertyChanged` and computed UI propertie
 `ParseDurationFilter`/`ParseDurationFilterString` parse combobox label strings (`"5s"`, `"30m"`, etc.) into seconds — a UI concern that belongs in `FilterDialog`, not in the main window.
 
 **Action:** Inline `StartDurationScan`/`StartLoudnessScan` call sites and remove the wrapper methods; move duration-label parsing into `FilterDialog`.
+
+**Status:** Completed — inlined scan request call sites, removed the wrapper methods, and moved duration-label parsing into `FilterDialog`.

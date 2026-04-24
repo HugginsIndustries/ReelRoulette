@@ -19,6 +19,8 @@ Instructions:
 
 Commit Message:
 
-Chore: bump dev version surfaces to 0.12.0-dev
+Refactor: remove safe desktop cleanup leftovers
 
-- Set OpenAPI, `.csproj`, server `assetsVersion`, docs examples, and tests to `0.12.0-dev`.
+- Remove dead desktop fingerprint/history/local duplicate/source-stat cleanup leftovers.
+- Route desktop duplicate and source-stat views directly through Core API DTOs.
+- Keep desktop global stats API-backed via `/api/library/stats`.
