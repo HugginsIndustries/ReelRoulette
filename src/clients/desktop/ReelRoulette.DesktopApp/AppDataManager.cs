@@ -43,11 +43,6 @@ namespace ReelRoulette
             return Path.Combine(AppDataDirectory, "desktop-settings.json");
         }
 
-        public static string GetLibraryIndexPath()
-        {
-            return Path.Combine(AppDataDirectory, "library.json");
-        }
-
         public static string GetBackupDirectoryPath()
         {
             var backupDir = Path.Combine(AppDataDirectory, "backups");

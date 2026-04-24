@@ -41,9 +41,15 @@ public sealed class LibraryGlobalStatsResponse
     public int TotalMedia { get; set; }
     public int Favorites { get; set; }
     public int Blacklisted { get; set; }
+    public int UniquePlayedVideos { get; set; }
+    public int UniquePlayedPhotos { get; set; }
     public int UniquePlayedMedia { get; set; }
+    public int NeverPlayedVideos { get; set; }
+    public int NeverPlayedPhotos { get; set; }
     public int NeverPlayedMedia { get; set; }
     public int TotalPlays { get; set; }
+    public int VideosWithAudio { get; set; }
+    public int VideosWithoutAudio { get; set; }
 }
 
 public sealed class SourceStatsResponse
@@ -500,6 +506,7 @@ public sealed class DuplicateGroupItemResponse
     public bool IsBlacklisted { get; set; }
     public int PlayCount { get; set; }
     public int TagCount { get; set; }
+    public DateTime? LastWriteTimeUtc { get; set; }
 }
 
 public sealed class DuplicateApplyRequest

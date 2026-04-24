@@ -12,6 +12,13 @@ using System.Threading.Tasks;
 
 namespace ReelRoulette
 {
+    public enum DuplicateScanScope
+    {
+        CurrentSource = 0,
+        AllEnabledSources = 1,
+        AllSources = 2
+    }
+
     public partial class ManageSourcesDialog : Window, INotifyPropertyChanged
     {
         private readonly Func<Task<CoreLibraryStatsResponse?>>? _getLibraryStatsAsync;
@@ -77,7 +84,7 @@ namespace ReelRoulette
                         ? "Manage Sources requires core API connection."
                         : "Use Library -> Import Folder to add a source.",
                     IsEnabled = false,
-                    Statistics = new SourceStatistics()
+                    Statistics = new CoreSourceStatsResponse()
                 };
                 _sources.Add(emptyViewModel);
                 SourcesItemsControl.ItemsSource = _sources;
@@ -96,18 +103,7 @@ namespace ReelRoulette
                     DisplayName = displayName,
                     RootPath = source.RootPath,
                     IsEnabled = source.IsEnabled,
-                    Statistics = new SourceStatistics
-                    {
-                        TotalVideos = source.TotalVideos,
-                        TotalPhotos = source.TotalPhotos,
-                        TotalMedia = source.TotalMedia,
-                        VideosWithAudio = source.VideosWithAudio,
-                        VideosWithoutAudio = source.VideosWithoutAudio,
-                        TotalDuration = TimeSpan.FromSeconds(Math.Max(0, source.TotalDurationSeconds)),
-                        AverageDuration = source.AverageDurationSeconds.HasValue
-                            ? TimeSpan.FromSeconds(Math.Max(0, source.AverageDurationSeconds.Value))
-                            : null
-                    }
+                    Statistics = source
                 };
 
                 _sources.Add(viewModel);
@@ -289,30 +285,10 @@ namespace ReelRoulette
                     return;
                 }
 
-                var scan = new DuplicateScanResult
-                {
-                    Groups = scanResponse.Groups.Select(group => new DuplicateGroup
-                    {
-                        Fingerprint = group.Fingerprint,
-                        Items = group.Items.Select(item => new DuplicateGroupItem
-                        {
-                            ItemId = item.ItemId,
-                            FullPath = item.FullPath,
-                            SourceId = item.SourceId,
-                            IsFavorite = item.IsFavorite,
-                            IsBlacklisted = item.IsBlacklisted,
-                            PlayCount = item.PlayCount,
-                            TagCount = item.TagCount
-                        }).ToList()
-                    }).ToList(),
-                    ExcludedPending = scanResponse.ExcludedPending,
-                    ExcludedFailed = scanResponse.ExcludedFailed,
-                    ExcludedStale = scanResponse.ExcludedStale
-                };
                 var dialog = new DuplicatesDialog(
                     _applyDuplicatesAsync,
                     _scanDuplicatesAsync,
-                    scan,
+                    scanResponse,
                     scope.Value,
                     sourceId,
                     _coreServerBaseUrl,
@@ -496,7 +472,7 @@ namespace ReelRoulette
         private string _displayName = string.Empty;
         private string _rootPath = string.Empty;
         private bool _isEnabled = true;
-        private SourceStatistics _statistics = new();
+        private CoreSourceStatsResponse _statistics = new();
 
         public string Id
         {
@@ -529,10 +505,29 @@ namespace ReelRoulette
 
         public string IsEnabledText => IsEnabled ? "Enabled" : "Disabled";
 
-        public SourceStatistics Statistics
+        public CoreSourceStatsResponse Statistics
         {
             get => _statistics;
             set { _statistics = value; OnPropertyChanged(); }
+        }
+
+        public string TotalDurationFormatted
+        {
+            get
+            {
+                var duration = TimeSpan.FromSeconds(Math.Max(0, Statistics.TotalDurationSeconds));
+                if (duration == TimeSpan.Zero)
+                {
+                    return "0m";
+                }
+
+                if (duration.TotalHours >= 1)
+                {
+                    return $"{(int)duration.TotalHours}h {duration.Minutes}m";
+                }
+
+                return $"{duration.Minutes}m";
+            }
         }
 
         public event PropertyChangedEventHandler? PropertyChanged;

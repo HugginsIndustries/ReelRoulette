@@ -1414,6 +1414,12 @@ namespace ReelRoulette
             if (string.IsNullOrWhiteSpace(text))
                 return null;
 
+            var parsedLabelSeconds = ParseDurationLabelSeconds(text);
+            if (parsedLabelSeconds.HasValue)
+            {
+                return TimeSpan.FromSeconds(parsedLabelSeconds.Value);
+            }
+
             // Try parsing HH:MM:SS or MM:SS format
             var parts = text.Split(':');
             if (parts.Length == 2)
@@ -1442,6 +1448,24 @@ namespace ReelRoulette
             }
 
             return null;
+        }
+
+        private static long? ParseDurationLabelSeconds(string value)
+        {
+            return value.Trim() switch
+            {
+                "No Minimum" or "No Maximum" => null,
+                "5s" => 5,
+                "10s" => 10,
+                "30s" => 30,
+                "1m" => 60,
+                "2m" => 120,
+                "5m" => 300,
+                "10m" => 600,
+                "15m" => 900,
+                "30m" => 1800,
+                _ => null
+            };
         }
 
         public new event PropertyChangedEventHandler? PropertyChanged;

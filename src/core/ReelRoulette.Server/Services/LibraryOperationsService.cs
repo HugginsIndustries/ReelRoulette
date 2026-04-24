@@ -164,14 +164,30 @@ public sealed class LibraryOperationsService
             var totalPhotos = 0;
             var favorites = 0;
             var blacklisted = 0;
+            var uniquePlayedVideos = 0;
+            var uniquePlayedPhotos = 0;
             var uniquePlayedMedia = 0;
             var totalPlays = 0;
+            var videosWithAudio = 0;
+            var videosWithoutAudio = 0;
 
             foreach (var item in itemNodes)
             {
-                if (IsVideoItem(item))
+                var isVideo = IsVideoItem(item);
+                if (isVideo)
                 {
                     totalVideos++;
+                    if (item["hasAudio"] is not null)
+                    {
+                        if (GetNodeBool(item["hasAudio"], defaultValue: false))
+                        {
+                            videosWithAudio++;
+                        }
+                        else
+                        {
+                            videosWithoutAudio++;
+                        }
+                    }
                 }
                 else
                 {
@@ -193,6 +209,14 @@ public sealed class LibraryOperationsService
                 if (playCount > 0)
                 {
                     uniquePlayedMedia++;
+                    if (isVideo)
+                    {
+                        uniquePlayedVideos++;
+                    }
+                    else
+                    {
+                        uniquePlayedPhotos++;
+                    }
                 }
             }
 
@@ -251,9 +275,15 @@ public sealed class LibraryOperationsService
                     TotalMedia = itemNodes.Count,
                     Favorites = favorites,
                     Blacklisted = blacklisted,
+                    UniquePlayedVideos = uniquePlayedVideos,
+                    UniquePlayedPhotos = uniquePlayedPhotos,
                     UniquePlayedMedia = uniquePlayedMedia,
+                    NeverPlayedVideos = Math.Max(0, totalVideos - uniquePlayedVideos),
+                    NeverPlayedPhotos = Math.Max(0, totalPhotos - uniquePlayedPhotos),
                     NeverPlayedMedia = Math.Max(0, itemNodes.Count - uniquePlayedMedia),
-                    TotalPlays = totalPlays
+                    TotalPlays = totalPlays,
+                    VideosWithAudio = videosWithAudio,
+                    VideosWithoutAudio = videosWithoutAudio
                 },
                 Sources = sourceStats
             };
