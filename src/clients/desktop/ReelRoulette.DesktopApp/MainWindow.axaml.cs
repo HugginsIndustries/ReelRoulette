@@ -30,7 +30,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using ReelRoulette.LibraryArchive;
 using System.Timers;
-using ReelRoulette.Core.State;
 using ReelRoulette.Core.Storage;
 
 namespace ReelRoulette
@@ -83,10 +82,7 @@ namespace ReelRoulette
         private bool _hasShownMissingLoudnessWarning = false;
 
         // Randomization mode state (runtime-only, rebuilt as eligible-set changes)
-        private readonly RandomizationStateService _randomizationStateService = new();
-        private readonly FilterSessionStateService _filterSessionStateService = new();
-        private readonly PlaybackSessionStateService _playbackSessionStateService = new();
-        private readonly RandomizationRuntimeState _desktopRandomizationState;
+        private readonly RandomizationRuntimeState _desktopRandomizationState = new();
         private readonly object _desktopRandomizationLock = new object();
         private RandomizationMode _randomizationMode = RandomizationMode.SmartShuffle;
         private int _isHandlingEndReached = 0;
@@ -872,7 +868,6 @@ namespace ReelRoulette
                 Log("MainWindow constructor: Calling InitializeComponent...");
                 InitializeComponent();
                 Log("MainWindow constructor: InitializeComponent completed.");
-                _desktopRandomizationState = new RandomizationRuntimeState(_randomizationStateService.GetOrCreate("desktop"));
                 _coreServerApiClient = new CoreServerApiClient(_coreServerHttpClient);
                 _coreServerLongRunningApiClient = new CoreServerApiClient(_coreServerLongRunningHttpClient);
             
@@ -1440,7 +1435,7 @@ namespace ReelRoulette
                 RefreshLibraryPanelFromServiceState();
 
                 RebuildPlayQueueIfNeeded();
-                RecalculateGlobalStats();
+                _ = RefreshGlobalStatsFromCoreAsync();
                 StatusTextBlock.Text = statusMessage;
             }
             finally
@@ -1641,7 +1636,7 @@ namespace ReelRoulette
             item.LastPlayedUtc = playback.LastPlayedUtc?.ToUniversalTime() ?? DateTime.UtcNow;
 
             UpdateCurrentFileStatsUi();
-            RecalculateGlobalStats();
+            _ = RefreshGlobalStatsFromCoreAsync();
 
             var playbackSensitiveSort = _librarySortMode is "LastPlayed" or "PlayCount" or "Duration";
             if (_showLibraryPanel && ((_currentFilterState?.OnlyNeverPlayed ?? false) || playbackSensitiveSort))
@@ -1654,103 +1649,34 @@ namespace ReelRoulette
 
         private void RecalculateGlobalStats()
         {
-            // Ensure we're on UI thread for property updates
-            if (!Avalonia.Threading.Dispatcher.UIThread.CheckAccess())
-            {
-                Avalonia.Threading.Dispatcher.UIThread.Post(() => RecalculateGlobalStats());
-                return;
-            }
+            _ = RefreshGlobalStatsFromCoreAsync();
+        }
 
-            Log("RecalculateGlobalStats: Starting global stats recalculation");
+        private async Task RefreshGlobalStatsFromCoreAsync()
+        {
+            var stats = await FetchLibraryStatsViaCoreAsync();
+            await Dispatcher.UIThread.InvokeAsync(() => ApplyGlobalStats(stats));
+        }
 
-            // Build union of all known video paths
-            var knownVideos = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private void ApplyGlobalStats(CoreLibraryStatsResponse? stats)
+        {
+            var global = stats?.Global;
+            GlobalTotalVideosKnown = global?.TotalVideos ?? 0;
+            GlobalTotalPhotosKnown = global?.TotalPhotos ?? 0;
+            GlobalTotalMediaKnown = global?.TotalMedia ?? 0;
+            GlobalFavoritesCount = global?.Favorites ?? 0;
+            GlobalBlacklistCount = global?.Blacklisted ?? 0;
+            GlobalUniqueVideosPlayed = global?.UniquePlayedVideos ?? 0;
+            GlobalUniquePhotosPlayed = global?.UniquePlayedPhotos ?? 0;
+            GlobalUniqueMediaPlayed = global?.UniquePlayedMedia ?? 0;
+            GlobalTotalPlays = global?.TotalPlays ?? 0;
+            GlobalNeverPlayedVideosKnown = global?.NeverPlayedVideos ?? 0;
+            GlobalNeverPlayedPhotosKnown = global?.NeverPlayedPhotos ?? 0;
+            GlobalNeverPlayedMediaKnown = global?.NeverPlayedMedia ?? 0;
+            GlobalVideosWithAudio = global?.VideosWithAudio ?? 0;
+            GlobalVideosWithoutAudio = global?.VideosWithoutAudio ?? 0;
 
-            // Add library items
-            if (_libraryIndex != null)
-            {
-                foreach (var item in _libraryIndex.Items)
-                {
-                    knownVideos.Add(item.FullPath);
-                }
-            }
-
-            // Calculate global stats from library items
-            if (_libraryIndex != null)
-            {
-                var videos = _libraryIndex.Items.Where(i => i.MediaType == MediaType.Video).ToList();
-                var photos = _libraryIndex.Items.Where(i => i.MediaType == MediaType.Photo).ToList();
-                GlobalTotalVideosKnown = videos.Count;
-                GlobalTotalPhotosKnown = photos.Count;
-                GlobalTotalMediaKnown = videos.Count + photos.Count;
-                GlobalFavoritesCount = _libraryIndex.Items.Count(i => i.IsFavorite);
-                GlobalBlacklistCount = _libraryIndex.Items.Count(i => i.IsBlacklisted);
-                Log($"RecalculateGlobalStats: Library stats - Videos: {GlobalTotalVideosKnown}, Photos: {GlobalTotalPhotosKnown}, Total Media: {GlobalTotalMediaKnown}, Favorites: {GlobalFavoritesCount}, Blacklisted: {GlobalBlacklistCount}");
-            }
-            else
-            {
-                GlobalTotalVideosKnown = knownVideos.Count;
-                GlobalTotalPhotosKnown = 0;
-                GlobalTotalMediaKnown = knownVideos.Count;
-                GlobalFavoritesCount = 0;
-                GlobalBlacklistCount = 0;
-                Log($"RecalculateGlobalStats: No library index, using known videos count: {GlobalTotalVideosKnown}");
-            }
-
-            // Calculate stats from library items, distinguishing videos from photos
-            int uniqueVideosPlayed = 0;
-            int uniquePhotosPlayed = 0;
-            int totalPlays = 0;
-            int videosWithAudio = 0;
-            int videosWithoutAudio = 0;
-
-            if (_libraryIndex != null)
-            {
-                foreach (var item in _libraryIndex.Items)
-                {
-                    if (item.PlayCount > 0)
-                    {
-                        totalPlays += item.PlayCount;
-                        
-                        // Distinguish between videos and photos
-                        if (item.MediaType == MediaType.Video)
-                        {
-                            uniqueVideosPlayed++;
-                        }
-                        else if (item.MediaType == MediaType.Photo)
-                        {
-                            uniquePhotosPlayed++;
-                        }
-                    }
-                    
-                    // Audio stats only apply to videos
-                    if (item.MediaType == MediaType.Video)
-                    {
-                        if (item.HasAudio == true)
-                        {
-                            videosWithAudio++;
-                        }
-                        else if (item.HasAudio == false)
-                        {
-                            videosWithoutAudio++;
-                        }
-                        // If HasAudio == null (unknown), exclude from both counts
-                    }
-                }
-            }
-
-            GlobalUniqueVideosPlayed = uniqueVideosPlayed;
-            GlobalUniquePhotosPlayed = uniquePhotosPlayed;
-            GlobalUniqueMediaPlayed = uniqueVideosPlayed + uniquePhotosPlayed;
-            GlobalTotalPlays = totalPlays;
-            GlobalNeverPlayedVideosKnown = Math.Max(0, GlobalTotalVideosKnown - GlobalUniqueVideosPlayed);
-            GlobalNeverPlayedPhotosKnown = Math.Max(0, GlobalTotalPhotosKnown - GlobalUniquePhotosPlayed);
-            GlobalNeverPlayedMediaKnown = Math.Max(0, GlobalTotalMediaKnown - GlobalUniqueMediaPlayed);
-            GlobalVideosWithAudio = videosWithAudio;
-            GlobalVideosWithoutAudio = videosWithoutAudio;
-            
-            // Update baseline loudness display
-            if (_volumeNormalizationEnabled && videosWithAudio > 0)
+            if (_volumeNormalizationEnabled && GlobalVideosWithAudio > 0)
             {
                 double baseline = GetLibraryBaselineLoudness();
                 string mode = _baselineAutoMode ? " (Auto)" : " (Manual)";
@@ -1764,14 +1690,12 @@ namespace ReelRoulette
             {
                 GlobalBaselineLoudnessDisplay = "Normalization off";
             }
-            
-            Log($"RecalculateGlobalStats: Playback stats - Unique videos played: {GlobalUniqueVideosPlayed}, Unique photos played: {GlobalUniquePhotosPlayed}, Unique media played: {GlobalUniqueMediaPlayed}, Total plays: {GlobalTotalPlays}");
-            Log($"RecalculateGlobalStats: Never played - Videos: {GlobalNeverPlayedVideosKnown}, Photos: {GlobalNeverPlayedPhotosKnown}, Media: {GlobalNeverPlayedMediaKnown}");
-            Log($"RecalculateGlobalStats: Audio stats - With audio: {GlobalVideosWithAudio}, Without audio: {GlobalVideosWithoutAudio}");
-            Log("RecalculateGlobalStats: Global stats recalculation complete");
-            
-            // Update library info text
-            UpdateLibraryInfoText();
+
+            Log($"CoreLibraryStats: Applied stats from API - Videos: {GlobalTotalVideosKnown}, Photos: {GlobalTotalPhotosKnown}, Total Media: {GlobalTotalMediaKnown}, Favorites: {GlobalFavoritesCount}, Blacklisted: {GlobalBlacklistCount}, Total Plays: {GlobalTotalPlays}");
+            if (stats != null)
+            {
+                UpdateLibraryInfoText();
+            }
             UpdateFilterSummaryText();
         }
 
@@ -2116,71 +2040,6 @@ namespace ReelRoulette
             BlacklistToggle.IsChecked = isBlacklisted;
             
             Log($"UpdateCurrentFileStatsUi: Stats UI updated - MediaType: {(IsCurrentFileVideo ? "Video" : "Photo")}, Favorite: {CurrentVideoIsFavoriteDisplay}, Blacklisted: {CurrentVideoIsBlacklistedDisplay}, Duration: {CurrentVideoDurationDisplay}, Audio: {CurrentVideoHasAudioDisplay}, Tags: {CurrentVideoTagsDisplay}");
-        }
-
-        #endregion
-
-        #region Duration Cache System
-
-        private void StartDurationScan(string rootFolder)
-        {
-            Log($"StartDurationScan: Delegating duration scan request to core refresh pipeline for folder: {rootFolder}");
-            _ = Task.Run(async () =>
-            {
-                var accepted = await RequestCoreRefreshAsync();
-                if (!accepted)
-                {
-                    SetStatusMessage("Duration scan request deferred: core refresh unavailable or already running.", 0);
-                }
-            });
-        }
-
-        private void StartLoudnessScan(string rootFolder, bool rescanAll = false)
-        {
-            Log($"StartLoudnessScan: Delegating loudness scan request to core refresh pipeline for folder: {rootFolder}, RescanAll: {rescanAll}");
-            _ = Task.Run(async () =>
-            {
-                var accepted = await RequestCoreRefreshAsync();
-                if (!accepted)
-                {
-                    SetStatusMessage("Loudness scan request deferred: core refresh unavailable or already running.", 0);
-                }
-            });
-        }
-
-        private long? ParseDurationFilter(object? selectedItem)
-        {
-            if (selectedItem is ComboBoxItem item)
-            {
-                var content = item.Content?.ToString();
-                return ParseDurationFilterString(content);
-            }
-            else if (selectedItem is string str)
-            {
-                return ParseDurationFilterString(str);
-            }
-            return null;
-        }
-
-        private long? ParseDurationFilterString(string? value)
-        {
-            if (string.IsNullOrEmpty(value))
-                return null;
-
-            return value switch
-            {
-                "No Minimum" or "No Maximum" => null,
-                "5s" => 5,
-                "10s" => 10,
-                "30s" => 30,
-                "1m" => 60,
-                "2m" => 120,
-                "5m" => 300,
-                "10m" => 600,
-                "15m" => 900,
-                "30m" => 1800,
-                _ => null
-            };
         }
 
         #endregion
@@ -7131,11 +6990,6 @@ namespace ReelRoulette
                 _filterPresets = mapped;
                 _activePresetName = await MatchPresetNameFromCoreAsync(_currentFilterState) ??
                                     ResolveMatchingPresetName(_currentFilterState, _filterPresets);
-                _filterSessionStateService.Set(
-                    _currentFilterState ?? new FilterState(),
-                    _filterPresets.Cast<object>(),
-                    _activePresetName);
-
                 await Dispatcher.UIThread.InvokeAsync(() =>
                 {
                     UpdateLibraryPresetComboBox();
@@ -7632,13 +7486,6 @@ namespace ReelRoulette
             _duplicateHandlingDefaultBehavior = settings.DuplicateHandlingDefaultBehavior;
             _isMuted = settings.IsMuted;
             _userVolumePreference = settings.VolumeLevel; // Restore saved volume level
-            _playbackSessionStateService.Set(new PlaybackSessionState
-            {
-                LoopEnabled = _isLoopEnabled,
-                AutoPlayNext = _autoPlayNext,
-                IsMuted = _isMuted,
-                VolumeLevel = _userVolumePreference
-            });
             
             // Initialize _lastNonZeroVolume from saved volume for proper unmute behavior
             if (settings.VolumeLevel > 0)
@@ -7756,10 +7603,6 @@ namespace ReelRoulette
             _filterPresets = [];
             _activePresetName = null;
             _autoTagScanFullLibrary = settings.AutoTagScanFullLibrary;
-            _filterSessionStateService.Set(
-                _currentFilterState,
-                (_filterPresets ?? new List<FilterPreset>()).Cast<object>(),
-                _activePresetName);
             Log("LoadSettings: Presets will be loaded from API; active preset will be derived from filter state.");
             
             // Update filter summary after loading (to show preset name if active)
@@ -7872,20 +7715,12 @@ namespace ReelRoulette
                 settings.AudioFilterMode = _audioFilterMode;
                 
                 // Playback preferences (now persisted)
-                _playbackSessionStateService.Set(new PlaybackSessionState
-                {
-                    LoopEnabled = _isLoopEnabled,
-                    AutoPlayNext = _autoPlayNext,
-                    IsMuted = _isMuted,
-                    VolumeLevel = _isMuted ? _lastNonZeroVolume : _userVolumePreference
-                });
-                var playbackState = _playbackSessionStateService.GetSnapshot();
-                settings.LoopEnabled = playbackState.LoopEnabled;
-                settings.AutoPlayNext = playbackState.AutoPlayNext;
+                settings.LoopEnabled = _isLoopEnabled;
+                settings.AutoPlayNext = _autoPlayNext;
                 settings.ForceApiPlayback = _forceApiPlayback;
                 settings.DuplicateHandlingDefaultBehavior = _duplicateHandlingDefaultBehavior;
-                settings.IsMuted = playbackState.IsMuted;
-                settings.VolumeLevel = playbackState.VolumeLevel;
+                settings.IsMuted = _isMuted;
+                settings.VolumeLevel = _isMuted ? _lastNonZeroVolume : _userVolumePreference;
                 settings.RandomizationMode = _randomizationMode;
                 settings.RandomizationModeMigrated = _randomizationModeMigrated;
                 settings.PhotoDisplayDurationSeconds = _photoDisplayDurationSeconds;
@@ -7906,12 +7741,7 @@ namespace ReelRoulette
                 settings.CoreClientId = _coreClientId;
 
                 // Filter state (always save an object, never null)
-                _filterSessionStateService.Set(
-                    _currentFilterState ?? new FilterState(),
-                    (_filterPresets ?? new List<FilterPreset>()).Cast<object>(),
-                    _activePresetName);
-                var filterSession = _filterSessionStateService.GetSnapshot();
-                settings.FilterState = filterSession.CurrentFilterState as FilterState ?? new FilterState();
+                settings.FilterState = _currentFilterState ?? new FilterState();
                 
                 settings.AutoTagScanFullLibrary = _autoTagScanFullLibrary;
                 
@@ -9848,8 +9678,15 @@ namespace ReelRoulette
             Log($"  Starting duration scan for {sourceRoots.Count} source(s) in library");
             StatusTextBlock.Text = $"Starting duration scan for {sourceRoots.Count} source(s)...";
             
-            // Start scan for first source (could be enhanced to scan all sources)
-            StartDurationScan(sourceRoots[0]);
+            Log($"ScanDurations_Click: Delegating duration scan request to core refresh pipeline for folder: {sourceRoots[0]}");
+            _ = Task.Run(async () =>
+            {
+                var accepted = await RequestCoreRefreshAsync();
+                if (!accepted)
+                {
+                    SetStatusMessage("Duration scan request deferred: core refresh unavailable or already running.", 0);
+                }
+            });
         }
 
         private async void ScanLoudness_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -9975,8 +9812,15 @@ namespace ReelRoulette
             Log($"  Starting loudness scan for {sourceRoots.Count} source(s) in library - Mode: {(rescanAll ? "Rescan All" : "Only New Files")}");
             StatusTextBlock.Text = $"Starting loudness scan ({(rescanAll ? "all files" : "new files only")})...";
             
-            // Start scan for first source with rescan flag
-            StartLoudnessScan(sourceRoots[0], rescanAll);
+            Log($"ScanLoudness_Click: Delegating loudness scan request to core refresh pipeline for folder: {sourceRoots[0]}, RescanAll: {rescanAll}");
+            _ = Task.Run(async () =>
+            {
+                var accepted = await RequestCoreRefreshAsync();
+                if (!accepted)
+                {
+                    SetStatusMessage("Loudness scan request deferred: core refresh unavailable or already running.", 0);
+                }
+            });
         }
 
         // DurationFilter_Changed handler removed - now using FilterDialog

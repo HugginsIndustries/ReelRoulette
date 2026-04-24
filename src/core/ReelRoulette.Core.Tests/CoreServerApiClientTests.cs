@@ -469,9 +469,15 @@ public sealed class CoreServerApiClientTests
                         "totalMedia": 6,
                         "favorites": 1,
                         "blacklisted": 1,
+                        "uniquePlayedVideos": 2,
+                        "uniquePlayedPhotos": 1,
                         "uniquePlayedMedia": 3,
+                        "neverPlayedVideos": 2,
+                        "neverPlayedPhotos": 1,
                         "neverPlayedMedia": 3,
-                        "totalPlays": 9
+                        "totalPlays": 9,
+                        "videosWithAudio": 3,
+                        "videosWithoutAudio": 1
                       },
                       "sources": [
                         {
@@ -498,8 +504,12 @@ public sealed class CoreServerApiClientTests
         var snapshot = await client.GetLibraryStatsAsync("http://localhost:51301");
 
         Assert.NotNull(snapshot);
+        Assert.Equal(2, snapshot!.Global.UniquePlayedVideos);
+        Assert.Equal(1, snapshot.Global.UniquePlayedPhotos);
         Assert.Equal(6, snapshot!.Global.TotalMedia);
         Assert.Equal(9, snapshot.Global.TotalPlays);
+        Assert.Equal(3, snapshot.Global.VideosWithAudio);
+        Assert.Equal(1, snapshot.Global.VideosWithoutAudio);
         var source = Assert.Single(snapshot.Sources);
         Assert.Equal("src-1", source.SourceId);
         Assert.Equal(600, source.TotalDurationSeconds);

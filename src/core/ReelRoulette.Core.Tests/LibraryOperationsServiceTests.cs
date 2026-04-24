@@ -549,9 +549,15 @@ public sealed class LibraryOperationsServiceTests
             Assert.Equal(3, stats.Global.TotalMedia);
             Assert.Equal(1, stats.Global.Favorites);
             Assert.Equal(1, stats.Global.Blacklisted);
+            Assert.Equal(1, stats.Global.UniquePlayedVideos);
+            Assert.Equal(1, stats.Global.UniquePlayedPhotos);
             Assert.Equal(2, stats.Global.UniquePlayedMedia);
+            Assert.Equal(1, stats.Global.NeverPlayedVideos);
+            Assert.Equal(0, stats.Global.NeverPlayedPhotos);
             Assert.Equal(1, stats.Global.NeverPlayedMedia);
             Assert.Equal(3, stats.Global.TotalPlays);
+            Assert.Equal(1, stats.Global.VideosWithAudio);
+            Assert.Equal(1, stats.Global.VideosWithoutAudio);
 
             var sourceA = Assert.Single(stats.Sources, source => source.SourceId == "src-a");
             Assert.Equal(2, sourceA.TotalVideos);

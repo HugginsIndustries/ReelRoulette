@@ -84,7 +84,7 @@
                                             </TextBlock>
                                             <TextBlock FontSize="12" Foreground="Gray">
                                                 <Run Text="⏱️"/>
-                                                <Run Text="{Binding Statistics.TotalDurationFormatted}"/>
+                                                <Run Text="{Binding TotalDurationFormatted}"/>
                                             </TextBlock>
                                             <TextBlock FontSize="12" Foreground="Gray">
                                                 <Run Text="🔊"/>

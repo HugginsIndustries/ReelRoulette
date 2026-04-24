@@ -25,7 +25,7 @@ namespace ReelRoulette
     {
         private readonly Func<List<CoreDuplicateApplySelection>, Task<CoreDuplicateApplyResponse?>> _applyDuplicatesAsync;
         private readonly Func<DuplicateScanScope, string?, Task<CoreDuplicateScanResponse?>> _scanDuplicatesAsync;
-        private readonly DuplicateScanResult _scanResult;
+        private readonly CoreDuplicateScanResponse _scanResult;
         private readonly DuplicateScanScope _scope;
         private readonly string? _sourceId;
         private readonly string? _coreServerBaseUrl;
@@ -41,7 +41,7 @@ namespace ReelRoulette
             DataContext = this;
             _applyDuplicatesAsync = _ => Task.FromResult<CoreDuplicateApplyResponse?>(null);
             _scanDuplicatesAsync = (_, _) => Task.FromResult<CoreDuplicateScanResponse?>(null);
-            _scanResult = new DuplicateScanResult();
+            _scanResult = new CoreDuplicateScanResponse();
             _scope = DuplicateScanScope.AllSources;
             _coreServerBaseUrl = null;
             _duplicateHandlingDefaultBehavior = DuplicateHandlingDefaultBehavior.KeepAll;
@@ -50,7 +50,7 @@ namespace ReelRoulette
         public DuplicatesDialog(
             Func<List<CoreDuplicateApplySelection>, Task<CoreDuplicateApplyResponse?>> applyDuplicatesAsync,
             Func<DuplicateScanScope, string?, Task<CoreDuplicateScanResponse?>> scanDuplicatesAsync,
-            DuplicateScanResult scanResult,
+            CoreDuplicateScanResponse scanResult,
             DuplicateScanScope scope,
             string? sourceId,
             string? coreServerBaseUrl,
@@ -128,20 +128,7 @@ namespace ReelRoulette
             var updatedScan = await _scanDuplicatesAsync(_scope, _sourceId);
             if (updatedScan != null)
             {
-                _scanResult.Groups = updatedScan.Groups.Select(group => new DuplicateGroup
-                {
-                    Fingerprint = group.Fingerprint,
-                    Items = group.Items.Select(item => new DuplicateGroupItem
-                    {
-                        ItemId = item.ItemId,
-                        FullPath = item.FullPath,
-                        SourceId = item.SourceId,
-                        IsFavorite = item.IsFavorite,
-                        IsBlacklisted = item.IsBlacklisted,
-                        PlayCount = item.PlayCount,
-                        TagCount = item.TagCount
-                    }).ToList()
-                }).ToList();
+                _scanResult.Groups = updatedScan.Groups;
                 _scanResult.ExcludedPending = updatedScan.ExcludedPending;
                 _scanResult.ExcludedStale = updatedScan.ExcludedStale;
                 _scanResult.ExcludedFailed = updatedScan.ExcludedFailed;
@@ -289,7 +276,7 @@ namespace ReelRoulette
         }
 
         public DuplicateGroupViewModel(
-            DuplicateGroup group,
+            CoreDuplicateGroup group,
             string? coreServerBaseUrl,
             DuplicateHandlingDefaultBehavior defaultBehavior)
         {
@@ -405,7 +392,7 @@ namespace ReelRoulette
         public bool HasThumbnailBitmap => ThumbnailBitmap != null;
         public bool ShowThumbnailPlaceholder => ThumbnailBitmap == null;
 
-        public DuplicateItemOption(DuplicateGroupItem item, string? coreServerBaseUrl)
+        public DuplicateItemOption(CoreDuplicateGroupItem item, string? coreServerBaseUrl)
         {
             ItemId = item.ItemId;
             FullPath = item.FullPath;
