@@ -97,6 +97,8 @@ The same logic now also runs on the server in `LibraryPlaybackService`, so the d
 
 **Action:** Migrate. Remove client-side eligible-set computation for random selection (use `/api/random` only). Retain a lightweight local search/sort for library panel UI display, backed by the server projection, but move eligibility rules to the server.
 
+**Status:** Completed — removed `FilterService.cs` and all desktop references to `Core.Filtering.FilterSetBuilder`. Library panel `FilterState` is applied via `LibraryProjectionDisplayFilter` against the in-memory projection (mirrors former core rules for UI only). `GetEligibleItems` no longer builds a pool for random play; `PlayRandomVideoAsync` already uses `CoreServerApiClient.RequestRandomAsync` exclusively. Leftover `RebuildPlayQueueIfNeeded` / local `RandomSelectionEngine.RebuildState` wiring is unchanged for follow-up items **2.2** / **2.3**.
+
 ---
 
 ### 2.2 `RandomSelectionEngine.cs` + `RandomizationRuntimeState`
@@ -112,7 +114,7 @@ The desktop path (`GetEligibleItems` → `RebuildPlayQueueIfNeeded` → `RandomS
 
 ### 2.3 `MainWindow.axaml.cs` — `GetEligibleItems()` / `GetEligibleItemsAsync()` / `RebuildPlayQueueIfNeeded()`
 
-These methods build the local eligible item pool by calling `FilterService.BuildEligibleSetWithoutFileCheck`, then hand the result to `RandomSelectionEngine`.
+These methods rebuild local shuffle state from a (now empty) local pool, then hand the result to `RandomSelectionEngine` — a leftover parallel to server randomisation.
 This is the orchestration layer for the duplicate local randomisation pipeline (see 2.1 and 2.2).
 The entire code path should be removed in favour of the server `/api/random` call that the desktop already makes via `CoreServerApiClient.RequestRandomAsync`.
 

@@ -213,8 +213,7 @@ namespace ReelRoulette
         private bool _rememberLastFolder = true;
         private string? _lastFolderPath = null;
 
-        // Library system services
-        private readonly FilterService _filterService = new FilterService();
+        // Library projection (server-backed); panel filtering is local display-only.
         private LibraryIndex? _libraryIndex;
         private FilterState? _currentFilterState;
         private string? _activePresetName; // Track which preset is currently active for display in library panel
@@ -2278,15 +2277,13 @@ namespace ReelRoulette
                         
                         if (shouldApplyFilterState && _currentFilterState != null)
                         {
-                            Log("UpdateLibraryPanel: Applying FilterState...");
-                            // Use BuildEligibleSetWithoutFileCheck for performance - file existence will be checked when video is played
-                            var eligibleItems = _filterService.BuildEligibleSetWithoutFileCheck(_currentFilterState, _libraryIndex).ToList();
-                            Log($"UpdateLibraryPanel: FilterService returned {eligibleItems.Count} eligible items.");
-                            var eligiblePaths = new HashSet<string>(
-                                eligibleItems.Select(eligible => eligible.FullPath),
-                                StringComparer.OrdinalIgnoreCase);
-                            items = items.Where(item => eligiblePaths.Contains(item.FullPath)).ToList();
-                            Log($"UpdateLibraryPanel: After FilterState: {items.Count} items.");
+                            Log("UpdateLibraryPanel: Applying FilterState (library panel display projection)...");
+                            var beforeFilter = items.Count;
+                            items = items
+                                .Where(item =>
+                                    LibraryProjectionDisplayFilter.PassesFilterState(item, _libraryIndex, _currentFilterState))
+                                .ToList();
+                            Log($"UpdateLibraryPanel: After FilterState: {items.Count} items (was {beforeFilter}).");
                         }
                         else
                         {
@@ -2648,11 +2645,10 @@ namespace ReelRoulette
 
             if (shouldApplyFilterState && _currentFilterState != null)
             {
-                var eligibleItems = _filterService.BuildEligibleSetWithoutFileCheck(_currentFilterState, _libraryIndex);
-                var eligiblePaths = new HashSet<string>(
-                    eligibleItems.Select(i => i.FullPath),
-                    StringComparer.OrdinalIgnoreCase);
-                items = items.Where(item => eligiblePaths.Contains(item.FullPath)).ToList();
+                items = items
+                    .Where(item =>
+                        LibraryProjectionDisplayFilter.PassesFilterState(item, _libraryIndex, _currentFilterState))
+                    .ToList();
             }
 
             return ApplySort(items);
@@ -4438,35 +4434,16 @@ namespace ReelRoulette
 
         private List<LibraryItem> GetEligibleItems()
         {
-            Log("GetEligibleItems: Starting eligible pool calculation");
-            try
+            // Random playback uses /api/random only (see PlayRandomVideoAsync). Local shuffle state is not fed
+            // a desktop-built eligible set; see migration-cleanup 2.2 / 2.3 for removing the leftover rebuild path.
+            if (_libraryIndex == null || _currentFilterState == null)
             {
-                if (_libraryIndex == null || _currentFilterState == null)
-                {
-                    Log($"GetEligibleItems: Library system not available (libraryIndex: {_libraryIndex != null}, filterState: {_currentFilterState != null}), returning empty pool");
-                    return new List<LibraryItem>();
-                }
-
-                if (_libraryIndex.Items.Count == 0)
-                {
-                    Log("GetEligibleItems: Library has no items, returning empty pool");
-                    return new List<LibraryItem>();
-                }
-
-                var eligibleItems = _filterService.BuildEligibleSetWithoutFileCheck(_currentFilterState, _libraryIndex).ToList();
-                Log($"GetEligibleItems: FilterService returned {eligibleItems.Count} eligible items after filtering");
-                return eligibleItems;
-            }
-            catch (Exception ex)
-            {
-                Log($"GetEligibleItems: ERROR - Exception: {ex.GetType().Name}, Message: {ex.Message}");
-                Log($"GetEligibleItems: ERROR - Stack trace: {ex.StackTrace}");
-                if (ex.InnerException != null)
-                {
-                    Log($"GetEligibleItems: ERROR - Inner exception: {ex.InnerException.GetType().Name}, Message: {ex.InnerException.Message}");
-                }
+                Log($"GetEligibleItems: Library or filter state unavailable (libraryIndex: {_libraryIndex != null}, filterState: {_currentFilterState != null}); returning empty local pool.");
                 return new List<LibraryItem>();
             }
+
+            Log("GetEligibleItems: Returning empty local pool; random selection is API-authoritative.");
+            return new List<LibraryItem>();
         }
 
         private async Task<List<LibraryItem>> GetEligibleItemsAsync()

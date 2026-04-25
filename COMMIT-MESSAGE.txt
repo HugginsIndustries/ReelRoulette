@@ -19,8 +19,8 @@ Instructions:
 
 Commit Message:
 
-Refactor: remove safe desktop cleanup leftovers
+Refactor: desktop library filter without core FilterSetBuilder
 
-- Remove dead desktop fingerprint/history/local duplicate/source-stat cleanup leftovers.
-- Route desktop duplicate and source-stat views directly through Core API DTOs.
-- Keep desktop global stats API-backed via `/api/library/stats`.
+- Remove `FilterService` and desktop use of `Core.Filtering.FilterSetBuilder`.
+- Apply library panel `FilterState` via `LibraryProjectionDisplayFilter` on the in-memory projection.
+- Stop building a local eligible item list for random play; random remains `RequestRandomAsync` only.

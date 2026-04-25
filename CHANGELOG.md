@@ -12,6 +12,7 @@ This file follows a Keep a Changelog style format.
 ### Changed
 
 - **Desktop cleanup:** Removed unused desktop fingerprint/history wrappers, duplicate/source-stat adapter DTOs, Core state-service boxes, local global-stat aggregation, and duration/loudness scan wrapper methods from the safe migration-cleanup pass.
+- **Desktop filtering:** Dropped `FilterService` / `FilterSetBuilder` from the desktop; library panel filter state uses `LibraryProjectionDisplayFilter` on the server-backed projection, and random playback stays on `/api/random` via `RequestRandomAsync` (no desktop-built eligible pool).
 
 ### Fixed
 
