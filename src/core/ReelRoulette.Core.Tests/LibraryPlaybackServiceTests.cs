@@ -268,6 +268,30 @@ public sealed class LibraryPlaybackServiceTests : IDisposable
         Assert.Equal(withAudioPath, response!.Id);
     }
 
+    [Fact]
+    public void BuildRandomizationScopeKey_ShouldIsolateSessionsForSameClient()
+    {
+        var a = LibraryPlaybackService.BuildRandomizationScopeKey("client-1", "session-a");
+        var b = LibraryPlaybackService.BuildRandomizationScopeKey("client-1", "session-b");
+        Assert.NotEqual(a, b);
+    }
+
+    [Fact]
+    public void BuildRandomizationScopeKey_ShouldUseClientOnlyWhenSessionMissing()
+    {
+        var withBlankSession = LibraryPlaybackService.BuildRandomizationScopeKey("client-1", "   ");
+        var withNullSession = LibraryPlaybackService.BuildRandomizationScopeKey("client-1", null);
+        Assert.Equal(withNullSession, withBlankSession);
+    }
+
+    [Fact]
+    public void BuildRandomizationScopeKey_ShouldUseAnonymousClientWhenMissing()
+    {
+        var scoped = LibraryPlaybackService.BuildRandomizationScopeKey(null, "tab-session");
+        Assert.StartsWith("web-anonymous", scoped, StringComparison.Ordinal);
+        Assert.Contains("\u001f", scoped, StringComparison.Ordinal);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_tempDir))

@@ -119,17 +119,15 @@ public sealed class LibraryPlaybackService
             LastPlayedUtc = item.LastPlayedUtc
         }).ToList();
         var randomizationMode = ParseRandomizationMode(request.RandomizationMode);
-        var clientId = string.IsNullOrWhiteSpace(request.ClientId)
-            ? "web-anonymous"
-            : request.ClientId.Trim();
+        var scopeKey = BuildRandomizationScopeKey(request.ClientId, request.SessionId);
 
         string? selectedPath;
         lock (_randomizationLock)
         {
-            if (!_clientRandomizationStates.TryGetValue(clientId, out var state))
+            if (!_clientRandomizationStates.TryGetValue(scopeKey, out var state))
             {
                 state = new RandomizationRuntimeStateCore();
-                _clientRandomizationStates[clientId] = state;
+                _clientRandomizationStates[scopeKey] = state;
             }
 
             selectedPath = RandomSelectionEngineCore.SelectPath(
@@ -165,6 +163,21 @@ public sealed class LibraryPlaybackService
             isFavorite: selected.IsFavorite,
             isBlacklisted: selected.IsBlacklisted);
         return true;
+    }
+
+    /// <summary>
+    /// Isolates shuffle-bag / folder-spread state per browser tab (session) and per desktop process,
+    /// while keeping anonymous web clients that omit session on a single shared scope.
+    /// </summary>
+    internal static string BuildRandomizationScopeKey(string? clientId, string? sessionId)
+    {
+        var client = string.IsNullOrWhiteSpace(clientId) ? "web-anonymous" : clientId.Trim();
+        if (string.IsNullOrWhiteSpace(sessionId))
+        {
+            return client;
+        }
+
+        return $"{client}\u001f{sessionId.Trim()}";
     }
 
     public bool TryResolveMediaPath(string idOrToken, out string fullPath)

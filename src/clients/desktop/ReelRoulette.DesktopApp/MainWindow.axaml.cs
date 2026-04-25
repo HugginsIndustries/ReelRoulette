@@ -82,8 +82,6 @@ namespace ReelRoulette
         private bool _hasShownMissingLoudnessWarning = false;
 
         // Randomization mode state (runtime-only, rebuilt as eligible-set changes)
-        private readonly RandomizationRuntimeState _desktopRandomizationState = new();
-        private readonly object _desktopRandomizationLock = new object();
         private RandomizationMode _randomizationMode = RandomizationMode.SmartShuffle;
         private int _isHandlingEndReached = 0;
         private int _suppressStopForEndReachedTransition = 0;
@@ -1433,7 +1431,6 @@ namespace ReelRoulette
 
                 RefreshLibraryPanelFromServiceState();
 
-                RebuildPlayQueueIfNeeded();
                 _ = RefreshGlobalStatsFromCoreAsync();
                 StatusTextBlock.Text = statusMessage;
             }
@@ -3674,7 +3671,6 @@ namespace ReelRoulette
                 // Rebuild queue and update library panel
                 RefreshLibraryPanelFromServiceState();
                 StatusTextBlock.Text = "Cleared filter preset";
-                _ = Task.Run(async () => await RebuildPlayQueueIfNeededAsync());
                 SaveSettings();
                 _ = SyncPresetsToCoreAsync();
                 return;
@@ -3707,7 +3703,6 @@ namespace ReelRoulette
                 UpdateLibraryPanel();
             }
             StatusTextBlock.Text = $"Applied filter preset: {selectedPresetName}";
-            _ = Task.Run(async () => await RebuildPlayQueueIfNeededAsync());
             _ = SyncPresetsToCoreAsync();
         }
 
@@ -4130,7 +4125,6 @@ namespace ReelRoulette
             }
 
             StatusTextBlock.Text = $"Added {accepted} item(s) to blacklist";
-            RebuildPlayQueueIfNeeded();
             UpdateContextMenuState();
         }
 
@@ -4166,7 +4160,6 @@ namespace ReelRoulette
             }
 
             StatusTextBlock.Text = $"Removed {accepted} item(s) from blacklist";
-            RebuildPlayQueueIfNeeded();
             UpdateContextMenuState();
         }
 
@@ -4432,40 +4425,6 @@ namespace ReelRoulette
 
         #region Randomization System
 
-        private List<LibraryItem> GetEligibleItems()
-        {
-            // Random playback uses /api/random only (see PlayRandomVideoAsync). Local shuffle state is not fed
-            // a desktop-built eligible set; see migration-cleanup 2.2 / 2.3 for removing the leftover rebuild path.
-            if (_libraryIndex == null || _currentFilterState == null)
-            {
-                Log($"GetEligibleItems: Library or filter state unavailable (libraryIndex: {_libraryIndex != null}, filterState: {_currentFilterState != null}); returning empty local pool.");
-                return new List<LibraryItem>();
-            }
-
-            Log("GetEligibleItems: Returning empty local pool; random selection is API-authoritative.");
-            return new List<LibraryItem>();
-        }
-
-        private async Task<List<LibraryItem>> GetEligibleItemsAsync()
-        {
-            return await Task.Run(GetEligibleItems);
-        }
-
-        private void RebuildPlayQueueIfNeeded()
-        {
-            _ = RebuildPlayQueueIfNeededAsync();
-        }
-
-        private async Task RebuildPlayQueueIfNeededAsync()
-        {
-            var eligibleItems = await GetEligibleItemsAsync();
-            lock (_desktopRandomizationLock)
-            {
-                RandomSelectionEngine.RebuildState(_desktopRandomizationState, _randomizationMode, eligibleItems, _rng);
-            }
-            Log($"Randomization: Rebuilt runtime state for mode '{_randomizationMode}' with {eligibleItems.Count} eligible items");
-        }
-
         private void UpdateRandomizationModeComboBox()
         {
             if (LibraryRandomizationModeComboBox == null)
@@ -4510,7 +4469,6 @@ namespace ReelRoulette
             var previous = _randomizationMode;
             _randomizationMode = selectedMode;
             Log($"UI ACTION: Randomization mode changed from {previous} to {_randomizationMode}");
-            RebuildPlayQueueIfNeeded();
             SaveSettings();
         }
 
@@ -8738,9 +8696,6 @@ namespace ReelRoulette
             }
             RecalculateGlobalStats();
             UpdateLibraryInfoText();
-            
-            // Rebuild queue to respect any source enable/disable changes
-            RebuildPlayQueueIfNeeded();
         }
 
         private async Task<bool> UpdateSourceEnabledViaCoreAsync(string sourceId, bool isEnabled)
@@ -9992,12 +9947,7 @@ namespace ReelRoulette
                 UpdateLibraryInfoText();
                 UpdateFilterSummaryText();
                 
-                // Show message and rebuild queue to apply new filters
-                StatusTextBlock.Text = "Applying filters and rebuilding queue...";
-                _ = Task.Run(async () =>
-                {
-                    await RebuildPlayQueueIfNeededAsync();
-                });
+                StatusTextBlock.Text = "Applying filters...";
             }
         }
 

@@ -13,10 +13,13 @@ This file follows a Keep a Changelog style format.
 
 - **Desktop cleanup:** Removed unused desktop fingerprint/history wrappers, duplicate/source-stat adapter DTOs, Core state-service boxes, local global-stat aggregation, and duration/loudness scan wrapper methods from the safe migration-cleanup pass.
 - **Desktop filtering:** Dropped `FilterService` / `FilterSetBuilder` from the desktop; library panel filter state uses `LibraryProjectionDisplayFilter` on the server-backed projection, and random playback stays on `/api/random` via `RequestRandomAsync` (no desktop-built eligible pool).
+- **Desktop randomization:** Removed `RandomSelectionEngine` / local shuffle state; `LibraryPlaybackService` keys runtime shuffle/spread state by client plus session (WebUI tabs no longer share one bag).
+- **WebUI playback stats:** POST `/api/record-playback` when playback starts so weighted randomization sees updated play counts.
 
 ### Fixed
 
-- *No unreleased changes yet.*
+- **WebUI /api/random:** SmartShuffle and SpreadMode could behave incorrectly when multiple tabs shared the same stored client id; session-scoped randomization state restores per-tab behavior.
+- **WebUI /api/random:** Weighted modes could ignore recent plays because the browser never recorded playback to the library index.
 
 ---
 

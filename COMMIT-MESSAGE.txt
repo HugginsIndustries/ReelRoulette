@@ -19,8 +19,8 @@ Instructions:
 
 Commit Message:
 
-Refactor: desktop library filter without core FilterSetBuilder
+Bugfix: API randomization parity for WebUI and desktop cleanup
 
-- Remove `FilterService` and desktop use of `Core.Filtering.FilterSetBuilder`.
-- Apply library panel `FilterState` via `LibraryProjectionDisplayFilter` on the in-memory projection.
-- Stop building a local eligible item list for random play; random remains `RequestRandomAsync` only.
+- Remove desktop `RandomSelectionEngine`, local runtime shuffle state, and dead queue-rebuild helpers; random stays `RequestRandomAsync` only.
+- Scope server shuffle/spread state by client id plus session id so browser tabs do not corrupt each other’s SmartShuffle/SpreadMode.
+- Record WebUI playback on play start via `/api/record-playback` so WeightedRandom matches desktop library stats.

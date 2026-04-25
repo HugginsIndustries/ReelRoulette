@@ -1222,6 +1222,21 @@ export function startApp(config) {
     return new URL(normalized, `${apiBaseUrl}/`).toString();
   }
 
+  /** Matches desktop: record on play start so /api/random weights and filters use fresh library stats. */
+  function notifyPlaybackStarted(item) {
+    if (!item?.id || state.compatibilityBlocked) return;
+    void fetch(buildApiUrl("/api/record-playback"), {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        path: item.id,
+        clientId: state.clientId,
+        sessionId: state.sessionId
+      })
+    }).catch(() => {});
+  }
+
   async function fetchJson(path, options = {}) {
     const response = await fetch(buildApiUrl(path), {
       credentials: "include",
@@ -1364,6 +1379,7 @@ export function startApp(config) {
     state.playAttemptId += 1;
     const expectedPlayAttemptId = state.playAttemptId;
     tracePlayback("info", "start", { expectedItemId: item.id, mediaType: item.mediaType });
+    notifyPlaybackStarted(item);
 
     applyCachedState(item);
     clearPhotoTimer();

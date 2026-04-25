@@ -97,7 +97,7 @@ The same logic now also runs on the server in `LibraryPlaybackService`, so the d
 
 **Action:** Migrate. Remove client-side eligible-set computation for random selection (use `/api/random` only). Retain a lightweight local search/sort for library panel UI display, backed by the server projection, but move eligibility rules to the server.
 
-**Status:** Completed — removed `FilterService.cs` and all desktop references to `Core.Filtering.FilterSetBuilder`. Library panel `FilterState` is applied via `LibraryProjectionDisplayFilter` against the in-memory projection (mirrors former core rules for UI only). `GetEligibleItems` no longer builds a pool for random play; `PlayRandomVideoAsync` already uses `CoreServerApiClient.RequestRandomAsync` exclusively. Leftover `RebuildPlayQueueIfNeeded` / local `RandomSelectionEngine.RebuildState` wiring is unchanged for follow-up items **2.2** / **2.3**.
+**Status:** Completed — removed `FilterService.cs` and all desktop references to `Core.Filtering.FilterSetBuilder`. Library panel `FilterState` is applied via `LibraryProjectionDisplayFilter` against the in-memory projection (mirrors former core rules for UI only). Random play uses `CoreServerApiClient.RequestRandomAsync` exclusively; local shuffle-queue rebuild wiring was removed with item **2.2**.
 
 ---
 
@@ -110,6 +110,8 @@ The desktop path (`GetEligibleItems` → `RebuildPlayQueueIfNeeded` → `RandomS
 
 **Action:** Remove the local path; route all random selection through `/api/random`.
 
+**Status:** Completed — removed `RandomSelectionEngine.cs`, desktop `RandomizationRuntimeState`, `_desktopRandomizationState`, `GetEligibleItems`/`RebuildPlayQueueIfNeeded` and all call sites; random play was already API-only via `RequestRandomAsync`. **Server:** `LibraryPlaybackService` now keys `RandomizationRuntimeStateCore` by **client + session** (WebUI uses per-tab `sessionStorage` session ids but a shared `localStorage` client id; previously every tab shared one shuffle bag and spread history, which broke SmartShuffle/SpreadMode). **WebUI:** `playCurrent` now POSTs `/api/record-playback` on play start (desktop already did), so WeightedRandom and `lastPlayed`-based weights use up-to-date library stats instead of stale `library.json` counts.
+
 ---
 
 ### 2.3 `MainWindow.axaml.cs` — `GetEligibleItems()` / `GetEligibleItemsAsync()` / `RebuildPlayQueueIfNeeded()`
@@ -119,6 +121,8 @@ This is the orchestration layer for the duplicate local randomisation pipeline (
 The entire code path should be removed in favour of the server `/api/random` call that the desktop already makes via `CoreServerApiClient.RequestRandomAsync`.
 
 **Action:** Remove once API-only random selection is fully adopted.
+
+**Status:** Completed — removed `GetEligibleItems`, `GetEligibleItemsAsync`, `RebuildPlayQueueIfNeeded`, and `RebuildPlayQueueIfNeededAsync` from `MainWindow.axaml.cs`, plus all call sites that previously rebuilt desktop-local randomization state after filter/source/favorite/blacklist changes. Desktop random selection is now fully API-authoritative through `CoreServerApiClient.RequestRandomAsync`.
 
 ---
 
