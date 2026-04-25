@@ -15,11 +15,14 @@ This file follows a Keep a Changelog style format.
 - **Desktop filtering:** Dropped `FilterService` / `FilterSetBuilder` from the desktop; library panel filter state uses `LibraryProjectionDisplayFilter` on the server-backed projection, and random playback stays on `/api/random` via `RequestRandomAsync` (no desktop-built eligible pool).
 - **Desktop randomization:** Removed `RandomSelectionEngine` / local shuffle state; `LibraryPlaybackService` keys runtime shuffle/spread state by client plus session (WebUI tabs no longer share one bag).
 - **WebUI playback stats:** POST `/api/record-playback` when playback starts so weighted randomization sees updated play counts.
+- **Desktop loudness normalization:** Moved library-wide loudness baseline aggregation/caching (75th percentile over eligible videos) out of `MainWindow` into `LoudnessNormalizationService`; per-play VLC volume normalization remains in desktop playback orchestration.
+- **Desktop preset matching:** Removed local preset JSON string comparison fallback and now resolve active preset labels through `/api/presets/match` (`CoreServerApiClient.MatchPresetAsync`) for API-authoritative matching.
 
 ### Fixed
 
 - **WebUI /api/random:** SmartShuffle and SpreadMode could behave incorrectly when multiple tabs shared the same stored client id; session-scoped randomization state restores per-tab behavior.
 - **WebUI /api/random:** Weighted modes could ignore recent plays because the browser never recorded playback to the library index.
+- **Desktop preset auto-detection:** Active preset label no longer depends on local serialized `FilterState` equality and now follows server-side preset matching behavior.
 
 ---
 

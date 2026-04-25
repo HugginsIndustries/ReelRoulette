@@ -134,6 +134,8 @@ The VLC volume adjustment is legitimately a desktop concern, but the **baseline 
 
 **Action:** Migrate the loudness baseline computation to a dedicated desktop-local service class. The VLC volume adjustment itself stays in the desktop.
 
+**Status:** Completed — extracted baseline loudness aggregation/caching into `LoudnessNormalizationService`; `MainWindow.axaml.cs` now delegates baseline computation to the service while keeping `ApplyVolumeNormalization` and per-play VLC volume adjustment in place.
+
 ---
 
 ### 2.5 `MainWindow.axaml.cs` — Local preset serialisation/matching (`ResolveMatchingPresetName`, `_filterPresets` management, preset JSON compare)
@@ -142,6 +144,8 @@ The desktop maintains its own in-memory `List<FilterPreset>`, serialises filter 
 The preset-matching logic performs a client-local JSON string comparison that should instead call `/api/presets/match` — an endpoint that is already plumbed in `CoreServerApiClient`.
 
 **Action:** Migrate; use `/api/presets/match` for active-preset auto-detection and remove the client-local JSON-compare path.
+
+**Status:** Completed — removed local JSON preset comparison (`ResolveMatchingPresetName`) and now resolve active preset name via `CoreServerApiClient.MatchPresetAsync` (`/api/presets/match`); retained `_filterPresets` only for preset list UI/dialog/sync responsibilities.
 
 ---
 

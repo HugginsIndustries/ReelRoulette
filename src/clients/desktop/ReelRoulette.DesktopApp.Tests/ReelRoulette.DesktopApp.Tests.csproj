@@ -6,6 +6,7 @@
     <IsTestProject>true</IsTestProject>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="..\ReelRoulette.DesktopApp\ReelRoulette.DesktopApp.csproj" />
     <ProjectReference Include="..\ReelRoulette.LibraryArchive\ReelRoulette.LibraryArchive.csproj" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.4.0" />
     <PackageReference Include="xunit" Version="2.9.3" />

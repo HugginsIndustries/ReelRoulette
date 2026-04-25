@@ -19,8 +19,8 @@ Instructions:
 
 Commit Message:
 
-Bugfix: API randomization parity for WebUI and desktop cleanup
+Bugfix: Migrate desktop loudness baseline and preset matching
 
-- Remove desktop `RandomSelectionEngine`, local runtime shuffle state, and dead queue-rebuild helpers; random stays `RequestRandomAsync` only.
-- Scope server shuffle/spread state by client id plus session id so browser tabs do not corrupt each other’s SmartShuffle/SpreadMode.
-- Record WebUI playback on play start via `/api/record-playback` so WeightedRandom matches desktop library stats.
+- Extract library-wide loudness baseline aggregation/caching into `LoudnessNormalizationService` while keeping per-play VLC volume adjustment in `MainWindow`.
+- Replace local preset JSON comparison with API-authoritative `/api/presets/match` via `CoreServerApiClient.MatchPresetAsync` for active preset detection.
+- Add desktop tests covering loudness baseline behavior (manual override, 75th percentile baseline, default fallback, and cache reset semantics).

@@ -77,8 +77,7 @@ namespace ReelRoulette
         private int _userVolumePreference = 100; // User's slider preference (0-200)
         private AudioFilterMode _audioFilterMode = AudioFilterMode.PlayAll;
         
-        // Cached baseline loudness for normalization (75th percentile of library)
-        private double? _cachedBaselineLoudnessDb = null;
+        private readonly LoudnessNormalizationService _loudnessNormalizationService = new();
         private bool _hasShownMissingLoudnessWarning = false;
 
         // Randomization mode state (runtime-only, rebuilt as eligible-set changes)
@@ -972,6 +971,7 @@ namespace ReelRoulette
 
             // Initialize library system
             _libraryIndex = new LibraryIndex();
+            _loudnessNormalizationService.ResetCache();
 
             // Load persisted data (includes FilterState)
             LoadSettings();
@@ -5926,6 +5926,7 @@ namespace ReelRoulette
             _isCoreApiReachable = false;
             StopCoreEventStream();
             _libraryIndex = new LibraryIndex();
+            _loudnessNormalizationService.ResetCache();
             Dispatcher.UIThread.Post(() =>
             {
                 if (_showLibraryPanel)
@@ -6092,6 +6093,7 @@ namespace ReelRoulette
                 }
 
                 _libraryIndex = projection;
+                _loudnessNormalizationService.ResetCache();
 
                 await Dispatcher.UIThread.InvokeAsync(() =>
                 {
@@ -6923,8 +6925,7 @@ namespace ReelRoulette
                     .ToList();
 
                 _filterPresets = mapped;
-                _activePresetName = await MatchPresetNameFromCoreAsync(_currentFilterState) ??
-                                    ResolveMatchingPresetName(_currentFilterState, _filterPresets);
+                _activePresetName = await MatchPresetNameFromCoreAsync(_currentFilterState);
                 await Dispatcher.UIThread.InvokeAsync(() =>
                 {
                     UpdateLibraryPresetComboBox();
@@ -6984,31 +6985,6 @@ namespace ReelRoulette
             {
                 return new FilterState();
             }
-        }
-
-        private static string? ResolveMatchingPresetName(FilterState? currentFilterState, IReadOnlyList<FilterPreset>? presets)
-        {
-            if (currentFilterState == null || presets == null || presets.Count == 0)
-            {
-                return null;
-            }
-
-            var currentJson = JsonSerializer.Serialize(currentFilterState);
-            foreach (var preset in presets)
-            {
-                if (string.IsNullOrWhiteSpace(preset.Name))
-                {
-                    continue;
-                }
-
-                var presetJson = JsonSerializer.Serialize(preset.FilterState ?? new FilterState());
-                if (string.Equals(currentJson, presetJson, StringComparison.Ordinal))
-                {
-                    return preset.Name.Trim();
-                }
-            }
-
-            return null;
         }
 
         private PlaybackTarget? ResolvePlaybackTargetFromApiRandomResponse(CoreRandomResponse response)
@@ -8994,7 +8970,7 @@ namespace ReelRoulette
                     _baselineAutoMode = dialog.GetBaselineAutoMode();
                     _baselineOverrideLUFS = dialog.GetBaselineOverrideLUFS();
                     // Reset baseline cache when settings change
-                    _cachedBaselineLoudnessDb = null;
+                    _loudnessNormalizationService.ResetCache();
                     // Reset warning flag when settings change so it can be shown again if needed
                     _hasShownMissingLoudnessWarning = false;
                     Log($"Settings: Normalization settings updated - MaxReduction: {_maxReductionDb} dB, MaxBoost: {_maxBoostDb} dB, BaselineMode: {(_baselineAutoMode ? "Auto" : $"Manual ({_baselineOverrideLUFS} LUFS)")}");
@@ -9906,8 +9882,7 @@ namespace ReelRoulette
                 
                 // Save presets and active preset name to local fields
                 _filterPresets = dialog.GetPresets();
-                _activePresetName = await MatchPresetNameFromCoreAsync(_currentFilterState) ??
-                                    ResolveMatchingPresetName(_currentFilterState, _filterPresets);
+                _activePresetName = await MatchPresetNameFromCoreAsync(_currentFilterState);
                 
                 Log($"FilterMenuItem: Saved {_filterPresets?.Count ?? 0} presets, active preset: {_activePresetName ?? "None"}");
                 _ = SyncPresetsToCoreAsync();
@@ -10173,54 +10148,11 @@ namespace ReelRoulette
         /// </summary>
         private double GetLibraryBaselineLoudness()
         {
-            // If manual baseline mode is enabled, return the override value
-            if (!_baselineAutoMode)
-            {
-                Log($"GetLibraryBaselineLoudness: Manual mode - using override baseline: {_baselineOverrideLUFS:F2} LUFS");
-                return _baselineOverrideLUFS;
-            }
-            
-            // Return cached value if available
-            if (_cachedBaselineLoudnessDb.HasValue)
-            {
-                return _cachedBaselineLoudnessDb.Value;
-            }
-
-            Log("GetLibraryBaselineLoudness: Calculating baseline loudness from library");
-
-            // Check if library index is available
-            if (_libraryIndex == null)
-            {
-                Log("GetLibraryBaselineLoudness: Library index is null - using default baseline of -18 dB");
-                _cachedBaselineLoudnessDb = -18.0;
-                return _cachedBaselineLoudnessDb.Value;
-            }
-
-            // Get all videos with loudness data
-            var videosWithLoudness = _libraryIndex.Items
-                .Where(item => item.MediaType == MediaType.Video && 
-                              item.HasAudio == true && 
-                              item.IntegratedLoudness.HasValue)
-                .Select(item => item.IntegratedLoudness!.Value)
-                .OrderBy(loudness => loudness)
-                .ToList();
-
-            if (videosWithLoudness.Count == 0)
-            {
-                Log("GetLibraryBaselineLoudness: No videos with loudness data - using default baseline of -18 dB");
-                _cachedBaselineLoudnessDb = -18.0; // Default if no data
-                return _cachedBaselineLoudnessDb.Value;
-            }
-
-            // Use 75th percentile as baseline (avoids being skewed by very quiet outliers)
-            int percentile75Index = (int)Math.Ceiling(videosWithLoudness.Count * 0.75) - 1;
-            percentile75Index = Math.Clamp(percentile75Index, 0, videosWithLoudness.Count - 1);
-            double baselineLoudness = videosWithLoudness[percentile75Index];
-
-            _cachedBaselineLoudnessDb = baselineLoudness;
-            Log($"GetLibraryBaselineLoudness: Baseline calculated - 75th percentile: {baselineLoudness:F2} dB from {videosWithLoudness.Count} videos");
-            
-            return baselineLoudness;
+            return _loudnessNormalizationService.GetBaselineLoudness(
+                _libraryIndex,
+                _baselineAutoMode,
+                _baselineOverrideLUFS,
+                Log);
         }
 
         private int CalculateNormalizedVolume(FileLoudnessInfo info, int userVolumePreference)
