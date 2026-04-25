@@ -17,6 +17,7 @@ This file follows a Keep a Changelog style format.
 - **WebUI playback stats:** POST `/api/record-playback` when playback starts so weighted randomization sees updated play counts.
 - **Desktop loudness normalization:** Moved library-wide loudness baseline aggregation/caching (75th percentile over eligible videos) out of `MainWindow` into `LoudnessNormalizationService`; per-play VLC volume normalization remains in desktop playback orchestration.
 - **Desktop preset matching:** Removed local preset JSON string comparison fallback and now resolve active preset labels through `/api/presets/match` (`CoreServerApiClient.MatchPresetAsync`) for API-authoritative matching.
+- **Desktop library model split:** Extracted `LibraryItemViewModel` for thumbnail/image state and UI binding behavior (`INotifyPropertyChanged`, `HasGridStateIndicator`) and kept `LibraryItem` as a pure serializable server projection model.
 
 ### Fixed
 

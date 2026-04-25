@@ -772,7 +772,7 @@
                             </ItemsPanelTemplate>
                         </ListBox.ItemsPanel>
                         <ListBox.ItemTemplate>
-                            <DataTemplate DataType="local:LibraryItem">
+                            <DataTemplate DataType="local:LibraryItemViewModel">
                                 <Grid ColumnDefinitions="* Auto Auto" Margin="0,4,16,4">
                                     <StackPanel Grid.Column="0" Orientation="Vertical">
                                         <Grid VerticalAlignment="Center">

@@ -180,6 +180,8 @@ This couples a data-layer class to the presentation framework, making it impossi
 
 **Action:** Migrate the UI-specific thumbnail fields into a separate `LibraryItemViewModel` class; keep `LibraryItem` as a pure data class.
 
+**Status:** Completed — extracted Avalonia thumbnail state (`ThumbnailPath`, `ThumbnailBitmap`, `ThumbnailWidth`, `ThumbnailHeight`) into `LibraryItemViewModel`; `MainWindow` library list/grid bindings now use view-model instances for thumbnail hydration and grid aspect sizing.
+
 ---
 
 ### 2.9 `LibraryItem.cs` — `HasGridStateIndicator`, `INotifyPropertyChanged` implementation
@@ -187,6 +189,8 @@ This couples a data-layer class to the presentation framework, making it impossi
 Same structural issue as 2.8: `INotifyPropertyChanged` and computed UI properties are baked into the domain model rather than a view-model layer.
 
 **Action:** Migrate to a `LibraryItemViewModel` wrapper.
+
+**Status:** Completed — moved `INotifyPropertyChanged` and `HasGridStateIndicator` into `LibraryItemViewModel`, with `IsFavorite`/`IsBlacklisted` UI updates routed through the wrapper; `LibraryItem` is now a pure server-projection data model with no Avalonia/UI binding dependencies.
 
 ---
 
@@ -198,3 +202,9 @@ Same structural issue as 2.8: `INotifyPropertyChanged` and computed UI propertie
 **Action:** Inline `StartDurationScan`/`StartLoudnessScan` call sites and remove the wrapper methods; move duration-label parsing into `FilterDialog`.
 
 **Status:** Completed — inlined scan request call sites, removed the wrapper methods, and moved duration-label parsing into `FilterDialog`.
+
+---
+
+## Closing Summary
+
+All migration cleanup items in this document are now addressed. The desktop app now aligns with the thin-client target by keeping domain/projection data in pure models and moving presentation/runtime-specific state into UI-layer view models and desktop orchestration code.

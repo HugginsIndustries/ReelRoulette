@@ -220,7 +220,7 @@ namespace ReelRoulette
         private bool _randomizationModeMigrated = false;
 
         // Library panel state
-        private ObservableCollection<LibraryItem> _libraryItems = new ObservableCollection<LibraryItem>();
+        private ObservableCollection<LibraryItemViewModel> _libraryItems = new ObservableCollection<LibraryItemViewModel>();
         private ObservableCollection<LibraryGridRowViewModel> _libraryGridRows = new ObservableCollection<LibraryGridRowViewModel>();
         private ObservableCollection<LibraryGridRowViewModel> _libraryGridVisibleRows = new ObservableCollection<LibraryGridRowViewModel>();
         private readonly List<double> _libraryGridRowTopOffsets = new();
@@ -1415,7 +1415,7 @@ namespace ReelRoulette
                 // This ensures overlay indicators update immediately even when bound instances differ.
                 var boundItem = _libraryItems.FirstOrDefault(listItem =>
                     string.Equals(listItem.FullPath, fullPath, StringComparison.OrdinalIgnoreCase));
-                if (boundItem != null && !ReferenceEquals(boundItem, item))
+                if (boundItem != null && !ReferenceEquals(boundItem.Item, item))
                 {
                     boundItem.IsFavorite = isFavorite;
                     boundItem.IsBlacklisted = isBlacklisted;
@@ -2290,8 +2290,6 @@ namespace ReelRoulette
                         // Apply sorting
                         items = ApplySort(items);
                         Log($"UpdateLibraryPanel: After sorting: {items.Count} items. Final count ready for UI.");
-                        PopulateThumbnailPaths(items);
-
                         // Update UI on UI thread
                         Log("UpdateLibraryPanel: Posting to UI thread...");
                         Dispatcher.UIThread.Post(async () =>
@@ -2394,6 +2392,7 @@ namespace ReelRoulette
                                         return;
                                     }
 
+                                    PopulateThumbnailPaths(_libraryItems.ToList());
                                     await RebuildLibraryGridRowsIncrementalAsync(_libraryItems.ToList(), firstChangedItemIndex, cancellationToken, refreshGeneration);
                                     if (ShouldAbortLibraryPanelRefresh(cancellationToken, refreshGeneration))
                                     {
@@ -2826,7 +2825,12 @@ namespace ReelRoulette
             return item.FullPath;
         }
 
-        private ItemDiffWindow ComputeLibraryItemDiffWindow(IReadOnlyList<LibraryItem> currentItems, IReadOnlyList<LibraryItem> nextItems)
+        private string GetLibraryItemKey(LibraryItemViewModel item)
+        {
+            return GetLibraryItemKey(item.Item);
+        }
+
+        private ItemDiffWindow ComputeLibraryItemDiffWindow(IReadOnlyList<LibraryItemViewModel> currentItems, IReadOnlyList<LibraryItem> nextItems)
         {
             var prefix = 0;
             var prefixLimit = Math.Min(currentItems.Count, nextItems.Count);
@@ -2887,6 +2891,7 @@ namespace ReelRoulette
                         return -1;
                     }
 
+                    _libraryItems[diffWindow.StartIndex].Dispose();
                     _libraryItems.RemoveAt(diffWindow.StartIndex);
                     if (i > 0 && i % chunkSize == 0)
                     {
@@ -2906,7 +2911,7 @@ namespace ReelRoulette
                         return -1;
                     }
 
-                    _libraryItems.Insert(index, items[index]);
+                    _libraryItems.Insert(index, new LibraryItemViewModel(items[index]));
                     inserted++;
                     if (inserted % chunkSize == 0)
                     {
@@ -2918,12 +2923,12 @@ namespace ReelRoulette
             return diffWindow.StartIndex;
         }
 
-        private (List<LibraryGridRowViewModel> Rows, int MaxColumns) BuildGridRowModels(IReadOnlyList<LibraryItem> items, double layoutWidth)
+        private (List<LibraryGridRowViewModel> Rows, int MaxColumns) BuildGridRowModels(IReadOnlyList<LibraryItemViewModel> items, double layoutWidth)
         {
             return BuildGridRowModelsRange(items, 0, items.Count, layoutWidth);
         }
 
-        private (List<LibraryGridRowViewModel> Rows, int MaxColumns) BuildGridRowModelsRange(IReadOnlyList<LibraryItem> items, int startIndex, int endExclusive, double layoutWidth)
+        private (List<LibraryGridRowViewModel> Rows, int MaxColumns) BuildGridRowModelsRange(IReadOnlyList<LibraryItemViewModel> items, int startIndex, int endExclusive, double layoutWidth)
         {
             const double targetRowHeight = 300;
             const double minRowHeight = 200;
@@ -2932,7 +2937,7 @@ namespace ReelRoulette
             var maxColumns = 1;
             var rows = new List<LibraryGridRowViewModel>();
 
-            var pendingItems = new List<LibraryItem>();
+            var pendingItems = new List<LibraryItemViewModel>();
             var pendingAspects = new List<double>();
             var pendingItemIndexes = new List<int>();
             var pendingAspectSum = 0d;
@@ -3103,7 +3108,7 @@ namespace ReelRoulette
             }
         }
 
-        private async Task RebuildLibraryGridRowsIncrementalAsync(IReadOnlyList<LibraryItem> items, int firstChangedItemIndex, CancellationToken cancellationToken, int refreshGeneration)
+        private async Task RebuildLibraryGridRowsIncrementalAsync(IReadOnlyList<LibraryItemViewModel> items, int firstChangedItemIndex, CancellationToken cancellationToken, int refreshGeneration)
         {
             if (firstChangedItemIndex < 0)
             {
@@ -3396,7 +3401,7 @@ namespace ReelRoulette
             UpdateLibraryGridVisibleRowsWindow();
         }
 
-        private void PopulateThumbnailPaths(IReadOnlyList<LibraryItem> items)
+        private void PopulateThumbnailPaths(IReadOnlyList<LibraryItemViewModel> items)
         {
             var thumbRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ReelRoulette", "thumbnails");
             var metadata = LoadThumbnailMetadata(thumbRoot);
@@ -3435,7 +3440,7 @@ namespace ReelRoulette
                 return;
             }
 
-            var items = new List<LibraryItem>(256);
+            var items = new List<LibraryItemViewModel>(256);
             foreach (var row in _libraryGridVisibleRows)
             {
                 if (row?.Items == null || row.Items.Count == 0)
@@ -3460,7 +3465,7 @@ namespace ReelRoulette
             HydrateThumbnailsForItems(items);
         }
 
-        private void HydrateThumbnailsForItems(IReadOnlyList<LibraryItem> items)
+        private void HydrateThumbnailsForItems(IReadOnlyList<LibraryItemViewModel> items)
         {
             var thumbRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ReelRoulette", "thumbnails");
             var metadata = LoadThumbnailMetadata(thumbRoot);
@@ -3519,7 +3524,7 @@ namespace ReelRoulette
             return Math.Max(280, measuredWidth - visualRightGutterPx);
         }
 
-        private static double GetThumbnailAspectRatio(LibraryItem item)
+        private static double GetThumbnailAspectRatio(LibraryItemViewModel item)
         {
             if (item.ThumbnailWidth > 0 && item.ThumbnailHeight > 0)
             {
@@ -3799,7 +3804,7 @@ namespace ReelRoulette
             }
             
             // Only process if it's a user interaction (the toggle button is loaded and user clicks it)
-            if (sender is ToggleButton toggle && toggle.Tag is LibraryItem item)
+            if (sender is ToggleButton toggle && toggle.Tag is LibraryItemViewModel item)
             {
                 var toggleState = toggle.IsChecked == true;
                 var libraryItem = FindProjectionItemByPath(item.FullPath);
@@ -3850,7 +3855,7 @@ namespace ReelRoulette
             }
             
             // Only process if it's a user interaction (the toggle button is loaded and user clicks it)
-            if (sender is ToggleButton toggle && toggle.Tag is LibraryItem item)
+            if (sender is ToggleButton toggle && toggle.Tag is LibraryItemViewModel item)
             {
                 var toggleState = toggle.IsChecked == true;
                 var libraryItem = FindProjectionItemByPath(item.FullPath);
@@ -3893,7 +3898,7 @@ namespace ReelRoulette
 
         private void LibraryListBox_DoubleTapped(object? sender, RoutedEventArgs e)
         {
-            if (sender is ListBox listBox && listBox.SelectedItem is LibraryItem item)
+            if (sender is ListBox listBox && listBox.SelectedItem is LibraryItemViewModel item)
             {
                 Log($"UI ACTION: LibraryListBox double-tapped for: {System.IO.Path.GetFileName(item.FullPath)}");
                 PlayFromPath(item.FullPath);
@@ -3902,7 +3907,7 @@ namespace ReelRoulette
 
         private void LibraryListBox_KeyDown(object? sender, KeyEventArgs e)
         {
-            if (sender is ListBox listBox && listBox.SelectedItem is LibraryItem item)
+            if (sender is ListBox listBox && listBox.SelectedItem is LibraryItemViewModel item)
             {
                 if (e.Key == Key.Enter)
                 {
@@ -3926,7 +3931,7 @@ namespace ReelRoulette
                 _selectedItemPaths.Clear();
                 if (listBox.SelectedItems != null)
                 {
-                    foreach (var item in listBox.SelectedItems.Cast<LibraryItem>())
+                    foreach (var item in listBox.SelectedItems.Cast<LibraryItemViewModel>())
                     {
                         _selectedItemPaths.Add(item.FullPath);
                     }
@@ -4004,10 +4009,10 @@ namespace ReelRoulette
         private async void LibraryItemTags_Click(object? sender, RoutedEventArgs e)
         {
             Log("UI ACTION: LibraryItemTags clicked");
-            if (sender is Button button && button.Tag is LibraryItem item)
+            if (sender is Button button && button.Tag is LibraryItemViewModel item)
             {
                 Log($"LibraryItemTags_Click: Opening tags dialog for: {item.FileName}");
-                var dialog = new ItemTagsDialog(new List<LibraryItem> { item }, _libraryIndex, this);
+                var dialog = new ItemTagsDialog(new List<LibraryItem> { item.Item }, _libraryIndex, this);
                 var result = await dialog.ShowDialog<bool?>(this);
                 if (result == true)
                 {

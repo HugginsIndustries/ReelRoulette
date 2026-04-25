@@ -2,7 +2,7 @@ namespace ReelRoulette;
 
 public sealed class LibraryGridTileViewModel
 {
-    public LibraryItem Item { get; set; } = new();
+    public LibraryItemViewModel Item { get; set; } = new(new LibraryItem());
     public double TileWidth { get; set; }
     public double TileHeight { get; set; }
     public int ItemIndex { get; set; } = -1;

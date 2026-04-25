@@ -1,36 +1,14 @@
 using System;
 using System.Collections.Generic;
-using System.ComponentModel;
-using System.Runtime.CompilerServices;
 using System.Text.Json.Serialization;
-using Avalonia.Media.Imaging;
 
 namespace ReelRoulette
 {
     /// <summary>
     /// Represents a single video file in the library with all its metadata.
     /// </summary>
-    public class LibraryItem : INotifyPropertyChanged
+    public class LibraryItem
     {
-        public event PropertyChangedEventHandler? PropertyChanged;
-
-        private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
-        {
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
-        }
-
-        private bool SetField<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
-        {
-            if (EqualityComparer<T>.Default.Equals(field, value))
-            {
-                return false;
-            }
-
-            field = value;
-            OnPropertyChanged(propertyName);
-            return true;
-        }
-
         /// <summary>
         /// Stable item identity for path changes (rename/move).
         /// </summary>
@@ -88,41 +66,14 @@ namespace ReelRoulette
         /// <summary>
         /// Whether this item is marked as a favorite.
         /// </summary>
-        private bool _isFavorite;
-
         [JsonPropertyName("isFavorite")]
-        public bool IsFavorite
-        {
-            get => _isFavorite;
-            set
-            {
-                if (SetField(ref _isFavorite, value))
-                {
-                    OnPropertyChanged(nameof(HasGridStateIndicator));
-                }
-            }
-        }
+        public bool IsFavorite { get; set; }
 
         /// <summary>
         /// Whether this item is blacklisted.
         /// </summary>
-        private bool _isBlacklisted;
-
         [JsonPropertyName("isBlacklisted")]
-        public bool IsBlacklisted
-        {
-            get => _isBlacklisted;
-            set
-            {
-                if (SetField(ref _isBlacklisted, value))
-                {
-                    OnPropertyChanged(nameof(HasGridStateIndicator));
-                }
-            }
-        }
-
-        [JsonIgnore]
-        public bool HasGridStateIndicator => IsFavorite || IsBlacklisted;
+        public bool IsBlacklisted { get; set; }
 
         /// <summary>
         /// Number of times this video has been played.
@@ -190,73 +141,6 @@ namespace ReelRoulette
         [JsonPropertyName("fingerprintStatus")]
         public FingerprintStatus FingerprintStatus { get; set; } = FingerprintStatus.Pending;
 
-        private string _thumbnailPath = string.Empty;
-        private Bitmap? _thumbnailBitmap;
-
-        [JsonIgnore]
-        public string ThumbnailPath
-        {
-            get => _thumbnailPath;
-            set
-            {
-                if (string.Equals(_thumbnailPath, value, StringComparison.Ordinal))
-                {
-                    return;
-                }
-
-                _thumbnailBitmap?.Dispose();
-                _thumbnailPath = value ?? string.Empty;
-                _thumbnailBitmap = null;
-                OnPropertyChanged();
-                OnPropertyChanged(nameof(ThumbnailBitmap));
-            }
-        }
-
-        [JsonIgnore]
-        public Bitmap? ThumbnailBitmap
-        {
-            get
-            {
-                if (_thumbnailBitmap != null)
-                {
-                    return _thumbnailBitmap;
-                }
-
-                if (string.IsNullOrWhiteSpace(_thumbnailPath))
-                {
-                    return null;
-                }
-
-                try
-                {
-                    _thumbnailBitmap = new Bitmap(_thumbnailPath);
-                }
-                catch
-                {
-                    _thumbnailBitmap = null;
-                }
-
-                return _thumbnailBitmap;
-            }
-        }
-
-        private double _thumbnailWidth;
-
-        [JsonIgnore]
-        public double ThumbnailWidth
-        {
-            get => _thumbnailWidth;
-            set => SetField(ref _thumbnailWidth, value);
-        }
-
-        private double _thumbnailHeight;
-
-        [JsonIgnore]
-        public double ThumbnailHeight
-        {
-            get => _thumbnailHeight;
-            set => SetField(ref _thumbnailHeight, value);
-        }
     }
 }
 
