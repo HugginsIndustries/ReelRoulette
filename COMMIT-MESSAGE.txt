@@ -19,9 +19,8 @@ Instructions:
 
 Commit Message:
 
-Refactor: Extract desktop LibraryItem view model wrapper
+Bugfix: Show pending tag add/remove glyph state in desktop editor
 
-- Move Avalonia thumbnail state and UI binding behavior out of `LibraryItem` into a new `LibraryItemViewModel`.
-- Keep `LibraryItem` as a pure server-projection data model with no Avalonia dependencies or `INotifyPropertyChanged`.
-- Update desktop library list/grid bindings and call sites in `MainWindow` to use `LibraryItemViewModel` for UI state while preserving data operations on `LibraryItem`.
-- Mark migration-cleanup items 2.8 and 2.9 complete and add the final cleanup closeout note.
+- Match WebUI tag editor behavior by tinting checked plus/minus chip glyphs with `HugginsOrangeBrush` in the desktop `ItemTagsDialog`.
+- Keep no-pending chips unchanged (white glyphs) while pending add/remove selections now provide clear visual feedback before Apply.
+- Preserve existing pending toggle flow so indicators update instantly while toggling and reset after Save/Discard via existing dialog refresh/close behavior.

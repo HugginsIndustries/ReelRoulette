@@ -21,6 +21,7 @@ This file follows a Keep a Changelog style format.
 
 ### Fixed
 
+- **Desktop tag editor parity:** Pending add/remove actions in `ItemTagsDialog` now tint the selected plus/minus chip glyph in Huggins Orange (matching WebUI), while non-pending glyphs keep their default color.
 - **WebUI /api/random:** SmartShuffle and SpreadMode could behave incorrectly when multiple tabs shared the same stored client id; session-scoped randomization state restores per-tab behavior.
 - **WebUI /api/random:** Weighted modes could ignore recent plays because the browser never recorded playback to the library index.
 - **Desktop preset auto-detection:** Active preset label no longer depends on local serialized `FilterState` equality and now follows server-side preset matching behavior.
