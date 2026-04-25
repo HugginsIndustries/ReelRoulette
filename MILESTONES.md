@@ -91,6 +91,279 @@ Do not use this file for detailed architecture explanation or current capability
 
 Last milestone completed: M9i
 
+### M10a - Server-Authoritative Play Endpoint Foundation
+
+- **Status**: ⏳ Planned
+- **Goal**: Add a dedicated server-owned play request path that any client can use to request a specific library item.
+- **Scope**:
+  - Depends on: none.
+  - Define `POST /api/play/{itemId}` in the OpenAPI contract with deterministic success and failure responses for playable item, missing item, unavailable media, blacklisted/ineligible item, and unsupported media cases.
+  - Implement the server/core command path so item-specific play requests are authorized, validated, and recorded through the same authoritative state services used by random playback.
+  - Return the requested media response shape needed by existing clients without introducing transcoding/session-streaming behavior from later playback architecture work.
+  - Emit the same SSE side effects expected today for playback stats and library projection updates.
+- **Acceptance criteria**:
+  - A valid item-specific play request returns a playable media response for the requesting client.
+  - Invalid or unavailable item requests return deterministic status codes and machine-readable error payloads.
+  - Playback stats and last-played state are updated server-side and projected to all clients through existing SSE infrastructure.
+  - The endpoint is covered in the shared API contract and generated/typed client surfaces where applicable.
+  - No client-local state mutation path is introduced for endpoint side effects.
+- **Verification evidence**:
+  - Evidence placeholders maintained at planned state; completion evidence must include server/core tests for success, validation failure, missing-media, and stats/SSE side-effect behavior.
+  - Contract/docs evidence must include OpenAPI and API documentation updates for the new endpoint.
+- **Deferrals / Follow-ups**:
+  - Full playback-session, direct-stream, transcode, resume, and format-resilience architecture remains future playback architecture work.
+
+### M10b - Desktop Click-to-Play API Cutover
+
+- **Status**: ⏳ Planned
+- **Goal**: Replace the desktop library click-to-play workaround with the server-authoritative item play endpoint.
+- **Scope**:
+  - Depends on: server-authoritative play endpoint foundation.
+  - Route desktop grid item activation through `POST /api/play/{itemId}` instead of determining the selected media locally.
+  - Keep LibVLC rendering local to the desktop client while treating the server response as the source of playback truth.
+  - Preserve existing desktop error UX for missing/unplayable media with endpoint-backed messages.
+  - Remove or retire the click-to-play workaround code path once the API path is verified.
+- **Acceptance criteria**:
+  - Clicking a desktop library grid item requests playback through the server endpoint and starts the returned media locally.
+  - Playback stats, last-played, favorite, and blacklist state continue to update via API/SSE projection only.
+  - Missing/unavailable media produces a clear desktop error without local fallback selection logic.
+  - Existing random playback and player controls remain unchanged.
+- **Verification evidence**:
+  - Evidence placeholders maintained at planned state; completion evidence must include desktop API-client tests or focused integration coverage for item play requests and error mapping.
+  - Manual evidence must include desktop grid click-to-play smoke with a playable item and a missing/unavailable item.
+- **Deferrals / Follow-ups**:
+  - WebUI library-browser click-to-play adoption is handled in the WebUI browser series.
+
+### M10c - Desktop Grid-Only Library Panel Cleanup
+
+- **Status**: ⏳ Planned
+- **Goal**: Remove the obsolete desktop library list view so the desktop library panel is grid-only.
+- **Scope**:
+  - Depends on: desktop click-to-play API cutover.
+  - Remove list/grid toggle UI, list-view rendering, and list-view-specific state persistence from the desktop library panel.
+  - Keep the existing grid view, thumbnail behavior, sorting/filtering behavior, and item activation path intact.
+  - Clean up dead list-view styles, settings keys, and code paths without changing library projection contracts.
+- **Acceptance criteria**:
+  - Desktop library panel always renders the grid view and exposes no list-view toggle.
+  - Existing grid thumbnail, sorting, filtering, favorite/blacklist indicator, and click-to-play behavior remain functional.
+  - Removed list-view preference data is ignored harmlessly if present in existing desktop settings.
+  - No WebUI behavior changes are included in this cleanup.
+- **Verification evidence**:
+  - Evidence placeholders maintained at planned state; completion evidence must include focused desktop UI/state tests where practical and a manual grid-only smoke check.
+  - Docs/checklist evidence must remove or update any desktop list-view validation references.
+- **Deferrals / Follow-ups**:
+  - None at planned state.
+
+### M10d - WebUI Library Overlay Shell
+
+- **Status**: ⏳ Planned
+- **Goal**: Introduce the WebUI library browser entry point and full-screen overlay shell without implementing the full grid behavior yet.
+- **Scope**:
+  - Depends on: desktop grid-only library panel cleanup.
+  - Add a **Library** button to the WebUI top-right overlay controls, positioned left of the filter button.
+  - Implement a full-screen overlay matching the existing tag editor and filter dialog shell patterns, including header, close behavior, responsive layout, focus handling, and light/dark theme integration.
+  - Wire overlay open/close lifecycle and fetch the library projection on every open, with loading and error states.
+  - Keep the initial content minimal enough to validate shell behavior before grid/search/sort work lands.
+- **Acceptance criteria**:
+  - The Library button appears in the correct top-right overlay control position and opens a full-screen library overlay.
+  - The overlay matches established WebUI dialog structure and works in fullscreen/pseudo-fullscreen contexts used by the player shell.
+  - Opening the overlay re-fetches the projection every time, including after close/reopen.
+  - Loading, empty, and request-failure states are visible and theme-compatible.
+- **Verification evidence**:
+  - Evidence placeholders maintained at planned state; completion evidence must include WebUI tests for open/close lifecycle and projection refetch-on-open behavior.
+  - Manual evidence must include desktop-browser and mobile-width shell smoke in light and dark themes.
+- **Deferrals / Follow-ups**:
+  - Grid rendering, search, sort, SSE state updates, and click-to-play are handled by later WebUI library-browser milestones.
+
+### M10e - WebUI Library Projection Search and Sort
+
+- **Status**: ⏳ Planned
+- **Goal**: Add the WebUI library browser's in-memory projection model, free-text search, and desktop-aligned sort controls.
+- **Scope**:
+  - Depends on: WebUI library overlay shell.
+  - Build an in-memory library projection model from the server projection response for overlay rendering.
+  - Add free-text search over filename and relative path without server-side query changes.
+  - Add sort by name, last played, play count, and duration with ascending/descending selection matching desktop defaults.
+  - Keep filtering/sorting deterministic across missing values, mixed media types, and projection refreshes.
+- **Acceptance criteria**:
+  - Search matches filename and relative path case-insensitively from the in-memory projection.
+  - Sort controls support name, last played, play count, and duration in both directions.
+  - Default sort behavior matches the desktop library panel.
+  - Search and sort combine predictably and update rendered results without re-fetching the projection.
+- **Verification evidence**:
+  - Evidence placeholders maintained at planned state; completion evidence must include WebUI unit tests for search and all sort modes, including missing last-played/duration values.
+  - Manual evidence must include a mixed-library browser smoke with search and sort combinations.
+- **Deferrals / Follow-ups**:
+  - Server-side search/query endpoints remain out of scope unless projection size proves untenable after virtual scrolling.
+
+### M10f - WebUI Virtual Thumbnail Grid
+
+- **Status**: ⏳ Planned
+- **Goal**: Render the WebUI library browser as a responsive, virtualized thumbnail grid.
+- **Scope**:
+  - Depends on: WebUI library projection search and sort.
+  - Implement grid-only rendering with virtual scrolling so only visible items and a small buffer are mounted.
+  - Render thumbnails with `object-fit: cover` for mixed aspect ratios and missing-thumbnail behavior consistent with the desktop grid.
+  - Show favorite and blacklist state indicators on tiles using established Material Symbols conventions.
+  - Exclude play-count badges and list-view affordances from the tile design.
+- **Acceptance criteria**:
+  - The browser renders a responsive thumbnail grid on mobile-width and desktop-width layouts.
+  - Virtual scrolling keeps DOM item count bounded relative to the visible viewport, not total library size.
+  - Thumbnail cropping, placeholder/missing-thumbnail behavior, and tile metadata remain readable in light and dark themes.
+  - Favorite and blacklist indicators appear on tiles; play-count badges do not appear.
+- **Verification evidence**:
+  - Evidence placeholders maintained at planned state; completion evidence must include WebUI tests for virtualization bounds and tile state rendering.
+  - Manual evidence must include large-projection scroll smoke and mixed-aspect thumbnail review in both themes.
+- **Deferrals / Follow-ups**:
+  - Multi-select, batch actions, and list view are out of scope.
+
+### M10g - WebUI Library SSE State Sync
+
+- **Status**: ⏳ Planned
+- **Goal**: Keep the WebUI library browser projection current while open using existing SSE infrastructure.
+- **Scope**:
+  - Depends on: WebUI virtual thumbnail grid.
+  - Subscribe the library browser model to existing SSE events that affect favorite, blacklist, play count, and last played state.
+  - Update visible and non-visible virtualized items without requiring a full overlay reopen.
+  - Handle `resyncRequired` by re-fetching the authoritative projection.
+  - Preserve the explicit refetch-on-open behavior even after live updates are added.
+- **Acceptance criteria**:
+  - Favorite and blacklist changes from any client update matching WebUI tiles while the overlay is open.
+  - Playback stats and last-played changes from any client update search/sort projections correctly while the overlay is open.
+  - SSE replay gaps or resync-required events trigger an authoritative projection re-fetch.
+  - Closing and reopening the overlay still performs a fresh projection fetch.
+- **Verification evidence**:
+  - Evidence placeholders maintained at planned state; completion evidence must include WebUI SSE model tests for tile-state updates, sort-affecting updates, and resync-required requery behavior.
+  - Manual evidence must include cross-client favorite/blacklist and play-count/last-played sync smoke.
+- **Deferrals / Follow-ups**:
+  - New SSE event types are out of scope unless existing events cannot express the required state changes.
+
+### M10h - WebUI Library Click-to-Play and Responsive Sign-off
+
+- **Status**: ⏳ Planned
+- **Goal**: Complete WebUI library browser behavior by using the server-authoritative play endpoint and signing off responsive/theme parity.
+- **Scope**:
+  - Depends on: WebUI library SSE state sync and server-authoritative play endpoint foundation.
+  - Wire tile activation to `POST /api/play/{itemId}` and play the returned media through the existing WebUI player path.
+  - Map endpoint errors into clear overlay/player feedback without local fallback selection logic.
+  - Complete mobile LAN and desktop browser responsiveness, fullscreen behavior, keyboard/focus basics, and light/dark theme polish for the full browser.
+  - Update docs and testing checklist for the new standard WebUI library play path.
+- **Acceptance criteria**:
+  - Clicking a WebUI library tile requests item playback through the server endpoint and starts the returned media in the WebUI player.
+  - Playback side effects update all clients through SSE and update the open library browser projection.
+  - The browser is usable on mobile-width LAN browsers and desktop browsers in light and dark themes.
+  - The browser follows established WebUI icon, dialog, and theming conventions with no desktop list-view parity requirement.
+- **Verification evidence**:
+  - Evidence placeholders maintained at planned state; completion evidence must include WebUI tests for click-to-play request shape, success handling, and endpoint error handling.
+  - Manual evidence must include WebUI browser play smoke on desktop width and mobile width, plus cross-client SSE side-effect observation.
+- **Deferrals / Follow-ups**:
+  - Offline/PWA-specific library browsing and advanced library actions remain future considerations.
+
+### M10i - Server-Authoritative Source State Model
+
+- **Status**: ⏳ Planned
+- **Goal**: Move source enabled/disabled state into a server-owned domain model shared by all clients.
+- **Scope**:
+  - Depends on: completed WebUI library browser series.
+  - Define the canonical persisted source state shape for enabled/disabled status, source identity, display metadata, and future access-control annotations.
+  - Migrate any client-local enabled/disabled source preference into server-owned settings/state without breaking existing libraries.
+  - Ensure random selection, projection queries, refresh behavior, and source inclusion decisions read source enabled state from the server-owned model.
+  - Keep the first implementation single-operator/default-access only while preserving a clean model boundary for later per-user access decisions.
+- **Acceptance criteria**:
+  - Source enabled/disabled state persists in server-owned state and is shared across clients.
+  - Existing client-local source enabled settings are migrated or ignored harmlessly with deterministic defaults.
+  - Server-side selection/projection behavior honors server-owned enabled state consistently.
+  - The data model includes a non-authoritative placeholder or extension point for future source access policy without requiring user accounts.
+- **Verification evidence**:
+  - Evidence placeholders maintained at planned state; completion evidence must include core/server tests for source-state persistence, migration/default behavior, and selection/projection filtering.
+  - Docs evidence must identify server ownership and the future access-control extension point without documenting unimplemented user-account behavior.
+- **Deferrals / Follow-ups**:
+  - Full user accounts, roles, sharing UI, and per-user permission editing are future considerations.
+
+### M10j - Source Management API and SSE Contract
+
+- **Status**: ⏳ Planned
+- **Goal**: Expose source management through authoritative API and SSE contracts.
+- **Scope**:
+  - Depends on: server-authoritative source state model.
+  - Define source query and mutation endpoints for listing sources and changing enabled/disabled state through the server.
+  - Publish source-state changes through existing SSE envelope/replay semantics so all connected clients converge.
+  - Update OpenAPI, typed clients, API docs, and validation/error behavior for source mutations.
+  - Keep source add/remove/import behavior unchanged unless endpoint alignment is required for enabled-state ownership.
+- **Acceptance criteria**:
+  - Clients can query source state from the server and enable/disable a source through API calls.
+  - Source mutations validate source identity and return deterministic errors for missing/invalid requests.
+  - All connected clients receive source-state updates through SSE and recover through replay/resync behavior.
+  - Contract documentation distinguishes enabled/disabled source state from future access-control policy.
+- **Verification evidence**:
+  - Evidence placeholders maintained at planned state; completion evidence must include server API tests for query/mutation success, validation errors, and SSE emission/replay.
+  - Contract evidence must include OpenAPI and docs updates plus generated client verification where applicable.
+- **Deferrals / Follow-ups**:
+  - Per-user source visibility enforcement is staged behind the source access policy groundwork.
+
+### M10k - Desktop Source Management Cutover
+
+- **Status**: ⏳ Planned
+- **Goal**: Convert desktop source enabled/disabled UX to the server-authoritative source management API.
+- **Scope**:
+  - Depends on: source management API and SSE contract.
+  - Replace desktop client-local source enabled/disabled reads and writes with API calls and SSE projection updates.
+  - Keep desktop source-management UI behavior familiar while removing dual-writer authority.
+  - Ensure source changes from other clients update desktop source state and dependent library/filter views.
+  - Remove obsolete desktop-local source enabled-state persistence once server cutover is verified.
+- **Acceptance criteria**:
+  - Desktop source enabled/disabled changes persist through the server API and are reflected after restart/reconnect.
+  - Source-state changes made elsewhere update the desktop UI through SSE without manual refresh.
+  - Desktop random/play/filter behavior uses server-owned source state after cutover.
+  - No desktop-local source enabled-state mutation remains for the migrated flow.
+- **Verification evidence**:
+  - Evidence placeholders maintained at planned state; completion evidence must include desktop API-client tests or focused integration tests for source query/mutation and SSE update handling.
+  - Manual evidence must include desktop source toggle smoke across restart/reconnect and cross-client update observation.
+- **Deferrals / Follow-ups**:
+  - Any redesigned source-management UI is out of scope; this milestone is an ownership cutover.
+
+### M10l - WebUI Source Management Alignment
+
+- **Status**: ⏳ Planned
+- **Goal**: Align WebUI source-dependent behavior with server-authoritative source state.
+- **Scope**:
+  - Depends on: desktop source management cutover.
+  - Update WebUI source-aware filter/library behavior to read server-owned source state and react to source SSE updates.
+  - Remove any WebUI-local source enabled/disabled authority or duplicated source-state assumptions.
+  - Ensure the library browser projection and random playback requests honor the same source state as desktop.
+  - Keep UI changes minimal unless source state needs clearer feedback in existing WebUI filter/library surfaces.
+- **Acceptance criteria**:
+  - WebUI source-dependent filtering and library projection behavior reflects server-owned enabled/disabled state.
+  - Source-state changes from desktop or another client update WebUI behavior through SSE/resync.
+  - Random playback and item playback do not diverge from server source eligibility decisions.
+  - No new WebUI-local source authority is introduced.
+- **Verification evidence**:
+  - Evidence placeholders maintained at planned state; completion evidence must include WebUI tests for source-state projection, SSE updates, and source-dependent random/library behavior.
+  - Manual evidence must include cross-client desktop-to-WebUI source-state sync smoke.
+- **Deferrals / Follow-ups**:
+  - Full WebUI source administration UI is deferred unless needed to complete server-authoritative behavior.
+
+### M10m - Source Access Policy Groundwork and Final Verification
+
+- **Status**: ⏳ Planned
+- **Goal**: Add minimal access-policy architecture hooks for future per-user source access while completing source-management verification.
+- **Scope**:
+  - Depends on: WebUI source management alignment.
+  - Introduce a server-side source access policy abstraction that evaluates client/session context and source identity, with default behavior matching current all-authorized paired-client access.
+  - Thread the policy boundary through projection, random selection, item play, and source query paths without adding user accounts or permission editing UI.
+  - Document the intended future direction for per-user source access at a high level without treating it as implemented behavior.
+  - Complete final automated/manual verification for server-authoritative source state across server, desktop, and WebUI.
+- **Acceptance criteria**:
+  - Source access checks flow through a single server-side policy boundary with default allow-all behavior for current authenticated clients.
+  - Projection, random selection, item play, and source APIs can be constrained by the policy boundary in tests without client-side authority.
+  - Current user-visible behavior remains unchanged except for shared server-authoritative enabled/disabled state.
+  - Documentation clearly separates implemented source-state authority from future per-user access control.
+- **Verification evidence**:
+  - Evidence placeholders maintained at planned state; completion evidence must include policy-boundary tests for projection, random selection, item play, and source APIs.
+  - Final evidence must include `dotnet build ReelRoulette.sln`, `dotnet test ReelRoulette.sln`, WebUI `npm run verify`, and focused manual cross-client source-state verification.
+- **Deferrals / Follow-ups**:
+  - User accounts, role management, operator permission UI, source sharing invitations, and per-user audit/reporting remain future considerations.
+
 ### M11a - Structured JSONL Schema + Server Writer Foundation
 
 - **Status**: ⏳ Planned

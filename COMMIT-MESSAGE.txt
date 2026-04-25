@@ -19,9 +19,7 @@ Instructions:
 
 Commit Message:
 
-Bugfix: WebUI tag editor and filter Tags tab light-theme chip and icon colors
+Docs: Plan M10 milestone series
 
-- Keep tag chip label text and in-chip Material glyphs white on lime/orange/violet chip surfaces in light theme; chip backgrounds unchanged.
-- Scope light-theme icon tint to dark grey for shell controls only (headers, category rows, footer actions), matching readable contrast on pale panels.
-- Restore chip-button contrast under `html.theme-light .filter-dialog button.icon-glyph-base`, which had forced chip glyphs to the page foreground color.
-- Preserve Huggins Orange on `.chip-btn.is-selected` for pending add/remove (tag editor) and include/exclude selection (filter Tags), mirroring desktop `TagChipAction` checked-state styling.
+- Add planned M10 slices for server-authoritative item play, desktop grid-only cleanup, WebUI library browser delivery, and server-authoritative source management.
+- Capture explicit dependency order, acceptance criteria, evidence expectations, and deferrals for each slice.
