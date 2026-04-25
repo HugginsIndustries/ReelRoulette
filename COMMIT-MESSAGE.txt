@@ -19,8 +19,9 @@ Instructions:
 
 Commit Message:
 
-Bugfix: Show pending tag add/remove glyph state in desktop editor
+Bugfix: WebUI tag editor and filter Tags tab light-theme chip and icon colors
 
-- Match WebUI tag editor behavior by tinting checked plus/minus chip glyphs with `HugginsOrangeBrush` in the desktop `ItemTagsDialog`.
-- Keep no-pending chips unchanged (white glyphs) while pending add/remove selections now provide clear visual feedback before Apply.
-- Preserve existing pending toggle flow so indicators update instantly while toggling and reset after Save/Discard via existing dialog refresh/close behavior.
+- Keep tag chip label text and in-chip Material glyphs white on lime/orange/violet chip surfaces in light theme; chip backgrounds unchanged.
+- Scope light-theme icon tint to dark grey for shell controls only (headers, category rows, footer actions), matching readable contrast on pale panels.
+- Restore chip-button contrast under `html.theme-light .filter-dialog button.icon-glyph-base`, which had forced chip glyphs to the page foreground color.
+- Preserve Huggins Orange on `.chip-btn.is-selected` for pending add/remove (tag editor) and include/exclude selection (filter Tags), mirroring desktop `TagChipAction` checked-state styling.

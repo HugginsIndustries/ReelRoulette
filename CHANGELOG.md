@@ -21,6 +21,7 @@ This file follows a Keep a Changelog style format.
 
 ### Fixed
 
+- **WebUI light theme (tag editor / filter Tags):** Tag chip labels and in-chip icons stay white on colored chips; shell icons and category chrome use dark glyphs in light theme. Filter dialog no longer applies the page foreground color to all `icon-glyph-base` buttons (which had washed out chip icons). Pending or selected chip actions still use Huggins Orange on the plus/minus (and filter include/exclude) toggles.
 - **Desktop tag editor parity:** Pending add/remove actions in `ItemTagsDialog` now tint the selected plus/minus chip glyph in Huggins Orange (matching WebUI), while non-pending glyphs keep their default color.
 - **WebUI /api/random:** SmartShuffle and SpreadMode could behave incorrectly when multiple tabs shared the same stored client id; session-scoped randomization state restores per-tab behavior.
 - **WebUI /api/random:** Weighted modes could ignore recent plays because the browser never recorded playback to the library index.
