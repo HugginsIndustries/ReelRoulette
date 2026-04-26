@@ -156,13 +156,14 @@ Last milestone completed: M9i
   - Docs/checklist evidence must remove or update any desktop list-view validation references.
 - **Deferrals / Follow-ups**:
   - Confirm `GET /api/library/projection` exposes per-item `lastWriteTimeUtc`; if missing at implementation time, scope a small server projection contract addition into M10c.
+  - Duplicate detection remains in the desktop client until Operator Source Management and must not be removed as part of this milestone.
 
 ### M10d - WebUI Library Overlay Shell
 
 - **Status**: ⏳ Planned
 - **Goal**: Introduce the WebUI library browser entry point and full-screen overlay shell without implementing the full grid behavior yet.
 - **Scope**:
-  - Depends on: desktop grid-only library panel cleanup.
+  - Depends on: none.
   - Add a **Library** button to the WebUI top-right overlay controls, positioned left of the filter button.
   - Implement a full-screen overlay matching the existing tag editor and filter dialog shell patterns, including header, close behavior, responsive layout, focus handling, and light/dark theme integration.
   - Wire overlay open/close lifecycle and fetch the library projection on every open, with loading and error states.
@@ -324,6 +325,7 @@ Last milestone completed: M9i
   - Manual evidence must include desktop source toggle smoke across restart/reconnect and cross-client update observation.
 - **Deferrals / Follow-ups**:
   - Any redesigned source-management UI is out of scope; this milestone is an ownership cutover.
+  - The desktop Manage Sources dialog is left intact in this milestone; removing it is deferred to Cross-Client Source Access Cutover. Only source enabled/disabled state ownership moves to the server here.
 
 ### M10l - WebUI Source Management Alignment
 
@@ -373,12 +375,13 @@ Last milestone completed: M9i
 - **Scope**:
   - Depends on: source access policy groundwork.
   - Add persisted account records with name, account level, hashed PIN, and stable identity suitable for later source-permission references.
+  - Require PIN hashes to use bcrypt or Argon2; do not introduce custom, fast, or reversible PIN storage.
   - Support admin and user account levels, including multiple admin accounts.
   - Seed a default admin account with placeholder name `Admin` and default PIN `1234`.
   - Persist per-account, per-device failed PIN attempt state with one-hour lockout after 10 failed attempts.
   - Keep the model free of guest/anonymous access assumptions; every interactive client session must resolve to an account in later milestones.
 - **Acceptance criteria**:
-  - Accounts can be persisted and loaded with name, level, hashed PIN, stable account identity, and no plaintext PIN storage.
+  - Accounts can be persisted and loaded with name, level, bcrypt- or Argon2-hashed PIN, stable account identity, and no plaintext PIN storage.
   - Default startup state contains exactly one admin account named `Admin` with default PIN `1234` when no accounts exist.
   - Multiple admin accounts can exist while account identity remains stable across name and PIN changes.
   - Failed PIN attempt tracking is isolated by account and device and records lockout expiration deterministically.
@@ -395,7 +398,7 @@ Last milestone completed: M9i
 - **Goal**: Replace pairing/control-token authentication with PIN login and transient session tokens.
 - **Scope**:
   - Depends on: account and PIN data model.
-  - Remove the existing pairing/control-token authentication model from the planned auth path, with no migration path and old sessions invalidated on upgrade.
+  - Remove the existing pairing/control-token authentication model from the active auth path, with no migration path and old sessions invalidated on upgrade.
   - Add a PIN login endpoint where a client submits account identity, device identity, and PIN and receives a per-client session token on success.
   - Keep session tokens non-persistent; clients must authenticate again after restart.
   - Enforce failed-attempt lockout on the server and return lockout state, remaining duration, and deterministic failure errors to clients.
@@ -556,7 +559,7 @@ Last milestone completed: M9i
 - **Status**: ⏳ Planned
 - **Goal**: Move source administration into an admin-only Operator UI section.
 - **Scope**:
-  - Depends on: WebUI login gate.
+  - Depends on: Operator access control administration.
   - Add an admin-only Manage Sources section in Operator UI.
   - Support adding, removing, and renaming sources through server-authoritative APIs.
   - Move duplicate detection and duplicate handling entry points into Operator UI as admin-only source-management actions.
@@ -582,12 +585,13 @@ Last milestone completed: M9i
   - Depends on: Operator source management.
   - Add per-source per-user access controls to Operator UI source management.
   - Persist source permission assignments against stable account and source identities.
-  - Enforce denied sources through the server-side source access policy for projection, random selection, library browser, source queries, and item playback.
+  - Enforce denied sources through the server-side source access policy for projection, random selection, library browser, source queries, item playback, and `POST /api/play/{itemId}`.
   - Ensure admins retain source-management authority while user accounts see only allowed sources.
   - Keep source sharing invitations, groups, and audit/reporting out of scope.
 - **Acceptance criteria**:
   - Admins can grant or deny each user access to each source from Operator UI.
   - Denied sources are invisible to the affected user across source lists, projection, random selection, library browser, and item playback.
+  - Denied-source items cannot be played through `POST /api/play/{itemId}` regardless of whether the requesting client has the item ID.
   - Permission changes take effect for active sessions through SSE/resync or deterministic requery behavior.
   - Server tests prove clients cannot bypass source denial by requesting hidden source IDs or item IDs directly.
   - Permission data survives account/source rename operations because it is keyed by stable identities.

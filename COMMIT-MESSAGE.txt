@@ -19,7 +19,7 @@ Instructions:
 
 Commit Message:
 
-Docs: Expand M10 account and access-control roadmap
+Docs: Correct M10 account and source roadmap
 
-- Refocus M10m on source access policy groundwork only.
-- Add planned account, PIN authentication, admin setup, access-control, client login, and source-permission milestones through final v0.12.0 sign-off.
+- Clarify M10 duplicate/source-management deferrals and WebUI/Operator milestone dependencies.
+- Tighten account PIN hashing and source-permission denial requirements for the planned auth series.
