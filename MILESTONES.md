@@ -346,16 +346,15 @@ Last milestone completed: M9i
 - **Deferrals / Follow-ups**:
   - Full WebUI source administration UI is deferred unless needed to complete server-authoritative behavior.
 
-### M10m - Source Access Policy Groundwork and Final Verification
+### M10m - Source Access Policy Groundwork
 
 - **Status**: ⏳ Planned
-- **Goal**: Add minimal access-policy architecture hooks for future per-user source access while completing source-management verification.
+- **Goal**: Add minimal access-policy architecture hooks for future per-user source access.
 - **Scope**:
   - Depends on: WebUI source management alignment.
   - Introduce a server-side source access policy abstraction that evaluates client/session context and source identity, with default behavior matching current all-authorized paired-client access.
   - Thread the policy boundary through projection, random selection, item play, and source query paths without adding user accounts or permission editing UI.
   - Document the intended future direction for per-user source access at a high level without treating it as implemented behavior.
-  - Complete final automated/manual verification for server-authoritative source state across server, desktop, and WebUI.
 - **Acceptance criteria**:
   - Source access checks flow through a single server-side policy boundary with default allow-all behavior for current authenticated clients.
   - Projection, random selection, item play, and source APIs can be constrained by the policy boundary in tests without client-side authority.
@@ -363,9 +362,286 @@ Last milestone completed: M9i
   - Documentation clearly separates implemented source-state authority from future per-user access control.
 - **Verification evidence**:
   - Evidence placeholders maintained at planned state; completion evidence must include policy-boundary tests for projection, random selection, item play, and source APIs.
-  - Final evidence must include `dotnet build ReelRoulette.sln`, `dotnet test ReelRoulette.sln`, WebUI `npm run verify`, and focused manual cross-client source-state verification.
+  - Docs evidence must keep implemented source-state authority separate from future per-user access-control behavior.
 - **Deferrals / Follow-ups**:
-  - User accounts, role management, operator permission UI, source sharing invitations, and per-user audit/reporting remain future considerations.
+  - User accounts, role management, operator permission UI, source sharing invitations, and per-user audit/reporting are handled by later account and source-permission work where applicable.
+
+### M10n - Account and PIN Data Model
+
+- **Status**: ⏳ Planned
+- **Goal**: Establish the server/core account model required for PIN-authenticated clients and future per-user source access.
+- **Scope**:
+  - Depends on: source access policy groundwork.
+  - Add persisted account records with name, account level, hashed PIN, and stable identity suitable for later source-permission references.
+  - Support admin and user account levels, including multiple admin accounts.
+  - Seed a default admin account with placeholder name `Admin` and default PIN `1234`.
+  - Persist per-account, per-device failed PIN attempt state with one-hour lockout after 10 failed attempts.
+  - Keep the model free of guest/anonymous access assumptions; every interactive client session must resolve to an account in later milestones.
+- **Acceptance criteria**:
+  - Accounts can be persisted and loaded with name, level, hashed PIN, stable account identity, and no plaintext PIN storage.
+  - Default startup state contains exactly one admin account named `Admin` with default PIN `1234` when no accounts exist.
+  - Multiple admin accounts can exist while account identity remains stable across name and PIN changes.
+  - Failed PIN attempt tracking is isolated by account and device and records lockout expiration deterministically.
+  - The account schema can reference future per-user source access grants without redesigning account identity or source identity.
+- **Verification evidence**:
+  - Evidence placeholders maintained at planned state; completion evidence must include core/server persistence tests for account creation, default admin seeding, PIN hashing, level handling, and per-device lockout state.
+  - Docs evidence must describe account persistence ownership and default-admin behavior without documenting client login flows as implemented.
+- **Deferrals / Follow-ups**:
+  - Login endpoints, session tokens, account administration UI, and source-permission editing are deferred to later account-system milestones.
+
+### M10o - PIN Authentication API and Session Foundation
+
+- **Status**: ⏳ Planned
+- **Goal**: Replace pairing/control-token authentication with PIN login and transient session tokens.
+- **Scope**:
+  - Depends on: account and PIN data model.
+  - Remove the existing pairing/control-token authentication model from the planned auth path, with no migration path and old sessions invalidated on upgrade.
+  - Add a PIN login endpoint where a client submits account identity, device identity, and PIN and receives a per-client session token on success.
+  - Keep session tokens non-persistent; clients must authenticate again after restart.
+  - Enforce failed-attempt lockout on the server and return lockout state, remaining duration, and deterministic failure errors to clients.
+  - Define logout/session invalidation semantics and session identity propagation for HTTP and SSE.
+- **Acceptance criteria**:
+  - Successful PIN login returns a session token tied to the authenticated account, client, and device context.
+  - Failed PIN attempts increment the correct per-account/per-device counter, trigger one-hour lockout after 10 failures, and return lockout details while locked.
+  - Session tokens are accepted only while valid for the current server runtime/session store and are not persisted by the server as restart-surviving client credentials.
+  - Pairing and control-token auth are no longer accepted for the new auth path, and stale sessions/tokens from the prior system fail deterministically after upgrade.
+  - API and SSE session identity can carry the authenticated account identity for later authorization checks.
+- **Verification evidence**:
+  - Evidence placeholders maintained at planned state; completion evidence must include server API tests for login success, invalid PIN, lockout, lockout expiry, logout/invalidation, and old-token rejection.
+  - Contract evidence must include OpenAPI/docs updates for login/session payloads and lockout error shape.
+- **Deferrals / Follow-ups**:
+  - Full endpoint authorization cutover and client login screens are deferred until the session foundation exists.
+
+### M10p - Auth Cutover for API and Operator UI
+
+- **Status**: ⏳ Planned
+- **Goal**: Require session-token authentication across existing API surfaces and remove the separate Operator UI control-token layer.
+- **Scope**:
+  - Depends on: PIN authentication API and session foundation.
+  - Transition existing server API endpoints, control endpoints, and SSE connection setup to require valid session-token authentication where interactive client access is expected.
+  - Replace Operator UI auth with the account/session model; no separate control token remains.
+  - Ensure admin-only server/control capabilities can distinguish admin accounts from user accounts.
+  - Remove pairing/control-token client flows, docs, and contract references from active behavior.
+  - Explicitly keep external API/programmatic access out of scope.
+- **Acceptance criteria**:
+  - Existing API endpoints reject unauthenticated requests with deterministic auth errors.
+  - Operator UI access uses the same session model as other authenticated surfaces and no longer accepts a distinct control token.
+  - Admin-only operations reject user-level accounts while account-neutral read/playback operations use authenticated account context.
+  - SSE connections require valid session identity and expose auth failure/reconnect behavior consistently.
+  - Active API docs no longer describe pairing/control-token auth as a supported behavior.
+- **Verification evidence**:
+  - Evidence placeholders maintained at planned state; completion evidence must include authorization tests across representative library, playback, source, SSE, and Operator/control endpoints.
+  - Docs evidence must include API/auth documentation updates and removal of active pairing/control-token guidance.
+- **Deferrals / Follow-ups**:
+  - Client-specific login screens and account-management UI are deferred to later milestones.
+
+### M10q - Admin First-Run Setup Flow
+
+- **Status**: ⏳ Planned
+- **Goal**: Require the default admin account to be secured through Operator UI before other clients can log in.
+- **Scope**:
+  - Depends on: auth cutover for API and Operator UI.
+  - Detect the first-run setup state when only the default admin account exists and the default PIN remains active.
+  - In Operator UI, show a user grid containing only the default admin tile in first-run setup state.
+  - After logging in with the default PIN, show a mandatory setup overlay requiring PIN change and prompting for a name change.
+  - Disallow completing setup while the admin PIN remains `1234`; name change is recommended but optional.
+  - Expose setup-state responses so desktop and WebUI can block login and direct users to Operator UI until setup is complete.
+- **Acceptance criteria**:
+  - First-run setup state is detected deterministically from account state and clears only after the default admin PIN is changed.
+  - Operator UI allows the default admin login with PIN `1234` only for setup and forces a non-default replacement PIN before normal use.
+  - The setup overlay permits keeping the placeholder name while clearly prompting for a better admin name.
+  - Desktop and WebUI auth/bootstrap calls can identify setup-incomplete state and do not allow login while setup remains incomplete.
+  - Normal login behavior applies to all clients after setup completion.
+- **Verification evidence**:
+  - Evidence placeholders maintained at planned state; completion evidence must include server setup-state tests and Operator UI tests for default-admin login, mandatory PIN change, optional name change, and setup completion.
+  - Manual evidence must include first-launch Operator UI setup smoke and blocked desktop/WebUI login smoke before setup completion.
+- **Deferrals / Follow-ups**:
+  - General account add/edit/remove workflows are deferred to the Operator access-control milestone.
+
+### M10r - Operator Access Control Administration
+
+- **Status**: ⏳ Planned
+- **Goal**: Add admin-only Operator UI account management for creating and maintaining admin and user accounts.
+- **Scope**:
+  - Depends on: admin first-run setup flow.
+  - Add an admin-only Access Control section in Operator UI.
+  - List all accounts with name and level.
+  - Add accounts with name, level, and initial PIN.
+  - Edit account name, account level, and PIN reset.
+  - Remove accounts while preventing removal of the last admin account.
+  - Allow admins to change their own name and PIN through the standard self-service flow rather than a privileged bypass.
+- **Acceptance criteria**:
+  - Admin accounts can list, add, edit, reset PINs for, and remove accounts through Operator UI.
+  - User-level accounts cannot access account administration.
+  - The system prevents deleting or demoting the last remaining admin account.
+  - Account changes persist across restart and affect subsequent login/authorization decisions.
+  - Admin self-edits use the same PIN-change validation path as non-admin self-service.
+- **Verification evidence**:
+  - Evidence placeholders maintained at planned state; completion evidence must include server/admin API tests for account CRUD, last-admin protection, level changes, and PIN resets.
+  - Operator UI evidence must include admin-only rendering and validation/error-state tests.
+- **Deferrals / Follow-ups**:
+  - Per-source permission editing is deferred until source management moves to Operator UI.
+
+### M10s - Self-Service PIN Change
+
+- **Status**: ⏳ Planned
+- **Goal**: Let authenticated users change their own PIN from every client without admin assistance.
+- **Scope**:
+  - Depends on: Operator access control administration.
+  - Add a self-service PIN change API requiring old PIN, new PIN, and confirm-new-PIN validation.
+  - Add the self-service PIN change flow to Operator UI, desktop, and WebUI for both admin and user accounts.
+  - Reuse server-side PIN hashing, validation, and lockout semantics without exposing plaintext PINs after submission.
+  - Ensure successful PIN change affects future logins while current session behavior remains deterministic.
+- **Acceptance criteria**:
+  - Authenticated admins and users can change their own PIN by entering old PIN, new PIN, and matching confirmation.
+  - Wrong old PIN, mismatched confirmation, invalid new PIN, and lockout conditions return clear deterministic errors.
+  - Successful PIN changes persist and require the new PIN on the next login.
+  - The flow is available in Operator UI, desktop, and WebUI without requiring account-administration privileges.
+- **Verification evidence**:
+  - Evidence placeholders maintained at planned state; completion evidence must include server tests for self-service PIN change success/failure paths and client tests for validation rendering.
+  - Manual evidence must include self-service PIN change smoke in all clients.
+- **Deferrals / Follow-ups**:
+  - Broader profile editing beyond name and PIN remains out of scope.
+
+### M10t - Desktop Login Gate
+
+- **Status**: ⏳ Planned
+- **Goal**: Require PIN login before the desktop main window loads.
+- **Scope**:
+  - Depends on: self-service PIN change.
+  - Show a desktop login window before loading the main application window.
+  - Display a Plex-style account tile grid using `admin_panel_settings` for admin accounts and `account_circle` for user accounts, with account names below.
+  - On tile activation, prompt for PIN and start a session after successful authentication.
+  - Show server-unavailable messaging with retry when the server cannot be reached.
+  - Show setup-incomplete messaging that directs users to Operator UI and blocks login.
+  - Avoid persistent sessions; require PIN login each time the app opens.
+- **Acceptance criteria**:
+  - The desktop main window is inaccessible until a valid PIN login succeeds.
+  - Server-unavailable and setup-incomplete states block login with clear retry/direction messaging.
+  - Account tiles use the required Material Symbols and account-name labels.
+  - Failed PIN attempts and lockout responses display clear errors, including remaining lockout duration after 10 failed attempts.
+  - Restarting the desktop app requires re-authentication.
+- **Verification evidence**:
+  - Evidence placeholders maintained at planned state; completion evidence must include desktop UI/API-client tests for login success, server-unavailable retry, setup-incomplete block, failed PIN, lockout, and no persistent session reuse.
+  - Manual evidence must include desktop launch/login smoke before and after server restart.
+- **Deferrals / Follow-ups**:
+  - Remembered-account convenience, biometric auth, and offline login are out of scope.
+
+### M10u - WebUI Login Gate
+
+- **Status**: ⏳ Planned
+- **Goal**: Require PIN login before any WebUI library or player surface is accessible.
+- **Scope**:
+  - Depends on: desktop login gate.
+  - Show a Plex-style account tile grid before the WebUI shell, library, player, or random controls are accessible.
+  - Use `admin_panel_settings` for admin account tiles and `account_circle` for user account tiles, with account names below.
+  - On tile activation, prompt for PIN and start a session after successful authentication.
+  - Show setup-incomplete messaging that directs users to Operator UI and blocks login.
+  - Avoid persistent sessions; require PIN login each time the WebUI is opened or reloaded.
+  - Ensure WebUI API and SSE clients attach the active session token after login.
+- **Acceptance criteria**:
+  - No WebUI library, random, playback, or player UI is reachable before successful login.
+  - Account tiles use the required Material Symbols and account-name labels across desktop and mobile widths.
+  - Failed PIN attempts and lockout responses display clear errors, including remaining lockout duration after 10 failed attempts.
+  - Reloading or reopening WebUI requires re-authentication and does not reuse a persistent session token.
+  - Authenticated WebUI API and SSE traffic uses the logged-in account session context.
+- **Verification evidence**:
+  - Evidence placeholders maintained at planned state; completion evidence must include WebUI tests for route/shell gating, login success, setup-incomplete block, failed PIN, lockout, session attachment, and reload behavior.
+  - Manual evidence must include WebUI login smoke on desktop and mobile-width browsers.
+- **Deferrals / Follow-ups**:
+  - PWA offline auth behavior and persistent "remember me" sessions are out of scope.
+
+### M10v - Operator Source Management
+
+- **Status**: ⏳ Planned
+- **Goal**: Move source administration into an admin-only Operator UI section.
+- **Scope**:
+  - Depends on: WebUI login gate.
+  - Add an admin-only Manage Sources section in Operator UI.
+  - Support adding, removing, and renaming sources through server-authoritative APIs.
+  - Move duplicate detection and duplicate handling entry points into Operator UI as admin-only source-management actions.
+  - Preserve existing source identity and library refresh behavior unless endpoint alignment is required for Operator ownership.
+  - Keep per-user source permission editing out of this milestone except for any API shape needed to compose with the later permission milestone.
+- **Acceptance criteria**:
+  - Admin accounts can add, remove, rename, scan duplicates, and handle duplicate groups from Operator UI.
+  - User-level accounts cannot access Operator source-management actions.
+  - Source mutations persist through the server and propagate to connected clients through existing projection/SSE behavior.
+  - Duplicate detection and handling are no longer exposed as non-admin client-local source-management workflows.
+  - Existing libraries remain usable after source-management ownership moves to Operator UI.
+- **Verification evidence**:
+  - Evidence placeholders maintained at planned state; completion evidence must include server/admin API tests for source add/remove/rename and duplicate action authorization.
+  - Operator UI evidence must include admin-only Manage Sources rendering and mutation/error tests.
+- **Deferrals / Follow-ups**:
+  - Per-source per-user visibility grants are deferred to the source permission milestone.
+
+### M10w - Per-User Source Permission Management
+
+- **Status**: ⏳ Planned
+- **Goal**: Let admins manage source visibility per user and enforce it through the server policy boundary.
+- **Scope**:
+  - Depends on: Operator source management.
+  - Add per-source per-user access controls to Operator UI source management.
+  - Persist source permission assignments against stable account and source identities.
+  - Enforce denied sources through the server-side source access policy for projection, random selection, library browser, source queries, and item playback.
+  - Ensure admins retain source-management authority while user accounts see only allowed sources.
+  - Keep source sharing invitations, groups, and audit/reporting out of scope.
+- **Acceptance criteria**:
+  - Admins can grant or deny each user access to each source from Operator UI.
+  - Denied sources are invisible to the affected user across source lists, projection, random selection, library browser, and item playback.
+  - Permission changes take effect for active sessions through SSE/resync or deterministic requery behavior.
+  - Server tests prove clients cannot bypass source denial by requesting hidden source IDs or item IDs directly.
+  - Permission data survives account/source rename operations because it is keyed by stable identities.
+- **Verification evidence**:
+  - Evidence placeholders maintained at planned state; completion evidence must include policy tests for all listed source-dependent paths and Operator UI tests for permission editing.
+  - Manual evidence must include admin permission changes observed from at least one user account without client restart where supported.
+- **Deferrals / Follow-ups**:
+  - Role templates, account groups, source sharing invitations, and per-user audit/reporting remain future considerations.
+
+### M10x - Cross-Client Source Access Cutover
+
+- **Status**: ⏳ Planned
+- **Goal**: Align desktop and WebUI with server-authoritative source permissions and remove desktop source administration.
+- **Scope**:
+  - Depends on: per-user source permission management.
+  - Remove the Manage Sources dialog from the desktop client entirely.
+  - Ensure desktop and WebUI source lists, projection, random playback, library browser, and item playback rely only on server-authoritative account permissions.
+  - Remove or hide any client-side source-management entry points that would conflict with Operator-only administration.
+  - Add user-facing empty/denied-state messaging where a user has no visible sources or a previously visible item becomes inaccessible.
+  - Update docs and testing checklist for Operator-only source management and per-user source visibility behavior.
+- **Acceptance criteria**:
+  - Desktop no longer exposes a Manage Sources dialog or client-side source administration path.
+  - Desktop and WebUI do not render denied sources or allow playback/random/library access to denied-source items.
+  - Permission changes made in Operator UI are reflected in desktop and WebUI through session-aware API/SSE behavior.
+  - Client-side filtering cannot broaden source visibility beyond what the server returns.
+  - Documentation and testing checklist describe the new Operator-only source-management workflow.
+- **Verification evidence**:
+  - Evidence placeholders maintained at planned state; completion evidence must include desktop and WebUI tests for hidden denied sources, inaccessible item handling, and removed source-management entry points.
+  - Manual evidence must include cross-client source permission smoke for admin and user accounts.
+- **Deferrals / Follow-ups**:
+  - Client-side requests for source access, approval workflows, and external sharing remain out of scope.
+
+### M10y - Final Verification and v0.12.0 Sign-Off
+
+- **Status**: ⏳ Planned
+- **Goal**: Complete release-gate verification and documentation sign-off for the account, auth, access-control, and source-permission series.
+- **Scope**:
+  - Depends on: cross-client source access cutover.
+  - Run full build, test, and WebUI verification passes.
+  - Complete manual cross-client smoke for desktop and WebUI login, admin setup, account add/edit/remove, per-user source access, self-service PIN change, lockout behavior, and Operator source management.
+  - Update the testing checklist for all new behavior in this series.
+  - Confirm milestone docs, API docs, and CHANGELOG entries for this series are accurate and complete.
+  - Resolve or explicitly defer any open regressions before treating this as the v0.12.0 release gate.
+- **Acceptance criteria**:
+  - `dotnet build ReelRoulette.sln`, `dotnet test ReelRoulette.sln`, and WebUI `npm run verify` pass for the completed series.
+  - Manual verification covers all listed cross-client account, auth, lockout, permission, and source-management workflows.
+  - Testing checklist, API docs, CHANGELOG, and milestone evidence match implemented behavior.
+  - No open regressions remain from the series unless explicitly documented as accepted deferrals outside the v0.12.0 gate.
+  - This milestone is the final gate for the v0.12.0 release.
+- **Verification evidence**:
+  - Evidence placeholders maintained at planned state; completion evidence must include full automated command output summaries and manual smoke PASS/FAIL results.
+  - Docs evidence must include testing checklist, API docs, CHANGELOG, and milestone evidence review results.
+- **Deferrals / Follow-ups**:
+  - None at planned state.
 
 ### M11a - Structured JSONL Schema + Server Writer Foundation
 
