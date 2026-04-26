@@ -19,7 +19,7 @@ Instructions:
 
 Commit Message:
 
-Docs: Correct M10 account and source roadmap
+Docs: Clarify M10f WebUI grid parity
 
-- Clarify M10 duplicate/source-management deferrals and WebUI/Operator milestone dependencies.
-- Tighten account PIN hashing and source-permission denial requirements for the planned auth series.
+- Expand M10f scope and acceptance criteria to require WebUI thumbnail grid visual parity with the desktop grid.
+- Add manual side-by-side verification expectations and known-divergence handling for browser-only constraints.

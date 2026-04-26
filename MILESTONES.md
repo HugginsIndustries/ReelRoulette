@@ -207,19 +207,26 @@ Last milestone completed: M9i
 - **Scope**:
   - Depends on: WebUI library projection search and sort.
   - Implement grid-only rendering with virtual scrolling so only visible items and a small buffer are mounted.
+  - Match the desktop library grid visual design as closely as web technology allows. Before implementation, read `LibraryGridRowViewModel.cs`, `LibraryGridTileViewModel.cs`, and the relevant `MainWindow.axaml` grid markup to understand tile dimensions, spacing, corner radius, shadow treatment, overlay icon placement and sizing, missing-thumbnail placeholder appearance, and hover/active state behavior; implement equivalent CSS rather than approximate styling.
   - Render thumbnails with `object-fit: cover` for mixed aspect ratios and missing-thumbnail behavior consistent with the desktop grid.
   - Show favorite and blacklist state indicators on tiles using established Material Symbols conventions.
+  - Implement tile hover and active/pressed interaction states in CSS to match the desktop grid feel as closely as possible on desktop browsers and touch devices.
   - Exclude play-count badges and list-view affordances from the tile design.
 - **Acceptance criteria**:
   - The browser renders a responsive thumbnail grid on mobile-width and desktop-width layouts.
   - Virtual scrolling keeps DOM item count bounded relative to the visible viewport, not total library size.
+  - WebUI grid tile visual design, including dimensions, spacing, corner radius, shadow treatment, overlay icon placement, and missing-thumbnail placeholder, matches the desktop grid implementation as closely as web technology allows.
+  - Hover and active/pressed states are implemented on tiles and behave correctly on both pointer and touch devices.
+  - Side-by-side visual comparison of WebUI and desktop grids at equivalent viewport widths shows no significant unintentional divergence in tile appearance.
   - Thumbnail cropping, placeholder/missing-thumbnail behavior, and tile metadata remain readable in light and dark themes.
   - Favorite and blacklist indicators appear on tiles; play-count badges do not appear.
 - **Verification evidence**:
   - Evidence placeholders maintained at planned state; completion evidence must include WebUI tests for virtualization bounds and tile state rendering.
   - Manual evidence must include large-projection scroll smoke and mixed-aspect thumbnail review in both themes.
+  - Manual evidence must include side-by-side visual comparison of WebUI and desktop library grids confirming visual parity at equivalent widths in both light and dark themes.
 - **Deferrals / Follow-ups**:
   - Multi-select, batch actions, and list view are out of scope.
+  - Any desktop grid behavior that is technically impossible to replicate in a browser context should be noted as a known divergence in milestone completion evidence rather than treated as a blocker.
 
 ### M10g - WebUI Library SSE State Sync
 
