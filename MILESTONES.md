@@ -186,11 +186,11 @@ Last milestone completed: M9i
   - Depends on: WebUI library overlay shell.
   - Build an in-memory library projection model from the server projection response for overlay rendering.
   - Add free-text search over filename and relative path without server-side query changes.
-  - Add sort by name, last played, play count, and duration with ascending/descending selection matching desktop defaults.
+  - Add sort by name, last played, date added, play count, and duration with ascending/descending selection matching desktop defaults.
   - Keep filtering/sorting deterministic across missing values, mixed media types, and projection refreshes.
 - **Acceptance criteria**:
   - Search matches filename and relative path case-insensitively from the in-memory projection.
-  - Sort controls support name, last played, play count, and duration in both directions.
+  - Sort controls support name, last played, date added, play count, and duration in both directions.
   - Default sort behavior matches the desktop library panel.
   - Search and sort combine predictably and update rendered results without re-fetching the projection.
 - **Verification evidence**:
