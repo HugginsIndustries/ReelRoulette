@@ -625,6 +625,94 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/play/{itemId}:
+    post:
+      summary: Request playback for a specific library item
+      description: |
+        Starts server-authoritative play for the item identified by its persisted library `id` (the same
+        `id` field exposed in library projection). The route value must be that stable id — not `fullPath`
+        (paths are not valid here). Blacklist state does not block this endpoint when the user explicitly
+        selects an item. On success, playback stats and last-played are updated and a `playbackRecorded`
+        SSE event is emitted (same as `POST /api/record-playback`); callers must not call `record-playback`
+        again for the same play start.
+      operationId: postPlayItem
+      parameters:
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Persisted library item `id` (path-safe). Not a filesystem path.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PlayItemRequest"
+      responses:
+        "200":
+          description: Playable media descriptor (same shape as random playback)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RandomResponse"
+        "400":
+          description: Missing or blank item id
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                invalidId:
+                  value:
+                    error: itemId is required
+                    code: play_item_id_invalid
+        "401":
+          description: Unauthorized when auth is required and request is not paired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: >
+            Unknown item id (code play_item_not_found) or media missing on disk / testing simulation
+            (code play_media_missing).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                notFound:
+                  value:
+                    error: Item not found
+                    code: play_item_not_found
+                mediaMissing:
+                  value:
+                    error: Media file not found
+                    code: play_media_missing
+        "409":
+          description: Item exists but its source is disabled (code play_source_disabled).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                sourceDisabled:
+                  value:
+                    error: Source is disabled for this item
+                    code: play_source_disabled
+        "415":
+          description: File extension is not a supported playable type (code play_unsupported_media).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                unsupported:
+                  value:
+                    error: Unsupported media type
+                    code: play_unsupported_media
+
   /api/media/{idOrToken}:
     get:
       summary: Stream media by stable item id or issued playback token
@@ -1280,6 +1368,10 @@ components:
       properties:
         error:
           type: string
+        code:
+          type: string
+          nullable: true
+          description: Machine-readable error code when applicable (e.g. `POST /api/play/{itemId}`).
 
     VersionResponse:
       type: object
@@ -1687,6 +1779,16 @@ components:
           type: boolean
           default: true
         randomizationMode:
+          type: string
+          nullable: true
+
+    PlayItemRequest:
+      type: object
+      properties:
+        clientId:
+          type: string
+          nullable: true
+        sessionId:
           type: string
           nullable: true
 

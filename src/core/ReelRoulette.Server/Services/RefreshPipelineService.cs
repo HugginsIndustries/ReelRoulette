@@ -22,16 +22,6 @@ public sealed class RefreshPipelineService : BackgroundService
     private const long ThumbnailCacheMaxBytes = 2L * 1024L * 1024L * 1024L;
     private const int ThumbnailCacheMaxFiles = 100_000;
 
-    private static readonly HashSet<string> VideoExt = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ".mp4", ".mkv", ".avi", ".mov", ".wmv", ".mpg", ".mpeg"
-    };
-
-    private static readonly HashSet<string> PhotoExt = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".tiff", ".tif"
-    };
-
     private static SemaphoreSlim? _ffprobeSemaphore;
     private static readonly object FfprobeSemaphoreLock = new();
     private static SemaphoreSlim? _ffmpegSemaphore;
@@ -364,7 +354,7 @@ public sealed class RefreshPipelineService : BackgroundService
             var newPathWrite = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
             foreach (var path in newPaths)
             {
-                var mediaType = VideoExt.Contains(Path.GetExtension(path)) ? 0 : 1;
+                var mediaType = MediaPlayableExtensions.IsVideoExtension(Path.GetExtension(path)) ? 0 : 1;
                 newPathMediaType[path] = mediaType;
                 newPathFileName[path] = Path.GetFileName(path);
                 try
@@ -1313,7 +1303,7 @@ public sealed class RefreshPipelineService : BackgroundService
         foreach (var path in all)
         {
             var ext = Path.GetExtension(path);
-            if (VideoExt.Contains(ext) || PhotoExt.Contains(ext))
+            if (MediaPlayableExtensions.IsPlayableExtension(ext))
             {
                 yield return path;
             }

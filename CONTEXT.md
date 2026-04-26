@@ -27,6 +27,7 @@ ReelRoulette is migrating from a monolithic desktop app to a thin-client, API-fi
 
 - **Domain execution (`src/core/ReelRoulette.Core` + server services)**
   - API-authoritative library operations (import, duplicates, auto-tag, playback stats, refresh pipeline).
+  - `POST /api/play/{itemId}` (persisted library **id** only): returns the same `RandomResponse` shape as random playback, records playback server-side, and emits `playbackRecorded` on SSE; deterministic `404` / `409` / `415` errors with optional `code` on `ErrorResponse`. Direct play does not block blacklisted items; callers must not double-call `record-playback` for the same start.
   - Unified refresh pipeline: stage/status projection, thumbnail generation, library **duration** / **loudness** via **ffmpeg**/**ffprobe**, and server-scheduled **auto-refresh**; clients send refresh **settings** (for example enable/interval) and consume library state via API/SSE only (no authoritative client-side refresh stages or local ffprobe for catalog duration).
   - Replay-aware SSE envelope with reconnect recovery (`Last-Event-ID`, `resyncRequired`, authoritative requery).
 

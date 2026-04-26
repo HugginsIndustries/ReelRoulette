@@ -132,11 +132,14 @@ Reconnect/resync behavior:
 - `POST /api/presets`
 - `POST /api/presets/match`
 - `POST /api/random`
+- `POST /api/play/{itemId}`
 - `GET /api/sources`
 - `POST /api/sources/import`
 - `POST /api/sources/{sourceId}/enabled`
 
 **Random playback filter payload:** `POST /api/random` accepts optional `presetId` (matches stored preset **name**) and optional inline `filterState` (JSON object). When both are supplied, the server resolves eligibility from **`filterState` first** (inline wins). Clients should send a full `filterState` for ad-hoc filters (header preset **None**). For `minDuration` / `maxDuration`, prefer string **`HH:MM:SS`** (or a numeric duration in seconds) so values align with server `TimeSpan` parsing; two-part `H:MM` strings are interpreted as hours and minutes, not minutes and seconds. `POST /api/presets` replaces the entire preset catalog (array of `{ name, filterState }`).
+
+**Direct item play:** `POST /api/play/{itemId}` requests playback by persisted library **`id`** (the path segment is **not** `fullPath`). Optional JSON body `{ "clientId"?, "sessionId"? }` matches identity propagation on other playback endpoints. Success returns the same JSON shape as `POST /api/random` (`RandomResponse`) and updates play count / last-played server-side with a `playbackRecorded` SSE event—do **not** call `POST /api/record-playback` for the same play start. Blacklist does **not** block this endpoint. Errors use `ErrorResponse` with optional machine-readable `code` (for example `play_item_not_found`, `play_media_missing`, `play_source_disabled`, `play_unsupported_media`, `play_item_id_invalid`) and HTTP statuses **`404`** (unknown id or missing file), **`409`** (disabled source), **`415`** (extension not in the server playable allowlist).
 - `GET /api/library/projection`
 - `GET /api/library/stats`
 - `POST /api/library-states`

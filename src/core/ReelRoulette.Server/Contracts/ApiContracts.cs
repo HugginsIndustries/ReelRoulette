@@ -125,6 +125,12 @@ public sealed class RecordPlaybackRequest
     public string Path { get; set; } = string.Empty;
 }
 
+public sealed class PlayItemRequest
+{
+    public string? ClientId { get; set; }
+    public string? SessionId { get; set; }
+}
+
 public sealed class ClearPlaybackStatsRequest
 {
     public List<string>? ItemPaths { get; set; }

@@ -11,16 +11,6 @@ public sealed class LibraryOperationsService
 {
     private const string UncategorizedCategoryId = "uncategorized";
     private const string UncategorizedCategoryName = "Uncategorized";
-    private static readonly string[] VideoExtensions =
-    [
-        ".mp4", ".mkv", ".avi", ".mov", ".wmv", ".mpg", ".mpeg"
-    ];
-
-    private static readonly string[] PhotoExtensions =
-    [
-        ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp",
-        ".tiff", ".tif", ".heic", ".heif", ".avif", ".ico", ".svg", ".raw", ".cr2", ".nef", ".orf", ".sr2"
-    ];
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
@@ -1259,7 +1249,7 @@ public sealed class LibraryOperationsService
         foreach (var file in allFiles)
         {
             var extension = Path.GetExtension(file).ToLowerInvariant();
-            if (VideoExtensions.Contains(extension) || PhotoExtensions.Contains(extension))
+            if (MediaPlayableExtensions.IsPlayableExtension(extension))
             {
                 yield return file;
             }
@@ -1269,7 +1259,7 @@ public sealed class LibraryOperationsService
     private static string ResolveMediaType(string filePath)
     {
         var extension = Path.GetExtension(filePath).ToLowerInvariant();
-        return VideoExtensions.Contains(extension) ? "Video" : "Photo";
+        return MediaPlayableExtensions.IsVideoExtension(extension) ? "Video" : "Photo";
     }
 
     private static bool ItemBelongsToSource(JsonObject item, string sourceId, string sourceRootPath)
@@ -1300,12 +1290,12 @@ public sealed class LibraryOperationsService
         if (!string.IsNullOrWhiteSpace(fullPath))
         {
             var extension = Path.GetExtension(fullPath).ToLowerInvariant();
-            if (VideoExtensions.Contains(extension))
+            if (MediaPlayableExtensions.IsVideoExtension(extension))
             {
                 return true;
             }
 
-            if (PhotoExtensions.Contains(extension))
+            if (MediaPlayableExtensions.IsPhotoExtension(extension))
             {
                 return false;
             }

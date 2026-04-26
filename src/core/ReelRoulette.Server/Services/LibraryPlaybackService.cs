@@ -165,6 +165,82 @@ public sealed class LibraryPlaybackService
         return true;
     }
 
+    public const string PlayItemErrorInvalidId = "play_item_id_invalid";
+    public const string PlayItemErrorNotFound = "play_item_not_found";
+    public const string PlayItemErrorMediaMissing = "play_media_missing";
+    public const string PlayItemErrorSourceDisabled = "play_source_disabled";
+    public const string PlayItemErrorUnsupportedMedia = "play_unsupported_media";
+
+    public bool TryPlayItem(
+        string itemId,
+        bool forceMediaMissing,
+        out RandomResponse? response,
+        out int statusCode,
+        out string? error,
+        out string? errorCode)
+    {
+        response = null;
+        error = null;
+        errorCode = null;
+        statusCode = StatusCodes.Status200OK;
+
+        if (string.IsNullOrWhiteSpace(itemId))
+        {
+            statusCode = StatusCodes.Status400BadRequest;
+            error = "itemId is required";
+            errorCode = PlayItemErrorInvalidId;
+            return false;
+        }
+
+        var trimmedId = itemId.Trim();
+        var items = LoadItems();
+        var match = items.FirstOrDefault(item =>
+            string.Equals(item.Id, trimmedId, StringComparison.Ordinal));
+
+        if (string.IsNullOrWhiteSpace(match.FullPath))
+        {
+            statusCode = StatusCodes.Status404NotFound;
+            error = "Item not found";
+            errorCode = PlayItemErrorNotFound;
+            return false;
+        }
+
+        if (!match.IsSourceEnabled)
+        {
+            statusCode = StatusCodes.Status409Conflict;
+            error = "Source is disabled for this item";
+            errorCode = PlayItemErrorSourceDisabled;
+            return false;
+        }
+
+        if (forceMediaMissing || !File.Exists(match.FullPath))
+        {
+            statusCode = StatusCodes.Status404NotFound;
+            error = "Media file not found";
+            errorCode = PlayItemErrorMediaMissing;
+            return false;
+        }
+
+        if (!MediaPlayableExtensions.IsPlayableFilePath(match.FullPath))
+        {
+            statusCode = StatusCodes.Status415UnsupportedMediaType;
+            error = "Unsupported media type";
+            errorCode = PlayItemErrorUnsupportedMedia;
+            return false;
+        }
+
+        var token = _tokenStore.CreateToken(match.FullPath);
+        response = ApiContractMapper.MapRandomResult(
+            id: match.FullPath,
+            displayName: match.FileName,
+            mediaType: match.MediaType,
+            durationSeconds: match.DurationSeconds,
+            mediaUrl: $"/api/media/{token}",
+            isFavorite: match.IsFavorite,
+            isBlacklisted: match.IsBlacklisted);
+        return true;
+    }
+
     /// <summary>
     /// Isolates shuffle-bag / folder-spread state per browser tab (session) and per desktop process,
     /// while keeping anonymous web clients that omit session on a single shared scope.
@@ -365,13 +441,23 @@ public sealed class LibraryPlaybackService
                 var json = File.ReadAllText(_libraryPath);
                 var root = JsonNode.Parse(json) as JsonObject;
                 var nodes = root?["items"]?.AsArray() ?? [];
-                var enabledSources = (root?["sources"] as JsonArray ?? [])
-                    .OfType<JsonObject>()
-                    .Where(node =>
-                        (node["isEnabled"]?.GetValue<bool?>() ?? true) &&
-                        !string.IsNullOrWhiteSpace(node["id"]?.GetValue<string>()))
-                    .Select(node => node["id"]!.GetValue<string>())
-                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                var sourceEnabledById = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+                foreach (var sourceNode in root?["sources"] as JsonArray ?? [])
+                {
+                    if (sourceNode is not JsonObject sourceObject)
+                    {
+                        continue;
+                    }
+
+                    var sid = sourceObject["id"]?.GetValue<string>()?.Trim();
+                    if (string.IsNullOrWhiteSpace(sid))
+                    {
+                        continue;
+                    }
+
+                    sourceEnabledById[sid] = sourceObject["isEnabled"]?.GetValue<bool?>() ?? true;
+                }
+
                 var result = new List<LibraryItemRecord>();
                 foreach (var node in nodes)
                 {
@@ -404,11 +490,15 @@ public sealed class LibraryPlaybackService
                             .ToList()
                         : [];
 
+                    var itemSourceEnabled = string.IsNullOrWhiteSpace(sourceId)
+                        || !sourceEnabledById.TryGetValue(sourceId, out var catalogSourceEnabled)
+                        || catalogSourceEnabled;
+
                     result.Add(new LibraryItemRecord(
                         Id: string.IsNullOrWhiteSpace(id) ? fullPath : id,
                         FullPath: fullPath,
                         SourceId: sourceId,
-                        IsSourceEnabled: string.IsNullOrWhiteSpace(sourceId) || enabledSources.Count == 0 || enabledSources.Contains(sourceId),
+                        IsSourceEnabled: itemSourceEnabled,
                         FileName: string.IsNullOrWhiteSpace(fileName) ? Path.GetFileName(fullPath) : fileName,
                         MediaType: mediaType,
                         DurationSeconds: durationSeconds,

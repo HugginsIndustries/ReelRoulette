@@ -7,7 +7,7 @@ This file follows a Keep a Changelog style format.
 
 ### Added
 
-- *No unreleased changes yet.*
+- **Server — direct item play:** `POST /api/play/{itemId}` (persisted library id) returns `RandomResponse`, records playback, and emits `playbackRecorded`; OpenAPI documents error `code` values on `ErrorResponse`. Shared `MediaPlayableExtensions` aligns import/refresh/play extension allowlists. Library playback projection now honors per-source `isEnabled` when all sources are disabled.
 
 ### Changed
 

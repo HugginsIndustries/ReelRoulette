@@ -38,7 +38,9 @@ Boundary:
 `ReelRoulette.Server` remains a thin transport/composition layer.
 
 - `src/core/ReelRoulette.Server/Hosting/ServerHostComposition.cs`
-  - endpoint wiring for API/SSE/media/control/testing/log surfaces.
+  - endpoint wiring for API/SSE/media/control/testing/log surfaces (including `POST /api/play/{itemId}` with `record-playback`-equivalent persistence and SSE).
+- `src/core/ReelRoulette.Server/MediaPlayableExtensions.cs`
+  - canonical video/photo extension allowlist for import alignment and play `415` checks.
 - `src/core/ReelRoulette.Server/Contracts/ApiContracts.cs`
   - request/response/event DTOs used on transport boundaries.
 - `src/core/ReelRoulette.Server/Contracts/ApiContractMapper.cs`

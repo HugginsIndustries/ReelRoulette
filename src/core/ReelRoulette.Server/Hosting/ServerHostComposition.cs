@@ -349,6 +349,37 @@ public static class ServerHostComposition
             return Results.Ok(response);
         });
 
+        app.MapPost("/api/play/{itemId}", (string itemId, PlayItemRequest? body, LibraryPlaybackService playback, LibraryOperationsService operations, ServerStateService state, OperatorTestingService testingService) =>
+        {
+            var testing = testingService.GetSnapshot();
+            var forceMediaMissing = testing.TestingModeEnabled && testing.ForceMediaMissing;
+            body ??= new PlayItemRequest();
+            body.ClientId = NormalizeOptionalIdentity(body.ClientId);
+            body.SessionId = NormalizeOptionalIdentity(body.SessionId);
+
+            if (!playback.TryPlayItem(itemId, forceMediaMissing, out var playResponse, out var statusCode, out var error, out var errorCode))
+            {
+                return Results.Json(new { error, code = errorCode }, statusCode: statusCode);
+            }
+
+            var path = playResponse!.Id;
+            var recorded = operations.RecordPlayback(path);
+            if (!recorded.Found)
+            {
+                return Results.Json(new { error = "Playback could not be recorded", code = "play_record_failed" }, statusCode: StatusCodes.Status500InternalServerError);
+            }
+
+            state.PublishExternal("playbackRecorded", new PlaybackRecordedPayload
+            {
+                Path = path,
+                ClientId = body.ClientId,
+                SessionId = body.SessionId,
+                PlayCount = recorded.PlayCount,
+                LastPlayedUtc = recorded.LastPlayedUtc
+            });
+            return Results.Ok(playResponse);
+        });
+
         app.MapGet("/api/media/{idOrToken}", (string idOrToken, LibraryPlaybackService playback, OperatorTestingService testingService) =>
         {
             var testing = testingService.GetSnapshot();

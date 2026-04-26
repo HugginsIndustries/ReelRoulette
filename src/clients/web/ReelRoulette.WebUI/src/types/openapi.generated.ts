@@ -352,6 +352,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/play/{itemId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Request playback for a specific library item
+         * @description Starts server-authoritative play for the item identified by its persisted library `id` (the same
+         *     `id` field exposed in library projection). The route value must be that stable id — not `fullPath`
+         *     (paths are not valid here). Blacklist state does not block this endpoint when the user explicitly
+         *     selects an item. On success, playback stats and last-played are updated and a `playbackRecorded`
+         *     SSE event is emitted (same as `POST /api/record-playback`); callers must not call `record-playback`
+         *     again for the same play start.
+         */
+        post: operations["postPlayItem"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/media/{idOrToken}": {
         parameters: {
             query?: never;
@@ -812,6 +837,8 @@ export interface components {
         };
         ErrorResponse: {
             error: string;
+            /** @description Machine-readable error code when applicable (e.g. `POST /api/play/{itemId}`). */
+            code?: string | null;
         };
         VersionResponse: {
             appVersion: string;
@@ -969,6 +996,10 @@ export interface components {
             /** @default true */
             includePhotos: boolean;
             randomizationMode?: string | null;
+        };
+        PlayItemRequest: {
+            clientId?: string | null;
+            sessionId?: string | null;
         };
         RandomResponse: {
             id: string;
@@ -2138,6 +2169,78 @@ export interface operations {
             };
             /** @description Unauthorized when auth is required and request is not paired */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    postPlayItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Persisted library item `id` (path-safe). Not a filesystem path. */
+                itemId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PlayItemRequest"];
+            };
+        };
+        responses: {
+            /** @description Playable media descriptor (same shape as random playback) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RandomResponse"];
+                };
+            };
+            /** @description Missing or blank item id */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized when auth is required and request is not paired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unknown item id (code play_item_not_found) or media missing on disk / testing simulation (code play_media_missing). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Item exists but its source is disabled (code play_source_disabled). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description File extension is not a supported playable type (code play_unsupported_media). */
+            415: {
                 headers: {
                     [name: string]: unknown;
                 };

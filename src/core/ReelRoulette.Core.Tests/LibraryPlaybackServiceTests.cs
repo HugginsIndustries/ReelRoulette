@@ -292,6 +292,285 @@ public sealed class LibraryPlaybackServiceTests : IDisposable
         Assert.Contains("\u001f", scoped, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void TrySelectRandom_ShouldReturnEmptyResultWhenOnlyBlacklistedItemsMatchFilter()
+    {
+        Directory.CreateDirectory(_tempDir);
+        var mediaPath = Path.Combine(_tempDir, "blocked.mp4");
+        File.WriteAllBytes(mediaPath, [0x01, 0x02]);
+
+        File.WriteAllText(Path.Combine(_tempDir, "library.json"), $$"""
+        {
+          "items": [
+            {
+              "id": "blk-1",
+              "fullPath": "{{mediaPath.Replace("\\", "\\\\")}}",
+              "fileName": "blocked.mp4",
+              "mediaType": 0,
+              "isBlacklisted": true,
+              "sourceId": "s1"
+            }
+          ],
+          "sources": [
+            { "id": "s1", "isEnabled": true }
+          ]
+        }
+        """);
+
+        var service = CreateService();
+        var ok = service.TrySelectRandom(
+            new RandomRequest
+            {
+                PresetId = string.Empty,
+                FilterState = ParseJson("{}"),
+                IncludeVideos = true,
+                IncludePhotos = true
+            },
+            [],
+            [],
+            [],
+            out var response,
+            out var statusCode,
+            out var error);
+
+        Assert.True(ok);
+        Assert.Equal(StatusCodes.Status200OK, statusCode);
+        Assert.Null(error);
+        Assert.Null(response);
+    }
+
+    [Fact]
+    public void TryPlayItem_ShouldSucceed_ForPlayableItemByStableId()
+    {
+        Directory.CreateDirectory(_tempDir);
+        var mediaPath = Path.Combine(_tempDir, "play.mp4");
+        File.WriteAllBytes(mediaPath, [0x01, 0x02]);
+
+        File.WriteAllText(Path.Combine(_tempDir, "library.json"), $$"""
+        {
+          "items": [
+            {
+              "id": "stable-id-1",
+              "fullPath": "{{mediaPath.Replace("\\", "\\\\")}}",
+              "fileName": "play.mp4",
+              "mediaType": 0,
+              "sourceId": "s1",
+              "isBlacklisted": false
+            }
+          ],
+          "sources": [
+            { "id": "s1", "isEnabled": true }
+          ]
+        }
+        """);
+
+        var service = CreateService();
+        var ok = service.TryPlayItem("stable-id-1", false, out var response, out var statusCode, out var error, out var code);
+
+        Assert.True(ok);
+        Assert.Equal(StatusCodes.Status200OK, statusCode);
+        Assert.Null(error);
+        Assert.Null(code);
+        Assert.NotNull(response);
+        Assert.Equal(mediaPath, response!.Id);
+        Assert.StartsWith("/api/media/", response.MediaUrl, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TryPlayItem_ShouldSucceed_WhenItemIsBlacklisted()
+    {
+        Directory.CreateDirectory(_tempDir);
+        var mediaPath = Path.Combine(_tempDir, "blisted.mp4");
+        File.WriteAllBytes(mediaPath, [0x01, 0x02]);
+
+        File.WriteAllText(Path.Combine(_tempDir, "library.json"), $$"""
+        {
+          "items": [
+            {
+              "id": "bl-1",
+              "fullPath": "{{mediaPath.Replace("\\", "\\\\")}}",
+              "fileName": "blisted.mp4",
+              "mediaType": 0,
+              "sourceId": "s1",
+              "isBlacklisted": true
+            }
+          ],
+          "sources": [
+            { "id": "s1", "isEnabled": true }
+          ]
+        }
+        """);
+
+        var service = CreateService();
+        var ok = service.TryPlayItem("bl-1", false, out var response, out var statusCode, out _, out _);
+
+        Assert.True(ok);
+        Assert.Equal(StatusCodes.Status200OK, statusCode);
+        Assert.NotNull(response);
+        Assert.True(response!.IsBlacklisted);
+    }
+
+    [Fact]
+    public void TryPlayItem_ShouldReturn404_WhenIdUnknown()
+    {
+        Directory.CreateDirectory(_tempDir);
+        File.WriteAllText(Path.Combine(_tempDir, "library.json"), """
+        {
+          "items": [],
+          "sources": []
+        }
+        """);
+
+        var service = CreateService();
+        var ok = service.TryPlayItem("missing-id", false, out _, out var statusCode, out var error, out var code);
+
+        Assert.False(ok);
+        Assert.Equal(StatusCodes.Status404NotFound, statusCode);
+        Assert.Equal("Item not found", error);
+        Assert.Equal(LibraryPlaybackService.PlayItemErrorNotFound, code);
+    }
+
+    [Fact]
+    public void TryPlayItem_ShouldReturn404_WhenFileMissingOnDisk()
+    {
+        Directory.CreateDirectory(_tempDir);
+        var mediaPath = Path.Combine(_tempDir, "nope.mp4");
+
+        File.WriteAllText(Path.Combine(_tempDir, "library.json"), $$"""
+        {
+          "items": [
+            {
+              "id": "x-1",
+              "fullPath": "{{mediaPath.Replace("\\", "\\\\")}}",
+              "fileName": "nope.mp4",
+              "mediaType": 0,
+              "sourceId": "s1"
+            }
+          ],
+          "sources": [
+            { "id": "s1", "isEnabled": true }
+          ]
+        }
+        """);
+
+        var service = CreateService();
+        var ok = service.TryPlayItem("x-1", false, out _, out var statusCode, out var error, out var code);
+
+        Assert.False(ok);
+        Assert.Equal(StatusCodes.Status404NotFound, statusCode);
+        Assert.Equal("Media file not found", error);
+        Assert.Equal(LibraryPlaybackService.PlayItemErrorMediaMissing, code);
+    }
+
+    [Fact]
+    public void TryPlayItem_ShouldReturn404_WhenForceMediaMissing()
+    {
+        Directory.CreateDirectory(_tempDir);
+        var mediaPath = Path.Combine(_tempDir, "present.mp4");
+        File.WriteAllBytes(mediaPath, [0x01]);
+
+        File.WriteAllText(Path.Combine(_tempDir, "library.json"), $$"""
+        {
+          "items": [
+            {
+              "id": "fm-1",
+              "fullPath": "{{mediaPath.Replace("\\", "\\\\")}}",
+              "fileName": "present.mp4",
+              "mediaType": 0,
+              "sourceId": "s1"
+            }
+          ],
+          "sources": [
+            { "id": "s1", "isEnabled": true }
+          ]
+        }
+        """);
+
+        var service = CreateService();
+        var ok = service.TryPlayItem("fm-1", forceMediaMissing: true, out _, out var statusCode, out _, out var code);
+
+        Assert.False(ok);
+        Assert.Equal(StatusCodes.Status404NotFound, statusCode);
+        Assert.Equal(LibraryPlaybackService.PlayItemErrorMediaMissing, code);
+    }
+
+    [Fact]
+    public void TryPlayItem_ShouldReturn409_WhenSourceDisabled()
+    {
+        Directory.CreateDirectory(_tempDir);
+        var mediaPath = Path.Combine(_tempDir, "off.mp4");
+        File.WriteAllBytes(mediaPath, [0x01]);
+
+        File.WriteAllText(Path.Combine(_tempDir, "library.json"), $$"""
+        {
+          "items": [
+            {
+              "id": "off-1",
+              "fullPath": "{{mediaPath.Replace("\\", "\\\\")}}",
+              "fileName": "off.mp4",
+              "mediaType": 0,
+              "sourceId": "s1"
+            }
+          ],
+          "sources": [
+            { "id": "s1", "isEnabled": false }
+          ]
+        }
+        """);
+
+        var service = CreateService();
+        var ok = service.TryPlayItem("off-1", false, out _, out var statusCode, out var error, out var code);
+
+        Assert.False(ok);
+        Assert.Equal(StatusCodes.Status409Conflict, statusCode);
+        Assert.Contains("disabled", error, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(LibraryPlaybackService.PlayItemErrorSourceDisabled, code);
+    }
+
+    [Fact]
+    public void TryPlayItem_ShouldReturn415_WhenExtensionNotPlayable()
+    {
+        Directory.CreateDirectory(_tempDir);
+        var mediaPath = Path.Combine(_tempDir, "weird.xyz");
+        File.WriteAllBytes(mediaPath, [0x01]);
+
+        File.WriteAllText(Path.Combine(_tempDir, "library.json"), $$"""
+        {
+          "items": [
+            {
+              "id": "badext-1",
+              "fullPath": "{{mediaPath.Replace("\\", "\\\\")}}",
+              "fileName": "weird.xyz",
+              "mediaType": 0,
+              "sourceId": "s1"
+            }
+          ],
+          "sources": [
+            { "id": "s1", "isEnabled": true }
+          ]
+        }
+        """);
+
+        var service = CreateService();
+        var ok = service.TryPlayItem("badext-1", false, out _, out var statusCode, out _, out var code);
+
+        Assert.False(ok);
+        Assert.Equal(StatusCodes.Status415UnsupportedMediaType, statusCode);
+        Assert.Equal(LibraryPlaybackService.PlayItemErrorUnsupportedMedia, code);
+    }
+
+    [Fact]
+    public void TryPlayItem_ShouldReturn400_WhenItemIdBlank()
+    {
+        Directory.CreateDirectory(_tempDir);
+        var service = CreateService();
+        var ok = service.TryPlayItem("   ", false, out _, out var statusCode, out _, out var code);
+
+        Assert.False(ok);
+        Assert.Equal(StatusCodes.Status400BadRequest, statusCode);
+        Assert.Equal(LibraryPlaybackService.PlayItemErrorInvalidId, code);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_tempDir))

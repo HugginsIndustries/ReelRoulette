@@ -89,29 +89,7 @@ Do not use this file for detailed architecture explanation or current capability
 
 ## Active Milestones
 
-Last milestone completed: M9i
-
-### M10a - Server-Authoritative Play Endpoint Foundation
-
-- **Status**: ⏳ Planned
-- **Goal**: Add a dedicated server-owned play request path that any client can use to request a specific library item.
-- **Scope**:
-  - Depends on: none.
-  - Define `POST /api/play/{itemId}` in the OpenAPI contract with deterministic success and failure responses for playable item, missing item, unavailable media, blacklisted/ineligible item, and unsupported media cases.
-  - Implement the server/core command path so item-specific play requests are authorized, validated, and recorded through the same authoritative state services used by random playback.
-  - Return the requested media response shape needed by existing clients without introducing transcoding/session-streaming behavior from later playback architecture work.
-  - Emit the same SSE side effects expected today for playback stats and library projection updates.
-- **Acceptance criteria**:
-  - A valid item-specific play request returns a playable media response for the requesting client.
-  - Invalid or unavailable item requests return deterministic status codes and machine-readable error payloads.
-  - Playback stats and last-played state are updated server-side and projected to all clients through existing SSE infrastructure.
-  - The endpoint is covered in the shared API contract and generated/typed client surfaces where applicable.
-  - No client-local state mutation path is introduced for endpoint side effects.
-- **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include server/core tests for success, validation failure, missing-media, and stats/SSE side-effect behavior.
-  - Contract/docs evidence must include OpenAPI and API documentation updates for the new endpoint.
-- **Deferrals / Follow-ups**:
-  - Full playback-session, direct-stream, transcode, resume, and format-resilience architecture remains future playback architecture work.
+Last milestone completed: M10a
 
 ### M10b - Desktop Click-to-Play API Cutover
 
@@ -1386,6 +1364,30 @@ Last milestone completed: M9i
 ## Completed Milestones
 
 Latest completions first:
+
+### M10a - Server-Authoritative Play Endpoint Foundation
+
+- **Status**: ✅ Complete
+- **Goal**: Add a dedicated server-owned play request path that any client can use to request a specific library item.
+- **Scope**:
+  - Depends on: none.
+  - Define `POST /api/play/{itemId}` in the OpenAPI contract with deterministic success and failure responses (including optional machine-readable `code` on `ErrorResponse`) for playable item, unknown id, missing media file, disabled source, and unsupported extension cases. Route `itemId` is the persisted library **id** only (not `fullPath`). Direct play does **not** reject blacklisted items; disabled sources return **409**; missing media returns **404** with `play_media_missing`; unknown id returns **404** with `play_item_not_found`; unsupported extension returns **415** with `play_unsupported_media`.
+  - Implement the server command path with `LibraryPlaybackService.TryPlayItem`, shared playable extension allowlist (`MediaPlayableExtensions`, aligned with library import lists), and correct per-source `isEnabled` projection for items (including when all catalog sources are disabled).
+  - On success, return the same `RandomResponse` shape as random playback, call `LibraryOperationsService.RecordPlayback`, and publish `playbackRecorded` via `ServerStateService` (same side effects as `POST /api/record-playback`). No transcoding/session-streaming.
+- **Acceptance criteria**:
+  - A valid item-specific play request returns a playable media response for the requesting client.
+  - Invalid or unavailable item requests return deterministic status codes and machine-readable error payloads.
+  - Playback stats and last-played state are updated server-side and projected to all clients through existing SSE infrastructure.
+  - The endpoint is covered in the shared API contract and generated/typed client surfaces where applicable.
+  - No client-local state mutation path is introduced for endpoint side effects.
+- **Verification evidence**:
+  - `dotnet build ReelRoulette.sln` — pass (0 warnings).
+  - `dotnet test ReelRoulette.sln` — pass (`LibraryPlaybackServiceTests` play-item and random-blacklist cases; `PlayItemOrchestrationTests`).
+  - WebUI `npm run generate:contracts` / `npm run verify` — pass (OpenAPI + `openapi.generated.ts`).
+  - Docs: `docs/api.md`, `docs/domain-inventory.md`, `docs/checklists/testing-checklist.md`, `CONTEXT.md`, `CHANGELOG.md` `[Unreleased]`, `COMMIT-MESSAGE.txt`.
+- **Deferrals / Follow-ups**:
+  - Full playback-session, direct-stream, transcode, resume, and format-resilience architecture remains future playback architecture work.
+  - Desktop/WebUI cutover to call this endpoint without double `record-playback` is tracked in the desktop/WebUI browser milestones.
 
 ### M9i - WebUI Auto Tag Parity
 
