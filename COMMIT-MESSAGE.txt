@@ -19,7 +19,7 @@ Instructions:
 
 Commit Message:
 
-Docs: Plan M10 milestone series
+Docs: Expand M10c desktop sort plan
 
-- Add planned M10 slices for server-authoritative item play, desktop grid-only cleanup, WebUI library browser delivery, and server-authoritative source management.
-- Capture explicit dependency order, acceptance criteria, evidence expectations, and deferrals for each slice.
+- Update M10c scope and acceptance criteria to add a `lastWriteTimeUtc`-backed Date Added sort mode with both directions.
+- Document descending (Newest to Oldest) as the default Date Added direction and add a projection-field availability follow-up.

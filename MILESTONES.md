@@ -141,18 +141,21 @@ Last milestone completed: M9i
 - **Scope**:
   - Depends on: desktop click-to-play API cutover.
   - Remove list/grid toggle UI, list-view rendering, and list-view-specific state persistence from the desktop library panel.
-  - Keep the existing grid view, thumbnail behavior, sorting/filtering behavior, and item activation path intact.
+  - Keep the existing grid view, thumbnail behavior, filtering behavior, and item activation path intact.
+  - Add a `lastWriteTimeUtc`-backed **Date Added** sort mode to the desktop library panel sort selector, supporting both descending (Newest to Oldest) and ascending (Oldest to Newest) directions.
   - Clean up dead list-view styles, settings keys, and code paths without changing library projection contracts.
 - **Acceptance criteria**:
   - Desktop library panel always renders the grid view and exposes no list-view toggle.
   - Existing grid thumbnail, sorting, filtering, favorite/blacklist indicator, and click-to-play behavior remain functional.
+  - Sort controls include **Date Added** (from `lastWriteTimeUtc`) with both **Newest to Oldest** and **Oldest to Newest** directions.
+  - **Date Added** defaults to descending (**Newest to Oldest**), matching desktop time-based sort conventions.
   - Removed list-view preference data is ignored harmlessly if present in existing desktop settings.
   - No WebUI behavior changes are included in this cleanup.
 - **Verification evidence**:
   - Evidence placeholders maintained at planned state; completion evidence must include focused desktop UI/state tests where practical and a manual grid-only smoke check.
   - Docs/checklist evidence must remove or update any desktop list-view validation references.
 - **Deferrals / Follow-ups**:
-  - None at planned state.
+  - Confirm `GET /api/library/projection` exposes per-item `lastWriteTimeUtc`; if missing at implementation time, scope a small server projection contract addition into M10c.
 
 ### M10d - WebUI Library Overlay Shell
 
