@@ -72,6 +72,7 @@ flowchart LR
 - WebUI ships a small **PWA** surface (`manifest.webmanifest`, `index.html` install meta, `public/icons/*`, root `public/sw.js` registered in secure contexts for Chromium installability); build-time sync resizes shared PNG sources so declared icon sizes match shipped assets (see `scripts/sync-shared-icon.mjs`).
 - Playback filtering and preset catalogs are edited through API-backed UIs on both clients (no client-authoritative filter catalogs).
 - Clients issue command/query calls through APIs and project state from API plus SSE.
+- Desktop library activation (grid/list) is server-authoritative via `POST /api/play/{itemId}`; local LibVLC render only, with no duplicate client `record-playback` for that start.
 - WebUI Auto Tag (like duplicate scan/apply) performs filename/path matching only on the server; the web client sends scan scope and applies selected suggestions via API without client-local tag-matching authority.
 - Clients must not reintroduce local authoritative mutation fallbacks for migrated domains.
 - Library export/import applies zip packaging and JSON path remapping on the server; the desktop supplies UI and writes only imported `desktop-settings.json` locally after a successful import.

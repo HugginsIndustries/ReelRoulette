@@ -11,6 +11,10 @@ This file follows a Keep a Changelog style format.
 
 ### Changed
 
+- **Desktop — library click-to-play:** Grid and list activation call `POST /api/play/{itemId}`; playback starts from the returned `RandomResponse` with LibVLC locally and without duplicate client `record-playback`. Endpoint errors map to user-facing status messages (404/409/415).
+- **Desktop — Force API playback:** Resolve root-relative `/api/media/...` URLs against the core base URL on Linux (avoid mis-parsing them as `file://` paths).
+- **Desktop — Force API photo playback:** Photo display loads from `/api/media/...` over HTTP instead of treating API URLs as local filesystem paths.
+- **Desktop — favorite/blacklist toggles:** Programmatic sync during playback no longer fires toggle change handlers (avoids spurious add/remove status messages and unintended API writes).
 - **Desktop cleanup:** Removed unused desktop fingerprint/history wrappers, duplicate/source-stat adapter DTOs, Core state-service boxes, local global-stat aggregation, and duration/loudness scan wrapper methods from the safe migration-cleanup pass.
 - **Desktop filtering:** Dropped `FilterService` / `FilterSetBuilder` from the desktop; library panel filter state uses `LibraryProjectionDisplayFilter` on the server-backed projection, and random playback stays on `/api/random` via `RequestRandomAsync` (no desktop-built eligible pool).
 - **Desktop randomization:** Removed `RandomSelectionEngine` / local shuffle state; `LibraryPlaybackService` keys runtime shuffle/spread state by client plus session (WebUI tabs no longer share one bag).

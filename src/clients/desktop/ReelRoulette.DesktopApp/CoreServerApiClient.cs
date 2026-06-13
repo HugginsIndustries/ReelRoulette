@@ -50,6 +50,42 @@ public sealed class CoreServerApiClient
         return await JsonSerializer.DeserializeAsync<CoreRandomResponse>(stream, _serializerOptions, cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<CorePlayItemResult> RequestPlayItemAsync(
+        string baseUrl,
+        string itemId,
+        string? clientId = null,
+        string? sessionId = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(itemId))
+        {
+            return CorePlayItemResult.Failure(400, "itemId is required", "play_item_id_invalid");
+        }
+
+        var request = new CorePlayItemRequest
+        {
+            ClientId = clientId,
+            SessionId = sessionId
+        };
+        using var content = SerializeJson(request);
+        var escapedItemId = Uri.EscapeDataString(itemId.Trim());
+        using var response = await _httpClient.PostAsync(
+            $"{baseUrl.TrimEnd('/')}/api/play/{escapedItemId}",
+            content,
+            cancellationToken).ConfigureAwait(false);
+
+        if (response.IsSuccessStatusCode)
+        {
+            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+            var playResponse = await JsonSerializer.DeserializeAsync<CoreRandomResponse>(stream, _serializerOptions, cancellationToken).ConfigureAwait(false);
+            return CorePlayItemResult.Success((int)response.StatusCode, playResponse);
+        }
+
+        var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        var (error, code) = TryReadJsonErrorBody(body);
+        return CorePlayItemResult.Failure((int)response.StatusCode, error, code);
+    }
+
     public async Task<List<CorePresetResponse>?> GetPresetsAsync(string baseUrl, CancellationToken cancellationToken = default)
     {
         using var response = await _httpClient.GetAsync($"{baseUrl.TrimEnd('/')}/api/presets", cancellationToken).ConfigureAwait(false);
@@ -113,14 +149,22 @@ public sealed class CoreServerApiClient
 
     private static string? TryReadJsonError(string body)
     {
+        var (error, _) = TryReadJsonErrorBody(body);
+        return error;
+    }
+
+    private static (string? Error, string? Code) TryReadJsonErrorBody(string body)
+    {
         try
         {
             var node = JsonNode.Parse(body) as JsonObject;
-            return node?["error"]?.GetValue<string>() ?? body;
+            var error = node?["error"]?.GetValue<string>();
+            var code = node?["code"]?.GetValue<string>();
+            return (error ?? body, code);
         }
         catch
         {
-            return body;
+            return (body, null);
         }
     }
 
@@ -629,6 +673,42 @@ public sealed class CoreRandomRequest
     public bool IncludeVideos { get; set; } = true;
     public bool IncludePhotos { get; set; } = true;
     public string? RandomizationMode { get; set; }
+}
+
+public sealed class CorePlayItemRequest
+{
+    public string? ClientId { get; set; }
+    public string? SessionId { get; set; }
+}
+
+public sealed class CorePlayItemResult
+{
+    public bool IsSuccess { get; init; }
+    public int StatusCode { get; init; }
+    public CoreRandomResponse? Response { get; init; }
+    public string? Error { get; init; }
+    public string? Code { get; init; }
+
+    public static CorePlayItemResult Success(int statusCode, CoreRandomResponse? response)
+    {
+        return new CorePlayItemResult
+        {
+            IsSuccess = true,
+            StatusCode = statusCode,
+            Response = response
+        };
+    }
+
+    public static CorePlayItemResult Failure(int statusCode, string? error, string? code = null)
+    {
+        return new CorePlayItemResult
+        {
+            IsSuccess = false,
+            StatusCode = statusCode,
+            Error = error,
+            Code = code
+        };
+    }
 }
 
 public sealed class CoreRandomResponse

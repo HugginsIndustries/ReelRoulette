@@ -817,7 +817,8 @@ namespace ReelRoulette
             string PlaybackSource,
             FromType PlaybackSourceType,
             bool IsLocallyAccessible,
-            bool UsedApiPath);
+            bool UsedApiPath,
+            bool SkipRecordPlayback = false);
 
         // Volume and mute
         private int _lastNonZeroVolume = 100;
@@ -1424,8 +1425,7 @@ namespace ReelRoulette
                 var isCurrentItem = string.Equals(_currentVideoPath, fullPath, StringComparison.OrdinalIgnoreCase);
                 if (isCurrentItem)
                 {
-                    FavoriteToggle.IsChecked = isFavorite;
-                    BlacklistToggle.IsChecked = isBlacklisted;
+                    ApplyFavoriteBlacklistToggleState(isFavorite, isBlacklisted);
                     UpdateCurrentFileStatsUi();
                 }
 
@@ -2031,10 +2031,8 @@ namespace ReelRoulette
                 CurrentVideoTagsDisplay = "None";
             }
 
-            // Update toggle buttons to reflect current state
-            FavoriteToggle.IsChecked = isFavorite;
-            BlacklistToggle.IsChecked = isBlacklisted;
-            
+            ApplyFavoriteBlacklistToggleState(isFavorite, isBlacklisted);
+
             Log($"UpdateCurrentFileStatsUi: Stats UI updated - MediaType: {(IsCurrentFileVideo ? "Video" : "Photo")}, Favorite: {CurrentVideoIsFavoriteDisplay}, Blacklisted: {CurrentVideoIsBlacklistedDisplay}, Duration: {CurrentVideoDurationDisplay}, Audio: {CurrentVideoHasAudioDisplay}, Tags: {CurrentVideoTagsDisplay}");
         }
 
@@ -3585,9 +3583,9 @@ namespace ReelRoulette
 
         private void LibraryGridItem_Click(object? sender, RoutedEventArgs e)
         {
-            if (sender is Button button && button.Tag is string fullPath && !string.IsNullOrWhiteSpace(fullPath))
+            if (sender is Button button && button.Tag is string itemId && !string.IsNullOrWhiteSpace(itemId))
             {
-                PlayFromPath(fullPath);
+                _ = PlayFromLibraryItemIdAsync(itemId);
             }
         }
 
@@ -3778,10 +3776,10 @@ namespace ReelRoulette
 
         private void LibraryItemPlay_Click(object? sender, RoutedEventArgs e)
         {
-            if (sender is Button button && button.Tag is string path)
+            if (sender is Button button && button.Tag is string itemId && !string.IsNullOrWhiteSpace(itemId))
             {
-                Log($"UI ACTION: LibraryItemPlay clicked for: {System.IO.Path.GetFileName(path)}");
-                PlayFromPath(path);
+                Log($"UI ACTION: LibraryItemPlay clicked for item id: {itemId}");
+                _ = PlayFromLibraryItemIdAsync(itemId);
             }
         }
 
@@ -3901,7 +3899,7 @@ namespace ReelRoulette
             if (sender is ListBox listBox && listBox.SelectedItem is LibraryItemViewModel item)
             {
                 Log($"UI ACTION: LibraryListBox double-tapped for: {System.IO.Path.GetFileName(item.FullPath)}");
-                PlayFromPath(item.FullPath);
+                _ = PlayFromLibraryItemIdAsync(item.Id);
             }
         }
 
@@ -3912,7 +3910,7 @@ namespace ReelRoulette
                 if (e.Key == Key.Enter)
                 {
                     Log($"UI ACTION: LibraryListBox Enter key pressed for: {System.IO.Path.GetFileName(item.FullPath)}");
-                    PlayFromPath(item.FullPath);
+                    _ = PlayFromLibraryItemIdAsync(item.Id);
                     e.Handled = true;
                 }
             }
@@ -4481,6 +4479,73 @@ namespace ReelRoulette
 
         #region Video Playback
 
+        private async Task PlayFromLibraryItemIdAsync(string itemId, bool addToHistory = true)
+        {
+            Log($"PlayFromLibraryItemId: Starting - itemId: {itemId ?? "null"}");
+
+            if (string.IsNullOrWhiteSpace(itemId))
+            {
+                SetStatusMessage("Playback unavailable: no library item was selected.");
+                _isNavigatingTimeline = false;
+                return;
+            }
+
+            if (!await EnsureCoreCommandApiAvailableAsync())
+            {
+                SetStatusMessage("Core runtime is required for library playback.");
+                _isNavigatingTimeline = false;
+                return;
+            }
+
+            CorePlayItemResult result;
+            try
+            {
+                result = await _coreServerApiClient.RequestPlayItemAsync(
+                    _coreServerBaseUrl,
+                    itemId,
+                    _coreClientId,
+                    _coreSessionId);
+            }
+            catch (Exception ex)
+            {
+                Log($"PlayFromLibraryItemId: API call failed ({ex.Message})");
+                SetStatusMessage("Playback failed.");
+                _isNavigatingTimeline = false;
+                return;
+            }
+
+            if (!result.IsSuccess)
+            {
+                SetStatusMessage(MapPlayItemErrorToUserMessage(result));
+                _isNavigatingTimeline = false;
+                return;
+            }
+
+            // RandomResponse.id carries fullPath by current server convention (stats path, not stable item GUID).
+            var target = ResolvePlaybackTargetFromApiRandomResponse(result.Response!);
+            if (target == null)
+            {
+                SetStatusMessage("Playback failed.");
+                _isNavigatingTimeline = false;
+                return;
+            }
+
+            target = target with { SkipRecordPlayback = true };
+            Log($"PlayFromLibraryItemId: Resolved playback target for {Path.GetFileName(target.StatsPath)} (ApiPath={target.UsedApiPath})");
+            PlayMedia(target, addToHistory);
+        }
+
+        private static string MapPlayItemErrorToUserMessage(CorePlayItemResult result)
+        {
+            return result.StatusCode switch
+            {
+                404 => "Media not found. The file may have moved or been deleted.",
+                409 => "This item is unavailable.",
+                415 => "This file type is not supported.",
+                _ => string.IsNullOrWhiteSpace(result.Error) ? "Playback failed." : result.Error
+            };
+        }
+
         private async Task PlayFromPathAsync(string videoPath, bool addToHistory = true)
         {
             Log($"PlayFromPath: Starting - videoPath: {videoPath ?? "null"}");
@@ -4827,10 +4892,14 @@ namespace ReelRoulette
                 }
 
                 // Record playback stats
-                if (!string.IsNullOrWhiteSpace(statsPath))
+                if (!string.IsNullOrWhiteSpace(statsPath) && !target.SkipRecordPlayback)
                 {
                     Log("PlayMedia: Recording playback stats");
                     RecordPlayback(statsPath);
+                }
+                else if (target.SkipRecordPlayback)
+                {
+                    Log("PlayMedia: Skipping client record-playback (server already recorded this play start)");
                 }
 
                 // Update per-video toggle UI
@@ -4913,32 +4982,9 @@ namespace ReelRoulette
                             _currentMedia = null;
                         }
                         Log("PlayMedia: Previous photo resources disposed");
-                        
-                        // Check if file exists before loading
-                        // Note: File.Exists on network drives can be slow, but we'll proceed anyway
-                        // If the file doesn't exist, we'll catch it during loading
-                        Log($"PlayMedia: Checking if photo file exists: {playbackSource}");
-                        bool fileExists = false;
-                        try
-                        {
-                            fileExists = File.Exists(playbackSource);
-                            Log($"PlayMedia: File exists check completed: {fileExists}");
-                        }
-                        catch (Exception ex)
-                        {
-                            Log($"PlayMedia: ERROR checking file existence - Exception: {ex.GetType().Name}, Message: {ex.Message}");
-                            // Assume file exists to avoid blocking - we'll catch the error during loading if it doesn't
-                            fileExists = true;
-                        }
-                        
-                        if (!fileExists)
-                        {
-                            Log($"PlayMedia: Photo file not found: {playbackSource}");
-                            SetStatusMessage("Photo file not found.");
-                            return;
-                        }
-                        Log("PlayMedia: Photo file exists, proceeding with load");
-                        
+
+                        var usedApiPath = target.UsedApiPath;
+
                         // Load image asynchronously with efficient decoding
                         Log("PlayMedia: Starting Task.Run for photo loading");
                         _ = Task.Run(async () =>
@@ -4995,8 +5041,11 @@ namespace ReelRoulette
                                     Log("PlayMedia: Image scaling is disabled - loading full resolution");
                                 }
                                 
-                                // Load and decode image efficiently
-                                using (var stream = File.OpenRead(playbackSource))
+                                // Load and decode image efficiently (local path or API media URL)
+                                await using (var stream = await PhotoPlaybackStreamOpener.OpenReadStreamAsync(
+                                                 _coreServerHttpClient,
+                                                 playbackSource,
+                                                 usedApiPath))
                                 {
                                     if (_imageScalingMode != ImageScalingMode.Off && maxWidth < int.MaxValue && maxHeight < int.MaxValue)
                                     {
@@ -7017,7 +7066,7 @@ namespace ReelRoulette
                     UsedApiPath: false);
             }
 
-            var absoluteMediaUrl = ResolveAbsoluteMediaUrl(response.MediaUrl);
+            var absoluteMediaUrl = PlaybackMediaUrlResolver.ResolveAbsoluteMediaUrl(response.MediaUrl, _coreServerBaseUrl);
             if (string.IsNullOrWhiteSpace(absoluteMediaUrl))
             {
                 if (!TryBuildApiMediaUrl(statsPath, out var builtApiMediaUrl))
@@ -7034,29 +7083,6 @@ namespace ReelRoulette
                 PlaybackSourceType: FromType.FromLocation,
                 IsLocallyAccessible: localAccessible,
                 UsedApiPath: true);
-        }
-
-        private string? ResolveAbsoluteMediaUrl(string? mediaUrl)
-        {
-            if (string.IsNullOrWhiteSpace(mediaUrl))
-            {
-                return null;
-            }
-
-            if (Uri.TryCreate(mediaUrl, UriKind.Absolute, out var absolute))
-            {
-                return absolute.ToString();
-            }
-
-            if (!Uri.TryCreate(_coreServerBaseUrl, UriKind.Absolute, out var baseUri))
-            {
-                return null;
-            }
-
-            var normalizedRelative = mediaUrl.StartsWith("/", StringComparison.Ordinal)
-                ? mediaUrl
-                : "/" + mediaUrl;
-            return new Uri(baseUri, normalizedRelative).ToString();
         }
 
         private async Task SyncPresetsToCoreAsync()
@@ -10035,6 +10061,21 @@ namespace ReelRoulette
 
         #region UI sync
 
+        private void ApplyFavoriteBlacklistToggleState(bool isFavorite, bool isBlacklisted)
+        {
+            var wasApplyingCoreSync = _isApplyingCoreSync;
+            _isApplyingCoreSync = true;
+            try
+            {
+                FavoriteToggle.IsChecked = isFavorite;
+                BlacklistToggle.IsChecked = isBlacklisted;
+            }
+            finally
+            {
+                _isApplyingCoreSync = wasApplyingCoreSync;
+            }
+        }
+
         private void UpdatePerVideoToggleStates()
         {
             var hasVideo = !string.IsNullOrEmpty(_currentVideoPath);
@@ -10045,8 +10086,7 @@ namespace ReelRoulette
 
             if (!hasVideo)
             {
-                FavoriteToggle.IsChecked = false;
-                BlacklistToggle.IsChecked = false;
+                ApplyFavoriteBlacklistToggleState(false, false);
                 return;
             }
 
@@ -10063,8 +10103,7 @@ namespace ReelRoulette
                     isBlacklisted = item.IsBlacklisted;
                 }
             }
-            FavoriteToggle.IsChecked = isFavorite;
-            BlacklistToggle.IsChecked = isBlacklisted;
+            ApplyFavoriteBlacklistToggleState(isFavorite, isBlacklisted);
         }
 
         #endregion

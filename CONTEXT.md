@@ -34,6 +34,7 @@ ReelRoulette is migrating from a monolithic desktop app to a thin-client, API-fi
 - **Desktop client (`src/clients/desktop/ReelRoulette.DesktopApp/`)**
   - Thin-client for migrated flows: API command/query + SSE projection (no dual-writer core-state mutation). Shows library projection from the server (including durations) and syncs refresh-related **settings** to the core; **LibVLC**-backed local playback via `LibVLCSharp.Avalonia` `VideoView` / `MediaPlayer` (`--intf dummy`, re-attach when the native host is ready under Avalonia 12) and `NativeBinaryHelper` / bundled `runtimes/.../native/libvlc` on Windows when present.
   - Local-first playback with deterministic API fallback (`ForceApiPlayback` option).
+  - Library panel grid and list activation requests playback through `POST /api/play/{itemId}` (persisted item **id**); LibVLC renders locally from the returned `RandomResponse` without a duplicate client `record-playback` for the same start.
   - Server version/capability compatibility gating with reconnect/resync guidance.
   - API-backed source import, duplicate scan/apply, auto-tag scan/apply, and playback-stats clear.
   - Duplicate review dialog renders per-item thumbnail previews via server thumbnail endpoint paths for faster keep/delete validation.

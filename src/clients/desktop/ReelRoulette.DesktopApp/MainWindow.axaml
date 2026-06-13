@@ -811,7 +811,7 @@
                                             Classes="IconGlyphBase IconGlyphButton"
                                             Margin="4,0,2,0"
                                             ToolTip.Tip="Play this video"
-                                            Tag="{Binding FullPath}"
+                                            Tag="{Binding Id}"
                                             Click="LibraryItemPlay_Click">
                                         <TextBlock Classes="MaterialSymbolIcon"
                                                    Text="play_arrow"
@@ -864,7 +864,7 @@
                                             </ItemsControl.ItemsPanel>
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate DataType="local:LibraryGridTileViewModel">
-                                                    <Button Tag="{Binding Item.FullPath}"
+                                                    <Button Tag="{Binding Item.Id}"
                                                             Click="LibraryGridItem_Click"
                                                             Width="{Binding TileWidth}"
                                                             Height="{Binding TileHeight}"

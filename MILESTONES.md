@@ -89,28 +89,7 @@ Do not use this file for detailed architecture explanation or current capability
 
 ## Active Milestones
 
-Last milestone completed: M10a
-
-### M10b - Desktop Click-to-Play API Cutover
-
-- **Status**: ⏳ Planned
-- **Goal**: Replace the desktop library click-to-play workaround with the server-authoritative item play endpoint.
-- **Scope**:
-  - Depends on: server-authoritative play endpoint foundation.
-  - Route desktop grid item activation through `POST /api/play/{itemId}` instead of determining the selected media locally.
-  - Keep LibVLC rendering local to the desktop client while treating the server response as the source of playback truth.
-  - Preserve existing desktop error UX for missing/unplayable media with endpoint-backed messages.
-  - Remove or retire the click-to-play workaround code path once the API path is verified.
-- **Acceptance criteria**:
-  - Clicking a desktop library grid item requests playback through the server endpoint and starts the returned media locally.
-  - Playback stats, last-played, favorite, and blacklist state continue to update via API/SSE projection only.
-  - Missing/unavailable media produces a clear desktop error without local fallback selection logic.
-  - Existing random playback and player controls remain unchanged.
-- **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include desktop API-client tests or focused integration coverage for item play requests and error mapping.
-  - Manual evidence must include desktop grid click-to-play smoke with a playable item and a missing/unavailable item.
-- **Deferrals / Follow-ups**:
-  - WebUI library-browser click-to-play adoption is handled in the WebUI browser series.
+Last milestone completed: M10b
 
 ### M10c - Desktop Grid-Only Library Panel Cleanup
 
@@ -1364,6 +1343,30 @@ Last milestone completed: M10a
 ## Completed Milestones
 
 Latest completions first:
+
+### M10b - Desktop Click-to-Play API Cutover
+
+- **Status**: ✅ Complete
+- **Goal**: Replace the desktop library click-to-play workaround with the server-authoritative item play endpoint.
+- **Scope**:
+  - Depends on: server-authoritative play endpoint foundation.
+  - Route desktop grid item activation through `POST /api/play/{itemId}` instead of determining the selected media locally.
+  - Keep LibVLC rendering local to the desktop client while treating the server response as the source of playback truth.
+  - Preserve existing desktop error UX for missing/unplayable media with endpoint-backed messages.
+  - Remove or retire the click-to-play workaround code path once the API path is verified.
+- **Acceptance criteria**:
+  - Clicking a desktop library grid item requests playback through the server endpoint and starts the returned media locally.
+  - Playback stats, last-played, favorite, and blacklist state continue to update via API/SSE projection only.
+  - Missing/unavailable media produces a clear desktop error without local fallback selection logic.
+  - Existing random playback and player controls remain unchanged.
+- **Verification evidence**:
+  - `dotnet build ReelRoulette.sln` — pass (0 warnings).
+  - `dotnet test ReelRoulette.sln` — pass (`CoreServerApiClientPlayItemTests`, `PlaybackMediaUrlResolverTests`, `PhotoPlaybackStreamOpenerTests`; existing Core play-item coverage).
+  - Desktop library grid and list activation wired to `RequestPlayItemAsync` with `SkipRecordPlayback` on `PlaybackTarget`; no client `record-playback` for play-item starts.
+  - Manual smoke — confirmed (Linux desktop): library grid/list click-to-play for playable video and photo items with Force API `/api/media/...` playback; list double-click, Enter, and play button match grid play-item behavior; favorite/blacklist toggles no longer emit spurious add/remove status on play; random playback and prev/next timeline unchanged.
+- **Deferrals / Follow-ups**:
+  - WebUI library-browser click-to-play adoption is handled in the WebUI browser series.
+  - Non-library play entry points (favorites, blacklist, recently played, timeline navigation) remain on `PlayFromPathAsync` + `record-playback` unless explicitly expanded later.
 
 ### M10a - Server-Authoritative Play Endpoint Foundation
 
