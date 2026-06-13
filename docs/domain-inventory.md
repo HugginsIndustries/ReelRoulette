@@ -98,7 +98,7 @@ Desktop is orchestration/render for migrated flows.
 - `src/clients/desktop/ReelRoulette.DesktopApp.Tests/`
   - xUnit tests for `ReelRoulette.LibraryArchive` migration helpers and export→import round-trip.
 - `src/clients/desktop/ReelRoulette.DesktopApp/MainWindow.axaml.cs`
-  - API/SSE lifecycle orchestration, reconnect/resync guidance, compatibility gating, playback orchestration (library grid/list click-to-play via `POST /api/play/{itemId}`).
+  - API/SSE lifecycle orchestration, reconnect/resync guidance, compatibility gating, playback orchestration (library grid click-to-play via `POST /api/play/{itemId}`); grid-only library panel with Date Added sort.
 - `src/clients/desktop/ReelRoulette.DesktopApp/CoreServerApiClient.cs`
   - typed desktop API adapter (commands/queries/SSE wiring), including `RequestPlayItemAsync` for server-authoritative library item play.
 - `src/clients/desktop/ReelRoulette.DesktopApp/ManageSourcesDialog.axaml.cs`

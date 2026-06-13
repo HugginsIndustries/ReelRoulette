@@ -19,10 +19,11 @@ Instructions:
 
 Commit Message:
 
-Feature: Desktop library grid multi-select and bulk context menu
+M10c: Desktop grid-only library panel and Date Added sort
 
-- Add grid single-click selection with Ctrl/Shift multi-select (disjoint ranges, stable shift anchor) and orange selection overlay.
-- Route grid double-click and Enter to `POST /api/play/{itemId}`; single click no longer plays immediately.
-- Share list-view bulk context menu with grid view and keep selection count in sync.
-- Persist grid/list selection and shift anchor across sort, filter, and view-mode changes for items still visible.
-- Update CONTEXT, testing checklist, and changelog.
+- Remove list view, grid/list toggle, and list scroll-anchor restore; library panel is always the thumbnail grid.
+- Stop persisting `LibraryGridViewEnabled`; legacy desktop settings value is ignored on load.
+- Add **Date added** sort from projection `lastWriteTimeUtc` with Newest→Oldest default when selected.
+- Extract `LibraryPanelSort` and add unit tests for Date Added ordering and missing timestamps.
+- Move bulk context menu to the grid scroll viewer; remove dead list-era handlers.
+- Update CONTEXT, checklist, domain inventory, feature migration, milestone evidence, and changelog.

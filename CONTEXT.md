@@ -34,8 +34,8 @@ ReelRoulette is migrating from a monolithic desktop app to a thin-client, API-fi
 - **Desktop client (`src/clients/desktop/ReelRoulette.DesktopApp/`)**
   - Thin-client for migrated flows: API command/query + SSE projection (no dual-writer core-state mutation). Shows library projection from the server (including durations) and syncs refresh-related **settings** to the core; **LibVLC**-backed local playback via `LibVLCSharp.Avalonia` `VideoView` / `MediaPlayer` (`--intf dummy`, re-attach when the native host is ready under Avalonia 12) and `NativeBinaryHelper` / bundled `runtimes/.../native/libvlc` on Windows when present.
   - Local-first playback with deterministic API fallback (`ForceApiPlayback` option).
-  - Library panel grid and list activation requests playback through `POST /api/play/{itemId}` (persisted item **id**); LibVLC renders locally from the returned `RandomResponse` without a duplicate client `record-playback` for the same start.
-  - Library panel grid view supports multi-select (click, Ctrl+click, Shift+click), double-click/Enter to play, right-click bulk context menu (favorites, blacklist, tags, remove, clear stats), and selection count display matching list-view batch operations.
+  - Library panel is grid-only: thumbnail grid with sort (name, last played, play count, duration, **date added** from `lastWriteTimeUtc`), search, filtering, multi-select, and bulk context-menu actions; grid activation requests playback through `POST /api/play/{itemId}` (persisted item **id**); LibVLC renders locally from the returned `RandomResponse` without a duplicate client `record-playback` for the same start.
+  - Library panel grid supports multi-select (click, Ctrl+click, Shift+click), double-click/Enter to play, right-click bulk context menu (favorites, blacklist, tags, remove, clear stats), and selection count display.
   - Server version/capability compatibility gating with reconnect/resync guidance.
   - API-backed source import, duplicate scan/apply, auto-tag scan/apply, and playback-stats clear.
   - Duplicate review dialog renders per-item thumbnail previews via server thumbnail endpoint paths for faster keep/delete validation.

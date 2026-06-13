@@ -16,7 +16,7 @@ Report only — no changes have been made.
 
 **Desktop location:** `MainWindow.axaml` / `MainWindow.axaml.cs`, `LibraryGridRowViewModel.cs`, `LibraryGridTileViewModel.cs`
 
-Browsable list and thumbnail-grid view of all library items with sort (name, last-played, play-count, duration), free-text search, virtual scrolling, and per-item state indicators (favorite, blacklist, play-count badges).
+Browsable thumbnail-grid library panel with sort (name, last-played, play-count, duration, date added), free-text search, virtual scrolling, and per-item state indicators (favorite, blacklist).
 
 **Target surface:** WebUI
 

@@ -234,9 +234,8 @@ namespace ReelRoulette
         private double _libraryGridBottomSpacerHeight = 0d;
         private double _libraryPanelWidth = 400; // Track panel width independently from Bounds (default matches XAML MinWidth)
         private string _librarySearchText = "";
-        private string _librarySortMode = "Name"; // "Name", "LastPlayed", "PlayCount", "Duration"
+        private string _librarySortMode = "Name"; // "Name", "LastPlayed", "PlayCount", "Duration", "DateAdded"
         private bool _librarySortDescending = false;
-        private bool _libraryGridViewEnabled = false;
         private int _libraryGridColumns = 2;
         private DateTime _thumbnailIndexLastWriteUtc = DateTime.MinValue;
         private readonly Dictionary<string, (double Width, double Height)> _thumbnailMetadataByItemId = new(StringComparer.OrdinalIgnoreCase);
@@ -249,10 +248,6 @@ namespace ReelRoulette
         private string? _shiftAnchorPath;
         private bool _gridSelectionModifiedByCtrl;
         private HashSet<string> _gridCtrlBasePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        private bool _isHandlingSelectionChange = false; // Prevent recursive selection change handling
-        
-        // Scroll position tracking for library panel
-        private string? _scrollAnchorPath = null; // First visible item path to restore scroll position
         
         // Debouncing for UpdateLibraryPanel
         private CancellationTokenSource? _updateLibraryPanelCancellationSource;
@@ -263,7 +258,6 @@ namespace ReelRoulette
         private bool _isGridScrollInteracting = false;
         private bool _pendingLibraryPanelRefresh = false;
         private bool _isInitializingLibraryPanel = false; // Flag to suppress events during initialization
-        private bool _isUpdatingLibraryItems = false; // Flag to suppress Favorite/Blacklist events during UI updates
         private const double LibraryGridVerticalRowGap = 1d;
         
         // Volume slider debouncing
@@ -868,10 +862,6 @@ namespace ReelRoulette
                 Log("MainWindow constructor: Calling InitializeComponent...");
                 InitializeComponent();
                 Log("MainWindow constructor: InitializeComponent completed.");
-                if (LibraryListBox?.ContextMenu != null && LibraryGridScrollViewer != null)
-                {
-                    LibraryGridScrollViewer.ContextMenu = LibraryListBox.ContextMenu;
-                }
                 _coreServerApiClient = new CoreServerApiClient(_coreServerHttpClient);
                 _coreServerLongRunningApiClient = new CoreServerApiClient(_coreServerLongRunningHttpClient);
             
@@ -1029,7 +1019,7 @@ namespace ReelRoulette
                                 {
                                     _libraryPanelWidth = currentWidth.Value;
                                     Log($"LibraryVideoSplitter DragCompleted: Captured new panel width: {_libraryPanelWidth}");
-                                    if (_libraryGridViewEnabled && _showLibraryPanel)
+                                    if (_showLibraryPanel)
                                     {
                                         UpdateLibraryPanel();
                                     }
@@ -2058,29 +2048,12 @@ namespace ReelRoulette
             {
                 _isInitializingLibraryPanel = true; // Suppress event handlers during initialization
                 Log("InitializeLibraryPanel: Starting");
-                Log("  Setting up LibraryListBox...");
-                // Set up Library panel collections and initial state
-                if (LibraryListBox != null)
-                {
-                    LibraryListBox.ItemsSource = _libraryItems;
-                    Log($"InitializeLibraryPanel: LibraryListBox.ItemsSource set, collection has {_libraryItems.Count} items");
-                }
-                else
-                {
-                    Log("InitializeLibraryPanel: WARNING - LibraryListBox is null!");
-                }
-
                 if (LibraryGridItemsControl != null)
                 {
                     LibraryGridItemsControl.ItemsSource = _libraryGridVisibleRows;
                 }
 
-                if (LibraryGridViewToggle != null)
-                {
-                    LibraryGridViewToggle.IsChecked = _libraryGridViewEnabled;
-                }
-
-                UpdateLibraryViewModeVisibility();
+                EnsureLibraryGridInitialized();
                 
                 // Set default sort
                 Log("  Setting default sort...");
@@ -2161,7 +2134,7 @@ namespace ReelRoulette
         private void UpdateLibraryPanel()
         {
             var refreshGeneration = Interlocked.Increment(ref _libraryPanelRefreshGeneration);
-            if (_libraryGridViewEnabled && _isGridScrollInteracting)
+            if (_isGridScrollInteracting)
             {
                 _pendingLibraryPanelRefresh = true;
                 Log($"UpdateLibraryPanel: Deferring refresh during grid scroll interaction (generation={refreshGeneration})");
@@ -2310,8 +2283,7 @@ namespace ReelRoulette
                                 Log($"UpdateLibraryPanel: UI thread callback started, about to add {items.Count} items");
 
                                 // Preserve grid scroll offset across row rebuilds to prevent jumpy drag/scroll behavior.
-                                var shouldRestoreGridOffset = _libraryGridViewEnabled && LibraryGridScrollViewer != null && !_isGridScrollInteracting;
-                                var shouldRestoreListAnchor = !_libraryGridViewEnabled;
+                                var shouldRestoreGridOffset = LibraryGridScrollViewer != null && !_isGridScrollInteracting;
                                 var gridOffsetYBeforeUpdate = shouldRestoreGridOffset
                                     ? LibraryGridScrollViewer!.Offset.Y
                                     : 0d;
@@ -2319,79 +2291,7 @@ namespace ReelRoulette
                                     ? CaptureGridViewportAnchor()
                                     : null;
                                 
-                                // Save scroll position anchor before clearing (first visible item)
-                                if (shouldRestoreListAnchor && LibraryListBox != null && _libraryItems.Count > 0)
-                                {
-                                    int anchorIndex = -1;
-                                    string? strategy = null;
-                                    
-                                    // Strategy 1: Use SelectedIndex if something is selected (fastest, most reliable when available)
-                                    if (LibraryListBox.SelectedIndex >= 0 && LibraryListBox.SelectedIndex < _libraryItems.Count)
-                                    {
-                                        anchorIndex = LibraryListBox.SelectedIndex;
-                                        strategy = "SelectedIndex";
-                                        Log($"UpdateLibraryPanel: Saving scroll anchor using SelectedIndex={anchorIndex}, item={_libraryItems[anchorIndex].FileName}");
-                                    }
-                                    else
-                                    {
-                                        // Strategy 2: Try to preserve previous anchor (works when scrolling without selection)
-                                        // This is the most reliable fallback when SelectedIndex is -1
-                                        if (_scrollAnchorPath != null)
-                                        {
-                                            var existingAnchor = _libraryItems
-                                                .Select((item, idx) => new { item, idx })
-                                                .FirstOrDefault(x => x.item.FullPath == _scrollAnchorPath);
-                                            if (existingAnchor != null)
-                                            {
-                                                anchorIndex = existingAnchor.idx;
-                                                strategy = "PreviousAnchor";
-                                                Log($"UpdateLibraryPanel: Saving scroll anchor using previous anchor at index={anchorIndex}, path={_scrollAnchorPath}, item={existingAnchor.item.FileName}");
-                                            }
-                                            else
-                                            {
-                                                Log($"UpdateLibraryPanel: Previous scroll anchor path '{_scrollAnchorPath}' not found in current list (item may have been filtered out)");
-                                            }
-                                        }
-                                        else
-                                        {
-                                            Log($"UpdateLibraryPanel: No scroll anchor to preserve (SelectedIndex={LibraryListBox.SelectedIndex}, _scrollAnchorPath=null) - will start at top");
-                                        }
-                                    }
-                                    
-                                    // Save anchor if we found a valid one
-                                    if (anchorIndex >= 0 && anchorIndex < _libraryItems.Count)
-                                    {
-                                        var oldAnchorPath = _scrollAnchorPath;
-                                        _scrollAnchorPath = _libraryItems[anchorIndex].FullPath;
-                                        Log($"UpdateLibraryPanel: Saved scroll anchor: index={anchorIndex}, path={_scrollAnchorPath}, strategy={strategy}, oldPath={oldAnchorPath ?? "null"}");
-                                    }
-                                    else
-                                    {
-                                        // Clear anchor if we couldn't find a valid one
-                                        if (_scrollAnchorPath != null)
-                                        {
-                                            Log($"UpdateLibraryPanel: Clearing scroll anchor (no valid index found, anchorIndex={anchorIndex}, itemCount={_libraryItems.Count})");
-                                            _scrollAnchorPath = null;
-                                        }
-                                    }
-                                }
-                                else
-                                {
-                                    if (LibraryListBox == null)
-                                    {
-                                        Log($"UpdateLibraryPanel: Cannot save scroll anchor - LibraryListBox is null");
-                                    }
-                                    else if (_libraryItems.Count == 0)
-                                    {
-                                        Log($"UpdateLibraryPanel: Cannot save scroll anchor - _libraryItems is empty");
-                                    }
-                                }
-                                
-                                // Suppress Favorite/Blacklist event handlers during UI update
-                                _isUpdatingLibraryItems = true;
-                                try
-                                {
-                                    var firstChangedItemIndex = await ApplyLibraryItemsDiffChunkedAsync(items, cancellationToken, refreshGeneration);
+                                var firstChangedItemIndex = await ApplyLibraryItemsDiffChunkedAsync(items, cancellationToken, refreshGeneration);
                                     if (ShouldAbortLibraryPanelRefresh(cancellationToken, refreshGeneration))
                                     {
                                         return;
@@ -2404,8 +2304,8 @@ namespace ReelRoulette
                                         return;
                                     }
 
-                                    UpdateLibraryViewModeVisibility();
-                                    Log($"UpdateLibraryPanel: UI thread callback completed. _libraryItems now has {_libraryItems.Count} items. LibraryListBox.ItemsSource is set: {LibraryListBox?.ItemsSource != null}, LibraryListBox.IsVisible: {LibraryListBox?.IsVisible}, LibraryPanelContainer.IsVisible: {LibraryPanelContainer?.IsVisible}");
+                                    EnsureLibraryGridInitialized();
+                                    Log($"UpdateLibraryPanel: UI thread callback completed. _libraryItems now has {_libraryItems.Count} items. LibraryPanelContainer.IsVisible: {LibraryPanelContainer?.IsVisible}");
 
                                     if (shouldRestoreGridOffset)
                                     {
@@ -2445,55 +2345,6 @@ namespace ReelRoulette
                                     {
                                         ApplyLibrarySelectionUiState();
                                     }
-                                    
-                                    // Restore scroll position using anchor item
-                                    if (shouldRestoreListAnchor && _scrollAnchorPath != null && LibraryListBox != null)
-                                    {
-                                        var anchorIndex = _libraryItems
-                                            .Select((item, index) => new { item, index })
-                                            .FirstOrDefault(x => x.item.FullPath == _scrollAnchorPath)?.index ?? -1;
-                                        
-                                        if (anchorIndex >= 0)
-                                        {
-                                            Log($"UpdateLibraryPanel: Restoring scroll position to anchor index={anchorIndex}, path={_scrollAnchorPath}, item={_libraryItems[anchorIndex].FileName}");
-                                            // Restore scroll position on next render cycle
-                                            Dispatcher.UIThread.Post(() =>
-                                            {
-                                                if (LibraryListBox != null && anchorIndex < _libraryItems.Count)
-                                                {
-                                                    Log($"UpdateLibraryPanel: Calling ScrollIntoView for index={anchorIndex}, itemCount={_libraryItems.Count}");
-                                                    LibraryListBox.ScrollIntoView(anchorIndex);
-                                                    Log($"UpdateLibraryPanel: ScrollIntoView completed for index={anchorIndex}");
-                                                }
-                                                else
-                                                {
-                                                    Log($"UpdateLibraryPanel: ScrollIntoView skipped - LibraryListBox={LibraryListBox != null}, anchorIndex={anchorIndex}, itemCount={_libraryItems.Count}");
-                                                }
-                                                _scrollAnchorPath = null; // Reset after restoration
-                                            }, DispatcherPriority.Loaded);
-                                        }
-                                        else
-                                        {
-                                            Log($"UpdateLibraryPanel: Scroll anchor '{_scrollAnchorPath}' not found in new filtered list (item was filtered out) - resetting to top");
-                                            _scrollAnchorPath = null; // Anchor not found, reset
-                                        }
-                                    }
-                                    else
-                                    {
-                                        if (shouldRestoreListAnchor && _scrollAnchorPath != null && LibraryListBox == null)
-                                        {
-                                            Log($"UpdateLibraryPanel: Scroll anchor exists but LibraryListBox is null - cannot restore scroll position");
-                                        }
-                                        else if (shouldRestoreListAnchor && _scrollAnchorPath == null)
-                                        {
-                                            Log($"UpdateLibraryPanel: No scroll anchor to restore (_scrollAnchorPath=null)");
-                                        }
-                                    }
-                                }
-                                finally
-                                {
-                                    _isUpdatingLibraryItems = false;
-                                }
                             }
                             catch (OperationCanceledException)
                             {
@@ -2544,23 +2395,7 @@ namespace ReelRoulette
 
         private List<LibraryItem> ApplySort(List<LibraryItem> items)
         {
-            IEnumerable<LibraryItem> sorted = _librarySortMode switch
-            {
-                "LastPlayed" => _librarySortDescending
-                    ? items.OrderByDescending(item => item.LastPlayedUtc ?? DateTime.MinValue)
-                    : items.OrderBy(item => item.LastPlayedUtc ?? DateTime.MinValue),
-                "PlayCount" => _librarySortDescending
-                    ? items.OrderByDescending(item => item.PlayCount)
-                    : items.OrderBy(item => item.PlayCount),
-                "Duration" => _librarySortDescending
-                    ? items.OrderByDescending(item => item.Duration ?? TimeSpan.Zero)
-                    : items.OrderBy(item => item.Duration ?? TimeSpan.Zero),
-                _ => _librarySortDescending
-                    ? items.OrderByDescending(item => item.FileName, StringComparer.OrdinalIgnoreCase)
-                    : items.OrderBy(item => item.FileName, StringComparer.OrdinalIgnoreCase)
-            };
-
-            return sorted.ToList();
+            return LibraryPanelSort.Apply(items, _librarySortMode, _librarySortDescending);
         }
 
         private List<LibraryItem> GetSelectedLibraryItems()
@@ -2645,7 +2480,6 @@ namespace ReelRoulette
         private void ApplyLibrarySelectionUiState()
         {
             UpdateGridSelectionVisualsFromPaths();
-            SyncListBoxSelectionFromPaths();
             UpdateSelectionCountDisplay();
             UpdateContextMenuState();
         }
@@ -2659,31 +2493,6 @@ namespace ReelRoulette
                 {
                     item.IsSelected = isSelected;
                 }
-            }
-        }
-
-        private void SyncListBoxSelectionFromPaths()
-        {
-            if (LibraryListBox?.SelectedItems == null)
-            {
-                return;
-            }
-
-            _isHandlingSelectionChange = true;
-            try
-            {
-                LibraryListBox.SelectedItems.Clear();
-                foreach (var item in _libraryItems)
-                {
-                    if (_selectedItemPaths.Contains(item.FullPath))
-                    {
-                        LibraryListBox.SelectedItems.Add(item);
-                    }
-                }
-            }
-            finally
-            {
-                _isHandlingSelectionChange = false;
             }
         }
 
@@ -2895,22 +2704,9 @@ namespace ReelRoulette
             }
         }
 
-        private void LibraryGridViewToggle_Changed(object? sender, RoutedEventArgs e)
-        {
-            _libraryGridViewEnabled = LibraryGridViewToggle?.IsChecked == true;
-            Log($"UI ACTION: LibraryGridViewToggle changed to: {_libraryGridViewEnabled}");
-            UpdateLibraryViewModeVisibility();
-            SaveSettings();
-
-            if (_showLibraryPanel)
-            {
-                UpdateLibraryPanel();
-            }
-        }
-
         private void LibraryPanelContainer_SizeChanged(object? sender, SizeChangedEventArgs e)
         {
-            if (!_libraryGridViewEnabled || !_showLibraryPanel)
+            if (!_showLibraryPanel)
             {
                 return;
             }
@@ -2929,7 +2725,7 @@ namespace ReelRoulette
                 _libraryGridResizeDebounceTimer.Tick += (_, _) =>
                 {
                     _libraryGridResizeDebounceTimer.Stop();
-                    if (!_libraryGridViewEnabled || !_showLibraryPanel)
+                    if (!_showLibraryPanel)
                     {
                         return;
                     }
@@ -2942,23 +2738,10 @@ namespace ReelRoulette
             _libraryGridResizeDebounceTimer.Start();
         }
 
-        private void UpdateLibraryViewModeVisibility()
+        private void EnsureLibraryGridInitialized()
         {
-            if (LibraryListBox != null)
-            {
-                LibraryListBox.IsVisible = !_libraryGridViewEnabled;
-            }
-
-            if (LibraryGridScrollViewer != null)
-            {
-                LibraryGridScrollViewer.IsVisible = _libraryGridViewEnabled;
-            }
-
-            if (_libraryGridViewEnabled)
-            {
-                RebuildLibraryGridOffsetIndex();
-                UpdateLibraryGridVisibleRowsWindow(forceRefreshRows: true);
-            }
+            RebuildLibraryGridOffsetIndex();
+            UpdateLibraryGridVisibleRowsWindow(forceRefreshRows: true);
         }
 
         private bool ShouldAbortLibraryPanelRefresh(CancellationToken cancellationToken, int refreshGeneration)
@@ -2969,7 +2752,7 @@ namespace ReelRoulette
                 return true;
             }
 
-            if (_libraryGridViewEnabled && _isGridScrollInteracting)
+            if (_isGridScrollInteracting)
             {
                 _pendingLibraryPanelRefresh = true;
                 return true;
@@ -3065,7 +2848,7 @@ namespace ReelRoulette
                 {
                     if (ShouldAbortLibraryPanelRefresh(cancellationToken, refreshGeneration))
                     {
-                        Log($"UpdateLibraryPanel: Cancelled during item removal (scroll anchor preserved: {_scrollAnchorPath ?? "null"})");
+                        Log($"UpdateLibraryPanel: Cancelled during item removal");
                         return -1;
                     }
 
@@ -3085,7 +2868,7 @@ namespace ReelRoulette
                 {
                     if (ShouldAbortLibraryPanelRefresh(cancellationToken, refreshGeneration))
                     {
-                        Log($"UpdateLibraryPanel: Cancelled during item insertion (scroll anchor preserved: {_scrollAnchorPath ?? "null"})");
+                        Log($"UpdateLibraryPanel: Cancelled during item insertion");
                         return -1;
                     }
 
@@ -3507,7 +3290,7 @@ namespace ReelRoulette
 
         private void UpdateLibraryGridVisibleRowsWindow(bool forceRefreshRows = false)
         {
-            if (!_libraryGridViewEnabled || LibraryGridScrollViewer == null)
+            if (LibraryGridScrollViewer == null)
             {
                 return;
             }
@@ -3571,11 +3354,6 @@ namespace ReelRoulette
 
         private void LibraryGridScrollViewer_ScrollChanged(object? sender, ScrollChangedEventArgs e)
         {
-            if (!_libraryGridViewEnabled)
-            {
-                return;
-            }
-
             UpdateLibraryGridVisibleRowsWindow();
         }
 
@@ -3613,7 +3391,7 @@ namespace ReelRoulette
 
         private void HydrateThumbnailsForVisibleGridItems()
         {
-            if (!_libraryGridViewEnabled || _libraryGridVisibleRows.Count == 0)
+            if (_libraryGridVisibleRows.Count == 0)
             {
                 return;
             }
@@ -3678,11 +3456,6 @@ namespace ReelRoulette
 
         private void RebuildLibraryGridRowsFromCurrentItems()
         {
-            if (!_libraryGridViewEnabled)
-            {
-                return;
-            }
-
             _ = RebuildLibraryGridRowsIncrementalAsync(_libraryItems.ToList(), 0, CancellationToken.None, Volatile.Read(ref _libraryPanelRefreshGeneration));
         }
 
@@ -3823,7 +3596,7 @@ namespace ReelRoulette
 
         private void LibraryGridScrollViewer_KeyDown(object? sender, KeyEventArgs e)
         {
-            if (!_libraryGridViewEnabled || e.Key != Key.Enter)
+            if (e.Key != Key.Enter)
             {
                 return;
             }
@@ -3979,7 +3752,7 @@ namespace ReelRoulette
             {
                 Log($"UI ACTION: LibrarySortComboBox changed to: {sortMode} (display: {item.Content})");
                 _librarySortMode = sortMode;
-                _librarySortDescending = IsDefaultDescendingForSortMode(sortMode);
+                _librarySortDescending = LibraryPanelSort.IsDefaultDescendingForSortMode(sortMode);
                 UpdateSortDirectionButton();
                 UpdateLibraryPanel();
             }
@@ -3999,23 +3772,7 @@ namespace ReelRoulette
                 return;
             }
 
-            LibrarySortDirectionButton.Content = GetSortDirectionLabel(_librarySortMode, _librarySortDescending);
-        }
-
-        private static bool IsDefaultDescendingForSortMode(string sortMode)
-        {
-            return sortMode is "LastPlayed" or "PlayCount" or "Duration";
-        }
-
-        private static string GetSortDirectionLabel(string sortMode, bool descending)
-        {
-            return sortMode switch
-            {
-                "LastPlayed" => descending ? "Newest -> Oldest" : "Oldest -> Newest",
-                "PlayCount" => descending ? "Most Plays -> Least Plays" : "Least Plays -> Most Plays",
-                "Duration" => descending ? "Longest -> Shortest" : "Shortest -> Longest",
-                _ => descending ? "Z-A" : "A-Z"
-            };
+            LibrarySortDirectionButton.Content = LibraryPanelSort.GetSortDirectionLabel(_librarySortMode, _librarySortDescending);
         }
 
         private void LibraryFilterButton_Click(object? sender, RoutedEventArgs e)
@@ -4024,200 +3781,8 @@ namespace ReelRoulette
             FilterMenuItem_Click(sender, e);
         }
 
-        private void LibraryItemPlay_Click(object? sender, RoutedEventArgs e)
-        {
-            if (sender is Button button && button.Tag is string itemId && !string.IsNullOrWhiteSpace(itemId))
-            {
-                Log($"UI ACTION: LibraryItemPlay clicked for item id: {itemId}");
-                _ = PlayFromLibraryItemIdAsync(itemId);
-            }
-        }
-
-        private void LibraryItemShowInFileManager_Click(object? sender, RoutedEventArgs e)
-        {
-            if (sender is Button button && button.Tag is string path)
-            {
-                Log($"UI ACTION: LibraryItemShowInFileManager clicked for: {System.IO.Path.GetFileName(path)}");
-                OpenFileLocation(path);
-            }
-        }
-
-        private async void LibraryItemFavorite_Changed(object? sender, RoutedEventArgs e)
-        {
-            // Don't process if we're updating the library items UI
-            if (_isUpdatingLibraryItems || _isInitializingLibraryPanel)
-            {
-                Log($"LibraryItemFavorite_Changed: Ignoring - UI update in progress");
-                return;
-            }
-            
-            // Only process if it's a user interaction (the toggle button is loaded and user clicks it)
-            if (sender is ToggleButton toggle && toggle.Tag is LibraryItemViewModel item)
-            {
-                var toggleState = toggle.IsChecked == true;
-                var libraryItem = FindProjectionItemByPath(item.FullPath);
-                if (libraryItem == null)
-                {
-                    Log($"LibraryItemFavorite_Changed: Item not found in library: {item.FileName}");
-                    return;
-                }
-
-                Log($"UI ACTION: LibraryItemFavorite toggled for '{item.FileName}' to: {toggleState} (was: {libraryItem.IsFavorite})");
-                if (!await EnsureCoreCommandApiAvailableAsync())
-                {
-                    toggle.IsChecked = libraryItem.IsFavorite;
-                    StatusTextBlock.Text = "Core runtime is required for favorite updates.";
-                    return;
-                }
-
-                var state = await _coreServerApiClient.SetFavoriteWithStateAsync(
-                    _coreServerBaseUrl,
-                    libraryItem.FullPath,
-                    toggleState,
-                    _coreClientId,
-                    _coreSessionId);
-                if (state == null)
-                {
-                    toggle.IsChecked = libraryItem.IsFavorite;
-                    StatusTextBlock.Text = "Favorite update rejected by core runtime.";
-                    return;
-                }
-
-                ApplyRemoteItemStateProjection(
-                    state.Path,
-                    state.IsFavorite,
-                    state.IsBlacklisted,
-                    state.IsFavorite
-                        ? $"Added to favorites: {Path.GetFileName(state.Path)}"
-                        : $"Removed from favorites: {Path.GetFileName(state.Path)}");
-            }
-        }
-
-        private async void LibraryItemBlacklist_Changed(object? sender, RoutedEventArgs e)
-        {
-            // Don't process if we're updating the library items UI
-            if (_isUpdatingLibraryItems || _isInitializingLibraryPanel)
-            {
-                Log($"LibraryItemBlacklist_Changed: Ignoring - UI update in progress");
-                return;
-            }
-            
-            // Only process if it's a user interaction (the toggle button is loaded and user clicks it)
-            if (sender is ToggleButton toggle && toggle.Tag is LibraryItemViewModel item)
-            {
-                var toggleState = toggle.IsChecked == true;
-                var libraryItem = FindProjectionItemByPath(item.FullPath);
-                if (libraryItem == null)
-                {
-                    Log($"LibraryItemBlacklist_Changed: Item not found in library: {item.FileName}");
-                    return;
-                }
-
-                Log($"UI ACTION: LibraryItemBlacklist toggled for '{item.FileName}' to: {toggleState} (was: {libraryItem.IsBlacklisted})");
-                if (!await EnsureCoreCommandApiAvailableAsync())
-                {
-                    toggle.IsChecked = libraryItem.IsBlacklisted;
-                    StatusTextBlock.Text = "Core runtime is required for blacklist updates.";
-                    return;
-                }
-
-                var state = await _coreServerApiClient.SetBlacklistWithStateAsync(
-                    _coreServerBaseUrl,
-                    libraryItem.FullPath,
-                    toggleState,
-                    _coreClientId,
-                    _coreSessionId);
-                if (state == null)
-                {
-                    toggle.IsChecked = libraryItem.IsBlacklisted;
-                    StatusTextBlock.Text = "Blacklist update rejected by core runtime.";
-                    return;
-                }
-
-                ApplyRemoteItemStateProjection(
-                    state.Path,
-                    state.IsFavorite,
-                    state.IsBlacklisted,
-                    state.IsBlacklisted
-                        ? $"Blacklisted: {Path.GetFileName(state.Path)}"
-                        : $"Removed from blacklist: {Path.GetFileName(state.Path)}");
-            }
-        }
-
-        private void LibraryListBox_DoubleTapped(object? sender, RoutedEventArgs e)
-        {
-            if (sender is ListBox listBox && listBox.SelectedItem is LibraryItemViewModel item)
-            {
-                Log($"UI ACTION: LibraryListBox double-tapped for: {System.IO.Path.GetFileName(item.FullPath)}");
-                _ = PlayFromLibraryItemIdAsync(item.Id);
-            }
-        }
-
-        private void LibraryListBox_KeyDown(object? sender, KeyEventArgs e)
-        {
-            if (sender is ListBox listBox && listBox.SelectedItem is LibraryItemViewModel item)
-            {
-                if (e.Key == Key.Enter)
-                {
-                    Log($"UI ACTION: LibraryListBox Enter key pressed for: {System.IO.Path.GetFileName(item.FullPath)}");
-                    _ = PlayFromLibraryItemIdAsync(item.Id);
-                    e.Handled = true;
-                }
-            }
-        }
-
-        private void LibraryListBox_SelectionChanged(object? sender, SelectionChangedEventArgs e)
-        {
-            if (_isHandlingSelectionChange || _isUpdatingLibraryItems || sender is not ListBox listBox)
-                return;
-
-            try
-            {
-                _isHandlingSelectionChange = true;
-
-                // Update selected paths from current selection
-                _selectedItemPaths.Clear();
-                if (listBox.SelectedItems != null)
-                {
-                    foreach (var item in listBox.SelectedItems.Cast<LibraryItemViewModel>())
-                    {
-                        _selectedItemPaths.Add(item.FullPath);
-                    }
-                }
-
-                // Update shift anchor from list selection for grid parity
-                if (listBox.SelectedIndex >= 0)
-                {
-                    SetShiftAnchor(listBox.SelectedIndex);
-                }
-
-                UpdateGridSelectionVisualsFromPaths();
-                UpdateSelectionCountDisplay();
-                UpdateContextMenuState();
-            }
-            finally
-            {
-                _isHandlingSelectionChange = false;
-            }
-        }
-
-        private void LibraryListBox_PointerPressed(object? sender, PointerPressedEventArgs e)
-        {
-            // Note: Avalonia's ListBox with SelectionMode="Multiple" handles Ctrl+Click and Shift+Click automatically
-            // This handler is kept for potential future custom behavior, but currently relies on default behavior
-            if (sender is ListBox listBox && listBox.SelectedIndex >= 0)
-            {
-                SetShiftAnchor(listBox.SelectedIndex);
-            }
-        }
-
         private void LibraryGridScrollViewer_PointerPressed(object? sender, PointerPressedEventArgs e)
         {
-            if (!_libraryGridViewEnabled)
-            {
-                return;
-            }
-
             var source = e.Source;
             var isScrollbarInteraction = source is ScrollBar or Thumb;
             if (isScrollbarInteraction)
@@ -4261,28 +3826,6 @@ namespace ReelRoulette
             {
                 _pendingLibraryPanelRefresh = false;
                 UpdateLibraryPanel();
-            }
-        }
-
-        private async void LibraryItemTags_Click(object? sender, RoutedEventArgs e)
-        {
-            Log("UI ACTION: LibraryItemTags clicked");
-            if (sender is Button button && button.Tag is LibraryItemViewModel item)
-            {
-                Log($"LibraryItemTags_Click: Opening tags dialog for: {item.FileName}");
-                var dialog = new ItemTagsDialog(new List<LibraryItem> { item.Item }, _libraryIndex, this);
-                var result = await dialog.ShowDialog<bool?>(this);
-                if (result == true)
-                {
-                    Log($"LibraryItemTags_Click: Tags updated for: {item.FileName}");
-                    // Save filter presets (in case tags were renamed/deleted)
-                    SaveSettings();
-                    // Update stats if this is the current video
-                    if (_currentVideoPath == item.FullPath)
-                    {
-                        UpdateCurrentFileStatsUi();
-                    }
-                }
             }
         }
 
@@ -6772,7 +6315,7 @@ namespace ReelRoulette
 
                     var thumbnailStage = snapshot.Stages.FirstOrDefault(stage =>
                         string.Equals(stage.Stage, "thumbnailGeneration", StringComparison.OrdinalIgnoreCase));
-                    if (thumbnailStage?.IsComplete == true && _libraryGridViewEnabled)
+                    if (thumbnailStage?.IsComplete == true)
                     {
                         Dispatcher.UIThread.Post(HydrateThumbnailsForVisibleGridItems);
                     }
@@ -7743,7 +7286,6 @@ namespace ReelRoulette
             _forceRescanLoudnessOnNextRefresh = false;
             _forceRescanDurationOnNextRefresh = false;
             _fingerprintScanMaxDegreeOfParallelism = 4;
-            _libraryGridViewEnabled = settings.LibraryGridViewEnabled;
             Log("LoadSettings: Using core-owned refresh settings defaults until API sync.");
 
             Log("LoadSettings: Web runtime settings are core-owned; desktop will sync them via API.");
@@ -7936,8 +7478,6 @@ namespace ReelRoulette
                 settings.BackupSettingsEnabled = _backupSettingsEnabled;
                 settings.MinimumSettingsBackupGapMinutes = _minimumSettingsBackupGapMinutes;
                 settings.NumberOfSettingsBackups = _numberOfSettingsBackups;
-                
-                settings.LibraryGridViewEnabled = _libraryGridViewEnabled;
 
                 settings.CoreServerBaseUrl = _coreServerBaseUrl;
                 settings.CoreClientId = _coreClientId;

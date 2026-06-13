@@ -89,31 +89,7 @@ Do not use this file for detailed architecture explanation or current capability
 
 ## Active Milestones
 
-Last milestone completed: M10b
-
-### M10c - Desktop Grid-Only Library Panel Cleanup
-
-- **Status**: ⏳ Planned
-- **Goal**: Remove the obsolete desktop library list view so the desktop library panel is grid-only.
-- **Scope**:
-  - Depends on: desktop click-to-play API cutover.
-  - Remove list/grid toggle UI, list-view rendering, and list-view-specific state persistence from the desktop library panel.
-  - Keep the existing grid view, thumbnail behavior, filtering behavior, and item activation path intact.
-  - Add a `lastWriteTimeUtc`-backed **Date Added** sort mode to the desktop library panel sort selector, supporting both descending (Newest to Oldest) and ascending (Oldest to Newest) directions.
-  - Clean up dead list-view styles, settings keys, and code paths without changing library projection contracts.
-- **Acceptance criteria**:
-  - Desktop library panel always renders the grid view and exposes no list-view toggle.
-  - Existing grid thumbnail, sorting, filtering, favorite/blacklist indicator, and click-to-play behavior remain functional.
-  - Sort controls include **Date Added** (from `lastWriteTimeUtc`) with both **Newest to Oldest** and **Oldest to Newest** directions.
-  - **Date Added** defaults to descending (**Newest to Oldest**), matching desktop time-based sort conventions.
-  - Removed list-view preference data is ignored harmlessly if present in existing desktop settings.
-  - No WebUI behavior changes are included in this cleanup.
-- **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include focused desktop UI/state tests where practical and a manual grid-only smoke check.
-  - Docs/checklist evidence must remove or update any desktop list-view validation references.
-- **Deferrals / Follow-ups**:
-  - Confirm `GET /api/library/projection` exposes per-item `lastWriteTimeUtc`; if missing at implementation time, scope a small server projection contract addition into M10c.
-  - Duplicate detection remains in the desktop client until Operator Source Management and must not be removed as part of this milestone.
+Last milestone completed: M10c
 
 ### M10d - WebUI Library Overlay Shell
 
@@ -1343,6 +1319,34 @@ Last milestone completed: M10b
 ## Completed Milestones
 
 Latest completions first:
+
+### M10c - Desktop Grid-Only Library Panel Cleanup
+
+- **Status**: ✅ Complete
+- **Goal**: Remove the obsolete desktop library list view so the desktop library panel is grid-only.
+- **Scope**:
+  - Depends on: desktop click-to-play API cutover.
+  - Remove list/grid toggle UI, list-view rendering, and list-view-specific state persistence from the desktop library panel.
+  - Keep the existing grid view, thumbnail behavior, filtering behavior, and item activation path intact.
+  - Add a `lastWriteTimeUtc`-backed **Date Added** sort mode to the desktop library panel sort selector, supporting both descending (Newest to Oldest) and ascending (Oldest to Newest) directions.
+  - Clean up dead list-view styles, settings keys, and code paths without changing library projection contracts.
+- **Acceptance criteria**:
+  - Desktop library panel always renders the grid view and exposes no list-view toggle.
+  - Existing grid thumbnail, sorting, filtering, favorite/blacklist indicator, and click-to-play behavior remain functional.
+  - Sort controls include **Date Added** (from `lastWriteTimeUtc`) with both **Newest to Oldest** and **Oldest to Newest** directions.
+  - **Date Added** defaults to descending (**Newest to Oldest**), matching desktop time-based sort conventions.
+  - Removed list-view preference data is ignored harmlessly if present in existing desktop settings.
+  - No WebUI behavior changes are included in this cleanup.
+- **Verification evidence**:
+  - `dotnet build ReelRoulette.sln` — pass (0 warnings after cleanup).
+  - `dotnet test ReelRoulette.sln` — pass (`LibraryPanelSortTests` Date Added asc/desc/null ordering; existing desktop/core suites).
+  - Confirmed `GET /api/library/projection` already exposes per-item `lastWriteTimeUtc` via full library root JSON; no server/OpenAPI contract change required.
+  - Desktop library panel is grid-only: removed `LibraryListBox`, grid/list toggle, list scroll-anchor restore, and `LibraryGridViewEnabled` settings read/write (legacy JSON property ignored on load).
+  - Added `LibraryPanelSort` helper with **Date added** sort mode (`lastWriteTimeUtc`).
+  - Manual grid-only smoke — confirmed (Linux desktop): library panel grid-only with no list/toggle; thumbnails and favorite/blacklist overlays; search and existing sort modes; **Date added** Newest→Oldest/Oldest→Newest (defaults to Newest→Oldest when selected); grid double-click/Enter play via `POST /api/play/{itemId}`; multi-select and right-click bulk context menu; selection persists across filter/sort changes; legacy `libraryGridViewEnabled: false` settings load with grid shown; random playback and prev/next timeline unchanged.
+  - Docs/checklist updated to remove list-view validation references.
+- **Deferrals / Follow-ups**:
+  - Duplicate detection remains in the desktop client until Operator Source Management and must not be removed as part of this milestone.
 
 ### M10b - Desktop Click-to-Play API Cutover
 

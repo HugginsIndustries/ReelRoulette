@@ -93,7 +93,9 @@ Use `pwsh ./tools/scripts/reset-checklist.ps1` to reset metadata/check states be
 - [x] Desktop loads and shows current runtime status without crash.
 - [x] Random play works from active preset.
 - [x] Manual library play works.
-- [x] Library grid and list activation call `POST /api/play/{itemId}` and start returned media locally without a duplicate `record-playback` for the same start.
+- [x] Library grid activation calls `POST /api/play/{itemId}` and starts returned media locally without a duplicate `record-playback` for the same start.
+- [x] Library panel is grid-only (no list view or grid/list toggle).
+- [x] Library **Date added** sort (from projection `lastWriteTimeUtc`) supports Newest→Oldest and Oldest→Newest; selecting Date added defaults to Newest→Oldest.
 - [x] Missing/unavailable library items show clear desktop errors (404/409/415 mapping) with no path-first fallback.
 - [x] Previous/next timeline navigation works.
 - [x] Loop toggle works.

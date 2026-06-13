@@ -7,12 +7,15 @@ This file follows a Keep a Changelog style format.
 
 ### Added
 
-- **Desktop — library grid selection:** Grid view supports multi-select (click, Ctrl+click, Shift+click with disjoint ranges and stable shift anchor), double-click/Enter to play, right-click bulk context menu parity with list view, orange selection overlay, and selection state that persists across sort, filter, and view toggles for items still in the filtered set.
+- **Desktop — library grid-only panel:** Removed list view and grid/list toggle; library panel always renders the virtualized thumbnail grid with bulk context menu on the grid scroll surface.
+- **Desktop — Date added sort:** Library panel sort selector includes **Date added** (`lastWriteTimeUtc`) with Newest→Oldest and Oldest→Newest directions (defaults to Newest→Oldest when selected).
+- **Desktop — library grid selection:** Grid view supports multi-select (click, Ctrl+click, Shift+click with disjoint ranges and stable shift anchor), double-click/Enter to play, right-click bulk context menu, orange selection overlay, and selection state that persists across sort and filter changes for items still in the filtered set.
 - **Server — direct item play:** `POST /api/play/{itemId}` (persisted library id) returns `RandomResponse`, records playback, and emits `playbackRecorded`; OpenAPI documents error `code` values on `ErrorResponse`. Shared `MediaPlayableExtensions` aligns import/refresh/play extension allowlists. Library playback projection now honors per-source `isEnabled` when all sources are disabled.
 
 ### Changed
 
-- **Desktop — library click-to-play:** Grid and list activation call `POST /api/play/{itemId}`; playback starts from the returned `RandomResponse` with LibVLC locally and without duplicate client `record-playback`. Endpoint errors map to user-facing status messages (404/409/415).
+- **Desktop — library panel cleanup:** Retired list view rendering, list scroll-anchor logic, and `LibraryGridViewEnabled` settings persistence (legacy setting ignored harmlessly if present).
+- **Desktop — library click-to-play:** Grid activation calls `POST /api/play/{itemId}`; playback starts from the returned `RandomResponse` with LibVLC locally and without duplicate client `record-playback`. Endpoint errors map to user-facing status messages (404/409/415).
 - **Desktop — Force API playback:** Resolve root-relative `/api/media/...` URLs against the core base URL on Linux (avoid mis-parsing them as `file://` paths).
 - **Desktop — Force API photo playback:** Photo display loads from `/api/media/...` over HTTP instead of treating API URLs as local filesystem paths.
 - **Desktop — favorite/blacklist toggles:** Programmatic sync during playback no longer fires toggle change handlers (avoids spurious add/remove status messages and unintended API writes).
