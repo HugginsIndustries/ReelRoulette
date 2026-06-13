@@ -7,6 +7,7 @@ This file follows a Keep a Changelog style format.
 
 ### Added
 
+- **Desktop — library grid selection:** Grid view supports multi-select (click, Ctrl+click, Shift+click with disjoint ranges and stable shift anchor), double-click/Enter to play, right-click bulk context menu parity with list view, orange selection overlay, and selection state that persists across sort, filter, and view toggles for items still in the filtered set.
 - **Server — direct item play:** `POST /api/play/{itemId}` (persisted library id) returns `RandomResponse`, records playback, and emits `playbackRecorded`; OpenAPI documents error `code` values on `ErrorResponse`. Shared `MediaPlayableExtensions` aligns import/refresh/play extension allowlists. Library playback projection now honors per-source `isEnabled` when all sources are disabled.
 
 ### Changed

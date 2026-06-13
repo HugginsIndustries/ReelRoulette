@@ -172,6 +172,7 @@ Use `pwsh ./tools/scripts/reset-checklist.ps1` to reset metadata/check states be
 
 > Add checks here for features or changes introduced in the current release. Remove this section's items after the release is signed off and the checklist is reset. Do not add permanent checks here — if a check should survive future releases, promote it to the appropriate section above.
 
+- [x] Library grid view: single-click multi-select (Ctrl/Shift), double-click/Enter play, right-click bulk context menu, selection count updates, and selection persists across filter changes.
 - [ ] `POST /api/play/{libraryItemId}` returns `200` with a `RandomResponse` for a playable item; `GET` on `mediaUrl` streams when paired/auth allows.
 - [ ] Same request produces a `playbackRecorded` SSE event (or visible in Operator event tooling) without a separate `record-playback` call.
 

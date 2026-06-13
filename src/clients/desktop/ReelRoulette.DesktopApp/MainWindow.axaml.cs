@@ -245,7 +245,10 @@ namespace ReelRoulette
         
         // Selection tracking for batch operations
         private HashSet<string> _selectedItemPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        private int _lastSelectedIndex = -1;
+        private int _shiftAnchorIndex = -1;
+        private string? _shiftAnchorPath;
+        private bool _gridSelectionModifiedByCtrl;
+        private HashSet<string> _gridCtrlBasePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private bool _isHandlingSelectionChange = false; // Prevent recursive selection change handling
         
         // Scroll position tracking for library panel
@@ -865,6 +868,10 @@ namespace ReelRoulette
                 Log("MainWindow constructor: Calling InitializeComponent...");
                 InitializeComponent();
                 Log("MainWindow constructor: InitializeComponent completed.");
+                if (LibraryListBox?.ContextMenu != null && LibraryGridScrollViewer != null)
+                {
+                    LibraryGridScrollViewer.ContextMenu = LibraryListBox.ContextMenu;
+                }
                 _coreServerApiClient = new CoreServerApiClient(_coreServerHttpClient);
                 _coreServerLongRunningApiClient = new CoreServerApiClient(_coreServerLongRunningHttpClient);
             
@@ -2422,29 +2429,21 @@ namespace ReelRoulette
                                     UpdateFilterCountDisplay(_libraryItems.Count);
                                     
                                     // Restore selection state (only for items that are still in the filtered list)
-                                    if (LibraryListBox != null && LibraryListBox.SelectedItems != null && _selectedItemPaths.Count > 0)
+                                    if (_selectedItemPaths.Count > 0 || _gridCtrlBasePaths.Count > 0)
                                     {
-                                        _isHandlingSelectionChange = true;
-                                        try
-                                        {
-                                            LibraryListBox.SelectedItems.Clear();
-                                            foreach (var item in _libraryItems)
-                                            {
-                                                if (_selectedItemPaths.Contains(item.FullPath))
-                                                {
-                                                    LibraryListBox.SelectedItems.Add(item);
-                                                }
-                                            }
-                                            // Remove paths that are no longer in the filtered list
-                                            var visiblePaths = new HashSet<string>(_libraryItems.Select(i => i.FullPath), StringComparer.OrdinalIgnoreCase);
-                                            _selectedItemPaths.RemoveWhere(path => !visiblePaths.Contains(path));
-                                        }
-                                        finally
-                                        {
-                                            _isHandlingSelectionChange = false;
-                                        }
-                                        // Update selection count display after restoration (since SelectionChanged was suppressed)
-                                        UpdateSelectionCountDisplay();
+                                        var visiblePaths = new HashSet<string>(_libraryItems.Select(i => i.FullPath), StringComparer.OrdinalIgnoreCase);
+                                        _selectedItemPaths.RemoveWhere(path => !visiblePaths.Contains(path));
+                                        _gridCtrlBasePaths.RemoveWhere(path => !visiblePaths.Contains(path));
+                                    }
+
+                                    if (_selectedItemPaths.Count > 0 || !string.IsNullOrWhiteSpace(_shiftAnchorPath))
+                                    {
+                                        ReconcileShiftAnchorIndex();
+                                    }
+
+                                    if (_selectedItemPaths.Count > 0)
+                                    {
+                                        ApplyLibrarySelectionUiState();
                                     }
                                     
                                     // Restore scroll position using anchor item
@@ -2578,6 +2577,190 @@ namespace ReelRoulette
             return selectedItems;
         }
 
+        private void ClearLibrarySelection()
+        {
+            if (_selectedItemPaths.Count == 0)
+            {
+                return;
+            }
+
+            _selectedItemPaths.Clear();
+            _shiftAnchorIndex = -1;
+            _shiftAnchorPath = null;
+            _gridSelectionModifiedByCtrl = false;
+            _gridCtrlBasePaths.Clear();
+            ApplyLibrarySelectionUiState();
+        }
+
+        private void SetShiftAnchor(int shiftAnchorIndex)
+        {
+            _shiftAnchorIndex = shiftAnchorIndex;
+            if (shiftAnchorIndex >= 0 && shiftAnchorIndex < _libraryItems.Count)
+            {
+                _shiftAnchorPath = _libraryItems[shiftAnchorIndex].FullPath;
+            }
+            else
+            {
+                _shiftAnchorPath = null;
+            }
+        }
+
+        private void ReconcileShiftAnchorIndex()
+        {
+            if (string.IsNullOrWhiteSpace(_shiftAnchorPath))
+            {
+                _shiftAnchorIndex = -1;
+                return;
+            }
+
+            _shiftAnchorIndex = -1;
+            for (var i = 0; i < _libraryItems.Count; i++)
+            {
+                if (string.Equals(_libraryItems[i].FullPath, _shiftAnchorPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    _shiftAnchorIndex = i;
+                    return;
+                }
+            }
+
+            _shiftAnchorPath = null;
+            _shiftAnchorIndex = -1;
+        }
+
+        private void SetLibrarySelectionPaths(IReadOnlyCollection<string> paths, int shiftAnchorIndex)
+        {
+            _selectedItemPaths.Clear();
+            foreach (var path in paths)
+            {
+                if (!string.IsNullOrWhiteSpace(path))
+                {
+                    _selectedItemPaths.Add(path);
+                }
+            }
+
+            SetShiftAnchor(shiftAnchorIndex);
+            ApplyLibrarySelectionUiState();
+        }
+
+        private void ApplyLibrarySelectionUiState()
+        {
+            UpdateGridSelectionVisualsFromPaths();
+            SyncListBoxSelectionFromPaths();
+            UpdateSelectionCountDisplay();
+            UpdateContextMenuState();
+        }
+
+        private void UpdateGridSelectionVisualsFromPaths()
+        {
+            foreach (var item in _libraryItems)
+            {
+                var isSelected = _selectedItemPaths.Contains(item.FullPath);
+                if (item.IsSelected != isSelected)
+                {
+                    item.IsSelected = isSelected;
+                }
+            }
+        }
+
+        private void SyncListBoxSelectionFromPaths()
+        {
+            if (LibraryListBox?.SelectedItems == null)
+            {
+                return;
+            }
+
+            _isHandlingSelectionChange = true;
+            try
+            {
+                LibraryListBox.SelectedItems.Clear();
+                foreach (var item in _libraryItems)
+                {
+                    if (_selectedItemPaths.Contains(item.FullPath))
+                    {
+                        LibraryListBox.SelectedItems.Add(item);
+                    }
+                }
+            }
+            finally
+            {
+                _isHandlingSelectionChange = false;
+            }
+        }
+
+        private static bool IsLibraryGridTileInteraction(object? source)
+        {
+            if (source is not Visual visual)
+            {
+                return false;
+            }
+
+            var current = visual;
+            while (current != null)
+            {
+                if (current.DataContext is LibraryGridTileViewModel)
+                {
+                    return true;
+                }
+
+                current = current.Parent as Visual;
+            }
+
+            return false;
+        }
+
+        private void ApplyGridSelectionSingle(LibraryItemViewModel item, int itemIndex)
+        {
+            _gridSelectionModifiedByCtrl = false;
+            _gridCtrlBasePaths.Clear();
+            SetLibrarySelectionPaths(new[] { item.FullPath }, itemIndex);
+        }
+
+        private void ToggleGridSelectionItem(LibraryItemViewModel item, int itemIndex)
+        {
+            var paths = new HashSet<string>(_selectedItemPaths, StringComparer.OrdinalIgnoreCase);
+            if (paths.Contains(item.FullPath))
+            {
+                paths.Remove(item.FullPath);
+            }
+            else
+            {
+                paths.Add(item.FullPath);
+            }
+
+            _gridSelectionModifiedByCtrl = true;
+            _gridCtrlBasePaths = new HashSet<string>(paths, StringComparer.OrdinalIgnoreCase);
+            SetLibrarySelectionPaths(paths, itemIndex);
+        }
+
+        private void ApplyGridSelectionRange(int anchorIndex, int targetIndex, bool addToExisting)
+        {
+            var start = Math.Min(anchorIndex, targetIndex);
+            var end = Math.Max(anchorIndex, targetIndex);
+            HashSet<string> paths;
+            if (!addToExisting)
+            {
+                paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            }
+            else if (_gridSelectionModifiedByCtrl && _gridCtrlBasePaths.Count > 0)
+            {
+                // Ctrl-disjoint selection: extend from the Ctrl base, not the prior Shift range.
+                paths = new HashSet<string>(_gridCtrlBasePaths, StringComparer.OrdinalIgnoreCase);
+            }
+            else
+            {
+                paths = new HashSet<string>(_selectedItemPaths, StringComparer.OrdinalIgnoreCase);
+            }
+
+            for (var index = start; index <= end && index < _libraryItems.Count; index++)
+            {
+                paths.Add(_libraryItems[index].FullPath);
+            }
+
+            // Keep anchorIndex as the shift anchor so consecutive Shift+clicks extend from the
+            // original non-Shift click, not from the previous range endpoint.
+            SetLibrarySelectionPaths(paths, anchorIndex);
+        }
+
         private LibraryItem? FindProjectionItemByPath(string? fullPath)
         {
             if (_libraryIndex == null || string.IsNullOrWhiteSpace(fullPath))
@@ -2680,9 +2863,6 @@ namespace ReelRoulette
 
         private void UpdateContextMenuState()
         {
-            if (LibraryListBox == null)
-                return;
-
             var selectedItems = GetSelectedLibraryItems();
             var hasSelection = selectedItems.Count > 0;
             var hasAnyFavorites = selectedItems.Any(item => item.IsFavorite);
@@ -3581,12 +3761,82 @@ namespace ReelRoulette
             return _thumbnailMetadataByItemId;
         }
 
-        private void LibraryGridItem_Click(object? sender, RoutedEventArgs e)
+        private void LibraryGridTile_PointerPressed(object? sender, PointerPressedEventArgs e)
         {
-            if (sender is Button button && button.Tag is string itemId && !string.IsNullOrWhiteSpace(itemId))
+            if (sender is not Control control || control.DataContext is not LibraryGridTileViewModel tile)
             {
-                _ = PlayFromLibraryItemIdAsync(itemId);
+                return;
             }
+
+            var point = e.GetCurrentPoint(control);
+            if (!point.Properties.IsLeftButtonPressed && !point.Properties.IsRightButtonPressed)
+            {
+                return;
+            }
+
+            var item = tile.Item;
+            var itemIndex = tile.ItemIndex;
+            if (itemIndex < 0 || itemIndex >= _libraryItems.Count)
+            {
+                return;
+            }
+
+            if (point.Properties.IsRightButtonPressed)
+            {
+                if (!_selectedItemPaths.Contains(item.FullPath))
+                {
+                    ApplyGridSelectionSingle(item, itemIndex);
+                }
+
+                return;
+            }
+
+            if (e.ClickCount >= 2)
+            {
+                Log($"UI ACTION: LibraryGridTile double-clicked for: {System.IO.Path.GetFileName(item.FullPath)}");
+                _ = PlayFromLibraryItemIdAsync(item.Id);
+                e.Handled = true;
+                return;
+            }
+
+            var modifiers = e.KeyModifiers;
+            if ((modifiers & KeyModifiers.Shift) != 0 && _shiftAnchorIndex >= 0)
+            {
+                var addToExisting = (modifiers & KeyModifiers.Control) != 0 || _gridSelectionModifiedByCtrl;
+                ApplyGridSelectionRange(_shiftAnchorIndex, itemIndex, addToExisting);
+                if ((modifiers & KeyModifiers.Control) != 0)
+                {
+                    _gridSelectionModifiedByCtrl = true;
+                }
+            }
+            else if ((modifiers & KeyModifiers.Control) != 0)
+            {
+                ToggleGridSelectionItem(item, itemIndex);
+            }
+            else
+            {
+                ApplyGridSelectionSingle(item, itemIndex);
+            }
+
+            e.Handled = true;
+        }
+
+        private void LibraryGridScrollViewer_KeyDown(object? sender, KeyEventArgs e)
+        {
+            if (!_libraryGridViewEnabled || e.Key != Key.Enter)
+            {
+                return;
+            }
+
+            var item = _libraryItems.FirstOrDefault(i => _selectedItemPaths.Contains(i.FullPath));
+            if (item == null)
+            {
+                return;
+            }
+
+            Log($"UI ACTION: LibraryGrid Enter key pressed for: {System.IO.Path.GetFileName(item.FullPath)}");
+            _ = PlayFromLibraryItemIdAsync(item.Id);
+            e.Handled = true;
         }
 
         /// <summary>
@@ -3918,7 +4168,7 @@ namespace ReelRoulette
 
         private void LibraryListBox_SelectionChanged(object? sender, SelectionChangedEventArgs e)
         {
-            if (_isHandlingSelectionChange || sender is not ListBox listBox)
+            if (_isHandlingSelectionChange || _isUpdatingLibraryItems || sender is not ListBox listBox)
                 return;
 
             try
@@ -3935,12 +4185,13 @@ namespace ReelRoulette
                     }
                 }
 
-                // Update last selected index
+                // Update shift anchor from list selection for grid parity
                 if (listBox.SelectedIndex >= 0)
                 {
-                    _lastSelectedIndex = listBox.SelectedIndex;
+                    SetShiftAnchor(listBox.SelectedIndex);
                 }
 
+                UpdateGridSelectionVisualsFromPaths();
                 UpdateSelectionCountDisplay();
                 UpdateContextMenuState();
             }
@@ -3956,7 +4207,7 @@ namespace ReelRoulette
             // This handler is kept for potential future custom behavior, but currently relies on default behavior
             if (sender is ListBox listBox && listBox.SelectedIndex >= 0)
             {
-                _lastSelectedIndex = listBox.SelectedIndex;
+                SetShiftAnchor(listBox.SelectedIndex);
             }
         }
 
@@ -3969,13 +4220,22 @@ namespace ReelRoulette
 
             var source = e.Source;
             var isScrollbarInteraction = source is ScrollBar or Thumb;
-            if (!isScrollbarInteraction)
+            if (isScrollbarInteraction)
             {
+                _isGridScrollInteracting = true;
+                Log("LibraryGridVirtualizer: Scroll interaction started.");
                 return;
             }
 
-            _isGridScrollInteracting = true;
-            Log("LibraryGridVirtualizer: Scroll interaction started.");
+            if (!IsLibraryGridTileInteraction(source) && sender is Visual visual)
+            {
+                var point = e.GetCurrentPoint(visual);
+                if (point.Properties.IsLeftButtonPressed)
+                {
+                    Log("UI ACTION: LibraryGrid background clicked - clearing selection");
+                    ClearLibrarySelection();
+                }
+            }
         }
 
         private void LibraryGridScrollViewer_PointerReleased(object? sender, PointerReleasedEventArgs e)

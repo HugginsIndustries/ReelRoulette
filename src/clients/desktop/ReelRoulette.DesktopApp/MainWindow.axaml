@@ -237,6 +237,12 @@
             <Setter Property="Width" Value="14"/>
             <Setter Property="MinWidth" Value="14"/>
         </Style>
+        <Style Selector="Border.LibraryGridTile">
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+        <Style Selector="Border.LibraryGridTile:pointerover">
+            <Setter Property="Opacity" Value="0.92"/>
+        </Style>
     </Window.Styles>
     
     <Grid RowDefinitions="Auto,Auto,Auto,*" Margin="0">
@@ -840,10 +846,12 @@
                                   AllowAutoHide="False"
                                   HorizontalScrollBarVisibility="Disabled"
                                   VerticalScrollBarVisibility="Visible"
+                                  Focusable="True"
                                   ScrollChanged="LibraryGridScrollViewer_ScrollChanged"
                                   PointerPressed="LibraryGridScrollViewer_PointerPressed"
                                   PointerReleased="LibraryGridScrollViewer_PointerReleased"
                                   PointerCaptureLost="LibraryGridScrollViewer_PointerCaptureLost"
+                                  KeyDown="LibraryGridScrollViewer_KeyDown"
                                   IsVisible="False">
                         <StackPanel Orientation="Vertical">
                             <Border Height="{Binding LibraryGridTopSpacerHeight}"/>
@@ -864,12 +872,14 @@
                                             </ItemsControl.ItemsPanel>
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate DataType="local:LibraryGridTileViewModel">
-                                                    <Button Tag="{Binding Item.Id}"
-                                                            Click="LibraryGridItem_Click"
+                                                    <Border Classes="LibraryGridTile"
+                                                            Tag="{Binding Item.Id}"
                                                             Width="{Binding TileWidth}"
                                                             Height="{Binding TileHeight}"
                                                             HorizontalAlignment="Stretch"
-                                                            VerticalAlignment="Stretch">
+                                                            VerticalAlignment="Stretch"
+                                                            Background="Transparent"
+                                                            PointerPressed="LibraryGridTile_PointerPressed">
                                                         <Grid>
                                                             <Border Background="#22000000"
                                                                     CornerRadius="0"
@@ -908,8 +918,13 @@
                                                                            Foreground="White"
                                                                            FontSize="12"/>
                                                             </Border>
+                                                            <Border BorderBrush="{StaticResource HugginsOrangeBrush}"
+                                                                    BorderThickness="3"
+                                                                    CornerRadius="0"
+                                                                    IsHitTestVisible="False"
+                                                                    IsVisible="{Binding Item.IsSelected}"/>
                                                         </Grid>
-                                                    </Button>
+                                                    </Border>
                                                 </DataTemplate>
                                             </ItemsControl.ItemTemplate>
                                         </ItemsControl>

@@ -13,6 +13,7 @@ public sealed class LibraryItemViewModel : INotifyPropertyChanged, IDisposable
     private Bitmap? _thumbnailBitmap;
     private double _thumbnailWidth;
     private double _thumbnailHeight;
+    private bool _isSelected;
 
     public LibraryItemViewModel(LibraryItem item)
     {
@@ -84,6 +85,12 @@ public sealed class LibraryItemViewModel : INotifyPropertyChanged, IDisposable
     }
 
     public bool HasGridStateIndicator => IsFavorite || IsBlacklisted;
+
+    public bool IsSelected
+    {
+        get => _isSelected;
+        set => SetField(ref _isSelected, value);
+    }
 
     public string ThumbnailPath
     {

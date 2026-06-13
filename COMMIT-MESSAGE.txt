@@ -19,12 +19,10 @@ Instructions:
 
 Commit Message:
 
-M10b: Desktop library click-to-play API cutover
+Feature: Desktop library grid multi-select and bulk context menu
 
-- Route desktop library grid and list activation through `POST /api/play/{itemId}` via `RequestPlayItemAsync`.
-- Skip client `record-playback` when the server already recorded the play start (`SkipRecordPlayback` on `PlaybackTarget`).
-- Map play-item HTTP errors to desktop status messages without path-first fallback.
-- Fix Force API playback on Linux by resolving `/api/media/...` against the core base URL (`PlaybackMediaUrlResolver` + tests).
-- Fix spurious favorite/blacklist status messages on playback by suppressing toggle change handlers during programmatic UI sync.
-- Fix Force API photo playback by loading images from `/api/media/...` via `PhotoPlaybackStreamOpener` (+ tests).
-- Add `CoreServerApiClientPlayItemTests`; update milestone evidence, CONTEXT, API/architecture/domain inventory, checklist, and changelog.
+- Add grid single-click selection with Ctrl/Shift multi-select (disjoint ranges, stable shift anchor) and orange selection overlay.
+- Route grid double-click and Enter to `POST /api/play/{itemId}`; single click no longer plays immediately.
+- Share list-view bulk context menu with grid view and keep selection count in sync.
+- Persist grid/list selection and shift anchor across sort, filter, and view-mode changes for items still visible.
+- Update CONTEXT, testing checklist, and changelog.
