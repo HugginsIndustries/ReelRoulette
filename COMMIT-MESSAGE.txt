@@ -19,11 +19,10 @@ Instructions:
 
 Commit Message:
 
-M10c: Desktop grid-only library panel and Date Added sort
+M10d: WebUI library overlay shell
 
-- Remove list view, grid/list toggle, and list scroll-anchor restore; library panel is always the thumbnail grid.
-- Stop persisting `LibraryGridViewEnabled`; legacy desktop settings value is ignored on load.
-- Add **Date added** sort from projection `lastWriteTimeUtc` with Newest→Oldest default when selected.
-- Extract `LibraryPanelSort` and add unit tests for Date Added ordering and missing timestamps.
-- Move bulk context menu to the grid scroll viewer; remove dead list-era handlers.
+- Add Library corner control (`browse` icon, left of Filter) and full-screen overlay inside the player stage.
+- Fetch `GET /api/library/projection` on every open with loading, empty, error, and summary body states.
+- Extract `libraryOverlayModel` with lifecycle and refetch-on-open unit tests.
+- Match filter/tag overlay shell styling and light/dark theme integration; playback continues while open.
 - Update CONTEXT, checklist, domain inventory, feature migration, milestone evidence, and changelog.

@@ -7,6 +7,7 @@ This file follows a Keep a Changelog style format.
 
 ### Added
 
+- **WebUI — library overlay shell:** **Library** corner control (`browse` icon, left of Filter) opens a full-screen overlay inside the player stage; Close-only header; `GET /api/library/projection` on every open with loading, empty, error, and summary states; light/dark themed shell matching filter/tag overlays.
 - **Desktop — library grid-only panel:** Removed list view and grid/list toggle; library panel always renders the virtualized thumbnail grid with bulk context menu on the grid scroll surface.
 - **Desktop — Date added sort:** Library panel sort selector includes **Date added** (`lastWriteTimeUtc`) with Newest→Oldest and Oldest→Newest directions (defaults to Newest→Oldest when selected).
 - **Desktop — library grid selection:** Grid view supports multi-select (click, Ctrl+click, Shift+click with disjoint ranges and stable shift anchor), double-click/Enter to play, right-click bulk context menu, orange selection overlay, and selection state that persists across sort and filter changes for items still in the filtered set.

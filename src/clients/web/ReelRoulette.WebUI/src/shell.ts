@@ -36,6 +36,7 @@ export function renderApp(container: HTMLElement, config: RuntimeConfig): void {
         <img id="photo" alt="Photo" style="display:none">
         <div id="empty-state" class="empty-state">Click here to play (choose a preset or open Filter…)</div>
         <div id="overlay-controls" class="overlay-controls">
+          <button id="library-open-btn" class="overlay-btn icon-glyph-base icon-glyph-button overlay-corner-btn" aria-label="Library" title="Library"><span class="material-symbol-icon">browse</span></button>
           <button id="filter-edit-btn" class="overlay-btn icon-glyph-base icon-glyph-button overlay-corner-btn" aria-label="Select filters" title="Select filters…"><span class="material-symbol-icon">filter_alt</span></button>
           <button id="tag-edit-btn" class="overlay-btn icon-glyph-base icon-glyph-button overlay-corner-btn" aria-label="Edit Tags" title="Edit Tags"><span class="material-symbol-icon">tag</span></button>
           <button id="favorite-btn" class="overlay-btn icon-glyph-base icon-glyph-toggle overlay-toggle overlay-corner-btn" aria-label="Favorite" title="Favorite"><span class="material-symbol-icon">favorite</span></button>
@@ -134,6 +135,15 @@ export function renderApp(container: HTMLElement, config: RuntimeConfig): void {
         <button id="filter-cancel-btn" type="button">Cancel</button>
         <button id="filter-apply-btn" type="button">Apply</button>
       </div>
+    </div>
+    <div id="library-overlay" class="library-overlay" style="display:none">
+      <div class="library-overlay-header">
+        <h2>Library</h2>
+        <div class="library-overlay-actions">
+          <button id="library-overlay-close-btn" class="icon-glyph-base icon-glyph-button" type="button" title="Close" aria-label="Close"><span class="material-symbol-icon">close</span></button>
+        </div>
+      </div>
+      <div id="library-overlay-body" class="library-overlay-body"></div>
     </div>
     </div>
     <div id="status" class="status status-bottom"></div>

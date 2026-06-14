@@ -12,6 +12,16 @@ import {
   presetsToPostBody,
   serializeFilterStateForApi
 } from "./filter/filterStateModel.ts";
+import {
+  LIBRARY_OVERLAY_FETCH_ERROR,
+  beginLibraryOverlayOpen,
+  closeLibraryOverlayState,
+  completeLibraryOverlayFetch,
+  createLibraryOverlayState,
+  failLibraryOverlayFetch,
+  parseLibraryProjectionSummary,
+  renderLibraryOverlayBodyHtml
+} from "./library/libraryOverlayModel.ts";
 
 const CLIENT_ID_KEY = "rr_clientId";
 const SESSION_ID_KEY = "rr_sessionId";
@@ -191,8 +201,12 @@ export function startApp(config) {
     videoMuted: false,
     appliedFilterState: createDefaultFilterState(),
     activePresetName: null,
-    filterDialogOpen: false
+    filterDialogOpen: false,
+    libraryOverlayOpen: false
   };
+
+  let libraryOverlayState = createLibraryOverlayState();
+  let libraryOverlayOpenGeneration = 0;
 
   const video = getElement("video");
   const photo = getElement("photo");
@@ -259,6 +273,10 @@ export function startApp(config) {
   const filterClearAllBtn = getElement("filter-clear-all-btn");
   const filterCancelBtn = getElement("filter-cancel-btn");
   const filterApplyBtn = getElement("filter-apply-btn");
+  const libraryOpenBtn = getElement("library-open-btn");
+  const libraryOverlay = getElement("library-overlay");
+  const libraryOverlayBody = getElement("library-overlay-body");
+  const libraryOverlayCloseBtn = getElement("library-overlay-close-btn");
 
   if (
     !video || !photo || !statusEl || !presetSelect || !pairSection || !pairToken || !pairBtn ||
@@ -272,7 +290,8 @@ export function startApp(config) {
     !tagEditCategory || !tagEditCancelBtn || !tagEditSaveBtn || !photoDurationInput || !emptyState ||
     !filterDialog || !filterDialogHeading || !filterDialogRefreshBtn || !filterDialogCloseBtn ||
     !filterPanelGeneral || !filterPanelTags || !filterPanelPresets || !filterClearAllBtn ||
-    !filterCancelBtn || !filterApplyBtn
+    !filterCancelBtn || !filterApplyBtn || !libraryOpenBtn || !libraryOverlay ||
+    !libraryOverlayBody || !libraryOverlayCloseBtn
   ) {
     throw new Error("Legacy WebUI bootstrap failed: missing required DOM elements.");
   }
@@ -1073,6 +1092,53 @@ export function startApp(config) {
     filterPanelTags.removeEventListener("click", onFilterTagPanelClick);
     filterDialog.style.display = "none";
     state.filterDialogOpen = false;
+  }
+
+  function renderLibraryOverlayBody() {
+    libraryOverlayBody.innerHTML = renderLibraryOverlayBodyHtml(
+      libraryOverlayState.phase,
+      libraryOverlayState.summary,
+      libraryOverlayState.lastError
+    );
+  }
+
+  async function openLibraryOverlay() {
+    if (state.compatibilityBlocked) {
+      return;
+    }
+
+    libraryOverlayOpenGeneration += 1;
+    const openGeneration = libraryOverlayOpenGeneration;
+    libraryOverlayState = beginLibraryOverlayOpen(libraryOverlayState);
+    libraryOverlay.style.display = "flex";
+    state.libraryOverlayOpen = true;
+    renderLibraryOverlayBody();
+
+    try {
+      const projection = await fetchJson("/api/library/projection");
+      if (openGeneration !== libraryOverlayOpenGeneration || !state.libraryOverlayOpen) {
+        return;
+      }
+      const summary = parseLibraryProjectionSummary(projection);
+      libraryOverlayState = completeLibraryOverlayFetch(libraryOverlayState, summary);
+      renderLibraryOverlayBody();
+    } catch (error) {
+      if (openGeneration !== libraryOverlayOpenGeneration || !state.libraryOverlayOpen) {
+        return;
+      }
+      const message = error?.message ? String(error.message) : LIBRARY_OVERLAY_FETCH_ERROR;
+      libraryOverlayState = failLibraryOverlayFetch(libraryOverlayState, message);
+      renderLibraryOverlayBody();
+      setStatus(`Library load failed: ${message}`);
+    }
+  }
+
+  function closeLibraryOverlay() {
+    libraryOverlayOpenGeneration += 1;
+    libraryOverlay.style.display = "none";
+    state.libraryOverlayOpen = false;
+    libraryOverlayState = closeLibraryOverlayState(libraryOverlayState);
+    renderLibraryOverlayBody();
   }
 
   async function applyFilterDialog() {
@@ -2991,6 +3057,13 @@ export function startApp(config) {
   filterEditBtn.addEventListener("click", (event) => {
     event.stopPropagation();
     void openFilterDialog();
+  });
+  libraryOpenBtn.addEventListener("click", (event) => {
+    event.stopPropagation();
+    void openLibraryOverlay();
+  });
+  libraryOverlayCloseBtn.addEventListener("click", () => {
+    closeLibraryOverlay();
   });
   filterDialogCloseBtn.addEventListener("click", () => {
     closeFilterDialog();

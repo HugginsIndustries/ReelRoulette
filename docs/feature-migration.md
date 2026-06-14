@@ -20,7 +20,7 @@ Browsable thumbnail-grid library panel with sort (name, last-played, play-count,
 
 **Target surface:** WebUI
 
-WebUI has a playback-focused player with a tag editor but no browsable library grid.
+WebUI has a playback-focused player with tag and filter overlays plus a **library overlay shell** (corner control, projection refetch on open, loading/empty/error states). Browsable thumbnail grid, search, and sort are not yet implemented.
 
 ---
 

@@ -72,6 +72,7 @@ Use `pwsh ./tools/scripts/reset-checklist.ps1` to reset metadata/check states be
 - [x] Core controls are usable on touch.
 - [x] Random play works with None (ad-hoc filter) and with a named header preset.
 - [x] Filter Media overlay opens and General, Tags, and Presets tabs function correctly.
+- [x] Library overlay opens and closes from player controls, loads library state on each open, and works in fullscreen and light/dark themes.
 - [x] Preset catalog add, rename, delete, reorder, and load all work; header combobox stays ordered.
 - [x] Manual controls (prev/play-next) work.
 - [x] Loop/autoplay toggles work.

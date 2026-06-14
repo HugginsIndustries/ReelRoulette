@@ -348,6 +348,7 @@ body {
   z-index: 20;
   filter: drop-shadow(var(--control-drop-shadow));
 }
+#library-open-btn.overlay-corner-btn { right: 220px; }
 #filter-edit-btn.overlay-corner-btn { right: 168px; }
 #tag-edit-btn.overlay-corner-btn { right: 116px; }
 #favorite-btn.overlay-corner-btn { right: 64px; }
@@ -981,6 +982,93 @@ html.theme-light .filter-dialog .tag-chip .chip-btn.icon-glyph-base {
 }
 html.theme-light .filter-dialog .tag-chip .chip-btn.icon-glyph-base.is-selected {
   color: var(--huggins-orange);
+}
+
+.library-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(16, 16, 16, 0.96);
+  color-scheme: dark;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  gap: 12px;
+}
+.library-overlay-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.library-overlay-header h2 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+.library-overlay-actions {
+  display: flex;
+  gap: 8px;
+}
+.library-overlay-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px;
+  border: 1px solid #333;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.2);
+}
+.library-overlay-status {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.5;
+}
+.library-overlay-status-error {
+  color: #ffb4b4;
+}
+.library-overlay button {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 8px 12px;
+  border: 1px solid #555;
+  border-radius: 8px;
+  background: #2a2a2a;
+  color: #fff;
+  cursor: pointer;
+}
+.library-overlay button:hover:not(:disabled) {
+  background: #353535;
+  border-color: #7a7a7a;
+}
+.library-overlay button:focus-visible {
+  outline: 2px solid #7aa7ff;
+  outline-offset: 1px;
+}
+.library-overlay button.icon-glyph-base {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #fff;
+}
+html.theme-light .library-overlay {
+  background: rgba(248, 249, 252, 0.98);
+  color: var(--page-fg);
+  color-scheme: light;
+}
+html.theme-light .library-overlay-body {
+  background: #f4f5f8;
+  border-color: var(--panel-border);
+}
+html.theme-light .library-overlay button:not(.icon-glyph-base) {
+  background: var(--panel-bg);
+  color: var(--page-fg);
+  border-color: var(--panel-border);
+}
+html.theme-light .library-overlay button.icon-glyph-base {
+  color: var(--icon-dark-grey);
+}
+html.theme-light .library-overlay-status-error {
+  color: #b42318;
 }
 
 main {

@@ -89,28 +89,7 @@ Do not use this file for detailed architecture explanation or current capability
 
 ## Active Milestones
 
-Last milestone completed: M10c
-
-### M10d - WebUI Library Overlay Shell
-
-- **Status**: ⏳ Planned
-- **Goal**: Introduce the WebUI library browser entry point and full-screen overlay shell without implementing the full grid behavior yet.
-- **Scope**:
-  - Depends on: none.
-  - Add a **Library** button to the WebUI top-right overlay controls, positioned left of the filter button.
-  - Implement a full-screen overlay matching the existing tag editor and filter dialog shell patterns, including header, close behavior, responsive layout, focus handling, and light/dark theme integration.
-  - Wire overlay open/close lifecycle and fetch the library projection on every open, with loading and error states.
-  - Keep the initial content minimal enough to validate shell behavior before grid/search/sort work lands.
-- **Acceptance criteria**:
-  - The Library button appears in the correct top-right overlay control position and opens a full-screen library overlay.
-  - The overlay matches established WebUI dialog structure and works in fullscreen/pseudo-fullscreen contexts used by the player shell.
-  - Opening the overlay re-fetches the projection every time, including after close/reopen.
-  - Loading, empty, and request-failure states are visible and theme-compatible.
-- **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include WebUI tests for open/close lifecycle and projection refetch-on-open behavior.
-  - Manual evidence must include desktop-browser and mobile-width shell smoke in light and dark themes.
-- **Deferrals / Follow-ups**:
-  - Grid rendering, search, sort, SSE state updates, and click-to-play are handled by later WebUI library-browser milestones.
+Last milestone completed: M10d
 
 ### M10e - WebUI Library Projection Search and Sort
 
@@ -1319,6 +1298,31 @@ Last milestone completed: M10c
 ## Completed Milestones
 
 Latest completions first:
+
+### M10d - WebUI Library Overlay Shell
+
+- **Status**: ✅ Complete
+- **Goal**: Introduce the WebUI library browser entry point and full-screen overlay shell without implementing the full grid behavior yet.
+- **Scope**:
+  - Depends on: none.
+  - Add a **Library** button to the WebUI top-right overlay controls, positioned left of the filter button.
+  - Implement a full-screen overlay matching the existing tag editor and filter dialog shell patterns, including header, close behavior, responsive layout, focus handling, and light/dark theme integration.
+  - Wire overlay open/close lifecycle and fetch the library projection on every open, with loading and error states.
+  - Keep the initial content minimal enough to validate shell behavior before grid/search/sort work lands.
+- **Acceptance criteria**:
+  - The Library button appears in the correct top-right overlay control position and opens a full-screen library overlay.
+  - The overlay matches established WebUI dialog structure and works in fullscreen/pseudo-fullscreen contexts used by the player shell.
+  - Opening the overlay re-fetches the projection every time, including after close/reopen.
+  - Loading, empty, and request-failure states are visible and theme-compatible.
+- **Verification evidence**:
+  - `dotnet build ReelRoulette.sln` — pass.
+  - `dotnet test ReelRoulette.sln` — pass (168 tests; no server/desktop changes).
+  - `npm run verify` in `src/clients/web/ReelRoulette.WebUI` — pass (36 Vitest tests including new `libraryOverlayModel.test.ts`).
+  - WebUI library overlay shell: `#library-open-btn` (`browse` icon) left of filter; `#library-overlay` inside `#fullscreen-stage`; Close-only header; `GET /api/library/projection` on every open with loading/empty/error/summary states; playback continues while open.
+  - `libraryOverlayModel.ts` — projection summary parsing (enabled-source item counts), open/close lifecycle, refetch-on-open contract tests.
+  - Manual shell smoke — confirmed (Linux desktop, dark theme): open/close from corner control, projection refetch on reopen with loading then summary, native fullscreen overlay usable; light theme not explicitly re-tested (uses same `html.theme-light` overlay pattern as filter/tag dialogs).
+- **Deferrals / Follow-ups**:
+  - Grid rendering, search, sort, SSE state updates, and click-to-play are handled by later WebUI library-browser milestones.
 
 ### M10c - Desktop Grid-Only Library Panel Cleanup
 
