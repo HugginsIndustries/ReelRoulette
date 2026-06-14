@@ -15,6 +15,7 @@ export interface LibraryGridController {
   setBrowseContent(input: {
     visibleItems: readonly LibraryProjectionItem[];
     searchQuery: string;
+    resetScroll?: boolean;
   }): void;
   destroy(): void;
 }
@@ -156,6 +157,7 @@ export function createLibraryGridController(
   function setBrowseContent(input: {
     visibleItems: readonly LibraryProjectionItem[];
     searchQuery: string;
+    resetScroll?: boolean;
   }): void {
     ensureBrowseShell();
     items = input.visibleItems;
@@ -185,7 +187,7 @@ export function createLibraryGridController(
       return;
     }
 
-    rebuildVirtualizer(true);
+    rebuildVirtualizer(input.resetScroll !== false);
   }
 
   function destroy(): void {
@@ -230,6 +232,7 @@ export function getVisibleRowCountForFixture(
     id: `id-${index}`,
     sourceId: "s1",
     fileName: `f-${index}.mp4`,
+    fullPath: null,
     relativePath: "",
     playCount: 0,
     lastPlayedUtcMs: null,

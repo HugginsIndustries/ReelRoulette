@@ -123,13 +123,15 @@ Boundary:
 WebUI is runtime-config-driven API/SSE client orchestration.
 
 - `src/clients/web/ReelRoulette.WebUI/src/app.js`
-  - main client runtime behavior and orchestration (playback, filter dialog, library overlay browse, tag overlay with **Edit Tags** + **Auto Tag** API flows).
+  - main client runtime behavior and orchestration (playback, filter dialog, library overlay browse + SSE live sync, tag overlay with **Edit Tags** + **Auto Tag** API flows).
 - `src/clients/web/ReelRoulette.WebUI/src/filter/filterStateModel.ts`
   - filter JSON serialize/parse aligned with desktop/server `FilterState`.
 - `src/clients/web/ReelRoulette.WebUI/src/library/libraryOverlayModel.ts`
   - library overlay lifecycle, projection summary parsing, and body render helpers.
 - `src/clients/web/ReelRoulette.WebUI/src/library/libraryProjectionModel.ts`
-  - projection item/catalog parse for library overlay browse.
+  - projection item/catalog parse for library overlay browse (includes optional `fullPath` for SSE path matching).
+- `src/clients/web/ReelRoulette.WebUI/src/library/libraryProjectionSync.ts`
+  - pure SSE projection patch helpers (`itemStateChanged`, `playbackRecorded`) and rebrowse decision logic for open overlay sync.
 - `src/clients/web/ReelRoulette.WebUI/src/library/libraryProjectionDisplayFilter.ts`
   - in-memory FilterState display filter for library overlay (desktop parity).
 - `src/clients/web/ReelRoulette.WebUI/src/library/libraryBrowseModel.ts`
@@ -143,7 +145,7 @@ WebUI is runtime-config-driven API/SSE client orchestration.
 - `src/clients/web/ReelRoulette.WebUI/src/library/libraryGridVirtualizer.ts`
   - row offset index and visible-window calculation (900px overscan).
 - `src/clients/web/ReelRoulette.WebUI/src/library/libraryGridController.ts`
-  - library overlay grid DOM lifecycle (mount, scroll, resize debounce, destroy).
+  - library overlay grid DOM lifecycle (mount, scroll, optional scroll reset on re-browse, resize debounce, destroy).
 - `src/clients/web/ReelRoulette.WebUI/src/shell.ts`
   - static layout including library overlay header browse count, toolbar (search/sort cluster), tabbed tag overlay, and filter overlay chrome.
 - `src/clients/web/ReelRoulette.WebUI/src/main.ts`

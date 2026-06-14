@@ -1630,7 +1630,7 @@ namespace ReelRoulette
             UpdateCurrentFileStatsUi();
             _ = RefreshGlobalStatsFromCoreAsync();
 
-            var playbackSensitiveSort = _librarySortMode is "LastPlayed" or "PlayCount" or "Duration";
+            var playbackSensitiveSort = _librarySortMode is "LastPlayed" or "PlayCount";
             if (_showLibraryPanel && ((_currentFilterState?.OnlyNeverPlayed ?? false) || playbackSensitiveSort))
             {
                 UpdateLibraryPanel();

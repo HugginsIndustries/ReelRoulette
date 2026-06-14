@@ -105,6 +105,8 @@ Reconnect/resync behavior:
 - Server replays buffered events newer than last revision when available.
 - If replay gap exceeds retention, server emits `resyncRequired`.
 - Client must re-fetch authoritative state via `POST /api/library-states`.
+- WebUI library overlay: when open, also refetches `GET /api/library/projection` on `resyncRequired` (desktop parity). Incremental favorite/blacklist/playback updates apply via `itemStateChanged` and `playbackRecorded` without reopening the overlay.
+- `playbackRecorded` payload may include optional `playCount` and `lastPlayedUtc` (server contract); clients should tolerate these fields even when omitted from generated OpenAPI schemas.
 
 ## Error and Simulation Semantics
 

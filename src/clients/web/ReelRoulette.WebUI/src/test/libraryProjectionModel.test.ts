@@ -68,6 +68,22 @@ describe("libraryProjectionModel", () => {
     expect(parseMediaType("Photo")).toBe("photo");
   });
 
+  it("parses optional fullPath on projection items", () => {
+    const result = parseLibraryProjection({
+      sources: [{ id: "s1", isEnabled: true }],
+      items: [
+        {
+          id: "i1",
+          sourceId: "s1",
+          fileName: "clip.mp4",
+          fullPath: "/data/videos/clip.mp4"
+        }
+      ]
+    });
+
+    expect(result.items[0]?.fullPath).toBe("/data/videos/clip.mp4");
+  });
+
   it("parses projection thumbnail metadata fields", () => {
     const result = parseLibraryProjection({
       sources: [{ id: "s1", isEnabled: true }],

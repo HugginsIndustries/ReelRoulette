@@ -77,6 +77,10 @@ Use `pwsh ./tools/scripts/reset-checklist.ps1` to reset metadata/check states be
 - [x] WebUI library grid: justified thumbnail layout at desktop and mobile widths; virtual scroll keeps mounted rows bounded; thumbnails load from `GET /api/thumbnail/{itemId}` only.
 - [x] WebUI library grid: mixed-aspect reflow on resize; missing-thumbnail placeholder (no broken image); favorite/blacklist badges; filename bar readable in light and dark themes.
 - [x] WebUI library grid visual parity: side-by-side with desktop grid at equivalent width (tile scrim, bar, badges, gaps).
+- [x] WebUI library SSE sync: with overlay open, desktop favorite/blacklist toggles update visible and scrolled-off WebUI tiles without closing overlay.
+- [x] WebUI library SSE sync: with overlay open, desktop playback updates **Play count** / **Last played** sort and **Only never played** filter correctly.
+- [x] WebUI library SSE sync: `resyncRequired` refetches projection while overlay is open; close/reopen still performs fresh `GET /api/library/projection`.
+- [x] WebUI library SSE sync regression: search/sort/filter re-browse still scrolls grid to top; playback continues while overlay stays open.
 - [x] Preset catalog add, rename, delete, reorder, and load all work; header combobox stays ordered.
 - [x] Manual controls (prev/play-next) work.
 - [x] Loop/autoplay toggles work.

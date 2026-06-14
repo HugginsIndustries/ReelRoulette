@@ -1092,7 +1092,7 @@ html.theme-light .filter-dialog .tag-chip .chip-btn.icon-glyph-base.is-selected 
   cursor: pointer;
 }
 .library-grid-tile:hover {
-  opacity: 0.92;
+  opacity: 0.79;
 }
 .library-grid-tile-media {
   position: relative;

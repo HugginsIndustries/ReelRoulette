@@ -20,6 +20,11 @@ import {
   isDefaultDescendingForSortMode
 } from "./library/libraryBrowseModel.ts";
 import { parseLibraryProjection } from "./library/libraryProjectionModel.ts";
+import {
+  applyItemStateChanged,
+  applyPlaybackRecorded,
+  shouldRebrowseAfterPlaybackUpdate
+} from "./library/libraryProjectionSync.ts";
 import { createLibraryGridController } from "./library/libraryGridController.ts";
 import {
   LIBRARY_OVERLAY_FETCH_ERROR,
@@ -1145,7 +1150,8 @@ export function startApp(config) {
     );
   }
 
-  function renderLibraryOverlayBody() {
+  function renderLibraryOverlayBody(options = {}) {
+    const resetScroll = options.resetScroll !== false;
     const phase = libraryOverlayState.phase;
     if (phase === "loading" || phase === "error" || phase === "empty") {
       destroyLibraryGridController();
@@ -1185,15 +1191,82 @@ export function startApp(config) {
     }
     libraryGridController.setBrowseContent({
       visibleItems: browse.visibleItems,
-      searchQuery: libraryBrowseControls.searchQuery
+      searchQuery: libraryBrowseControls.searchQuery,
+      resetScroll
     });
   }
 
-  function refreshLibraryOverlayBrowse() {
+  function refreshLibraryOverlayBrowse(options = {}) {
     if (!state.libraryOverlayOpen || libraryOverlayState.phase !== "ready") {
       return;
     }
-    renderLibraryOverlayBody();
+    renderLibraryOverlayBody(options);
+  }
+
+  function isLibraryOverlayReadyForSync() {
+    return (
+      state.libraryOverlayOpen &&
+      libraryOverlayState.phase === "ready" &&
+      libraryOverlayCatalog &&
+      libraryOverlayItems
+    );
+  }
+
+  async function syncLibraryOverlayProjectionFromServer() {
+    if (!state.libraryOverlayOpen) {
+      return;
+    }
+
+    libraryOverlayOpenGeneration += 1;
+    const syncGeneration = libraryOverlayOpenGeneration;
+
+    try {
+      const projection = await fetchJson("/api/library/projection");
+      if (syncGeneration !== libraryOverlayOpenGeneration || !state.libraryOverlayOpen) {
+        return;
+      }
+      const parsed = parseLibraryProjection(projection);
+      libraryOverlayCatalog = parsed.catalog;
+      libraryOverlayItems = parsed.items;
+      libraryOverlayState = completeLibraryOverlayFetch(libraryOverlayState, parsed.summary);
+      refreshLibraryOverlayBrowse({ resetScroll: false });
+    } catch (error) {
+      if (syncGeneration !== libraryOverlayOpenGeneration || !state.libraryOverlayOpen) {
+        return;
+      }
+      const message = error?.message ? String(error.message) : LIBRARY_OVERLAY_FETCH_ERROR;
+      libraryOverlayState = failLibraryOverlayFetch(libraryOverlayState, message);
+      renderLibraryOverlayBody({ resetScroll: false });
+      setStatus(`Library sync failed: ${message}`);
+    }
+  }
+
+  function handleLibraryOverlayItemStateChanged(payload) {
+    if (!isLibraryOverlayReadyForSync()) {
+      return;
+    }
+
+    const result = applyItemStateChanged(libraryOverlayItems, payload);
+    if (!result.changed) {
+      return;
+    }
+
+    refreshLibraryOverlayBrowse({ resetScroll: false });
+  }
+
+  function handleLibraryOverlayPlaybackRecorded(payload) {
+    if (!isLibraryOverlayReadyForSync()) {
+      return;
+    }
+
+    const result = applyPlaybackRecorded(libraryOverlayItems, payload);
+    if (!result.changed) {
+      return;
+    }
+
+    if (shouldRebrowseAfterPlaybackUpdate(libraryBrowseControls.sortMode, state.appliedFilterState)) {
+      refreshLibraryOverlayBrowse({ resetScroll: false });
+    }
   }
 
   async function openLibraryOverlay() {
@@ -2809,6 +2882,7 @@ export function startApp(config) {
         state.current.isBlacklisted = !!payload.isBlacklisted;
         updateToggleButtons();
       }
+      handleLibraryOverlayItemStateChanged(payload);
       const fileName = basenameFromPath(itemPath);
       if (payload.isBlacklisted) {
         setStatus(`Synced: Blacklisted: ${fileName}`);
@@ -2817,6 +2891,10 @@ export function startApp(config) {
       } else {
         setStatus(`Synced: Removed from favorites: ${fileName}`);
       }
+    });
+    eventSource.addEventListener("playbackRecorded", (event) => {
+      const payload = parseEnvelopePayload(event.data);
+      handleLibraryOverlayPlaybackRecorded(payload);
     });
     eventSource.addEventListener("refreshStatusChanged", (event) => {
       const payload = parseEnvelopePayload(event.data);
@@ -2835,6 +2913,9 @@ export function startApp(config) {
         // best effort
       }
       void loadPresets();
+      if (state.libraryOverlayOpen) {
+        await syncLibraryOverlayProjectionFromServer();
+      }
     });
   }
 

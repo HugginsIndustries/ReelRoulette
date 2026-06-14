@@ -20,7 +20,7 @@ Browsable thumbnail-grid library panel with sort (name, last-played, play-count,
 
 **Target surface:** WebUI
 
-WebUI has a playback-focused player with tag and filter overlays plus a **library overlay** with projection refetch on open, playback FilterState narrowing, search, sort, and a virtualized justified thumbnail grid (API metadata + `GET /api/thumbnail/{itemId}`). SSE live sync and click-to-play are not yet implemented.
+WebUI has a playback-focused player with tag and filter overlays plus a **library overlay** with projection refetch on open, playback FilterState narrowing, search, sort, virtualized justified thumbnail grid (API metadata + `GET /api/thumbnail/{itemId}`), and SSE live sync of favorite/blacklist/playback stats while open. Click-to-play is not yet implemented.
 
 ---
 

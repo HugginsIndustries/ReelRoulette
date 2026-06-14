@@ -74,7 +74,7 @@ flowchart LR
 - Clients issue command/query calls through APIs and project state from API plus SSE.
 - Desktop library activation (grid/list) is server-authoritative via `POST /api/play/{itemId}`; local LibVLC render only, with no duplicate client `record-playback` for that start.
 - WebUI Auto Tag (like duplicate scan/apply) performs filename/path matching only on the server; the web client sends scan scope and applies selected suggestions via API without client-local tag-matching authority.
-- WebUI library overlay grid uses a TypeScript port of Core `LibraryGridLayout` for justified-row packing and row-level virtual scrolling; tile JPEGs load from `GET /api/thumbnail/{itemId}` using projection metadata only.
+- WebUI library overlay grid uses a TypeScript port of Core `LibraryGridLayout` for justified-row packing and row-level virtual scrolling; tile JPEGs load from `GET /api/thumbnail/{itemId}` using projection metadata only. While the overlay is open, `itemStateChanged` and `playbackRecorded` patch the in-memory projection; `resyncRequired` refetches `GET /api/library/projection`.
 - Clients must not reintroduce local authoritative mutation fallbacks for migrated domains.
 - Library export/import applies zip packaging and JSON path remapping on the server; the desktop supplies UI and writes only imported `desktop-settings.json` locally after a successful import.
 

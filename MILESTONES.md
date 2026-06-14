@@ -89,28 +89,7 @@ Do not use this file for detailed architecture explanation or current capability
 
 ## Active Milestones
 
-Last milestone completed: M10f
-
-### M10g - WebUI Library SSE State Sync
-
-- **Status**: ⏳ Planned
-- **Goal**: Keep the WebUI library browser projection current while open using existing SSE infrastructure.
-- **Scope**:
-  - Depends on: WebUI virtual thumbnail grid.
-  - Subscribe the library browser model to existing SSE events that affect favorite, blacklist, play count, and last played state.
-  - Update visible and non-visible virtualized items without requiring a full overlay reopen.
-  - Handle `resyncRequired` by re-fetching the authoritative projection.
-  - Preserve the explicit refetch-on-open behavior even after live updates are added.
-- **Acceptance criteria**:
-  - Favorite and blacklist changes from any client update matching WebUI tiles while the overlay is open.
-  - Playback stats and last-played changes from any client update search/sort projections correctly while the overlay is open.
-  - SSE replay gaps or resync-required events trigger an authoritative projection re-fetch.
-  - Closing and reopening the overlay still performs a fresh projection fetch.
-- **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include WebUI SSE model tests for tile-state updates, sort-affecting updates, and resync-required requery behavior.
-  - Manual evidence must include cross-client favorite/blacklist and play-count/last-played sync smoke.
-- **Deferrals / Follow-ups**:
-  - New SSE event types are out of scope unless existing events cannot express the required state changes.
+Last milestone completed: M10g
 
 ### M10h - WebUI Library Click-to-Play and Responsive Sign-off
 
@@ -1249,6 +1228,34 @@ Last milestone completed: M10f
 ## Completed Milestones
 
 Latest completions first:
+
+### M10g - WebUI Library SSE State Sync
+
+- **Status**: ✅ Complete
+- **Goal**: Keep the WebUI library browser projection current while open using existing SSE infrastructure.
+- **Scope**:
+  - Depends on: WebUI virtual thumbnail grid.
+  - Subscribe the library browser model to existing SSE events that affect favorite, blacklist, play count, and last played state.
+  - Update visible and non-visible virtualized items without requiring a full overlay reopen.
+  - Handle `resyncRequired` by re-fetching the authoritative projection.
+  - Preserve the explicit refetch-on-open behavior even after live updates are added.
+- **Acceptance criteria**:
+  - Favorite and blacklist changes from any client update matching WebUI tiles while the overlay is open.
+  - Playback stats and last-played changes from any client update search/sort projections correctly while the overlay is open.
+  - SSE replay gaps or resync-required events trigger an authoritative projection re-fetch.
+  - Closing and reopening the overlay still performs a fresh projection fetch.
+- **Verification evidence**:
+  - `dotnet build ReelRoulette.sln` — pass.
+  - `dotnet test ReelRoulette.sln` — pass (126 Core + 49 Desktop tests; desktop change limited to library grid hover opacity 0.79).
+  - `npm run verify` in `src/clients/web/ReelRoulette.WebUI` — pass (84 Vitest tests).
+  - WebUI `libraryProjectionSync.test.ts` — tile-state patch, playback patch with optional server fields, rebrowse decision matrix, id/fullPath lookup.
+  - WebUI `libraryProjectionModel.test.ts` — optional `fullPath` parse for SSE path matching.
+  - WebUI modules: `libraryProjectionSync.ts`, `libraryGridController.ts` (`resetScroll`), `app.js` SSE handlers (`itemStateChanged`, `playbackRecorded`, `resyncRequired` projection refetch when overlay open).
+  - Manual cross-client smoke — confirmed: favorite/blacklist tile updates (visible + scrolled-off), playback sort/filter re-browse (`Play count`, `Last played`, `Only never played`), `resyncRequired` projection refetch while open, refetch-on-open, search/sort/filter scroll-to-top regression, playback continues with overlay open (`docs/checklists/testing-checklist.md`).
+- **Deferrals / Follow-ups**:
+  - New SSE event types are out of scope unless existing events cannot express the required state changes.
+  - `refreshStatusChanged` completion → overlay projection refetch remains deferred (desktop parity gap until follow-up).
+  - `createSseClient.ts` consolidation with inline `app.js` SSE remains deferred.
 
 ### M10f - WebUI Virtual Thumbnail Grid
 

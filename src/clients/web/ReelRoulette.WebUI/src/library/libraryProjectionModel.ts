@@ -27,6 +27,7 @@ export interface LibraryProjectionItem {
   id: string;
   sourceId: string;
   fileName: string;
+  fullPath: string | null;
   relativePath: string;
   playCount: number;
   lastPlayedUtcMs: number | null;
@@ -201,10 +202,12 @@ function parseItem(row: Record<string, unknown>, enabledSourceIds: Set<string>):
     return null;
   }
   const fileName = row.fileName != null ? String(row.fileName) : "";
+  const fullPathRaw = row.fullPath != null ? String(row.fullPath).trim() : "";
   return {
     id: row.id != null ? String(row.id) : fileName || sourceId,
     sourceId,
     fileName,
+    fullPath: fullPathRaw || null,
     relativePath: row.relativePath != null ? String(row.relativePath) : "",
     playCount: typeof row.playCount === "number" && Number.isFinite(row.playCount) ? Math.max(0, Math.trunc(row.playCount)) : 0,
     lastPlayedUtcMs: parseUtcMs(row.lastPlayedUtc),

@@ -24,6 +24,7 @@ function row(
     id: fileName,
     sourceId: "s1",
     fileName,
+    fullPath: null,
     relativePath: fileName,
     playCount: 0,
     lastPlayedUtcMs: null,

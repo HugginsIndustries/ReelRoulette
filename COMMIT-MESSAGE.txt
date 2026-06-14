@@ -19,10 +19,12 @@ Instructions:
 
 Commit Message:
 
-M10f: WebUI virtual library thumbnail grid
+M10g: WebUI library overlay SSE state sync
 
-- Port Core LibraryGridLayout to WebUI with parity unit tests for aspect and row packing; use full scrollport width (no Avalonia 8px right gutter).
-- Add row-virtualized justified thumbnail grid with desktop-aligned tile chrome, themed scrollbars, API thumbnail loading, stable scroll behavior, and edge-to-edge layout inside the rounded overlay body.
-- Replace library overlay interim filename list; keep in-memory search/sort/filter pipeline; browse item count in header; sort select and direction button wrap as a cluster.
-- Wire grid controller in app.js with resize debounce and scroll-to-top on re-browse.
-- Add layout, virtualizer, and tile rendering Vitest suites; update milestone/docs/checklist evidence; manual smoke confirmed.
+- Add libraryProjectionSync helpers to patch favorite/blacklist and playback stats on in-memory projection items (id/fullPath lookup).
+- Wire app.js SSE handlers for itemStateChanged, playbackRecorded, and resyncRequired projection refetch while overlay is open.
+- Preserve refetch-on-open; SSE grid refresh uses resetScroll:false to avoid scroll jumps on live updates.
+- Parse optional fullPath on projection items for playbackRecorded path matching.
+- Add libraryProjectionSync Vitest suite; manual cross-client smoke confirmed; checklist and milestone evidence updated.
+- Align WebUI and desktop library grid tile hover opacity to 0.79 for clearer feedback.
+- Skip spurious library grid re-sort on playbackRecorded when sort is Duration (playback does not change durationSeconds).

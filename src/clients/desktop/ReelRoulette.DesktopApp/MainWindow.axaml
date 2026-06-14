@@ -233,7 +233,7 @@
             <Setter Property="Cursor" Value="Hand"/>
         </Style>
         <Style Selector="Border.LibraryGridTile:pointerover">
-            <Setter Property="Opacity" Value="0.92"/>
+            <Setter Property="Opacity" Value="0.79"/>
         </Style>
     </Window.Styles>
     

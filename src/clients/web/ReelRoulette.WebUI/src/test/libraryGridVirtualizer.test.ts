@@ -13,6 +13,7 @@ function makeItem(index: number): LibraryProjectionItem {
     id: `item-${index}`,
     sourceId: "s1",
     fileName: `file-${index}.mp4`,
+    fullPath: null,
     relativePath: `folder/file-${index}.mp4`,
     playCount: 0,
     lastPlayedUtcMs: null,

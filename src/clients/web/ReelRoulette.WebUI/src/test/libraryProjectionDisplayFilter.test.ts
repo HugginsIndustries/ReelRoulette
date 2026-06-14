@@ -25,6 +25,7 @@ function item(overrides: Partial<LibraryProjectionItem> = {}): LibraryProjection
     id: "i1",
     sourceId: "s1",
     fileName: "clip.mp4",
+    fullPath: null,
     relativePath: "clip.mp4",
     playCount: 0,
     lastPlayedUtcMs: null,
