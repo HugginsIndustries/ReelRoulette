@@ -7,6 +7,10 @@ This file follows a Keep a Changelog style format.
 
 ### Added
 
+- **Server — library projection thumbnail metadata:** `GET /api/library/projection` enriches each item at serve time with `hasThumbnail`, `thumbnailWidth`, and `thumbnailHeight` from the server thumbnail index (not persisted in `library.json`).
+- **Core — library grid layout:** Shared `LibraryGridLayout` justified-row algorithm with tests for aspect fallbacks, row packing, and layout width rules.
+- **Desktop — API-only library grid thumbnails:** Library panel grid reads thumbnail dimensions from the projection API and loads visible tile JPEGs via `GET /api/thumbnail/{itemId}` (no local `thumbnails/` reads for grid rendering).
+- **WebUI — projection thumbnail fields:** Library projection parser accepts `hasThumbnail`, `thumbnailWidth`, and `thumbnailHeight` (prep for virtual grid milestone).
 - **WebUI — library overlay browse:** Library overlay adds in-memory projection parse, playback **FilterState** display filtering (desktop parity), search (filename/path), desktop-aligned sort controls, and interim filename result list; browse updates in memory on search/sort/filter changes; refetch-on-open preserved.
 - **WebUI — library overlay shell:** **Library** corner control (`browse` icon, left of Filter) opens a full-screen overlay inside the player stage; Close-only header; `GET /api/library/projection` on every open with loading, empty, error, and summary states; light/dark themed shell matching filter/tag overlays.
 - **Desktop — library grid-only panel:** Removed list view and grid/list toggle; library panel always renders the virtualized thumbnail grid with bulk context menu on the grid scroll surface.

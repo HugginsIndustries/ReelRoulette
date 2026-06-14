@@ -213,6 +213,59 @@ public sealed class RefreshPipelineService : BackgroundService
         return Path.Combine(_thumbnailDir, $"{itemId}.jpg");
     }
 
+    public void EnrichLibraryProjection(JsonObject projection)
+    {
+        if (projection == null)
+        {
+            return;
+        }
+
+        var index = LoadThumbnailIndex();
+        if (projection["items"] is not JsonArray items)
+        {
+            return;
+        }
+
+        foreach (var node in items)
+        {
+            if (node is not JsonObject item)
+            {
+                continue;
+            }
+
+            var itemId = item["id"]?.GetValue<string>()?.Trim();
+            if (string.IsNullOrWhiteSpace(itemId))
+            {
+                item["hasThumbnail"] = false;
+                item.Remove("thumbnailWidth");
+                item.Remove("thumbnailHeight");
+                continue;
+            }
+
+            var hasThumbnail = File.Exists(GetThumbnailPath(itemId));
+            item["hasThumbnail"] = hasThumbnail;
+            if (index.TryGetPropertyValue(itemId, out var indexNode))
+            {
+                var entry = ReadThumbnailIndexEntry(indexNode);
+                if (entry.HasDimensions)
+                {
+                    item["thumbnailWidth"] = entry.Width;
+                    item["thumbnailHeight"] = entry.Height;
+                }
+                else
+                {
+                    item.Remove("thumbnailWidth");
+                    item.Remove("thumbnailHeight");
+                }
+            }
+            else
+            {
+                item.Remove("thumbnailWidth");
+                item.Remove("thumbnailHeight");
+            }
+        }
+    }
+
     private bool TryReserveRun(string trigger, out string? runId)
     {
         lock (_runLock)

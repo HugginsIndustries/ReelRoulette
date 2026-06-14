@@ -1753,9 +1753,60 @@ components:
           type: integer
           format: int32
 
+    LibraryProjectionItem:
+      type: object
+      description: Library item entry in the projection snapshot. Thumbnail metadata is derived from the server thumbnail cache at serve time and is not persisted in library.json.
+      additionalProperties: true
+      properties:
+        id:
+          type: string
+        sourceId:
+          type: string
+        fileName:
+          type: string
+        relativePath:
+          type: string
+        mediaType:
+          oneOf:
+            - type: integer
+            - type: string
+        hasThumbnail:
+          type: boolean
+          description: True when a generated thumbnail JPEG exists for this item id.
+        thumbnailWidth:
+          type: integer
+          format: int32
+          nullable: true
+          description: Generated thumbnail width in pixels when available from the server thumbnail index.
+        thumbnailHeight:
+          type: integer
+          format: int32
+          nullable: true
+          description: Generated thumbnail height in pixels when available from the server thumbnail index.
+
     LibraryProjectionResponse:
       type: object
       additionalProperties: true
+      properties:
+        sources:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/LibraryProjectionItem"
+        categories:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        tags:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
 
     RandomRequest:
       type: object

@@ -283,9 +283,11 @@ public static class ServerHostComposition
             return Results.Ok(response);
         });
 
-        app.MapGet("/api/library/projection", (LibraryOperationsService operations) =>
+        app.MapGet("/api/library/projection", (LibraryOperationsService operations, RefreshPipelineService refresh) =>
         {
-            return Results.Json(operations.GetLibraryProjection());
+            var projection = operations.GetLibraryProjection();
+            refresh.EnrichLibraryProjection(projection);
+            return Results.Json(projection);
         });
 
         app.MapGet("/api/library/stats", (LibraryOperationsService operations) =>

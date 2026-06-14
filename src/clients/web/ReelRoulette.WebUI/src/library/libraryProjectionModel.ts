@@ -38,6 +38,9 @@ export interface LibraryProjectionItem {
   hasAudio: boolean | null;
   integratedLoudness: number | null;
   tags: string[];
+  hasThumbnail: boolean;
+  thumbnailWidth: number | null;
+  thumbnailHeight: number | null;
 }
 
 export interface ParsedLibraryProjection {
@@ -185,6 +188,13 @@ function parseCatalog(raw: Record<string, unknown>): LibraryProjectionCatalog {
   return { sources, categories, tags };
 }
 
+function parseOptionalPositiveInt(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+    return Math.trunc(value);
+  }
+  return null;
+}
+
 function parseItem(row: Record<string, unknown>, enabledSourceIds: Set<string>): LibraryProjectionItem | null {
   const sourceId = row.sourceId != null ? String(row.sourceId) : "";
   if (!enabledSourceIds.has(sourceId)) {
@@ -208,7 +218,10 @@ function parseItem(row: Record<string, unknown>, enabledSourceIds: Set<string>):
       typeof row.integratedLoudness === "number" && Number.isFinite(row.integratedLoudness)
         ? row.integratedLoudness
         : null,
-    tags: parseStringArray(row.tags)
+    tags: parseStringArray(row.tags),
+    hasThumbnail: row.hasThumbnail === true,
+    thumbnailWidth: parseOptionalPositiveInt(row.thumbnailWidth),
+    thumbnailHeight: parseOptionalPositiveInt(row.thumbnailHeight)
   };
 }
 

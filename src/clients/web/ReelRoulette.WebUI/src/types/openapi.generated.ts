@@ -981,7 +981,40 @@ export interface components {
             /** Format: int32 */
             updatedCount: number;
         };
+        /** @description Library item entry in the projection snapshot. Thumbnail metadata is derived from the server thumbnail cache at serve time and is not persisted in library.json. */
+        LibraryProjectionItem: {
+            id?: string;
+            sourceId?: string;
+            fileName?: string;
+            relativePath?: string;
+            mediaType?: number | string;
+            /** @description True when a generated thumbnail JPEG exists for this item id. */
+            hasThumbnail?: boolean;
+            /**
+             * Format: int32
+             * @description Generated thumbnail width in pixels when available from the server thumbnail index.
+             */
+            thumbnailWidth?: number | null;
+            /**
+             * Format: int32
+             * @description Generated thumbnail height in pixels when available from the server thumbnail index.
+             */
+            thumbnailHeight?: number | null;
+        } & {
+            [key: string]: unknown;
+        };
         LibraryProjectionResponse: {
+            sources?: {
+                [key: string]: unknown;
+            }[];
+            items?: components["schemas"]["LibraryProjectionItem"][];
+            categories?: {
+                [key: string]: unknown;
+            }[];
+            tags?: {
+                [key: string]: unknown;
+            }[];
+        } & {
             [key: string]: unknown;
         };
         RandomRequest: {

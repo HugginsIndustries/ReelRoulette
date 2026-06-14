@@ -67,4 +67,37 @@ describe("libraryProjectionModel", () => {
     expect(parseMediaType(1)).toBe("photo");
     expect(parseMediaType("Photo")).toBe("photo");
   });
+
+  it("parses projection thumbnail metadata fields", () => {
+    const result = parseLibraryProjection({
+      sources: [{ id: "s1", isEnabled: true }],
+      items: [
+        {
+          id: "i1",
+          sourceId: "s1",
+          fileName: "clip.mp4",
+          hasThumbnail: true,
+          thumbnailWidth: 480,
+          thumbnailHeight: 270
+        },
+        {
+          id: "i2",
+          sourceId: "s1",
+          fileName: "missing.jpg",
+          hasThumbnail: false
+        }
+      ]
+    });
+
+    expect(result.items[0]).toMatchObject({
+      hasThumbnail: true,
+      thumbnailWidth: 480,
+      thumbnailHeight: 270
+    });
+    expect(result.items[1]).toMatchObject({
+      hasThumbnail: false,
+      thumbnailWidth: null,
+      thumbnailHeight: null
+    });
+  });
 });

@@ -17,11 +17,11 @@ It is ownership-first and reflects current state only.
 Core/server domain services own business rules and persisted state semantics.
 
 - `src/core/ReelRoulette.Core/*`
-  - filtering/randomization helpers, storage abstractions, verification modules.
+  - filtering/randomization helpers, storage abstractions, verification modules, **`LibraryGridLayout`** (shared justified-row thumbnail grid layout).
 - `src/core/ReelRoulette.Server/Services/LibraryOperationsService.cs`
   - source import, duplicate scan/apply, auto-tag scan/apply, playback-stats clear, related command orchestration.
 - `src/core/ReelRoulette.Server/Services/RefreshPipelineService.cs`
-  - unified refresh pipeline stage execution (including `fingerprintScan` for per-file SHA-256 backfill), overlap guards, status snapshots, thumbnail generation/invalidation, duration/loudness scans, and server-scheduled **auto-refresh** (clients surface settings only).
+  - unified refresh pipeline stage execution (including `fingerprintScan` for per-file SHA-256 backfill), overlap guards, status snapshots, thumbnail generation/invalidation, duration/loudness scans, server-scheduled **auto-refresh**, and **library projection thumbnail metadata enrichment** at serve time.
 - `src/core/ReelRoulette.Server/Services/ServerStateService.cs`
   - revisioned event publication, replay/resync behavior, state projection support.
 - `src/core/ReelRoulette.Server/Services/CoreSettingsService.cs`

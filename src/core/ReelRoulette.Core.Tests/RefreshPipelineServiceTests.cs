@@ -265,6 +265,49 @@ public sealed class RefreshPipelineServiceTests
     }
 
     [Fact]
+    public void EnrichLibraryProjection_ShouldAddThumbnailMetadataFromIndex()
+    {
+        using var scope = new AppDataScope();
+        var thumbsDir = Path.Combine(scope.RootPath, "thumbnails");
+        Directory.CreateDirectory(thumbsDir);
+        File.WriteAllBytes(Path.Combine(thumbsDir, "item-1.jpg"), TinyPngBytes);
+        File.WriteAllText(
+            Path.Combine(thumbsDir, "index.json"),
+            new JsonObject
+            {
+                ["item-1"] = new JsonObject
+                {
+                    ["width"] = 480,
+                    ["height"] = 270,
+                    ["revision"] = "abc"
+                }
+            }.ToJsonString());
+
+        var service = CreateService(new ServerStateService(), scope.RootPath);
+        var projection = new JsonObject
+        {
+            ["items"] = new JsonArray
+            {
+                new JsonObject { ["id"] = "item-1", ["fileName"] = "a.mp4" },
+                new JsonObject { ["id"] = "item-2", ["fileName"] = "b.mp4" }
+            }
+        };
+
+        service.EnrichLibraryProjection(projection);
+
+        var items = projection["items"]!.AsArray();
+        var item1 = items[0]!.AsObject();
+        Assert.True(item1["hasThumbnail"]!.GetValue<bool>());
+        Assert.Equal(480, item1["thumbnailWidth"]!.GetValue<int>());
+        Assert.Equal(270, item1["thumbnailHeight"]!.GetValue<int>());
+
+        var item2 = items[1]!.AsObject();
+        Assert.False(item2["hasThumbnail"]!.GetValue<bool>());
+        Assert.Null(item2["thumbnailWidth"]);
+        Assert.Null(item2["thumbnailHeight"]);
+    }
+
+    [Fact]
     public async Task ThumbnailStage_ShouldWriteIndexMetadataObject()
     {
         using var scope = new AppDataScope();

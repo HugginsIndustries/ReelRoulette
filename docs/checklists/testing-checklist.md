@@ -179,6 +179,7 @@ Use `pwsh ./tools/scripts/reset-checklist.ps1` to reset metadata/check states be
 - [x] Library panel is grid-only (no list view or grid/list toggle).
 - [x] Library **Date added** sort (from projection `lastWriteTimeUtc`) supports Newest→Oldest and Oldest→Newest; selecting Date added defaults to Newest→Oldest.
 - [x] Library grid activation calls `POST /api/play/{itemId}` and starts returned media locally without a duplicate `record-playback` for the same start.
+- [x] Desktop library grid loads thumbnail metadata from `GET /api/library/projection` and JPEGs from `GET /api/thumbnail/{itemId}` only (no local `thumbnails/` reads for grid display); mixed-aspect layout reflows after refresh completion.
 
 ## Optional Release Flow
 

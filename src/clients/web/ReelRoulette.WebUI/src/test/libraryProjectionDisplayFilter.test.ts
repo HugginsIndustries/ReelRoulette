@@ -36,6 +36,9 @@ function item(overrides: Partial<LibraryProjectionItem> = {}): LibraryProjection
     hasAudio: true,
     integratedLoudness: -14,
     tags: [],
+    hasThumbnail: false,
+    thumbnailWidth: null,
+    thumbnailHeight: null,
     ...overrides
   };
 }

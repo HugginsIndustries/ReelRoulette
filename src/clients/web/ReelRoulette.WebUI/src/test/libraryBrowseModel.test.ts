@@ -35,6 +35,9 @@ function row(
     hasAudio: null,
     integratedLoudness: null,
     tags: [],
+    hasThumbnail: false,
+    thumbnailWidth: null,
+    thumbnailHeight: null,
     ...overrides
   };
 }

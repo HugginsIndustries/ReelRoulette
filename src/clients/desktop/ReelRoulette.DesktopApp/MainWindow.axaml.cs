@@ -30,6 +30,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using ReelRoulette.LibraryArchive;
 using System.Timers;
+using ReelRoulette.Core.Library;
 using ReelRoulette.Core.Storage;
 
 namespace ReelRoulette
@@ -237,8 +238,6 @@ namespace ReelRoulette
         private string _librarySortMode = "Name"; // "Name", "LastPlayed", "PlayCount", "Duration", "DateAdded"
         private bool _librarySortDescending = false;
         private int _libraryGridColumns = 2;
-        private DateTime _thumbnailIndexLastWriteUtc = DateTime.MinValue;
-        private readonly Dictionary<string, (double Width, double Height)> _thumbnailMetadataByItemId = new(StringComparer.OrdinalIgnoreCase);
         private string? _lastAppliedRefreshCompletionRunId;
         private bool _autoTagScanFullLibrary = true;
         
@@ -258,7 +257,7 @@ namespace ReelRoulette
         private bool _isGridScrollInteracting = false;
         private bool _pendingLibraryPanelRefresh = false;
         private bool _isInitializingLibraryPanel = false; // Flag to suppress events during initialization
-        private const double LibraryGridVerticalRowGap = 1d;
+        private static readonly HttpClient LibraryGridThumbnailHttpClient = new();
         
         // Volume slider debouncing
         private DispatcherTimer? _volumeSliderDebounceTimer;
@@ -2297,7 +2296,12 @@ namespace ReelRoulette
                                         return;
                                     }
 
-                                    PopulateThumbnailPaths(_libraryItems.ToList());
+                                    var thumbnailLayoutChanged = SyncLibraryItemViewModelsFromProjection(items);
+                                    if (thumbnailLayoutChanged && firstChangedItemIndex < 0)
+                                    {
+                                        firstChangedItemIndex = 0;
+                                    }
+
                                     await RebuildLibraryGridRowsIncrementalAsync(_libraryItems.ToList(), firstChangedItemIndex, cancellationToken, refreshGeneration);
                                     if (ShouldAbortLibraryPanelRefresh(cancellationToken, refreshGeneration))
                                     {
@@ -2842,6 +2846,8 @@ namespace ReelRoulette
 
             Log($"UpdateLibraryPanel: Applying item diff window start={diffWindow.StartIndex}, oldCount={diffWindow.OldCount}, newCount={diffWindow.NewCount}");
 
+            SyncLibraryItemViewModelsFromProjection(items, 0, diffWindow.StartIndex);
+
             if (diffWindow.OldCount > 0)
             {
                 for (var i = 0; i < diffWindow.OldCount; i++)
@@ -2891,88 +2897,44 @@ namespace ReelRoulette
 
         private (List<LibraryGridRowViewModel> Rows, int MaxColumns) BuildGridRowModelsRange(IReadOnlyList<LibraryItemViewModel> items, int startIndex, int endExclusive, double layoutWidth)
         {
-            const double targetRowHeight = 300;
-            const double minRowHeight = 200;
-            const double maxRowHeight = 400;
-            const double horizontalGap = 2;
-            var maxColumns = 1;
-            var rows = new List<LibraryGridRowViewModel>();
-
-            var pendingItems = new List<LibraryItemViewModel>();
-            var pendingAspects = new List<double>();
-            var pendingItemIndexes = new List<int>();
-            var pendingAspectSum = 0d;
-
-            void AddRow(bool isLastRow)
+            var aspects = new List<double>(items.Count);
+            for (var i = 0; i < items.Count; i++)
             {
-                if (pendingItems.Count == 0)
-                {
-                    return;
-                }
+                aspects.Add(items[i].GetThumbnailAspectRatio());
+            }
 
-                var rowHeight = isLastRow
-                    ? targetRowHeight
-                    : (layoutWidth - ((pendingItems.Count - 1) * horizontalGap)) / Math.Max(0.01, pendingAspectSum);
-                rowHeight = Math.Clamp(rowHeight, minRowHeight, maxRowHeight);
-
-                var row = new LibraryGridRowViewModel();
-                var widths = pendingAspects.Select(aspect => Math.Max(1, aspect * rowHeight)).ToList();
-                if (!isLastRow)
+            var layout = LibraryGridLayout.BuildRows(aspects, startIndex, endExclusive, layoutWidth);
+            var rows = new List<LibraryGridRowViewModel>(layout.Rows.Count);
+            foreach (var layoutRow in layout.Rows)
+            {
+                var row = new LibraryGridRowViewModel
                 {
-                    var widthDelta = layoutWidth - ((pendingItems.Count - 1) * horizontalGap) - widths.Sum();
-                    widths[widths.Count - 1] = Math.Max(1, widths[^1] + widthDelta);
-                }
+                    StartItemIndex = layoutRow.StartItemIndex,
+                    EndItemIndexExclusive = layoutRow.EndItemIndexExclusive,
+                    ItemCount = layoutRow.ItemCount,
+                    RowHeight = layoutRow.RowHeight,
+                    RowWidth = layoutRow.RowWidth
+                };
 
-                for (var i = 0; i < pendingItems.Count; i++)
+                foreach (var layoutTile in layoutRow.Tiles)
                 {
-                    var item = pendingItems[i];
-                    var itemIndex = pendingItemIndexes[i];
+                    var item = items[layoutTile.ItemIndex];
                     row.Items.Add(new LibraryGridTileViewModel
                     {
                         Item = item,
-                        TileWidth = widths[i],
-                        TileHeight = rowHeight,
-                        ItemIndex = itemIndex,
-                        AspectRatioUsed = pendingAspects[i],
+                        TileWidth = layoutTile.TileWidth,
+                        TileHeight = layoutTile.TileHeight,
+                        ItemIndex = layoutTile.ItemIndex,
+                        AspectRatioUsed = layoutTile.AspectRatioUsed,
                         ItemKey = GetLibraryItemKey(item)
                     });
                 }
 
-                row.StartItemIndex = pendingItemIndexes[0];
-                row.EndItemIndexExclusive = pendingItemIndexes[^1] + 1;
-                row.ItemCount = row.Items.Count;
-                row.RowHeight = rowHeight;
-                row.RowWidth = widths.Sum() + ((row.Items.Count - 1) * horizontalGap);
-                row.FirstItemKey = row.Items[0].ItemKey;
+                row.FirstItemKey = row.Items.Count > 0 ? row.Items[0].ItemKey : string.Empty;
                 rows.Add(row);
-                maxColumns = Math.Max(maxColumns, row.Items.Count);
-                pendingItems.Clear();
-                pendingAspects.Clear();
-                pendingItemIndexes.Clear();
-                pendingAspectSum = 0;
             }
 
-            startIndex = Math.Clamp(startIndex, 0, items.Count);
-            endExclusive = Math.Clamp(endExclusive, startIndex, items.Count);
-
-            for (var itemIndex = startIndex; itemIndex < endExclusive; itemIndex++)
-            {
-                var item = items[itemIndex];
-                var aspect = GetThumbnailAspectRatio(item);
-                pendingItems.Add(item);
-                pendingAspects.Add(aspect);
-                pendingItemIndexes.Add(itemIndex);
-                pendingAspectSum += aspect;
-
-                var projectedWidth = (pendingAspectSum * targetRowHeight) + ((pendingItems.Count - 1) * horizontalGap);
-                if (projectedWidth >= layoutWidth && pendingItems.Count > 0)
-                {
-                    AddRow(isLastRow: false);
-                }
-            }
-
-            AddRow(isLastRow: true);
-            return (rows, maxColumns);
+            return (rows, layout.MaxColumns);
         }
 
         private int FindGridRowIndexContainingItemIndex(int itemIndex)
@@ -3124,7 +3086,7 @@ namespace ReelRoulette
             foreach (var row in _libraryGridRows)
             {
                 var rowHeight = row.RowHeight > 0 ? row.RowHeight : (row.Items.Count > 0 ? row.Items[0].TileHeight : 0d);
-                var rowBottom = runningTop + rowHeight + LibraryGridVerticalRowGap;
+                var rowBottom = runningTop + rowHeight + LibraryGridLayout.VerticalRowGap;
                 if (rawOffsetY <= rowBottom)
                 {
                     var anchorKey = row.FirstItemKey;
@@ -3169,7 +3131,7 @@ namespace ReelRoulette
                     return runningTop + anchorState.InsetY;
                 }
 
-                runningTop += rowHeight + LibraryGridVerticalRowGap;
+                runningTop += rowHeight + LibraryGridLayout.VerticalRowGap;
             }
 
             return anchorState.RawOffsetY;
@@ -3181,7 +3143,7 @@ namespace ReelRoulette
                 ? row.RowHeight
                 : (row.Items.Count > 0 ? row.Items[0].TileHeight : 0d);
 
-            return Math.Max(1d, rowHeight) + LibraryGridVerticalRowGap;
+            return Math.Max(1d, rowHeight) + LibraryGridLayout.VerticalRowGap;
         }
 
         private void RebuildLibraryGridOffsetIndex(int startRowIndex = 0)
@@ -3357,36 +3319,24 @@ namespace ReelRoulette
             UpdateLibraryGridVisibleRowsWindow();
         }
 
-        private void PopulateThumbnailPaths(IReadOnlyList<LibraryItemViewModel> items)
+        private bool SyncLibraryItemViewModelsFromProjection(IReadOnlyList<LibraryItem> items, int startIndex = 0, int? endExclusive = null)
         {
-            var thumbRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ReelRoulette", "thumbnails");
-            var metadata = LoadThumbnailMetadata(thumbRoot);
-            foreach (var item in items)
-            {
-                var thumbnailFilePath = string.IsNullOrWhiteSpace(item.Id)
-                    ? string.Empty
-                    : Path.Combine(thumbRoot, $"{item.Id}.jpg");
-                item.ThumbnailPath = !string.IsNullOrWhiteSpace(thumbnailFilePath) && File.Exists(thumbnailFilePath)
-                    ? thumbnailFilePath
-                    : string.Empty;
-                var fallbackAspect = item.MediaType == MediaType.Photo ? (4d / 3d) : (16d / 9d);
-                var fallbackHeight = 100d;
-                var fallbackWidth = fallbackHeight * fallbackAspect;
+            var end = endExclusive ?? Math.Min(items.Count, _libraryItems.Count);
+            end = Math.Min(end, _libraryItems.Count);
+            startIndex = Math.Clamp(startIndex, 0, end);
+            var layoutChanged = false;
 
-                if (!string.IsNullOrWhiteSpace(item.Id) &&
-                    metadata.TryGetValue(item.Id, out var dims) &&
-                    dims.Width > 0 &&
-                    dims.Height > 0)
+            for (var i = startIndex; i < end; i++)
+            {
+                var viewModel = _libraryItems[i];
+                var nextItem = items[i];
+                if (viewModel.SyncFromProjectionItem(nextItem))
                 {
-                    item.ThumbnailWidth = dims.Width;
-                    item.ThumbnailHeight = dims.Height;
-                }
-                else
-                {
-                    item.ThumbnailWidth = fallbackWidth;
-                    item.ThumbnailHeight = fallbackHeight;
+                    layoutChanged = true;
                 }
             }
+
+            return layoutChanged;
         }
 
         private void HydrateThumbnailsForVisibleGridItems()
@@ -3418,39 +3368,24 @@ namespace ReelRoulette
                 return;
             }
 
-            HydrateThumbnailsForItems(items);
+            _ = HydrateThumbnailsForItemsAsync(items);
         }
 
-        private void HydrateThumbnailsForItems(IReadOnlyList<LibraryItemViewModel> items)
+        private async Task HydrateThumbnailsForItemsAsync(IReadOnlyList<LibraryItemViewModel> items)
         {
-            var thumbRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ReelRoulette", "thumbnails");
-            var metadata = LoadThumbnailMetadata(thumbRoot);
-
-            for (var i = 0; i < items.Count; i++)
+            if (!_isCoreApiReachable || string.IsNullOrWhiteSpace(_coreServerBaseUrl))
             {
-                var item = items[i];
-                if (item == null || string.IsNullOrWhiteSpace(item.Id))
+                return;
+            }
+
+            foreach (var item in items)
+            {
+                if (item == null)
                 {
                     continue;
                 }
 
-                if (string.IsNullOrWhiteSpace(item.ThumbnailPath))
-                {
-                    var thumbnailFilePath = Path.Combine(thumbRoot, $"{item.Id}.jpg");
-                    if (File.Exists(thumbnailFilePath))
-                    {
-                        item.ThumbnailPath = thumbnailFilePath;
-                    }
-                }
-
-                if (metadata.TryGetValue(item.Id, out var dims) &&
-                    dims.Width > 0 &&
-                    dims.Height > 0 &&
-                    (item.ThumbnailWidth <= 0 || item.ThumbnailHeight <= 0))
-                {
-                    item.ThumbnailWidth = dims.Width;
-                    item.ThumbnailHeight = dims.Height;
-                }
+                await item.LoadThumbnailAsync(LibraryGridThumbnailHttpClient, _coreServerBaseUrl).ConfigureAwait(false);
             }
         }
 
@@ -3461,7 +3396,6 @@ namespace ReelRoulette
 
         private double ComputeLibraryGridAvailableWidth()
         {
-            const double visualRightGutterPx = 8;
             var measuredWidth = LibraryGridScrollViewer?.Viewport.Width > 0
                 ? LibraryGridScrollViewer.Viewport.Width
                 : (LibraryGridItemsControl?.Bounds.Width > 0
@@ -3472,66 +3406,7 @@ namespace ReelRoulette
                         ? LibraryPanelContainer.Bounds.Width
                         : _libraryPanelWidth)));
 
-            return Math.Max(280, measuredWidth - visualRightGutterPx);
-        }
-
-        private static double GetThumbnailAspectRatio(LibraryItemViewModel item)
-        {
-            if (item.ThumbnailWidth > 0 && item.ThumbnailHeight > 0)
-            {
-                return Math.Clamp(item.ThumbnailWidth / item.ThumbnailHeight, 0.25, 4.0);
-            }
-
-            return item.MediaType == MediaType.Photo ? (4d / 3d) : (16d / 9d);
-        }
-
-        private Dictionary<string, (double Width, double Height)> LoadThumbnailMetadata(string thumbRoot)
-        {
-            var indexPath = Path.Combine(thumbRoot, "index.json");
-            if (!File.Exists(indexPath))
-            {
-                _thumbnailMetadataByItemId.Clear();
-                _thumbnailIndexLastWriteUtc = DateTime.MinValue;
-                return _thumbnailMetadataByItemId;
-            }
-
-            var writeUtc = File.GetLastWriteTimeUtc(indexPath);
-            if (_thumbnailMetadataByItemId.Count > 0 && writeUtc == _thumbnailIndexLastWriteUtc)
-            {
-                return _thumbnailMetadataByItemId;
-            }
-
-            _thumbnailMetadataByItemId.Clear();
-            _thumbnailIndexLastWriteUtc = writeUtc;
-            try
-            {
-                var root = JsonNode.Parse(File.ReadAllText(indexPath)) as JsonObject;
-                if (root == null)
-                {
-                    return _thumbnailMetadataByItemId;
-                }
-
-                foreach (var entry in root)
-                {
-                    if (entry.Value is not JsonObject obj)
-                    {
-                        continue;
-                    }
-
-                    var width = obj["width"]?.GetValue<double?>() ?? 0;
-                    var height = obj["height"]?.GetValue<double?>() ?? 0;
-                    if (width > 0 && height > 0)
-                    {
-                        _thumbnailMetadataByItemId[entry.Key] = (width, height);
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Log($"LoadThumbnailMetadata: Failed to parse thumbnail index metadata - {ex.GetType().Name}: {ex.Message}");
-            }
-
-            return _thumbnailMetadataByItemId;
+            return LibraryGridLayout.ComputeAvailableLayoutWidth(measuredWidth);
         }
 
         private void LibraryGridTile_PointerPressed(object? sender, PointerPressedEventArgs e)

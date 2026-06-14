@@ -89,14 +89,14 @@ Do not use this file for detailed architecture explanation or current capability
 
 ## Active Milestones
 
-Last milestone completed: M10e
+Last milestone completed: M10e2
 
 ### M10f - WebUI Virtual Thumbnail Grid
 
 - **Status**: ⏳ Planned
 - **Goal**: Render the WebUI library browser as a responsive, virtualized thumbnail grid.
 - **Scope**:
-  - Depends on: WebUI library projection search and sort.
+  - Depends on: API-backed library thumbnail metadata and desktop grid cutover (M10e2).
   - Implement grid-only rendering with virtual scrolling so only visible items and a small buffer are mounted.
   - Match the desktop library grid visual design as closely as web technology allows. Before implementation, read `LibraryGridRowViewModel.cs`, `LibraryGridTileViewModel.cs`, and the relevant `MainWindow.axaml` grid markup to understand tile dimensions, spacing, corner radius, shadow treatment, overlay icon placement and sizing, missing-thumbnail placeholder appearance, and hover/active state behavior; implement equivalent CSS rather than approximate styling.
   - Render thumbnails with `object-fit: cover` for mixed aspect ratios and missing-thumbnail behavior consistent with the desktop grid.
@@ -1277,6 +1277,30 @@ Last milestone completed: M10e
 ## Completed Milestones
 
 Latest completions first:
+
+### M10e2 - API-Backed Library Thumbnail Metadata and Desktop Grid Cutover
+
+- **Status**: ✅ Complete
+- **Goal**: Serve thumbnail layout metadata through the library projection API and cut the desktop library grid over to API-only thumbnail access so WebUI can replicate the same contract.
+- **Scope**:
+  - Enrich `GET /api/library/projection` items at serve time with `hasThumbnail`, `thumbnailWidth`, and `thumbnailHeight` derived from the server thumbnail index (not persisted in `library.json`).
+  - Extract the justified-row library grid layout algorithm into `ReelRoulette.Core` with golden-vector tests.
+  - Cut desktop library grid thumbnail metadata and image loading over to the projection API and `GET /api/thumbnail/{itemId}`; remove local `thumbnails/` reads for grid rendering.
+  - Parse projection thumbnail fields in WebUI `libraryProjectionModel` (prep for M10f; no grid rendering yet).
+- **Acceptance criteria**:
+  - Projection items expose thumbnail metadata when generated thumbs exist; missing thumbs omit dimensions and set `hasThumbnail: false`.
+  - Desktop library grid layout remains visually unchanged and no longer reads local thumbnail cache files for rendering.
+  - Desktop visible tiles load thumbnail JPEGs through the API only.
+  - After refresh completes, new/changed thumbnails appear without desktop restart (projection refetch + visible-tile reload + layout reflow when dimensions change).
+  - Core layout tests and WebUI projection parser tests cover the new contract.
+- **Verification evidence**:
+  - `dotnet build ReelRoulette.sln` — pass.
+  - `dotnet test ReelRoulette.sln` — pass (126 Core + 49 Desktop tests).
+  - `npm run verify` in WebUI — pass (56 Vitest tests).
+  - Manual desktop grid smoke — confirmed (Linux desktop): grid appearance and interaction unchanged vs pre-cutover; thumbnails load via projection metadata and `GET /api/thumbnail/{itemId}` after refresh without restart; mixed-aspect layout and panel resize reflow behave as before.
+- **Deferrals / Follow-ups**:
+  - WebUI virtual thumbnail grid remains M10f.
+  - Library archive export/import continues to use on-disk `thumbnails/` (server artifact management, not grid rendering).
 
 ### M10e - WebUI Library Projection Search and Sort
 

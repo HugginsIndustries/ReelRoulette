@@ -19,10 +19,10 @@ Instructions:
 
 Commit Message:
 
-M10e: WebUI library projection search and sort
+M10e2: API-backed library thumbnail metadata and desktop grid cutover
 
-- Add in-memory projection parse, FilterState display filter, and browse pipeline (search → FilterState → sort) for the library overlay.
-- Add search/sort toolbar, interim filename result list, and in-memory re-browse on filter/search/sort changes.
-- Persist search/sort across overlay close/reopen; refetch projection on every open unchanged.
-- Add Vitest coverage for projection parse, FilterState rules, search, and all sort modes.
-- Update CONTEXT, checklist, domain inventory, feature migration, milestone evidence, and changelog.
+- Enrich GET /api/library/projection items with hasThumbnail, thumbnailWidth, and thumbnailHeight from the server thumbnail index.
+- Extract shared LibraryGridLayout into Core with layout/aspect tests.
+- Cut desktop library grid over to projection metadata and GET /api/thumbnail/{itemId} (no local thumbnails/ reads for grid rendering).
+- Parse projection thumbnail fields in WebUI libraryProjectionModel for upcoming virtual grid work.
+- Update OpenAPI, CONTEXT, milestone evidence, checklist, and changelog.
