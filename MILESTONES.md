@@ -89,40 +89,7 @@ Do not use this file for detailed architecture explanation or current capability
 
 ## Active Milestones
 
-Last milestone completed: M10e2
-
-### M10f - WebUI Virtual Thumbnail Grid
-
-- **Status**: ⏳ Planned
-- **Goal**: Replace the interim filename result list with a responsive, virtualized, desktop-aligned justified thumbnail grid using API-backed projection metadata and shared layout rules.
-- **Scope**:
-  - Depends on: WebUI library projection search and sort; API-backed library thumbnail metadata and desktop grid cutover.
-  - Port or mirror `ReelRoulette.Core.Library.LibraryGridLayout` in WebUI (same constants, aspect fallbacks, row packing, and layout-width rules as Core tests in `LibraryGridLayoutTests.cs`).
-  - Build justified-row virtual scrolling with top/bottom spacers so only visible rows (plus a small buffer) are mounted; DOM item count stays bounded relative to the viewport, not total library size.
-  - Derive tile aspect ratios from projection `thumbnailWidth` / `thumbnailHeight` and `mediaType` fallbacks (same rules as `LibraryGridLayout.GetAspectRatio`); load tile JPEGs from `GET /api/thumbnail/{itemId}` when `hasThumbnail` is true (no local thumbnail cache reads).
-  - Replace the interim scrollable filename list in the library overlay with the virtual grid while keeping the “Showing N of M items” summary.
-  - Match the current desktop library grid tile chrome as closely as web technology allows. Before implementation, read `LibraryGridLayout.cs`, `LibraryGridLayoutTests.cs`, the `MainWindow.axaml` tile template, and desktop row virtualization/spacer logic in `MainWindow.axaml.cs`; implement equivalent CSS rather than approximate styling. Parity targets include: square tile edges; image scrim (`#22000000`) with crop equivalent to desktop `UniformToFill` inside variable-size cells; bottom filename bar (`#AA000000`, 12px white, ellipsis); top-right favorite/blacklist badge pill (`#99000000`, Material Symbols, Huggins Orange, 18px); missing-thumbnail placeholder when `hasThumbnail` is false; hover opacity ~0.92.
-  - Show favorite and blacklist state indicators on tiles using established Material Symbols conventions.
-  - Exclude play-count badges, list-view affordances, multi-select, orange selection overlay, and bulk context menu from this milestone.
-- **Acceptance criteria**:
-  - The browser renders a responsive justified thumbnail grid on mobile-width and desktop-width overlay layouts.
-  - Virtual scrolling keeps mounted row/tile count bounded relative to the visible viewport, not total library size.
-  - Justified-row layout at a given content width matches desktop row packing for the same visible items and projection metadata.
-  - Aspect ratios use projection dimensions when present and the same media-type fallbacks when missing.
-  - Tiles with `hasThumbnail: false` render placeholder behavior consistent with desktop (layout still uses fallback aspect; no broken image).
-  - Thumbnail images load from `GET /api/thumbnail/{itemId}` only.
-  - WebUI grid tile visual design—including variable tile sizing, row gaps, overlay scrims, filename bar, badge pill, and missing-thumbnail placeholder—matches the desktop grid as closely as web technology allows.
-  - Tile hover uses desktop-equivalent opacity treatment; no distinct pressed-state requirement beyond that.
-  - Side-by-side visual comparison of WebUI and desktop grids at equivalent viewport widths shows no significant unintentional divergence in tile appearance.
-  - Thumbnail cropping, placeholder/missing-thumbnail behavior, and filename metadata remain readable in light and dark themes.
-  - Favorite and blacklist indicators appear on tiles; play-count badges do not appear.
-- **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include WebUI `libraryGridLayout` tests aligned with Core (`GetAspectRatio` fallbacks/clamps, `BuildRows` packing, `ComputeAvailableLayoutWidth`), virtualization bounds tests, and tile state rendering tests (favorite/blacklist badge, missing thumbnail, filename bar).
-  - Manual evidence must include large-projection scroll smoke with API thumbnail loading, mixed-aspect layout review, and overlay resize/reflow smoke in both themes.
-  - Manual evidence must include side-by-side visual comparison of WebUI and desktop library grids confirming visual parity at equivalent widths in both light and dark themes.
-- **Deferrals / Follow-ups**:
-  - Multi-select, orange selection overlay, bulk context menu, batch actions, list view, and click-to-play are out of scope for this milestone (selection overlay and bulk actions are planned for a later WebUI library milestone; implementation may differ slightly from desktop to support both touch and pointer input).
-  - Any desktop grid behavior that is technically impossible to replicate in a browser context should be noted as a known divergence in milestone completion evidence rather than treated as a blocker.
+Last milestone completed: M10f
 
 ### M10g - WebUI Library SSE State Sync
 
@@ -1282,6 +1249,44 @@ Last milestone completed: M10e2
 ## Completed Milestones
 
 Latest completions first:
+
+### M10f - WebUI Virtual Thumbnail Grid
+
+- **Status**: ✅ Complete
+- **Goal**: Replace the interim filename result list with a responsive, virtualized, desktop-aligned justified thumbnail grid using API-backed projection metadata and shared layout rules.
+- **Scope**:
+  - Depends on: WebUI library projection search and sort; API-backed library thumbnail metadata and desktop grid cutover.
+  - Port or mirror `ReelRoulette.Core.Library.LibraryGridLayout` in WebUI (same constants, aspect fallbacks, row packing, and layout-width rules as Core tests in `LibraryGridLayoutTests.cs`).
+  - Build justified-row virtual scrolling with top/bottom spacers so only visible rows (plus a small buffer) are mounted; DOM item count stays bounded relative to the viewport, not total library size.
+  - Derive tile aspect ratios from projection `thumbnailWidth` / `thumbnailHeight` and `mediaType` fallbacks (same rules as `LibraryGridLayout.GetAspectRatio`); load tile JPEGs from `GET /api/thumbnail/{itemId}` when `hasThumbnail` is true (no local thumbnail cache reads).
+  - Replace the interim scrollable filename list in the library overlay with the virtual grid while keeping the “Showing N of M items” summary.
+  - Match the current desktop library grid tile chrome as closely as web technology allows. Before implementation, read `LibraryGridLayout.cs`, `LibraryGridLayoutTests.cs`, the `MainWindow.axaml` tile template, and desktop row virtualization/spacer logic in `MainWindow.axaml.cs`; implement equivalent CSS rather than approximate styling. Parity targets include: square tile edges; image scrim (`#22000000`) with crop equivalent to desktop `UniformToFill` inside variable-size cells; bottom filename bar (`#AA000000`, 12px white, ellipsis); top-right favorite/blacklist badge pill (`#99000000`, Material Symbols, Huggins Orange, 18px); missing-thumbnail placeholder when `hasThumbnail` is false; hover opacity ~0.92.
+  - Show favorite and blacklist state indicators on tiles using established Material Symbols conventions.
+  - Exclude play-count badges, list-view affordances, multi-select, orange selection overlay, and bulk context menu from this milestone.
+- **Acceptance criteria**:
+  - The browser renders a responsive justified thumbnail grid on mobile-width and desktop-width overlay layouts.
+  - Virtual scrolling keeps mounted row/tile count bounded relative to the visible viewport, not total library size.
+  - Justified-row layout at a given content width matches desktop row packing for the same visible items and projection metadata.
+  - Aspect ratios use projection dimensions when present and the same media-type fallbacks when missing.
+  - Tiles with `hasThumbnail: false` render placeholder behavior consistent with desktop (layout still uses fallback aspect; no broken image).
+  - Thumbnail images load from `GET /api/thumbnail/{itemId}` only.
+  - WebUI grid tile visual design—including variable tile sizing, row gaps, overlay scrims, filename bar, badge pill, and missing-thumbnail placeholder—matches the desktop grid as closely as web technology allows.
+  - Tile hover uses desktop-equivalent opacity treatment; no distinct pressed-state requirement beyond that.
+  - Side-by-side visual comparison of WebUI and desktop grids at equivalent viewport widths shows no significant unintentional divergence in tile appearance.
+  - Thumbnail cropping, placeholder/missing-thumbnail behavior, and filename metadata remain readable in light and dark themes.
+  - Favorite and blacklist indicators appear on tiles; play-count badges do not appear.
+- **Verification evidence**:
+  - `dotnet build ReelRoulette.sln` — pass.
+  - `dotnet test ReelRoulette.sln` — pass (126 Core + 49 Desktop tests; no server/desktop changes).
+  - `npm run verify` in `src/clients/web/ReelRoulette.WebUI` — pass (72 Vitest tests).
+  - WebUI `libraryGridLayout.test.ts` — Core-aligned `getAspectRatio` and `buildRows` parity; layout width uses full scrollport (no Avalonia 8px right gutter).
+  - WebUI `libraryGridVirtualizer.test.ts` — visible row window bounded for 1200-item fixture at mid-scroll.
+  - WebUI `libraryGridTileModel.test.ts` — favorite/blacklist badges, missing-thumbnail placeholder (no `<img>`), filename escape, thumbnail URL shape.
+  - WebUI library grid modules: `libraryGridLayout.ts`, `libraryGridTileModel.ts`, `libraryGridRowModel.ts`, `libraryGridVirtualizer.ts`, `libraryGridController.ts`; overlay wired via `app.js` grid controller; browse re-browse resets scroll to top.
+  - Manual smoke — confirmed: large-projection scroll, API thumbnail loading, mixed-aspect reflow, resize debounce, light/dark themes, side-by-side desktop visual parity, edge-to-edge grid layout, overlay scrollbar, header item count, and responsive toolbar/sort cluster at mobile and desktop widths.
+- **Deferrals / Follow-ups**:
+  - Multi-select, orange selection overlay, bulk context menu, batch actions, list view, and click-to-play are out of scope for this milestone (selection overlay and bulk actions are planned for a later WebUI library milestone; implementation may differ slightly from desktop to support both touch and pointer input).
+  - Any desktop grid behavior that is technically impossible to replicate in a browser context should be noted as a known divergence in milestone completion evidence rather than treated as a blocker.
 
 ### M10e2 - API-Backed Library Thumbnail Metadata and Desktop Grid Cutover
 

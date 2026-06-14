@@ -11,7 +11,8 @@ This file follows a Keep a Changelog style format.
 - **Core — library grid layout:** Shared `LibraryGridLayout` justified-row algorithm with tests for aspect fallbacks, row packing, and layout width rules.
 - **Desktop — API-only library grid thumbnails:** Library panel grid reads thumbnail dimensions from the projection API and loads visible tile JPEGs via `GET /api/thumbnail/{itemId}` (no local `thumbnails/` reads for grid rendering).
 - **WebUI — projection thumbnail fields:** Library projection parser accepts `hasThumbnail`, `thumbnailWidth`, and `thumbnailHeight` (prep for virtual grid milestone).
-- **WebUI — library overlay browse:** Library overlay adds in-memory projection parse, playback **FilterState** display filtering (desktop parity), search (filename/path), desktop-aligned sort controls, and interim filename result list; browse updates in memory on search/sort/filter changes; refetch-on-open preserved.
+- **WebUI — virtual library thumbnail grid:** Library overlay renders a desktop-aligned justified thumbnail grid with row virtualization (top/bottom spacers, 900px overscan), Core-parity `libraryGridLayout` port, tile chrome (scrim, filename bar, favorite/blacklist badges), and `GET /api/thumbnail/{itemId}` JPEG loading; replaces interim filename list; browse item count in overlay header; in-memory browse pipeline.
+- **WebUI — library overlay browse:** Library overlay adds in-memory projection parse, playback **FilterState** display filtering (desktop parity), search (filename/path), desktop-aligned sort controls, and virtualized thumbnail grid browse; browse updates in memory on search/sort/filter changes; refetch-on-open preserved.
 - **WebUI — library overlay shell:** **Library** corner control (`browse` icon, left of Filter) opens a full-screen overlay inside the player stage; Close-only header; `GET /api/library/projection` on every open with loading, empty, error, and summary states; light/dark themed shell matching filter/tag overlays.
 - **Desktop — library grid-only panel:** Removed list view and grid/list toggle; library panel always renders the virtualized thumbnail grid with bulk context menu on the grid scroll surface.
 - **Desktop — Date added sort:** Library panel sort selector includes **Date added** (`lastWriteTimeUtc`) with Newest→Oldest and Oldest→Newest directions (defaults to Newest→Oldest when selected).
@@ -20,6 +21,7 @@ This file follows a Keep a Changelog style format.
 
 ### Changed
 
+- **WebUI — library grid layout width:** Justified rows pack to the full scrollport width; the desktop/Avalonia 8px right gutter is not applied in the browser overlay. Grid is edge-to-edge inside the rounded overlay body; scrollbar overlays tiles without clipping past the container.
 - **Desktop — library panel cleanup:** Retired list view rendering, list scroll-anchor logic, and `LibraryGridViewEnabled` settings persistence (legacy setting ignored harmlessly if present).
 - **Desktop — library click-to-play:** Grid activation calls `POST /api/play/{itemId}`; playback starts from the returned `RandomResponse` with LibVLC locally and without duplicate client `record-playback`. Endpoint errors map to user-facing status messages (404/409/415).
 - **Desktop — Force API playback:** Resolve root-relative `/api/media/...` URLs against the core base URL on Linux (avoid mis-parsing them as `file://` paths).

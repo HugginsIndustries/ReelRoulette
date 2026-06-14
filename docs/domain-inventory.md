@@ -134,8 +134,18 @@ WebUI is runtime-config-driven API/SSE client orchestration.
   - in-memory FilterState display filter for library overlay (desktop parity).
 - `src/clients/web/ReelRoulette.WebUI/src/library/libraryBrowseModel.ts`
   - search, sort, and browse pipeline for library overlay.
+- `src/clients/web/ReelRoulette.WebUI/src/library/libraryGridLayout.ts`
+  - Core-aligned justified-row layout port (`getAspectRatio`, `buildRows`); layout width uses full scrollport (no desktop 8px right gutter).
+- `src/clients/web/ReelRoulette.WebUI/src/library/libraryGridTileModel.ts`
+  - grid tile HTML, thumbnail URL builder, favorite/blacklist badge rendering.
+- `src/clients/web/ReelRoulette.WebUI/src/library/libraryGridRowModel.ts`
+  - justified grid row HTML composition.
+- `src/clients/web/ReelRoulette.WebUI/src/library/libraryGridVirtualizer.ts`
+  - row offset index and visible-window calculation (900px overscan).
+- `src/clients/web/ReelRoulette.WebUI/src/library/libraryGridController.ts`
+  - library overlay grid DOM lifecycle (mount, scroll, resize debounce, destroy).
 - `src/clients/web/ReelRoulette.WebUI/src/shell.ts`
-  - static layout including library overlay toolbar (search/sort), tabbed tag overlay, and filter overlay chrome.
+  - static layout including library overlay header browse count, toolbar (search/sort cluster), tabbed tag overlay, and filter overlay chrome.
 - `src/clients/web/ReelRoulette.WebUI/src/main.ts`
   - bootstrap entrypoint.
 - `src/clients/web/ReelRoulette.WebUI/src/api/coreApi.ts`

@@ -19,10 +19,10 @@ Instructions:
 
 Commit Message:
 
-M10e2: API-backed library thumbnail metadata and desktop grid cutover
+M10f: WebUI virtual library thumbnail grid
 
-- Enrich GET /api/library/projection items with hasThumbnail, thumbnailWidth, and thumbnailHeight from the server thumbnail index.
-- Extract shared LibraryGridLayout into Core with layout/aspect tests.
-- Cut desktop library grid over to projection metadata and GET /api/thumbnail/{itemId} (no local thumbnails/ reads for grid rendering).
-- Parse projection thumbnail fields in WebUI libraryProjectionModel for upcoming virtual grid work.
-- Update OpenAPI, CONTEXT, milestone evidence, checklist, and changelog.
+- Port Core LibraryGridLayout to WebUI with parity unit tests for aspect and row packing; use full scrollport width (no Avalonia 8px right gutter).
+- Add row-virtualized justified thumbnail grid with desktop-aligned tile chrome, themed scrollbars, API thumbnail loading, stable scroll behavior, and edge-to-edge layout inside the rounded overlay body.
+- Replace library overlay interim filename list; keep in-memory search/sort/filter pipeline; browse item count in header; sort select and direction button wrap as a cluster.
+- Wire grid controller in app.js with resize debounce and scroll-to-top on re-browse.
+- Add layout, virtualizer, and tile rendering Vitest suites; update milestone/docs/checklist evidence; manual smoke confirmed.

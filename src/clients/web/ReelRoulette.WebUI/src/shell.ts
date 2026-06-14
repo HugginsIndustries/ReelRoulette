@@ -71,10 +71,10 @@ export function renderApp(container: HTMLElement, config: RuntimeConfig): void {
       </div>
       <div class="tag-editor-panel-stack">
         <div id="tag-editor-panel-edit" class="tag-editor-panel">
-          <div id="tag-editor-body" class="tag-editor-body"></div>
+          <div id="tag-editor-body" class="tag-editor-body themed-scrollbar"></div>
         </div>
         <div id="tag-editor-panel-autotag" class="tag-editor-panel" style="display:none">
-          <div class="tag-editor-body tag-autotag-body">
+          <div class="tag-editor-body tag-autotag-body themed-scrollbar">
             <div class="tag-autotag-toolbar">
               <label class="tag-autotag-check-label"><input type="checkbox" id="tag-autotag-scan-full"> Scan full library</label>
               <label class="tag-autotag-check-label"><input type="checkbox" id="tag-autotag-view-all"> View all matches</label>
@@ -87,7 +87,7 @@ export function renderApp(container: HTMLElement, config: RuntimeConfig): void {
             </div>
             <div id="tag-autotag-progress" class="tag-autotag-progress" style="display:none" role="progressbar" aria-label="Scan in progress"></div>
             <div id="tag-autotag-status" class="tag-autotag-status" aria-live="polite"></div>
-            <div id="tag-autotag-results" class="tag-autotag-results"></div>
+            <div id="tag-autotag-results" class="tag-autotag-results themed-scrollbar"></div>
           </div>
         </div>
       </div>
@@ -125,7 +125,7 @@ export function renderApp(container: HTMLElement, config: RuntimeConfig): void {
         <button type="button" class="filter-tab" role="tab" data-filter-tab="tags" aria-selected="false">Tags</button>
         <button type="button" class="filter-tab" role="tab" data-filter-tab="presets" aria-selected="false">Presets</button>
       </div>
-      <div class="filter-dialog-body">
+      <div class="filter-dialog-body themed-scrollbar">
         <div id="filter-panel-general" class="filter-panel"></div>
         <div id="filter-panel-tags" class="filter-panel" style="display:none"></div>
         <div id="filter-panel-presets" class="filter-panel" style="display:none"></div>
@@ -139,20 +139,23 @@ export function renderApp(container: HTMLElement, config: RuntimeConfig): void {
     <div id="library-overlay" class="library-overlay" style="display:none">
       <div class="library-overlay-header">
         <h2>Library</h2>
+        <p id="library-overlay-summary" class="library-overlay-summary" aria-live="polite" hidden></p>
         <div class="library-overlay-actions">
           <button id="library-overlay-close-btn" class="icon-glyph-base icon-glyph-button" type="button" title="Close" aria-label="Close"><span class="material-symbol-icon">close</span></button>
         </div>
       </div>
       <div id="library-overlay-toolbar" class="library-overlay-toolbar" style="display:none">
         <input id="library-search-input" class="library-overlay-search" type="search" placeholder="Search…" aria-label="Search library" autocomplete="off" />
-        <select id="library-sort-select" class="library-overlay-sort-select" aria-label="Sort library">
-          <option value="Name">Name</option>
-          <option value="LastPlayed">Last played</option>
-          <option value="PlayCount">Play count</option>
-          <option value="Duration">Duration</option>
-          <option value="DateAdded">Date added</option>
-        </select>
-        <button id="library-sort-direction-btn" class="library-overlay-sort-direction" type="button" aria-label="Toggle sort direction">A–Z</button>
+        <div class="library-overlay-sort-cluster">
+          <select id="library-sort-select" class="library-overlay-sort-select" aria-label="Sort library">
+            <option value="Name">Name</option>
+            <option value="LastPlayed">Last played</option>
+            <option value="PlayCount">Play count</option>
+            <option value="Duration">Duration</option>
+            <option value="DateAdded">Date added</option>
+          </select>
+          <button id="library-sort-direction-btn" class="library-overlay-sort-direction" type="button" aria-label="Toggle sort direction">A–Z</button>
+        </div>
       </div>
       <div id="library-overlay-body" class="library-overlay-body"></div>
     </div>

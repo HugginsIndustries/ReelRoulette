@@ -20,6 +20,7 @@ import {
   isDefaultDescendingForSortMode
 } from "./library/libraryBrowseModel.ts";
 import { parseLibraryProjection } from "./library/libraryProjectionModel.ts";
+import { createLibraryGridController } from "./library/libraryGridController.ts";
 import {
   LIBRARY_OVERLAY_FETCH_ERROR,
   beginLibraryOverlayOpen,
@@ -27,7 +28,6 @@ import {
   completeLibraryOverlayFetch,
   createLibraryOverlayState,
   failLibraryOverlayFetch,
-  renderLibraryBrowseHtml,
   renderLibraryOverlayBodyHtml
 } from "./library/libraryOverlayModel.ts";
 
@@ -220,6 +220,15 @@ export function startApp(config) {
   let libraryOverlayCatalog = null;
   /** @type {import("./library/libraryProjectionModel.ts").LibraryProjectionItem[] | null} */
   let libraryOverlayItems = null;
+  /** @type {import("./library/libraryGridController.ts").LibraryGridController | null} */
+  let libraryGridController = null;
+
+  function destroyLibraryGridController() {
+    if (libraryGridController) {
+      libraryGridController.destroy();
+      libraryGridController = null;
+    }
+  }
 
   const video = getElement("video");
   const photo = getElement("photo");
@@ -293,6 +302,7 @@ export function startApp(config) {
   const librarySortSelect = getElement("library-sort-select");
   const librarySortDirectionBtn = getElement("library-sort-direction-btn");
   const libraryOverlayBody = getElement("library-overlay-body");
+  const libraryOverlaySummary = getElement("library-overlay-summary");
   const libraryOverlayCloseBtn = getElement("library-overlay-close-btn");
 
   if (
@@ -309,7 +319,7 @@ export function startApp(config) {
     !filterPanelGeneral || !filterPanelTags || !filterPanelPresets || !filterClearAllBtn ||
     !filterCancelBtn || !filterApplyBtn || !libraryOpenBtn || !libraryOverlay ||
     !libraryOverlayToolbar || !librarySearchInput || !librarySortSelect || !librarySortDirectionBtn ||
-    !libraryOverlayBody || !libraryOverlayCloseBtn
+    !libraryOverlayBody || !libraryOverlaySummary || !libraryOverlayCloseBtn
   ) {
     throw new Error("Legacy WebUI bootstrap failed: missing required DOM elements.");
   }
@@ -903,7 +913,7 @@ export function startApp(config) {
       </div>
       <div class="filter-section filter-section-manage">
         <h3>Manage Presets</h3>
-        <div class="filter-preset-list">${rows || "<span class=\"filter-hint\">No presets</span>"}</div>
+        <div class="filter-preset-list themed-scrollbar">${rows || "<span class=\"filter-hint\">No presets</span>"}</div>
       </div>`;
 
     const sel = filterPanelPresets.querySelector("#filter-dialog-preset-select");
@@ -1116,6 +1126,16 @@ export function startApp(config) {
     libraryOverlayToolbar.style.display = visible ? "flex" : "none";
   }
 
+  function setLibraryOverlaySummary(text) {
+    if (!text) {
+      libraryOverlaySummary.textContent = "";
+      libraryOverlaySummary.hidden = true;
+      return;
+    }
+    libraryOverlaySummary.textContent = text;
+    libraryOverlaySummary.hidden = false;
+  }
+
   function syncLibraryOverlayToolbarFromControls() {
     librarySearchInput.value = libraryBrowseControls.searchQuery;
     librarySortSelect.value = libraryBrowseControls.sortMode;
@@ -1128,7 +1148,9 @@ export function startApp(config) {
   function renderLibraryOverlayBody() {
     const phase = libraryOverlayState.phase;
     if (phase === "loading" || phase === "error" || phase === "empty") {
+      destroyLibraryGridController();
       setLibraryOverlayToolbarVisible(false);
+      setLibraryOverlaySummary(null);
       libraryOverlayBody.innerHTML = renderLibraryOverlayBodyHtml(
         phase,
         libraryOverlayState.summary,
@@ -1138,7 +1160,9 @@ export function startApp(config) {
     }
 
     if (phase !== "ready" || !libraryOverlayCatalog || !libraryOverlayItems) {
+      destroyLibraryGridController();
       setLibraryOverlayToolbarVisible(false);
+      setLibraryOverlaySummary(null);
       libraryOverlayBody.innerHTML = "";
       return;
     }
@@ -1152,12 +1176,14 @@ export function startApp(config) {
       state.appliedFilterState,
       libraryBrowseControls
     );
-    const summaryLine = formatBrowseResultSummary(
-      browse.visibleItems.length,
-      browse.filterBaselineCount
+    setLibraryOverlaySummary(
+      formatBrowseResultSummary(browse.visibleItems.length, browse.filterBaselineCount)
     );
-    libraryOverlayBody.innerHTML = renderLibraryBrowseHtml({
-      summaryLine,
+
+    if (!libraryGridController) {
+      libraryGridController = createLibraryGridController(libraryOverlayBody, apiBaseUrl);
+    }
+    libraryGridController.setBrowseContent({
       visibleItems: browse.visibleItems,
       searchQuery: libraryBrowseControls.searchQuery
     });
