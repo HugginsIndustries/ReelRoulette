@@ -13,13 +13,21 @@ import {
   serializeFilterStateForApi
 } from "./filter/filterStateModel.ts";
 import {
+  applyLibraryBrowse,
+  createDefaultBrowseControls,
+  formatBrowseResultSummary,
+  getSortDirectionLabel,
+  isDefaultDescendingForSortMode
+} from "./library/libraryBrowseModel.ts";
+import { parseLibraryProjection } from "./library/libraryProjectionModel.ts";
+import {
   LIBRARY_OVERLAY_FETCH_ERROR,
   beginLibraryOverlayOpen,
   closeLibraryOverlayState,
   completeLibraryOverlayFetch,
   createLibraryOverlayState,
   failLibraryOverlayFetch,
-  parseLibraryProjectionSummary,
+  renderLibraryBrowseHtml,
   renderLibraryOverlayBodyHtml
 } from "./library/libraryOverlayModel.ts";
 
@@ -207,6 +215,11 @@ export function startApp(config) {
 
   let libraryOverlayState = createLibraryOverlayState();
   let libraryOverlayOpenGeneration = 0;
+  let libraryBrowseControls = createDefaultBrowseControls();
+  /** @type {import("./library/libraryProjectionModel.ts").LibraryProjectionCatalog | null} */
+  let libraryOverlayCatalog = null;
+  /** @type {import("./library/libraryProjectionModel.ts").LibraryProjectionItem[] | null} */
+  let libraryOverlayItems = null;
 
   const video = getElement("video");
   const photo = getElement("photo");
@@ -275,6 +288,10 @@ export function startApp(config) {
   const filterApplyBtn = getElement("filter-apply-btn");
   const libraryOpenBtn = getElement("library-open-btn");
   const libraryOverlay = getElement("library-overlay");
+  const libraryOverlayToolbar = getElement("library-overlay-toolbar");
+  const librarySearchInput = getElement("library-search-input");
+  const librarySortSelect = getElement("library-sort-select");
+  const librarySortDirectionBtn = getElement("library-sort-direction-btn");
   const libraryOverlayBody = getElement("library-overlay-body");
   const libraryOverlayCloseBtn = getElement("library-overlay-close-btn");
 
@@ -291,6 +308,7 @@ export function startApp(config) {
     !filterDialog || !filterDialogHeading || !filterDialogRefreshBtn || !filterDialogCloseBtn ||
     !filterPanelGeneral || !filterPanelTags || !filterPanelPresets || !filterClearAllBtn ||
     !filterCancelBtn || !filterApplyBtn || !libraryOpenBtn || !libraryOverlay ||
+    !libraryOverlayToolbar || !librarySearchInput || !librarySortSelect || !librarySortDirectionBtn ||
     !libraryOverlayBody || !libraryOverlayCloseBtn
   ) {
     throw new Error("Legacy WebUI bootstrap failed: missing required DOM elements.");
@@ -1094,12 +1112,62 @@ export function startApp(config) {
     state.filterDialogOpen = false;
   }
 
-  function renderLibraryOverlayBody() {
-    libraryOverlayBody.innerHTML = renderLibraryOverlayBodyHtml(
-      libraryOverlayState.phase,
-      libraryOverlayState.summary,
-      libraryOverlayState.lastError
+  function setLibraryOverlayToolbarVisible(visible) {
+    libraryOverlayToolbar.style.display = visible ? "flex" : "none";
+  }
+
+  function syncLibraryOverlayToolbarFromControls() {
+    librarySearchInput.value = libraryBrowseControls.searchQuery;
+    librarySortSelect.value = libraryBrowseControls.sortMode;
+    librarySortDirectionBtn.textContent = getSortDirectionLabel(
+      libraryBrowseControls.sortMode,
+      libraryBrowseControls.sortDescending
     );
+  }
+
+  function renderLibraryOverlayBody() {
+    const phase = libraryOverlayState.phase;
+    if (phase === "loading" || phase === "error" || phase === "empty") {
+      setLibraryOverlayToolbarVisible(false);
+      libraryOverlayBody.innerHTML = renderLibraryOverlayBodyHtml(
+        phase,
+        libraryOverlayState.summary,
+        libraryOverlayState.lastError
+      );
+      return;
+    }
+
+    if (phase !== "ready" || !libraryOverlayCatalog || !libraryOverlayItems) {
+      setLibraryOverlayToolbarVisible(false);
+      libraryOverlayBody.innerHTML = "";
+      return;
+    }
+
+    setLibraryOverlayToolbarVisible(true);
+    syncLibraryOverlayToolbarFromControls();
+
+    const browse = applyLibraryBrowse(
+      libraryOverlayCatalog,
+      libraryOverlayItems,
+      state.appliedFilterState,
+      libraryBrowseControls
+    );
+    const summaryLine = formatBrowseResultSummary(
+      browse.visibleItems.length,
+      browse.filterBaselineCount
+    );
+    libraryOverlayBody.innerHTML = renderLibraryBrowseHtml({
+      summaryLine,
+      visibleItems: browse.visibleItems,
+      searchQuery: libraryBrowseControls.searchQuery
+    });
+  }
+
+  function refreshLibraryOverlayBrowse() {
+    if (!state.libraryOverlayOpen || libraryOverlayState.phase !== "ready") {
+      return;
+    }
+    renderLibraryOverlayBody();
   }
 
   async function openLibraryOverlay() {
@@ -1119,8 +1187,10 @@ export function startApp(config) {
       if (openGeneration !== libraryOverlayOpenGeneration || !state.libraryOverlayOpen) {
         return;
       }
-      const summary = parseLibraryProjectionSummary(projection);
-      libraryOverlayState = completeLibraryOverlayFetch(libraryOverlayState, summary);
+      const parsed = parseLibraryProjection(projection);
+      libraryOverlayCatalog = parsed.catalog;
+      libraryOverlayItems = parsed.items;
+      libraryOverlayState = completeLibraryOverlayFetch(libraryOverlayState, parsed.summary);
       renderLibraryOverlayBody();
     } catch (error) {
       if (openGeneration !== libraryOverlayOpenGeneration || !state.libraryOverlayOpen) {
@@ -1137,7 +1207,10 @@ export function startApp(config) {
     libraryOverlayOpenGeneration += 1;
     libraryOverlay.style.display = "none";
     state.libraryOverlayOpen = false;
+    libraryOverlayCatalog = null;
+    libraryOverlayItems = null;
     libraryOverlayState = closeLibraryOverlayState(libraryOverlayState);
+    setLibraryOverlayToolbarVisible(false);
     renderLibraryOverlayBody();
   }
 
@@ -1178,6 +1251,7 @@ export function startApp(config) {
     await loadPresets();
     closeFilterDialog();
     setStatus("Filters applied.");
+    refreshLibraryOverlayBrowse();
   }
 
   function clearAllFiltersInDialog() {
@@ -2812,6 +2886,7 @@ export function startApp(config) {
       state.activePresetName = preset.name || preset.id;
       state.appliedFilterState = filterStateFromApiObject(preset.filterState);
     }
+    refreshLibraryOverlayBrowse();
   });
   playBtn.addEventListener("click", (event) => {
     event.stopPropagation();
@@ -3064,6 +3139,29 @@ export function startApp(config) {
   });
   libraryOverlayCloseBtn.addEventListener("click", () => {
     closeLibraryOverlay();
+  });
+  librarySearchInput.addEventListener("input", () => {
+    libraryBrowseControls = {
+      ...libraryBrowseControls,
+      searchQuery: librarySearchInput.value
+    };
+    refreshLibraryOverlayBrowse();
+  });
+  librarySortSelect.addEventListener("change", () => {
+    const sortMode = librarySortSelect.value || "Name";
+    libraryBrowseControls = {
+      ...libraryBrowseControls,
+      sortMode,
+      sortDescending: isDefaultDescendingForSortMode(sortMode)
+    };
+    refreshLibraryOverlayBrowse();
+  });
+  librarySortDirectionBtn.addEventListener("click", () => {
+    libraryBrowseControls = {
+      ...libraryBrowseControls,
+      sortDescending: !libraryBrowseControls.sortDescending
+    };
+    refreshLibraryOverlayBrowse();
   });
   filterDialogCloseBtn.addEventListener("click", () => {
     closeFilterDialog();

@@ -19,10 +19,10 @@ Instructions:
 
 Commit Message:
 
-M10d: WebUI library overlay shell
+M10e: WebUI library projection search and sort
 
-- Add Library corner control (`browse` icon, left of Filter) and full-screen overlay inside the player stage.
-- Fetch `GET /api/library/projection` on every open with loading, empty, error, and summary body states.
-- Extract `libraryOverlayModel` with lifecycle and refetch-on-open unit tests.
-- Match filter/tag overlay shell styling and light/dark theme integration; playback continues while open.
+- Add in-memory projection parse, FilterState display filter, and browse pipeline (search → FilterState → sort) for the library overlay.
+- Add search/sort toolbar, interim filename result list, and in-memory re-browse on filter/search/sort changes.
+- Persist search/sort across overlay close/reopen; refetch projection on every open unchanged.
+- Add Vitest coverage for projection parse, FilterState rules, search, and all sort modes.
 - Update CONTEXT, checklist, domain inventory, feature migration, milestone evidence, and changelog.

@@ -131,8 +131,26 @@ export function renderLibraryOverlayBodyHtml(
   if (phase === "empty" || (summary && !summary.hasItems)) {
     return `<p class="library-overlay-status">No media in library.</p>`;
   }
-  if (phase === "ready" && summary) {
-    return `<p class="library-overlay-status">${escapeHtml(formatLibrarySummaryMessage(summary))}</p>`;
-  }
   return "";
+}
+
+export interface LibraryBrowseRenderInput {
+  summaryLine: string;
+  visibleItems: readonly { fileName: string }[];
+  searchQuery: string;
+}
+
+export function renderLibraryBrowseHtml(input: LibraryBrowseRenderInput): string {
+  const summary = `<p class="library-overlay-summary" aria-live="polite">${escapeHtml(input.summaryLine)}</p>`;
+  if (input.visibleItems.length === 0) {
+    const trimmed = String(input.searchQuery || "").trim();
+    const message = trimmed
+      ? `No matches for “${trimmed}”.`
+      : "No items match the current filter.";
+    return `${summary}<p class="library-overlay-status">${escapeHtml(message)}</p>`;
+  }
+  const rows = input.visibleItems
+    .map((item) => `<li class="library-overlay-result-row">${escapeHtml(item.fileName)}</li>`)
+    .join("");
+  return `${summary}<ul class="library-overlay-results-list">${rows}</ul>`;
 }

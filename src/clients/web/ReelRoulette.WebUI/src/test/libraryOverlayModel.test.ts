@@ -5,8 +5,8 @@ import {
   completeLibraryOverlayFetch,
   createLibraryOverlayState,
   failLibraryOverlayFetch,
-  formatLibrarySummaryMessage,
   parseLibraryProjectionSummary,
+  renderLibraryBrowseHtml,
   renderLibraryOverlayBodyHtml
 } from "../library/libraryOverlayModel";
 
@@ -106,13 +106,17 @@ describe("libraryOverlayModel", () => {
     expect(overlayState.summary).toBeNull();
   });
 
-  it("renders loading, empty, error, and summary body HTML", () => {
+  it("renders loading, empty, error body HTML and browse results", () => {
     expect(renderLibraryOverlayBodyHtml("loading", null, null)).toContain("Loading library");
     expect(renderLibraryOverlayBodyHtml("empty", null, null)).toContain("No media in library");
     expect(renderLibraryOverlayBodyHtml("error", null, "HTTP 500")).toContain("HTTP 500");
-    const summary = { totalItems: 1234, enabledSourceCount: 3, hasItems: true };
-    expect(renderLibraryOverlayBodyHtml("ready", summary, null)).toContain(
-      formatLibrarySummaryMessage(summary)
-    );
+    expect(renderLibraryOverlayBodyHtml("ready", { totalItems: 1, enabledSourceCount: 1, hasItems: true }, null)).toBe("");
+    expect(
+      renderLibraryBrowseHtml({
+        summaryLine: "Showing 1 of 1 items",
+        visibleItems: [{ fileName: "clip.mp4" }],
+        searchQuery: ""
+      })
+    ).toContain("clip.mp4");
   });
 });

@@ -143,6 +143,17 @@ export function renderApp(container: HTMLElement, config: RuntimeConfig): void {
           <button id="library-overlay-close-btn" class="icon-glyph-base icon-glyph-button" type="button" title="Close" aria-label="Close"><span class="material-symbol-icon">close</span></button>
         </div>
       </div>
+      <div id="library-overlay-toolbar" class="library-overlay-toolbar" style="display:none">
+        <input id="library-search-input" class="library-overlay-search" type="search" placeholder="Search…" aria-label="Search library" autocomplete="off" />
+        <select id="library-sort-select" class="library-overlay-sort-select" aria-label="Sort library">
+          <option value="Name">Name</option>
+          <option value="LastPlayed">Last played</option>
+          <option value="PlayCount">Play count</option>
+          <option value="Duration">Duration</option>
+          <option value="DateAdded">Date added</option>
+        </select>
+        <button id="library-sort-direction-btn" class="library-overlay-sort-direction" type="button" aria-label="Toggle sort direction">A–Z</button>
+      </div>
       <div id="library-overlay-body" class="library-overlay-body"></div>
     </div>
     </div>

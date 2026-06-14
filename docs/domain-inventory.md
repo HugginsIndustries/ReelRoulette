@@ -123,13 +123,19 @@ Boundary:
 WebUI is runtime-config-driven API/SSE client orchestration.
 
 - `src/clients/web/ReelRoulette.WebUI/src/app.js`
-  - main client runtime behavior and orchestration (playback, filter dialog, library overlay shell, tag overlay with **Edit Tags** + **Auto Tag** API flows).
+  - main client runtime behavior and orchestration (playback, filter dialog, library overlay browse, tag overlay with **Edit Tags** + **Auto Tag** API flows).
 - `src/clients/web/ReelRoulette.WebUI/src/filter/filterStateModel.ts`
   - filter JSON serialize/parse aligned with desktop/server `FilterState`.
 - `src/clients/web/ReelRoulette.WebUI/src/library/libraryOverlayModel.ts`
-  - library overlay lifecycle, projection summary parsing, and body render helpers for the shell milestone.
+  - library overlay lifecycle, projection summary parsing, and body render helpers.
+- `src/clients/web/ReelRoulette.WebUI/src/library/libraryProjectionModel.ts`
+  - projection item/catalog parse for library overlay browse.
+- `src/clients/web/ReelRoulette.WebUI/src/library/libraryProjectionDisplayFilter.ts`
+  - in-memory FilterState display filter for library overlay (desktop parity).
+- `src/clients/web/ReelRoulette.WebUI/src/library/libraryBrowseModel.ts`
+  - search, sort, and browse pipeline for library overlay.
 - `src/clients/web/ReelRoulette.WebUI/src/shell.ts`
-  - static layout including library overlay, tabbed tag overlay, and filter overlay chrome.
+  - static layout including library overlay toolbar (search/sort), tabbed tag overlay, and filter overlay chrome.
 - `src/clients/web/ReelRoulette.WebUI/src/main.ts`
   - bootstrap entrypoint.
 - `src/clients/web/ReelRoulette.WebUI/src/api/coreApi.ts`

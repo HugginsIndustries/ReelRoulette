@@ -89,28 +89,7 @@ Do not use this file for detailed architecture explanation or current capability
 
 ## Active Milestones
 
-Last milestone completed: M10d
-
-### M10e - WebUI Library Projection Search and Sort
-
-- **Status**: ⏳ Planned
-- **Goal**: Add the WebUI library browser's in-memory projection model, free-text search, and desktop-aligned sort controls.
-- **Scope**:
-  - Depends on: WebUI library overlay shell.
-  - Build an in-memory library projection model from the server projection response for overlay rendering.
-  - Add free-text search over filename and relative path without server-side query changes.
-  - Add sort by name, last played, date added, play count, and duration with ascending/descending selection matching desktop defaults.
-  - Keep filtering/sorting deterministic across missing values, mixed media types, and projection refreshes.
-- **Acceptance criteria**:
-  - Search matches filename and relative path case-insensitively from the in-memory projection.
-  - Sort controls support name, last played, date added, play count, and duration in both directions.
-  - Default sort behavior matches the desktop library panel.
-  - Search and sort combine predictably and update rendered results without re-fetching the projection.
-- **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include WebUI unit tests for search and all sort modes, including missing last-played/duration values.
-  - Manual evidence must include a mixed-library browser smoke with search and sort combinations.
-- **Deferrals / Follow-ups**:
-  - Server-side search/query endpoints remain out of scope unless projection size proves untenable after virtual scrolling.
+Last milestone completed: M10e
 
 ### M10f - WebUI Virtual Thumbnail Grid
 
@@ -1298,6 +1277,34 @@ Last milestone completed: M10d
 ## Completed Milestones
 
 Latest completions first:
+
+### M10e - WebUI Library Projection Search and Sort
+
+- **Status**: ✅ Complete
+- **Goal**: Add the WebUI library browser's in-memory projection model, playback FilterState narrowing, free-text search, and desktop-aligned sort controls.
+- **Scope**:
+  - Depends on: WebUI library overlay shell.
+  - Build an in-memory library projection model from the server projection response for overlay rendering.
+  - Apply active playback **FilterState** to the library overlay (desktop `LibraryProjectionDisplayFilter` parity).
+  - Add free-text search over filename and relative path without server-side query changes.
+  - Add sort by name, last played, date added, play count, and duration with ascending/descending selection matching desktop defaults.
+  - Keep filtering/sorting deterministic across missing values, mixed media types, and projection refreshes.
+- **Acceptance criteria**:
+  - Search matches filename and relative path case-insensitively from the in-memory projection.
+  - Sort controls support name, last played, date added, play count, and duration in both directions.
+  - Default sort behavior matches the desktop library panel.
+  - Search and sort combine predictably and update rendered results without re-fetching the projection.
+  - Library overlay reflects the active playback filter (Filter Media / header preset) with desktop-aligned display rules.
+- **Verification evidence**:
+  - `dotnet build ReelRoulette.sln` — pass.
+  - `dotnet test ReelRoulette.sln` — pass (168 tests; no server/desktop changes).
+  - `npm run verify` in `src/clients/web/ReelRoulette.WebUI` — pass (55 Vitest tests including `libraryProjectionModel`, `libraryProjectionDisplayFilter`, and `libraryBrowseModel` suites).
+  - WebUI library browse modules: projection parse + catalog; FilterState display filter port; browse pipeline (enabled sources → search → FilterState → sort); interim scrollable filename result list with “Showing N of M items” summary.
+  - Search/sort controls persist across overlay close/reopen; Filter Media Apply and header preset changes re-browse in memory while overlay is open; projection still refetches on every open.
+  - Manual smoke — confirmed: FilterState narrowing (default + favorites-only + header preset), search/sort without refetch, Filter Apply re-browse while overlay open, search/sort persistence across close/reopen, refetch-on-open, zero-match messaging, fullscreen, and light/dark themes.
+- **Deferrals / Follow-ups**:
+  - Virtual thumbnail grid, SSE sync, and click-to-play remain follow-on WebUI library milestones.
+  - Server-side search/query endpoints remain out of scope unless projection size proves untenable after virtual scrolling.
 
 ### M10d - WebUI Library Overlay Shell
 

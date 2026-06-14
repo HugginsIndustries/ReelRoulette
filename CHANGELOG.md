@@ -7,6 +7,7 @@ This file follows a Keep a Changelog style format.
 
 ### Added
 
+- **WebUI — library overlay browse:** Library overlay adds in-memory projection parse, playback **FilterState** display filtering (desktop parity), search (filename/path), desktop-aligned sort controls, and interim filename result list; browse updates in memory on search/sort/filter changes; refetch-on-open preserved.
 - **WebUI — library overlay shell:** **Library** corner control (`browse` icon, left of Filter) opens a full-screen overlay inside the player stage; Close-only header; `GET /api/library/projection` on every open with loading, empty, error, and summary states; light/dark themed shell matching filter/tag overlays.
 - **Desktop — library grid-only panel:** Removed list view and grid/list toggle; library panel always renders the virtualized thumbnail grid with bulk context menu on the grid scroll surface.
 - **Desktop — Date added sort:** Library panel sort selector includes **Date added** (`lastWriteTimeUtc`) with Newest→Oldest and Oldest→Newest directions (defaults to Newest→Oldest when selected).
