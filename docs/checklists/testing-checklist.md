@@ -81,6 +81,10 @@ Use `pwsh ./tools/scripts/reset-checklist.ps1` to reset metadata/check states be
 - [x] WebUI library SSE sync: with overlay open, desktop playback updates **Play count** / **Last played** sort and **Only never played** filter correctly.
 - [x] WebUI library SSE sync: `resyncRequired` refetches projection while overlay is open; close/reopen still performs fresh `GET /api/library/projection`.
 - [x] WebUI library SSE sync regression: search/sort/filter re-browse still scrolls grid to top; playback continues while overlay stays open.
+- [x] WebUI library click-to-play: single-click tile calls `POST /api/play/{itemId}`, overlay closes on success, media plays in WebUI player without duplicate `record-playback`.
+- [x] WebUI library click-to-play errors: missing/disabled/unsupported items show clear status messages (404/409/415); overlay stays open on failure.
+- [x] WebUI library keyboard: Escape closes overlay; Tab to tile + Enter/Space plays.
+- [x] WebUI library click-to-play cross-client SSE: playback from WebUI updates open library overlay sort/stats on another client.
 - [x] Preset catalog add, rename, delete, reorder, and load all work; header combobox stays ordered.
 - [x] Manual controls (prev/play-next) work.
 - [x] Loop/autoplay toggles work.
@@ -181,8 +185,8 @@ Use `pwsh ./tools/scripts/reset-checklist.ps1` to reset metadata/check states be
 > Add checks here for features or changes introduced in the current release. Remove this section's items after the release is signed off and the checklist is reset. Do not add permanent checks here — if a check should survive future releases, promote it to the appropriate section above.
 
 - [x] Library grid view: single-click multi-select (Ctrl/Shift), double-click/Enter play, right-click bulk context menu, selection count updates, and selection persists across filter changes.
-- [ ] `POST /api/play/{libraryItemId}` returns `200` with a `RandomResponse` for a playable item; `GET` on `mediaUrl` streams when paired/auth allows.
-- [ ] Same request produces a `playbackRecorded` SSE event (or visible in Operator event tooling) without a separate `record-playback` call.
+- [x] `POST /api/play/{libraryItemId}` returns `200` with a `RandomResponse` for a playable item; `GET` on `mediaUrl` streams when paired/auth allows.
+- [x] Same request produces a `playbackRecorded` SSE event (or visible in Operator event tooling) without a separate `record-playback` call.
 - [x] Library panel is grid-only (no list view or grid/list toggle).
 - [x] Library **Date added** sort (from projection `lastWriteTimeUtc`) supports Newest→Oldest and Oldest→Newest; selecting Date added defaults to Newest→Oldest.
 - [x] Library grid activation calls `POST /api/play/{itemId}` and starts returned media locally without a duplicate `record-playback` for the same start.

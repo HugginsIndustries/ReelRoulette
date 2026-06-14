@@ -26,6 +26,7 @@ import {
   shouldRebrowseAfterPlaybackUpdate
 } from "./library/libraryProjectionSync.ts";
 import { createLibraryGridController } from "./library/libraryGridController.ts";
+import { mapPlayItemErrorToStatus } from "./library/libraryPlayModel.ts";
 import {
   LIBRARY_OVERLAY_FETCH_ERROR,
   beginLibraryOverlayOpen,
@@ -35,6 +36,7 @@ import {
   failLibraryOverlayFetch,
   renderLibraryOverlayBodyHtml
 } from "./library/libraryOverlayModel.ts";
+import { requestPlayItem } from "./api/coreApi.ts";
 
 const CLIENT_ID_KEY = "rr_clientId";
 const SESSION_ID_KEY = "rr_sessionId";
@@ -227,6 +229,7 @@ export function startApp(config) {
   let libraryOverlayItems = null;
   /** @type {import("./library/libraryGridController.ts").LibraryGridController | null} */
   let libraryGridController = null;
+  let libraryPlayInFlight = false;
 
   function destroyLibraryGridController() {
     if (libraryGridController) {
@@ -399,6 +402,10 @@ export function startApp(config) {
 
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Escape") return;
+    if (state.libraryOverlayOpen) {
+      closeLibraryOverlay();
+      return;
+    }
     if (!pseudoFullscreen) return;
     exitPseudoFullscreen();
   });
@@ -1313,6 +1320,88 @@ export function startApp(config) {
     renderLibraryOverlayBody();
   }
 
+  async function playFromLibraryItemId(itemId) {
+    const trimmedItemId = String(itemId || "").trim();
+    if (!trimmedItemId) {
+      setStatus("Playback unavailable: no library item was selected.");
+      return;
+    }
+
+    if (state.compatibilityBlocked) {
+      setStatus("Cannot play: server compatibility check failed.");
+      return;
+    }
+
+    if (libraryPlayInFlight) {
+      return;
+    }
+
+    libraryPlayInFlight = true;
+    setStatus("Loading...");
+    tracePlayback("info", "library-play-start", { libraryItemId: trimmedItemId });
+
+    try {
+      const result = await requestPlayItem(
+        { apiBaseUrl, sseUrl },
+        trimmedItemId,
+        { clientId: state.clientId, sessionId: state.sessionId }
+      );
+
+      if (result.statusCode === 401) {
+        pairSection.style.display = "flex";
+        setStatus("Unauthorized. Pair first.");
+        return;
+      }
+
+      if (!result.ok) {
+        tracePlayback("warn", "library-play-failed", {
+          libraryItemId: trimmedItemId,
+          statusCode: result.statusCode,
+          code: result.code || "none"
+        });
+        setStatus(mapPlayItemErrorToStatus(result));
+        return;
+      }
+
+      const data = result.response;
+      if (!data?.mediaUrl) {
+        setStatus("Playback failed.");
+        return;
+      }
+
+      state.current = data;
+      applyCachedState(state.current);
+      state.history = state.history.slice(0, state.historyIndex + 1);
+      state.history.push(state.current);
+      state.historyIndex = state.history.length - 1;
+      closeLibraryOverlay();
+      tracePlayback("info", "library-play-success", { libraryItemId: trimmedItemId, mediaId: data.id });
+      playCurrent({ skipRecordPlayback: true });
+    } catch (error) {
+      tracePlayback("warn", "library-play-error", {
+        libraryItemId: trimmedItemId,
+        message: error?.message || String(error)
+      });
+      setStatus(`Playback failed: ${error?.message || error}`);
+    } finally {
+      libraryPlayInFlight = false;
+    }
+  }
+
+  function resolveLibraryTileFromEventTarget(target) {
+    if (!(target instanceof Element)) {
+      return null;
+    }
+
+    const tile = target.closest(".library-grid-tile[data-item-id]");
+    if (!tile) {
+      return null;
+    }
+
+    const itemId = tile.getAttribute("data-item-id");
+    return itemId ? itemId : null;
+  }
+
   async function applyFilterDialog() {
     const err = validateFilterDurationsForApply();
     if (err) {
@@ -1612,13 +1701,15 @@ export function startApp(config) {
     video.onpause = () => updatePlayButtonGlyph();
   }
 
-  async function playCurrent() {
+  async function playCurrent(options = {}) {
     const item = state.current;
     if (!item) return;
     state.playAttemptId += 1;
     const expectedPlayAttemptId = state.playAttemptId;
     tracePlayback("info", "start", { expectedItemId: item.id, mediaType: item.mediaType });
-    notifyPlaybackStarted(item);
+    if (!options.skipRecordPlayback) {
+      notifyPlaybackStarted(item);
+    }
 
     applyCachedState(item);
     clearPhotoTimer();
@@ -3246,6 +3337,27 @@ export function startApp(config) {
   });
   libraryOverlayCloseBtn.addEventListener("click", () => {
     closeLibraryOverlay();
+  });
+  libraryOverlayBody.addEventListener("click", (event) => {
+    const itemId = resolveLibraryTileFromEventTarget(event.target);
+    if (!itemId) {
+      return;
+    }
+    event.preventDefault();
+    void playFromLibraryItemId(itemId);
+  });
+  libraryOverlayBody.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") {
+      return;
+    }
+
+    const itemId = resolveLibraryTileFromEventTarget(event.target);
+    if (!itemId) {
+      return;
+    }
+
+    event.preventDefault();
+    void playFromLibraryItemId(itemId);
   });
   librarySearchInput.addEventListener("input", () => {
     libraryBrowseControls = {

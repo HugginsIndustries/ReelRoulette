@@ -1094,6 +1094,16 @@ html.theme-light .filter-dialog .tag-chip .chip-btn.icon-glyph-base.is-selected 
 .library-grid-tile:hover {
   opacity: 0.79;
 }
+.library-grid-tile:active {
+  opacity: 0.72;
+}
+.library-grid-tile:focus-visible {
+  outline: 2px solid #7aa7ff;
+  outline-offset: 1px;
+}
+html.theme-light .library-grid-tile:focus-visible {
+  outline-color: #2563eb;
+}
 .library-grid-tile-media {
   position: relative;
   width: 100%;
@@ -1271,6 +1281,13 @@ html.theme-light .library-overlay-result-row {
 @media (max-width: 600px) {
   .library-overlay-search {
     flex: 1 1 100%;
+  }
+  .library-overlay-sort-cluster {
+    flex: 1 1 100%;
+  }
+  .library-overlay-sort-direction {
+    min-width: 0;
+    flex: 1 1 auto;
   }
 }
 

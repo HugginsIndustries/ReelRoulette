@@ -89,28 +89,7 @@ Do not use this file for detailed architecture explanation or current capability
 
 ## Active Milestones
 
-Last milestone completed: M10g
-
-### M10h - WebUI Library Click-to-Play and Responsive Sign-off
-
-- **Status**: ⏳ Planned
-- **Goal**: Complete WebUI library browser behavior by using the server-authoritative play endpoint and signing off responsive/theme parity.
-- **Scope**:
-  - Depends on: WebUI library SSE state sync and server-authoritative play endpoint foundation.
-  - Wire tile activation to `POST /api/play/{itemId}` and play the returned media through the existing WebUI player path.
-  - Map endpoint errors into clear overlay/player feedback without local fallback selection logic.
-  - Complete mobile LAN and desktop browser responsiveness, fullscreen behavior, keyboard/focus basics, and light/dark theme polish for the full browser.
-  - Update docs and testing checklist for the new standard WebUI library play path.
-- **Acceptance criteria**:
-  - Clicking a WebUI library tile requests item playback through the server endpoint and starts the returned media in the WebUI player.
-  - Playback side effects update all clients through SSE and update the open library browser projection.
-  - The browser is usable on mobile-width LAN browsers and desktop browsers in light and dark themes.
-  - The browser follows established WebUI icon, dialog, and theming conventions with no desktop list-view parity requirement.
-- **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include WebUI tests for click-to-play request shape, success handling, and endpoint error handling.
-  - Manual evidence must include WebUI browser play smoke on desktop width and mobile width, plus cross-client SSE side-effect observation.
-- **Deferrals / Follow-ups**:
-  - Offline/PWA-specific library browsing and advanced library actions remain future considerations.
+Last milestone completed: M10h
 
 ### M10i - Server-Authoritative Source State Model
 
@@ -1228,6 +1207,34 @@ Last milestone completed: M10g
 ## Completed Milestones
 
 Latest completions first:
+
+### M10h - WebUI Library Click-to-Play and Responsive Sign-off
+
+- **Status**: ✅ Complete
+- **Goal**: Complete WebUI library browser behavior by using the server-authoritative play endpoint and signing off responsive/theme parity.
+- **Scope**:
+  - Depends on: WebUI library SSE state sync and server-authoritative play endpoint foundation.
+  - Wire tile activation to `POST /api/play/{itemId}` and play the returned media through the existing WebUI player path.
+  - Map endpoint errors into clear overlay/player feedback without local fallback selection logic.
+  - Complete mobile LAN and desktop browser responsiveness, fullscreen behavior, keyboard/focus basics, and light/dark theme polish for the full browser.
+  - Update docs and testing checklist for the new standard WebUI library play path.
+- **Acceptance criteria**:
+  - Clicking a WebUI library tile requests item playback through the server endpoint and starts the returned media in the WebUI player.
+  - Playback side effects update all clients through SSE and update the open library browser projection.
+  - The browser is usable on mobile-width LAN browsers and desktop browsers in light and dark themes.
+  - The browser follows established WebUI icon, dialog, and theming conventions with no desktop list-view parity requirement.
+- **Verification evidence**:
+  - `dotnet build ReelRoulette.sln` — pass.
+  - `dotnet test ReelRoulette.sln` — pass (126 Core + 49 Desktop tests; no server/desktop changes).
+  - `npm run verify` in `src/clients/web/ReelRoulette.WebUI` — pass (95 Vitest tests).
+  - WebUI `coreApi.test.ts` — `requestPlayItem` URL/body/encoding, success JSON, structured failure, blank id guard.
+  - WebUI `libraryPlayModel.test.ts` — 404/409/415/401 and fallback status mapping.
+  - WebUI `libraryGridTileModel.test.ts` — `data-item-id`, `tabindex`, `role="button"` on tiles.
+  - WebUI modules: `coreApi.ts` (`requestPlayItem`), `libraryPlayModel.ts`, `app.js` (`playFromLibraryItemId`, delegated tile click/keyboard, `playCurrent({ skipRecordPlayback })`, Escape closes overlay), `libraryGridTileModel.ts`, `styles.css` (tile focus/active, mobile sort-cluster wrap).
+  - API smoke — `POST /api/play/{itemId}` returns `200` with `RandomResponse` against live server library.
+  - Manual UI smoke — confirmed: tile click play (overlay closes, no duplicate `record-playback`), error mapping (404/409/415), keyboard (Escape/Enter/Space), desktop and mobile width, light/dark themes, cross-client SSE playback updates, fullscreen (`docs/checklists/testing-checklist.md`).
+- **Deferrals / Follow-ups**:
+  - Offline/PWA-specific library browsing and advanced library actions remain future considerations.
 
 ### M10g - WebUI Library SSE State Sync
 

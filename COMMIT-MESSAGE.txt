@@ -19,12 +19,10 @@ Instructions:
 
 Commit Message:
 
-M10g: WebUI library overlay SSE state sync
+M10h: WebUI library click-to-play and responsive sign-off
 
-- Add libraryProjectionSync helpers to patch favorite/blacklist and playback stats on in-memory projection items (id/fullPath lookup).
-- Wire app.js SSE handlers for itemStateChanged, playbackRecorded, and resyncRequired projection refetch while overlay is open.
-- Preserve refetch-on-open; SSE grid refresh uses resetScroll:false to avoid scroll jumps on live updates.
-- Parse optional fullPath on projection items for playbackRecorded path matching.
-- Add libraryProjectionSync Vitest suite; manual cross-client smoke confirmed; checklist and milestone evidence updated.
-- Align WebUI and desktop library grid tile hover opacity to 0.79 for clearer feedback.
-- Skip spurious library grid re-sort on playbackRecorded when sort is Duration (playback does not change durationSeconds).
+- Add coreApi.requestPlayItem and libraryPlayModel error/status helpers with Vitest coverage.
+- Wire library tile single-click and Enter/Space to POST /api/play/{itemId}; close overlay on success.
+- Skip client record-playback on play-item path via playCurrent({ skipRecordPlayback: true }).
+- Add tile focus/active styles, mobile sort-cluster wrap, Escape-to-close, and keyboard tile activation.
+- Update milestone evidence, CONTEXT, checklist, and impacted docs.

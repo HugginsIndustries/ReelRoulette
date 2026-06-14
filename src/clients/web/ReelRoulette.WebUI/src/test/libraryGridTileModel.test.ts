@@ -57,6 +57,13 @@ describe("libraryGridTileModel", () => {
     expect(html).not.toContain('a<b>"c"');
   });
 
+  it("includes data-item-id and keyboard activation attributes", () => {
+    const html = renderGridTileHtml(baseTile, buildThumbnailUrl("http://localhost:51301", "item-1"));
+    expect(html).toContain('data-item-id="item-1"');
+    expect(html).toContain('tabindex="0"');
+    expect(html).toContain('role="button"');
+  });
+
   it("hasGridStateIndicator is true when favorite or blacklisted", () => {
     expect(hasGridStateIndicator(true, false)).toBe(true);
     expect(hasGridStateIndicator(false, true)).toBe(true);

@@ -123,7 +123,7 @@ Boundary:
 WebUI is runtime-config-driven API/SSE client orchestration.
 
 - `src/clients/web/ReelRoulette.WebUI/src/app.js`
-  - main client runtime behavior and orchestration (playback, filter dialog, library overlay browse + SSE live sync, tag overlay with **Edit Tags** + **Auto Tag** API flows).
+  - main client runtime behavior and orchestration (playback, filter dialog, library overlay browse + SSE live sync + click-to-play, tag overlay with **Edit Tags** + **Auto Tag** API flows).
 - `src/clients/web/ReelRoulette.WebUI/src/filter/filterStateModel.ts`
   - filter JSON serialize/parse aligned with desktop/server `FilterState`.
 - `src/clients/web/ReelRoulette.WebUI/src/library/libraryOverlayModel.ts`
@@ -146,12 +146,14 @@ WebUI is runtime-config-driven API/SSE client orchestration.
   - row offset index and visible-window calculation (900px overscan).
 - `src/clients/web/ReelRoulette.WebUI/src/library/libraryGridController.ts`
   - library overlay grid DOM lifecycle (mount, scroll, optional scroll reset on re-browse, resize debounce, destroy).
+- `src/clients/web/ReelRoulette.WebUI/src/library/libraryPlayModel.ts`
+  - play-item error status mapping and request identity helpers for library tile activation.
 - `src/clients/web/ReelRoulette.WebUI/src/shell.ts`
   - static layout including library overlay header browse count, toolbar (search/sort cluster), tabbed tag overlay, and filter overlay chrome.
 - `src/clients/web/ReelRoulette.WebUI/src/main.ts`
   - bootstrap entrypoint.
 - `src/clients/web/ReelRoulette.WebUI/src/api/coreApi.ts`
-  - API client calls and identity propagation.
+  - API client calls, identity propagation, and `requestPlayItem` for library tile play.
 - `src/clients/web/ReelRoulette.WebUI/src/auth/authBootstrap.ts`
   - startup auth/version/capability checks.
 - `src/clients/web/ReelRoulette.WebUI/src/events/sseClient.ts`

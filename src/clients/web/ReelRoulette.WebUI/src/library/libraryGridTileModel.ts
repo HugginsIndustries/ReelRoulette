@@ -43,7 +43,7 @@ export function renderGridTileHtml(tile: GridTileRenderInput, thumbnailUrl: stri
     ? `<div class="library-grid-tile-badge">${favoriteBadge}${blacklistBadge}</div>`
     : "";
 
-  return `<div class="library-grid-tile" style="${style}" data-item-id="${escapeHtml(tile.itemId)}">
+  return `<div class="library-grid-tile" style="${style}" data-item-id="${escapeHtml(tile.itemId)}" tabindex="0" role="button">
   <div class="library-grid-tile-media">
     <div class="library-grid-tile-scrim">${imgHtml}</div>
     ${badgeHtml}

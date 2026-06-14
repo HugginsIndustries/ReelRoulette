@@ -1,5 +1,23 @@
 import type { RuntimeConfig } from "../types/runtimeConfig";
+import type { components } from "../types/openapi.generated";
 import type { PairResponse, RefreshStatusSnapshot, VersionResponse } from "../types/serverContracts";
+
+type RandomResponse = components["schemas"]["RandomResponse"];
+
+export type PlayItemSuccess = {
+  ok: true;
+  statusCode: number;
+  response: RandomResponse;
+};
+
+export type PlayItemFailure = {
+  ok: false;
+  statusCode: number;
+  error?: string;
+  code?: string;
+};
+
+export type PlayItemResult = PlayItemSuccess | PlayItemFailure;
 
 const CLIENT_ID_KEY = "rr_clientId";
 const SESSION_ID_KEY = "rr_sessionId";
@@ -153,4 +171,64 @@ export async function getVersionJson(
   }
 
   return (await response.json()) as VersionResponse;
+}
+
+function tryReadJsonErrorBody(body: string): { error?: string; code?: string } {
+  try {
+    const parsed = JSON.parse(body) as { error?: unknown; code?: unknown };
+    return {
+      error: typeof parsed.error === "string" ? parsed.error : undefined,
+      code: typeof parsed.code === "string" ? parsed.code : undefined
+    };
+  } catch {
+    return {};
+  }
+}
+
+export async function requestPlayItem(
+  config: RuntimeConfig,
+  itemId: string,
+  identity: { clientId: string; sessionId: string },
+  fetchImpl: typeof fetch = fetch
+): Promise<PlayItemResult> {
+  const trimmedItemId = itemId.trim();
+  if (!trimmedItemId) {
+    return {
+      ok: false,
+      statusCode: 400,
+      error: "itemId is required",
+      code: "play_item_id_invalid"
+    };
+  }
+
+  const encodedItemId = encodeURIComponent(trimmedItemId);
+  const response = await fetchImpl(buildApiUrl(config, `/api/play/${encodedItemId}`), {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      clientId: identity.clientId,
+      sessionId: identity.sessionId
+    })
+  });
+
+  if (response.ok) {
+    const playResponse = (await response.json()) as RandomResponse;
+    return {
+      ok: true,
+      statusCode: response.status,
+      response: playResponse
+    };
+  }
+
+  const body = await response.text();
+  const { error, code } = tryReadJsonErrorBody(body);
+  return {
+    ok: false,
+    statusCode: response.status,
+    error,
+    code
+  };
 }
