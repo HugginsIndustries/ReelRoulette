@@ -25,3 +25,4 @@ Refactor: adopt .version source of truth and extract packaging staging
 - Fan out bare semver to ServerApp, DesktopApp, LibraryArchive, OpenAPI, and test fixtures.
 - Extract WebUI asset staging to stage-webui-assets.ps1 and Windows native staging to stage-native-deps.ps1.
 - Point all packaging scripts at `.version` and the new staging helpers; update README, dev-setup, and CONTEXT.
+- Bump WebUI `sharp` to 0.35.x and override transitive `js-yaml` to clear npm audit findings.
