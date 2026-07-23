@@ -19,10 +19,9 @@ Instructions:
 
 Commit Message:
 
-M10h: WebUI library click-to-play and responsive sign-off
+Refactor: adopt .version source of truth and extract packaging staging
 
-- Add coreApi.requestPlayItem and libraryPlayModel error/status helpers with Vitest coverage.
-- Wire library tile single-click and Enter/Space to POST /api/play/{itemId}; close overlay on success.
-- Skip client record-playback on play-item path via playCurrent({ skipRecordPlayback: true }).
-- Add tile focus/active styles, mobile sort-cluster wrap, Escape-to-close, and keyboard tile activation.
-- Update milestone evidence, CONTEXT, checklist, and impacted docs.
+- Add repo-root `.version` and teach set-release-version.ps1 to read/write it with semver2 validation.
+- Fan out bare semver to ServerApp, DesktopApp, LibraryArchive, OpenAPI, and test fixtures.
+- Extract WebUI asset staging to stage-webui-assets.ps1 and Windows native staging to stage-native-deps.ps1.
+- Point all packaging scripts at `.version` and the new staging helpers; update README, dev-setup, and CONTEXT.

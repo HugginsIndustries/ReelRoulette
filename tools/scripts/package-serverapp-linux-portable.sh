@@ -38,7 +38,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-for cmd in dotnet npm tar bash; do
+for cmd in dotnet npm tar bash pwsh; do
   if ! command -v "$cmd" >/dev/null 2>&1; then
     echo "Required command not found in PATH: $cmd" >&2
     exit 1
@@ -48,16 +48,20 @@ done
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 PROJECT_PATH="$REPO_ROOT/src/core/ReelRoulette.ServerApp/ReelRoulette.ServerApp.csproj"
-WEB_UI_DIR="$REPO_ROOT/src/clients/web/ReelRoulette.WebUI"
-WEB_UI_DIST="$WEB_UI_DIR/dist"
-SHARED_ICON="$REPO_ROOT/assets/HI.ico"
+VERSION_FILE="$REPO_ROOT/.version"
 
 if [[ -z "$Version" ]]; then
-  Version="$(sed -n 's:^[[:space:]]*<Version>\(.*\)</Version>.*:\1:p' "$PROJECT_PATH" | head -1)"
-  Version="$(echo "$Version" | tr -d '\r')"
+  if [[ ! -f "$VERSION_FILE" ]]; then
+    echo ".version file not found at $VERSION_FILE" >&2
+    exit 1
+  fi
+  Version="$(tr -d ' \r\n' < "$VERSION_FILE")"
+  Version="${Version#v}"
   if [[ -z "$Version" ]]; then
     Version="dev"
   fi
+elif [[ "$Version" == v* ]]; then
+  Version="${Version#v}"
 fi
 
 PUBLISH_DIR="$REPO_ROOT/artifacts/publish/serverapp-$Runtime"
@@ -69,21 +73,6 @@ TAR_PATH="$PACKAGE_ROOT/portable/$STAGING_NAME.tar.gz"
 rm -rf "$PUBLISH_DIR" "$STAGING_DIR"
 rm -f "$TAR_PATH"
 mkdir -p "$PUBLISH_DIR" "$STAGING_DIR"
-
-(
-  cd "$WEB_UI_DIR"
-  npm install
-  npm run build
-)
-
-if [[ ! -d "$WEB_UI_DIST" ]]; then
-  echo "WebUI build output was not found at $WEB_UI_DIST." >&2
-  exit 1
-fi
-if [[ ! -f "$SHARED_ICON" ]]; then
-  echo "Shared icon was not found at $SHARED_ICON." >&2
-  exit 1
-fi
 
 (
   cd "$REPO_ROOT"
@@ -104,10 +93,7 @@ fi
 
 find "$PUBLISH_DIR" -type f -name '*.pdb' -delete
 
-PUBLISH_WEBROOT="$PUBLISH_DIR/wwwroot"
-mkdir -p "$PUBLISH_WEBROOT"
-cp -a "$WEB_UI_DIST"/. "$PUBLISH_WEBROOT/"
-cp -f "$SHARED_ICON" "$PUBLISH_WEBROOT/HI.ico"
+pwsh "$SCRIPT_DIR/stage-webui-assets.ps1" -RepoRoot "$REPO_ROOT" -PublishDir "$PUBLISH_DIR"
 
 cp -a "$PUBLISH_DIR"/. "$STAGING_DIR/"
 

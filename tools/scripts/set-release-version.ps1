@@ -1,6 +1,5 @@
 #!/usr/bin/env pwsh
 param(
-    [Parameter(Mandatory = $true)]
     [string]$Version,
     [switch]$NoDocUpdates,
     [switch]$NoUpdateDesktopVersion,
@@ -10,11 +9,75 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-if ([string]::IsNullOrWhiteSpace($Version)) {
-    throw "Version is required."
+$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
+$versionFilePath = Join-Path $repoRoot ".version"
+
+function Test-ReleaseVersionFormat {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Value
+    )
+
+    if ($Value -match '^v\d+\.\d+\.\d+\.\d+') {
+        throw "Four-part versions like '$Value' are not supported. Use semver2 (for example v1.2.3 or v1.2.3-dev.1)."
+    }
+
+    if ($Value -notmatch '^v\d+\.\d+\.\d+(-[0-9A-Za-z][0-9A-Za-z.-]*)?$') {
+        throw "Invalid version format '$Value'. Expected a v-prefixed semver2 string (for example v0.12.0-dev or v0.12.0-dev.2)."
+    }
 }
 
-$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
+function Get-BareSemver {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Value
+    )
+
+    $trimmed = $Value.Trim()
+    if ($trimmed.StartsWith("v")) {
+        return $trimmed.Substring(1)
+    }
+    return $trimmed
+}
+
+function Read-ReleaseVersionFromFile {
+    if (-not (Test-Path $versionFilePath)) {
+        throw ".version file not found at $versionFilePath"
+    }
+
+    $raw = (Get-Content -Path $versionFilePath -Raw).Trim()
+    if ([string]::IsNullOrWhiteSpace($raw)) {
+        throw ".version file is empty."
+    }
+
+    Test-ReleaseVersionFormat -Value $raw
+    return $raw
+}
+
+function Write-ReleaseVersionFile {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Value
+    )
+
+    Test-ReleaseVersionFormat -Value $Value
+    $normalized = $Value.Trim()
+    Set-Content -Path $versionFilePath -Value $normalized -NoNewline
+    Write-Host "Updated: $versionFilePath"
+}
+
+if ([string]::IsNullOrWhiteSpace($Version)) {
+    $Version = Read-ReleaseVersionFromFile
+}
+else {
+    $Version = $Version.Trim()
+    if (-not $Version.StartsWith("v")) {
+        $Version = "v$Version"
+    }
+    Write-ReleaseVersionFile -Value $Version
+}
+
+$bareVersion = Get-BareSemver -Value $Version
 
 function Set-FileContentIfChanged {
     param(
@@ -42,7 +105,7 @@ function Update-OpenApiVersion {
     if (-not [regex]::IsMatch($raw, $pattern)) {
         throw "Failed to find OpenAPI info.version in $path"
     }
-    $next = [regex]::Replace($raw, $pattern, "`${1}$Version")
+    $next = [regex]::Replace($raw, $pattern, "`${1}$bareVersion")
     Set-FileContentIfChanged -Path $path -NewContent $next | Out-Null
 }
 
@@ -53,7 +116,7 @@ function Update-ServerAssetsVersion {
     if (-not [regex]::IsMatch($raw, $pattern)) {
         throw "Failed to find assetsVersion in $path"
     }
-    $next = [regex]::Replace($raw, $pattern, "assetsVersion: `"$Version`"", 1)
+    $next = [regex]::Replace($raw, $pattern, "assetsVersion: `"$bareVersion`"", 1)
     Set-FileContentIfChanged -Path $path -NewContent $next | Out-Null
 }
 
@@ -67,8 +130,8 @@ function Update-ContractTestsAssetsVersion {
         throw "Failed to find AssetsVersion assertion in $path"
     }
     $next = $raw
-    $next = [regex]::Replace($next, 'assetsVersion:\s*"[^"]+"', "assetsVersion: `"$Version`"", 1)
-    $next = [regex]::Replace($next, 'Assert\.Equal\("[^"]+",\s*response\.AssetsVersion\);', "Assert.Equal(`"$Version`", response.AssetsVersion);", 1)
+    $next = [regex]::Replace($next, 'assetsVersion:\s*"[^"]+"', "assetsVersion: `"$bareVersion`"", 1)
+    $next = [regex]::Replace($next, 'Assert\.Equal\("[^"]+",\s*response\.AssetsVersion\);', "Assert.Equal(`"$bareVersion`", response.AssetsVersion);", 1)
     Set-FileContentIfChanged -Path $path -NewContent $next | Out-Null
 }
 
@@ -78,7 +141,7 @@ function Update-WebAuthBootstrapTestAssetsVersion {
     if (-not [regex]::IsMatch($raw, 'assetsVersion:\s*"[^"]+"')) {
         throw "Failed to find auth bootstrap test assetsVersion in $path"
     }
-    $next = [regex]::Replace($raw, 'assetsVersion:\s*"[^"]+"', "assetsVersion: `"$Version`"", 1)
+    $next = [regex]::Replace($raw, 'assetsVersion:\s*"[^"]+"', "assetsVersion: `"$bareVersion`"", 1)
     Set-FileContentIfChanged -Path $path -NewContent $next | Out-Null
 }
 
@@ -86,18 +149,15 @@ function Update-ReadmeVersionExamples {
     $path = Join-Path $repoRoot "README.md"
     $raw = Get-Content -Path $path -Raw
 
-    if (-not [regex]::IsMatch($raw, 'set-release-version\.ps1 -Version [^\s`]+')) {
+    if (-not [regex]::IsMatch($raw, 'set-release-version\.ps1(?: -Version [^\s`]+)?')) {
         throw "Failed to find set-release-version command version in $path"
     }
     if (-not [regex]::IsMatch($raw, 'full-release\.ps1 -Version [^\s`]+')) {
         throw "Failed to find full-release command version in $path"
     }
-    if (-not [regex]::IsMatch($raw, '- \*\*Chained release build\*\*:\s')) {
-        throw "Failed to find Chained release build bullet in $path"
-    }
 
     $next = $raw
-    $next = [regex]::Replace($next, 'set-release-version\.ps1 -Version [^\s`]+', "set-release-version.ps1 -Version $Version", 1)
+    $next = [regex]::Replace($next, 'set-release-version\.ps1(?: -Version [^\s`]+)?', "set-release-version.ps1 -Version $Version", 1)
     $next = [regex]::Replace($next, 'full-release\.ps1 -Version [^\s`]+', "full-release.ps1 -Version $Version", 1)
     Set-FileContentIfChanged -Path $path -NewContent $next | Out-Null
 }
@@ -148,19 +208,19 @@ function Set-ProjectVersion {
         $propertyGroup.AppendChild($versionNode) | Out-Null
     }
 
-    if ($versionNode.InnerText -eq $Version) {
+    if ($versionNode.InnerText -eq $bareVersion) {
         Write-Host "No change: $ProjectPath"
         return
     }
 
-    $versionNode.InnerText = $Version
+    $versionNode.InnerText = $bareVersion
     $xml.Save($ProjectPath)
     Write-Host "Updated: $ProjectPath"
 }
 
 Push-Location $repoRoot
 try {
-    Write-Host "Applying release version $Version..."
+    Write-Host "Applying release version $Version (bare semver $bareVersion)..."
 
     Update-OpenApiVersion
     Update-ServerAssetsVersion
@@ -168,6 +228,7 @@ try {
     Update-WebAuthBootstrapTestAssetsVersion
 
     Set-ProjectVersion -ProjectPath (Join-Path $repoRoot "src" "core" "ReelRoulette.ServerApp" "ReelRoulette.ServerApp.csproj")
+    Set-ProjectVersion -ProjectPath (Join-Path $repoRoot "src" "clients" "desktop" "ReelRoulette.LibraryArchive" "ReelRoulette.LibraryArchive.csproj")
     if (-not $NoUpdateDesktopVersion.IsPresent) {
         Set-ProjectVersion -ProjectPath (Join-Path $repoRoot "src" "clients" "desktop" "ReelRoulette.DesktopApp" "ReelRoulette.DesktopApp.csproj")
     }

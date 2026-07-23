@@ -12,42 +12,35 @@ if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
     Write-Error "dotnet SDK not found in PATH."
     exit 1
 }
-if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
-    Write-Error "npm not found in PATH."
-    exit 1
-}
 
-function Invoke-EnsureWinX64NativeDeps {
-    param([Parameter(Mandatory = $true)][string]$Root)
-    if ($Runtime -ne "win-x64") {
-        return
-    }
-    $nativeRoot = Join-Path $Root "runtimes\win-x64\native"
-    $need = -not (Test-Path (Join-Path $nativeRoot "ffmpeg.exe")) `
-        -or -not (Test-Path (Join-Path $nativeRoot "ffprobe.exe")) `
-        -or -not (Test-Path (Join-Path $nativeRoot "libvlc\libvlc.dll"))
-    if ($need) {
-        $fetch = Join-Path $PSScriptRoot "fetch-native-deps.ps1"
-        & $fetch -RepoRoot $Root
-    }
-}
-
-function Ensure-WinServerNativeAssets {
+function Resolve-PackageVersion {
     param(
-        [Parameter(Mandatory = $true)][string]$RepoRoot,
-        [Parameter(Mandatory = $true)][string]$PublishDir
+        [string]$ExplicitVersion,
+        [Parameter(Mandatory = $true)][string]$RepoRoot
     )
-    $src = Join-Path $RepoRoot "runtimes\win-x64\native"
-    $dest = Join-Path $PublishDir "runtimes\win-x64\native"
-    New-Item -ItemType Directory -Force -Path $dest | Out-Null
-    foreach ($exe in @("ffmpeg.exe", "ffprobe.exe")) {
-        $from = Join-Path $src $exe
-        if (-not (Test-Path -LiteralPath $from)) {
-            Write-Error "Missing $exe under $src. Run pwsh ./tools/scripts/fetch-native-deps.ps1 from the repo root."
-            exit 1
+
+    if (-not [string]::IsNullOrWhiteSpace($ExplicitVersion)) {
+        $value = $ExplicitVersion.Trim()
+        if ($value.StartsWith("v")) {
+            $value = $value.Substring(1)
         }
-        Copy-Item -LiteralPath $from -Destination (Join-Path $dest $exe) -Force
+        return $value
     }
+
+    $versionFile = Join-Path $RepoRoot ".version"
+    if (-not (Test-Path $versionFile)) {
+        Write-Error ".version file not found at $versionFile"
+        exit 1
+    }
+
+    $value = (Get-Content -Path $versionFile -Raw).Trim()
+    if ($value.StartsWith("v")) {
+        $value = $value.Substring(1)
+    }
+    if ([string]::IsNullOrWhiteSpace($value)) {
+        $value = "dev"
+    }
+    return $value
 }
 
 function Resolve-IsccPath {
@@ -94,17 +87,8 @@ if (-not $isccPath) {
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $projectPath = Join-Path $repoRoot "src\core\ReelRoulette.ServerApp\ReelRoulette.ServerApp.csproj"
-$webUiProjectDir = Join-Path $repoRoot "src\clients\web\ReelRoulette.WebUI"
-$webUiDistPath = Join-Path $webUiProjectDir "dist"
+$Version = Resolve-PackageVersion -ExplicitVersion $Version -RepoRoot $repoRoot
 $sharedIconPath = Join-Path $repoRoot "assets\HI.ico"
-
-if ([string]::IsNullOrWhiteSpace($Version)) {
-    [xml]$projectXml = Get-Content -Path $projectPath -Raw
-    $Version = $projectXml.Project.PropertyGroup.Version | Select-Object -First 1
-    if ([string]::IsNullOrWhiteSpace($Version)) {
-        $Version = "dev"
-    }
-}
 
 $publishDir = Join-Path $repoRoot "artifacts\publish\serverapp-$Runtime"
 $installerOutDir = Join-Path $repoRoot "$OutputRoot\installer"
@@ -116,34 +100,6 @@ New-Item -ItemType Directory -Force -Path $installerOutDir | Out-Null
 
 Push-Location $repoRoot
 try {
-    Invoke-EnsureWinX64NativeDeps -Root $repoRoot
-
-    Push-Location $webUiProjectDir
-    try {
-        npm install
-        if ($LASTEXITCODE -ne 0) {
-            Write-Error "npm install failed with code $LASTEXITCODE"
-            exit $LASTEXITCODE
-        }
-        npm run build
-        if ($LASTEXITCODE -ne 0) {
-            Write-Error "npm run build failed with code $LASTEXITCODE"
-            exit $LASTEXITCODE
-        }
-    }
-    finally {
-        Pop-Location
-    }
-
-    if (-not (Test-Path $webUiDistPath)) {
-        Write-Error "WebUI build output was not found at $webUiDistPath."
-        exit 1
-    }
-    if (-not (Test-Path $sharedIconPath)) {
-        Write-Error "Shared icon was not found at $sharedIconPath."
-        exit 1
-    }
-
     dotnet publish $projectPath `
         -c $Configuration `
         -f net10.0-windows `
@@ -159,13 +115,12 @@ try {
         exit $LASTEXITCODE
     }
 
-    $publishWebRoot = Join-Path $publishDir "wwwroot"
-    New-Item -ItemType Directory -Force -Path $publishWebRoot | Out-Null
-    Copy-Item -Recurse -Force (Join-Path $webUiDistPath "*") $publishWebRoot
-    Copy-Item -Force $sharedIconPath (Join-Path $publishWebRoot "HI.ico")
+    & (Join-Path $PSScriptRoot "stage-webui-assets.ps1") -RepoRoot $repoRoot -PublishDir $publishDir
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
     if ($Runtime -eq "win-x64") {
-        Ensure-WinServerNativeAssets -RepoRoot $repoRoot -PublishDir $publishDir
+        & (Join-Path $PSScriptRoot "stage-native-deps.ps1") -RepoRoot $repoRoot -PublishDir $publishDir -Component server
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     }
 
     & $isccPath `

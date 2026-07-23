@@ -38,7 +38,7 @@ try {
 
     Invoke-Step -Name "Set release version + verify" -Action {
         if (-not $haveVersion) {
-            Write-Host "Skipping set-release-version (no -Version): packaging uses `<Version>` from each .csproj."
+            Write-Host "Skipping set-release-version (no -Version): packaging uses `.version` at the repo root."
             if ($NoDocUpdates -or $NoUpdateDesktopVersion -or $NoRegenerateContracts -or $NoRunVerify) {
                 Write-Host "Note: -NoDocUpdates / -NoUpdateDesktopVersion / -NoRegenerateContracts / -NoRunVerify apply only when -Version is set."
             }
@@ -149,7 +149,7 @@ try {
         Write-Host "Full release flow completed for version $Version."
     }
     else {
-        Write-Host "Full release flow completed (packaging used project `<Version>` values)."
+        Write-Host "Full release flow completed (packaging used `.version` at the repo root)."
     }
 }
 finally {

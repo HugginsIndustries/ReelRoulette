@@ -145,10 +145,9 @@ Per-user data uses .NET `Environment.SpecialFolder` mappings:
 
 Packaging notes:
 
-- Server packaging scripts auto-detect version from `src/core/ReelRoulette.ServerApp/ReelRoulette.ServerApp.csproj` when `-Version` is not passed.
-- Desktop packaging scripts auto-detect version from `src/clients/desktop/ReelRoulette.DesktopApp/ReelRoulette.DesktopApp.csproj` when `-Version` is not passed.
-- Windows packaging scripts ensure **`runtimes/win-x64/native/`** via **`fetch-native-deps.ps1`** when **ffmpeg.exe**, **ffprobe.exe**, or **libvlc** are missing, then copy **FFmpeg/ffprobe** into the **server** publish output and **LibVLC** into the **desktop** publish output under `runtimes/win-x64/native/`. Duration and other ffprobe work run in the **server** refresh pipeline, not in the desktop app.
-- Server packaging scripts run WebUI build and bundle static assets into ServerApp publish output (`wwwroot`) so packaged runtime includes WebUI and Operator favicon.
+- Repo-root **`.version`** is the release version source (v-prefixed semver2). When `-Version` is not passed, packaging scripts read the bare semver from `.version`.
+- Windows packaging scripts delegate native bundling to **`stage-native-deps.ps1`**, which ensures **`runtimes/win-x64/native/`** via **`fetch-native-deps.ps1`** when **ffmpeg.exe**, **ffprobe.exe**, or **libvlc** are missing, then copies **FFmpeg/ffprobe** into the **server** publish output and **LibVLC** into the **desktop** publish output under `runtimes/win-x64/native/`. Duration and other ffprobe work run in the **server** refresh pipeline, not in the desktop app.
+- Server packaging scripts delegate WebUI build and static asset staging to **`stage-webui-assets.ps1`**, bundling assets into ServerApp publish output (`wwwroot`) so packaged runtime includes WebUI and Operator favicon.
 - Server publish output includes `HI.ico` at app root for tray icon loading (from shared `assets/HI.ico`).
 - Shared app/installer/web icon source is `assets/HI.ico`.
 - Inno script auto-detects `ISCC.exe` from PATH/common install locations/registry.
@@ -159,19 +158,22 @@ Packaging notes:
 
 ## Release Versioning
 
-Use one command to align release-version surfaces:
+Repo-root **`.version`** holds the canonical release version as a single v-prefixed semver2 line (for example `v0.12.0-dev`). Use one command to align release-version surfaces:
 
-- `pwsh ./tools/scripts/set-release-version.ps1 -Version 0.12.0-dev`
+- `pwsh ./tools/scripts/set-release-version.ps1 -Version v0.12.0-dev.1`
+- Omit `-Version` to read `.version` and fan out without changing the file.
 - By default, the script also updates the desktop app `<Version>`, runs `npm run generate:contracts` in WebUI, runs solution build/test plus WebUI verify and `verify-web-deploy.ps1`, and updates release command examples in `README.md` and `docs/dev-setup.md`.
 - Use `-NoDocUpdates` to skip the README/dev-setup example updates.
 - Use `-NoUpdateDesktopVersion`, `-NoRegenerateContracts`, and/or `-NoRunVerify` to skip desktop version, contract regeneration, or the verify steps respectively.
 
 This updates:
 
+- `.version` (when `-Version` is supplied)
 - OpenAPI `info.version`
 - server `assetsVersion` in `/api/version` response
 - release-version test fixtures
 - server app project `<Version>`
+- `ReelRoulette.LibraryArchive` project `<Version>`
 - desktop project `<Version>`
 
 Then package server and desktop as needed:
@@ -181,7 +183,7 @@ Then package server and desktop as needed:
 - `pwsh ./tools/scripts/package-desktop-win-portable.ps1`
 - `pwsh ./tools/scripts/package-desktop-win-inno.ps1`
 - or run the chained flow:
-  - `pwsh ./tools/scripts/full-release.ps1 -Version 0.12.0-dev` (optional `-NoDocUpdates`, `-NoUpdateDesktopVersion`, `-NoRegenerateContracts`, `-NoRunVerify` are passed through to `set-release-version.ps1`). Run without `-Version` to skip `set-release-version` and use each `.csproj` `<Version>` in package outputs.
+  - `pwsh ./tools/scripts/full-release.ps1 -Version v0.12.0-dev.1` (optional `-NoDocUpdates`, `-NoUpdateDesktopVersion`, `-NoRegenerateContracts`, `-NoRunVerify` are passed through to `set-release-version.ps1`). Run without `-Version` to skip `set-release-version` and use `.version` in package outputs.
 
 Reset manual testing checklist state for a fresh run:
 
@@ -223,7 +225,7 @@ Artifacts:
 
 Each archive contains a single top-level directory with the executable, `run-server.sh` or `run-desktop.sh` (executable), `README.txt`, and `PACKAGE_INFO.txt`. Extract, then run `./run-server.sh` or `./run-desktop.sh` from that directory.
 
-When `-Version` is omitted, scripts read `<Version>` from the corresponding `.csproj` (same behavior as Windows packaging scripts).
+When `-Version` is omitted, scripts read the bare semver from repo-root `.version` (same behavior as Windows packaging scripts).
 
 ### Linux AppImage (server + Desktop)
 
@@ -259,7 +261,7 @@ Requires `curl` and `jq` on `PATH`. Default repository is `HugginsIndustries/Ree
 
 AppImage installs go to `~/.local/share/ReelRoulette/` as `ReelRoulette-{Server|Desktop}-linux-x64.AppImage` (version stripped; same as `install-linux-local.sh`). Override directory with `REELROULETTE_LOCAL_APPIMAGE_DIR`. Portable tarball fallback still extracts under `~/.local/share/ReelRoulette/<server|desktop>/<version>/` and adds a launcher symlink in `~/.local/bin/`.
 
-On Linux, `pwsh ./tools/scripts/full-release.ps1 -Version 0.12.0-dev` runs `set-release-version.ps1` with the same defaults documented under **Release Versioning** above (and any `-No*` switches you pass), then the two Linux portable scripts, then the two Linux AppImage scripts, and skips Inno installer steps (Windows-only). With no `-Version`, it skips `set-release-version` and packages using `.csproj` versions. AppImage steps require `appimagetool`.
+On Linux, `pwsh ./tools/scripts/full-release.ps1 -Version v0.12.0-dev.1` runs `set-release-version.ps1` with the same defaults documented under **Release Versioning** above (and any `-No*` switches you pass), then the two Linux portable scripts, then the two Linux AppImage scripts, and skips Inno installer steps (Windows-only). With no `-Version`, it skips `set-release-version` and packages using `.version`. AppImage steps require `appimagetool`.
 
 ## Troubleshooting
 

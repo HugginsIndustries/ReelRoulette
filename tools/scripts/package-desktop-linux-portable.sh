@@ -50,13 +50,20 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 PROJECT_PATH="$REPO_ROOT/src/clients/desktop/ReelRoulette.DesktopApp/ReelRoulette.DesktopApp.csproj"
+VERSION_FILE="$REPO_ROOT/.version"
 
 if [[ -z "$Version" ]]; then
-  Version="$(sed -n 's:^[[:space:]]*<Version>\(.*\)</Version>.*:\1:p' "$PROJECT_PATH" | head -1)"
-  Version="$(echo "$Version" | tr -d '\r')"
+  if [[ ! -f "$VERSION_FILE" ]]; then
+    echo ".version file not found at $VERSION_FILE" >&2
+    exit 1
+  fi
+  Version="$(tr -d ' \r\n' < "$VERSION_FILE")"
+  Version="${Version#v}"
   if [[ -z "$Version" ]]; then
     Version="dev"
   fi
+elif [[ "$Version" == v* ]]; then
+  Version="${Version#v}"
 fi
 
 PUBLISH_DIR="$REPO_ROOT/artifacts/publish/desktop-$Runtime"

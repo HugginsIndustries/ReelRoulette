@@ -13,49 +13,34 @@ if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
     exit 1
 }
 
-function Invoke-EnsureWinX64NativeDeps {
-    param([Parameter(Mandatory = $true)][string]$Root)
-    if ($Runtime -ne "win-x64") {
-        return
-    }
-    $nativeRoot = Join-Path $Root "runtimes\win-x64\native"
-    $need = -not (Test-Path (Join-Path $nativeRoot "ffmpeg.exe")) `
-        -or -not (Test-Path (Join-Path $nativeRoot "ffprobe.exe")) `
-        -or -not (Test-Path (Join-Path $nativeRoot "libvlc\libvlc.dll"))
-    if ($need) {
-        $fetch = Join-Path $PSScriptRoot "fetch-native-deps.ps1"
-        & $fetch -RepoRoot $Root
-    }
-}
-
-function Ensure-WinDesktopNativeAssets {
+function Resolve-PackageVersion {
     param(
-        [Parameter(Mandatory = $true)][string]$RepoRoot,
-        [Parameter(Mandatory = $true)][string]$PublishDir
+        [string]$ExplicitVersion,
+        [Parameter(Mandatory = $true)][string]$RepoRoot
     )
 
-    $nativeDir = Join-Path $PublishDir "runtimes\win-x64\native"
-    $libVlcTargetDir = Join-Path $nativeDir "libvlc"
-    $libVlcSourceDir = Join-Path $RepoRoot "runtimes\win-x64\native\libvlc"
-    New-Item -ItemType Directory -Force -Path $nativeDir | Out-Null
-    if (-not (Test-Path (Join-Path $libVlcSourceDir "libvlc.dll"))) {
-        Write-Error "LibVLC not found at $libVlcSourceDir. Run pwsh ./tools/scripts/fetch-native-deps.ps1 from the repo root."
-        exit 1
+    if (-not [string]::IsNullOrWhiteSpace($ExplicitVersion)) {
+        $value = $ExplicitVersion.Trim()
+        if ($value.StartsWith("v")) {
+            $value = $value.Substring(1)
+        }
+        return $value
     }
-    if (Test-Path $libVlcTargetDir) {
-        Remove-Item -Recurse -Force $libVlcTargetDir
-    }
-    New-Item -ItemType Directory -Force -Path $libVlcTargetDir | Out-Null
-    Copy-Item -Recurse -Force (Join-Path $libVlcSourceDir "*") $libVlcTargetDir
 
-    if (-not (Test-Path (Join-Path $libVlcTargetDir "libvlc.dll"))) {
-        Write-Error "Desktop package is missing libvlc.dll after native asset staging."
+    $versionFile = Join-Path $RepoRoot ".version"
+    if (-not (Test-Path $versionFile)) {
+        Write-Error ".version file not found at $versionFile"
         exit 1
     }
-    if (-not (Test-Path (Join-Path $libVlcTargetDir "plugins"))) {
-        Write-Error "Desktop package is missing libvlc plugins after native asset staging."
-        exit 1
+
+    $value = (Get-Content -Path $versionFile -Raw).Trim()
+    if ($value.StartsWith("v")) {
+        $value = $value.Substring(1)
     }
+    if ([string]::IsNullOrWhiteSpace($value)) {
+        $value = "dev"
+    }
+    return $value
 }
 
 function Resolve-IsccPath {
@@ -107,14 +92,7 @@ if (-not $isccPath) {
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $projectPath = Join-Path $repoRoot "src\clients\desktop\ReelRoulette.DesktopApp\ReelRoulette.DesktopApp.csproj"
 $sharedIconPath = Join-Path $repoRoot "assets\HI.ico"
-
-if ([string]::IsNullOrWhiteSpace($Version)) {
-    [xml]$projectXml = Get-Content -Path $projectPath -Raw
-    $Version = $projectXml.Project.PropertyGroup.Version | Select-Object -First 1
-    if ([string]::IsNullOrWhiteSpace($Version)) {
-        $Version = "dev"
-    }
-}
+$Version = Resolve-PackageVersion -ExplicitVersion $Version -RepoRoot $repoRoot
 
 $publishDir = Join-Path $repoRoot "artifacts\publish\desktop-$Runtime"
 $installerOutDir = Join-Path $repoRoot "$OutputRoot\installer"
@@ -126,8 +104,6 @@ New-Item -ItemType Directory -Force -Path $installerOutDir | Out-Null
 
 Push-Location $repoRoot
 try {
-    Invoke-EnsureWinX64NativeDeps -Root $repoRoot
-
     if (-not (Test-Path $sharedIconPath)) {
         Write-Error "Shared icon was not found at $sharedIconPath."
         exit 1
@@ -148,7 +124,8 @@ try {
     }
 
     if ($Runtime -eq "win-x64") {
-        Ensure-WinDesktopNativeAssets -RepoRoot $repoRoot -PublishDir $publishDir
+        & (Join-Path $PSScriptRoot "stage-native-deps.ps1") -RepoRoot $repoRoot -PublishDir $publishDir -Component desktop
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     }
 
     & $isccPath `
