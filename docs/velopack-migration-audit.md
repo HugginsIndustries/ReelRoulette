@@ -727,3 +727,368 @@ Sections referencing Inno Setup, AppImage, portable archives, install scripts, o
 ---
 
 Report only — no repository changes except this file.
+
+---
+
+## Addendum — LibVLC native duplication
+
+Investigation of the three LibVLC directory trees observed in a Windows desktop portable package: `runtimes/win-x64/native/libvlc/` (from `stage-native-deps.ps1`), plus `libvlc/win-x64/` and `libvlc/win-x86/` at the publish root (from the `VideoLAN.LibVLC.Windows` NuGet targets). Empirical publish measurements were taken via cross-publish from Linux (`-r win-x64` / `-r linux-x64`, self-contained, matching `package-desktop-win-portable.ps1` flags except output path).
+
+### Section A — What the NuGet package does
+
+#### Resolved package location and version
+
+After `dotnet restore` on `src/clients/desktop/ReelRoulette.DesktopApp/ReelRoulette.DesktopApp.csproj`:
+
+| Field | Value |
+|-------|-------|
+| **Package ID** | `VideoLAN.LibVLC.Windows` |
+| **Resolved version** | **`3.0.23`** (matches `PackageReference` in desktop `.csproj`) |
+| **NuGet global-packages path** | `/home/christian/.nuget/packages/videolan.libvlc.windows/3.0.23/` |
+
+#### MSBuild import files shipped by the package
+
+| Path under package | Present |
+|--------------------|---------|
+| `build/VideoLAN.LibVLC.Windows.targets` | **Yes** |
+| `build/*.props` | **No** |
+| `buildTransitive/**` | **No** |
+
+NuGet auto-imports `build/{packageId}.targets` for this package ID; there is **no separate `.props` file**.
+
+#### Quoted targets mechanism (`build/VideoLAN.LibVLC.Windows.targets`)
+
+Default output directories and architecture enable flags:
+
+```xml
+  <PropertyGroup>
+    <VlcWindowsX64TargetDir Condition=" '$(VlcWindowsX64TargetDir)' == '' ">libvlc\win-x64</VlcWindowsX64TargetDir>
+    <VlcWindowsX86TargetDir Condition=" '$(VlcWindowsX86TargetDir)' == '' ">libvlc\win-x86</VlcWindowsX86TargetDir>
+    <VlcWindowsX64Enabled Condition="'$(VlcWindowsX64Enabled)' == '' AND ('$(Platform)' == 'x64' OR '$(Platform)' == 'AnyCPU')">true</VlcWindowsX64Enabled>
+    <VlcWindowsX86Enabled Condition="'$(VlcWindowsX86Enabled)' == '' AND ('$(Platform)' == 'x86' OR '$(Platform)' == 'AnyCPU')">true</VlcWindowsX86Enabled>
+  </PropertyGroup>
+```
+
+Default file globs (used when item lists are empty):
+
+```xml
+    <VlcWindowsX64IncludeFiles Condition="'@(VlcWindowsX64IncludeFiles)'==''" Include="libvlc.%2A;libvlccore.%2A;hrtfs\%2A%2A;lua\%2A%2A;plugins\%2A%2A" />
+    <VlcWindowsX86IncludeFiles Condition="'@(VlcWindowsX86IncludeFiles)'==''" Include="libvlc.%2A;libvlccore.%2A;hrtfs\%2A%2A;lua\%2A%2A;plugins\%2A%2A" />
+```
+
+Core copy target — runs **`BeforeTargets="BeforeBuild"`**, adds **`Content`** items with **`CopyToOutputDirectory>PreserveNewest`**:
+
+```xml
+  <Target Name="CollectVlcFilesToCopyWindows" BeforeTargets="BeforeBuild">
+    ...
+    <ItemGroup Condition="'$(VlcWindowsX64Enabled)' == 'true'">
+      <VlcWindowsX64IncludeFilesFullPath Include="$([MSBuild]::Unescape($(MSBuildThisFileDirectory)..\build\x64\%(VlcWindowsX64IncludeFiles.Identity)))" />
+      ...
+      <Content Include="@(VlcWindowsX64IncludeFilesFullPath)" Exclude="@(VlcWindowsX64ExcludeFilesFullPath)">
+        <Link>$(VlcWindowsX64TargetDir)\$([MSBuild]::MakeRelative($(MSBuildThisFileDirectory)..\build\x64\, %(FullPath)))</Link>
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      </Content>
+    </ItemGroup>
+    <!-- x86 ItemGroup mirrors x64 using build\x86\ and $(VlcWindowsX86TargetDir) -->
+  </Target>
+```
+
+Additional **`Content`** item groups for **C++ projects only** (`Condition="'$(Language)' == 'C++' ..."`) copy DLLs/plugins/hrtfs/lua under flat `plugins\`, `hrtfs\`, `lua\` links — **not applicable** to the ReelRoulette C# desktop project.
+
+**Mechanism summary:** Native files from `build/x64/` and `build/x86/` inside the NuGet package are added as `Content` with `CopyToOutputDirectory`, linked under `libvlc\win-x64\` and `libvlc\win-x86\` respectively. This is **not** a custom publish-only target; it hooks **`BeforeBuild`**.
+
+#### MSBuild properties/items that can suppress, redirect, or narrow the copy
+
+| Property / item | Role | Quoted condition |
+|-----------------|------|------------------|
+| **`VlcWindowsX64TargetDir`** | Redirect x64 output subdirectory (default `libvlc\win-x64`) | `Condition=" '$(VlcWindowsX64TargetDir)' == '' "` |
+| **`VlcWindowsX86TargetDir`** | Redirect x86 output subdirectory (default `libvlc\win-x86`) | same pattern |
+| **`VlcWindowsX64Enabled`** | Enable/disable x64 copy (default `true` when `Platform` is `x64` or **`AnyCPU`**) | `Condition="'$(VlcWindowsX64Enabled)' == '' AND ('$(Platform)' == 'x64' OR '$(Platform)' == 'AnyCPU')"` |
+| **`VlcWindowsX86Enabled`** | Enable/disable x86 copy (default `true` when `Platform` is `x86` or **`AnyCPU`**) | `Condition="'$(VlcWindowsX86Enabled)' == '' AND ('$(Platform)' == 'x86' OR '$(Platform)' == 'AnyCPU')"` |
+| **`@(VlcWindowsX64IncludeFiles)`** | Override x64 file glob (default shown above) | `Condition="'@(VlcWindowsX64IncludeFiles)'==''"` |
+| **`@(VlcWindowsX86IncludeFiles)`** | Override x86 file glob | same |
+| **`@(VlcWindowsX64ExcludeFiles)`** | Exclude paths from x64 copy | used in `Exclude="@(VlcWindowsX64ExcludeFilesFullPath)"` |
+| **`@(VlcWindowsX86ExcludeFiles)`** | Exclude paths from x86 copy | same |
+
+**Not present in the targets:** No property reads **`RuntimeIdentifier`**, **`RuntimeIdentifiers`**, or OS (`$(OS)`) for the `CollectVlcFilesToCopyWindows` target. Architecture selection is **`$(Platform)`-only**.
+
+**Observed during investigation** (`dotnet msbuild ... -getProperty:Platform -getProperty:RuntimeIdentifier -getProperty:VlcWindowsX64Enabled -getProperty:VlcWindowsX86Enabled` with `-p:RuntimeIdentifier=win-x64`):
+
+```json
+{
+  "Properties": {
+    "Platform": "AnyCPU",
+    "RuntimeIdentifier": "win-x64",
+    "VlcWindowsX64Enabled": "true",
+    "VlcWindowsX86Enabled": "true"
+  }
+}
+```
+
+Because SDK-style projects default **`Platform=AnyCPU`**, **both** x64 and x86 LibVLC trees are enabled even when publishing with **`-r win-x64` only**.
+
+#### Build vs publish; RID sensitivity
+
+| Question | Finding |
+|----------|---------|
+| **Triggered on `dotnet build`?** | **Yes** — target runs `BeforeTargets="BeforeBuild"`; `Content`/`CopyToOutputDirectory` populates the build output directory. |
+| **Triggered on `dotnet publish`?** | **Yes** — publish includes build output; the same `libvlc/` trees appear in publish output (confirmed empirically below). |
+| **Sensitive to `-r` / `RuntimeIdentifier`?** | **No** — the package targets do not reference `RuntimeIdentifier`. Only **`Platform`** gates `VlcWindowsX64Enabled` / `VlcWindowsX86Enabled`. |
+
+---
+
+### Section B — Empirical layout and size
+
+#### Publish command (desktop, matching portable script flags)
+
+```bash
+dotnet publish src/clients/desktop/ReelRoulette.DesktopApp/ReelRoulette.DesktopApp.csproj \
+  -c Release \
+  -r win-x64 \
+  --self-contained true \
+  -p:PublishSingleFile=false \
+  -p:PublishTrimmed=false \
+  -p:ErrorOnDuplicatePublishOutputFiles=false \
+  -o <scratch>/desktop-win-x64
+```
+
+(`package-desktop-win-portable.ps1` additionally passes `-p:Version=...` and, on Windows only, runs `stage-native-deps.ps1` afterward — **not** part of bare publish.)
+
+#### LibVLC-related trees in bare desktop `win-x64` publish output
+
+| Path (relative to publish root) | File count | Total bytes | Present after bare publish? |
+|---------------------------------|------------|-------------|----------------------------|
+| **`libvlc/win-x64/`** | **425** | **105,774,201** (~100.8 MiB) | **Yes** (NuGet targets) |
+| **`libvlc/win-x86/`** | **425** | **102,041,141** (~97.3 MiB) | **Yes** (NuGet targets) |
+| **`runtimes/win-x64/native/libvlc/`** | — | — | **No** (only added by `stage-native-deps.ps1` on Windows) |
+
+**`libvlc/win-x86/` is produced even when publishing with `-r win-x64` only** — because `VlcWindowsX86Enabled` is `true` when `Platform=AnyCPU`.
+
+Top-level layout under `libvlc/win-x64/`:
+
+- `libvlc.dll`, `libvlccore.dll`, `libvlc.lib`, `libvlccore.lib`
+- `hrtfs/`
+- `lua/` (extensions, http, intf, meta, modules, playlist, sd, …)
+- `plugins/` (access, codec, demux, video_output, … — 325 files)
+
+#### Simulated full Windows portable package (publish + `stage-native-deps.ps1` equivalent)
+
+Copying NuGet `build/x64/*` into `runtimes/win-x64/native/libvlc/` (same source `fetch-native-deps.ps1` uses) on top of bare publish:
+
+| Path | File count | Total bytes |
+|------|------------|-------------|
+| **`runtimes/win-x64/native/libvlc/`** | **525** | **106,760,334** (~101.8 MiB) |
+| **`libvlc/win-x64/`** | **425** | **105,774,201** (~100.8 MiB) |
+| **`libvlc/win-x86/`** | **425** | **102,041,141** (~97.3 MiB) |
+| **Combined (all three trees)** | **1,375** | **314,575,676** (~300.0 MiB) |
+
+#### Comparison: NuGet-root `libvlc/win-x64/` vs `fetch-native-deps` source (`build/x64/`)
+
+The repo gitignored path `runtimes/win-x64/native/libvlc/` was **not populated** on the Linux investigation host. Comparison uses the NuGet cache path that `fetch-native-deps.ps1` copies from: `videolan.libvlc.windows/3.0.23/build/x64/`.
+
+| Comparison | Result |
+|------------|--------|
+| **`libvlc.dll` (publish `libvlc/win-x64/` vs NuGet `build/x64/`)** | **Byte-identical** (SHA-256 `8ae9f16a72441f43fb4ae8f72c843736726e067ea4a8def2646748631cc4e872`) |
+| **`plugins/` file count** | **325** in both publish `libvlc/win-x64/plugins/` and NuGet `build/x64/plugins/` |
+| **`plugins/` total bytes** | **100,975,221** in both |
+| **`plugins/` tree content** | **`diff -qr` reported 0 differences** |
+| **Version string in `libvlc.dll`** | **`3.0.23 Vetinari`** / **`3.0.23-2-0-g79128878dd`** in both |
+| **Extra content in NuGet `build/x64/` not copied by targets** | **`include/`** (headers), **`vlc.lib`**, **`vlccore.lib`** — present in full `build/x64/` (525 files) but excluded from the default `VlcWindowsX64IncludeFiles` glob; therefore **absent** from publish `libvlc/win-x64/` but **present** in `runtimes/win-x64/native/libvlc/` after `fetch-native-deps.ps1` (which copies `build/x64/*` wholesale) |
+
+#### ServerApp `win-x64` publish
+
+```bash
+dotnet publish src/core/ReelRoulette.ServerApp/ReelRoulette.ServerApp.csproj \
+  -c Release -f net10.0-windows -r win-x64 \
+  --self-contained true \
+  -p:PublishSingleFile=false -p:PublishTrimmed=false \
+  -p:ErrorOnDuplicatePublishOutputFiles=false \
+  -o <scratch>/server-win-x64
+```
+
+| Finding | Evidence |
+|---------|----------|
+| **Any LibVLC tree in server publish output** | **No** — `find … -iname '*libvlc*'` returned **0** paths |
+| **Package reference path to LibVLC** | **None** — `VideoLAN.LibVLC.Windows` / `LibVLCSharp*` appear only in `ReelRoulette.DesktopApp.csproj`; no LibVLC references under `src/core/` |
+
+---
+
+### Section C — What the application actually loads
+
+#### `NativeBinaryHelper.GetLibVlcPath()` (full)
+
+```csharp
+public static string GetLibVlcPath()
+{
+    if (_cachedLibVlcPath != null)
+        return _cachedLibVlcPath;
+
+    lock (_libVlcPathLock)
+    {
+        if (_cachedLibVlcPath != null)
+            return _cachedLibVlcPath;
+
+        var exeDir = AppContext.BaseDirectory;
+        var rid = GetRuntimeIdentifier();
+
+        if (string.IsNullOrEmpty(rid))
+        {
+            _cachedLibVlcPath = "";
+            return "";
+        }
+
+        var libVlcDir = Path.Combine(exeDir, "runtimes", rid, "native", "libvlc");
+
+        _cachedLibVlcPath = Directory.Exists(libVlcDir) ? libVlcDir : "";
+        return _cachedLibVlcPath;
+    }
+}
+```
+
+**Probe order:** Single path only — `{AppContext.BaseDirectory}/runtimes/{rid}/native/libvlc` where `{rid}` is `win-x64` on Windows x64, `linux-x64` on Linux x64, `osx-x64` on macOS x64.
+
+**When absent:** Returns **`""`** (empty string). Does **not** fall back to `libvlc/win-x64/`.
+
+#### Call sites and `Core.Initialize()` paths
+
+**Call site:** `src/clients/desktop/ReelRoulette.DesktopApp/Program.cs` line 71 — sole caller of `GetLibVlcPath()`.
+
+**Initialization branches in `Program.cs`:**
+
+| Branch | Condition | Path passed to `Core.Initialize(...)` |
+|--------|-----------|--------------------------------------|
+| **1. Bundled (staged layout)** | `GetLibVlcPath()` non-empty | **`{AppContext.BaseDirectory}/runtimes/win-x64/native/libvlc`** (on Windows x64 with staged tree). Also sets `VLC_PLUGIN_PATH` to `{that path}/plugins`. |
+| **2. System default** | Bundled path empty or init failed | **`Core.Initialize()`** — no path argument (parameterless overload; equivalent to `null` per LibVLCSharp API) |
+| **3. Windows VLC install paths** | Branch 2 failed | **`Core.Initialize(path)`** for each existing directory: `C:\Program Files\VideoLAN\VLC`, `C:\Program Files (x86)\VideoLAN\VLC`, `{ProgramFiles}\VideoLAN\VLC` |
+
+On a **bare `dotnet publish`** (NuGet trees only, no `stage-native-deps.ps1`), branch 1 is skipped (`GetLibVlcPath()` returns `""`), so **`Core.Initialize()` without path** runs first.
+
+#### LibVLCSharp default search when `Core.Initialize()` receives no path
+
+**From LibVLCSharp 3.9.7 XML documentation** (`LibVLCSharp.xml`, `Core.Initialize(string)`):
+
+> Load the native libvlc library (if necessary, depending on platform)  
+> …  
+> **This parameter is NOT supported on Linux, use LD_LIBRARY_PATH instead.**
+
+The parameterless call used in `Program.cs` maps to `Initialize(string? libvlcDirectoryPath = null)` per [LibVLCSharp API docs](https://docs.videolan.me/libvlcsharp/api/LibVLCSharp.Shared.Core.html).
+
+**LibVLCSharp 3.9.7 binary inspection** (`LibVLCSharp.dll`): contains a private **`ComputeLibVLCSearchPaths`** method name; **no literal `libvlc/win-x64` or `win-x64` strings** are embedded in the DLL (paths appear constructed at runtime).
+
+**External evidence (not in this repository):** LibVLCSharp migration documentation states that with `VideoLAN.LibVLC.Windows` installed, *"The path will be found automatically"* when calling `Core.Initialize()` ([LibVLCSharp migrating_from_Vlc.DotNet.md](https://github.com/videolan/libvlcsharp/blob/3.x/docs/migrating_from_Vlc.DotNet.md)). Reported `VLCException` search-path messages from LibVLCSharp on Windows list candidates under **`{appdir}\libvlc\win-x64\libvlc.dll`** ([Stack Overflow example](https://stackoverflow.com/questions/69593147/embedding-vlc-player-in-winform-application-in-net-core-core-intialize-givin)).
+
+**Conclusion:** When the app does not pass an explicit path, LibVLCSharp's default loader targets the **NuGet layout `libvlc/win-{arch}/`**, not `runtimes/win-x64/native/libvlc/`. The **`libvlc/win-x64/` tree is the layout LibVLCSharp expects** for parameterless initialization on Windows x64. **Exact search-path algorithm cannot be determined from repository files and NuGet package contents alone**; decompiling `LibVLCSharp.dll` or reading LibVLCSharp source would resolve it.
+
+#### References to package-root `libvlc/` vs `runtimes/.../libvlc/`
+
+| Location | Path referenced |
+|----------|-----------------|
+| **`NativeBinaryHelper.cs`** | **`runtimes/{rid}/native/libvlc`** only |
+| **`Program.cs`** | Uses helper → **`runtimes/.../libvlc`** when present; otherwise LibVLCSharp default / Program Files VLC |
+| **`stage-native-deps.ps1`** | Copies to **`runtimes/win-x64/native/libvlc`** |
+| **`fetch-native-deps.ps1`** | Populates repo **`runtimes/win-x64/native/libvlc`** |
+| **`docs/dev-setup.md`, `README.md`, `CONTEXT.md`** | Document **`runtimes/win-x64/native/libvlc`** for Windows dev/packaging |
+| **`tools/installer/*.iss`** | **No** `libvlc` path references (recursive copy of entire publish dir) |
+| **Tests** | **No** references to either LibVLC path in `ReelRoulette.DesktopApp.Tests` |
+| **Package-root `libvlc/win-x64`** | **Not referenced** in application code, scripts, or installer definitions within this repository |
+
+---
+
+### Section D — Reference graph
+
+#### Direct NuGet package references
+
+| Project | Package | Version | `PrivateAssets` / `ExcludeAssets` / `IncludeAssets` |
+|---------|---------|---------|-----------------------------------------------------|
+| **`ReelRoulette.DesktopApp`** | `LibVLCSharp.Avalonia` | **3.9.7** | *(none)* |
+| **`ReelRoulette.DesktopApp`** | `VideoLAN.LibVLC.Windows` | **3.0.23** | *(none)* |
+
+`LibVLCSharp.Avalonia` nuspec declares a dependency on **`LibVLCSharp` 3.9.7** with **`exclude="Build,Analyzers"`** — it does **not** pull in `VideoLAN.LibVLC.Windows` transitively.
+
+**No other project** in the solution references `VideoLAN.LibVLC.Windows` or `LibVLCSharp*`.
+
+#### Transitive flow into ServerApp / Server
+
+| Project | References LibVLC? |
+|---------|------------------|
+| `ReelRoulette.ServerApp` | **No** — project refs: `ReelRoulette.Core`, `ReelRoulette.Server` only |
+| `ReelRoulette.Server` | **No** — project ref: `ReelRoulette.Core` only |
+| `ReelRoulette.DesktopApp` → Server | **No project reference** (desktop is a separate client) |
+
+**`VideoLAN.LibVLC.Windows` does not flow into ServerApp or Server.**
+
+#### `fetch-native-deps.ps1` LibVLC cache resolution
+
+Version from desktop `.csproj`:
+
+```powershell
+function Get-LibVlcWindowsPackageVersion {
+    ...
+            if ($pr.Include -eq "VideoLAN.LibVLC.Windows" -and $pr.Version) {
+                return [string]$pr.Version
+            }
+    ...
+    return "3.0.21"
+}
+```
+
+Cache lookup and copy:
+
+```powershell
+$libVlcVer = Get-LibVlcWindowsPackageVersion -CsprojPath $desktopCsproj
+...
+$nugetRoot = Get-NuGetGlobalPackagesPath
+$pkgDir = Join-Path $nugetRoot "videolan.libvlc.windows\$libVlcVer"
+$nugetX64 = Join-Path $pkgDir "build\x64"
+...
+Copy-Item -Path (Join-Path $nugetX64 "*") -Destination $libVlcDir -Recurse -Force
+$versions['libvlcPackageVersion'] = $libVlcVer
+```
+
+| Question | Answer |
+|----------|--------|
+| **Is package version guaranteed to match `PackageReference`?** | **Yes, when the csproj is present and lists the version** — the script reads `<PackageReference Include="VideoLAN.LibVLC.Windows" Version="…">` directly. |
+| **When could it diverge?** | If the csproj is missing, fallback hard-coded version **`3.0.21`** is used. If the csproj version is updated but `runtimes/win-x64/native/.versions.json` still matches the old `libvlcPackageVersion`, skip logic may retain stale binaries until `-Force`. |
+| **Mirror fallback** | Uses `https://get.videolan.org/vlc/$libVlcVer/win64/...` with the **same `$libVlcVer`** from the csproj when NuGet cache layout is missing. |
+
+---
+
+### Section E — Linux
+
+#### Duplication in Linux desktop publish output
+
+**Yes — Windows LibVLC trees are duplicated in Linux desktop publish output**, even though Linux runtime does not use them for playback.
+
+Empirical `dotnet publish -r linux-x64` (same self-contained flags):
+
+| Path | File count | Total bytes |
+|------|------------|-------------|
+| **`libvlc/win-x64/`** | **425** | **105,774,201** |
+| **`libvlc/win-x86/`** | **425** | **102,041,141** |
+| **`runtimes/linux-x64/native/libvlc/`** | **Missing** | — |
+
+The `VideoLAN.LibVLC.Windows` targets **do not gate** `CollectVlcFilesToCopyWindows` on host OS or target RID; they run for cross-platform publishes of the desktop project.
+
+**Combined wasted Windows LibVLC payload in Linux desktop packages:** **~207.8 MiB** (both `libvlc/win-*` trees), with **no** Linux-native LibVLC bundled by this package (Linux LibVLC would come from distro packages via `LD_LIBRARY_PATH` at runtime).
+
+#### LibVLC path resolved on Linux at runtime
+
+1. **`GetLibVlcPath()`** probes `{AppContext.BaseDirectory}/runtimes/linux-x64/native/libvlc` — **absent** in standard publish/package (nothing stages Linux LibVLC).
+2. **`Program.cs`** falls through to **`Core.Initialize()`** without path.
+3. **LibVLCSharp XML** states the **`libvlcDirectoryPath` parameter is NOT supported on Linux**; use **`LD_LIBRARY_PATH`** instead.
+4. Linux portable script documents system LibVLC expectation:
+
+```bash
+# LibVLC: ensure VLC is installed (e.g. vlc package). For non-standard installs,
+# prepend the directory containing libvlc.so to LD_LIBRARY_PATH.
+```
+
+---
+
+### Addendum ambiguities
+
+| Topic | Status |
+|-------|--------|
+| Exact **`ComputeLibVLCSearchPaths`** candidate list in LibVLCSharp 3.9.7 | Not readable as plain strings in `LibVLCSharp.dll`; requires decompilation or upstream source. |
+| Whether **`stage-native-deps.ps1` overwrites** an existing `runtimes/win-x64/native/libvlc` vs merging | Script **removes and recopies** the entire `libvlc` subdirectory before copy (lines 54–58 of `stage-native-deps.ps1`). |
+| **`repo-root runtimes/win-x64/native/libvlc/`** byte comparison on investigation host | Directory **not present** (gitignored; Linux host). Equivalence inferred via shared NuGet `build/x64/` source documented above. |
