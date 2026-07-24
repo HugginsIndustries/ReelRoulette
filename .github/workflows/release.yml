@@ -328,9 +328,6 @@ jobs:
           if [[ -n "${{ matrix.framework }}" ]]; then
             publish_args+=(-f "${{ matrix.framework }}")
           fi
-          if [[ "${{ matrix.component }}" == "desktop" ]]; then
-            publish_args+=(-p:VlcWindowsX64Enabled=false)
-          fi
           dotnet "${publish_args[@]}"
 
           echo "PUBLISH_DIR=$publish_dir" >> "$GITHUB_ENV"
@@ -341,11 +338,58 @@ jobs:
         run: |
           pwsh ./tools/scripts/stage-webui-assets.ps1 -RepoRoot "$env:GITHUB_WORKSPACE" -PublishDir "$env:PUBLISH_DIR"
 
-      - name: Stage Windows native dependencies
-        if: matrix.stage_native
+      - name: Setup FFmpeg (Windows server)
+        if: matrix.native_component == 'server'
+        uses: AnimMouse/setup-ffmpeg@v1.2.5
+        with:
+          version: "7.1"
+
+      - name: Bundle FFmpeg into publish output (Windows server)
+        if: matrix.native_component == 'server'
         shell: pwsh
         run: |
-          pwsh ./tools/scripts/stage-native-deps.ps1 -RepoRoot "$env:GITHUB_WORKSPACE" -PublishDir "$env:PUBLISH_DIR" -Component "${{ matrix.native_component }}"
+          $ErrorActionPreference = 'Stop'
+          $dest = Join-Path $env:PUBLISH_DIR 'runtimes/win-x64/native'
+          New-Item -ItemType Directory -Force -Path $dest | Out-Null
+          $ffmpegSrc = (Get-Command ffmpeg).Source
+          $ffprobeSrc = (Get-Command ffprobe).Source
+          Copy-Item -LiteralPath $ffmpegSrc -Destination (Join-Path $dest 'ffmpeg.exe') -Force
+          Copy-Item -LiteralPath $ffprobeSrc -Destination (Join-Path $dest 'ffprobe.exe') -Force
+          $bundledFfprobe = Join-Path $dest 'ffprobe.exe'
+          & $bundledFfprobe -version
+          if ($LASTEXITCODE -ne 0) {
+            throw "ffprobe -version gate failed with exit code $LASTEXITCODE"
+          }
+
+      - name: Relocate LibVLC into probe path (Windows desktop)
+        if: matrix.native_component == 'desktop'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $publishRoot = $env:PUBLISH_DIR
+          $src = Join-Path $publishRoot 'libvlc/win-x64'
+          $dest = Join-Path $publishRoot 'runtimes/win-x64/native/libvlc'
+          if (-not (Test-Path -LiteralPath $src)) {
+            throw "Expected LibVLC publish output at $src"
+          }
+          $x86Tree = Join-Path $publishRoot 'libvlc/win-x86'
+          if (Test-Path -LiteralPath $x86Tree) {
+            throw "Unexpected libvlc/win-x86 output (VlcWindowsX86Enabled should be false)"
+          }
+          New-Item -ItemType Directory -Force -Path (Split-Path -Parent $dest) | Out-Null
+          Move-Item -LiteralPath $src -Destination $dest -Force
+          $libvlcRoot = Join-Path $publishRoot 'libvlc'
+          if (Test-Path -LiteralPath $libvlcRoot) {
+            Remove-Item -LiteralPath $libvlcRoot -Recurse -Force
+          }
+          $dll = Join-Path $dest 'libvlc.dll'
+          $plugins = Join-Path $dest 'plugins'
+          if (-not (Test-Path -LiteralPath $dll)) {
+            throw "LibVLC gate failed: missing $dll"
+          }
+          if (-not (Test-Path -LiteralPath $plugins)) {
+            throw "LibVLC gate failed: missing plugins directory $plugins"
+          }
 
       - name: Download prior release index (delta)
         shell: bash

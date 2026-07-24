@@ -19,9 +19,9 @@ Instructions:
 
 Commit Message:
 
-Chore: align Velopack release workflow and bump to v0.12.0-dev.2
+Chore: bundle Windows FFmpeg and LibVLC in Velopack release workflow
 
-- Drop MSI and per-machine pack flags; Windows legs use per-user Setup.exe with explicit Desktop and Start Menu shortcuts.
-- Remove the one-off vpk pack help step from release summaries; name matrix release jobs by channel.
-- Document Velopack Windows delivery as per-user Setup under LocalAppData (no MSI).
-- Fan out v0.12.0-dev.2 from `.version` through OpenAPI, app versions, and release command examples.
+- Install pinned FFmpeg on Windows server legs via AnimMouse/setup-ffmpeg and copy into the publish tree with an ffprobe -version gate.
+- Publish LibVLC from the NuGet package on Windows desktop legs, relocate into the existing probe path, and verify libvlc.dll and plugins before pack.
+- Stop calling stage-native-deps.ps1 from release.yml; Inno/AppImage scripts unchanged for a later retirement slice.
+- Note the release pipeline change in CHANGELOG [Unreleased].

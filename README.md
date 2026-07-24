@@ -164,10 +164,10 @@ pwsh ./tools/scripts/run-server-rebuild.ps1
 Set release-aligned version surfaces in one step (repo-root `.version` is the source of truth; bare semver is written to consumers):
 
 ```bash
-pwsh ./tools/scripts/set-release-version.ps1 -Version v0.12.0-dev.2
+pwsh ./tools/scripts/set-release-version.ps1 -Version v0.12.0-dev.3
 ```
 
-Omit `-Version` to read the current value from `.version` and fan out without changing the file. By default this also updates the desktop app `<Version>`, regenerates WebUI OpenAPI contracts (`npm run generate:contracts`), and runs the same verify steps as `full-release.ps1` when you pass `-Version` there (solution build/test, WebUI verify, deploy smoke). Pass `-NoUpdateDesktopVersion`, `-NoRegenerateContracts`, and/or `-NoRunVerify` to skip any of those. Use `-NoDocUpdates` to leave `README.md` / `docs/dev-setup.md` release command examples unchanged. `full-release.ps1` forwards those `-No*` switches to `set-release-version.ps1 -Version v0.12.0-dev.2` when `-Version` is set; if you omit `-Version` on `full-release.ps1`, the version/verify step is skipped and packaging reads `.version`.
+Omit `-Version` to read the current value from `.version` and fan out without changing the file. By default this also updates the desktop app `<Version>`, regenerates WebUI OpenAPI contracts (`npm run generate:contracts`), and runs the same verify steps as `full-release.ps1` when you pass `-Version` there (solution build/test, WebUI verify, deploy smoke). Pass `-NoUpdateDesktopVersion`, `-NoRegenerateContracts`, and/or `-NoRunVerify` to skip any of those. Use `-NoDocUpdates` to leave `README.md` / `docs/dev-setup.md` release command examples unchanged. `full-release.ps1` forwards those `-No*` switches to `set-release-version.ps1 -Version v0.12.0-dev.3` when `-Version` is set; if you omit `-Version` on `full-release.ps1`, the version/verify step is skipped and packaging reads `.version`.
 
 ## Verification
 
@@ -265,10 +265,10 @@ pwsh ./tools/scripts/package-desktop-win-inno.ps1
 
 - Repo-root **`.version`** holds the release version (v-prefixed semver2, for example `v0.12.0-dev`). If **`-Version`** is omitted on any package script, the bare semver is read from `.version` (explicit `-Version` still overrides).
 - **Server** packaging (all platforms) delegates WebUI build and static asset staging to **`stage-webui-assets.ps1`**, copying built assets into published **`wwwroot`**, including `/HI.ico`; the published server also carries `HI.ico` at the app root for tray icon loading (from `assets/HI.ico`).
-- **Chained release build**: with `-Version <ver>`, runs `set-release-version.ps1 -Version v0.12.0-dev.2` (same defaults as under **Helper Scripts**; optional `-NoDocUpdates`, `-NoUpdateDesktopVersion`, `-NoRegenerateContracts`, `-NoRunVerify` are forwarded), then platform-appropriate packaging. Omit `-Version` to skip `set-release-version` and package using `.version`.
+- **Chained release build**: with `-Version <ver>`, runs `set-release-version.ps1 -Version v0.12.0-dev.3` (same defaults as under **Helper Scripts**; optional `-NoDocUpdates`, `-NoUpdateDesktopVersion`, `-NoRegenerateContracts`, `-NoRunVerify` are forwarded), then platform-appropriate packaging. Omit `-Version` to skip `set-release-version` and package using `.version`.
 
 ```bash
-pwsh ./tools/scripts/full-release.ps1 -Version v0.12.0-dev.2
+pwsh ./tools/scripts/full-release.ps1 -Version v0.12.0-dev.3
 ```
 
 On **Linux**, this produces `artifacts/packages/portable/*.tar.gz` and `artifacts/packages/appimage/*.AppImage` for server and desktop (AppImage steps require `appimagetool`); Inno installer steps are skipped. On **Windows**, it produces portable `.zip` outputs and Inno **`.exe`** installers.

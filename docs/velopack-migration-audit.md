@@ -1092,3 +1092,291 @@ The `VideoLAN.LibVLC.Windows` targets **do not gate** `CollectVlcFilesToCopyWind
 | Exact **`ComputeLibVLCSearchPaths`** candidate list in LibVLCSharp 3.9.7 | Not readable as plain strings in `LibVLCSharp.dll`; requires decompilation or upstream source. |
 | Whether **`stage-native-deps.ps1` overwrites** an existing `runtimes/win-x64/native/libvlc` vs merging | Script **removes and recopies** the entire `libvlc` subdirectory before copy (lines 54–58 of `stage-native-deps.ps1`). |
 | **`repo-root runtimes/win-x64/native/libvlc/`** byte comparison on investigation host | Directory **not present** (gitignored; Linux host). Equivalence inferred via shared NuGet `build/x64/` source documented above. |
+
+---
+
+## Addendum — Native dependency consolidation
+
+Report-only investigation (2026-07-24) for retiring local Windows packaging in favor of **`release.yml`** as the sole packaging path, moving FFmpeg acquisition into the workflow via **`AnimMouse/setup-ffmpeg`**, and assessing whether LibVLC staging can be replaced by the **`VideoLAN.LibVLC.Windows`** NuGet publish layout. No repository changes were made to produce this section beyond appending it.
+
+### Section A — How the server resolves FFmpeg at runtime
+
+#### Quoted resolution helpers
+
+From `src/core/ReelRoulette.Server/Services/RefreshPipelineService.cs`:
+
+```1932:1964:src/core/ReelRoulette.Server/Services/RefreshPipelineService.cs
+    private static string ResolveFfprobePath()
+    {
+        var exeDir = AppContext.BaseDirectory;
+        var rid = GetRuntimeIdentifier();
+        if (!string.IsNullOrWhiteSpace(rid))
+        {
+            var exeName = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "ffprobe.exe" : "ffprobe";
+            var bundled = Path.Combine(exeDir, "runtimes", rid, "native", exeName);
+            if (File.Exists(bundled))
+            {
+                return bundled;
+            }
+        }
+
+        return RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "ffprobe.exe" : "ffprobe";
+    }
+
+    private static string ResolveFfmpegPath()
+    {
+        var exeDir = AppContext.BaseDirectory;
+        var rid = GetRuntimeIdentifier();
+        if (!string.IsNullOrWhiteSpace(rid))
+        {
+            var exeName = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "ffmpeg.exe" : "ffmpeg";
+            var bundled = Path.Combine(exeDir, "runtimes", rid, "native", exeName);
+            if (File.Exists(bundled))
+            {
+                return bundled;
+            }
+        }
+
+        return RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "ffmpeg.exe" : "ffmpeg";
+    }
+```
+
+`GetRuntimeIdentifier()` (same file, lines 1966–1976) maps **Windows x64 → `win-x64`**, Linux x64 → `linux-x64`, macOS x64 → `osx-x64`.
+
+#### Probe order
+
+1. **`{AppContext.BaseDirectory}/runtimes/{rid}/native/{ffmpeg|ffprobe}.exe`** on Windows (extensionless names on non-Windows).
+2. If that file **does not exist**, return the **bare executable name** (`ffmpeg.exe` / `ffprobe.exe` on Windows, `ffmpeg` / `ffprobe` elsewhere) with **no directory component** — i.e. rely on **process creation resolving the name via the host `PATH`** (or Windows application directory search rules for unqualified `.exe` names).
+
+#### Expected bundled layout (Windows)
+
+Relative to the installed/published app root (`AppContext.BaseDirectory`):
+
+- **`runtimes/win-x64/native/ffmpeg.exe`**
+- **`runtimes/win-x64/native/ffprobe.exe`**
+
+This matches what **`stage-native-deps.ps1`** copies for the server component (lines 33–43 of `tools/scripts/stage-native-deps.ps1`).
+
+#### End-user Windows machine with no ffmpeg on PATH
+
+**Yes — a bundled copy under `runtimes/win-x64/native/` is the only reliable way the server uses ffmpeg/ffprobe when nothing is on PATH.** After the bundled probe fails, the returned `"ffmpeg.exe"` / `"ffprobe.exe"` strings do not point at an install-directory path; on a typical end-user PC without ffmpeg installed, **`VerifyFfmpegAsync` and ffprobe invocations fail** unless those binaries were copied into the publish tree (or the user installed ffmpeg globally). **PATH availability on a CI runner after `setup-ffmpeg` does not bundle ffmpeg into the Velopack output**; a post-publish copy step into `runtimes/win-x64/native/` (or an equivalent layout change) is still required for shipped server packages.
+
+---
+
+### Section B — The ffmpeg setup action's real interface
+
+#### `AnimMouse/setup-ffmpeg` — pinned ref **`v1.2.5`** (tag; commit `178e0b4a408f06ce40d896c3cd79f50fa6f8b0c3`)
+
+Fetched **`action.yaml`** (this repository uses **`action.yaml`**, not `action.yml`):
+
+```yaml
+name: Setup FFmpeg action
+description: Setup/Install FFmpeg for GitHub Actions
+branding:
+  icon: play
+  color: green
+inputs:
+  version:
+    description: FFmpeg version
+    default: release
+  token:
+    description: GitHub token to avoid API rate limiting
+    default: ${{ github.token }}
+    
+runs:
+  using: composite
+  steps:
+    # ... version resolution, BtbN release-id, actions/cache restore/save ...
+    - name: Install FFmpeg on tool cache
+      uses: AnimMouse/tool-cache@v1
+      with:
+        folder_name: FFmpeg
+        cache_hit: ${{ steps.cache.outputs.cache-hit }}
+```
+
+**Inputs:** `version` (default `release`), `token` (default `${{ github.token }}`).
+
+**Outputs:** **None declared** in `action.yaml`. There is **no** `ffmpeg-path` (or similar) output.
+
+**Install location (Windows):** Download script (`scripts/download/Windows.ps1` at `v1.2.5`) extracts **`ffmpeg.exe`** and **`ffprobe.exe`** into **`$env:RUNNER_TEMP\FFmpeg`**, then **`AnimMouse/tool-cache@v1`** moves that folder to **`$env:RUNNER_TOOL_CACHE\FFmpeg`** and appends **`$env:RUNNER_TOOL_CACHE\FFmpeg`** to **`GITHUB_PATH`** (`tool-cache` `scripts/add-to-path/Windows.ps1`).
+
+**Locating binaries for a copy-into-publish step (recommended):**
+
+- **Most robust after the action runs:** resolve full paths with PowerShell, e.g. `(Get-Command ffmpeg).Source` and `(Get-Command ffprobe).Source` (PATH is updated by `tool-cache`), **or** use the fixed tool-cache directory **`Join-Path $env:RUNNER_TOOL_CACHE 'FFmpeg'`** and copy **`ffmpeg.exe`** / **`ffprobe.exe`** from there.
+- **`where.exe ffmpeg`** is an alternative on Windows runners once PATH is set.
+
+Because there is **no path output**, the implementation should **not** assume a FedericoCarboni-style `steps.setup-ffmpeg.outputs.ffmpeg-path`; it should copy from **`RUNNER_TOOL_CACHE\FFmpeg`** or **`Get-Command`**.
+
+#### `FedericoCarboni/setup-ffmpeg@v3` — interface comparison only (not usable; gyan mirror)
+
+Quoted from fetched `action.yml`:
+
+```yaml
+inputs:
+  ffmpeg-version:
+    description: 'Version of ffmpeg to use. Version Spec is only fully supported on Windows.'
+    default: release
+  architecture:
+    description: 'Target architecture for FFmpeg, on Windows and MacOS only x64 is supported; on Linux arm64 may also be used. Defaults to the system architecture.'
+  github-token:
+    description: "Used to pull Windows builds from GyanD/codexffmpeg. ..."
+    default: ${{ github.server_url == 'https://github.com' && github.token || '' }}
+outputs:
+  ffmpeg-version:
+    description: The installed ffmpeg version
+  ffmpeg-path:
+    description: Path to the ffmpeg binaries
+  cache-hit:
+    description: A boolean value to indicate whether the tool cache was hit
+```
+
+**`AnimMouse/setup-ffmpeg@v1.2.5` does not expose an equivalent `ffmpeg-path` output**; copy-from-tool-cache (or `Get-Command`) is the intended integration pattern.
+
+#### BtbN build variant (Windows) and standalone vs DLL-dependent
+
+From **`AnimMouse/setup-ffmpeg@v1.2.5`** `scripts/download/Windows.ps1`:
+
+- **`master`:** `ffmpeg-master-latest-win64-gpl.zip`
+- **Release pin:** `ffmpeg-n{version}-latest-win64-gpl-{version}.zip` downloaded from **`BtbN/FFmpeg-Builds`** (`releases/download/latest/...`).
+- Extraction uses **`7z e ... ffmpeg.exe ffprobe.exe -oFFmpeg`** — **only those two files** are placed in the cache folder, not the full zip contents.
+
+**Controllable via action input:** `version` — default **`release`** resolves to the latest BtbN semver via `gh api repos/BtbN/FFmpeg-Builds/releases/latest` (`scripts/version/Windows.ps1`); explicit values such as **`7.1`** pass through to the zip filename.
+
+**GPL vs LGPL / static vs shared:** The Windows script **hard-codes the `win64-gpl` artifact name**; there is **no input** to select LGPL or `-shared` vs `-static` variants. BtbN **`gpl` shared** builds normally ship companion **`*.dll`** files in the zip; extracting **only** the `.exe` files may produce binaries that **fail at runtime** unless those builds are effectively standalone. **The implementation task must run `ffmpeg -version` (and a sample server refresh probe) on the copied pair** after extraction; if DLLs are required, the workflow must copy additional files from the same zip or choose a different BtbN asset pattern (not currently exposed by `AnimMouse/setup-ffmpeg`).
+
+#### Version pinning
+
+| Source | Pinning mechanism |
+|--------|-------------------|
+| **`fetch-native-deps.ps1` (gyan)** | Rolling URL `https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip`; version stamp from **`${url}.ver`** stored as **`ffmpegZipVer`** in **`runtimes/win-x64/native/.versions.json`** at fetch time (not committed). |
+| **`AnimMouse/setup-ffmpeg`** | Input **`version`**: `release` (latest BtbN semver), **`master`**, or explicit **`major.minor`** (e.g. `7.1`) per README — Windows uses BtbN tags like those listed under **`BtbN/FFmpeg-Builds` releases/latest**. |
+| **Reproducibility** | Pin the action ref (**`AnimMouse/setup-ffmpeg@v1.2.5`**) **and** set **`with: version: 'x.y'`** to a fixed BtbN release line; avoid bare `release` on production release legs if bit-for-bit reproducibility is required. |
+
+---
+
+### Section C — FFmpeg version parity
+
+#### Current gyan.dev fetch (`fetch-native-deps.ps1`)
+
+Quoted URLs and version recording:
+
+```97:104:tools/scripts/fetch-native-deps.ps1
+# --- FFmpeg / ffprobe (gyan.dev release essentials ZIP) ---
+$ffZipUrl = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
+$ffShaUrl = "${ffZipUrl}.sha256"
+$ffVerUrl = "${ffZipUrl}.ver"
+...
+$remoteFfVer = Get-WebContentText -Uri $ffVerUrl
+```
+
+The essentials build is **rolling** (not a fixed semver in-repo). At investigation time, a direct fetch of **`.ver`** from this environment returned **HTTP 303** (redirect/HTML), so **no live gyan version string was captured here**; the script records whatever **`remoteFfVer`** returns at successful fetch time in **`.versions.json`**.
+
+#### Nearest BtbN equivalent
+
+With **`AnimMouse/setup-ffmpeg@v1.2.5`** and **`version: release`**, Windows resolves the latest **`major.minor`** from **`BtbN/FFmpeg-Builds` releases/latest** (see `scripts/version/Windows.ps1`). That will **not automatically match** a given gyan essentials **`ffmpegZipVer`**; parity requires **explicitly choosing a BtbN `version` input** and accepting differences between **gyan essentials** and **BtbN gpl** build lines.
+
+#### Server ffmpeg/ffprobe usage (version sensitivity)
+
+| Use | Location | Invocation summary |
+|-----|----------|-------------------|
+| **ffmpeg presence** | `VerifyFfmpegAsync` (~2077–2098) | `ffmpeg -version` |
+| **Video duration** | `GetVideoDurationAsync` (~1998–2017) | `ffprobe -v error -select_streams v:0 -show_entries format=duration,stream=duration -of json -i {file}` |
+| **Audio stream detect** | `TryDetectAudioStreamAsync` (~2216–2231) | `ffprobe -v error -show_streams -of json {file}` |
+| **Thumbnails** | `TryExtractVideoFrameAtOffsetAsync` (~1595–1621) | `ffmpeg` with `-ss`, `-i`, single-frame `mjpeg`, `scale=...` |
+| **Loudness** | `AnalyzeLoudnessAsync` (~2128–2156) | `ffmpeg` with `-filter:a ebur128=framelog=verbose -f null -` |
+
+No ffmpeg filters or ffprobe options tied to a **specific ffmpeg major version** were identified; behavior is **standard** (json probe, ebur128, single-frame extract). **Large version skew** could still affect edge codecs/containers, so **smoke-testing refresh** after switching build sources is prudent.
+
+---
+
+### Section D — Can LibVLC staging be dropped
+
+#### Quoted probe logic (`NativeBinaryHelper`)
+
+```12:35:src/clients/desktop/ReelRoulette.DesktopApp/NativeBinaryHelper.cs
+        public static string GetLibVlcPath()
+        {
+            ...
+                var exeDir = AppContext.BaseDirectory;
+                var rid = GetRuntimeIdentifier();
+                ...
+                var libVlcDir = Path.Combine(exeDir, "runtimes", rid, "native", "libvlc");
+
+                _cachedLibVlcPath = Directory.Exists(libVlcDir) ? libVlcDir : "";
+                return _cachedLibVlcPath;
+```
+
+**Single probe directory:** `{AppContext.BaseDirectory}/runtimes/{rid}/native/libvlc` (on Windows x64: **`runtimes/win-x64/native/libvlc`**). **No reference** to **`libvlc/win-x64/`** in this helper.
+
+#### Restatement from LibVLC deduplication addendum (same document)
+
+- **`libvlc.dll`** in publish **`libvlc/win-x64/`** vs NuGet **`build/x64/`** was **byte-identical**; **`plugins/`** trees matched (**325** files, **100,975,221** bytes, `diff -qr` zero differences).
+- **Staged `runtimes/win-x64/native/libvlc/`** (wholesale **`build/x64/*`**) adds **`include/`**, **`vlc.lib`**, **`vlccore.lib`** not present in the NuGet-target **`libvlc/win-x64/`** glob — **not required** for runtime playback per the addendum's plugin/DLL comparison.
+
+#### Open question: NuGet-only publish, no staged tree, no `VlcWindowsX64Enabled=false`
+
+**Does `GetLibVlcPath()` find LibVLC?** **No.** The probe only checks **`runtimes/.../native/libvlc`**, which **`stage-native-deps.ps1`** populates today.
+
+**Can playback still work without staging?** **`Program.cs`** (lines 74–137) tries bundled path first, then **`Core.Initialize()`** without path, then fixed **Program Files** VLC directories. The existing addendum documents that on a **bare publish** (NuGet **`libvlc/win-x64/`** only, no staged tree), **`GetLibVlcPath()` is empty** and **parameterless `Core.Initialize()`** runs — LibVLCSharp's default loader targets **`libvlc/win-x64/`** on Windows x64. **Therefore:**
+
+- **LibVLC staging can be dropped** in favor of the NuGet layout **without changing `NativeBinaryHelper`**, **if** packaged publishes **stop passing `-p:VlcWindowsX64Enabled=false`** and **stop copying** `runtimes/win-x64/native/libvlc/`, accepting the **`Core.Initialize()` fallback** path instead of branch 1 (no explicit **`VLC_PLUGIN_PATH`** from bundled init).
+- **`GetLibVlcPath()` will not report a bundled path**; logs will show **system (default)** initialization rather than **bundled (...)**.
+
+**VM caveat:** Byte-identical trees and code-path tracing **do not prove** playback from the Velopack install layout; a **clean Windows VM playback test** is required in the implementation task.
+
+#### If bundled probe should target NuGet layout instead
+
+**Single-path change (Windows only):** extend **`GetLibVlcPath()`** to also test, for example:
+
+`Path.Combine(exeDir, "libvlc", "win-x64")`
+
+when **`rid == "win-x64"`**, before returning empty — **or** replace the probe with that path when the staged directory is absent. **Linux** probing remains **`runtimes/linux-x64/native/libvlc`** (still absent in standard publish); **no change** to Linux **`GetRuntimeIdentifier()`** branches unless Linux bundling is added later.
+
+---
+
+### Section E — Deletion safety
+
+#### Callers of `tools/scripts/fetch-native-deps.ps1`
+
+| Location | Role | Blocks deletion? |
+|----------|------|------------------|
+| `tools/scripts/stage-native-deps.ps1` lines 24–25 | Invokes fetch when repo `runtimes/win-x64/native/` incomplete | **Retiring local packaging** — replace when `release.yml` owns acquisition |
+| `tools/scripts/fetch-native-deps.ps1` line 13 | Self (Windows-only guard) | — |
+| **Docs only:** `README.md`, `docs/dev-setup.md`, `CONTEXT.md`, `CHANGELOG.md`, `docs/velopack-migration-audit.md`, `docs/full-audit.md`, `MILESTONES.md`, `.gitignore` | Human/process references | Update with retirement; **not runtime callers** |
+
+**No MSBuild / csproj** references. **No workflow** invokes **`fetch-native-deps.ps1` directly** today.
+
+#### Callers of `tools/scripts/stage-native-deps.ps1`
+
+| Location | Role | Blocks deletion? |
+|----------|------|------------------|
+| `.github/workflows/release.yml` lines 344–348 | **Velopack** Windows legs — **must be replaced**, not deleted blindly | **Active non-retiring caller** |
+| `tools/scripts/package-serverapp-win-portable.ps1` line 83 | Inno/portable local packaging | Retiring surface |
+| `tools/scripts/package-serverapp-win-inno.ps1` line 122 | Inno local packaging | Retiring surface |
+| `tools/scripts/package-desktop-win-portable.ps1` line 81 | Inno/portable local packaging | Retiring surface |
+| `tools/scripts/package-desktop-win-inno.ps1` line 129 | Inno local packaging | Retiring surface |
+| **Docs:** same set as fetch script | Documentation | Update with retirement |
+
+#### `release.yml` today — quoted staging step
+
+```344:348:.github/workflows/release.yml
+      - name: Stage Windows native dependencies
+        if: matrix.stage_native
+        shell: pwsh
+        run: |
+          pwsh ./tools/scripts/stage-native-deps.ps1 -RepoRoot "$env:GITHUB_WORKSPACE" -PublishDir "$env:PUBLISH_DIR" -Component "${{ matrix.native_component }}"
+```
+
+**Server Windows legs:** `stage_native` true → runs **`stage-native-deps.ps1 -Component server`** (ffmpeg/ffprobe copy only). **Desktop Windows legs:** `-Component desktop` (LibVLC tree copy). **Linux legs:** `stage_native` false — step skipped.
+
+**Prominent blocker for script deletion:** only **`release.yml`** among **non-retiring** automation; all other invocations are **legacy Windows package scripts** slated for retirement alongside Inno/portable.
+
+---
+
+### Summary answers (implementation-facing)
+
+| Question | Answer |
+|----------|--------|
+| **Bundle ffmpeg for shipped server on Windows** | Copy **`ffmpeg.exe`** and **`ffprobe.exe`** into **`{publishDir}/runtimes/win-x64/native/`** after **`AnimMouse/setup-ffmpeg@v1.2.5`**; locate sources at **`$env:RUNNER_TOOL_CACHE\FFmpeg`** or via **`Get-Command`**. PATH alone is insufficient. |
+| **Drop LibVLC staging for NuGet layout only** | **Yes for packaging mechanics** if **`-p:VlcWindowsX64Enabled=false`** is removed and staging is removed — playback relies on **`Core.Initialize()`** + **`libvlc/win-x64/`**, not **`GetLibVlcPath()`**. **VM playback confirmation required.** Optional **`NativeBinaryHelper`** probe extension to **`libvlc/win-x64`** restores explicit bundled init. |
+| **Delete fetch/stage scripts** | Safe **after** `release.yml` replaces staging (ffmpeg copy step; LibVLC policy decided) **and** retiring local package scripts/docs no longer reference them. |
