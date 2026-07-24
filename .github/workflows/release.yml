@@ -15,7 +15,6 @@ env:
   VPK_VERSION: "1.2.0"
   B2_BUCKET: hugginsindustries-releases
   B2_ENDPOINT: https://s3.us-west-004.backblazeb2.com
-  B2_REGION: us-west-004
   PUBLIC_FEED_BASE: https://f004.backblazeb2.com/file/hugginsindustries-releases
   KEEP_MAX_RELEASES: "10"
 
@@ -92,13 +91,13 @@ jobs:
                 pack_id="ReelRoulette.Server"
                 pack_title="ReelRoulette Server"
                 csproj="src/core/ReelRoulette.ServerApp/ReelRoulette.ServerApp.csproj"
-                main_exe="ReelRoulette.ServerApp"
+                main_exe_base="ReelRoulette.ServerApp"
                 ;;
               desktop)
                 pack_id="ReelRoulette.Desktop"
                 pack_title="ReelRoulette Desktop"
                 csproj="src/clients/desktop/ReelRoulette.DesktopApp/ReelRoulette.DesktopApp.csproj"
-                main_exe="ReelRoulette.DesktopApp"
+                main_exe_base="ReelRoulette.DesktopApp"
                 ;;
             esac
 
@@ -109,14 +108,18 @@ jobs:
                   rid="linux-x64"
                   os_key="linux"
                   framework_server="net10.0"
+                  exe_suffix=""
                   ;;
                 windows)
                   runner="windows-latest"
                   rid="win-x64"
                   os_key="win"
                   framework_server="net10.0-windows"
+                  exe_suffix=".exe"
                   ;;
               esac
+
+              main_exe="${main_exe_base}${exe_suffix}"
 
               for tier in "${tiers[@]}"; do
                 tier_suffix=""
@@ -297,6 +300,17 @@ jobs:
             echo "${HOME}/.dotnet/tools" >> "$GITHUB_PATH"
           fi
 
+      - name: Record vpk pack CLI reference
+        shell: bash
+        continue-on-error: true
+        run: |
+          {
+            echo "### vpk pack --help (${{ matrix.channel }})"
+            echo '```'
+            vpk pack --help 2>&1 || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Publish application
         shell: bash
         env:
@@ -359,7 +373,6 @@ jobs:
             --keyId "$B2_RELEASES_KEY_ID" \
             --secret "$B2_RELEASES_SECRET_KEY" \
             --endpoint "${{ env.B2_ENDPOINT }}" \
-            --region "${{ env.B2_REGION }}" \
             --bucket "${{ env.B2_BUCKET }}" \
             --prefix "${{ matrix.prefix }}"
 
@@ -375,23 +388,17 @@ jobs:
           pack_args=(
             pack
             -o "$out_dir"
-            -c "${{ matrix.channel }}"
-            -r "${{ matrix.rid }}"
-            -u "${{ matrix.pack_id }}"
-            -v "$BARE_VERSION"
-            -p "$PUBLISH_DIR"
-            -e "${{ matrix.main_exe }}"
+            --channel "${{ matrix.channel }}"
+            --packId "${{ matrix.pack_id }}"
+            --packVersion "$BARE_VERSION"
+            --packDir "$PUBLISH_DIR"
+            --mainExe "${{ matrix.main_exe }}"
             --packTitle "${{ matrix.pack_title }}"
           )
 
           if [[ "${{ matrix.os_key }}" == "win" ]]; then
             pack_args+=(--icon "assets/HI.ico")
-            pack_args+=(--msi true --instLocation PerMachine --packAuthors "Huggins Industries")
-            if [[ "${{ matrix.component }}" == "desktop" ]]; then
-              pack_args+=(--shortcuts "Desktop,StartMenuRoot")
-            else
-              pack_args+=(--shortcuts "StartMenuRoot")
-            fi
+            pack_args+=(--msi --instLocation PerMachine)
           else
             pack_args+=(--icon "assets/HI-256.png")
           fi
@@ -412,7 +419,6 @@ jobs:
             --keyId "$B2_RELEASES_KEY_ID" \
             --secret "$B2_RELEASES_SECRET_KEY" \
             --endpoint "${{ env.B2_ENDPOINT }}" \
-            --region "${{ env.B2_REGION }}" \
             --bucket "${{ env.B2_BUCKET }}" \
             --prefix "${{ matrix.prefix }}" \
             --keepMaxReleases "${{ env.KEEP_MAX_RELEASES }}"
