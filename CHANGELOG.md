@@ -7,6 +7,7 @@ This file follows a Keep a Changelog style format.
 
 ### Added
 
+- **Release pipeline — Velopack on B2:** Tag and manual `release.yml` workflow packs ServerApp and DesktopApp with Velopack, publishes dev/stable update feeds to Backblaze B2 (`reelroulette/*` prefixes), and mirrors stable builds to GitHub Releases; host apps call `VelopackApp` hooks at startup (update UI deferred to a follow-up slice). Inno/AppImage/portable packaging remains unchanged.
 - **Server — library projection thumbnail metadata:** `GET /api/library/projection` enriches each item at serve time with `hasThumbnail`, `thumbnailWidth`, and `thumbnailHeight` from the server thumbnail index (not persisted in `library.json`).
 - **Core — library grid layout:** Shared `LibraryGridLayout` justified-row algorithm with tests for aspect fallbacks, row packing, and layout width rules.
 - **Desktop — API-only library grid thumbnails:** Library panel grid reads thumbnail dimensions from the projection API and loads visible tile JPEGs via `GET /api/thumbnail/{itemId}` (no local `thumbnails/` reads for grid rendering).

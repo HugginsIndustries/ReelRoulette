@@ -1,0 +1,443 @@
+name: Release (Velopack)
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release tag/version (must match .version exactly, e.g. v0.12.0-dev.1)"
+        required: true
+  push:
+    tags:
+      - "v*"
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  VPK_VERSION: "1.2.0"
+  B2_BUCKET: hugginsindustries-releases
+  B2_ENDPOINT: https://s3.us-west-004.backblazeb2.com
+  B2_REGION: us-west-004
+  PUBLIC_FEED_BASE: https://f004.backblazeb2.com/file/hugginsindustries-releases
+  KEEP_MAX_RELEASES: "10"
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.validate.outputs.tag }}
+      bare_version: ${{ steps.validate.outputs.bare_version }}
+      is_dev: ${{ steps.validate.outputs.is_dev }}
+      assembly_version: ${{ steps.validate.outputs.assembly_version }}
+      matrix: ${{ steps.validate.outputs.matrix }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Validate version and build release matrix
+        id: validate
+        run: |
+          set -euo pipefail
+
+          version_file="$(tr -d '\r\n' < .version | xargs)"
+          if [[ -z "$version_file" ]]; then
+            echo "::error::Guard 1 failed: .version is empty."
+            exit 1
+          fi
+
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            requested="${{ github.event.inputs.version }}"
+          else
+            requested="${GITHUB_REF_NAME}"
+          fi
+          requested="$(printf '%s' "$requested" | tr -d '\r\n' | xargs)"
+
+          if [[ "$requested" != "$version_file" ]]; then
+            echo "::error::Guard 1 failed: requested version '$requested' does not match .version '$version_file'."
+            exit 1
+          fi
+
+          if [[ "$requested" =~ ^v[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+            echo "::error::Guard 2 failed: four-part versions are not supported ('$requested')."
+            exit 1
+          fi
+          if [[ ! "$requested" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z][0-9A-Za-z.-]*)?$ ]]; then
+            echo "::error::Guard 2 failed: '$requested' is not v-prefixed semver2."
+            exit 1
+          fi
+
+          bare="${requested#v}"
+          is_dev=false
+          if [[ "$bare" == *"-dev"* ]]; then
+            is_dev=true
+          fi
+
+          numeric_three="$(printf '%s' "$bare" | sed -E 's/^([0-9]+\.[0-9]+\.[0-9]+).*/\1/')"
+          assembly_version="${numeric_three}.0"
+
+          tiers=(stable)
+          if [[ "$is_dev" == true ]]; then
+            tiers=(dev)
+          else
+            tiers=(dev stable)
+          fi
+
+          components=(server desktop)
+          platforms=(linux windows)
+
+          matrix_json='{"include":[]}'
+          feed_urls=()
+
+          for component in "${components[@]}"; do
+            case "$component" in
+              server)
+                pack_id="ReelRoulette.Server"
+                pack_title="ReelRoulette Server"
+                csproj="src/core/ReelRoulette.ServerApp/ReelRoulette.ServerApp.csproj"
+                main_exe="ReelRoulette.ServerApp"
+                ;;
+              desktop)
+                pack_id="ReelRoulette.Desktop"
+                pack_title="ReelRoulette Desktop"
+                csproj="src/clients/desktop/ReelRoulette.DesktopApp/ReelRoulette.DesktopApp.csproj"
+                main_exe="ReelRoulette.DesktopApp"
+                ;;
+            esac
+
+            for platform in "${platforms[@]}"; do
+              case "$platform" in
+                linux)
+                  runner="ubuntu-latest"
+                  rid="linux-x64"
+                  os_key="linux"
+                  framework_server="net10.0"
+                  ;;
+                windows)
+                  runner="windows-latest"
+                  rid="win-x64"
+                  os_key="win"
+                  framework_server="net10.0-windows"
+                  ;;
+              esac
+
+              for tier in "${tiers[@]}"; do
+                tier_suffix=""
+                channel_suffix=""
+                native_component=""
+                stage_webui=false
+                stage_native=false
+                if [[ "$tier" == "dev" ]]; then
+                  tier_suffix="-dev"
+                  channel_suffix="-dev"
+                fi
+                channel="${os_key}-${component}${channel_suffix}"
+                prefix="reelroulette/${component}${tier_suffix}"
+                mirror_github=false
+                if [[ "$tier" == "stable" ]]; then
+                  mirror_github=true
+                fi
+
+                feed_urls+=("${PUBLIC_FEED_BASE}/${prefix}/releases.${channel}.json")
+
+                if [[ "$component" == "server" ]]; then
+                  framework="$framework_server"
+                  stage_webui=true
+                  stage_native=false
+                else
+                  framework=""
+                  stage_webui=false
+                  stage_native=false
+                fi
+                if [[ "$platform" == "windows" ]]; then
+                  if [[ "$component" == "server" ]]; then
+                    stage_native=true
+                    native_component="server"
+                  else
+                    stage_native=true
+                    native_component="desktop"
+                  fi
+                fi
+
+                leg="$(jq -nc \
+                  --arg component "$component" \
+                  --arg pack_id "$pack_id" \
+                  --arg pack_title "$pack_title" \
+                  --arg csproj "$csproj" \
+                  --arg main_exe "$main_exe" \
+                  --arg runner "$runner" \
+                  --arg rid "$rid" \
+                  --arg os_key "$os_key" \
+                  --arg tier "$tier" \
+                  --arg channel "$channel" \
+                  --arg prefix "$prefix" \
+                  --arg framework "$framework" \
+                  --argjson mirror_github "$mirror_github" \
+                  --argjson stage_webui "$stage_webui" \
+                  --argjson stage_native "$stage_native" \
+                  --arg native_component "${native_component:-}" \
+                  '{
+                    component: $component,
+                    pack_id: $pack_id,
+                    pack_title: $pack_title,
+                    csproj: $csproj,
+                    main_exe: $main_exe,
+                    runner: $runner,
+                    rid: $rid,
+                    os_key: $os_key,
+                    tier: $tier,
+                    channel: $channel,
+                    prefix: $prefix,
+                    framework: $framework,
+                    mirror_github: $mirror_github,
+                    stage_webui: $stage_webui,
+                    stage_native: $stage_native,
+                    native_component: $native_component
+                  }')"
+
+                matrix_json="$(jq -c --argjson leg "$leg" '.include += [$leg]' <<<"$matrix_json")"
+              done
+            done
+          done
+
+          for feed_url in "${feed_urls[@]}"; do
+            http_code="$(curl -sS -o /tmp/feed.json -w '%{http_code}' "$feed_url" || true)"
+            if [[ "$http_code" == "404" || "$http_code" == "403" ]]; then
+              continue
+            fi
+            if [[ "$http_code" != "200" ]]; then
+              echo "::warning::Guard 3: unexpected HTTP $http_code for $feed_url (skipping publish check)."
+              continue
+            fi
+            if jq -e --arg v "$bare" '.Assets[]? | select(.Version == $v)' /tmp/feed.json >/dev/null; then
+              echo "::error::Guard 3 failed: version '$bare' is already published at $feed_url."
+              exit 1
+            fi
+          done
+
+          {
+            echo "tag=$requested"
+            echo "bare_version=$bare"
+            echo "is_dev=$is_dev"
+            echo "assembly_version=$assembly_version"
+            echo "matrix<<EOF"
+            echo "$matrix_json"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "## Release validation"
+            echo "- Tag: \`$requested\`"
+            echo "- Bare version: \`$bare\`"
+            echo "- Assembly/File version: \`$assembly_version\`"
+            echo "- Dev-only release: \`$is_dev\`"
+            echo "- Matrix legs: $(jq '.include | length' <<<"$matrix_json")"
+            echo ""
+            echo "### Planned legs"
+            jq -r '.include[] | "- `\(.channel)` → `\(.prefix)` on `\(.runner)` (GitHub mirror: \(.mirror_github))"' <<<"$matrix_json"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  ensure-release-exists:
+    needs: validate
+    if: needs.validate.outputs.is_dev != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for published GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag="${{ needs.validate.outputs.tag }}"
+          attempts=5
+          delay=15
+          for ((i=1; i<=attempts; i++)); do
+            if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+              echo "Release $tag exists."
+              exit 0
+            fi
+            if [[ "$i" -lt "$attempts" ]]; then
+              echo "Release $tag not found (attempt $i/$attempts); retrying in ${delay}s..."
+              sleep "$delay"
+            fi
+          done
+          echo "::error::No published GitHub release for tag '$tag'. Create and publish the release in the GitHub UI before pushing the tag."
+          exit 1
+
+  release:
+    needs: [validate, ensure-release-exists]
+    if: >-
+      always() &&
+      needs.validate.result == 'success' &&
+      (needs.ensure-release-exists.result == 'success' || needs.ensure-release-exists.result == 'skipped')
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.validate.outputs.matrix) }}
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+
+      - name: Install vpk CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet tool install --global vpk --version "${{ env.VPK_VERSION }}"
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            echo "${USERPROFILE}\\.dotnet\\tools" >> "$GITHUB_PATH"
+          else
+            echo "${HOME}/.dotnet/tools" >> "$GITHUB_PATH"
+          fi
+
+      - name: Publish application
+        shell: bash
+        env:
+          BARE_VERSION: ${{ needs.validate.outputs.bare_version }}
+          ASSEMBLY_VERSION: ${{ needs.validate.outputs.assembly_version }}
+        run: |
+          set -euo pipefail
+          publish_dir="${RUNNER_TEMP}/velopack-publish/${{ matrix.channel }}"
+          rm -rf "$publish_dir"
+          mkdir -p "$publish_dir"
+
+          publish_args=(
+            publish "${{ matrix.csproj }}"
+            -c Release
+            -r "${{ matrix.rid }}"
+            --self-contained true
+            -p:PublishSingleFile=false
+            -p:PublishTrimmed=false
+            -p:Version="$BARE_VERSION"
+            -p:AssemblyVersion="$ASSEMBLY_VERSION"
+            -p:FileVersion="$ASSEMBLY_VERSION"
+            -p:ErrorOnDuplicatePublishOutputFiles=false
+            -o "$publish_dir"
+          )
+          if [[ -n "${{ matrix.framework }}" ]]; then
+            publish_args+=(-f "${{ matrix.framework }}")
+          fi
+          if [[ "${{ matrix.component }}" == "desktop" ]]; then
+            publish_args+=(-p:VlcWindowsX64Enabled=false)
+          fi
+          dotnet "${publish_args[@]}"
+
+          echo "PUBLISH_DIR=$publish_dir" >> "$GITHUB_ENV"
+
+      - name: Stage WebUI assets (server)
+        if: matrix.stage_webui
+        shell: pwsh
+        run: |
+          pwsh ./tools/scripts/stage-webui-assets.ps1 -RepoRoot "$env:GITHUB_WORKSPACE" -PublishDir "$env:PUBLISH_DIR"
+
+      - name: Stage Windows native dependencies
+        if: matrix.stage_native
+        shell: pwsh
+        run: |
+          pwsh ./tools/scripts/stage-native-deps.ps1 -RepoRoot "$env:GITHUB_WORKSPACE" -PublishDir "$env:PUBLISH_DIR" -Component "${{ matrix.native_component }}"
+
+      - name: Download prior release index (delta)
+        shell: bash
+        continue-on-error: true
+        env:
+          B2_RELEASES_KEY_ID: ${{ secrets.B2_RELEASES_KEY_ID }}
+          B2_RELEASES_SECRET_KEY: ${{ secrets.B2_RELEASES_SECRET_KEY }}
+        run: |
+          set -euo pipefail
+          out_dir="${RUNNER_TEMP}/velopack-releases/${{ matrix.channel }}"
+          mkdir -p "$out_dir"
+          vpk download s3 \
+            -o "$out_dir" \
+            -c "${{ matrix.channel }}" \
+            --keyId "$B2_RELEASES_KEY_ID" \
+            --secret "$B2_RELEASES_SECRET_KEY" \
+            --endpoint "${{ env.B2_ENDPOINT }}" \
+            --region "${{ env.B2_REGION }}" \
+            --bucket "${{ env.B2_BUCKET }}" \
+            --prefix "${{ matrix.prefix }}"
+
+      - name: Pack Velopack release
+        shell: bash
+        env:
+          BARE_VERSION: ${{ needs.validate.outputs.bare_version }}
+        run: |
+          set -euo pipefail
+          out_dir="${RUNNER_TEMP}/velopack-releases/${{ matrix.channel }}"
+          mkdir -p "$out_dir"
+
+          pack_args=(
+            pack
+            -o "$out_dir"
+            -c "${{ matrix.channel }}"
+            -r "${{ matrix.rid }}"
+            -u "${{ matrix.pack_id }}"
+            -v "$BARE_VERSION"
+            -p "$PUBLISH_DIR"
+            -e "${{ matrix.main_exe }}"
+            --packTitle "${{ matrix.pack_title }}"
+          )
+
+          if [[ "${{ matrix.os_key }}" == "win" ]]; then
+            pack_args+=(--icon "assets/HI.ico")
+            pack_args+=(--msi true --instLocation PerMachine --packAuthors "Huggins Industries")
+            if [[ "${{ matrix.component }}" == "desktop" ]]; then
+              pack_args+=(--shortcuts "Desktop,StartMenuRoot")
+            else
+              pack_args+=(--shortcuts "StartMenuRoot")
+            fi
+          else
+            pack_args+=(--icon "assets/HI-256.png")
+          fi
+
+          vpk "${pack_args[@]}"
+          echo "VPK_OUTPUT_DIR=$out_dir" >> "$GITHUB_ENV"
+
+      - name: Upload to Backblaze B2
+        shell: bash
+        env:
+          B2_RELEASES_KEY_ID: ${{ secrets.B2_RELEASES_KEY_ID }}
+          B2_RELEASES_SECRET_KEY: ${{ secrets.B2_RELEASES_SECRET_KEY }}
+        run: |
+          set -euo pipefail
+          vpk upload s3 \
+            -o "$VPK_OUTPUT_DIR" \
+            -c "${{ matrix.channel }}" \
+            --keyId "$B2_RELEASES_KEY_ID" \
+            --secret "$B2_RELEASES_SECRET_KEY" \
+            --endpoint "${{ env.B2_ENDPOINT }}" \
+            --region "${{ env.B2_REGION }}" \
+            --bucket "${{ env.B2_BUCKET }}" \
+            --prefix "${{ matrix.prefix }}" \
+            --keepMaxReleases "${{ env.KEEP_MAX_RELEASES }}"
+
+      - name: Mirror stable release to GitHub
+        if: matrix.mirror_github
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          vpk upload github \
+            -o "$VPK_OUTPUT_DIR" \
+            -c "${{ matrix.channel }}" \
+            --repoUrl "https://github.com/${GITHUB_REPOSITORY}" \
+            --token "$GH_TOKEN" \
+            --merge true \
+            --tag "${{ needs.validate.outputs.tag }}"
+
+      - name: Leg summary
+        shell: bash
+        run: |
+          {
+            echo "## Velopack leg: ${{ matrix.pack_id }}"
+            echo "- Channel: \`${{ matrix.channel }}\`"
+            echo "- B2 prefix: \`${{ matrix.prefix }}\`"
+            echo "- GitHub mirror: \`${{ matrix.mirror_github }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"

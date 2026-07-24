@@ -11,6 +11,10 @@ using ReelRoulette.ServerApp.Hosting;
 using ReelRoulette.Server.Contracts;
 using ReelRoulette.Server.Hosting;
 using ReelRoulette.Server.Services;
+using Velopack;
+
+// Velopack re-invokes this executable with hook arguments during install, update, and uninstall; run before port binding, disk writes, tray init, or native loads — hook invocations exit the process (ResetServerLastLog and CoreSettingsService must not run on hooks).
+VelopackApp.Build().Run();
 
 // Linux/DBus tray teardown can surface TaskCanceledException on a thread-pool continuation; mark as observed so the host does not print an unhandled exception on shutdown.
 TaskScheduler.UnobservedTaskException += (_, e) =>

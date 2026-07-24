@@ -19,8 +19,8 @@ Instructions:
 
 Commit Message:
 
-Chore: dedupe LibVLC native trees in desktop packages
+Chore: add Velopack packaging and release workflow
 
-- Disable VideoLAN.LibVLC.Windows x86 copy in the desktop csproj (no x86 dev or ship target).
-- Suppress NuGet libvlc/win-x64 copy on desktop packaging publishes only; dev dotnet run keeps the NuGet tree.
-- Document single-tree Windows layout and Linux no-bundle behavior in README and dev-setup.
+- Pin Velopack 1.2.0 on ServerApp and DesktopApp with startup hook ordering before host I/O.
+- Add release.yml: version guards, B2 feed publish, stable GitHub mirror; dev/stable channel matrix.
+- Document Velopack delivery layout; set release version v0.12.0-dev.1 via .version fan-out.

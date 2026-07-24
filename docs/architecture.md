@@ -142,6 +142,7 @@ Operator UI is an operational surface and does not own domain logic.
 ## Packaging and Delivery
 
 - Packaging supports portable and installer outputs through repository scripts; on Linux, scripts also produce AppImages and a GitHub latest-release install helper for user-local installs.
+- Velopack release publishing (`.github/workflows/release.yml`) builds self-contained ServerApp and DesktopApp outputs per OS, packs them with `vpk`, and uploads update feeds to Backblaze B2 under `reelroulette/{server|desktop}` with optional `-dev` tier prefixes. Update channels are named `{os}-{component}` for stable (`win-server`, `linux-desktop`, …) and `{os}-{component}-dev` for dev builds; each prefix holds the two feeds (stable + dev) for that component and tier. Stable tag releases mirror Velopack assets onto the existing GitHub release; dev releases publish to B2 only.
 - ServerApp runtime uses an Avalonia-hosted tray when a compatible desktop session is available; otherwise it runs deterministically in a headless mode.
 - CI/workflow gates validate build/test/contract/web checks; tag and `workflow_dispatch` packaging workflows build Windows and Linux release artifacts (including Linux portable + AppImage and a headless packaged-server smoke) and attach them to the existing GitHub release on tag pushes.
 - Release version metadata should remain aligned across contract, runtime, project, and package surfaces.

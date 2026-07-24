@@ -58,6 +58,9 @@ coverage/
 .web-deploy-smoke/
 artifacts/
 
+# Velopack pack output (default vpk --outputDir)
+Releases/
+
 # Windows native deps (ffmpeg/ffprobe/LibVLC) — acquire via tools/scripts/fetch-native-deps.ps1
 runtimes/
 

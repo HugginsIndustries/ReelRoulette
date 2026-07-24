@@ -3,6 +3,7 @@ using LibVLCSharp.Shared;
 using System;
 using System.IO;
 using System.Threading.Tasks;
+using Velopack;
 
 namespace ReelRoulette;
 
@@ -19,6 +20,9 @@ class Program
     [STAThread]
     public static void Main(string[] args)
     {
+        // Velopack re-invokes this executable with hook arguments during install, update, and uninstall; run before LibVLC/native loads or Avalonia startup — hook invocations exit the process.
+        VelopackApp.Build().Run();
+
         Log("=== Desktop Application Startup ===");
 
         // Add global exception handlers to capture crashes
