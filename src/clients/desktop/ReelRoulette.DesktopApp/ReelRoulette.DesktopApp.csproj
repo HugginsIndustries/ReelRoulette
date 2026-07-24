@@ -17,6 +17,8 @@
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <!-- Suppress warnings for dialog windows that require constructor parameters -->
     <NoWarn>$(NoWarn);AVLN3001</NoWarn>
+    <!-- No shipped or dev configuration is x86; VideoLAN.LibVLC.Windows enables both x64 and x86 copies by default because it keys off Platform (AnyCPU) rather than RuntimeIdentifier. -->
+    <VlcWindowsX86Enabled>false</VlcWindowsX86Enabled>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="12.0.0" />

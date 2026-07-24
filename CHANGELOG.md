@@ -23,6 +23,7 @@ This file follows a Keep a Changelog style format.
 
 ### Changed
 
+- **Desktop packaging — LibVLC layout:** Windows desktop packages ship one LibVLC tree under `runtimes/win-x64/native/libvlc/` instead of duplicating NuGet `libvlc/win-x64/` and `libvlc/win-x86/` beside the publish root; Linux desktop packages no longer carry unused Windows LibVLC binaries (playback still uses system LibVLC on Linux).
 - **Release tooling — version source and staging extraction:** Repo-root `.version` is now the canonical release version (v-prefixed semver2). `set-release-version.ps1` reads or writes `.version` and fans out bare semver to csproj, OpenAPI, and test fixtures (including `ReelRoulette.LibraryArchive`). WebUI static asset staging and Windows native dependency staging moved to `stage-webui-assets.ps1` and `stage-native-deps.ps1`; packaging scripts delegate to them.
 - **WebUI devDependencies:** Bump `sharp` to 0.35.x and pin transitive `js-yaml` via npm overrides to clear npm audit findings in build/contract tooling.
 - **WebUI — library overlay keyboard/responsive:** Escape closes overlay; tiles are focusable (`tabindex`, `role="button"`) with focus/active styles; mobile sort cluster wraps at ≤600px.

@@ -78,12 +78,14 @@ mkdir -p "$PUBLISH_DIR" "$STAGING_DIR"
 
 (
   cd "$REPO_ROOT"
+  # Packaging suppresses NuGet libvlc/win-* copies: Windows packages use staged runtimes/win-x64/native/libvlc/; Linux uses system LibVLC at runtime.
   dotnet publish "$PROJECT_PATH" \
     -c "$Configuration" \
     -r "$Runtime" \
     --self-contained true \
     -p:PublishSingleFile=false \
     -p:PublishTrimmed=false \
+    -p:VlcWindowsX64Enabled=false \
     -p:Version="$Version" \
     -p:ErrorOnDuplicatePublishOutputFiles=false \
     -p:DebugType=none \

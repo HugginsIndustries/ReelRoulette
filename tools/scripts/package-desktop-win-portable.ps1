@@ -61,12 +61,14 @@ New-Item -ItemType Directory -Force -Path $stagingDir | Out-Null
 
 Push-Location $repoRoot
 try {
+    # Packaging suppresses NuGet libvlc/win-* copies; staged runtimes/win-x64/native/libvlc/ replaces them on Windows (Linux portable uses system LibVLC).
     dotnet publish $projectPath `
         -c $Configuration `
         -r $Runtime `
         --self-contained true `
         -p:PublishSingleFile=false `
         -p:PublishTrimmed=false `
+        -p:VlcWindowsX64Enabled=false `
         -p:Version=$Version `
         -p:ErrorOnDuplicatePublishOutputFiles=false `
         -o $publishDir

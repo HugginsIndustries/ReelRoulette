@@ -11,7 +11,7 @@ This guide covers local setup, run paths, verification gates, packaging, and rel
   - Linux (Arch Linux, CachyOS, and similar): install from the AUR, for example `paru -S powershell-bin` or `yay -S powershell-bin`; that package provides `pwsh` on your PATH.
 - Windows packaging only:
   - Inno Setup 6 (for installer builds)
-- **Windows developers:** after cloning, run **`pwsh ./tools/scripts/fetch-native-deps.ps1`** once from the repository root. This downloads **FFmpeg/ffprobe** (gyan.dev release essentials ZIP, SHA-256 verified) and materializes **LibVLC** (prefer **VideoLAN.LibVLC.Windows** from the NuGet global cache after `dotnet restore`, else the official VideoLAN mirror with SHA-256 verification) into **`runtimes/win-x64/native/`** (gitignored). Then `dotnet run` for **ServerApp** and **DesktopApp** resolves bundled tools from that path. Pass **`-Force`** to ignore skip rules and re-fetch.
+- **Windows developers:** after cloning, run **`pwsh ./tools/scripts/fetch-native-deps.ps1`** once from the repository root. This downloads **FFmpeg/ffprobe** (gyan.dev release essentials ZIP, SHA-256 verified) and materializes **LibVLC** (prefer **VideoLAN.LibVLC.Windows** from the NuGet global cache after `dotnet restore`, else the official VideoLAN mirror with SHA-256 verification) into **`runtimes/win-x64/native/`** (gitignored). Then `dotnet run` for **ServerApp** resolves bundled FFmpeg from that path; **DesktopApp** development playback on Windows uses the NuGet **`libvlc/win-x64/`** tree in the build output (packaged Windows desktop builds use the staged **`runtimes/win-x64/native/libvlc/`** tree instead). Pass **`-Force`** to ignore skip rules and re-fetch.
 - VLC / LibVLC for desktop video playback; FFmpeg (with `ffprobe` on `PATH`) on the **server** for library refresh (duration, loudness, thumbnails). Linux portable tarballs do not bundle LibVLC or FFmpeg (install from your distro). Windows **packaging** scripts call `fetch-native-deps.ps1` automatically when `runtimes/win-x64/native/` is incomplete, then stage **ffmpeg.exe** / **ffprobe.exe** into the **server** publish tree and **LibVLC** into the **desktop** publish tree—same source folder for both.
 
 ## Key Projects
@@ -53,7 +53,7 @@ Use when you want to ensure web assets are freshly rebuilt before startup:
 
 ### Run Desktop app
 
-- **Windows:** run `pwsh ./tools/scripts/fetch-native-deps.ps1` first if `runtimes/win-x64/native/libvlc` is not populated (see Prerequisites).
+- **Windows:** run `pwsh ./tools/scripts/fetch-native-deps.ps1` first if `runtimes/win-x64/native/libvlc` is not populated (see Prerequisites). **`dotnet run`** for the desktop app on Windows uses the **VideoLAN.LibVLC.Windows** NuGet copy under **`libvlc/win-x64/`** in the build output (that tree is not used by packaged Windows builds, which load **`runtimes/win-x64/native/libvlc/`** instead).
 - `dotnet run --project ./src/clients/desktop/ReelRoulette.DesktopApp/ReelRoulette.DesktopApp.csproj`
 
 Desktop behavior notes:
@@ -146,7 +146,7 @@ Per-user data uses .NET `Environment.SpecialFolder` mappings:
 Packaging notes:
 
 - Repo-root **`.version`** is the release version source (v-prefixed semver2). When `-Version` is not passed, packaging scripts read the bare semver from `.version`.
-- Windows packaging scripts delegate native bundling to **`stage-native-deps.ps1`**, which ensures **`runtimes/win-x64/native/`** via **`fetch-native-deps.ps1`** when **ffmpeg.exe**, **ffprobe.exe**, or **libvlc** are missing, then copies **FFmpeg/ffprobe** into the **server** publish output and **LibVLC** into the **desktop** publish output under `runtimes/win-x64/native/`. Duration and other ffprobe work run in the **server** refresh pipeline, not in the desktop app.
+- Windows packaging scripts delegate native bundling to **`stage-native-deps.ps1`**, which ensures **`runtimes/win-x64/native/`** via **`fetch-native-deps.ps1`** when **ffmpeg.exe**, **ffprobe.exe**, or **libvlc** are missing, then copies **FFmpeg/ffprobe** into the **server** publish output and **LibVLC** into the **desktop** publish output under `runtimes/win-x64/native/`. Desktop packaging publishes pass **`-p:VlcWindowsX64Enabled=false`** so the NuGet **`libvlc/win-x64/`** tree is omitted from packaged output (development **`dotnet run`** still relies on that NuGet tree). **`VlcWindowsX86Enabled`** is disabled in the desktop project because no configuration ships or develops as x86. Duration and other ffprobe work run in the **server** refresh pipeline, not in the desktop app.
 - Server packaging scripts delegate WebUI build and static asset staging to **`stage-webui-assets.ps1`**, bundling assets into ServerApp publish output (`wwwroot`) so packaged runtime includes WebUI and Operator favicon.
 - Server publish output includes `HI.ico` at app root for tray icon loading (from shared `assets/HI.ico`).
 - Shared app/installer/web icon source is `assets/HI.ico`.

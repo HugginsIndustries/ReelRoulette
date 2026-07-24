@@ -19,10 +19,8 @@ Instructions:
 
 Commit Message:
 
-Refactor: adopt .version source of truth and extract packaging staging
+Chore: dedupe LibVLC native trees in desktop packages
 
-- Add repo-root `.version` and teach set-release-version.ps1 to read/write it with semver2 validation.
-- Fan out bare semver to ServerApp, DesktopApp, LibraryArchive, OpenAPI, and test fixtures.
-- Extract WebUI asset staging to stage-webui-assets.ps1 and Windows native staging to stage-native-deps.ps1.
-- Point all packaging scripts at `.version` and the new staging helpers; update README, dev-setup, and CONTEXT.
-- Bump WebUI `sharp` to 0.35.x and override transitive `js-yaml` to clear npm audit findings.
+- Disable VideoLAN.LibVLC.Windows x86 copy in the desktop csproj (no x86 dev or ship target).
+- Suppress NuGet libvlc/win-x64 copy on desktop packaging publishes only; dev dotnet run keeps the NuGet tree.
+- Document single-tree Windows layout and Linux no-bundle behavior in README and dev-setup.
