@@ -25,6 +25,7 @@ ReelRoulette is migrating from a monolithic desktop app to a thin-client, API-fi
     - Windows: user-scoped `HKCU` registration.
     - Linux: XDG autostart (`*.desktop` under `~/.config/autostart/` or `$XDG_CONFIG_HOME/autostart/`, with `Exec=`/`Path=` derived from the stable app path—**`APPIMAGE`** when running an AppImage, otherwise the process path—and host content root pinned to `AppContext.BaseDirectory` so session autostart finds config and WebUI assets).
   - Packaged server builds self-update via Velopack on an operator-controlled check → download → apply flow: a background loop checks the feed only (stable or dev via `devChannelEnabled` on `/control/settings`) to surface availability; download and apply are separate confirmed operator actions under `/control/update/*` and never run automatically; an immediate check still runs when the dev channel toggle changes.
+  - On Linux, when running a Velopack **AppImage** (`APPIMAGE` set), the server reconciles a Freedesktop application menu entry (`reelroulette-server.desktop`) and hicolor icons under the user’s XDG data home on every launch—silent, with no first-run flag; `Exec=` always points at the current AppImage path.
   - The desktop client self-updates via Velopack with the same manual check → download → apply flow in Settings: stable or dev channel via `DevChannelEnabled` in `desktop-settings.json`, background check-only polling, and no restart without explicit Apply confirmation.
 
 - **Domain execution (`src/core/ReelRoulette.Core` + server services)**
@@ -40,6 +41,7 @@ ReelRoulette is migrating from a monolithic desktop app to a thin-client, API-fi
   - Library panel grid uses API-only thumbnail rendering: layout aspect inputs from `GET /api/library/projection` (`hasThumbnail`, `thumbnailWidth`, `thumbnailHeight`); visible tile JPEGs from `GET /api/thumbnail/{itemId}`; justified-row layout via shared `ReelRoulette.Core.Library.LibraryGridLayout` (no local `thumbnails/` reads for grid display).
   - Library panel grid supports multi-select (click, Ctrl+click, Shift+click), double-click/Enter to play, right-click bulk context menu (favorites, blacklist, tags, remove, clear stats), and selection count display.
   - Server version/capability compatibility gating with reconnect/resync guidance.
+  - On Linux, when running a Velopack **AppImage** (`APPIMAGE` set), the desktop client reconciles `reelroulette-desktop.desktop` and menu icons under the user’s XDG data home on every launch (same silent reconcile semantics as the server).
   - API-backed source import, duplicate scan/apply, auto-tag scan/apply, and playback-stats clear.
   - Duplicate review dialog renders per-item thumbnail previews via server thumbnail endpoint paths for faster keep/delete validation.
   - Duplicate review dialog supports per-group handling selection with a persisted default behavior (`Keep All` or `Select Best`) from desktop settings.

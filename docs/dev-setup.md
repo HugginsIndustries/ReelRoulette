@@ -139,6 +139,8 @@ All shipping packages are produced by **`.github/workflows/release.yml`** (tag p
 
 Windows output is a per-user **`Setup.exe`** (no MSI). Linux output is a Velopack **AppImage**-style bundle. Update channels follow `{os}-{component}` for stable and `{os}-{component}-dev` for dev builds.
 
+**Linux AppImage menu integration:** When `APPIMAGE` is set (running the downloaded `.AppImage` file), ServerApp and DesktopApp reconcile a Freedesktop launcher under `$XDG_DATA_HOME/applications/` (default `~/.local/share/applications/`) and hicolor icons on every startup—silent, no first-run flag. `dotnet run` and Windows builds skip registration. Dangling entries after deleting an AppImage are not removed automatically.
+
 **Installed runtime:** ServerApp and DesktopApp call **`VelopackApp.Build().Run()`** at startup so Velopack **install/update/uninstall hook** invocations work. There is **no** `UpdateManager` / feed check / in-app “update available” flow yet—users upgrade by installing a newer build from GitHub Releases (or a future client slice will use the B2 feeds).
 
 ### Packaged-server smoke (Linux)
@@ -149,13 +151,13 @@ After local changes that affect server packaging, run:
 ./tools/scripts/verify-linux-packaged-server-smoke.sh
 ```
 
-With no argument, the script publishes and `vpk pack`s a server AppImage (matching the workflow shape), then runs it headlessly with `--appimage-extract-and-run` when FUSE is unavailable. It checks `/health`, `/api/version`, `/control/status`, and `/operator`.
+With no argument, the script publishes and `vpk pack`s a server AppImage (matching the workflow shape), then runs it headlessly with `--appimage-extract-and-run` when FUSE is unavailable. It checks `/health`, `/api/version`, `/control/status`, and `/operator`. It isolates **`XDG_CONFIG_HOME`** and **`XDG_DATA_HOME`** so menu registration and settings do not touch your real `~/.config` or `~/.local/share` tree.
 
 ## Release Versioning
 
 Repo-root **`.version`** holds the canonical release version as a single v-prefixed semver2 line (for example `v0.12.0-dev`). Use one command to align release-version surfaces:
 
-- `pwsh ./tools/scripts/set-release-version.ps1 -Version v0.12.0-dev.9`
+- `pwsh ./tools/scripts/set-release-version.ps1 -Version v0.12.0-dev.10`
 - Omit `-Version` to read `.version` and fan out without changing the file.
 - By default, the script also updates the desktop app `<Version>`, runs `npm run generate:contracts` in WebUI, runs solution build/test plus WebUI verify and `verify-web-deploy.ps1`, and updates release command examples in `README.md` and `docs/dev-setup.md`.
 - Use `-NoDocUpdates` to skip the README/dev-setup example updates.

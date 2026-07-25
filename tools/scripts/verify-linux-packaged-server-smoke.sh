@@ -122,7 +122,16 @@ err_log="$work/server.err"
 # Verification scripts must not read or write the developer's real ApplicationData settings.
 # .NET uses XDG_CONFIG_HOME on Linux for SpecialFolder.ApplicationData (ReelRoulette under config home).
 isolated_config_home="$work/isolated-config-home"
-mkdir -p "$isolated_config_home"
+isolated_data_home="$work/isolated-data-home"
+mkdir -p "$isolated_config_home" "$isolated_data_home"
+
+real_user_data_snapshot="$work/real-user-data-snapshot.txt"
+real_applications_dir="${HOME}/.local/share/applications"
+real_icons_root="${HOME}/.local/share/icons"
+{
+  find "$real_applications_dir" -maxdepth 1 -name 'reelroulette-*.desktop' 2>/dev/null | sort || true
+  find "$real_icons_root" -path '*/reelroulette-*.png' 2>/dev/null | sort || true
+} >"$real_user_data_snapshot"
 
 server_pid=""
 server_listen_pid=""
@@ -184,6 +193,7 @@ trap cleanup EXIT
 (
   exec env -u DISPLAY -u WAYLAND_DISPLAY -u DBUS_SESSION_BUS_ADDRESS \
     XDG_CONFIG_HOME="$isolated_config_home" \
+    XDG_DATA_HOME="$isolated_data_home" \
     "$appimage" --appimage-extract-and-run --CoreServer:ListenUrl="$listen_url"
 ) >"$out_log" 2>"$err_log" &
 server_pid=$!
@@ -225,6 +235,29 @@ fi
 
 if ! curl -sfS --max-time 5 "$operator_url" >/dev/null; then
   echo "Expected GET $operator_url to succeed (Operator UI)." >&2
+  exit 1
+fi
+
+for _ in $(seq 1 30); do
+  if [[ -f "$isolated_data_home/applications/reelroulette-server.desktop" ]]; then
+    break
+  fi
+  sleep 0.2
+done
+
+{
+  find "$real_applications_dir" -maxdepth 1 -name 'reelroulette-*.desktop' 2>/dev/null | sort || true
+  find "$real_icons_root" -path '*/reelroulette-*.png' 2>/dev/null | sort || true
+} >"$work/real-user-data-after.txt"
+
+if ! diff -q "$real_user_data_snapshot" "$work/real-user-data-after.txt" >/dev/null 2>&1; then
+  echo "Smoke run changed real user menu/icon files under ~/.local/share (expected isolated XDG_DATA_HOME)." >&2
+  diff -u "$real_user_data_snapshot" "$work/real-user-data-after.txt" >&2 || true
+  exit 1
+fi
+
+if [[ ! -f "$isolated_data_home/applications/reelroulette-server.desktop" ]]; then
+  echo "Expected isolated menu entry at $isolated_data_home/applications/reelroulette-server.desktop" >&2
   exit 1
 fi
 

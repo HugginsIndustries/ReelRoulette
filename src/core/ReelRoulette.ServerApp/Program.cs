@@ -102,6 +102,14 @@ static async Task RunAsync(string[] args)
         {
             app.Logger.LogInformation("ReelRoulette.ServerApp started on {ListenUrl}", runtimeOptions.ListenUrl);
             hostUi.Start();
+            try
+            {
+                LinuxAppImageRegistrationService.TryRegisterInBackground(app.Logger);
+            }
+            catch (Exception ex)
+            {
+                app.Logger.LogDebug(ex, "Linux AppImage menu registration could not be scheduled (non-fatal).");
+            }
         });
 
         app.Lifetime.ApplicationStopping.Register(() =>

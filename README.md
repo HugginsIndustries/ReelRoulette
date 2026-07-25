@@ -45,9 +45,11 @@ Official **installers** for stable tags are on **[GitHub Releases](https://githu
    ~/Downloads/ReelRoulette.Server-*.AppImage
    ```
 
-   Keeping copies under **`~/Applications`** (or another directory you control) is a common convention; create the folder if you use it.
+   Keeping copies under **`~/Applications`** (or another directory you control) is a common convention; create the folder if you use it. The AppImage works from any location.
+
+   On first launch (and whenever you move the file and run it again), the server and desktop apps **register themselves** in your application menu (`reelroulette-server` / `reelroulette-desktop`) and refresh the shortcut to point at the current AppImage path. No installer or `--install` step is required.
 3. Install **VLC / LibVLC** for desktop playback and **`ffmpeg`** with **`ffprobe`** on your **`PATH`** for server library refresh—Linux packages do not bundle those tools.
-4. **Upgrades:** download a newer **`.AppImage`** from GitHub Releases and run it (replace or rename your copy as you prefer). In-app update checks are **not implemented yet**. A desktop menu entry is **not** created automatically today; launch the AppImage from your file manager or shell.
+4. **Upgrades:** download a newer **`.AppImage`** from GitHub Releases and run it (replace or rename your copy as you prefer). In-app update checks are **not implemented yet**.
 
 ### Developing from source
 
@@ -134,7 +136,7 @@ pwsh ./tools/scripts/run-server-rebuild.ps1
 Set release-aligned version surfaces in one step (repo-root `.version` is the source of truth; bare semver is written to consumers):
 
 ```bash
-pwsh ./tools/scripts/set-release-version.ps1 -Version v0.12.0-dev.9
+pwsh ./tools/scripts/set-release-version.ps1 -Version v0.12.0-dev.10
 ```
 
 Omit `-Version` to read the current value from `.version` and fan out without changing the file. By default this also updates the desktop app `<Version>`, regenerates WebUI OpenAPI contracts (`npm run generate:contracts`), and runs solution build/test, WebUI verify, and deploy smoke. Pass `-NoUpdateDesktopVersion`, `-NoRegenerateContracts`, and/or `-NoRunVerify` to skip any of those. Use `-NoDocUpdates` to leave `README.md` / `docs/dev-setup.md` release command examples unchanged.
@@ -194,7 +196,7 @@ ReelRoulette ships through **Velopack** only. The **`.github/workflows/release.y
 1. Set the repo version and align contract/project surfaces:
 
    ```bash
-   pwsh ./tools/scripts/set-release-version.ps1 -Version v0.12.0-dev.9
+   pwsh ./tools/scripts/set-release-version.ps1 -Version v0.12.0-dev.10
    ```
 
 2. Commit, push, and create/publish the GitHub release notes for the tag.

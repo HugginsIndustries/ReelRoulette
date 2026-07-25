@@ -23,6 +23,15 @@ class Program
         // Velopack re-invokes this executable with hook arguments during install, update, and uninstall; run before LibVLC/native loads or Avalonia startup — hook invocations exit the process.
         VelopackApp.Build().Run();
 
+        try
+        {
+            LinuxAppImageRegistration.TryRegisterInBackground();
+        }
+        catch (Exception ex)
+        {
+            Log($"Linux AppImage menu registration could not be scheduled (non-fatal): {ex.Message}");
+        }
+
         Log("=== Desktop Application Startup ===");
 
         // Add global exception handlers to capture crashes

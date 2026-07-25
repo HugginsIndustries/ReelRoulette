@@ -3,7 +3,7 @@
     <TargetFrameworks>net10.0;net10.0-windows</TargetFrameworks>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <Version>0.12.0-dev.9</Version>
+    <Version>0.12.0-dev.10</Version>
     <ApplicationIcon>..\..\..\assets\HI.ico</ApplicationIcon>
   </PropertyGroup>
   <PropertyGroup Condition="'$(TargetFramework)'=='net10.0'">
@@ -18,6 +18,8 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\..\assets\HI.ico" Link="HI.ico" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\..\assets\HI-256.png" Link="HI-256.png" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\..\assets\HI-512.png" Link="HI-512.png" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="12.0.0" />

@@ -156,6 +156,9 @@ Use `pwsh ./tools/scripts/reset-checklist.ps1` to reset metadata/check states be
 
 - [ ] **Velopack install (Windows):** per-user `Setup.exe` installs without elevation; Desktop and Start Menu shortcuts present when offered; server serves WebUI at `/` and Operator at `/operator`.
 - [ ] **Velopack install (Linux):** `.AppImage` runs after `chmod +x`; server serves WebUI and Operator; desktop plays video with system LibVLC; server refresh works with distro `ffmpeg`/`ffprobe`.
+- [ ] **Linux AppImage menu registration:** After first launch of each AppImage, `reelroulette-server.desktop` and `reelroulette-desktop.desktop` appear under `~/.local/share/applications/` with matching hicolor icons; both show under Multimedia in the application menu and launch the correct AppImage.
+- [ ] **Linux AppImage menu — move/reconcile:** Move one AppImage to a new directory, run it directly, and confirm its `.desktop` `Exec=` updates; relaunch without moving and confirm the `.desktop` mtime does not change.
+- [ ] **Linux AppImage menu — update:** After an in-app Velopack update, menu entries remain present and still launch the updated AppImage.
 - [ ] **Server in-app updates (manual):** From packaged build *N*, background check surfaces *N+1* without downloading; operator Download reaches ready without restart; Apply & Restart relaunches on *N+1*; restart without apply re-checks feed (does not offer stale ready).
 - [ ] **Desktop in-app updates (deferred):** feed-based check/download/apply—desktop slice not implemented; upgrade manually from GitHub Releases until then.
 - [ ] **Packaged server smoke:** `./tools/scripts/verify-linux-packaged-server-smoke.sh` passes (builds Velopack server AppImage when no path given).

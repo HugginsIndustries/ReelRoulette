@@ -9,7 +9,7 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
-    <Version>0.12.0-dev.9</Version>
+    <Version>0.12.0-dev.10</Version>
     <AssemblyName>ReelRoulette.DesktopApp</AssemblyName>
     <Nullable>enable</Nullable>
     <ApplicationManifest>app.manifest</ApplicationManifest>
@@ -37,6 +37,8 @@
     <None Include="..\..\..\..\licenses\**\*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <None Include="..\..\..\..\assets\HI-256.png" Link="HI-256.png" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\..\..\assets\HI-512.png" Link="HI-512.png" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>
     <AvaloniaResource Include="..\..\..\..\assets\HI.ico" Link="assets\HI.ico" />

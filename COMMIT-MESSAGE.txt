@@ -19,8 +19,8 @@ Instructions:
 
 Commit Message:
 
-Feature: Desktop Velopack self-update in Settings
+Feature: Linux AppImage Freedesktop menu self-registration
 
-- Port check/download/apply UpdateService and background check-only loop (stable/dev feeds) for Velopack-installed desktop builds; dev channel in desktop-settings.json with persistence tests.
-- Settings dialog update section mirrors operator UI (version, status, manual actions, channel toggle).
-- CONTEXT and CHANGELOG [Unreleased] note desktop self-update behavior.
+- Server and desktop reconcile `reelroulette-*.desktop` and hicolor icons when `APPIMAGE` is set; copy HI-256/512 into publish output for icon sources.
+- Wire fire-and-forget registration after server start and desktop Velopack hooks; isolate `XDG_DATA_HOME` in packaged-server smoke.
+- Docs, CONTEXT, checklist, and changelog note silent menu integration and reconcile-on-move behavior.
