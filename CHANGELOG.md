@@ -7,7 +7,7 @@ This file follows a Keep a Changelog style format.
 
 ### Added
 
-- **Server — Velopack self-update:** Installed ServerApp builds automatically check, download, and apply updates from Backblaze B2 (stable or dev feed), restarting after a graceful shutdown; operator control settings add `devChannelEnabled` to select the dev pre-release channel (immediate check when toggled, plus periodic schedule; no restart required).
+- **Server — Velopack self-update:** Installed ServerApp builds expose operator-driven update control (`/control/update/*` and the operator UI check → download → apply flow). A background loop **checks** the Backblaze B2 feed only (stable or dev via `devChannelEnabled`); download and apply never run without operator confirmation. Dev channel toggles still trigger an immediate check.
 - **Release pipeline — Velopack on B2:** Tag and manual `release.yml` workflow packs ServerApp and DesktopApp with Velopack, publishes dev/stable update feeds to Backblaze B2 (`reelroulette/*` prefixes), and mirrors stable builds to GitHub Releases; host apps call `VelopackApp` hooks at startup (update UI deferred to a follow-up slice). Inno/AppImage/portable packaging remains unchanged.
 - **Server — library projection thumbnail metadata:** `GET /api/library/projection` enriches each item at serve time with `hasThumbnail`, `thumbnailWidth`, and `thumbnailHeight` from the server thumbnail index (not persisted in `library.json`).
 - **Core — library grid layout:** Shared `LibraryGridLayout` justified-row algorithm with tests for aspect fallbacks, row packing, and layout width rules.
@@ -25,7 +25,8 @@ This file follows a Keep a Changelog style format.
 
 ### Changed
 
-- **Server — operator UI:** Shows the running server build version (`GET /api/version` → `appVersion`) near the top of `/operator`.
+- **Server — self-update control:** Background Velopack polling notifies when an update is available; operators choose when to download and when to apply, so the server never restarts for an update on its own.
+- **Server — operator UI:** Shows the running server build version (`GET /api/version` → `appVersion`) near the top of `/operator` and exposes Check for Updates / Download / Apply & Restart actions wired to `/control/update/*`.
 - **Packaging and installation:** ReelRoulette now ships through a single Velopack installer path on Windows and Linux (replacing Inno Setup, portable ZIP/tarball packages, and legacy AppImage build scripts). Update **feeds** are published on B2; **ServerApp** applies in-app updates when installed via Velopack (desktop self-update remains a follow-up slice).
 - **Release pipeline — Windows native dependencies:** Velopack release builds now install FFmpeg from a pinned GitHub-hosted build and copy it into the server package, and bundle the desktop video playback library from its NuGet publish output instead of relying on the legacy fetch-and-stage scripts used by Inno/AppImage packaging.
 - **Desktop packaging — LibVLC layout:** Windows desktop packages ship one LibVLC tree under `runtimes/win-x64/native/libvlc/` instead of duplicating NuGet `libvlc/win-x64/` and `libvlc/win-x86/` beside the publish root; Linux desktop packages no longer carry unused Windows LibVLC binaries (playback still uses system LibVLC on Linux).

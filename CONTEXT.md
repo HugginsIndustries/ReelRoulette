@@ -24,7 +24,7 @@ ReelRoulette is migrating from a monolithic desktop app to a thin-client, API-fi
   - Startup-launch registration is host-managed with immediate toggle support through tray and Operator control settings:
     - Windows: user-scoped `HKCU` registration.
     - Linux: XDG autostart (`*.desktop` under `~/.config/autostart/` or `$XDG_CONFIG_HOME/autostart/`, with `Exec=`/`Path=` derived from the stable app path—**`APPIMAGE`** when running an AppImage, otherwise the process path—and host content root pinned to `AppContext.BaseDirectory` so session autostart finds config and WebUI assets).
-  - Packaged server builds self-update via Velopack: automatic check/download/apply on a background schedule, graceful shutdown before apply, and an operator UI toggle (`devChannelEnabled` on `/control/settings`) to choose stable vs dev update feeds (an immediate check runs when the toggle changes, in addition to the periodic schedule).
+  - Packaged server builds self-update via Velopack on an operator-controlled check → download → apply flow: a background loop checks the feed only (stable or dev via `devChannelEnabled` on `/control/settings`) to surface availability; download and apply are separate confirmed operator actions under `/control/update/*` and never run automatically; an immediate check still runs when the dev channel toggle changes.
 
 - **Domain execution (`src/core/ReelRoulette.Core` + server services)**
   - API-authoritative library operations (import, duplicates, auto-tag, playback stats, refresh pipeline).

@@ -111,6 +111,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/control/update/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get server Velopack self-update state (check/download/apply is operator-driven) */
+        get: operations["getControlUpdateStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/control/update/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Check the configured update feed for a newer server build (does not download or apply) */
+        post: operations["postControlUpdateCheck"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/control/update/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Download the update surfaced by the last successful check (does not apply) */
+        post: operations["postControlUpdateDownload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/control/update/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Apply a downloaded update and restart the server process */
+        post: operations["postControlUpdateApply"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/control/status": {
         parameters: {
             query?: never;
@@ -855,6 +923,23 @@ export interface components {
             accepted: boolean;
             message: string;
         };
+        /** @enum {string} */
+        ServerUpdatePhase: "notInstalled" | "idle" | "upToDate" | "updateAvailable" | "downloading" | "updateReady" | "restarting";
+        ServerUpdateStatusResponse: {
+            phase: components["schemas"]["ServerUpdatePhase"];
+            runningVersion?: string | null;
+            targetVersion?: string | null;
+            message: string;
+            velopackInstalled: boolean;
+        };
+        ServerUpdateActionResponse: {
+            accepted: boolean;
+            phase: components["schemas"]["ServerUpdatePhase"];
+            runningVersion?: string | null;
+            targetVersion?: string | null;
+            message: string;
+            velopackInstalled: boolean;
+        };
         ControlRuntimeSettingsSnapshot: {
             /** @enum {string} */
             adminAuthMode: "Off" | "TokenRequired";
@@ -1558,6 +1643,158 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RestartResponse"];
+                };
+            };
+        };
+    };
+    getControlUpdateStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current update state */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServerUpdateStatusResponse"];
+                };
+            };
+            /** @description Unauthorized when control admin auth is required and request is not paired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden when request is non-local and LAN control access is disabled */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    postControlUpdateCheck: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Check result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServerUpdateActionResponse"];
+                };
+            };
+            /** @description Unauthorized when control admin auth is required and request is not paired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden when request is non-local and LAN control access is disabled */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    postControlUpdateDownload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Download result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServerUpdateActionResponse"];
+                };
+            };
+            /** @description Unauthorized when control admin auth is required and request is not paired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden when request is non-local and LAN control access is disabled */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    postControlUpdateApply: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Apply accepted; process will restart shortly */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServerUpdateActionResponse"];
+                };
+            };
+            /** @description Unauthorized when control admin auth is required and request is not paired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden when request is non-local and LAN control access is disabled */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
         };

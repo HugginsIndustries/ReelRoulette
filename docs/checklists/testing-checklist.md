@@ -156,7 +156,8 @@ Use `pwsh ./tools/scripts/reset-checklist.ps1` to reset metadata/check states be
 
 - [ ] **Velopack install (Windows):** per-user `Setup.exe` installs without elevation; Desktop and Start Menu shortcuts present when offered; server serves WebUI at `/` and Operator at `/operator`.
 - [ ] **Velopack install (Linux):** `.AppImage` runs after `chmod +x`; server serves WebUI and Operator; desktop plays video with system LibVLC; server refresh works with distro `ffmpeg`/`ffprobe`.
-- [ ] **In-app updates (deferred):** feed-based check/download/apply from build *N* to *N+1* (full or delta)—not implemented; upgrade manually from GitHub Releases until this slice lands.
+- [ ] **Server in-app updates (manual):** From packaged build *N*, background check surfaces *N+1* without downloading; operator Download reaches ready without restart; Apply & Restart relaunches on *N+1*; restart without apply re-checks feed (does not offer stale ready).
+- [ ] **Desktop in-app updates (deferred):** feed-based check/download/apply—desktop slice not implemented; upgrade manually from GitHub Releases until then.
 - [ ] **Packaged server smoke:** `./tools/scripts/verify-linux-packaged-server-smoke.sh` passes (builds Velopack server AppImage when no path given).
 - [ ] **Branding:** icon parity across shortcuts, menus, and WebUI.
 

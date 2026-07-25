@@ -161,6 +161,102 @@ paths:
               schema:
                 $ref: "#/components/schemas/RestartResponse"
 
+  /control/update/status:
+    get:
+      summary: Get server Velopack self-update state (check/download/apply is operator-driven)
+      operationId: getControlUpdateStatus
+      responses:
+        "200":
+          description: Current update state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServerUpdateStatusResponse"
+        "401":
+          description: Unauthorized when control admin auth is required and request is not paired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden when request is non-local and LAN control access is disabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /control/update/check:
+    post:
+      summary: Check the configured update feed for a newer server build (does not download or apply)
+      operationId: postControlUpdateCheck
+      responses:
+        "200":
+          description: Check result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServerUpdateActionResponse"
+        "401":
+          description: Unauthorized when control admin auth is required and request is not paired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden when request is non-local and LAN control access is disabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /control/update/download:
+    post:
+      summary: Download the update surfaced by the last successful check (does not apply)
+      operationId: postControlUpdateDownload
+      responses:
+        "200":
+          description: Download result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServerUpdateActionResponse"
+        "401":
+          description: Unauthorized when control admin auth is required and request is not paired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden when request is non-local and LAN control access is disabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /control/update/apply:
+    post:
+      summary: Apply a downloaded update and restart the server process
+      operationId: postControlUpdateApply
+      responses:
+        "200":
+          description: Apply accepted; process will restart shortly
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServerUpdateActionResponse"
+        "401":
+          description: Unauthorized when control admin auth is required and request is not paired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden when request is non-local and LAN control access is disabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /control/status:
     get:
       summary: Get control-plane runtime status and telemetry
@@ -1420,6 +1516,60 @@ components:
           type: boolean
         message:
           type: string
+
+    ServerUpdatePhase:
+      type: string
+      enum:
+        - notInstalled
+        - idle
+        - upToDate
+        - updateAvailable
+        - downloading
+        - updateReady
+        - restarting
+
+    ServerUpdateStatusResponse:
+      type: object
+      required:
+        - phase
+        - message
+        - velopackInstalled
+      properties:
+        phase:
+          $ref: "#/components/schemas/ServerUpdatePhase"
+        runningVersion:
+          type: string
+          nullable: true
+        targetVersion:
+          type: string
+          nullable: true
+        message:
+          type: string
+        velopackInstalled:
+          type: boolean
+
+    ServerUpdateActionResponse:
+      type: object
+      required:
+        - accepted
+        - phase
+        - message
+        - velopackInstalled
+      properties:
+        accepted:
+          type: boolean
+        phase:
+          $ref: "#/components/schemas/ServerUpdatePhase"
+        runningVersion:
+          type: string
+          nullable: true
+        targetVersion:
+          type: string
+          nullable: true
+        message:
+          type: string
+        velopackInstalled:
+          type: boolean
 
     ControlRuntimeSettingsSnapshot:
       type: object

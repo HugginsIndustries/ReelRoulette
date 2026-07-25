@@ -93,6 +93,7 @@ static async Task RunAsync(string[] args)
         MapRuntimeConfig(app, runtimeOptions, startupWebRuntime);
         MapOperatorUi(app, serverAppOptions, webUiEnabledAtStartup);
         MapRestartEndpoints(app, serverAppOptions);
+        MapUpdateControlEndpoints(app);
         MapStartupLaunchEndpoints(app, startupLaunchService);
         MapWebUiStaticServing(app, serverAppOptions, webUiEnabledAtStartup);
 
@@ -518,6 +519,14 @@ static void MapOperatorUi(WebApplication app, ServerAppOptions options, bool web
       <h1>ReelRoulette Server</h1>
       <p>Control-plane operator surface for runtime status, settings, telemetry, and lifecycle actions.</p>
       <p id="runningVersion" class="muted">Running version: loading…</p>
+      <div id="updatePanel">
+        <p id="updateStatusLine" class="muted">Update status: loading…</p>
+        <div class="row-actions">
+          <button id="checkForUpdates" type="button">Check for Updates</button>
+          <button id="downloadUpdate" type="button" style="display:none;">Download Update</button>
+          <button id="applyUpdate" type="button" style="display:none;">Apply &amp; Restart</button>
+        </div>
+      </div>
       <h3>Runtime Status</h3>
       <div id="status" class="status-box">Loading...</div>
       <div class="row-actions">
@@ -665,6 +674,89 @@ static void MapOperatorUi(WebApplication app, ServerAppOptions options, bool web
         node.textContent = "Running version: " + (version.appVersion ?? "unknown");
       } catch (err) {
         node.textContent = "Running version: unavailable (" + (err.message || String(err)) + ")";
+      }
+    }
+
+    function renderUpdateUi(status) {
+      const line = document.getElementById("updateStatusLine");
+      const checkBtn = document.getElementById("checkForUpdates");
+      const downloadBtn = document.getElementById("downloadUpdate");
+      const applyBtn = document.getElementById("applyUpdate");
+      const phase = status?.phase || "idle";
+      line.textContent = status?.message || "Update status unavailable.";
+
+      const checking = checkBtn.dataset.busy === "1";
+      const downloading = downloadBtn.dataset.busy === "1";
+      const applying = applyBtn.dataset.busy === "1";
+
+      checkBtn.disabled = checking || downloading || applying || phase === "downloading" || phase === "restarting";
+      checkBtn.textContent = checking ? "Checking…" : "Check for Updates";
+
+      const showDownload = phase === "updateAvailable" || phase === "downloading";
+      downloadBtn.style.display = showDownload ? "" : "none";
+      downloadBtn.disabled = downloading || phase === "downloading" || phase === "restarting";
+      downloadBtn.textContent = (downloading || phase === "downloading") ? "Downloading…" : "Download Update";
+
+      const showApply = phase === "updateReady" || phase === "restarting";
+      applyBtn.style.display = showApply ? "" : "none";
+      applyBtn.disabled = applying || phase === "restarting";
+      applyBtn.textContent = (applying || phase === "restarting") ? "Restarting…" : "Apply & Restart";
+    }
+
+    async function refreshUpdateStatus() {
+      const status = await getJson("/control/update/status");
+      renderUpdateUi(status);
+      return status;
+    }
+
+    async function runUpdateCheck() {
+      const checkBtn = document.getElementById("checkForUpdates");
+      checkBtn.dataset.busy = "1";
+      renderUpdateUi(await getJson("/control/update/status").catch(() => ({ phase: "idle", message: "Update status unavailable." })));
+      try {
+        const result = await getJson("/control/update/check", { method: "POST" });
+        renderUpdateUi(result);
+      } finally {
+        checkBtn.dataset.busy = "0";
+        await refreshUpdateStatus().catch(() => {});
+      }
+    }
+
+    async function runUpdateDownload() {
+      const target = (await getJson("/control/update/status").catch(() => null))?.targetVersion;
+      const label = target ? "v" + target : "the available update";
+      if (!window.confirm("Download update " + label + " now? The server will not restart until you choose Apply & Restart.")) {
+        return;
+      }
+
+      const downloadBtn = document.getElementById("downloadUpdate");
+      downloadBtn.dataset.busy = "1";
+      try {
+        const result = await getJson("/control/update/download", { method: "POST" });
+        renderUpdateUi(result);
+      } finally {
+        downloadBtn.dataset.busy = "0";
+        await refreshUpdateStatus().catch(() => {});
+      }
+    }
+
+    async function runUpdateApply() {
+      const target = (await getJson("/control/update/status").catch(() => null))?.targetVersion;
+      const label = target ? "v" + target : "the downloaded update";
+      if (!window.confirm("Apply " + label + " and restart the server now? The operator UI will disconnect while the server restarts.")) {
+        return;
+      }
+
+      const applyBtn = document.getElementById("applyUpdate");
+      applyBtn.dataset.busy = "1";
+      renderUpdateUi({ phase: "restarting", message: "Restarting to apply update…" });
+      try {
+        const result = await getJson("/control/update/apply", { method: "POST" });
+        renderUpdateUi(result);
+      } catch (err) {
+        document.getElementById("updateStatusLine").textContent = err.message || String(err);
+        applyBtn.dataset.busy = "0";
+        await refreshUpdateStatus().catch(() => {});
       }
     }
 
@@ -979,6 +1071,15 @@ static void MapOperatorUi(WebApplication app, ServerAppOptions options, bool web
       setStatus("stop requested:\\n" + JSON.stringify(result, null, 2));
     }
 
+    document.getElementById("checkForUpdates").addEventListener("click", () => runUpdateCheck().catch(err => {
+      document.getElementById("updateStatusLine").textContent = err.message || String(err);
+    }));
+    document.getElementById("downloadUpdate").addEventListener("click", () => runUpdateDownload().catch(err => {
+      document.getElementById("updateStatusLine").textContent = err.message || String(err);
+    }));
+    document.getElementById("applyUpdate").addEventListener("click", () => runUpdateApply().catch(err => {
+      document.getElementById("updateStatusLine").textContent = err.message || String(err);
+    }));
     document.getElementById("refreshStatus").addEventListener("click", () => refreshStatus().catch(err => setStatus(err.message)));
     document.getElementById("saveWebSettings").addEventListener("click", () => saveWebRuntimeSettings().catch(err => setSettingsStatus(err.message, true)));
     document.getElementById("saveControlSettings").addEventListener("click", () => saveControlSettings().catch(err => setControlStatus(err.message, true)));
@@ -1005,7 +1106,8 @@ static void MapOperatorUi(WebApplication app, ServerAppOptions options, bool web
     });
     document.getElementById("saveTestingState").addEventListener("click", () => saveTestingState().catch(err => setTestingStatus(err.message, true)));
     document.getElementById("resetTestingState").addEventListener("click", () => resetTestingState().catch(err => setTestingStatus(err.message, true)));
-    Promise.all([refreshRunningVersion(), refreshStatus(), loadWebRuntimeSettings(), loadControlSettings(), loadStartupLaunchSetting(), refreshLogs(), loadTestingState()]).catch(err => setStatus(err.message));
+    Promise.all([refreshRunningVersion(), refreshUpdateStatus(), refreshStatus(), loadWebRuntimeSettings(), loadControlSettings(), loadStartupLaunchSetting(), refreshLogs(), loadTestingState()]).catch(err => setStatus(err.message));
+    setInterval(() => refreshUpdateStatus().catch(() => {}), 15000);
     setInterval(() => refreshStatus().catch(() => {}), 3000);
     setInterval(() => refreshRunningVersion().catch(() => {}), 30000);
     setInterval(() => refreshLogs().catch(() => {}), 5000);
@@ -1015,6 +1117,29 @@ static void MapOperatorUi(WebApplication app, ServerAppOptions options, bool web
 """;
         var html = htmlTemplate.Replace("__WEBUI_ENABLED_AT_STARTUP__", webUiEnabledAtStartup ? "true" : "false");
         return Results.Text(html, "text/html");
+    });
+}
+
+static void MapUpdateControlEndpoints(WebApplication app)
+{
+    app.MapGet("/control/update/status", (UpdateService updates) => Results.Ok(updates.GetStatus()));
+
+    app.MapPost("/control/update/check", async (UpdateService updates, CancellationToken cancellationToken) =>
+    {
+        var result = await updates.CheckForUpdatesAsync(cancellationToken).ConfigureAwait(false);
+        return Results.Ok(result);
+    });
+
+    app.MapPost("/control/update/download", async (UpdateService updates, CancellationToken cancellationToken) =>
+    {
+        var result = await updates.DownloadAvailableUpdateAsync(cancellationToken).ConfigureAwait(false);
+        return Results.Ok(result);
+    });
+
+    app.MapPost("/control/update/apply", (UpdateService updates) =>
+    {
+        var result = updates.ApplyDownloadedUpdate();
+        return Results.Ok(result);
     });
 }
 
