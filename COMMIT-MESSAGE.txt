@@ -19,8 +19,8 @@ Instructions:
 
 Commit Message:
 
-Feature: Manual server Velopack check, download, and apply
+Bugfix: Operator UI shows Velopack package version, not assembly version
 
-- Replace automatic background download/apply with check-only polling plus operator `/control/update/*` actions.
-- Add operator UI state machine (check, confirmed download, confirmed apply) and OpenAPI contract surfaces.
-- Document manual self-update behavior in CONTEXT, api.md, and CHANGELOG [Unreleased].
+- Source the running-version line from `/control/update/status` `runningVersion` so it matches update status (prerelease builds included).
+- Resolve non–Velopack runs via assembly informational version with a clear dev-run label instead of the four-part assembly version.
+- Update CHANGELOG [Unreleased] operator UI note; no OpenAPI contract change.

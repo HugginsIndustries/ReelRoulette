@@ -104,14 +104,12 @@ public sealed class UpdateService : IServerUpdateChannelCoordinator
         var devChannelEnabled = _settings.GetControlRuntimeSettings().DevChannelEnabled;
         var manager = CreateUpdateManager(devChannelEnabled);
         _velopackInstalled = manager.IsInstalled;
+        _runningVersion = ServerRunningVersion.Resolve(manager);
         if (!manager.IsInstalled)
         {
             _phase = ServerUpdatePhases.NotInstalled;
-            _runningVersion = null;
             return;
         }
-
-        _runningVersion ??= manager.CurrentVersion?.ToString() ?? "unknown";
     }
 
     public async Task<ServerUpdateActionResult> CheckForUpdatesAsync(CancellationToken cancellationToken)
@@ -131,7 +129,7 @@ public sealed class UpdateService : IServerUpdateChannelCoordinator
             {
                 _velopackInstalled = false;
                 _phase = ServerUpdatePhases.NotInstalled;
-                _runningVersion = null;
+                _runningVersion = ServerRunningVersion.ResolveFromEntryAssembly();
                 _targetVersion = null;
                 _availableUpdate = null;
                 _sessionReadyRelease = null;
@@ -156,7 +154,7 @@ public sealed class UpdateService : IServerUpdateChannelCoordinator
                 return ToActionResult(false, BuildStatusLocked(), "A download is already in progress.");
             }
 
-            _runningVersion = manager.CurrentVersion?.ToString() ?? "unknown";
+            _runningVersion = ServerRunningVersion.Resolve(manager);
         }
 
         _logger.LogInformation(
@@ -184,7 +182,7 @@ public sealed class UpdateService : IServerUpdateChannelCoordinator
         lock (_stateLock)
         {
             _velopackInstalled = true;
-            _runningVersion = manager.CurrentVersion?.ToString() ?? _runningVersion;
+            _runningVersion = ServerRunningVersion.Resolve(manager);
 
             if (updateInfo == null)
             {

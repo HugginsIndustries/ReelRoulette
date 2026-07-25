@@ -667,17 +667,16 @@ static void MapOperatorUi(WebApplication app, ServerAppOptions options, bool web
       document.getElementById("status").textContent = text;
     }
 
-    async function refreshRunningVersion() {
-      const node = document.getElementById("runningVersion");
-      try {
-        const version = await getJson("/api/version");
-        node.textContent = "Running version: " + (version.appVersion ?? "unknown");
-      } catch (err) {
-        node.textContent = "Running version: unavailable (" + (err.message || String(err)) + ")";
+    function formatRunningVersion(status) {
+      const version = status?.runningVersion ?? "unknown";
+      if (status?.velopackInstalled) {
+        return "Running version: " + version;
       }
+      return "Running version: " + version + " (dev run — not a Velopack install)";
     }
 
     function renderUpdateUi(status) {
+      document.getElementById("runningVersion").textContent = formatRunningVersion(status);
       const line = document.getElementById("updateStatusLine");
       const checkBtn = document.getElementById("checkForUpdates");
       const downloadBtn = document.getElementById("downloadUpdate");
@@ -1106,10 +1105,9 @@ static void MapOperatorUi(WebApplication app, ServerAppOptions options, bool web
     });
     document.getElementById("saveTestingState").addEventListener("click", () => saveTestingState().catch(err => setTestingStatus(err.message, true)));
     document.getElementById("resetTestingState").addEventListener("click", () => resetTestingState().catch(err => setTestingStatus(err.message, true)));
-    Promise.all([refreshRunningVersion(), refreshUpdateStatus(), refreshStatus(), loadWebRuntimeSettings(), loadControlSettings(), loadStartupLaunchSetting(), refreshLogs(), loadTestingState()]).catch(err => setStatus(err.message));
+    Promise.all([refreshUpdateStatus(), refreshStatus(), loadWebRuntimeSettings(), loadControlSettings(), loadStartupLaunchSetting(), refreshLogs(), loadTestingState()]).catch(err => setStatus(err.message));
     setInterval(() => refreshUpdateStatus().catch(() => {}), 15000);
     setInterval(() => refreshStatus().catch(() => {}), 3000);
-    setInterval(() => refreshRunningVersion().catch(() => {}), 30000);
     setInterval(() => refreshLogs().catch(() => {}), 5000);
   </script>
 </body>
