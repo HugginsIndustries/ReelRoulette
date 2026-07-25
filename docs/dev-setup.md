@@ -155,7 +155,7 @@ With no argument, the script publishes and `vpk pack`s a server AppImage (matchi
 
 Repo-root **`.version`** holds the canonical release version as a single v-prefixed semver2 line (for example `v0.12.0-dev`). Use one command to align release-version surfaces:
 
-- `pwsh ./tools/scripts/set-release-version.ps1 -Version v0.12.0-dev.8`
+- `pwsh ./tools/scripts/set-release-version.ps1 -Version v0.12.0-dev.9`
 - Omit `-Version` to read `.version` and fan out without changing the file.
 - By default, the script also updates the desktop app `<Version>`, runs `npm run generate:contracts` in WebUI, runs solution build/test plus WebUI verify and `verify-web-deploy.ps1`, and updates release command examples in `README.md` and `docs/dev-setup.md`.
 - Use `-NoDocUpdates` to skip the README/dev-setup example updates.
