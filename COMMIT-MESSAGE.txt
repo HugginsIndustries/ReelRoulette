@@ -19,9 +19,8 @@ Instructions:
 
 Commit Message:
 
-Bugfix: Stop verification scripts and partial control POSTs from resetting dev channel
+Chore: Stop verification smoke servers and guard agent lifecycle checks
 
-- Omitting `devChannelEnabled` on POST `/control/settings` now leaves the persisted value unchanged (nullable OpenAPI/C# contract; GET still returns a concrete boolean).
-- Isolate `verify-web-deploy.ps1` and Linux packaged server smoke via `APPDATA` / `XDG_CONFIG_HOME` temp dirs so routine verification does not touch real `core-settings.json`.
-- Add CoreSettingsService tests for omitted dev channel and cross-section refresh persist survival; document AGENTS rule and add settings persistence audit report.
-- CHANGELOG [Unreleased] Fixed entry; regenerate WebUI OpenAPI types.
+- `verify-web-deploy.ps1` and `verify-linux-packaged-server-smoke.sh` stop the process they started (launcher plus HTTP listener PID on the script port) with graceful shutdown then force kill, always before removing isolated config/temp dirs.
+- AGENTS: document verification-script termination by started handle; when validating lifecycle behavior, never stop unrelated servers—use non-destructive checks only (`kill -0`, read-only process/port queries).
+- CHANGELOG [Unreleased] Fixed and Changed entries for this slice.

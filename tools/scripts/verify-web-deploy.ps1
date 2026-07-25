@@ -12,10 +12,90 @@ $serverProject = Join-Path $repoRoot "src" "core" "ReelRoulette.ServerApp" "Reel
 $serverOutLogPath = Join-Path $repoRoot ".verify-web-deploy-server.out.log"
 $serverErrLogPath = Join-Path $repoRoot ".verify-web-deploy-server.err.log"
 
+function Get-TcpListenerProcessId {
+    param([int]$Port)
+
+    if ($IsWindows) {
+        $conn = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($null -eq $conn) {
+            return $null
+        }
+        return [int]$conn.OwningProcess
+    }
+
+    $ssLines = & ss -tlnp 2>$null
+    foreach ($line in $ssLines) {
+        if ($line -notmatch ":$Port(\s|\*)") {
+            continue
+        }
+        $match = [regex]::Match($line, 'pid=(\d+)')
+        if ($match.Success) {
+            return [int]$match.Groups[1].Value
+        }
+    }
+    return $null
+}
+
+function Stop-StartedProcessById {
+    param(
+        [int]$ProcessId,
+        [int]$GracefulTimeoutMs = 5000
+    )
+
+    if ($ProcessId -le 0) {
+        return
+    }
+
+    try {
+        Stop-Process -Id $ProcessId -ErrorAction SilentlyContinue
+    }
+    catch {
+        # Best-effort graceful stop (SIGTERM on Linux, close message on Windows).
+    }
+
+    try {
+        $proc = [System.Diagnostics.Process]::GetProcessById($ProcessId)
+        if ($proc.WaitForExit($GracefulTimeoutMs)) {
+            return
+        }
+
+        $proc.Kill($true)
+        $proc.WaitForExit($GracefulTimeoutMs) | Out-Null
+    }
+    catch {
+        Stop-Process -Id $ProcessId -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Stop-StartedServerProcess {
+    param(
+        [System.Diagnostics.Process]$Process,
+        [int]$ListenProcessId = 0,
+        [int]$GracefulTimeoutMs = 5000
+    )
+
+    $idsToStop = New-Object System.Collections.Generic.List[int]
+    if ($ListenProcessId -gt 0) {
+        $idsToStop.Add($ListenProcessId) | Out-Null
+    }
+    if ($null -ne $Process -and -not $Process.HasExited) {
+        if (-not $idsToStop.Contains($Process.Id)) {
+            $idsToStop.Add($Process.Id) | Out-Null
+        }
+    }
+
+    foreach ($processId in $idsToStop) {
+        Stop-StartedProcessById -ProcessId $processId -GracefulTimeoutMs $GracefulTimeoutMs
+    }
+}
+
 # Verification scripts must not read or write the developer's real ApplicationData settings.
 # .NET resolves SpecialFolder.ApplicationData from APPDATA (Windows) or XDG_CONFIG_HOME (Linux).
 $isolatedConfigHome = Join-Path ([IO.Path]::GetTempPath()) ("reelroulette-verify-web-deploy-" + [Guid]::NewGuid().ToString("N"))
 New-Item -ItemType Directory -Path $isolatedConfigHome -Force | Out-Null
+
+$serverProcess = $null
+$serverListenProcessId = 0
 
 try {
     Push-Location $webUiPath
@@ -72,8 +152,7 @@ try {
     }
     $serverProcess = Start-Process @startProcessArgs
 
-    try {
-        $healthUrl = "$listenUrl/health"
+    $healthUrl = "$listenUrl/health"
         $healthReady = $false
         for ($i = 0; $i -lt 40; $i++) {
             if ($serverProcess.HasExited) {
@@ -95,6 +174,8 @@ try {
         if (-not $healthReady) {
             throw "Timed out waiting for health endpoint at $healthUrl. See logs: $serverOutLogPath and $serverErrLogPath."
         }
+
+        $serverListenProcessId = Get-TcpListenerProcessId -Port $ServerPort
 
         $indexResponse = Invoke-WebRequest -Uri "$listenUrl/" -UseBasicParsing -TimeoutSec 5
         if ([string]::IsNullOrWhiteSpace($indexResponse.Content)) {
@@ -150,15 +231,16 @@ try {
             throw "Server process exited unexpectedly during validation."
         }
 
-        Write-Output "Single-origin and control-plane server smoke verification passed."
-    }
-    finally {
-        if (-not $serverProcess.HasExited) {
-            Stop-Process -Id $serverProcess.Id -Force
-        }
-    }
+    Write-Output "Single-origin and control-plane server smoke verification passed."
 }
 finally {
+    if ($serverListenProcessId -le 0) {
+        $serverListenProcessId = Get-TcpListenerProcessId -Port $ServerPort
+    }
+    if ($null -eq $serverListenProcessId) {
+        $serverListenProcessId = 0
+    }
+    Stop-StartedServerProcess -Process $serverProcess -ListenProcessId $serverListenProcessId
     if (Test-Path $isolatedConfigHome) {
         Remove-Item -Path $isolatedConfigHome -Recurse -Force -ErrorAction SilentlyContinue
     }

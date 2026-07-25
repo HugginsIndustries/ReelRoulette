@@ -125,11 +125,58 @@ isolated_config_home="$work/isolated-config-home"
 mkdir -p "$isolated_config_home"
 
 server_pid=""
-cleanup() {
-  if [[ -n "${server_pid}" ]] && kill -0 "$server_pid" 2>/dev/null; then
-    kill "$server_pid" 2>/dev/null || true
-    wait "$server_pid" 2>/dev/null || true
+server_listen_pid=""
+
+get_tcp_listener_pid() {
+  local port="$1"
+  local line
+  while IFS= read -r line; do
+    if [[ "$line" =~ :${port}([^0-9]|$|\*) ]]; then
+      if [[ "$line" =~ pid=([0-9]+) ]]; then
+        echo "${BASH_REMATCH[1]}"
+        return 0
+      fi
+    fi
+  done < <(ss -tlnp 2>/dev/null || true)
+  return 1
+}
+
+stop_process_gracefully() {
+  local pid="$1"
+  if [[ -z "$pid" ]]; then
+    return 0
   fi
+  if ! kill -0 "$pid" 2>/dev/null; then
+    wait "$pid" 2>/dev/null || true
+    return 0
+  fi
+  kill -TERM "$pid" 2>/dev/null || true
+  local i
+  for i in $(seq 1 50); do
+    if ! kill -0 "$pid" 2>/dev/null; then
+      wait "$pid" 2>/dev/null || true
+      return 0
+    fi
+    sleep 0.1
+  done
+  kill -KILL "$pid" 2>/dev/null || true
+  wait "$pid" 2>/dev/null || true
+}
+
+stop_started_server() {
+  if [[ -z "${server_listen_pid}" ]]; then
+    server_listen_pid="$(get_tcp_listener_pid "$port" 2>/dev/null || true)"
+  fi
+  if [[ -n "${server_listen_pid}" ]]; then
+    stop_process_gracefully "$server_listen_pid"
+  fi
+  if [[ -n "${server_pid}" && "${server_pid}" != "${server_listen_pid}" ]]; then
+    stop_process_gracefully "$server_pid"
+  fi
+}
+
+cleanup() {
+  stop_started_server
   rm -rf "$work"
 }
 trap cleanup EXIT
@@ -164,6 +211,8 @@ if [[ "$ready" != true ]]; then
   exit 1
 fi
 
+server_listen_pid="$(get_tcp_listener_pid "$port" 2>/dev/null || true)"
+
 if ! curl -sfS --max-time 5 "$version_url" >/dev/null; then
   echo "Expected GET $version_url to succeed." >&2
   exit 1
@@ -178,8 +227,5 @@ if ! curl -sfS --max-time 5 "$operator_url" >/dev/null; then
   echo "Expected GET $operator_url to succeed (Operator UI)." >&2
   exit 1
 fi
-
-cleanup
-trap - EXIT
 
 echo "Packaged server smoke OK ($appimage @ $listen_url)."

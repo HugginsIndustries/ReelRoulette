@@ -47,5 +47,7 @@ Keep this file short and enforceable. For details, use `CONTEXT.md`, `MILESTONES
 ## Verification and smoke scripts
 
 - Scripts under `tools/scripts/` that start a server for automated verification or smoke testing must isolate application data (for example `APPDATA` on Windows, `XDG_CONFIG_HOME` on Linux) in a fresh temporary directory per run and remove it afterward, including on failure paths.
+- Those scripts must stop the server process they started (by started handle/PID, not broad name matching) before removing the isolated config directory, using graceful shutdown with a short timeout then force kill if needed, including on failure and interrupt paths.
 - Do not point verification or smoke servers at the developer's real `%ApplicationData%/ReelRoulette` / `~/.config/ReelRoulette` tree.
 - Dev-run helpers such as `run-server.ps1` intentionally use real settings and must not be isolated.
+- When validating process-lifecycle or smoke-script changes, never send stop signals to processes the task did not start (for example a developer's `run-server.ps1` instance). Confirm liveness and cleanup with non-destructive checks only, such as `kill -0`, `Get-Process` without stopping, or a port/listener query scoped to the verification port.

@@ -5,9 +5,14 @@ This file follows a Keep a Changelog style format.
 
 ## [Unreleased]
 
+### Changed
+
+- **Agent instructions:** Verification/smoke scripts must stop servers they start by started handle before removing isolated config; when validating that behavior, agents must not stop unrelated server processes (for example `run-server.ps1`) and should use non-destructive liveness checks only.
+
 ### Fixed
 
 - **Server — update channel preference:** Fixed a bug where `devChannelEnabled` could be silently reset to stable (`false`) when a control-settings POST omitted the field; omitted values now leave the persisted preference unchanged. Development verification scripts (`verify-web-deploy.ps1`, Linux packaged server smoke) now isolate application data so routine smoke runs do not read or write the developer's real `core-settings.json`.
+- **Verification scripts — server lifecycle:** Fixed smoke/verify scripts leaving orphaned `ReelRoulette.ServerApp` listeners after repeated runs by stopping started and listener PIDs (graceful, then force) before deleting isolated temp config directories, including on failure and interrupt paths.
 
 ### Added
 
