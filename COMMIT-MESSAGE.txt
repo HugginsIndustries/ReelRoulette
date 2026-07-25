@@ -19,8 +19,8 @@ Instructions:
 
 Commit Message:
 
-Chore: Stop verification smoke servers and guard agent lifecycle checks
+Feature: Desktop Velopack self-update in Settings
 
-- `verify-web-deploy.ps1` and `verify-linux-packaged-server-smoke.sh` stop the process they started (launcher plus HTTP listener PID on the script port) with graceful shutdown then force kill, always before removing isolated config/temp dirs.
-- AGENTS: document verification-script termination by started handle; when validating lifecycle behavior, never stop unrelated servers—use non-destructive checks only (`kill -0`, read-only process/port queries).
-- CHANGELOG [Unreleased] Fixed and Changed entries for this slice.
+- Port check/download/apply UpdateService and background check-only loop (stable/dev feeds) for Velopack-installed desktop builds; dev channel in desktop-settings.json with persistence tests.
+- Settings dialog update section mirrors operator UI (version, status, manual actions, channel toggle).
+- CONTEXT and CHANGELOG [Unreleased] note desktop self-update behavior.

@@ -25,6 +25,7 @@ ReelRoulette is migrating from a monolithic desktop app to a thin-client, API-fi
     - Windows: user-scoped `HKCU` registration.
     - Linux: XDG autostart (`*.desktop` under `~/.config/autostart/` or `$XDG_CONFIG_HOME/autostart/`, with `Exec=`/`Path=` derived from the stable app path—**`APPIMAGE`** when running an AppImage, otherwise the process path—and host content root pinned to `AppContext.BaseDirectory` so session autostart finds config and WebUI assets).
   - Packaged server builds self-update via Velopack on an operator-controlled check → download → apply flow: a background loop checks the feed only (stable or dev via `devChannelEnabled` on `/control/settings`) to surface availability; download and apply are separate confirmed operator actions under `/control/update/*` and never run automatically; an immediate check still runs when the dev channel toggle changes.
+  - The desktop client self-updates via Velopack with the same manual check → download → apply flow in Settings: stable or dev channel via `DevChannelEnabled` in `desktop-settings.json`, background check-only polling, and no restart without explicit Apply confirmation.
 
 - **Domain execution (`src/core/ReelRoulette.Core` + server services)**
   - API-authoritative library operations (import, duplicates, auto-tag, playback stats, refresh pipeline).
@@ -60,7 +61,7 @@ ReelRoulette is migrating from a monolithic desktop app to a thin-client, API-fi
 
 - **Operational surfaces**
   - Manual validation guide/checklist at `docs/checklists/testing-checklist.md`.
-  - CI and release: `ci.yml` (build/test + WebUI verify) and `release.yml` (tag + `workflow_dispatch`, Velopack publish to Backblaze B2—Windows per-user `Setup.exe`, Linux AppImage-style bundles, no MSI; stable builds also mirror install assets onto the existing GitHub release). B2 **update feeds** are published for in-app updates; **ServerApp** checks and applies its own updates when installed via Velopack (desktop self-update is a follow-up slice).
+  - CI and release: `ci.yml` (build/test + WebUI verify) and `release.yml` (tag + `workflow_dispatch`, Velopack publish to Backblaze B2—Windows per-user `Setup.exe`, Linux AppImage-style bundles, no MSI; stable builds also mirror install assets onto the existing GitHub release). B2 **update feeds** are published for in-app updates; **ServerApp** and the **desktop client** check and apply their own updates when installed via Velopack (manual check/download/apply in operator UI or desktop Settings).
   - Release versioning: **`tools/scripts/set-release-version.ps1`** reads/writes repo-root **`.version`** and fans out OpenAPI, project versions, contract fixtures, optional verify gates, and doc examples before tagging.
   - Packaging staging: **`stage-webui-assets.ps1`** (server WebUI in publish output); used by **`release.yml`** and **`verify-linux-packaged-server-smoke.sh`**.
   - Packaged-server smoke: **`verify-linux-packaged-server-smoke.sh`** builds or accepts a Velopack Linux server AppImage and curls `/health`, `/api/version`, `/control/status`, `/operator` headlessly.

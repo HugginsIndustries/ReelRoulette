@@ -16,6 +16,7 @@ This file follows a Keep a Changelog style format.
 
 ### Added
 
+- **Desktop — Velopack self-update:** The desktop app can check for and install its own updates from Settings (stable or preview/dev channel). Download and apply are separate confirmed actions; the app never restarts for an update without asking.
 - **Server — Velopack self-update:** Installed ServerApp builds expose operator-driven update control (`/control/update/*` and the operator UI check → download → apply flow). A background loop **checks** the Backblaze B2 feed only (stable or dev via `devChannelEnabled`); download and apply never run without operator confirmation. Dev channel toggles still trigger an immediate check.
 - **Release pipeline — Velopack on B2:** Tag and manual `release.yml` workflow packs ServerApp and DesktopApp with Velopack, publishes dev/stable update feeds to Backblaze B2 (`reelroulette/*` prefixes), and mirrors stable builds to GitHub Releases; host apps call `VelopackApp` hooks at startup (update UI deferred to a follow-up slice). Inno/AppImage/portable packaging remains unchanged.
 - **Server — library projection thumbnail metadata:** `GET /api/library/projection` enriches each item at serve time with `hasThumbnail`, `thumbnailWidth`, and `thumbnailHeight` from the server thumbnail index (not persisted in `library.json`).

@@ -95,6 +95,9 @@ namespace ReelRoulette
         private bool _isLoopEnabled = true;
         private bool _autoPlayNext = true;
         private bool _forceApiPlayback;
+        private bool _devChannelEnabled;
+        private UpdateService? _updateService;
+        private CancellationTokenSource? _updateBackgroundLoopCts;
         private DuplicateHandlingDefaultBehavior _duplicateHandlingDefaultBehavior = DuplicateHandlingDefaultBehavior.KeepAll;
         private bool _isMuted = false; // Track mute state for persistence
 
@@ -1029,6 +1032,7 @@ namespace ReelRoulette
                     }
 
                     StartCoreReconnectLoop();
+                    EnsureDesktopUpdateServiceStarted();
                     await EnsureCoreRuntimeAvailableAsync();
                     if (_isCoreApiReachable)
                     {
@@ -6856,91 +6860,39 @@ namespace ReelRoulette
 
         #region View Preferences
 
-        private class AppSettings
+        private void EnsureDesktopUpdateServiceStarted()
         {
-            // View preferences
-            public bool ShowMenu { get; set; } = true;
-            public bool ShowStatusLine { get; set; } = true;
-            public bool ShowControls { get; set; } = true;
-            public bool ShowLibraryPanel { get; set; } = false;
-            public bool ShowStatsPanel { get; set; } = false;
-            public bool AlwaysOnTop { get; set; } = false;
-            public bool IsPlayerViewMode { get; set; } = false;
-            public bool RememberLastFolder { get; set; } = true;
-            public string? LastFolderPath { get; set; } = null;
-            
-            // Window state
-            public double? WindowX { get; set; }
-            public double? WindowY { get; set; }
-            public double? WindowWidth { get; set; }
-            public double? WindowHeight { get; set; }
-            public int WindowState { get; set; } = 0; // 0=Normal, 1=Minimized, 2=Maximized, 3=FullScreen
-            public double? LibraryPanelWidth { get; set; }
-            
-            // ItemTagsDialog state
-            public double? ItemTagsDialogX { get; set; }
-            public double? ItemTagsDialogY { get; set; }
-            public double? ItemTagsDialogWidth { get; set; }
-            public double? ItemTagsDialogHeight { get; set; }
-            
-            // FilterDialog state
-            public double? FilterDialogX { get; set; }
-            public double? FilterDialogY { get; set; }
-            public double? FilterDialogWidth { get; set; }
-            public double? FilterDialogHeight { get; set; }
-            
-            // Playback settings
-            public string? SeekStep { get; set; }
-            public int VolumeStep { get; set; } = 5;
-            public double? IntervalSeconds { get; set; }
-            public bool VolumeNormalizationEnabled { get; set; } = false;
-            public double MaxReductionDb { get; set; } = 15.0;
-            public double MaxBoostDb { get; set; } = 5.0;
-            public bool BaselineAutoMode { get; set; } = true;
-            public double BaselineOverrideLUFS { get; set; } = -23.0;
-            public AudioFilterMode AudioFilterMode { get; set; } = AudioFilterMode.PlayAll;
-            
-            // Playback preferences (now persisted)
-            public bool LoopEnabled { get; set; } = true;
-            public bool AutoPlayNext { get; set; } = true;
-            public bool ForceApiPlayback { get; set; } = false;
-            public DuplicateHandlingDefaultBehavior DuplicateHandlingDefaultBehavior { get; set; } = DuplicateHandlingDefaultBehavior.KeepAll;
-            public bool IsMuted { get; set; } = false; // Persist mute state
-            public int VolumeLevel { get; set; } = 100; // Persist volume level (0-200)
-            public RandomizationMode RandomizationMode { get; set; } = RandomizationMode.SmartShuffle;
-            public bool RandomizationModeMigrated { get; set; } = false;
-            public int PhotoDisplayDurationSeconds { get; set; } = 5; // Photo display duration
-            
-            // Image scaling
-            public ImageScalingMode ImageScalingMode { get; set; } = ImageScalingMode.Auto;
-            public int FixedImageMaxWidth { get; set; } = 3840;
-            public int FixedImageMaxHeight { get; set; } = 2160;
-            
-            // Backup settings
-            public bool BackupLibraryEnabled { get; set; } = true;
-            public int MinimumBackupGapMinutes { get; set; } = 15;
-            public int NumberOfBackups { get; set; } = 10;
-            public bool BackupSettingsEnabled { get; set; } = true;
-            public int MinimumSettingsBackupGapMinutes { get; set; } = 15;
-            public int NumberOfSettingsBackups { get; set; } = 10;
-            
-            // Library view settings
-            public bool LibraryGridViewEnabled { get; set; } = false;
-            
-            // Filter state
-            public FilterState? FilterState { get; set; }
-            
-            public bool AutoTagScanFullLibrary { get; set; } = true;
-            public string CoreServerBaseUrl { get; set; } = "http://localhost:45123";
-            public string? CoreClientId { get; set; }
+            if (_updateService != null)
+            {
+                return;
+            }
+
+            _updateService = new UpdateService(
+                () => CreateSettingsStorageService().Load().DevChannelEnabled,
+                ShutdownDesktopForUpdateApply);
+
+            _updateBackgroundLoopCts = new CancellationTokenSource();
+            _ = DesktopUpdateBackgroundLoop.RunAsync(_updateService, _updateBackgroundLoopCts.Token);
+            Log("Desktop update background check loop started.");
         }
 
-        private static SettingsStorageService<AppSettings> CreateSettingsStorageService()
+        private static void ShutdownDesktopForUpdateApply()
         {
-            return new SettingsStorageService<AppSettings>(new JsonFileStorageOptions<AppSettings>
+            if (Application.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktopLifetime)
+            {
+                desktopLifetime.Shutdown();
+                return;
+            }
+
+            Environment.Exit(0);
+        }
+
+        private static SettingsStorageService<DesktopAppSettings> CreateSettingsStorageService()
+        {
+            return new SettingsStorageService<DesktopAppSettings>(new JsonFileStorageOptions<DesktopAppSettings>
             {
                 FilePathResolver = AppDataManager.GetSettingsPath,
-                CreateDefault = () => new AppSettings(),
+                CreateDefault = () => new DesktopAppSettings(),
                 SerializerOptions = new JsonSerializerOptions { WriteIndented = true },
                 Logger = Log
             });
@@ -7103,6 +7055,7 @@ namespace ReelRoulette
             _isLoopEnabled = settings.LoopEnabled;
             _autoPlayNext = settings.AutoPlayNext;
             _forceApiPlayback = settings.ForceApiPlayback;
+            _devChannelEnabled = settings.DevChannelEnabled;
             _duplicateHandlingDefaultBehavior = settings.DuplicateHandlingDefaultBehavior;
             _isMuted = settings.IsMuted;
             _userVolumePreference = settings.VolumeLevel; // Restore saved volume level
@@ -7337,6 +7290,7 @@ namespace ReelRoulette
                 settings.LoopEnabled = _isLoopEnabled;
                 settings.AutoPlayNext = _autoPlayNext;
                 settings.ForceApiPlayback = _forceApiPlayback;
+                settings.DevChannelEnabled = _devChannelEnabled;
                 settings.DuplicateHandlingDefaultBehavior = _duplicateHandlingDefaultBehavior;
                 settings.IsMuted = _isMuted;
                 settings.VolumeLevel = _isMuted ? _lastNonZeroVolume : _userVolumePreference;
@@ -7368,7 +7322,7 @@ namespace ReelRoulette
                 Log($"SaveSettings: Window size - Width={Width}, Height={Height}, WindowState={(WindowState)settings.WindowState}");
                 Log($"SaveSettings: Library panel width={settings.LibraryPanelWidth}");
                 Log($"SaveSettings: Photo display duration: {_photoDisplayDurationSeconds} seconds");
-                Log($"SaveSettings: Created AppSettings object. FilterState is null: {settings.FilterState == null}");
+                Log($"SaveSettings: Created DesktopAppSettings object. FilterState is null: {settings.FilterState == null}");
                 if (settings.FilterState != null)
                 {
                     Log($"SaveSettings: FilterState details - FavoritesOnly: {settings.FilterState.FavoritesOnly}, ExcludeBlacklisted: {settings.FilterState.ExcludeBlacklisted}, AudioFilter: {settings.FilterState.AudioFilter}");
@@ -8536,7 +8490,7 @@ namespace ReelRoulette
             try
             {
                 Log("Settings: Creating dialog instance...");
-                var dialog = new SettingsDialog();
+                var dialog = new SettingsDialog(_updateService);
                 Log("Settings: Dialog instance created.");
 
                 if (_isCoreApiReachable)
@@ -8592,7 +8546,8 @@ namespace ReelRoulette
                     _webRemoteBindOnLan,
                     _webRemoteLanHostname,
                     _webRemoteAuthMode,
-                    _webRemoteSharedToken
+                    _webRemoteSharedToken,
+                    _devChannelEnabled
                 );
                 Log("Settings: Dialog values loaded.");
                 
@@ -8662,6 +8617,7 @@ namespace ReelRoulette
                         var oldWebRemoteLanHostname = _webRemoteLanHostname;
                         var oldWebRemoteAuthMode = _webRemoteAuthMode;
                         var oldWebRemoteSharedToken = _webRemoteSharedToken;
+                        var oldDevChannelEnabled = _devChannelEnabled;
 
                     // Apply settings from dialog
                     _isLoopEnabled = dialog.LoopEnabled;
@@ -8716,6 +8672,13 @@ namespace ReelRoulette
                     _webRemoteSharedToken = dialog.GetWebRemoteSharedToken();
                     Log($"Settings: Web UI settings changed - Enabled: {_webRemoteEnabled}, Port: {_webRemotePort}, BindOnLan: {_webRemoteBindOnLan}, LanHostname: {_webRemoteLanHostname}, AuthMode: {_webRemoteAuthMode}");
 
+                    _devChannelEnabled = dialog.DevChannelEnabled;
+                    var devChannelChanged = oldDevChannelEnabled != _devChannelEnabled;
+                    if (devChannelChanged)
+                    {
+                        Log($"Settings: Dev update channel changed: {oldDevChannelEnabled} -> {_devChannelEnabled}");
+                    }
+
                         var settingsChanged =
                             oldLoopEnabled != _isLoopEnabled ||
                             oldAutoPlayNext != _autoPlayNext ||
@@ -8746,7 +8709,8 @@ namespace ReelRoulette
                             oldWebRemoteBindOnLan != _webRemoteBindOnLan ||
                             !string.Equals(oldWebRemoteLanHostname, _webRemoteLanHostname, StringComparison.OrdinalIgnoreCase) ||
                             oldWebRemoteAuthMode != _webRemoteAuthMode ||
-                            !string.Equals(oldWebRemoteSharedToken ?? string.Empty, _webRemoteSharedToken ?? string.Empty, StringComparison.Ordinal);
+                            !string.Equals(oldWebRemoteSharedToken ?? string.Empty, _webRemoteSharedToken ?? string.Empty, StringComparison.Ordinal) ||
+                            oldDevChannelEnabled != _devChannelEnabled;
 
                         var autoRefreshChanged =
                             oldAutoRefreshEnabled != _autoRefreshSourcesEnabled ||
@@ -9013,6 +8977,10 @@ namespace ReelRoulette
                             var saveSettingsStopwatch = Stopwatch.StartNew();
                             SaveSettings();
                             Log($"Settings: SaveSettings completed in {saveSettingsStopwatch.ElapsedMilliseconds}ms");
+                            if (devChannelChanged)
+                            {
+                                _updateService?.NotifyDevChannelChanged();
+                            }
                             Log($"Settings: Applied and saved - Loop={_isLoopEnabled}, AutoPlay={_autoPlayNext}, ForceApiPlayback={_forceApiPlayback}, DuplicateHandlingDefault={_duplicateHandlingDefaultBehavior}, RandomizationMode={_randomizationMode}, SeekStep={_seekStep}, VolumeStep={_volumeStep}, VolumeNorm={_volumeNormalizationEnabled}");
                         }
                         else

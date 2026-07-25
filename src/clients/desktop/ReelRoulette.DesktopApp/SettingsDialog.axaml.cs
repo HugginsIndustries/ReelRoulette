@@ -1,15 +1,30 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
+using Avalonia.Layout;
+using Avalonia.Media;
+using Avalonia.Threading;
 using System;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace ReelRoulette
 {
     public partial class SettingsDialog : Window, INotifyPropertyChanged
     {
+        private readonly UpdateService? _updateService;
+        private readonly CancellationTokenSource _dialogLifetimeCts = new();
         private bool _wasApplied = false;
+        private bool _devChannelEnabled;
+        private bool _checkBusy;
+        private bool _downloadBusy;
+        private bool _applyBusy;
+        private string _runningVersionLine = "Running version: loading…";
+        private string _updateStatusLine = "Update status: loading…";
+        private bool _isDownloadUpdateVisible;
+        private bool _isApplyUpdateVisible;
         
         // Playback behavior
         private bool _loopEnabled;
@@ -41,10 +56,13 @@ namespace ReelRoulette
         private bool _baselineAutoMode;
         private double _baselineOverrideLUFS;
 
-        public SettingsDialog()
+        public SettingsDialog(UpdateService? updateService = null)
         {
+            _updateService = updateService;
             InitializeComponent();
             DataContext = this;
+            Opened += SettingsDialog_Opened;
+            Closed += (_, _) => _dialogLifetimeCts.Cancel();
             
             // Set defaults
             _loopEnabled = true;
@@ -61,6 +79,71 @@ namespace ReelRoulette
         }
 
         public bool WasApplied => _wasApplied;
+
+        public bool DevChannelEnabled
+        {
+            get => _devChannelEnabled;
+            set
+            {
+                if (_devChannelEnabled != value)
+                {
+                    _devChannelEnabled = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public string RunningVersionLine
+        {
+            get => _runningVersionLine;
+            private set
+            {
+                if (_runningVersionLine != value)
+                {
+                    _runningVersionLine = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public string UpdateStatusLine
+        {
+            get => _updateStatusLine;
+            private set
+            {
+                if (_updateStatusLine != value)
+                {
+                    _updateStatusLine = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public bool IsDownloadUpdateVisible
+        {
+            get => _isDownloadUpdateVisible;
+            private set
+            {
+                if (_isDownloadUpdateVisible != value)
+                {
+                    _isDownloadUpdateVisible = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public bool IsApplyUpdateVisible
+        {
+            get => _isApplyUpdateVisible;
+            private set
+            {
+                if (_isApplyUpdateVisible != value)
+                {
+                    _isApplyUpdateVisible = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
 
         // Playback behavior properties
         public bool LoopEnabled
@@ -781,7 +864,8 @@ namespace ReelRoulette
             bool webRemoteBindOnLan = false,
             string? webRemoteLanHostname = "reel",
             WebUiAuthMode webRemoteAuthMode = WebUiAuthMode.TokenRequired,
-            string? webRemoteSharedToken = null)
+            string? webRemoteSharedToken = null,
+            bool devChannelEnabled = false)
         {
             // Set backing fields directly and notify
             _loopEnabled = loopEnabled;
@@ -933,6 +1017,11 @@ namespace ReelRoulette
             OnPropertyChanged(nameof(WebRemoteAuthOff));
             OnPropertyChanged(nameof(WebRemoteAuthTokenRequired));
             OnPropertyChanged(nameof(WebRemoteSharedToken));
+
+            _devChannelEnabled = devChannelEnabled;
+            OnPropertyChanged(nameof(DevChannelEnabled));
+
+            RefreshUpdateUiFromStatus(_updateService?.GetStatus());
         }
 
         public string GetSeekStep()
@@ -1057,6 +1146,206 @@ namespace ReelRoulette
         {
             _wasApplied = false;
             Close(false);
+        }
+
+        private void SettingsDialog_Opened(object? sender, EventArgs e)
+        {
+            _ = RunUpdateCheckOnOpenAsync();
+        }
+
+        private async Task RunUpdateCheckOnOpenAsync()
+        {
+            if (_updateService == null)
+            {
+                RefreshUpdateUiFromStatus(null);
+                return;
+            }
+
+            await RunUpdateCheckAsync().ConfigureAwait(true);
+        }
+
+        private async void CheckForUpdatesButton_Click(object? sender, RoutedEventArgs e)
+        {
+            await RunUpdateCheckAsync().ConfigureAwait(true);
+        }
+
+        private async Task RunUpdateCheckAsync()
+        {
+            if (_updateService == null || _checkBusy || _downloadBusy || _applyBusy)
+            {
+                return;
+            }
+
+            _checkBusy = true;
+            UpdateCheckButtonState();
+            try
+            {
+                var result = await _updateService.CheckForUpdatesAsync(_dialogLifetimeCts.Token).ConfigureAwait(true);
+                RefreshUpdateUiFromActionResult(result);
+            }
+            finally
+            {
+                _checkBusy = false;
+                UpdateCheckButtonState();
+                RefreshUpdateUiFromStatus(_updateService.GetStatus());
+            }
+        }
+
+        private async void DownloadUpdateButton_Click(object? sender, RoutedEventArgs e)
+        {
+            if (_updateService == null || _downloadBusy)
+            {
+                return;
+            }
+
+            var status = _updateService.GetStatus();
+            var label = string.IsNullOrWhiteSpace(status.TargetVersion) ? "the available update" : "v" + status.TargetVersion;
+            var confirmed = await ShowConfirmDialogAsync(
+                "Download Update",
+                $"Download update {label} now? The app will not restart until you choose Apply & Restart.");
+            if (!confirmed)
+            {
+                return;
+            }
+
+            _downloadBusy = true;
+            UpdateCheckButtonState();
+            try
+            {
+                var result = await _updateService.DownloadAvailableUpdateAsync(_dialogLifetimeCts.Token).ConfigureAwait(true);
+                RefreshUpdateUiFromActionResult(result);
+            }
+            finally
+            {
+                _downloadBusy = false;
+                UpdateCheckButtonState();
+                RefreshUpdateUiFromStatus(_updateService.GetStatus());
+            }
+        }
+
+        private async void ApplyUpdateButton_Click(object? sender, RoutedEventArgs e)
+        {
+            if (_updateService == null || _applyBusy)
+            {
+                return;
+            }
+
+            var status = _updateService.GetStatus();
+            var label = string.IsNullOrWhiteSpace(status.TargetVersion) ? "the downloaded update" : "v" + status.TargetVersion;
+            var confirmed = await ShowConfirmDialogAsync(
+                "Apply Update",
+                $"Apply {label} and restart the app now?");
+            if (!confirmed)
+            {
+                return;
+            }
+
+            _applyBusy = true;
+            UpdateCheckButtonState();
+            var result = _updateService.ApplyDownloadedUpdate();
+            RefreshUpdateUiFromActionResult(result);
+        }
+
+        private void RefreshUpdateUiFromActionResult(DesktopUpdateActionResult result)
+        {
+            RefreshUpdateUiFromStatus(new DesktopUpdateStatus(
+                result.Phase,
+                result.RunningVersion,
+                result.TargetVersion,
+                result.Message,
+                result.VelopackInstalled));
+        }
+
+        private void RefreshUpdateUiFromStatus(DesktopUpdateStatus? status)
+        {
+            if (status == null)
+            {
+                RunningVersionLine = DesktopRunningVersion.FormatRunningVersionLine(
+                    DesktopRunningVersion.ResolveFromEntryAssembly(),
+                    velopackInstalled: false);
+                UpdateStatusLine = "Updates are unavailable in this session.";
+                IsDownloadUpdateVisible = false;
+                IsApplyUpdateVisible = false;
+                UpdateCheckButtonState();
+                return;
+            }
+
+            RunningVersionLine = DesktopRunningVersion.FormatRunningVersionLine(status.RunningVersion, status.VelopackInstalled);
+            UpdateStatusLine = status.Message;
+
+            var phase = status.Phase ?? DesktopUpdatePhases.Idle;
+            IsDownloadUpdateVisible = phase == DesktopUpdatePhases.UpdateAvailable || phase == DesktopUpdatePhases.Downloading;
+            IsApplyUpdateVisible = phase == DesktopUpdatePhases.UpdateReady || phase == DesktopUpdatePhases.Restarting;
+            UpdateCheckButtonState();
+        }
+
+        private void UpdateCheckButtonState()
+        {
+            if (CheckForUpdatesButton == null || DownloadUpdateButton == null || ApplyUpdateButton == null)
+            {
+                return;
+            }
+
+            var status = _updateService?.GetStatus();
+            var phase = status?.Phase ?? DesktopUpdatePhases.Idle;
+
+            CheckForUpdatesButton.IsEnabled = !_checkBusy && !_downloadBusy && !_applyBusy &&
+                phase != DesktopUpdatePhases.Downloading && phase != DesktopUpdatePhases.Restarting;
+            CheckForUpdatesButton.Content = _checkBusy ? "Checking…" : "Check for Updates";
+
+            DownloadUpdateButton.IsEnabled = !_downloadBusy && phase != DesktopUpdatePhases.Downloading && phase != DesktopUpdatePhases.Restarting;
+            DownloadUpdateButton.Content = (_downloadBusy || phase == DesktopUpdatePhases.Downloading) ? "Downloading…" : "Download Update";
+
+            ApplyUpdateButton.IsEnabled = !_applyBusy && phase != DesktopUpdatePhases.Restarting;
+            ApplyUpdateButton.Content = (_applyBusy || phase == DesktopUpdatePhases.Restarting) ? "Restarting…" : "Apply & Restart";
+        }
+
+        private async Task<bool> ShowConfirmDialogAsync(string title, string message)
+        {
+            var confirmDialog = new Window
+            {
+                Title = title,
+                Width = 520,
+                Height = 190,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                Content = new StackPanel
+                {
+                    Margin = new Thickness(20),
+                    Spacing = 12,
+                    Children =
+                    {
+                        new TextBlock
+                        {
+                            Text = message,
+                            TextWrapping = TextWrapping.Wrap
+                        },
+                        new StackPanel
+                        {
+                            Orientation = Orientation.Horizontal,
+                            HorizontalAlignment = HorizontalAlignment.Center,
+                            Spacing = 8,
+                            Children =
+                            {
+                                new Button { Content = "OK", MinWidth = 80 },
+                                new Button { Content = "Cancel", MinWidth = 80 }
+                            }
+                        }
+                    }
+                }
+            };
+
+            bool? result = null;
+            if (confirmDialog.Content is StackPanel root &&
+                root.Children.Count > 1 &&
+                root.Children[1] is StackPanel btnPanel &&
+                btnPanel.Children.Count >= 2)
+            {
+                ((Button)btnPanel.Children[0]).Click += (_, _) => { result = true; confirmDialog.Close(); };
+                ((Button)btnPanel.Children[1]).Click += (_, _) => { result = false; confirmDialog.Close(); };
+            }
+
+            await confirmDialog.ShowDialog(this).ConfigureAwait(true);
+            return result == true;
         }
 
         public new event PropertyChangedEventHandler? PropertyChanged;
