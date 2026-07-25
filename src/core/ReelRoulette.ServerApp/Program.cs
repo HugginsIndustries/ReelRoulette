@@ -58,6 +58,7 @@ static async Task RunAsync(string[] args)
         builder.Services.AddSingleton(corsOrigins);
         builder.Services.AddSingleton<RestartCoordinator>();
         builder.Services.AddSingleton<UpdateService>();
+        builder.Services.AddSingleton<IServerUpdateChannelCoordinator>(sp => sp.GetRequiredService<UpdateService>());
         builder.Services.AddHostedService<UpdateHostedService>();
         builder.Services.AddHostedService<WebUiMdnsService>();
         builder.Services.AddCors(options =>
@@ -516,6 +517,7 @@ static void MapOperatorUi(WebApplication app, ServerAppOptions options, bool web
     <div class="card two-col">
       <h1>ReelRoulette Server</h1>
       <p>Control-plane operator surface for runtime status, settings, telemetry, and lifecycle actions.</p>
+      <p id="runningVersion" class="muted">Running version: loading…</p>
       <h3>Runtime Status</h3>
       <div id="status" class="status-box">Loading...</div>
       <div class="row-actions">
@@ -561,7 +563,7 @@ static void MapOperatorUi(WebApplication app, ServerAppOptions options, bool web
       <input id="adminSharedToken" type="text" />
       <div class="inline">
         <input id="devChannelEnabled" type="checkbox" />
-        <label for="devChannelEnabled" style="margin-top:0;">Dev (pre-release) update channel — takes effect on the next automatic update check (unchecked = stable)</label>
+        <label for="devChannelEnabled" style="margin-top:0;">Dev (pre-release) update channel — triggers an immediate update check when changed (unchecked = stable)</label>
       </div>
       <div class="inline">
         <input id="launchServerOnStartup" type="checkbox" />
@@ -654,6 +656,16 @@ static void MapOperatorUi(WebApplication app, ServerAppOptions options, bool web
 
     function setStatus(text) {
       document.getElementById("status").textContent = text;
+    }
+
+    async function refreshRunningVersion() {
+      const node = document.getElementById("runningVersion");
+      try {
+        const version = await getJson("/api/version");
+        node.textContent = "Running version: " + (version.appVersion ?? "unknown");
+      } catch (err) {
+        node.textContent = "Running version: unavailable (" + (err.message || String(err)) + ")";
+      }
     }
 
     function setSettingsStatus(messageHtml, isError = false) {
@@ -993,8 +1005,9 @@ static void MapOperatorUi(WebApplication app, ServerAppOptions options, bool web
     });
     document.getElementById("saveTestingState").addEventListener("click", () => saveTestingState().catch(err => setTestingStatus(err.message, true)));
     document.getElementById("resetTestingState").addEventListener("click", () => resetTestingState().catch(err => setTestingStatus(err.message, true)));
-    Promise.all([refreshStatus(), loadWebRuntimeSettings(), loadControlSettings(), loadStartupLaunchSetting(), refreshLogs(), loadTestingState()]).catch(err => setStatus(err.message));
+    Promise.all([refreshRunningVersion(), refreshStatus(), loadWebRuntimeSettings(), loadControlSettings(), loadStartupLaunchSetting(), refreshLogs(), loadTestingState()]).catch(err => setStatus(err.message));
     setInterval(() => refreshStatus().catch(() => {}), 3000);
+    setInterval(() => refreshRunningVersion().catch(() => {}), 30000);
     setInterval(() => refreshLogs().catch(() => {}), 5000);
   </script>
 </body>

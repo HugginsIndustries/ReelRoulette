@@ -19,8 +19,8 @@ Instructions:
 
 Commit Message:
 
-Feature: ServerApp Velopack self-update and dev channel toggle
+Feature: Operator running version and prompt dev-channel update checks
 
-- Extend control settings contract with devChannelEnabled; persist in core-settings.json without restart on toggle.
-- Add ServerApp UpdateService background check/download/apply using WaitExitThenApplyUpdates plus graceful StopApplication.
-- Operator UI checkbox for stable vs dev update channel; document API/CONTEXT/CHANGELOG.
+- Show server running version on the operator UI via existing GET /api/version (appVersion).
+- When devChannelEnabled changes on POST /control/settings, run an immediate Velopack check using persisted settings (in addition to the 4-hour schedule).
+- Register IServerUpdateChannelCoordinator in ServerApp; update operator copy and CONTEXT/api notes.

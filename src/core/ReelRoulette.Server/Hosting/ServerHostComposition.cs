@@ -196,9 +196,19 @@ public static class ServerHostComposition
             return Results.Ok(settings.GetControlRuntimeSettings());
         });
 
-        app.MapPost("/control/settings", (ControlRuntimeSettingsSnapshot snapshot, CoreSettingsService settings) =>
+        app.MapPost("/control/settings", (HttpContext context, ControlRuntimeSettingsSnapshot snapshot, CoreSettingsService settings) =>
         {
+            var devChannelBefore = settings.GetControlRuntimeSettings().DevChannelEnabled;
             var (appliedSettings, applyResult) = settings.UpdateControlRuntimeSettings(snapshot);
+            if (applyResult.Accepted)
+            {
+                var devChannelAfter = settings.GetControlRuntimeSettings().DevChannelEnabled;
+                if (devChannelBefore != devChannelAfter)
+                {
+                    context.RequestServices.GetService<IServerUpdateChannelCoordinator>()?.NotifyDevChannelChanged();
+                }
+            }
+
             return Results.Ok(new
             {
                 settings = appliedSettings,

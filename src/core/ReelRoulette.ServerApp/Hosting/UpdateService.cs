@@ -1,10 +1,11 @@
 using Microsoft.Extensions.Hosting;
+using ReelRoulette.Server.Hosting;
 using ReelRoulette.Server.Services;
 using Velopack;
 
 namespace ReelRoulette.ServerApp.Hosting;
 
-public sealed class UpdateService
+public sealed class UpdateService : IServerUpdateChannelCoordinator
 {
     internal const string PublicFeedBase = "https://f004.backblazeb2.com/file/hugginsindustries-releases";
 
@@ -21,6 +22,24 @@ public sealed class UpdateService
         _logger = logger;
         _settings = settings;
         _lifetime = lifetime;
+    }
+
+    public void NotifyDevChannelChanged()
+    {
+        _logger.LogInformation("Dev update channel changed; scheduling an immediate update check.");
+        _ = RunImmediateCheckAfterDevChannelChangeAsync();
+    }
+
+    private async Task RunImmediateCheckAfterDevChannelChangeAsync()
+    {
+        try
+        {
+            await RunCheckCycleAsync(CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Immediate update check after dev channel change failed.");
+        }
     }
 
     internal static (string FeedUrl, string ExplicitChannel) ComposeFeedAndChannel(bool devChannelEnabled)
