@@ -57,6 +57,8 @@ static async Task RunAsync(string[] args)
         builder.Services.AddSingleton(serverAppOptions);
         builder.Services.AddSingleton(corsOrigins);
         builder.Services.AddSingleton<RestartCoordinator>();
+        builder.Services.AddSingleton<UpdateService>();
+        builder.Services.AddHostedService<UpdateHostedService>();
         builder.Services.AddHostedService<WebUiMdnsService>();
         builder.Services.AddCors(options =>
         {
@@ -558,6 +560,10 @@ static void MapOperatorUi(WebApplication app, ServerAppOptions options, bool web
       <label for="adminSharedToken">Admin Shared Token</label>
       <input id="adminSharedToken" type="text" />
       <div class="inline">
+        <input id="devChannelEnabled" type="checkbox" />
+        <label for="devChannelEnabled" style="margin-top:0;">Dev (pre-release) update channel — takes effect on the next automatic update check (unchecked = stable)</label>
+      </div>
+      <div class="inline">
         <input id="launchServerOnStartup" type="checkbox" />
         <label for="launchServerOnStartup" style="margin-top:0;">Launch Server on Startup</label>
       </div>
@@ -894,6 +900,7 @@ static void MapOperatorUi(WebApplication app, ServerAppOptions options, bool web
       lastLoadedControlSettings = settings;
       document.getElementById("adminAuthMode").value = settings.adminAuthMode ?? "Off";
       document.getElementById("adminSharedToken").value = settings.adminSharedToken ?? "";
+      document.getElementById("devChannelEnabled").checked = !!settings.devChannelEnabled;
     }
 
     async function loadStartupLaunchSetting() {
@@ -906,7 +913,8 @@ static void MapOperatorUi(WebApplication app, ServerAppOptions options, bool web
     async function saveControlSettings() {
       const payload = {
         adminAuthMode: document.getElementById("adminAuthMode").value || "Off",
-        adminSharedToken: document.getElementById("adminSharedToken").value || null
+        adminSharedToken: document.getElementById("adminSharedToken").value || null,
+        devChannelEnabled: document.getElementById("devChannelEnabled").checked
       };
 
       const response = await getJson("/control/settings", {

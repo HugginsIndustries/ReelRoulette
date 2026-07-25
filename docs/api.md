@@ -200,6 +200,8 @@ Reconnect/resync behavior:
 
 ### Control plane (operator/runtime)
 
+- `GET /control/settings` / `POST /control/settings` — `ControlRuntimeSettingsSnapshot` includes `adminAuthMode`, optional `adminSharedToken`, and optional `devChannelEnabled` (defaults to `false` / stable update channel; when `true`, the server checks the dev Velopack feed on its automatic update cycle).
+
 - `GET /control/status`
 - `GET /control/settings`
 - `POST /control/settings`

@@ -859,6 +859,8 @@ export interface components {
             /** @enum {string} */
             adminAuthMode: "Off" | "TokenRequired";
             adminSharedToken?: string | null;
+            /** @default false */
+            devChannelEnabled: boolean;
         };
         ControlApplyResult: {
             accepted: boolean;

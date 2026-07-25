@@ -36,6 +36,7 @@ public sealed class CoreSettingsServiceTests : IDisposable
         Assert.Null(web.SharedToken);
         Assert.Equal("Off", control.AdminAuthMode);
         Assert.Null(control.AdminSharedToken);
+        Assert.False(control.DevChannelEnabled);
     }
 
     [Fact]
@@ -69,7 +70,8 @@ public sealed class CoreSettingsServiceTests : IDisposable
         var controlApply = service.UpdateControlRuntimeSettings(new ReelRoulette.Server.Contracts.ControlRuntimeSettingsSnapshot
         {
             AdminAuthMode = "TokenRequired",
-            AdminSharedToken = "admin-token"
+            AdminSharedToken = "admin-token",
+            DevChannelEnabled = true
         });
         Assert.True(controlApply.Result.Accepted);
 
@@ -94,6 +96,62 @@ public sealed class CoreSettingsServiceTests : IDisposable
         Assert.Null(web.SharedToken);
         Assert.Equal("TokenRequired", control.AdminAuthMode);
         Assert.Equal("admin-token", control.AdminSharedToken);
+        Assert.True(control.DevChannelEnabled);
+    }
+
+    [Fact]
+    public void Constructor_WithLegacyControlRuntimeWithoutDevChannel_ShouldDefaultDevChannelToFalse()
+    {
+        Directory.CreateDirectory(_tempDir);
+        var settingsPath = Path.Combine(_tempDir, "core-settings.json");
+        File.WriteAllText(settingsPath, """
+{
+  "refresh": {
+    "autoRefreshEnabled": true,
+    "autoRefreshIntervalMinutes": 15,
+    "forceRescanLoudness": false,
+    "forceRescanDuration": false,
+    "fingerprintScanMaxDegreeOfParallelism": 4
+  },
+  "backup": {
+    "enabled": true,
+    "minimumBackupGapMinutes": 360,
+    "numberOfBackups": 8
+  },
+  "webRuntime": {
+    "enabled": true,
+    "port": 45123,
+    "bindOnLan": false,
+    "lanHostname": "reel",
+    "authMode": "TokenRequired",
+    "sharedToken": null
+  },
+  "controlRuntime": {
+    "adminAuthMode": "Off",
+    "adminSharedToken": null
+  }
+}
+""");
+
+        var service = CreateService();
+        Assert.False(service.GetControlRuntimeSettings().DevChannelEnabled);
+    }
+
+    [Fact]
+    public void UpdateControlRuntimeSettings_DevChannelToggleAlone_ShouldNotRequireRestart()
+    {
+        Directory.CreateDirectory(_tempDir);
+        var service = CreateService();
+
+        var result = service.UpdateControlRuntimeSettings(new ReelRoulette.Server.Contracts.ControlRuntimeSettingsSnapshot
+        {
+            AdminAuthMode = "Off",
+            AdminSharedToken = null,
+            DevChannelEnabled = true
+        });
+
+        Assert.True(result.Result.Accepted);
+        Assert.False(result.Result.RestartRequired);
     }
 
     [Fact]

@@ -118,6 +118,7 @@ public sealed class CoreSettingsService
 
         _controlRuntimeSettings.AdminAuthMode = loaded.ControlRuntime.AdminAuthMode;
         _controlRuntimeSettings.AdminSharedToken = loaded.ControlRuntime.AdminSharedToken;
+        _controlRuntimeSettings.DevChannelEnabled = loaded.ControlRuntime.DevChannelEnabled;
     }
 
     public RefreshSettingsSnapshot GetRefreshSettings()
@@ -238,7 +239,8 @@ public sealed class CoreSettingsService
             return new ControlRuntimeSettingsSnapshot
             {
                 AdminAuthMode = _controlRuntimeSettings.AdminAuthMode,
-                AdminSharedToken = _controlRuntimeSettings.AdminSharedToken
+                AdminSharedToken = _controlRuntimeSettings.AdminSharedToken,
+                DevChannelEnabled = _controlRuntimeSettings.DevChannelEnabled
             };
         }
     }
@@ -266,6 +268,7 @@ public sealed class CoreSettingsService
 
                 _controlRuntimeSettings.AdminAuthMode = normalizedAuthMode;
                 _controlRuntimeSettings.AdminSharedToken = normalizedSharedToken;
+                _controlRuntimeSettings.DevChannelEnabled = snapshot.DevChannelEnabled;
                 PersistSettings();
             }
 
@@ -353,6 +356,7 @@ public sealed class CoreSettingsService
                         controlRuntime.AdminSharedToken = string.IsNullOrWhiteSpace(parsed.ControlRuntime.AdminSharedToken)
                             ? null
                             : parsed.ControlRuntime.AdminSharedToken.Trim();
+                        controlRuntime.DevChannelEnabled = parsed.ControlRuntime.DevChannelEnabled;
                     }
 
                     return ((refresh, backup, webRuntime, controlRuntime), needsStartupBackfillPersist);
