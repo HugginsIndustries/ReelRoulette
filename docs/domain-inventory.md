@@ -214,7 +214,7 @@ Runtime scripts:
 - `tools/scripts/run-server-rebuild.ps1`
 - scripts select `net10.0-windows` framework on Windows and `net10.0` on non-Windows for ServerApp startup.
 - `tools/scripts/set-release-version.ps1` (release-aligned version fan-out for OpenAPI/runtime/tests/server+desktop project metadata, optional WebUI contract regen and verify gates, plus README/dev-setup release command examples; use `-NoDocUpdates` / `-NoUpdateDesktopVersion` / `-NoRegenerateContracts` / `-NoRunVerify` to skip pieces)
-- `tools/scripts/full-release.ps1` (chained release: optional `-Version` runs `set-release-version.ps1` with forwarded `-No*` switches, then server/desktop packaging; omit `-Version` to package from `.csproj` versions only)
+- `tools/scripts/stage-webui-assets.ps1` (WebUI build + copy into server publish `wwwroot`; used by `release.yml` and packaged-server smoke)
 - `tools/scripts/reset-checklist.ps1` (resets `docs/checklists/testing-checklist.md` metadata/checklist state; preserves waived checks by default, supports `-RemoveWaived`)
 
 Web verification:
@@ -222,27 +222,14 @@ Web verification:
 - `tools/scripts/verify-web.ps1`
 - `tools/scripts/verify-web-deploy.ps1`
 - `tools/scripts/publish-web.ps1` (compat/deploy tooling)
-- `./tools/scripts/verify-linux-packaged-server-smoke.sh` (headless packaged Linux server tarball: curls `/health`, `/api/version`, `/control/status`, `/operator`; Linux packaging CI and local runs after producing a portable tarball)
+- `./tools/scripts/verify-linux-packaged-server-smoke.sh` (headless Velopack Linux server AppImage: curls `/health`, `/api/version`, `/control/status`, `/operator`; builds an AppImage locally when no path is passed)
 
-Packaging:
+Packaging and release:
 
-- `pwsh ./tools/scripts/package-serverapp-win-portable.ps1`
-- `pwsh ./tools/scripts/package-serverapp-win-inno.ps1`
-- `pwsh ./tools/scripts/package-desktop-win-portable.ps1`
-- `pwsh ./tools/scripts/package-desktop-win-inno.ps1`
-- `./tools/scripts/package-serverapp-linux-portable.sh`
-- `./tools/scripts/package-desktop-linux-portable.sh`
-- `./tools/scripts/package-serverapp-linux-appimage.sh`
-- `./tools/scripts/package-desktop-linux-appimage.sh`
-- `./tools/scripts/install-linux-from-github.sh`
-- `./tools/scripts/install-linux-local.sh` (copy local `artifacts/packages/appimage/*.AppImage` to stable names under `~/.local/share/ReelRoulette` and run `--install`)
-- `tools/scripts/lib/appimage-helpers.sh` (sourced by Linux AppImage package scripts)
-- `tools/installer/ReelRoulette.ServerApp.iss`
-- `tools/installer/ReelRoulette.Desktop.iss`
-- shared icon assets: `assets/HI.ico`, `assets/HI-256.png`, `assets/HI-512.png` (Linux menu / AppImage)
+- `.github/workflows/release.yml` (Velopack matrix build/pack/upload; sole shipping pipeline)
+- `tools/scripts/stage-webui-assets.ps1`
+- shared icon assets: `assets/HI.ico`, `assets/HI-256.png`, `assets/HI-512.png`
 
 CI:
 
 - `.github/workflows/ci.yml`
-- `.github/workflows/package-windows.yml`
-- `.github/workflows/package-linux.yml`

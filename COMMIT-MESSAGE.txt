@@ -19,9 +19,9 @@ Instructions:
 
 Commit Message:
 
-Chore: bundle Windows FFmpeg and LibVLC in Velopack release workflow
+Chore: retire Inno/AppImage packaging; document Velopack-only delivery
 
-- Install pinned FFmpeg on Windows server legs via AnimMouse/setup-ffmpeg and copy into the publish tree with an ffprobe -version gate.
-- Publish LibVLC from the NuGet package on Windows desktop legs, relocate into the existing probe path, and verify libvlc.dll and plugins before pack.
-- Stop calling stage-native-deps.ps1 from release.yml; Inno/AppImage scripts unchanged for a later retirement slice.
-- Note the release pipeline change in CHANGELOG [Unreleased].
+- Remove legacy Windows/Linux packaging scripts, Inno definitions, install helpers, and package-* GitHub workflows.
+- Repoint verify-linux-packaged-server-smoke.sh to build and smoke a Velopack Linux server AppImage.
+- Rewrite README, dev-setup, architecture, CONTEXT, domain-inventory, and testing checklist for Velopack install flows (feeds published; in-app update check not implemented yet).
+- Keep set-release-version.ps1 as the pre-tag version entry point; update its doc sync and packaging contract test accordingly.

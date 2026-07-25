@@ -154,18 +154,17 @@ Use `pwsh ./tools/scripts/reset-checklist.ps1` to reset metadata/check states be
 
 ## Packaging + Deployment Smoke
 
-- [x] **Windows:** server and desktop portable and installer packages build successfully.
-- [x] **Linux:** portable tarballs and AppImages build with expected names under `artifacts/packages/`.
-- [x] **Linux install:** `install-linux-local.sh` installs AppImages with stable names and registers menu entries.
-- [x] **Linux portable tarball:** single top-level directory, executable run scripts, no `.pdb`, prerequisites documented.
-- [x] **Branding:** icon parity across shortcuts, menus, and WebUI.
-- [x] **Inno shortcuts:** server and desktop installers include default-checked desktop shortcut option.
+- [ ] **Velopack install (Windows):** per-user `Setup.exe` installs without elevation; Desktop and Start Menu shortcuts present when offered; server serves WebUI at `/` and Operator at `/operator`.
+- [ ] **Velopack install (Linux):** `.AppImage` runs after `chmod +x`; server serves WebUI and Operator; desktop plays video with system LibVLC; server refresh works with distro `ffmpeg`/`ffprobe`.
+- [ ] **In-app updates (deferred):** feed-based check/download/apply from build *N* to *N+1* (full or delta)—not implemented; upgrade manually from GitHub Releases until this slice lands.
+- [ ] **Packaged server smoke:** `./tools/scripts/verify-linux-packaged-server-smoke.sh` passes (builds Velopack server AppImage when no path given).
+- [ ] **Branding:** icon parity across shortcuts, menus, and WebUI.
 
 ## CI/Workflow Readiness
 
 - [x] Workflow YAML files are valid and committed in `.github/workflows`.
 - [x] Default CI gates map to required checks (build, test, web verify).
-- [x] `package-windows.yml` and `package-linux.yml` are runnable (tag + `workflow_dispatch`).
+- [x] `release.yml` is runnable (tag + `workflow_dispatch`) and publishes Velopack feeds.
 
 ## Documentation Sync
 
@@ -194,10 +193,10 @@ Use `pwsh ./tools/scripts/reset-checklist.ps1` to reset metadata/check states be
 
 ## Optional Release Flow
 
-- [x] Server and desktop packages created via `pwsh ./tools/scripts/full-release.ps1 -Version {VERSION}`.
-- [x] Expected artifacts exist under `artifacts/packages/` with correct names and version metadata.
-- [x] Installed server and desktop apps launch and function properly after installation.
-- [x] `CHANGELOG.md`: cut `Unreleased` into the new release section, then initialize a fresh `Unreleased` block.
+- [ ] Version aligned via `pwsh ./tools/scripts/set-release-version.ps1 -Version {VERSION}`; tag matches `.version`.
+- [ ] `release.yml` matrix legs succeed for the tag (Windows + Linux, server + desktop).
+- [ ] Installed server and desktop apps launch and function after Velopack install.
+- [ ] `CHANGELOG.md`: cut `Unreleased` into the new release section, then initialize a fresh `Unreleased` block.
 
 ## Failure Documentation
 

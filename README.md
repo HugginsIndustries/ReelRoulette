@@ -20,62 +20,34 @@ ReelRoulette is a server-first media randomizer with thin desktop and web client
 - Node.js and npm (for WebUI build/verify flows).
 - PowerShell Core (`pwsh`) for `tools/scripts/*.ps1` helpers (for example `pwsh ./tools/scripts/run-server.ps1`).
   - Linux (Arch Linux, CachyOS, and similar): install from the AUR, for example `paru -S powershell-bin` or `yay -S powershell-bin`; that package provides `pwsh` on your PATH.
-- `bash` and `tar` on your `PATH` if you run Linux portable packaging (`./tools/scripts/package-serverapp-linux-portable.sh`, `./tools/scripts/package-desktop-linux-portable.sh`); both are available by default on typical Linux and macOS environments.
-- Windows installer builds additionally need Inno Setup 6 (`iscc`); see `docs/dev-setup.md`.
-- **VLC / LibVLC** for **desktop** video playback. **FFmpeg** (including **`ffprobe` on your `PATH`**) on the **server** host for library refresh (duration, loudness, thumbnails, and related probes). Linux portable tarballs **do not** bundle these; install from your distro. On **Windows**, after cloning, run **`pwsh ./tools/scripts/fetch-native-deps.ps1` once** so `runtimes/win-x64/native/` contains **FFmpeg/ffprobe** (server) and **LibVLC** (desktop); packaging scripts fetch the same artifacts automatically when that folder is incomplete. Use **`-Force`** on that script to re-download. Official **Windows** portable/installer builds from this repo **bundle** those binaries into the published output; **Linux** users rely on distro packages instead.
+- **VLC / LibVLC** for **desktop** video playback when running from source. **FFmpeg** (including **`ffprobe` on your `PATH`**) on the **server** host for library refresh (duration, loudness, thumbnails, and related probes). Install these from your OS packages on Linux. On **Windows**, use distro-equivalent installs on your `PATH` for local `dotnet run` (official **Velopack** server packages bundle FFmpeg/ffprobe; desktop packages bundle LibVLC).
 
 ## Quick Start
 
 These paths are for **people who want to run packaged builds**. If you are changing code, skip to [Developing from source](#developing-from-source).
 
-Official downloads live on **[GitHub Releases](https://github.com/HugginsIndustries/ReelRoulette/releases)**. You usually want **two pieces**: the **server** (hosts your library, API, WebUI, Operator) and optionally the **desktop** app (a native client). The **WebUI** is served by the server at the root URL once the server is running; it supports the same API-backed playback filters and presets as the desktop **Filter Media** dialog (overlay control with a `filter_alt` icon), and a tabbed tag overlay (**Edit Tags** / **Auto Tag**) aligned with the desktop Auto Tag workflow over the API.
+Official **installers** for stable tags are on **[GitHub Releases](https://github.com/HugginsIndustries/ReelRoulette/releases)** (Velopack **`Setup.exe`** on Windows, **`.AppImage`** on Linux). The release pipeline also publishes **Velopack update feeds** to Backblaze B2 for future in-app updates; **installed apps do not check or apply updates yet**—upgrade by installing a newer release build. You usually want **two pieces**: the **server** (hosts your library, API, WebUI, Operator) and optionally the **desktop** app (a native client). The **WebUI** is served by the server at the root URL once the server is running.
 
 ### Windows
 
-1. **Installer (easiest)**  
-   On the latest release, download the **server** installer (`ReelRoulette-Server-…-win-x64-setup.exe`) and (optionally) the **desktop** installer (`ReelRoulette-Desktop-…-win-x64-setup.exe`). Run each file and follow the prompts. The installers can add Start Menu / desktop shortcuts (those options are on by default).
-
-2. **Portable ZIP (no installer)**  
-   Download the matching **portable** ZIPs instead (`ReelRoulette-Server-…-win-x64.zip`, `ReelRoulette-Desktop-…-win-x64.zip`). Extract each to its own folder and run `ReelRoulette.ServerApp.exe` or `ReelRoulette.DesktopApp.exe` inside. Nothing is written to Program Files; you can delete the folder to uninstall.
-
-3. **First run**  
-   Start the **server** first. By default, open **[http://localhost:45123/operator](http://localhost:45123/operator)** in a browser for the Operator UI, or use the desktop app to connect to that server. The Windows tray icon (when available) can open Operator, refresh the library, and toggle “launch on startup.”
+1. From the latest **stable** GitHub release (or your dev feed URL), download the **server** and (optionally) **desktop** **`Setup.exe`** installers produced by Velopack.
+2. Run each installer. Installs are **per-user** under `%LocalAppData%` (no elevation, no MSI, no Program Files layout). Desktop and Start Menu shortcuts are created when the installer offers them.
+3. Start the **server** first. Open **[http://localhost:45123/operator](http://localhost:45123/operator)** in a browser for the Operator UI, or connect the desktop app to that server. The tray icon (when available) can open Operator, refresh the library, and toggle “launch on startup.”
+4. **Upgrades:** download and run a newer **`Setup.exe`** from GitHub Releases when you want a new version. In-app update prompts and background feed checks are **not implemented yet** (packaged apps only run **`VelopackApp` install/update/uninstall hooks** when Velopack drives those operations).
 
 ### Linux
 
-1. **Install script (recommended if you use the terminal a little)**  
-   You need **`curl`** and **`jq`** installed (e.g. from your distro packages). Then either clone this repo and run from the root:
+1. Download the **server** and (optionally) **desktop** **`.AppImage`** from the latest GitHub release or your feed mirror.
+2. Make the file executable and run it, for example:
 
    ```bash
-   ./tools/scripts/install-linux-from-github.sh server
-   ./tools/scripts/install-linux-from-github.sh desktop
+   chmod +x ~/Downloads/ReelRoulette.Server-*.AppImage
+   ~/Downloads/ReelRoulette.Server-*.AppImage
    ```
 
-   …or download and pipe the script (same effect; AppImages install to `~/.local/share/ReelRoulette/` under stable filenames; portable tarball fallback uses `~/.local/share` and a `~/.local/bin` symlink; **no sudo**):
-
-   ```bash
-   curl -fsSL https://raw.githubusercontent.com/HugginsIndustries/ReelRoulette/main/tools/scripts/install-linux-from-github.sh | bash -s -- server
-   ```
-
-   Run the same command again with `desktop` instead of `server` if you want the desktop client. The script prefers an **AppImage** from the latest release if one is attached; otherwise it uses the **portable `.tar.gz`**. To target a fork, set `REELROULETTE_GITHUB_REPO=owner/repo` or pass `-Repo owner/repo`. See `docs/dev-setup.md` for `-Branch` / icon source details.
-
-2. **AppImage by hand**  
-   From Releases, download `ReelRoulette-Server-{version}-linux-x64.AppImage` and (optionally) `ReelRoulette-Desktop-{version}-linux-x64.AppImage`. In a terminal:
-
-   ```bash
-   chmod +x ./ReelRoulette-Server-0.11.0-dev-linux-x64.AppImage
-   ./ReelRoulette-Server-0.11.0-dev-linux-x64.AppImage --install
-   ```
-
-   `--install` registers a menu entry and icons in your user account (still no sudo). Run the AppImage again without `--install` to start the app. Use `./ReelRoulette-*.AppImage --help` for native dependency notes (FFmpeg/VLC).
-
-3. **Portable tarball**  
-   Download `ReelRoulette-Server-…-linux-x64.tar.gz` and/or `ReelRoulette-Desktop-…-linux-x64.tar.gz`, extract, then from the extracted folder run `./run-server.sh` or `./run-desktop.sh`.
-
-4. **Media tools on Linux**  
-   Linux packages **do not** bundle FFmpeg or VLC. Install **VLC / LibVLC** for desktop playback. For the **server**, install **`ffmpeg`** with **`ffprobe`** on your **`PATH`** for library refresh (duration, loudness, thumbnails).
-
-**Local build install (developers):** After packaging AppImages (`./tools/scripts/package-serverapp-linux-appimage.sh` and `./tools/scripts/package-desktop-linux-appimage.sh`), run `./tools/scripts/install-linux-local.sh` to copy them to `~/.local/share/ReelRoulette/` under stable names and re-register menu entries (`--install`). See `docs/dev-setup.md`.
+   Keeping copies under **`~/Applications`** (or another directory you control) is a common convention; create the folder if you use it.
+3. Install **VLC / LibVLC** for desktop playback and **`ffmpeg`** with **`ffprobe`** on your **`PATH`** for server library refresh—Linux packages do not bundle those tools.
+4. **Upgrades:** download a newer **`.AppImage`** from GitHub Releases and run it (replace or rename your copy as you prefer). In-app update checks are **not implemented yet**. A desktop menu entry is **not** created automatically today; launch the AppImage from your file manager or shell.
 
 ### Developing from source
 
@@ -84,8 +56,6 @@ From the repository root:
 ```bash
 dotnet build ReelRoulette.sln
 ```
-
-On **Windows**, from the repo root, run native dependency acquisition once before local server/desktop runs (see **Prerequisites**): `pwsh ./tools/scripts/fetch-native-deps.ps1`.
 
 Run the server app:
 
@@ -141,7 +111,7 @@ Windows runtime note:
 Linux runtime note:
 
 - Tray is used when a graphical session is available; otherwise the server runs headless.
-- Tray and Operator expose the same `Launch Server on Startup` toggle; it writes `reelroulette-server.desktop` under your XDG autostart directory with `Exec=` targeting the stable server binary (from **`APPIMAGE`** when you run the **AppImage**, otherwise the process path) and `Path=` set to that binary’s directory so login startup matches `./run-server.sh` working-directory behavior. If you use the AppImage and an older autostart entry still points at `/tmp/.mount_*`, toggle startup off and on once to refresh it.
+- Tray and Operator expose the same `Launch Server on Startup` toggle; it writes `reelroulette-server.desktop` under your XDG autostart directory with `Exec=` targeting the stable server binary (from **`APPIMAGE`** when you run a Velopack **AppImage**, otherwise the process path) and `Path=` set to that binary’s directory. If an older autostart entry still points at `/tmp/.mount_*`, toggle startup off and on once to refresh it.
 
 ### WebUI HTTPS on Tailscale (PWA/Home Screen)
 
@@ -167,7 +137,13 @@ Set release-aligned version surfaces in one step (repo-root `.version` is the so
 pwsh ./tools/scripts/set-release-version.ps1 -Version v0.12.0-dev.3
 ```
 
-Omit `-Version` to read the current value from `.version` and fan out without changing the file. By default this also updates the desktop app `<Version>`, regenerates WebUI OpenAPI contracts (`npm run generate:contracts`), and runs the same verify steps as `full-release.ps1` when you pass `-Version` there (solution build/test, WebUI verify, deploy smoke). Pass `-NoUpdateDesktopVersion`, `-NoRegenerateContracts`, and/or `-NoRunVerify` to skip any of those. Use `-NoDocUpdates` to leave `README.md` / `docs/dev-setup.md` release command examples unchanged. `full-release.ps1` forwards those `-No*` switches to `set-release-version.ps1 -Version v0.12.0-dev.3` when `-Version` is set; if you omit `-Version` on `full-release.ps1`, the version/verify step is skipped and packaging reads `.version`.
+Omit `-Version` to read the current value from `.version` and fan out without changing the file. By default this also updates the desktop app `<Version>`, regenerates WebUI OpenAPI contracts (`npm run generate:contracts`), and runs solution build/test, WebUI verify, and deploy smoke. Pass `-NoUpdateDesktopVersion`, `-NoRegenerateContracts`, and/or `-NoRunVerify` to skip any of those. Use `-NoDocUpdates` to leave `README.md` / `docs/dev-setup.md` release command examples unchanged.
+
+Packaged-server smoke (Linux, Velopack AppImage):
+
+```bash
+./tools/scripts/verify-linux-packaged-server-smoke.sh
+```
 
 ## Verification
 
@@ -209,77 +185,29 @@ Manual test guide:
 
 The **HTTP server and Operator UI are unaffected**. If the tray is missing or unusable, open **[http://localhost:45123/operator](http://localhost:45123/operator)** (or your configured listen URL with `/operator`) for refresh, restart, stop, and settings. The process may still be running even when no tray icon is visible; use Operator or Task Manager to confirm.
 
-## Packaging
+## Packaging and releases
 
-Scripts run from the **repository root** unless noted. Optional flags (`-Version`, `-Configuration`, `-OutputRoot`) are documented in `docs/dev-setup.md`.
+ReelRoulette ships through **Velopack** only. The **`.github/workflows/release.yml`** workflow (tag push or manual dispatch) builds self-contained **ServerApp** and **DesktopApp** outputs for **Windows** and **Linux**, stages WebUI assets for server legs, bundles Windows native dependencies in CI, packs with **`vpk`**, and publishes update feeds to **Backblaze B2**. Stable tag releases also mirror install artifacts onto the existing **GitHub release**. **Runtime update checking and apply-from-feed in the apps are a follow-up slice**; today both hosts call **`VelopackApp` hooks** at startup so install/update/uninstall hook invocations work when Velopack runs them.
 
-### Linux Packaging
+### Maintainer flow
 
-**Prerequisites:** `bash`, `dotnet`, `npm`, and `tar` on your `PATH` for portable tarballs; **[`appimagetool`](https://github.com/AppImage/AppImageKit)** on your `PATH` as well if you build AppImages.
+1. Set the repo version and align contract/project surfaces:
 
-**Portable tarballs** (self-contained `linux-x64`, symbols stripped, no `.pdb` in the tree, `README.txt` for native prerequisites):
+   ```bash
+   pwsh ./tools/scripts/set-release-version.ps1 -Version v0.12.0-dev.3
+   ```
 
-```bash
-./tools/scripts/package-serverapp-linux-portable.sh
-./tools/scripts/package-desktop-linux-portable.sh
-```
+2. Commit, push, and create/publish the GitHub release notes for the tag.
+3. Push the **`v*`** tag (must match `.version` exactly). The release workflow validates the tag, builds all matrix legs, and uploads to B2 (and GitHub for stable).
 
-Outputs: `artifacts/packages/portable/ReelRoulette-Server-{Version}-linux-x64.tar.gz` and `ReelRoulette-Desktop-{Version}-linux-x64.tar.gz`.
+Repo-root **`.version`** holds the canonical release version (v-prefixed semver2). **Server** packaging delegates WebUI build and static asset staging to **`stage-webui-assets.ps1`**, copying built assets into published **`wwwroot`**.
 
-**AppImages** (invoke the portable scripts first, then assemble the image):
+### Local verification
 
-```bash
-./tools/scripts/package-serverapp-linux-appimage.sh
-./tools/scripts/package-desktop-linux-appimage.sh
-```
+- **Linux packaged server smoke:** `./tools/scripts/verify-linux-packaged-server-smoke.sh` (builds a Velopack server AppImage if you omit a path, then curls `/health`, `/api/version`, `/control/status`, `/operator` headlessly).
+- Windows release legs run on GitHub-hosted runners; local Windows pack is optional.
 
-Outputs: `artifacts/packages/appimage/ReelRoulette-Server-{Version}-linux-x64.AppImage` and `ReelRoulette-Desktop-{Version}-linux-x64.AppImage`.
-
-**Local install** (copies those AppImages to `~/.local/share/ReelRoulette/` with stable names and runs `--install`): `./tools/scripts/install-linux-local.sh`.
-
-**End-user install helper** (fetches latest GitHub release; prefers AppImage, falls back to portable `.tar.gz`; needs `curl` and `jq`):
-
-```bash
-./tools/scripts/install-linux-from-github.sh server
-./tools/scripts/install-linux-from-github.sh desktop
-```
-
-Linux portable and AppImage packages **do not** bundle FFmpeg or LibVLC; the install script and AppImage `--help` describe expecting distro packages on the target system.
-
-### Windows Packaging
-
-**Prerequisites:** `dotnet`, `npm`, and `pwsh`; **Inno Setup 6** (`iscc`) for installer builds. See `docs/dev-setup.md`.
-
-```bash
-pwsh ./tools/scripts/package-serverapp-win-portable.ps1
-pwsh ./tools/scripts/package-serverapp-win-inno.ps1
-pwsh ./tools/scripts/package-desktop-win-portable.ps1
-pwsh ./tools/scripts/package-desktop-win-inno.ps1
-```
-
-- Windows packaging calls **`fetch-native-deps.ps1`** (via **`stage-native-deps.ps1`**) when `runtimes/win-x64/native/` is missing **ffmpeg.exe**, **ffprobe.exe**, or **libvlc** assets, then stages **FFmpeg/ffprobe** into the **server** publish output and **LibVLC** into the **desktop** publish output (see `docs/dev-setup.md`).
-- Installer metadata (setup, Start Menu, uninstall entry) uses shared `assets/HI.ico`.
-- Server and desktop installers include a **Create Desktop Shortcut** task (checked by default).
-
-### General
-
-- Repo-root **`.version`** holds the release version (v-prefixed semver2, for example `v0.12.0-dev`). If **`-Version`** is omitted on any package script, the bare semver is read from `.version` (explicit `-Version` still overrides).
-- **Server** packaging (all platforms) delegates WebUI build and static asset staging to **`stage-webui-assets.ps1`**, copying built assets into published **`wwwroot`**, including `/HI.ico`; the published server also carries `HI.ico` at the app root for tray icon loading (from `assets/HI.ico`).
-- **Chained release build**: with `-Version <ver>`, runs `set-release-version.ps1 -Version v0.12.0-dev.3` (same defaults as under **Helper Scripts**; optional `-NoDocUpdates`, `-NoUpdateDesktopVersion`, `-NoRegenerateContracts`, `-NoRunVerify` are forwarded), then platform-appropriate packaging. Omit `-Version` to skip `set-release-version` and package using `.version`.
-
-```bash
-pwsh ./tools/scripts/full-release.ps1 -Version v0.12.0-dev.3
-```
-
-On **Linux**, this produces `artifacts/packages/portable/*.tar.gz` and `artifacts/packages/appimage/*.AppImage` for server and desktop (AppImage steps require `appimagetool`); Inno installer steps are skipped. On **Windows**, it produces portable `.zip` outputs and Inno **`.exe`** installers.
-
-**GitHub Releases upload (Windows + Linux packages on tag):**
-
-- Push your final release commit, then create/publish the GitHub tag and release with your notes.
-- A `v*` tag push runs **`package-windows.yml`** and **`package-linux.yml`** in parallel. Each workflow builds its platform’s packages, checks that the release already exists for that tag, then uploads assets to that release (`gh release upload --clobber` on reruns):
-  - Windows: `artifacts/packages/**/*.zip` and `artifacts/packages/**/*.exe`
-  - Linux: `artifacts/packages/**/*.tar.gz` and `artifacts/packages/**/*.AppImage`
-- You can also run either workflow manually via **Actions → Package Windows / Package Linux → Run workflow** (optional version input).
+See `docs/dev-setup.md` for channel names, dev vs stable tiers, and troubleshooting.
 
 ## Documentation Map
 
@@ -294,4 +222,4 @@ On **Linux**, this produces `artifacts/packages/portable/*.tar.gz` and `artifact
 
 ReelRoulette integrates **VideoLAN VLC / LibVLC** and **FFmpeg** (including **ffprobe**). They are licensed under the GNU GPL and LGPL respectively. See the `licenses/` folder for license texts and [https://www.videolan.org](https://www.videolan.org) and [https://ffmpeg.org](https://ffmpeg.org) for source code.
 
-**Windows** release **server** packages produced by this repository bundle **FFmpeg** and **ffprobe** from the [gyan.dev](https://www.gyan.dev/ffmpeg/builds/) **release essentials** build. **Windows** **desktop** packages bundle a **single** **LibVLC** tree under **`runtimes/win-x64/native/libvlc/`** (staged during packaging from the same **VideoLAN.LibVLC.Windows** sources as development). **Linux** desktop packages bundle **no** LibVLC binaries; install **VLC/LibVLC** from your distribution for desktop playback. **Linux** users install **FFmpeg/ffprobe** (server refresh) from their distribution as well; Linux portable tarballs do not ship those binaries inside the archive.
+**Windows** release **server** packages bundle **FFmpeg** and **ffprobe** (CI-acquired build). **Windows** **desktop** packages bundle **LibVLC** under **`runtimes/win-x64/native/libvlc/`**. **Linux** packages bundle **no** LibVLC or FFmpeg; install **VLC/LibVLC** and **ffmpeg/ffprobe** from your distribution.

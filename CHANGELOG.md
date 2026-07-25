@@ -24,6 +24,7 @@ This file follows a Keep a Changelog style format.
 
 ### Changed
 
+- **Packaging and installation:** ReelRoulette now ships through a single Velopack installer path on Windows and Linux (replacing Inno Setup, portable ZIP/tarball packages, and legacy AppImage build scripts). Update **feeds** are published for a later in-app update slice; **installed apps do not check or apply updates yet**.
 - **Release pipeline — Windows native dependencies:** Velopack release builds now install FFmpeg from a pinned GitHub-hosted build and copy it into the server package, and bundle the desktop video playback library from its NuGet publish output instead of relying on the legacy fetch-and-stage scripts used by Inno/AppImage packaging.
 - **Desktop packaging — LibVLC layout:** Windows desktop packages ship one LibVLC tree under `runtimes/win-x64/native/libvlc/` instead of duplicating NuGet `libvlc/win-x64/` and `libvlc/win-x86/` beside the publish root; Linux desktop packages no longer carry unused Windows LibVLC binaries (playback still uses system LibVLC on Linux).
 - **Release tooling — version source and staging extraction:** Repo-root `.version` is now the canonical release version (v-prefixed semver2). `set-release-version.ps1` reads or writes `.version` and fans out bare semver to csproj, OpenAPI, and test fixtures (including `ReelRoulette.LibraryArchive`). WebUI static asset staging and Windows native dependency staging moved to `stage-webui-assets.ps1` and `stage-native-deps.ps1`; packaging scripts delegate to them.

@@ -141,7 +141,7 @@ public sealed class ServerContractTests
     }
 
     [Fact]
-    public void M8fPackagingScripts_AndWorkflows_ShouldExist()
+    public void ReleasePackagingWorkflow_AndVersionScript_ShouldExist()
     {
         var repoRoot = Path.GetFullPath(Path.Combine(
             AppContext.BaseDirectory,
@@ -152,10 +152,10 @@ public sealed class ServerContractTests
             "..",
             ".."));
 
-        Assert.True(File.Exists(Path.Combine(repoRoot, "tools", "scripts", "package-serverapp-win-portable.ps1")));
-        Assert.True(File.Exists(Path.Combine(repoRoot, "tools", "scripts", "package-serverapp-win-inno.ps1")));
-        Assert.True(File.Exists(Path.Combine(repoRoot, "tools", "installer", "ReelRoulette.ServerApp.iss")));
         Assert.True(File.Exists(Path.Combine(repoRoot, ".github", "workflows", "ci.yml")));
-        Assert.True(File.Exists(Path.Combine(repoRoot, ".github", "workflows", "package-windows.yml")));
+        Assert.True(File.Exists(Path.Combine(repoRoot, ".github", "workflows", "release.yml")));
+        Assert.True(File.Exists(Path.Combine(repoRoot, "tools", "scripts", "set-release-version.ps1")));
+        Assert.True(File.Exists(Path.Combine(repoRoot, "tools", "scripts", "stage-webui-assets.ps1")));
+        Assert.True(File.Exists(Path.Combine(repoRoot, "tools", "scripts", "verify-linux-packaged-server-smoke.sh")));
     }
 }

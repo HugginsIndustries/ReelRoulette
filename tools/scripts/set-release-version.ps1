@@ -152,13 +152,9 @@ function Update-ReadmeVersionExamples {
     if (-not [regex]::IsMatch($raw, 'set-release-version\.ps1(?: -Version [^\s`]+)?')) {
         throw "Failed to find set-release-version command version in $path"
     }
-    if (-not [regex]::IsMatch($raw, 'full-release\.ps1 -Version [^\s`]+')) {
-        throw "Failed to find full-release command version in $path"
-    }
 
     $next = $raw
     $next = [regex]::Replace($next, 'set-release-version\.ps1(?: -Version [^\s`]+)?', "set-release-version.ps1 -Version $Version", 1)
-    $next = [regex]::Replace($next, 'full-release\.ps1 -Version [^\s`]+', "full-release.ps1 -Version $Version", 1)
     Set-FileContentIfChanged -Path $path -NewContent $next | Out-Null
 }
 
@@ -169,13 +165,9 @@ function Update-DevSetupVersionExamples {
     if (-not [regex]::IsMatch($raw, 'set-release-version\.ps1 -Version [^\s`]+')) {
         throw "Failed to find set-release-version command version in $path"
     }
-    if (-not [regex]::IsMatch($raw, 'full-release\.ps1 -Version [^\s`]+')) {
-        throw "Failed to find full-release command version in $path"
-    }
 
     $next = $raw
     $next = [regex]::Replace($next, 'set-release-version\.ps1 -Version [^\s`]+', "set-release-version.ps1 -Version $Version", 1)
-    $next = [regex]::Replace($next, 'full-release\.ps1 -Version [^\s`]+', "full-release.ps1 -Version $Version", 1)
     Set-FileContentIfChanged -Path $path -NewContent $next | Out-Null
 }
 

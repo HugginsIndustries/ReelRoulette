@@ -59,11 +59,10 @@ ReelRoulette is migrating from a monolithic desktop app to a thin-client, API-fi
 
 - **Operational surfaces**
   - Manual validation guide/checklist at `docs/checklists/testing-checklist.md`.
-  - Windows and Linux packaging scripts and CI workflows: `ci.yml` (build/test + WebUI verify), `package-windows.yml` and `package-linux.yml` (tag + `workflow_dispatch`, upload artifacts; tag builds attach packages to the existing GitHub release), and `release.yml` (tag + `workflow_dispatch`, Velopack publish to Backblaze B2—Windows per-user `Setup.exe`, no MSI; stable builds also mirror Velopack assets onto the existing GitHub release). Inno Setup and AppImage/portable packaging workflows remain in service until a later slice retires them.
-  - Linux portable packaging: `tools/scripts/package-serverapp-linux-portable.sh` and `package-desktop-linux-portable.sh` produce self-contained `linux-x64` tarballs under `artifacts/packages/portable/` (`run-server.sh` / `run-desktop.sh`, bundled `README.txt` for native prereqs).
-  - Linux AppImage packaging: `tools/scripts/package-serverapp-linux-appimage.sh` and `package-desktop-linux-appimage.sh` (shared `tools/scripts/lib/appimage-helpers.sh`) produce `artifacts/packages/appimage/*.AppImage` from those portable tarballs; `AppRun` supports `--help` (prereqs) and `--install` (user-local menu entry and icons). GitHub latest-release installer: `tools/scripts/install-linux-from-github.sh` (AppImage preferred, portable tarball fallback; `curl` + `jq`; AppImages install to `~/.local/share/ReelRoulette` with stable names; `REELROULETTE_LOCAL_APPIMAGE_DIR` override; default repo overridable for forks). Local build: `tools/scripts/install-linux-local.sh` copies those AppImages to the same location and re-runs `--install`.
-  - Windows installers expose desktop shortcut install tasks (checked by default for server and desktop installers).
-  - Windows dev and packaging: **`tools/scripts/fetch-native-deps.ps1`** fills gitignored **`runtimes/win-x64/native/`** (FFmpeg/ffprobe + LibVLC); packaging copies **ffmpeg/ffprobe** into the **server** publish tree and **LibVLC** into the **desktop** publish tree (`docs/dev-setup.md`).
+  - CI and release: `ci.yml` (build/test + WebUI verify) and `release.yml` (tag + `workflow_dispatch`, Velopack publish to Backblaze B2—Windows per-user `Setup.exe`, Linux AppImage-style bundles, no MSI; stable builds also mirror install assets onto the existing GitHub release). B2 **update feeds** are published for a later in-app update slice; **apps do not check or apply updates yet** (only `VelopackApp` lifecycle hooks at startup).
+  - Release versioning: **`tools/scripts/set-release-version.ps1`** reads/writes repo-root **`.version`** and fans out OpenAPI, project versions, contract fixtures, optional verify gates, and doc examples before tagging.
+  - Packaging staging: **`stage-webui-assets.ps1`** (server WebUI in publish output); used by **`release.yml`** and **`verify-linux-packaged-server-smoke.sh`**.
+  - Packaged-server smoke: **`verify-linux-packaged-server-smoke.sh`** builds or accepts a Velopack Linux server AppImage and curls `/health`, `/api/version`, `/control/status`, `/operator` headlessly.
 
 ## Repository Map (High Signal)
 
@@ -77,8 +76,7 @@ ReelRoulette is migrating from a monolithic desktop app to a thin-client, API-fi
   - `desktop/ReelRoulette.DesktopApp`: shipping Desktop client location (Avalonia).
   - `desktop/ReelRoulette.LibraryArchive`: desktop-local library zip export/import helpers (referenced by the Desktop app and its tests).
 - `shared/api/openapi.yaml`: API contract source of truth.
-- `tools/scripts/`: runtime/verify/package scripts (`run-server*`, `verify-web*`, `verify-web-deploy*`, `verify-linux-packaged-server-smoke.sh`, `publish-web*`, Windows `package-*-win-*.ps1`, Linux portable `package-*-linux-portable.sh`).
-  - includes `set-release-version.ps1` for release-aligned version fan-out from repo-root `.version` (by default updates app/library `<Version>` surfaces, regenerates WebUI contracts, runs build/test/WebUI/deploy-smoke verify, and syncs README/dev-setup examples; skip pieces with `-NoUpdateDesktopVersion`, `-NoRegenerateContracts`, `-NoRunVerify`, `-NoDocUpdates`); `stage-webui-assets.ps1` and `stage-native-deps.ps1` for shared packaging staging; `full-release.ps1` forwards those switches when `-Version` is set and skips `set-release-version` when `-Version` is omitted (packaging then reads `.version`); `reset-checklist.ps1` for testing-guide reset workflows; Linux AppImage scripts, `install-linux-from-github.sh`, and packaged-server smoke helper live alongside portable `package-*-linux-portable.sh`.
+- `tools/scripts/`: runtime/verify/release scripts (`run-server*`, `verify-web*`, `verify-web-deploy*`, `verify-linux-packaged-server-smoke.sh`, `publish-web*`, `set-release-version.ps1`, `stage-webui-assets.ps1`, `reset-checklist.ps1`).
 
 ## Working Commands (Canonical Set)
 
