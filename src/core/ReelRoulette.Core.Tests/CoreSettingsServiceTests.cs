@@ -36,7 +36,7 @@ public sealed class CoreSettingsServiceTests : IDisposable
         Assert.Null(web.SharedToken);
         Assert.Equal("Off", control.AdminAuthMode);
         Assert.Null(control.AdminSharedToken);
-        Assert.False(control.DevChannelEnabled);
+        Assert.False(control.DevChannelEnabled.GetValueOrDefault());
     }
 
     [Fact]
@@ -96,7 +96,7 @@ public sealed class CoreSettingsServiceTests : IDisposable
         Assert.Null(web.SharedToken);
         Assert.Equal("TokenRequired", control.AdminAuthMode);
         Assert.Equal("admin-token", control.AdminSharedToken);
-        Assert.True(control.DevChannelEnabled);
+        Assert.True(control.DevChannelEnabled.GetValueOrDefault());
     }
 
     [Fact]
@@ -134,7 +134,7 @@ public sealed class CoreSettingsServiceTests : IDisposable
 """);
 
         var service = CreateService();
-        Assert.False(service.GetControlRuntimeSettings().DevChannelEnabled);
+        Assert.False(service.GetControlRuntimeSettings().DevChannelEnabled.GetValueOrDefault());
     }
 
     [Fact]
@@ -152,6 +152,61 @@ public sealed class CoreSettingsServiceTests : IDisposable
 
         Assert.True(result.Result.Accepted);
         Assert.False(result.Result.RestartRequired);
+    }
+
+    [Fact]
+    public void UpdateControlRuntimeSettings_WhenDevChannelOmitted_ShouldLeavePersistedValueUnchanged()
+    {
+        Directory.CreateDirectory(_tempDir);
+        var service = CreateService();
+
+        service.UpdateControlRuntimeSettings(new ReelRoulette.Server.Contracts.ControlRuntimeSettingsSnapshot
+        {
+            AdminAuthMode = "Off",
+            AdminSharedToken = null,
+            DevChannelEnabled = true
+        });
+
+        var result = service.UpdateControlRuntimeSettings(new ReelRoulette.Server.Contracts.ControlRuntimeSettingsSnapshot
+        {
+            AdminAuthMode = "Off",
+            AdminSharedToken = null,
+            DevChannelEnabled = null
+        });
+
+        Assert.True(result.Result.Accepted);
+        Assert.True(service.GetControlRuntimeSettings().DevChannelEnabled.GetValueOrDefault());
+
+        var reload = CreateService();
+        Assert.True(reload.GetControlRuntimeSettings().DevChannelEnabled.GetValueOrDefault());
+    }
+
+    [Fact]
+    public void UpdateRefreshSettings_AfterDevChannelEnabled_ShouldPreserveDevChannelOnDisk()
+    {
+        Directory.CreateDirectory(_tempDir);
+        var service = CreateService();
+
+        service.UpdateControlRuntimeSettings(new ReelRoulette.Server.Contracts.ControlRuntimeSettingsSnapshot
+        {
+            AdminAuthMode = "Off",
+            AdminSharedToken = null,
+            DevChannelEnabled = true
+        });
+
+        service.UpdateRefreshSettings(new ReelRoulette.Server.Contracts.RefreshSettingsSnapshot
+        {
+            AutoRefreshEnabled = true,
+            AutoRefreshIntervalMinutes = 22,
+            ForceRescanLoudness = false,
+            ForceRescanDuration = false,
+            FingerprintScanMaxDegreeOfParallelism = 4
+        });
+
+        Assert.True(service.GetControlRuntimeSettings().DevChannelEnabled.GetValueOrDefault());
+
+        var reload = CreateService();
+        Assert.True(reload.GetControlRuntimeSettings().DevChannelEnabled.GetValueOrDefault());
     }
 
     [Fact]

@@ -301,7 +301,7 @@ public sealed class ControlRuntimeSettingsSnapshot
 {
     public string AdminAuthMode { get; set; } = "Off";
     public string? AdminSharedToken { get; set; }
-    public bool DevChannelEnabled { get; set; }
+    public bool? DevChannelEnabled { get; set; }
 }
 
 public sealed class ControlApplyResult

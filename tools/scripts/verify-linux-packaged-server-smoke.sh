@@ -119,6 +119,11 @@ work="$(mktemp -d)"
 out_log="$work/server.out"
 err_log="$work/server.err"
 
+# Verification scripts must not read or write the developer's real ApplicationData settings.
+# .NET uses XDG_CONFIG_HOME on Linux for SpecialFolder.ApplicationData (ReelRoulette under config home).
+isolated_config_home="$work/isolated-config-home"
+mkdir -p "$isolated_config_home"
+
 server_pid=""
 cleanup() {
   if [[ -n "${server_pid}" ]] && kill -0 "$server_pid" 2>/dev/null; then
@@ -131,6 +136,7 @@ trap cleanup EXIT
 
 (
   exec env -u DISPLAY -u WAYLAND_DISPLAY -u DBUS_SESSION_BUS_ADDRESS \
+    XDG_CONFIG_HOME="$isolated_config_home" \
     "$appimage" --appimage-extract-and-run --CoreServer:ListenUrl="$listen_url"
 ) >"$out_log" 2>"$err_log" &
 server_pid=$!

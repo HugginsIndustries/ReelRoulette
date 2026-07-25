@@ -118,7 +118,7 @@ public sealed class CoreSettingsService
 
         _controlRuntimeSettings.AdminAuthMode = loaded.ControlRuntime.AdminAuthMode;
         _controlRuntimeSettings.AdminSharedToken = loaded.ControlRuntime.AdminSharedToken;
-        _controlRuntimeSettings.DevChannelEnabled = loaded.ControlRuntime.DevChannelEnabled;
+        _controlRuntimeSettings.DevChannelEnabled = loaded.ControlRuntime.DevChannelEnabled ?? false;
     }
 
     public RefreshSettingsSnapshot GetRefreshSettings()
@@ -240,7 +240,7 @@ public sealed class CoreSettingsService
             {
                 AdminAuthMode = _controlRuntimeSettings.AdminAuthMode,
                 AdminSharedToken = _controlRuntimeSettings.AdminSharedToken,
-                DevChannelEnabled = _controlRuntimeSettings.DevChannelEnabled
+                DevChannelEnabled = _controlRuntimeSettings.DevChannelEnabled ?? false
             };
         }
     }
@@ -268,7 +268,11 @@ public sealed class CoreSettingsService
 
                 _controlRuntimeSettings.AdminAuthMode = normalizedAuthMode;
                 _controlRuntimeSettings.AdminSharedToken = normalizedSharedToken;
-                _controlRuntimeSettings.DevChannelEnabled = snapshot.DevChannelEnabled;
+                if (snapshot.DevChannelEnabled.HasValue)
+                {
+                    _controlRuntimeSettings.DevChannelEnabled = snapshot.DevChannelEnabled.Value;
+                }
+
                 PersistSettings();
             }
 
@@ -356,7 +360,7 @@ public sealed class CoreSettingsService
                         controlRuntime.AdminSharedToken = string.IsNullOrWhiteSpace(parsed.ControlRuntime.AdminSharedToken)
                             ? null
                             : parsed.ControlRuntime.AdminSharedToken.Trim();
-                        controlRuntime.DevChannelEnabled = parsed.ControlRuntime.DevChannelEnabled;
+                        controlRuntime.DevChannelEnabled = parsed.ControlRuntime.DevChannelEnabled ?? false;
                     }
 
                     return ((refresh, backup, webRuntime, controlRuntime), needsStartupBackfillPersist);

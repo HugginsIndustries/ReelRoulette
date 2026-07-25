@@ -944,8 +944,8 @@ export interface components {
             /** @enum {string} */
             adminAuthMode: "Off" | "TokenRequired";
             adminSharedToken?: string | null;
-            /** @default false */
-            devChannelEnabled: boolean;
+            /** @description When omitted or null on POST, the persisted dev-channel preference is left unchanged. GET always returns the current boolean value (stable or dev update channel). */
+            devChannelEnabled?: boolean | null;
         };
         ControlApplyResult: {
             accepted: boolean;

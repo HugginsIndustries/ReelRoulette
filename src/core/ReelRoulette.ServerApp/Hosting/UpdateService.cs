@@ -101,7 +101,7 @@ public sealed class UpdateService : IServerUpdateChannelCoordinator
             return;
         }
 
-        var devChannelEnabled = _settings.GetControlRuntimeSettings().DevChannelEnabled;
+        var devChannelEnabled = _settings.GetControlRuntimeSettings().DevChannelEnabled.GetValueOrDefault();
         var manager = CreateUpdateManager(devChannelEnabled);
         _velopackInstalled = manager.IsInstalled;
         _runningVersion = ServerRunningVersion.Resolve(manager);
@@ -119,7 +119,7 @@ public sealed class UpdateService : IServerUpdateChannelCoordinator
             return ToActionResult(false, GetStatus(), "Update apply is in progress; check skipped.");
         }
 
-        var devChannelEnabled = _settings.GetControlRuntimeSettings().DevChannelEnabled;
+        var devChannelEnabled = _settings.GetControlRuntimeSettings().DevChannelEnabled.GetValueOrDefault();
         var (feedUrl, explicitChannel) = ComposeFeedAndChannel(devChannelEnabled);
         var manager = CreateUpdateManager(devChannelEnabled);
 
@@ -258,7 +258,7 @@ public sealed class UpdateService : IServerUpdateChannelCoordinator
             _phase = ServerUpdatePhases.Downloading;
         }
 
-        var devChannelEnabled = _settings.GetControlRuntimeSettings().DevChannelEnabled;
+        var devChannelEnabled = _settings.GetControlRuntimeSettings().DevChannelEnabled.GetValueOrDefault();
         var manager = CreateUpdateManager(devChannelEnabled);
 
         _logger.LogInformation("Downloading server update {TargetVersion}.", targetVersion);
@@ -329,7 +329,7 @@ public sealed class UpdateService : IServerUpdateChannelCoordinator
             _phase = ServerUpdatePhases.Restarting;
         }
 
-        var devChannelEnabled = _settings.GetControlRuntimeSettings().DevChannelEnabled;
+        var devChannelEnabled = _settings.GetControlRuntimeSettings().DevChannelEnabled.GetValueOrDefault();
         var manager = CreateUpdateManager(devChannelEnabled);
 
         _logger.LogInformation(

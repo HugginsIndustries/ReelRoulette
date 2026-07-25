@@ -43,3 +43,9 @@ Keep this file short and enforceable. For details, use `CONTEXT.md`, `MILESTONES
   without approval.
 - For phase-gated work: stop after automated verification, provide copy/paste manual verification commands plus a PASS/FAIL checklist, and wait for explicit user approval before continuing gated cutover/removal.
 - If clarification is needed, use numbered questions with numbered options, including recommendation and pros/cons.
+
+## Verification and smoke scripts
+
+- Scripts under `tools/scripts/` that start a server for automated verification or smoke testing must isolate application data (for example `APPDATA` on Windows, `XDG_CONFIG_HOME` on Linux) in a fresh temporary directory per run and remove it afterward, including on failure paths.
+- Do not point verification or smoke servers at the developer's real `%ApplicationData%/ReelRoulette` / `~/.config/ReelRoulette` tree.
+- Dev-run helpers such as `run-server.ps1` intentionally use real settings and must not be isolated.

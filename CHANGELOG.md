@@ -5,6 +5,10 @@ This file follows a Keep a Changelog style format.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Server — update channel preference:** Fixed a bug where `devChannelEnabled` could be silently reset to stable (`false`) when a control-settings POST omitted the field; omitted values now leave the persisted preference unchanged. Development verification scripts (`verify-web-deploy.ps1`, Linux packaged server smoke) now isolate application data so routine smoke runs do not read or write the developer's real `core-settings.json`.
+
 ### Added
 
 - **Server — Velopack self-update:** Installed ServerApp builds expose operator-driven update control (`/control/update/*` and the operator UI check → download → apply flow). A background loop **checks** the Backblaze B2 feed only (stable or dev via `devChannelEnabled`); download and apply never run without operator confirmation. Dev channel toggles still trigger an immediate check.

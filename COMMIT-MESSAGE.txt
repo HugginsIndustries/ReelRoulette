@@ -19,8 +19,9 @@ Instructions:
 
 Commit Message:
 
-Bugfix: Operator UI shows Velopack package version, not assembly version
+Bugfix: Stop verification scripts and partial control POSTs from resetting dev channel
 
-- Source the running-version line from `/control/update/status` `runningVersion` so it matches update status (prerelease builds included).
-- Resolve non–Velopack runs via assembly informational version with a clear dev-run label instead of the four-part assembly version.
-- Update CHANGELOG [Unreleased] operator UI note; no OpenAPI contract change.
+- Omitting `devChannelEnabled` on POST `/control/settings` now leaves the persisted value unchanged (nullable OpenAPI/C# contract; GET still returns a concrete boolean).
+- Isolate `verify-web-deploy.ps1` and Linux packaged server smoke via `APPDATA` / `XDG_CONFIG_HOME` temp dirs so routine verification does not touch real `core-settings.json`.
+- Add CoreSettingsService tests for omitted dev channel and cross-section refresh persist survival; document AGENTS rule and add settings persistence audit report.
+- CHANGELOG [Unreleased] Fixed entry; regenerate WebUI OpenAPI types.
