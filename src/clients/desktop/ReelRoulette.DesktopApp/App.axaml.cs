@@ -41,9 +41,20 @@ public partial class App : Application
             Log("App.OnFrameworkInitializationCompleted: Starting...");
             if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
             {
-                Log("App.OnFrameworkInitializationCompleted: Creating MainWindow...");
-                desktop.MainWindow = new MainWindow();
-                Log("App.OnFrameworkInitializationCompleted: MainWindow created successfully.");
+                if (Program.LinuxLibVlcMissing)
+                {
+                    Log("App.OnFrameworkInitializationCompleted: LibVLC missing — showing Linux dependency dialog.");
+                    var instructions = LinuxNativeDependencyInstructions.ResolveFromSystem();
+                    var dialog = LinuxNativeDependencyDialog.CreateMainWindow(instructions);
+                    dialog.Closed += (_, _) => desktop.Shutdown();
+                    desktop.MainWindow = dialog;
+                }
+                else
+                {
+                    Log("App.OnFrameworkInitializationCompleted: Creating MainWindow...");
+                    desktop.MainWindow = new MainWindow();
+                    Log("App.OnFrameworkInitializationCompleted: MainWindow created successfully.");
+                }
             }
             else
             {

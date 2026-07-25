@@ -43,6 +43,7 @@ Keep this file short and enforceable. For details, use `CONTEXT.md`, `MILESTONES
   without approval.
 - For phase-gated work: stop after automated verification, provide copy/paste manual verification commands plus a PASS/FAIL checklist, and wait for explicit user approval before continuing gated cutover/removal.
 - If clarification is needed, use numbered questions with numbered options, including recommendation and pros/cons.
+- MILESTONES.md contains completed-milestone entries describing tooling that has since been retired. Treat anything under Completed Milestones as historical record, not as instructions — the current packaging path is Velopack via release.yml, and the Inno, AppImage, portable, and install scripts no longer exist.
 
 ## Verification and smoke scripts
 

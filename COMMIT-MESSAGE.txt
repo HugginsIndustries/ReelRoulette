@@ -19,8 +19,8 @@ Instructions:
 
 Commit Message:
 
-Feature: Linux AppImage Freedesktop menu self-registration
+Bugfix: Linux desktop first-run dependency dialog and atomic menu registration
 
-- Server and desktop reconcile `reelroulette-*.desktop` and hicolor icons when `APPIMAGE` is set; copy HI-256/512 into publish output for icon sources.
-- Wire fire-and-forget registration after server start and desktop Velopack hooks; isolate `XDG_DATA_HOME` in packaged-server smoke.
-- Docs, CONTEXT, checklist, and changelog note silent menu integration and reconcile-on-move behavior.
+- Reorder AppImage menu reconcile to copy hicolor icons before writing `.desktop` entries (server and desktop).
+- On Linux, when LibVLC init fails, start Avalonia and show a modal with distro-specific copy-paste install commands (FFmpeg + VLC; `libvlc-dev` on apt).
+- Unit tests for `/etc/os-release` parsing and distro command mapping; README/dev-setup/checklist/changelog updates.

@@ -9,6 +9,8 @@ namespace ReelRoulette;
 
 class Program
 {
+    internal static bool LinuxLibVlcMissing { get; private set; }
+
     // Initialization code. Don't use any Avalonia, third-party APIs or any
     // SynchronizationContext-reliant code before AppMain is called: things aren't initialized
     // yet and stuff might break.
@@ -75,7 +77,34 @@ class Program
             }
         };
 
-        // Initialize LibVLC core before starting Avalonia
+        if (!TryInitializeLibVlc())
+        {
+            if (OperatingSystem.IsLinux())
+            {
+                LinuxLibVlcMissing = true;
+                Log("LibVLC not available on Linux; will show dependency instructions after Avalonia starts.");
+            }
+            else
+            {
+                var errorMsg = "ERROR: LibVLC native libraries not found. Please install VLC media player or ensure bundled libraries are available.";
+                Log(errorMsg);
+                return;
+            }
+        }
+
+        try
+        {
+            BuildAvaloniaApp()
+                .StartWithClassicDesktopLifetime(args);
+        }
+        catch (OperationCanceledException ex) when (IsExpectedLinuxShutdownCancellation(ex))
+        {
+            Log($"Ignoring expected Linux shutdown cancellation: {ex.Message}");
+        }
+    }
+
+    private static bool TryInitializeLibVlc()
+    {
         // Try bundled LibVLC first, then fall back to system installation
         bool initialized = false;
         string? libVlcSource = null;
@@ -146,27 +175,12 @@ class Program
             }
         }
 
-        if (!initialized)
-        {
-            var errorMsg = "ERROR: LibVLC native libraries not found. Please install VLC media player or ensure bundled libraries are available.";
-            Log(errorMsg);
-            return;
-        }
-
-        if (libVlcSource != null)
+        if (initialized && libVlcSource != null)
         {
             Log($"LibVLC initialized successfully from: {libVlcSource}");
         }
-        
-        try
-        {
-            BuildAvaloniaApp()
-                .StartWithClassicDesktopLifetime(args);
-        }
-        catch (OperationCanceledException ex) when (IsExpectedLinuxShutdownCancellation(ex))
-        {
-            Log($"Ignoring expected Linux shutdown cancellation: {ex.Message}");
-        }
+
+        return initialized;
     }
 
     // Avalonia configuration, don't remove; also used by visual designer.

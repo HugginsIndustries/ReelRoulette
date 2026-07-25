@@ -5,12 +5,9 @@ This file follows a Keep a Changelog style format.
 
 ## [Unreleased]
 
-### Changed
-
-- **Agent instructions:** Verification/smoke scripts must stop servers they start by started handle before removing isolated config; when validating that behavior, agents must not stop unrelated server processes (for example `run-server.ps1`) and should use non-destructive liveness checks only.
-
 ### Fixed
 
+- **Linux — desktop first run:** When LibVLC/VLC is missing, the desktop app shows a dialog with copy-paste install instructions for your distribution instead of exiting with no message; AppImage menu registration now installs icons before writing the `.desktop` entry so a failed launch does not leave a blank-icon menu shortcut.
 - **Server — update channel preference:** Fixed a bug where `devChannelEnabled` could be silently reset to stable (`false`) when a control-settings POST omitted the field; omitted values now leave the persisted preference unchanged. Development verification scripts (`verify-web-deploy.ps1`, Linux packaged server smoke) now isolate application data so routine smoke runs do not read or write the developer's real `core-settings.json`.
 - **Verification scripts — server lifecycle:** Fixed smoke/verify scripts leaving orphaned `ReelRoulette.ServerApp` listeners after repeated runs by stopping started and listener PIDs (graceful, then force) before deleting isolated temp config directories, including on failure and interrupt paths.
 
@@ -36,6 +33,7 @@ This file follows a Keep a Changelog style format.
 
 ### Changed
 
+- **Agent instructions:** Verification/smoke scripts must stop servers they start by started handle before removing isolated config; when validating that behavior, agents must not stop unrelated server processes (for example `run-server.ps1`) and should use non-destructive liveness checks only.
 - **Server — self-update control:** Background Velopack polling notifies when an update is available; operators choose when to download and when to apply, so the server never restarts for an update on its own.
 - **Server — operator UI:** Shows the running server build version from `/control/update/status` (`runningVersion`, Velopack package version when installed) near the top of `/operator`, with assembly informational-version fallback and a dev-run label when not Velopack-installed; exposes Check for Updates / Download / Apply & Restart actions wired to `/control/update/*`.
 - **Packaging and installation:** ReelRoulette now ships through a single Velopack installer path on Windows and Linux (replacing Inno Setup, portable ZIP/tarball packages, and legacy AppImage build scripts). Update **feeds** are published on B2; **ServerApp** applies in-app updates when installed via Velopack (desktop self-update remains a follow-up slice).

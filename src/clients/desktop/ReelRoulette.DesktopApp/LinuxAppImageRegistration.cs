@@ -75,9 +75,10 @@ internal static class LinuxAppImageRegistration
         var icon512Dest = Path.Combine(dataHome, "icons", "hicolor", "512x512", "apps", $"{IconStem}.png");
 
         var desiredDesktop = BuildDesktopEntryContent(appImagePath);
-        var desktopChanged = ReconcileTextFile(desktopEntryPath, desiredDesktop);
+        // Install hicolor icons before writing the .desktop entry so a partial run never leaves a menu item without its icon files.
         var icon256Changed = ReconcileBinaryFile(icon256Dest, icon256Source);
         var icon512Changed = ReconcileBinaryFile(icon512Dest, icon512Source);
+        var desktopChanged = ReconcileTextFile(desktopEntryPath, desiredDesktop);
 
         if (desktopChanged || icon256Changed || icon512Changed)
         {
