@@ -6,8 +6,13 @@ namespace ReelRoulette;
 
 /// <summary>
 /// Maps Linux distro identity (<c>/etc/os-release</c>) to copy-paste install commands for FFmpeg and VLC/LibVLC.
-/// Add new distros by extending the family matchers below.
 /// </summary>
+/// <remarks>
+/// LibVLCSharp loads the native library by its unversioned name (<c>libvlc.so</c>). A working VLC player install is not
+/// enough on distros that ship only <c>libvlc.so.5</c> unless a separate package provides the bare symlink. When adding
+/// a new family, include whatever package supplies <c>libvlc.so</c> (verify on the target system: <c>libvlc.so</c> must
+/// exist alongside <c>libvlc.so.5</c>). Extend the family matchers below.
+/// </remarks>
 public static class LinuxNativeDependencyInstructions
 {
     public sealed record Instructions(
@@ -64,7 +69,6 @@ public static class LinuxNativeDependencyInstructions
         fields.TryGetValue("ID_LIKE", out var idLikeRaw);
         fields.TryGetValue("NAME", out var nameRaw);
         fields.TryGetValue("PRETTY_NAME", out var prettyNameRaw);
-        fields.TryGetValue("VERSION_ID", out var versionIdRaw);
 
         var id = NormalizeToken(idRaw);
         var idLike = NormalizeToken(idLikeRaw);
@@ -88,7 +92,7 @@ public static class LinuxNativeDependencyInstructions
 
         if (IsOpenSuseLike(id, idLike))
         {
-            var command = BuildOpenSuseInstallCommand(id, versionIdRaw);
+            var command = BuildOpenSuseInstallCommand(id);
             return WithCommand(displayName, command);
         }
 
@@ -119,23 +123,27 @@ public static class LinuxNativeDependencyInstructions
             '\n',
             "sudo dnf install https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm https://mirrors.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-$(rpm -E %fedora).noarch.rpm",
             "sudo dnf swap ffmpeg-free ffmpeg --allowerasing",
-            "sudo dnf install vlc ffmpeg");
+            // vlc-devel provides the unversioned libvlc.so LibVLCSharp resolves by name (verified on clean Fedora 43).
+            "sudo dnf install vlc vlc-devel ffmpeg");
     }
 
-    private static string BuildOpenSuseInstallCommand(string id, string? versionIdRaw)
+    private static string BuildOpenSuseInstallCommand(string id)
     {
-        var versionId = Unquote(versionIdRaw)?.Trim() ?? string.Empty;
         var isTumbleweed = id.Contains("tumbleweed", StringComparison.OrdinalIgnoreCase);
 
-        var repoUrl = isTumbleweed
-            ? "https://ftp.gwdg.de/pub/linux/misc/packman/suse/openSUSE_Tumbleweed/"
-            : $"https://ftp.gwdg.de/pub/linux/misc/packman/suse/openSUSE_Leap_{versionId}/";
+        var addRepoLine = isTumbleweed
+            ? "sudo zypper addrepo -cfp 90 https://ftp.gwdg.de/pub/linux/misc/packman/suse/openSUSE_Tumbleweed/ packman"
+            // Single quotes are load-bearing: bash must not expand $releasever before zypper sees it (otherwise openSUSE_Leap_/).
+            // Zypper stores $releasever in /etc/zypp/repos.d/ and re-expands it on every refresh, so the repo follows Leap upgrades instead of staying pinned to an old release.
+            : "sudo zypper addrepo -cfp 90 'https://ftp.gwdg.de/pub/linux/misc/packman/suse/openSUSE_Leap_$releasever/' packman";
 
         return string.Join(
             '\n',
-            $"sudo zypper addrepo -cfp 90 {repoUrl} packman",
+            addRepoLine,
             "sudo zypper refresh",
-            "sudo zypper install --allow-vendor-change --from packman ffmpeg vlc vlc-codecs");
+            // ffmpeg is a capability name on Leap (zypper resolves to the current major, e.g. ffmpeg-8); do not pin a version.
+            // vlc-devel from Packman provides /usr/lib64/libvlc.so (verified on clean openSUSE Leap 16.0); keep vendor-consistent with Packman libvlc.
+            "sudo zypper install --allow-vendor-change --from packman ffmpeg vlc vlc-codecs vlc-devel");
     }
 
     private static bool IsDebianLike(string id, string idLike)

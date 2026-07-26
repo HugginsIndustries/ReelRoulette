@@ -20,7 +20,7 @@ ReelRoulette is a server-first media randomizer with thin desktop and web client
 - Node.js and npm (for WebUI build/verify flows).
 - PowerShell Core (`pwsh`) for `tools/scripts/*.ps1` helpers (for example `pwsh ./tools/scripts/run-server.ps1`).
   - Linux (Arch Linux, CachyOS, and similar): install from the AUR, for example `paru -S powershell-bin` or `yay -S powershell-bin`; that package provides `pwsh` on your PATH.
-- **VLC / LibVLC** for **desktop** video playback when running from source. **FFmpeg** (including **`ffprobe` on your `PATH`**) on the **server** host for library refresh (duration, loudness, thumbnails, and related probes). Install these from your OS packages on Linux—AppImages do **not** bundle them. On **Debian/Ubuntu/Mint** and similar **`apt`** distros, install **`libvlc-dev`** as well as **`vlc`** (it provides the **`libvlc.so`** symlink LibVLCSharp needs). On **Windows**, use distro-equivalent installs on your `PATH` for local `dotnet run` (official **Velopack** server packages bundle FFmpeg/ffprobe; desktop packages bundle LibVLC).
+- **VLC / LibVLC** for **desktop** video playback when running from source. **FFmpeg** (including **`ffprobe` on your `PATH`**) on the **server** host for library refresh (duration, loudness, thumbnails, and related probes). Install these from your OS packages on Linux—AppImages do **not** bundle them. LibVLCSharp needs the **unversioned** **`libvlc.so`** symlink, not just the VLC player—on distros that split it out, install **`libvlc-dev`** on **Debian/Ubuntu/Mint** (and similar **`apt`** systems) and **`vlc-devel`** on **Fedora** and **openSUSE** (from Packman on openSUSE), alongside **`vlc`**. On **Windows**, use distro-equivalent installs on your `PATH` for local `dotnet run` (official **Velopack** server packages bundle FFmpeg/ffprobe; desktop packages bundle LibVLC).
 
 ## Quick Start
 
@@ -51,7 +51,7 @@ Official **installers** for stable tags are on **[GitHub Releases](https://githu
 
    **AppImage runtime:** most builds need **FUSE 2** on the host (`libfuse2`, or **`libfuse2t64`** on newer Ubuntu-based releases). If the AppImage will not start, install that package or run with **`--appimage-extract-and-run`**.
 
-3. Install **FFmpeg** (with **`ffprobe`**) and **VLC / LibVLC** before relying on playback and library refresh—Linux packages do not bundle those tools. On Debian/Ubuntu/Mint, also install **`libvlc-dev`**. If the **desktop** AppImage starts but VLC is missing, it shows a dialog with a **copy-paste command** for your distribution instead of exiting silently.
+3. Install **FFmpeg** (with **`ffprobe`**) and **VLC / LibVLC** before relying on playback and library refresh—Linux packages do not bundle those tools. Where your distro splits out the **`libvlc.so`** symlink, also install **`libvlc-dev`** (Debian/Ubuntu/Mint) or **`vlc-devel`** (Fedora, openSUSE/Packman). If the **desktop** AppImage starts but LibVLC is missing, it shows a dialog with a **copy-paste command** for your distribution instead of exiting silently.
 4. **Upgrades:** download a newer **`.AppImage`** from GitHub Releases and run it (replace or rename your copy as you prefer). In-app update checks are **not implemented yet**.
 
 ### Developing from source

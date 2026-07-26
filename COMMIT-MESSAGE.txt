@@ -19,8 +19,7 @@ Instructions:
 
 Commit Message:
 
-Bugfix: Linux desktop first-run dependency dialog and atomic menu registration
+Bugfix: Linux dependency commands for Fedora, openSUSE, and Packman URL
 
-- Reorder AppImage menu reconcile to copy hicolor icons before writing `.desktop` entries (server and desktop).
-- On Linux, when LibVLC init fails, start Avalonia and show a modal with distro-specific copy-paste install commands (FFmpeg + VLC; `libvlc-dev` on apt).
-- Unit tests for `/etc/os-release` parsing and distro command mapping; README/dev-setup/checklist/changelog updates.
+- Add vlc-devel on Fedora and openSUSE so LibVLCSharp gets unversioned libvlc.so; use zypper $releasever in single quotes for Leap Packman repo URL.
+- Document libvlc-dev / vlc-devel in README and dev-setup; extend mapping tests and changelog.

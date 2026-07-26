@@ -7,7 +7,7 @@ This file follows a Keep a Changelog style format.
 
 ### Fixed
 
-- **Linux — desktop first run:** When LibVLC/VLC is missing, the desktop app shows a dialog with copy-paste install instructions for your distribution instead of exiting with no message; AppImage menu registration now installs icons before writing the `.desktop` entry so a failed launch does not leave a blank-icon menu shortcut.
+- **Linux — desktop first run:** When LibVLC/VLC is missing, the desktop app shows a dialog with copy-paste install instructions for your distribution instead of exiting with no message; AppImage menu registration now installs icons before writing the `.desktop` entry so a failed launch does not leave a blank-icon menu shortcut. Fedora and openSUSE commands now include **`vlc-devel`** so the unversioned **`libvlc.so`** symlink LibVLCSharp needs is installed, not only the VLC player.
 - **Server — update channel preference:** Fixed a bug where `devChannelEnabled` could be silently reset to stable (`false`) when a control-settings POST omitted the field; omitted values now leave the persisted preference unchanged. Development verification scripts (`verify-web-deploy.ps1`, Linux packaged server smoke) now isolate application data so routine smoke runs do not read or write the developer's real `core-settings.json`.
 - **Verification scripts — server lifecycle:** Fixed smoke/verify scripts leaving orphaned `ReelRoulette.ServerApp` listeners after repeated runs by stopping started and listener PIDs (graceful, then force) before deleting isolated temp config directories, including on failure and interrupt paths.
 

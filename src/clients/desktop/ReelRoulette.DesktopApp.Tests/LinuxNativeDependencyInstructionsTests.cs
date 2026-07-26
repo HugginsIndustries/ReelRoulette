@@ -66,7 +66,35 @@ public sealed class LinuxNativeDependencyInstructionsTests
         Assert.NotNull(result.CopyCommand);
         Assert.Contains("rpmfusion-free-release", result.CopyCommand, StringComparison.Ordinal);
         Assert.Contains("ffmpeg-free ffmpeg --allowerasing", result.CopyCommand, StringComparison.Ordinal);
-        Assert.Contains("sudo dnf install vlc ffmpeg", result.CopyCommand, StringComparison.Ordinal);
+        Assert.Contains("sudo dnf install vlc vlc-devel ffmpeg", result.CopyCommand, StringComparison.Ordinal);
+        Assert.Equal(3, result.CopyCommand!.Split('\n').Length);
+    }
+
+    private const string OpenSuseLeapOsRelease = """
+        NAME="openSUSE Leap"
+        VERSION="16.0"
+        ID="opensuse-leap"
+        ID_LIKE="suse opensuse"
+        VERSION_ID="16.0"
+        PRETTY_NAME="openSUSE Leap 16.0"
+        """;
+
+    [Fact]
+    public void ResolveFromOsReleaseContent_OpenSuseLeap_EmitsPackmanSequenceWithVlcDevel()
+    {
+        var result = LinuxNativeDependencyInstructions.ResolveFromOsReleaseContent(OpenSuseLeapOsRelease);
+
+        Assert.True(result.HasInstallCommand);
+        Assert.Equal("Instructions for openSUSE Leap:", result.DistroHeading);
+        Assert.NotNull(result.CopyCommand);
+        Assert.Contains(
+            "sudo zypper addrepo -cfp 90 'https://ftp.gwdg.de/pub/linux/misc/packman/suse/openSUSE_Leap_$releasever/' packman",
+            result.CopyCommand,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "sudo zypper install --allow-vendor-change --from packman ffmpeg vlc vlc-codecs vlc-devel",
+            result.CopyCommand,
+            StringComparison.Ordinal);
         Assert.Equal(3, result.CopyCommand!.Split('\n').Length);
     }
 
