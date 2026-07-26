@@ -2,6 +2,8 @@ using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Threading;
 using System;
+using System.Net;
+using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using Velopack;
@@ -161,6 +163,26 @@ public sealed class UpdateService
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             Log($"Desktop update check failed: {ex.Message}");
+            if (VelopackUpdateFeedExceptions.IsMissingReleaseFeed(ex))
+            {
+                lock (_stateLock)
+                {
+                    _velopackInstalled = true;
+                    _runningVersion = DesktopRunningVersion.Resolve(manager);
+                    _phase = DesktopUpdatePhases.NoReleases;
+                    _targetVersion = null;
+                    _availableUpdate = null;
+                    _sessionReadyRelease = null;
+                }
+
+                return ToActionResult(true, GetStatus(), "No releases available on this channel.");
+            }
+
+            lock (_stateLock)
+            {
+                _phase = DesktopUpdatePhases.CheckFailed;
+            }
+
             return ToActionResult(false, GetStatus(), "Update check failed. See desktop logs for details.");
         }
 
@@ -370,7 +392,9 @@ public sealed class UpdateService
         var message = _phase switch
         {
             DesktopUpdatePhases.NotInstalled => "Updates apply only to Velopack-installed desktop builds.",
-            DesktopUpdatePhases.Idle => "Update status unknown; check for updates.",
+            DesktopUpdatePhases.Idle => "Check for updates to see whether a release is available.",
+            DesktopUpdatePhases.NoReleases => "No releases available on this channel.",
+            DesktopUpdatePhases.CheckFailed => "Update status unknown; check for updates.",
             DesktopUpdatePhases.UpToDate => $"Up to date ({_runningVersion ?? "unknown"}).",
             DesktopUpdatePhases.UpdateAvailable => $"Update available: {_targetVersion}.",
             DesktopUpdatePhases.Downloading => $"Downloading update {_targetVersion}…",
@@ -403,11 +427,33 @@ internal static class DesktopUpdatePhases
 {
     internal const string NotInstalled = "notInstalled";
     internal const string Idle = "idle";
+    internal const string NoReleases = "noReleases";
+    internal const string CheckFailed = "checkFailed";
     internal const string UpToDate = "upToDate";
     internal const string UpdateAvailable = "updateAvailable";
     internal const string Downloading = "downloading";
     internal const string UpdateReady = "updateReady";
     internal const string Restarting = "restarting";
+}
+
+internal static class VelopackUpdateFeedExceptions
+{
+    /// <summary>
+    /// Velopack's HTTP source throws when <c>releases.{channel}.json</c> is missing (404), not when the feed is empty.
+    /// See https://github.com/velopack/velopack/issues/91
+    /// </summary>
+    internal static bool IsMissingReleaseFeed(Exception ex)
+    {
+        for (var current = ex; current != null; current = current.InnerException)
+        {
+            if (current is HttpRequestException { StatusCode: HttpStatusCode.NotFound })
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 }
 
 internal static class DesktopUpdateBackgroundLoop

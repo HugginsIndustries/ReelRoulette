@@ -20,7 +20,7 @@ ReelRoulette is a server-first media randomizer with thin desktop and web client
 - Node.js and npm (for WebUI build/verify flows).
 - PowerShell Core (`pwsh`) for `tools/scripts/*.ps1` helpers (for example `pwsh ./tools/scripts/run-server.ps1`).
   - Linux (Arch Linux, CachyOS, and similar): install from the AUR, for example `paru -S powershell-bin` or `yay -S powershell-bin`; that package provides `pwsh` on your PATH.
-- **VLC / LibVLC** for **desktop** video playback when running from source. **FFmpeg** (including **`ffprobe` on your `PATH`**) on the **server** host for library refresh (duration, loudness, thumbnails, and related probes). Install these from your OS packages on Linux—AppImages do **not** bundle them; the standard **VLC player** package is enough for desktop playback (the app loads the versioned **`libvlc.so.5`** soname directly). On **Windows**, use distro-equivalent installs on your `PATH` for local `dotnet run` (official **Velopack** server packages bundle FFmpeg/ffprobe; desktop packages bundle LibVLC).
+- **VLC / LibVLC** for **desktop** video playback when running from source. **FFmpeg** (including **`ffprobe` on your `PATH`**) on the **server** host for library refresh (duration, loudness, thumbnails, and related probes). Install these from your OS packages on Linux—AppImages do **not** bundle them. The desktop app loads the system **`libvlc.so.5`** soname directly; on most distros you install **LibVLC libraries and plugins** only (not the full VLC media player metapackage where packages are split). On **Arch-like** distros the **`vlc`** package remains monolithic. On **Windows**, use distro-equivalent installs on your `PATH` for local `dotnet run` (official **Velopack** server packages bundle FFmpeg/ffprobe; desktop packages bundle LibVLC).
 
 ## Quick Start
 
@@ -51,7 +51,7 @@ Official **installers** for stable tags are on **[GitHub Releases](https://githu
 
    **AppImage runtime:** most builds need **FUSE 2** on the host (`libfuse2`, or **`libfuse2t64`** on newer Ubuntu-based releases). If the AppImage will not start, install that package or run with **`--appimage-extract-and-run`**.
 
-3. Install **FFmpeg** (with **`ffprobe`**) and **VLC** before relying on playback and library refresh—Linux packages do not bundle those tools. If the **desktop** AppImage starts but LibVLC is missing, it shows a dialog with a **copy-paste command** for your distribution instead of exiting silently.
+3. Install **FFmpeg** (with **`ffprobe`**) and **LibVLC** (libraries/plugins per your distro—the dependency dialog’s copy-paste command is verified minimal) before relying on playback and library refresh—Linux packages do not bundle those tools. If the **desktop** AppImage starts but LibVLC is missing, it shows a dialog with a **copy-paste command** for your distribution instead of exiting silently.
 4. **Upgrades:** download a newer **`.AppImage`** from GitHub Releases and run it (replace or rename your copy as you prefer). In-app update checks are **not implemented yet**.
 
 ### Developing from source
@@ -139,7 +139,7 @@ pwsh ./tools/scripts/run-server-rebuild.ps1
 Set release-aligned version surfaces in one step (repo-root `.version` is the source of truth; bare semver is written to consumers):
 
 ```bash
-pwsh ./tools/scripts/set-release-version.ps1 -Version v0.12.0-dev.13
+pwsh ./tools/scripts/set-release-version.ps1 -Version v0.12.0-dev.14
 ```
 
 Omit `-Version` to read the current value from `.version` and fan out without changing the file. By default this also updates the desktop app `<Version>`, regenerates WebUI OpenAPI contracts (`npm run generate:contracts`), and runs solution build/test, WebUI verify, and deploy smoke. Pass `-NoUpdateDesktopVersion`, `-NoRegenerateContracts`, and/or `-NoRunVerify` to skip any of those. Use `-NoDocUpdates` to leave `README.md` / `docs/dev-setup.md` release command examples unchanged.
@@ -199,7 +199,7 @@ ReelRoulette ships through **Velopack** only. The **`.github/workflows/release.y
 1. Set the repo version and align contract/project surfaces:
 
    ```bash
-   pwsh ./tools/scripts/set-release-version.ps1 -Version v0.12.0-dev.13
+   pwsh ./tools/scripts/set-release-version.ps1 -Version v0.12.0-dev.14
    ```
 
 2. Commit, push, and create/publish the GitHub release notes for the tag.
@@ -227,4 +227,4 @@ See `docs/dev-setup.md` for channel names, dev vs stable tiers, and troubleshoot
 
 ReelRoulette integrates **VideoLAN VLC / LibVLC** and **FFmpeg** (including **ffprobe**). They are licensed under the GNU GPL and LGPL respectively. See the `licenses/` folder for license texts and [https://www.videolan.org](https://www.videolan.org) and [https://ffmpeg.org](https://ffmpeg.org) for source code.
 
-**Windows** release **server** packages bundle **FFmpeg** and **ffprobe** (CI-acquired build). **Windows** **desktop** packages bundle **LibVLC** under **`runtimes/win-x64/native/libvlc/`**. **Linux** packages bundle **no** LibVLC or FFmpeg; install **VLC/LibVLC** and **ffmpeg/ffprobe** from your distribution.
+**Windows** release **server** packages bundle **FFmpeg** and **ffprobe** (CI-acquired build). **Windows** **desktop** packages bundle **LibVLC** under **`runtimes/win-x64/native/libvlc/`**. **Linux** packages bundle **no** LibVLC or FFmpeg; install **LibVLC libraries/plugins** and **ffmpeg/ffprobe** from your distribution (see the desktop dependency dialog or README prerequisites).

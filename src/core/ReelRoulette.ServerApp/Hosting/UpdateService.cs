@@ -1,6 +1,8 @@
 using Microsoft.Extensions.Hosting;
 using ReelRoulette.Server.Hosting;
 using ReelRoulette.Server.Services;
+using System.Net;
+using System.Net.Http;
 using Velopack;
 
 namespace ReelRoulette.ServerApp.Hosting;
@@ -171,6 +173,26 @@ public sealed class UpdateService : IServerUpdateChannelCoordinator
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogWarning(ex, "Server update check failed.");
+            if (VelopackUpdateFeedExceptions.IsMissingReleaseFeed(ex))
+            {
+                lock (_stateLock)
+                {
+                    _velopackInstalled = true;
+                    _runningVersion = ServerRunningVersion.Resolve(manager);
+                    _phase = ServerUpdatePhases.NoReleases;
+                    _targetVersion = null;
+                    _availableUpdate = null;
+                    _sessionReadyRelease = null;
+                }
+
+                return ToActionResult(true, GetStatus(), "No releases available on this channel.");
+            }
+
+            lock (_stateLock)
+            {
+                _phase = ServerUpdatePhases.CheckFailed;
+            }
+
             return ToActionResult(false, GetStatus(), "Update check failed. See server logs for details.");
         }
 
@@ -372,7 +394,9 @@ public sealed class UpdateService : IServerUpdateChannelCoordinator
         var message = _phase switch
         {
             ServerUpdatePhases.NotInstalled => "Updates apply only to Velopack-installed server builds.",
-            ServerUpdatePhases.Idle => "Update status unknown; check for updates.",
+            ServerUpdatePhases.Idle => "Check for updates to see whether a release is available.",
+            ServerUpdatePhases.NoReleases => "No releases available on this channel.",
+            ServerUpdatePhases.CheckFailed => "Update status unknown; check for updates.",
             ServerUpdatePhases.UpToDate => $"Up to date ({_runningVersion ?? "unknown"}).",
             ServerUpdatePhases.UpdateAvailable => $"Update available: {_targetVersion}.",
             ServerUpdatePhases.Downloading => $"Downloading update {_targetVersion}…",
@@ -400,11 +424,33 @@ internal static class ServerUpdatePhases
 {
     internal const string NotInstalled = "notInstalled";
     internal const string Idle = "idle";
+    internal const string NoReleases = "noReleases";
+    internal const string CheckFailed = "checkFailed";
     internal const string UpToDate = "upToDate";
     internal const string UpdateAvailable = "updateAvailable";
     internal const string Downloading = "downloading";
     internal const string UpdateReady = "updateReady";
     internal const string Restarting = "restarting";
+}
+
+internal static class VelopackUpdateFeedExceptions
+{
+    /// <summary>
+    /// Velopack's HTTP source throws when <c>releases.{channel}.json</c> is missing (404), not when the feed is empty.
+    /// See https://github.com/velopack/velopack/issues/91
+    /// </summary>
+    internal static bool IsMissingReleaseFeed(Exception ex)
+    {
+        for (var current = ex; current != null; current = current.InnerException)
+        {
+            if (current is HttpRequestException { StatusCode: HttpStatusCode.NotFound })
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 }
 
 public sealed class UpdateHostedService : BackgroundService

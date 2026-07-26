@@ -36,14 +36,17 @@ public sealed class LinuxNativeDependencyInstructionsTests
         """;
 
     [Fact]
-    public void ResolveFromOsReleaseContent_LinuxMintIdMatch_EmitsAptCommandWithHeading()
+    public void ResolveFromOsReleaseContent_LinuxMintIdMatch_EmitsMinimalDebianLikeCommand()
     {
         var result = LinuxNativeDependencyInstructions.ResolveFromOsReleaseContent(LinuxMintOsRelease);
 
         Assert.True(result.HasInstallCommand);
         Assert.Equal("Instructions for Linux Mint:", result.DistroHeading);
-        Assert.Equal("sudo apt update && sudo apt install -y ffmpeg vlc", result.CopyCommand);
+        Assert.Equal(
+            "sudo apt update && sudo apt install -y ffmpeg libvlc5 vlc-plugin-base vlc-plugin-video-output",
+            result.CopyCommand);
         Assert.DoesNotContain("libvlc-dev", result.CopyCommand, StringComparison.Ordinal);
+        Assert.DoesNotContain("apt install -y ffmpeg vlc", result.CopyCommand, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -66,8 +69,12 @@ public sealed class LinuxNativeDependencyInstructionsTests
         Assert.NotNull(result.CopyCommand);
         Assert.Contains("rpmfusion-free-release", result.CopyCommand, StringComparison.Ordinal);
         Assert.Contains("ffmpeg-free ffmpeg --allowerasing", result.CopyCommand, StringComparison.Ordinal);
-        Assert.Contains("sudo dnf install vlc ffmpeg", result.CopyCommand, StringComparison.Ordinal);
+        Assert.Contains(
+            "sudo dnf install vlc-libs vlc-plugins-base vlc-plugins-video-out vlc-plugin-ffmpeg vlc-plugin-pipewire ffmpeg",
+            result.CopyCommand,
+            StringComparison.Ordinal);
         Assert.DoesNotContain("vlc-devel", result.CopyCommand, StringComparison.Ordinal);
+        Assert.DoesNotContain(" dnf install vlc ", result.CopyCommand, StringComparison.Ordinal);
         Assert.Equal(3, result.CopyCommand!.Split('\n').Length);
     }
 
@@ -81,7 +88,7 @@ public sealed class LinuxNativeDependencyInstructionsTests
         """;
 
     [Fact]
-    public void ResolveFromOsReleaseContent_OpenSuseLeap_EmitsPackmanSequenceWithVlcCodecs()
+    public void ResolveFromOsReleaseContent_OpenSuseLeap_EmitsPackmanEssentialsSequence()
     {
         var result = LinuxNativeDependencyInstructions.ResolveFromOsReleaseContent(OpenSuseLeapOsRelease);
 
@@ -89,15 +96,14 @@ public sealed class LinuxNativeDependencyInstructionsTests
         Assert.Equal("Instructions for openSUSE Leap:", result.DistroHeading);
         Assert.NotNull(result.CopyCommand);
         Assert.Contains(
-            "sudo zypper addrepo -cfp 90 'https://ftp.gwdg.de/pub/linux/misc/packman/suse/openSUSE_Leap_$releasever/' packman",
+            "sudo zypper addrepo -cfp 90 'https://ftp.gwdg.de/pub/linux/misc/packman/suse/openSUSE_Leap_$releasever/Essentials/' packman-essentials",
             result.CopyCommand,
             StringComparison.Ordinal);
-        Assert.Contains(
-            "sudo zypper install --allow-vendor-change --from packman ffmpeg vlc vlc-codecs",
-            result.CopyCommand,
-            StringComparison.Ordinal);
+        Assert.Contains("sudo zypper dup --from packman-essentials --allow-vendor-change", result.CopyCommand, StringComparison.Ordinal);
+        Assert.Contains("sudo zypper install --from packman-essentials ffmpeg", result.CopyCommand, StringComparison.Ordinal);
+        Assert.DoesNotContain("vlc-codecs", result.CopyCommand, StringComparison.Ordinal);
         Assert.DoesNotContain("vlc-devel", result.CopyCommand, StringComparison.Ordinal);
-        Assert.Equal(3, result.CopyCommand!.Split('\n').Length);
+        Assert.Equal(4, result.CopyCommand!.Split('\n').Length);
     }
 
     [Fact]

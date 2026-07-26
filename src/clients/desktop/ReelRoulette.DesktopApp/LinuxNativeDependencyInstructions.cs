@@ -9,10 +9,9 @@ namespace ReelRoulette;
 /// </summary>
 /// <remarks>
 /// The desktop app resolves LibVLC via a Linux-only <c>DllImport</c> resolver (versioned soname such as
-/// <c>libvlc.so.5</c>, then <c>libvlc.so</c> as fallback). Only the runtime VLC package is required — do not add
-/// development packages (<c>libvlc-dev</c>, <c>vlc-devel</c>, etc.) to these commands for future distros. When adding
-/// a new family, include the standard runtime <c>vlc</c> package (and FFmpeg/ffprobe for the server). Extend the
-/// family matchers below.
+/// <c>libvlc.so.5</c>, then <c>libvlc.so</c> as fallback). Install VLC libraries and plugins only — not the
+/// full media player metapackage (<c>vlc</c> GUI/binary) where the distro splits packages. Do not add development
+/// packages (<c>libvlc-dev</c>, <c>vlc-devel</c>, etc.). Commands combine desktop LibVLC and server FFmpeg needs.
 /// </remarks>
 public static class LinuxNativeDependencyInstructions
 {
@@ -23,12 +22,12 @@ public static class LinuxNativeDependencyInstructions
         string? CopyCommand);
 
     private const string GenericMessage =
-        "ReelRoulette needs FFmpeg (including ffprobe) for the server and VLC/LibVLC for desktop video playback. " +
+        "ReelRoulette needs FFmpeg (including ffprobe) for the server and LibVLC libraries/plugins for desktop video playback. " +
         "Linux packages do not bundle these tools.\n\n" +
-        "Install FFmpeg and the VLC player package using your distribution's package manager, then restart ReelRoulette.";
+        "Install the packages below using your distribution's package manager, then restart ReelRoulette.";
 
     private const string DebianInstallCommand =
-        "sudo apt update && sudo apt install -y ffmpeg vlc";
+        "sudo apt update && sudo apt install -y ffmpeg libvlc5 vlc-plugin-base vlc-plugin-video-output";
 
     private const string ArchInstallCommand =
         "sudo pacman -S --needed ffmpeg vlc";
@@ -122,25 +121,30 @@ public static class LinuxNativeDependencyInstructions
             '\n',
             "sudo dnf install https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm https://mirrors.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-$(rpm -E %fedora).noarch.rpm",
             "sudo dnf swap ffmpeg-free ffmpeg --allowerasing",
-            "sudo dnf install vlc ffmpeg");
+            "sudo dnf install vlc-libs vlc-plugins-base vlc-plugins-video-out vlc-plugin-ffmpeg vlc-plugin-pipewire ffmpeg");
     }
 
     private static string BuildOpenSuseInstallCommand(string id)
     {
         var isTumbleweed = id.Contains("tumbleweed", StringComparison.OrdinalIgnoreCase);
 
+        // Packman Essentials (not the full Packman repo): vendor-switches codec libraries VLC's ffmpeg plugin
+        // links against, without pulling in Mesa vendor switches from a full-repo dup.
         var addRepoLine = isTumbleweed
-            ? "sudo zypper addrepo -cfp 90 https://ftp.gwdg.de/pub/linux/misc/packman/suse/openSUSE_Tumbleweed/ packman"
-            // Single quotes are load-bearing: bash must not expand $releasever before zypper sees it (otherwise openSUSE_Leap_/).
-            // Zypper stores $releasever in /etc/zypp/repos.d/ and re-expands it on every refresh, so the repo follows Leap upgrades instead of staying pinned to an old release.
-            : "sudo zypper addrepo -cfp 90 'https://ftp.gwdg.de/pub/linux/misc/packman/suse/openSUSE_Leap_$releasever/' packman";
+            // NOT verified on a real Tumbleweed system (Leap 16.0 Essentials flow was verified end-to-end).
+            ? "sudo zypper addrepo -cfp 90 https://ftp.gwdg.de/pub/linux/misc/packman/suse/openSUSE_Tumbleweed/Essentials/ packman-essentials"
+            // Single quotes are load-bearing: bash must not expand $releasever before zypper sees it.
+            : "sudo zypper addrepo -cfp 90 'https://ftp.gwdg.de/pub/linux/misc/packman/suse/openSUSE_Leap_$releasever/Essentials/' packman-essentials";
 
         return string.Join(
             '\n',
             addRepoLine,
             "sudo zypper refresh",
-            // ffmpeg is a capability name on Leap (zypper resolves to the current major, e.g. ffmpeg-8); do not pin a version.
-            "sudo zypper install --allow-vendor-change --from packman ffmpeg vlc vlc-codecs");
+            // Required (verified on Leap 16): dup upgrades already-installed libavcodec/etc. so VLC's plugin loads
+            // the same library line. Targeted installs of versioned names (e.g. libavcodec61) go stale on Leap upgrades.
+            "sudo zypper dup --from packman-essentials --allow-vendor-change",
+            // dup does not install ffmpeg/ffprobe binaries; server refresh needs them on PATH (verified after dup alone).
+            "sudo zypper install --from packman-essentials ffmpeg");
     }
 
     private static bool IsDebianLike(string id, string idLike)
