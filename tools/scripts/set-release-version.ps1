@@ -262,7 +262,7 @@ try {
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     }
 
-    Write-Host "Release version update complete."
+    Write-Host "Release version update to $Version complete."
 }
 finally {
     Pop-Location

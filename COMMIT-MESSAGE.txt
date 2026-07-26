@@ -19,7 +19,7 @@ Instructions:
 
 Commit Message:
 
-Bugfix: Linux dependency commands for Fedora, openSUSE, and Packman URL
+Chore: release script completion line and WebUI npm audit fixes
 
-- Add vlc-devel on Fedora and openSUSE so LibVLCSharp gets unversioned libvlc.so; use zypper $releasever in single quotes for Leap Packman repo URL.
-- Document libvlc-dev / vlc-devel in README and dev-setup; extend mapping tests and changelog.
+- Print the applied version in set-release-version.ps1 completion message.
+- Override transitive minimatch/brace-expansion in WebUI so npm audit is clean without downgrading openapi-typescript.
