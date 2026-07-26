@@ -42,8 +42,8 @@ public sealed class LinuxNativeDependencyInstructionsTests
 
         Assert.True(result.HasInstallCommand);
         Assert.Equal("Instructions for Linux Mint:", result.DistroHeading);
-        Assert.Equal("sudo apt update && sudo apt install -y ffmpeg vlc libvlc-dev", result.CopyCommand);
-        Assert.Contains("libvlc-dev", result.CopyCommand, StringComparison.Ordinal);
+        Assert.Equal("sudo apt update && sudo apt install -y ffmpeg vlc", result.CopyCommand);
+        Assert.DoesNotContain("libvlc-dev", result.CopyCommand, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -66,7 +66,8 @@ public sealed class LinuxNativeDependencyInstructionsTests
         Assert.NotNull(result.CopyCommand);
         Assert.Contains("rpmfusion-free-release", result.CopyCommand, StringComparison.Ordinal);
         Assert.Contains("ffmpeg-free ffmpeg --allowerasing", result.CopyCommand, StringComparison.Ordinal);
-        Assert.Contains("sudo dnf install vlc vlc-devel ffmpeg", result.CopyCommand, StringComparison.Ordinal);
+        Assert.Contains("sudo dnf install vlc ffmpeg", result.CopyCommand, StringComparison.Ordinal);
+        Assert.DoesNotContain("vlc-devel", result.CopyCommand, StringComparison.Ordinal);
         Assert.Equal(3, result.CopyCommand!.Split('\n').Length);
     }
 
@@ -80,7 +81,7 @@ public sealed class LinuxNativeDependencyInstructionsTests
         """;
 
     [Fact]
-    public void ResolveFromOsReleaseContent_OpenSuseLeap_EmitsPackmanSequenceWithVlcDevel()
+    public void ResolveFromOsReleaseContent_OpenSuseLeap_EmitsPackmanSequenceWithVlcCodecs()
     {
         var result = LinuxNativeDependencyInstructions.ResolveFromOsReleaseContent(OpenSuseLeapOsRelease);
 
@@ -92,9 +93,10 @@ public sealed class LinuxNativeDependencyInstructionsTests
             result.CopyCommand,
             StringComparison.Ordinal);
         Assert.Contains(
-            "sudo zypper install --allow-vendor-change --from packman ffmpeg vlc vlc-codecs vlc-devel",
+            "sudo zypper install --allow-vendor-change --from packman ffmpeg vlc vlc-codecs",
             result.CopyCommand,
             StringComparison.Ordinal);
+        Assert.DoesNotContain("vlc-devel", result.CopyCommand, StringComparison.Ordinal);
         Assert.Equal(3, result.CopyCommand!.Split('\n').Length);
     }
 

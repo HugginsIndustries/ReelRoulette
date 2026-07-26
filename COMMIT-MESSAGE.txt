@@ -19,7 +19,8 @@ Instructions:
 
 Commit Message:
 
-Chore: release script completion line and WebUI npm audit fixes
+Feature: Linux desktop loads LibVLC without dev packages
 
-- Print the applied version in set-release-version.ps1 completion message.
-- Override transitive minimatch/brace-expansion in WebUI so npm audit is clean without downgrading openapi-typescript.
+- Register a Linux-only DllImport resolver mapping libvlc to libvlc.so.5 (then libvlc.so).
+- Drop libvlc-dev and vlc-devel from distro install commands and docs.
+- Update dependency mapping tests and changelog.

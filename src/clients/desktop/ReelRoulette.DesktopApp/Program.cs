@@ -105,6 +105,8 @@ class Program
 
     private static bool TryInitializeLibVlc()
     {
+        LinuxLibVlcNativeResolver.EnsureRegistered();
+
         // Try bundled LibVLC first, then fall back to system installation
         bool initialized = false;
         string? libVlcSource = null;

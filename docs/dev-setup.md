@@ -9,7 +9,7 @@ This guide covers local setup, run paths, verification gates, packaging, and rel
 - PowerShell Core (`pwsh`) for repository scripts under `tools/scripts/` (for example `pwsh ./tools/scripts/run-server.ps1`).
   - Windows: install PowerShell 7+ with `winget install Microsoft.PowerShell` so `pwsh` is on your PATH. Built-in Windows PowerShell 5.1 is not enough for scripts that rely on PowerShell 7+; use `pwsh` after install (restart the terminal or Cursor if `pwsh` is not found until PATH refreshes).
   - Linux (Arch Linux, CachyOS, and similar): install from the AUR, for example `paru -S powershell-bin` or `yay -S powershell-bin`; that package provides `pwsh` on your PATH.
-- VLC / LibVLC for desktop video playback when running from source; FFmpeg (with `ffprobe` on `PATH`) on the **server** for library refresh (duration, loudness, thumbnails). Install from your OS on Linux and for local Windows `dotnet run`. **Velopack** Windows server packages bundle FFmpeg/ffprobe; Windows desktop packages bundle LibVLC. Linux AppImages bundle neither—LibVLCSharp requires the unversioned **`libvlc.so`** symlink: use **`libvlc-dev`** on Debian/Ubuntu/Mint, **`vlc-devel`** on Fedora and openSUSE (Packman on openSUSE), in addition to **`vlc`**. If the desktop AppImage is launched without LibVLC, it shows a copy-paste install command for the detected distro family.
+- VLC / LibVLC for desktop video playback when running from source; FFmpeg (with `ffprobe` on `PATH`) on the **server** for library refresh (duration, loudness, thumbnails). Install from your OS on Linux and for local Windows `dotnet run`. **Velopack** Windows server packages bundle FFmpeg/ffprobe; Windows desktop packages bundle LibVLC. Linux AppImages bundle neither—the desktop app resolves the system **`libvlc.so.5`** soname via a native loader hook, so the standard **VLC player** package is sufficient (no **`libvlc-dev`** / **`vlc-devel`**). If the desktop AppImage is launched without LibVLC, it shows a copy-paste install command for the detected distro family.
 
 ## Key Projects
 
@@ -157,7 +157,7 @@ With no argument, the script publishes and `vpk pack`s a server AppImage (matchi
 
 Repo-root **`.version`** holds the canonical release version as a single v-prefixed semver2 line (for example `v0.12.0-dev`). Use one command to align release-version surfaces:
 
-- `pwsh ./tools/scripts/set-release-version.ps1 -Version v0.12.0-dev.12`
+- `pwsh ./tools/scripts/set-release-version.ps1 -Version v0.12.0-dev.13`
 - Omit `-Version` to read `.version` and fan out without changing the file.
 - By default, the script also updates the desktop app `<Version>`, runs `npm run generate:contracts` in WebUI, runs solution build/test plus WebUI verify and `verify-web-deploy.ps1`, and updates release command examples in `README.md` and `docs/dev-setup.md`.
 - Use `-NoDocUpdates` to skip the README/dev-setup example updates.

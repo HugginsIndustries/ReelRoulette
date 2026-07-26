@@ -8,10 +8,11 @@ namespace ReelRoulette;
 /// Maps Linux distro identity (<c>/etc/os-release</c>) to copy-paste install commands for FFmpeg and VLC/LibVLC.
 /// </summary>
 /// <remarks>
-/// LibVLCSharp loads the native library by its unversioned name (<c>libvlc.so</c>). A working VLC player install is not
-/// enough on distros that ship only <c>libvlc.so.5</c> unless a separate package provides the bare symlink. When adding
-/// a new family, include whatever package supplies <c>libvlc.so</c> (verify on the target system: <c>libvlc.so</c> must
-/// exist alongside <c>libvlc.so.5</c>). Extend the family matchers below.
+/// The desktop app resolves LibVLC via a Linux-only <c>DllImport</c> resolver (versioned soname such as
+/// <c>libvlc.so.5</c>, then <c>libvlc.so</c> as fallback). Only the runtime VLC package is required — do not add
+/// development packages (<c>libvlc-dev</c>, <c>vlc-devel</c>, etc.) to these commands for future distros. When adding
+/// a new family, include the standard runtime <c>vlc</c> package (and FFmpeg/ffprobe for the server). Extend the
+/// family matchers below.
 /// </remarks>
 public static class LinuxNativeDependencyInstructions
 {
@@ -24,12 +25,10 @@ public static class LinuxNativeDependencyInstructions
     private const string GenericMessage =
         "ReelRoulette needs FFmpeg (including ffprobe) for the server and VLC/LibVLC for desktop video playback. " +
         "Linux packages do not bundle these tools.\n\n" +
-        "Install FFmpeg and VLC/LibVLC using your distribution's package manager. On some distributions the LibVLC " +
-        "development package (which provides the libvlc.so symlink) is separate from the VLC player package — " +
-        "install both if playback fails after installing vlc alone.";
+        "Install FFmpeg and the VLC player package using your distribution's package manager, then restart ReelRoulette.";
 
     private const string DebianInstallCommand =
-        "sudo apt update && sudo apt install -y ffmpeg vlc libvlc-dev";
+        "sudo apt update && sudo apt install -y ffmpeg vlc";
 
     private const string ArchInstallCommand =
         "sudo pacman -S --needed ffmpeg vlc";
@@ -123,8 +122,7 @@ public static class LinuxNativeDependencyInstructions
             '\n',
             "sudo dnf install https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm https://mirrors.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-$(rpm -E %fedora).noarch.rpm",
             "sudo dnf swap ffmpeg-free ffmpeg --allowerasing",
-            // vlc-devel provides the unversioned libvlc.so LibVLCSharp resolves by name (verified on clean Fedora 43).
-            "sudo dnf install vlc vlc-devel ffmpeg");
+            "sudo dnf install vlc ffmpeg");
     }
 
     private static string BuildOpenSuseInstallCommand(string id)
@@ -142,8 +140,7 @@ public static class LinuxNativeDependencyInstructions
             addRepoLine,
             "sudo zypper refresh",
             // ffmpeg is a capability name on Leap (zypper resolves to the current major, e.g. ffmpeg-8); do not pin a version.
-            // vlc-devel from Packman provides /usr/lib64/libvlc.so (verified on clean openSUSE Leap 16.0); keep vendor-consistent with Packman libvlc.
-            "sudo zypper install --allow-vendor-change --from packman ffmpeg vlc vlc-codecs vlc-devel");
+            "sudo zypper install --allow-vendor-change --from packman ffmpeg vlc vlc-codecs");
     }
 
     private static bool IsDebianLike(string id, string idLike)
