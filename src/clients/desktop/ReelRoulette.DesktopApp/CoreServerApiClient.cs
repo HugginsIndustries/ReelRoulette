@@ -1096,6 +1096,7 @@ public sealed class CoreWebRuntimeSettingsSnapshot
     public bool Enabled { get; set; }
     public int Port { get; set; } = 45123;
     public bool BindOnLan { get; set; }
+    public bool MdnsEnabled { get; set; } = true;
     public string LanHostname { get; set; } = "reel";
     public string AuthMode { get; set; } = "TokenRequired";
     public string? SharedToken { get; set; }

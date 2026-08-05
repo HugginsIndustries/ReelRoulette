@@ -131,6 +131,7 @@ namespace ReelRoulette
         private bool _webRemoteEnabled = false;
         private int _webRemotePort = 45123;
         private bool _webRemoteBindOnLan = false;
+        private bool _webRemoteMdnsEnabled = true;
         private string _webRemoteLanHostname = "reel";
         private WebUiAuthMode _webRemoteAuthMode = WebUiAuthMode.TokenRequired;
         private string? _webRemoteSharedToken;
@@ -6588,6 +6589,7 @@ namespace ReelRoulette
                 var previousEnabled = _webRemoteEnabled;
                 var previousPort = _webRemotePort;
                 var previousBindOnLan = _webRemoteBindOnLan;
+                var previousMdnsEnabled = _webRemoteMdnsEnabled;
                 var previousLanHostname = _webRemoteLanHostname;
                 var previousAuthMode = _webRemoteAuthMode;
                 var previousSharedToken = _webRemoteSharedToken;
@@ -6601,6 +6603,7 @@ namespace ReelRoulette
                 _webRemoteEnabled = settings.Enabled;
                 _webRemotePort = settings.Port > 0 ? settings.Port : 45123;
                 _webRemoteBindOnLan = settings.BindOnLan;
+                _webRemoteMdnsEnabled = settings.MdnsEnabled;
                 _webRemoteLanHostname = NormalizeWebRemoteLanHostname(settings.LanHostname);
                 _webRemoteAuthMode = string.Equals(settings.AuthMode, "Off", StringComparison.OrdinalIgnoreCase)
                     ? WebUiAuthMode.Off
@@ -6619,6 +6622,7 @@ namespace ReelRoulette
                     previousEnabled != _webRemoteEnabled ||
                     previousPort != _webRemotePort ||
                     previousBindOnLan != _webRemoteBindOnLan ||
+                    previousMdnsEnabled != _webRemoteMdnsEnabled ||
                     !string.Equals(previousLanHostname, _webRemoteLanHostname, StringComparison.OrdinalIgnoreCase) ||
                     previousAuthMode != _webRemoteAuthMode ||
                     !string.Equals(previousSharedToken ?? string.Empty, _webRemoteSharedToken ?? string.Empty, StringComparison.Ordinal);
@@ -8544,6 +8548,7 @@ namespace ReelRoulette
                     _webRemoteEnabled,
                     _webRemotePort,
                     _webRemoteBindOnLan,
+                    _webRemoteMdnsEnabled,
                     _webRemoteLanHostname,
                     _webRemoteAuthMode,
                     _webRemoteSharedToken,
@@ -8614,6 +8619,7 @@ namespace ReelRoulette
                         var oldWebRemoteEnabled = _webRemoteEnabled;
                         var oldWebRemotePort = _webRemotePort;
                         var oldWebRemoteBindOnLan = _webRemoteBindOnLan;
+                        var oldWebRemoteMdnsEnabled = _webRemoteMdnsEnabled;
                         var oldWebRemoteLanHostname = _webRemoteLanHostname;
                         var oldWebRemoteAuthMode = _webRemoteAuthMode;
                         var oldWebRemoteSharedToken = _webRemoteSharedToken;
@@ -8667,6 +8673,7 @@ namespace ReelRoulette
                     _webRemoteEnabled = dialog.GetWebRemoteEnabled();
                     _webRemotePort = dialog.GetWebRemotePort();
                     _webRemoteBindOnLan = dialog.GetWebRemoteBindOnLan();
+                    _webRemoteMdnsEnabled = dialog.GetWebRemoteMdnsEnabled();
                     _webRemoteLanHostname = NormalizeWebRemoteLanHostname(dialog.GetWebRemoteLanHostname());
                     _webRemoteAuthMode = dialog.GetWebRemoteAuthMode();
                     _webRemoteSharedToken = dialog.GetWebRemoteSharedToken();
@@ -8707,6 +8714,7 @@ namespace ReelRoulette
                             oldWebRemoteEnabled != _webRemoteEnabled ||
                             oldWebRemotePort != _webRemotePort ||
                             oldWebRemoteBindOnLan != _webRemoteBindOnLan ||
+                            oldWebRemoteMdnsEnabled != _webRemoteMdnsEnabled ||
                             !string.Equals(oldWebRemoteLanHostname, _webRemoteLanHostname, StringComparison.OrdinalIgnoreCase) ||
                             oldWebRemoteAuthMode != _webRemoteAuthMode ||
                             !string.Equals(oldWebRemoteSharedToken ?? string.Empty, _webRemoteSharedToken ?? string.Empty, StringComparison.Ordinal) ||
@@ -8728,6 +8736,7 @@ namespace ReelRoulette
                             oldWebRemoteEnabled != _webRemoteEnabled ||
                             oldWebRemotePort != _webRemotePort ||
                             oldWebRemoteBindOnLan != _webRemoteBindOnLan ||
+                            oldWebRemoteMdnsEnabled != _webRemoteMdnsEnabled ||
                             !string.Equals(oldWebRemoteLanHostname, _webRemoteLanHostname, StringComparison.OrdinalIgnoreCase) ||
                             oldWebRemoteAuthMode != _webRemoteAuthMode ||
                             !string.Equals(oldWebRemoteSharedToken ?? string.Empty, _webRemoteSharedToken ?? string.Empty, StringComparison.Ordinal);
@@ -8828,6 +8837,7 @@ namespace ReelRoulette
                                 _webRemoteEnabled = oldWebRemoteEnabled;
                                 _webRemotePort = oldWebRemotePort;
                                 _webRemoteBindOnLan = oldWebRemoteBindOnLan;
+                                _webRemoteMdnsEnabled = oldWebRemoteMdnsEnabled;
                                 _webRemoteLanHostname = oldWebRemoteLanHostname;
                                 _webRemoteAuthMode = oldWebRemoteAuthMode;
                                 _webRemoteSharedToken = oldWebRemoteSharedToken;
@@ -8844,6 +8854,7 @@ namespace ReelRoulette
                                         Enabled = _webRemoteEnabled,
                                         Port = _webRemotePort,
                                         BindOnLan = _webRemoteBindOnLan,
+                                        MdnsEnabled = _webRemoteMdnsEnabled,
                                         LanHostname = _webRemoteLanHostname,
                                         AuthMode = _webRemoteAuthMode == WebUiAuthMode.Off ? "Off" : "TokenRequired",
                                         SharedToken = _webRemoteSharedToken
@@ -8854,6 +8865,7 @@ namespace ReelRoulette
                                         _webRemoteEnabled = updated.Enabled;
                                         _webRemotePort = updated.Port > 0 ? updated.Port : 45123;
                                         _webRemoteBindOnLan = updated.BindOnLan;
+                                        _webRemoteMdnsEnabled = updated.MdnsEnabled;
                                         _webRemoteLanHostname = NormalizeWebRemoteLanHostname(updated.LanHostname);
                                         _webRemoteAuthMode = string.Equals(updated.AuthMode, "Off", StringComparison.OrdinalIgnoreCase)
                                             ? WebUiAuthMode.Off
@@ -8867,6 +8879,7 @@ namespace ReelRoulette
                                         _webRemoteEnabled = oldWebRemoteEnabled;
                                         _webRemotePort = oldWebRemotePort;
                                         _webRemoteBindOnLan = oldWebRemoteBindOnLan;
+                                        _webRemoteMdnsEnabled = oldWebRemoteMdnsEnabled;
                                         _webRemoteLanHostname = oldWebRemoteLanHostname;
                                         _webRemoteAuthMode = oldWebRemoteAuthMode;
                                         _webRemoteSharedToken = oldWebRemoteSharedToken;
@@ -8880,6 +8893,7 @@ namespace ReelRoulette
                                     _webRemoteEnabled = oldWebRemoteEnabled;
                                     _webRemotePort = oldWebRemotePort;
                                     _webRemoteBindOnLan = oldWebRemoteBindOnLan;
+                                    _webRemoteMdnsEnabled = oldWebRemoteMdnsEnabled;
                                     _webRemoteLanHostname = oldWebRemoteLanHostname;
                                     _webRemoteAuthMode = oldWebRemoteAuthMode;
                                     _webRemoteSharedToken = oldWebRemoteSharedToken;

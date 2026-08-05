@@ -587,6 +587,10 @@
                                       IsChecked="{Binding WebRemoteBindOnLan}"
                                       Margin="20,4,0,4"
                                       IsEnabled="{Binding WebRemoteEnabled}"/>
+                            <CheckBox Content="Advertise on local network (mDNS hostname)"
+                                      IsChecked="{Binding WebRemoteMdnsEnabled}"
+                                      Margin="20,4,0,4"
+                                      IsEnabled="{Binding WebRemoteEnabled}"/>
                             <Grid ColumnDefinitions="Auto *" ColumnSpacing="8" Margin="20,4,0,4"
                                   IsEnabled="{Binding WebRemoteEnabled}">
                                 <TextBlock Grid.Column="0"

@@ -154,6 +154,7 @@ Reconnect/resync behavior:
 
 - `GET /api/web-runtime/settings`
 - `POST /api/web-runtime/settings`
+- Web runtime snapshot fields include `enabled`, `port`, `bindOnLan`, `mdnsEnabled` (defaults to `true`; when `false`, LAN binding and CORS still apply but the server does not advertise `{lanHostname}.local` on the network), `lanHostname`, `authMode`, and `sharedToken`.
 
 ### Tag editor
 

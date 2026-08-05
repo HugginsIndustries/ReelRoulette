@@ -1,6 +1,6 @@
-using System.Net.Sockets;
 using Makaretu.Dns;
 using ReelRoulette.Server.Contracts;
+using ReelRoulette.Server.Hosting;
 using ReelRoulette.Server.Services;
 
 namespace ReelRoulette.ServerApp;
@@ -81,7 +81,7 @@ public sealed class WebUiMdnsService : IHostedService, IDisposable
         await _sync.WaitAsync(cancellationToken);
         try
         {
-            if (!snapshot.Enabled || !snapshot.BindOnLan)
+            if (!snapshot.Enabled || !snapshot.BindOnLan || !snapshot.MdnsEnabled)
             {
                 if (_mdns != null)
                 {
@@ -119,9 +119,7 @@ public sealed class WebUiMdnsService : IHostedService, IDisposable
     private void StartAdvertisement(string hostLabel, int port)
     {
         var hostFqdn = new DomainName($"{hostLabel}.local");
-        var addresses = MulticastService.GetLinkLocalAddresses()
-            .Where(a => a.AddressFamily == AddressFamily.InterNetwork || a.AddressFamily == AddressFamily.InterNetworkV6)
-            .ToArray();
+        var addresses = PrivateLanNetworkAddresses.GetMdnsAdvertisementAddresses().ToArray();
 
         _profile = new ServiceProfile("ReelRoulette", "_http._tcp", (ushort)port, addresses);
         _profile.HostName = hostFqdn;
@@ -140,10 +138,31 @@ public sealed class WebUiMdnsService : IHostedService, IDisposable
 
         _mdns = new ServiceDiscovery();
         _mdns.Advertise(_profile);
+        RemoveReverseLookupRecords(_mdns);
         _mdns.Announce(_profile);
 
         _advertisedHostLabel = hostLabel;
         _advertisedPort = port;
+    }
+
+    private static void RemoveReverseLookupRecords(ServiceDiscovery mdns)
+    {
+        var catalog = mdns.NameServer.Catalog;
+        var reverseNames = catalog.Keys
+            .Where(IsReverseLookupDomain)
+            .ToList();
+
+        foreach (var name in reverseNames)
+        {
+            catalog.TryRemove(name, out _);
+        }
+    }
+
+    private static bool IsReverseLookupDomain(DomainName name)
+    {
+        var text = name.ToString();
+        return text.EndsWith(".in-addr.arpa", StringComparison.OrdinalIgnoreCase)
+               || text.EndsWith(".ip6.arpa", StringComparison.OrdinalIgnoreCase);
     }
 
     private void StopAdvertisement()
@@ -194,6 +213,7 @@ public sealed class WebUiMdnsService : IHostedService, IDisposable
             Enabled = source.Enabled,
             Port = source.Port,
             BindOnLan = source.BindOnLan,
+            MdnsEnabled = source.MdnsEnabled,
             LanHostname = source.LanHostname,
             AuthMode = source.AuthMode,
             SharedToken = source.SharedToken

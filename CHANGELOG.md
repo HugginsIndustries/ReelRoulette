@@ -7,6 +7,7 @@ This file follows a Keep a Changelog style format.
 
 ### Fixed
 
+- **Server — LAN hostname discovery on Linux:** Fixed a conflict with the system network name service that could make your computer rename itself repeatedly (for example `cachyos-pc`, `cachyos-pc-2`, …) when the server was sharing the Web UI on the LAN. The server no longer publishes conflicting network records, limits discovery to ordinary home-network addresses (not VPN/tunnel interfaces like Tailscale), and adds an **Advertise on local network (mDNS)** setting so you can turn hostname discovery off while still allowing LAN access.
 - **Linux — dependency dialog:** Install commands now list only verified minimal packages (LibVLC libraries/plugins and FFmpeg where needed), not the full VLC media player metapackage on split distros.
 - **Updates — empty channel:** When a Velopack feed has no published **`releases.{channel}.json`** yet (HTTP 404), server and desktop update status report **No releases available on this channel** instead of an unknown/error state.
 - **Linux — desktop LibVLC:** The desktop app loads system LibVLC via the versioned **`libvlc.so.5`** soname (with **`libvlc.so`** as fallback), so a standard VLC install is enough—no extra developer package (**`libvlc-dev`**, **`vlc-devel`**, etc.) for the unversioned symlink.

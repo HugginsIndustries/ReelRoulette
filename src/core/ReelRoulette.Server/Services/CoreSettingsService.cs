@@ -60,6 +60,7 @@ public sealed class CoreSettingsService
                 Enabled = _webRuntimeSettings.Enabled,
                 Port = _webRuntimeSettings.Port,
                 BindOnLan = _webRuntimeSettings.BindOnLan,
+                MdnsEnabled = _webRuntimeSettings.MdnsEnabled,
                 LanHostname = _webRuntimeSettings.LanHostname,
                 AuthMode = _webRuntimeSettings.AuthMode,
                 SharedToken = _webRuntimeSettings.SharedToken
@@ -73,6 +74,7 @@ public sealed class CoreSettingsService
                 Enabled = _webRuntimeSettings.Enabled,
                 Port = _webRuntimeSettings.Port,
                 BindOnLan = _webRuntimeSettings.BindOnLan,
+                MdnsEnabled = _webRuntimeSettings.MdnsEnabled,
                 LanHostname = _webRuntimeSettings.LanHostname,
                 AuthMode = _webRuntimeSettings.AuthMode,
                 SharedToken = _webRuntimeSettings.SharedToken
@@ -83,6 +85,7 @@ public sealed class CoreSettingsService
             previousWeb.Enabled != currentWeb.Enabled ||
             previousWeb.Port != currentWeb.Port ||
             previousWeb.BindOnLan != currentWeb.BindOnLan ||
+            previousWeb.MdnsEnabled != currentWeb.MdnsEnabled ||
             !string.Equals(previousWeb.LanHostname, currentWeb.LanHostname, StringComparison.Ordinal) ||
             !string.Equals(previousWeb.AuthMode, currentWeb.AuthMode, StringComparison.Ordinal) ||
             !string.Equals(previousWeb.SharedToken, currentWeb.SharedToken, StringComparison.Ordinal);
@@ -112,6 +115,7 @@ public sealed class CoreSettingsService
         _webRuntimeSettings.Enabled = loaded.WebRuntime.Enabled;
         _webRuntimeSettings.Port = loaded.WebRuntime.Port;
         _webRuntimeSettings.BindOnLan = loaded.WebRuntime.BindOnLan;
+        _webRuntimeSettings.MdnsEnabled = loaded.WebRuntime.MdnsEnabled;
         _webRuntimeSettings.LanHostname = loaded.WebRuntime.LanHostname;
         _webRuntimeSettings.AuthMode = loaded.WebRuntime.AuthMode;
         _webRuntimeSettings.SharedToken = loaded.WebRuntime.SharedToken;
@@ -185,6 +189,7 @@ public sealed class CoreSettingsService
                 Enabled = _webRuntimeSettings.Enabled,
                 Port = _webRuntimeSettings.Port,
                 BindOnLan = _webRuntimeSettings.BindOnLan,
+                MdnsEnabled = _webRuntimeSettings.MdnsEnabled,
                 LanHostname = _webRuntimeSettings.LanHostname,
                 AuthMode = _webRuntimeSettings.AuthMode,
                 SharedToken = _webRuntimeSettings.SharedToken
@@ -206,6 +211,7 @@ public sealed class CoreSettingsService
             changed = _webRuntimeSettings.Enabled != snapshot.Enabled ||
                       _webRuntimeSettings.Port != normalizedPort ||
                       _webRuntimeSettings.BindOnLan != snapshot.BindOnLan ||
+                      _webRuntimeSettings.MdnsEnabled != snapshot.MdnsEnabled ||
                       !string.Equals(_webRuntimeSettings.LanHostname, normalizedHost, StringComparison.Ordinal) ||
                       !string.Equals(_webRuntimeSettings.AuthMode, normalizedAuthMode, StringComparison.Ordinal) ||
                       !string.Equals(_webRuntimeSettings.SharedToken, normalizedSharedToken, StringComparison.Ordinal);
@@ -213,6 +219,7 @@ public sealed class CoreSettingsService
             _webRuntimeSettings.Enabled = snapshot.Enabled;
             _webRuntimeSettings.Port = normalizedPort;
             _webRuntimeSettings.BindOnLan = snapshot.BindOnLan;
+            _webRuntimeSettings.MdnsEnabled = snapshot.MdnsEnabled;
             _webRuntimeSettings.LanHostname = normalizedHost;
             _webRuntimeSettings.AuthMode = normalizedAuthMode;
             _webRuntimeSettings.SharedToken = normalizedSharedToken;
@@ -349,6 +356,9 @@ public sealed class CoreSettingsService
                         webRuntime.Enabled = parsed.WebRuntime.Enabled;
                         webRuntime.Port = parsed.WebRuntime.Port > 0 ? parsed.WebRuntime.Port : 45123;
                         webRuntime.BindOnLan = parsed.WebRuntime.BindOnLan;
+                        webRuntime.MdnsEnabled = WebRuntimeJsonHasMdnsEnabled(text)
+                            ? parsed.WebRuntime.MdnsEnabled
+                            : true;
                         webRuntime.LanHostname = string.IsNullOrWhiteSpace(parsed.WebRuntime.LanHostname) ? "reel" : parsed.WebRuntime.LanHostname.Trim();
                         webRuntime.AuthMode = string.IsNullOrWhiteSpace(parsed.WebRuntime.AuthMode) ? "TokenRequired" : parsed.WebRuntime.AuthMode.Trim();
                         webRuntime.SharedToken = string.IsNullOrWhiteSpace(parsed.WebRuntime.SharedToken) ? null : parsed.WebRuntime.SharedToken.Trim();
@@ -433,6 +443,7 @@ public sealed class CoreSettingsService
                 !HasObjectProperty(webRuntime, "enabled") ||
                 !HasObjectProperty(webRuntime, "port") ||
                 !HasObjectProperty(webRuntime, "bindOnLan") ||
+                !HasObjectProperty(webRuntime, "mdnsEnabled") ||
                 !HasObjectProperty(webRuntime, "lanHostname") ||
                 !HasObjectProperty(webRuntime, "authMode") ||
                 !HasObjectProperty(webRuntime, "sharedToken"))
@@ -453,6 +464,20 @@ public sealed class CoreSettingsService
         catch
         {
             return true;
+        }
+    }
+
+    private static bool WebRuntimeJsonHasMdnsEnabled(string json)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            return document.RootElement.TryGetProperty("webRuntime", out var webRuntime) &&
+                   HasObjectProperty(webRuntime, "mdnsEnabled");
+        }
+        catch
+        {
+            return false;
         }
     }
 

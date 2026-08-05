@@ -1,4 +1,3 @@
-using System.Net;
 using System.Net.NetworkInformation;
 using ReelRoulette.Server.Contracts;
 using ReelRoulette.Server.Services;
@@ -138,7 +137,7 @@ public sealed class DynamicCorsOriginRegistry : IDisposable
             {
                 var hostLabel = NormalizeMdnsHostLabel(snapshot.LanHostname);
                 _allowedOrigins.Add(BuildOrigin($"{hostLabel}.local", webPort));
-                foreach (var address in GetPrivateLanIpv4Addresses())
+                foreach (var address in PrivateLanNetworkAddresses.GetPrivateLanIpv4Addresses())
                 {
                     _allowedOrigins.Add(BuildOrigin(address.ToString(), webPort));
                 }
@@ -150,52 +149,6 @@ public sealed class DynamicCorsOriginRegistry : IDisposable
             "CORS origin registry rebuilt ({Reason}) with {Count} allowed origin(s).",
             reason,
             _allowedOrigins.Count);
-    }
-
-    private static IEnumerable<IPAddress> GetPrivateLanIpv4Addresses()
-    {
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var nic in NetworkInterface.GetAllNetworkInterfaces())
-        {
-            if (nic.OperationalStatus != OperationalStatus.Up)
-            {
-                continue;
-            }
-
-            if (nic.NetworkInterfaceType is NetworkInterfaceType.Loopback or NetworkInterfaceType.Tunnel)
-            {
-                continue;
-            }
-
-            var props = nic.GetIPProperties();
-            foreach (var unicast in props.UnicastAddresses)
-            {
-                var ip = unicast.Address;
-                if (ip.AddressFamily != System.Net.Sockets.AddressFamily.InterNetwork)
-                {
-                    continue;
-                }
-
-                if (!IsPrivateLanIpv4(ip))
-                {
-                    continue;
-                }
-
-                var key = ip.ToString();
-                if (seen.Add(key))
-                {
-                    yield return ip;
-                }
-            }
-        }
-    }
-
-    private static bool IsPrivateLanIpv4(IPAddress ip)
-    {
-        var bytes = ip.GetAddressBytes();
-        return bytes[0] == 10 ||
-               (bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31) ||
-               (bytes[0] == 192 && bytes[1] == 168);
     }
 
     private static string BuildOrigin(string host, int port)

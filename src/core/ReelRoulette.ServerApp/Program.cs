@@ -554,6 +554,10 @@ static void MapOperatorUi(WebApplication app, ServerAppOptions options, bool web
         <input id="bindOnLan" type="checkbox" />
         <label for="bindOnLan" style="margin-top:0;">Bind on LAN</label>
       </div>
+      <div class="inline">
+        <input id="mdnsEnabled" type="checkbox" />
+        <label for="mdnsEnabled" style="margin-top:0;">Advertise on local network (mDNS)</label>
+      </div>
       <label for="webPort">Port</label>
       <input id="webPort" type="number" min="1" max="65535" />
       <label for="lanHostname">LAN Hostname</label>
@@ -970,6 +974,7 @@ static void MapOperatorUi(WebApplication app, ServerAppOptions options, bool web
       lastLoadedSettings = settings;
       document.getElementById("webEnabled").checked = !!settings.enabled;
       document.getElementById("bindOnLan").checked = !!settings.bindOnLan;
+      document.getElementById("mdnsEnabled").checked = settings.mdnsEnabled !== false;
       document.getElementById("webPort").value = settings.port ?? 45123;
       document.getElementById("lanHostname").value = settings.lanHostname ?? "reel";
       document.getElementById("authMode").value = settings.authMode ?? "TokenRequired";
@@ -981,6 +986,7 @@ static void MapOperatorUi(WebApplication app, ServerAppOptions options, bool web
       const payload = {
         enabled: document.getElementById("webEnabled").checked,
         bindOnLan: document.getElementById("bindOnLan").checked,
+        mdnsEnabled: document.getElementById("mdnsEnabled").checked,
         port: Number(document.getElementById("webPort").value || "45123"),
         lanHostname: document.getElementById("lanHostname").value || "reel",
         authMode: document.getElementById("authMode").value || "TokenRequired",

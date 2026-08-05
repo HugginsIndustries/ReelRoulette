@@ -31,6 +31,7 @@ public sealed class CoreSettingsServiceTests : IDisposable
         Assert.True(web.Enabled);
         Assert.Equal(45123, web.Port);
         Assert.False(web.BindOnLan);
+        Assert.True(web.MdnsEnabled);
         Assert.Equal("reel", web.LanHostname);
         Assert.Equal("TokenRequired", web.AuthMode);
         Assert.Null(web.SharedToken);
@@ -63,6 +64,7 @@ public sealed class CoreSettingsServiceTests : IDisposable
             Enabled = true,
             Port = 51239,
             BindOnLan = false,
+            MdnsEnabled = false,
             LanHostname = "reeltest",
             AuthMode = "Off",
             SharedToken = null
@@ -91,6 +93,7 @@ public sealed class CoreSettingsServiceTests : IDisposable
         Assert.True(web.Enabled);
         Assert.Equal(51239, web.Port);
         Assert.False(web.BindOnLan);
+        Assert.False(web.MdnsEnabled);
         Assert.Equal("reeltest", web.LanHostname);
         Assert.Equal("Off", web.AuthMode);
         Assert.Null(web.SharedToken);
@@ -135,6 +138,44 @@ public sealed class CoreSettingsServiceTests : IDisposable
 
         var service = CreateService();
         Assert.False(service.GetControlRuntimeSettings().DevChannelEnabled.GetValueOrDefault());
+    }
+
+    [Fact]
+    public void Constructor_WithLegacyWebRuntimeWithoutMdnsEnabled_ShouldDefaultMdnsEnabledToTrue()
+    {
+        Directory.CreateDirectory(_tempDir);
+        var settingsPath = Path.Combine(_tempDir, "core-settings.json");
+        File.WriteAllText(settingsPath, """
+{
+  "refresh": {
+    "autoRefreshEnabled": true,
+    "autoRefreshIntervalMinutes": 15,
+    "forceRescanLoudness": false,
+    "forceRescanDuration": false,
+    "fingerprintScanMaxDegreeOfParallelism": 4
+  },
+  "backup": {
+    "enabled": true,
+    "minimumBackupGapMinutes": 360,
+    "numberOfBackups": 8
+  },
+  "webRuntime": {
+    "enabled": true,
+    "port": 45123,
+    "bindOnLan": false,
+    "lanHostname": "reel",
+    "authMode": "TokenRequired",
+    "sharedToken": null
+  },
+  "controlRuntime": {
+    "adminAuthMode": "Off",
+    "adminSharedToken": null
+  }
+}
+""");
+
+        var service = CreateService();
+        Assert.True(service.GetWebRuntimeSettings().MdnsEnabled);
     }
 
     [Fact]

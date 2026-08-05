@@ -477,6 +477,7 @@ namespace ReelRoulette
         private bool _webRemoteEnabled = false;
         private int _webRemotePort = 45123;
         private bool _webRemoteBindOnLan = false;
+        private bool _webRemoteMdnsEnabled = true;
         private string _webRemoteLanHostname = "reel";
         private WebUiAuthMode _webRemoteAuthMode = WebUiAuthMode.TokenRequired;
         private string? _webRemoteSharedToken;
@@ -771,6 +772,19 @@ namespace ReelRoulette
             }
         }
 
+        public bool WebRemoteMdnsEnabled
+        {
+            get => _webRemoteMdnsEnabled;
+            set
+            {
+                if (_webRemoteMdnsEnabled != value)
+                {
+                    _webRemoteMdnsEnabled = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
         public string WebRemoteLanHostname
         {
             get => _webRemoteLanHostname;
@@ -862,6 +876,7 @@ namespace ReelRoulette
             bool webRemoteEnabled = false,
             int webRemotePort = 45123,
             bool webRemoteBindOnLan = false,
+            bool webRemoteMdnsEnabled = true,
             string? webRemoteLanHostname = "reel",
             WebUiAuthMode webRemoteAuthMode = WebUiAuthMode.TokenRequired,
             string? webRemoteSharedToken = null,
@@ -1007,12 +1022,14 @@ namespace ReelRoulette
             _webRemoteEnabled = webRemoteEnabled;
             _webRemotePort = webRemotePort > 0 ? webRemotePort : 45123;
             _webRemoteBindOnLan = webRemoteBindOnLan;
+            _webRemoteMdnsEnabled = webRemoteMdnsEnabled;
             _webRemoteLanHostname = string.IsNullOrWhiteSpace(webRemoteLanHostname) ? "reel" : webRemoteLanHostname.Trim();
             _webRemoteAuthMode = webRemoteAuthMode;
             _webRemoteSharedToken = webRemoteSharedToken;
             OnPropertyChanged(nameof(WebRemoteEnabled));
             OnPropertyChanged(nameof(WebRemotePort));
             OnPropertyChanged(nameof(WebRemoteBindOnLan));
+            OnPropertyChanged(nameof(WebRemoteMdnsEnabled));
             OnPropertyChanged(nameof(WebRemoteLanHostname));
             OnPropertyChanged(nameof(WebRemoteAuthOff));
             OnPropertyChanged(nameof(WebRemoteAuthTokenRequired));
@@ -1065,6 +1082,7 @@ namespace ReelRoulette
         public bool GetWebRemoteEnabled() => _webRemoteEnabled;
         public int GetWebRemotePort() => _webRemotePort;
         public bool GetWebRemoteBindOnLan() => _webRemoteBindOnLan;
+        public bool GetWebRemoteMdnsEnabled() => _webRemoteMdnsEnabled;
         public string GetWebRemoteLanHostname() => string.IsNullOrWhiteSpace(_webRemoteLanHostname) ? "reel" : _webRemoteLanHostname.Trim();
         public WebUiAuthMode GetWebRemoteAuthMode() => _webRemoteAuthMode;
         public string? GetWebRemoteSharedToken() => _webRemoteSharedToken;

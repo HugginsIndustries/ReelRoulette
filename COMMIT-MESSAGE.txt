@@ -19,9 +19,9 @@ Instructions:
 
 Commit Message:
 
-Feature: minimal Linux deps and empty update channel status
+Bugfix: Linux mDNS Avahi conflict and LAN discovery toggle
 
-- Replace verified minimal install commands for Debian, Fedora, and openSUSE Leap.
-- Document Packman Essentials dup/install reasoning in openSUSE comments.
-- Treat Velopack missing release index (404) as no releases, not check failure.
-- Update README, dev-setup, changelog, and mapping tests.
+- Stop publishing reverse DNS records that conflicted with Avahi on Linux.
+- Limit mDNS addresses to private LAN interfaces; skip tunnel/VPN adapters.
+- Add mdnsEnabled web-runtime setting with operator and desktop UI controls.
+- Remove unused Makaretu package reference from the desktop client project.
