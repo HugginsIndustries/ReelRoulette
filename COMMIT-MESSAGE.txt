@@ -19,9 +19,8 @@ Instructions:
 
 Commit Message:
 
-Bugfix: Linux mDNS Avahi conflict and LAN discovery toggle
+Bugfix: Name imported sources from the folder when the path has a trailing slash
 
-- Stop publishing reverse DNS records that conflicted with Avahi on Linux.
-- Limit mDNS addresses to private LAN interfaces; skip tunnel/VPN adapters.
-- Add mdnsEnabled web-runtime setting with operator and desktop UI controls.
-- Remove unused Makaretu package reference from the desktop client project.
+- Trim trailing directory separators on source import before naming and matching, without collapsing a Windows drive root to a drive-relative path.
+- Default display names from the last path segment; derive the same name in source/stats APIs when stored displayName is empty.
+- Keep existing library.json rows unchanged (no persist-on-read repair).

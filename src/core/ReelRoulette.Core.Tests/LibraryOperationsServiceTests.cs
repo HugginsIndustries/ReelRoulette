@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging.Abstractions;
+using ReelRoulette.Server.Contracts;
 using ReelRoulette.Server.Services;
 using Xunit;
 
@@ -821,6 +822,142 @@ public sealed class LibraryOperationsServiceTests
                 Directory.Delete(appDataRoot, recursive: true);
             }
         }
+    }
+
+    [Fact]
+    public void ImportSource_TrailingSlashAndEmptyDisplayName_PersistsFolderNameAndTrimmedRoot()
+    {
+        var appDataRoot = CreateTempAppDataRoot();
+        var mediaParent = Path.Combine(Path.GetTempPath(), "reelroulette-import-src-" + Guid.NewGuid().ToString("N"));
+        var mediaRoot = Path.Combine(mediaParent, "YouTube");
+        try
+        {
+            Directory.CreateDirectory(mediaRoot);
+            SeedCoreSettings(appDataRoot, enabled: true, minimumGapMinutes: 360, numberOfBackups: 8);
+            SeedLibrary(appDataRoot, EmptyLibraryRoot());
+
+            var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot);
+            var response = service.ImportSource(new SourceImportRequest
+            {
+                RootPath = mediaRoot + Path.DirectorySeparatorChar,
+                DisplayName = "  "
+            });
+
+            Assert.True(response.Accepted);
+            var sources = (LoadLibrary(appDataRoot)["sources"] as JsonArray)!.OfType<JsonObject>().ToList();
+            var source = Assert.Single(sources);
+            Assert.Equal(mediaRoot, source["rootPath"]?.GetValue<string>());
+            Assert.Equal("YouTube", source["displayName"]?.GetValue<string>());
+        }
+        finally
+        {
+            if (Directory.Exists(mediaParent))
+            {
+                Directory.Delete(mediaParent, recursive: true);
+            }
+
+            if (Directory.Exists(appDataRoot))
+            {
+                Directory.Delete(appDataRoot, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void ImportSource_SameFolderWithAndWithoutTrailingSlash_DoesNotCreateDuplicate()
+    {
+        var appDataRoot = CreateTempAppDataRoot();
+        var mediaParent = Path.Combine(Path.GetTempPath(), "reelroulette-import-src-" + Guid.NewGuid().ToString("N"));
+        var mediaRoot = Path.Combine(mediaParent, "YouTube");
+        try
+        {
+            Directory.CreateDirectory(mediaRoot);
+            SeedCoreSettings(appDataRoot, enabled: true, minimumGapMinutes: 360, numberOfBackups: 8);
+            SeedLibrary(appDataRoot, EmptyLibraryRoot());
+
+            var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot);
+            var first = service.ImportSource(new SourceImportRequest
+            {
+                RootPath = mediaRoot + Path.DirectorySeparatorChar
+            });
+            var second = service.ImportSource(new SourceImportRequest
+            {
+                RootPath = mediaRoot
+            });
+
+            Assert.True(first.Accepted);
+            Assert.True(second.Accepted);
+            Assert.Equal(first.SourceId, second.SourceId);
+            var sources = (LoadLibrary(appDataRoot)["sources"] as JsonArray)!.OfType<JsonObject>().ToList();
+            Assert.Single(sources);
+        }
+        finally
+        {
+            if (Directory.Exists(mediaParent))
+            {
+                Directory.Delete(mediaParent, recursive: true);
+            }
+
+            if (Directory.Exists(appDataRoot))
+            {
+                Directory.Delete(appDataRoot, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void GetLibraryStats_EmptyDisplayNameWithTrailingSlashRoot_DerivesFolderNameWithoutPersisting()
+    {
+        var appDataRoot = CreateTempAppDataRoot();
+        const string storedRoot = "/mnt/nas/multimedia/YouTube/";
+        try
+        {
+            SeedCoreSettings(appDataRoot, enabled: true, minimumGapMinutes: 360, numberOfBackups: 8);
+            SeedLibrary(appDataRoot, new JsonObject
+            {
+                ["sources"] = new JsonArray
+                {
+                    new JsonObject
+                    {
+                        ["id"] = "src-yt",
+                        ["rootPath"] = storedRoot,
+                        ["displayName"] = "",
+                        ["isEnabled"] = true
+                    }
+                },
+                ["items"] = new JsonArray(),
+                ["tags"] = new JsonArray(),
+                ["categories"] = new JsonArray()
+            });
+
+            var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot);
+            var stats = service.GetLibraryStats();
+            var source = Assert.Single(stats.Sources);
+            Assert.Equal("YouTube", source.DisplayName);
+            Assert.Equal(storedRoot, source.RootPath);
+
+            var stored = Assert.Single((LoadLibrary(appDataRoot)["sources"] as JsonArray)!.OfType<JsonObject>());
+            Assert.Equal("", stored["displayName"]?.GetValue<string>());
+            Assert.Equal(storedRoot, stored["rootPath"]?.GetValue<string>());
+        }
+        finally
+        {
+            if (Directory.Exists(appDataRoot))
+            {
+                Directory.Delete(appDataRoot, recursive: true);
+            }
+        }
+    }
+
+    private static JsonObject EmptyLibraryRoot()
+    {
+        return new JsonObject
+        {
+            ["sources"] = new JsonArray(),
+            ["items"] = new JsonArray(),
+            ["tags"] = new JsonArray(),
+            ["categories"] = new JsonArray()
+        };
     }
 
     private static string CreateTempAppDataRoot()

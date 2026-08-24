@@ -1746,7 +1746,7 @@ namespace ReelRoulette
                 {
                     var sourceNames = _libraryIndex.Sources
                         .Where(source => _currentFilterState.IncludedSourceIds.Contains(source.Id, StringComparer.OrdinalIgnoreCase))
-                        .Select(source => string.IsNullOrWhiteSpace(source.DisplayName) ? source.Id : source.DisplayName)
+                        .Select(source => LibrarySourcePath.ResolveDisplayName(source.DisplayName, source.RootPath))
                         .Distinct(StringComparer.OrdinalIgnoreCase)
                         .ToList();
                     if (sourceNames.Count == 1)
@@ -7703,10 +7703,11 @@ namespace ReelRoulette
                         return;
                     }
 
-                    var folderName = Path.GetFileName(path);
+                    var rootPath = LibrarySourcePath.NormalizeRootPath(path);
+                    var folderName = LibrarySourcePath.GetFolderDisplayName(rootPath);
                     var response = await _coreServerApiClient.ImportSourceAsync(_coreServerBaseUrl, new CoreSourceImportRequest
                     {
-                        RootPath = path,
+                        RootPath = rootPath,
                         DisplayName = folderName
                     });
                     if (response == null || !response.Accepted)

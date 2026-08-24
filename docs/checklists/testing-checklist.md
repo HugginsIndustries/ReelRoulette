@@ -115,6 +115,7 @@ Use `pwsh ./tools/scripts/reset-checklist.ps1` to reset metadata/check states be
 - [x] No stale/incorrect status text after playback actions.
 - [x] `View -> Diagnostics` opens and shows `CoreClientId`/`CoreSessionId`.
 - [x] Import folder works (or fails with clear guidance).
+- [ ] Import folder names the source after the folder when the picker path has a trailing slash.
 - [x] Manage Sources opens and source enable/disable persists.
 - [x] Thumbnails appear in the library panel after refresh thumbnail generation completes (no desktop restart required).
 - [x] Duplicate scan + apply flow works (if test data exists).

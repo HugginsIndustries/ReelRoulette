@@ -4,12 +4,12 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media;
+using ReelRoulette.Core.Storage;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Globalization;
-using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
@@ -624,9 +624,7 @@ namespace ReelRoulette
 
             foreach (var source in _libraryIndex.Sources)
             {
-                var name = string.IsNullOrWhiteSpace(source.DisplayName)
-                    ? Path.GetFileName(source.RootPath)
-                    : source.DisplayName!;
+                var name = LibrarySourcePath.ResolveDisplayName(source.DisplayName, source.RootPath);
                 var option = new FilterSourceOptionViewModel
                 {
                     SourceId = source.Id,

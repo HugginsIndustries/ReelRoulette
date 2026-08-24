@@ -30,6 +30,19 @@ public sealed class ServerContractTests
     }
 
     [Fact]
+    public void MapSource_EmptyDisplayName_DerivesLastPathSegment()
+    {
+        var response = ApiContractMapper.MapSource(
+            "src-yt",
+            "/mnt/nas/multimedia/YouTube/",
+            displayName: "",
+            isEnabled: true);
+
+        Assert.Equal("YouTube", response.DisplayName);
+        Assert.Equal("/mnt/nas/multimedia/YouTube/", response.RootPath);
+    }
+
+    [Fact]
     public void OpenApi_VersionResponse_ShouldContainCompatibilityProperties()
     {
         var openApiPath = Path.GetFullPath(Path.Combine(

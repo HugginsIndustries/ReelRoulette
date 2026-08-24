@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Text.Json;
+using ReelRoulette.Core.Storage;
 
 namespace ReelRoulette.Server.Contracts;
 
@@ -63,7 +64,7 @@ public static class ApiContractMapper
         {
             Id = id,
             RootPath = rootPath,
-            DisplayName = displayName,
+            DisplayName = LibrarySourcePath.ResolveDisplayName(displayName, rootPath),
             IsEnabled = isEnabled
         };
     }

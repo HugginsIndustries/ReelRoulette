@@ -45,8 +45,8 @@ public sealed class LibraryOperationsService
             return new SourceImportResponse { Accepted = false, Message = "rootPath is required." };
         }
 
-        var rootPath = request.RootPath.Trim();
-        if (!Directory.Exists(rootPath))
+        var rootPath = LibrarySourcePath.NormalizeRootPath(request.RootPath);
+        if (string.IsNullOrWhiteSpace(rootPath) || !Directory.Exists(rootPath))
         {
             return new SourceImportResponse { Accepted = false, Message = $"Directory not found: {rootPath}" };
         }
@@ -64,9 +64,7 @@ public sealed class LibraryOperationsService
                 {
                     ["id"] = Guid.NewGuid().ToString(),
                     ["rootPath"] = rootPath,
-                    ["displayName"] = string.IsNullOrWhiteSpace(request.DisplayName)
-                        ? Path.GetFileName(rootPath)
-                        : request.DisplayName!.Trim(),
+                    ["displayName"] = LibrarySourcePath.ResolveDisplayName(request.DisplayName, rootPath),
                     ["isEnabled"] = true
                 };
                 sources.Add(source);
@@ -242,7 +240,9 @@ public sealed class LibraryOperationsService
                 {
                     SourceId = sourceId,
                     RootPath = GetNodeString(source["rootPath"]),
-                    DisplayName = GetNodeString(source["displayName"]),
+                    DisplayName = LibrarySourcePath.ResolveDisplayName(
+                        GetNodeString(source["displayName"]),
+                        GetNodeString(source["rootPath"])),
                     IsEnabled = GetNodeBool(source["isEnabled"], defaultValue: true),
                     TotalVideos = sourceVideos.Count,
                     TotalPhotos = sourceItems.Count - sourceVideos.Count,
@@ -1240,7 +1240,7 @@ public sealed class LibraryOperationsService
     {
         return sources
             .OfType<JsonObject>()
-            .FirstOrDefault(source => string.Equals(source["rootPath"]?.GetValue<string>()?.Trim(), rootPath, StringComparison.OrdinalIgnoreCase));
+            .FirstOrDefault(source => LibrarySourcePath.RootPathsEqual(source["rootPath"]?.GetValue<string>(), rootPath));
     }
 
     private static IEnumerable<string> EnumerateMediaFiles(string rootPath)

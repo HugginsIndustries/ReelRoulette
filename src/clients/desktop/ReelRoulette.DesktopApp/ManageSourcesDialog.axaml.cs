@@ -1,11 +1,11 @@
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Interactivity;
+using ReelRoulette.Core.Storage;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
-using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
@@ -93,9 +93,7 @@ namespace ReelRoulette
 
             foreach (var source in statsSnapshot.Sources)
             {
-                var displayName = !string.IsNullOrEmpty(source.DisplayName) 
-                    ? source.DisplayName 
-                    : Path.GetFileName(source.RootPath);
+                var displayName = LibrarySourcePath.ResolveDisplayName(source.DisplayName, source.RootPath);
 
                 var viewModel = new SourceViewModel
                 {
@@ -149,7 +147,7 @@ namespace ReelRoulette
                 var source = _sources.FirstOrDefault(s => string.Equals(s.Id, sourceId, StringComparison.OrdinalIgnoreCase));
                 if (source == null) return;
 
-                var dialog = new RenameSourceDialog(source.DisplayName ?? Path.GetFileName(source.RootPath));
+                var dialog = new RenameSourceDialog(LibrarySourcePath.ResolveDisplayName(source.DisplayName, source.RootPath));
                 var result = await dialog.ShowDialog<string?>(this);
                 
                 if (!string.IsNullOrWhiteSpace(result))
@@ -367,9 +365,7 @@ namespace ReelRoulette
                 var source = _sources.FirstOrDefault(s => string.Equals(s.Id, sourceId, StringComparison.OrdinalIgnoreCase));
                 if (source == null) return;
 
-                var displayName = !string.IsNullOrEmpty(source.DisplayName) 
-                    ? source.DisplayName 
-                    : Path.GetFileName(source.RootPath);
+                var displayName = LibrarySourcePath.ResolveDisplayName(source.DisplayName, source.RootPath);
                 var itemCount = source.Statistics.TotalMedia;
 
                 var confirmDialog = new Window
