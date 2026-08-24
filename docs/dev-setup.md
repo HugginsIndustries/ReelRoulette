@@ -141,7 +141,7 @@ Windows output is a per-user **`Setup.exe`** (no MSI). Linux output is a Velopac
 
 **Linux AppImage menu integration:** When `APPIMAGE` is set (running the downloaded `.AppImage` file), ServerApp and DesktopApp reconcile a Freedesktop launcher under `$XDG_DATA_HOME/applications/` (default `~/.local/share/applications/`) and hicolor icons on every startup—silent, no first-run flag. `dotnet run` and Windows builds skip registration. Dangling entries after deleting an AppImage are not removed automatically.
 
-**Installed runtime:** ServerApp and DesktopApp call **`VelopackApp.Build().Run()`** at startup so Velopack **install/update/uninstall hook** invocations work. There is **no** `UpdateManager` / feed check / in-app “update available” flow yet—users upgrade by installing a newer build from GitHub Releases (or a future client slice will use the B2 feeds).
+**Installed runtime:** ServerApp and DesktopApp call **`VelopackApp.Build().Run()`** at startup so Velopack **install/update/uninstall hook** invocations work. **Velopack-installed** builds also check the B2 feed: a background loop is **check-only**; download and apply are confirmed actions in Operator (`/control/update/*`) or Desktop Settings (stable or preview/dev via the dev-channel toggle). Unpackaged `dotnet run` sessions report not-installed and skip apply.
 
 ### Packaged-server smoke (Linux)
 

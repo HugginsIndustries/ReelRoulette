@@ -924,7 +924,7 @@ export interface components {
             message: string;
         };
         /** @enum {string} */
-        ServerUpdatePhase: "notInstalled" | "idle" | "upToDate" | "updateAvailable" | "downloading" | "updateReady" | "restarting";
+        ServerUpdatePhase: "notInstalled" | "idle" | "noReleases" | "checkFailed" | "upToDate" | "updateAvailable" | "downloading" | "updateReady" | "restarting";
         ServerUpdateStatusResponse: {
             phase: components["schemas"]["ServerUpdatePhase"];
             runningVersion?: string | null;

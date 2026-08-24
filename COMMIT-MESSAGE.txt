@@ -19,8 +19,8 @@ Instructions:
 
 Commit Message:
 
-Bugfix: Name imported sources from the folder when the path has a trailing slash
+Bugfix: Align Velopack update phases and docs with shipped self-update
 
-- Trim trailing directory separators on source import before naming and matching, without collapsing a Windows drive root to a drive-relative path.
-- Default display names from the last path segment; derive the same name in source/stats APIs when stored displayName is empty.
-- Keep existing library.json rows unchanged (no persist-on-read repair).
+- Document noReleases and checkFailed on the OpenAPI update-phase enum and regenerate WebUI contract types.
+- Assert /control/update endpoints and those phase values in ServerContractTests.
+- Bring README, architecture, API, inventory, and checklist text in line with operator/desktop check → download → apply.

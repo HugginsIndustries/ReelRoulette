@@ -69,6 +69,12 @@ public sealed class ServerContractTests
         Assert.Contains("/control/testing:", yaml, StringComparison.Ordinal);
         Assert.Contains("/control/testing/update:", yaml, StringComparison.Ordinal);
         Assert.Contains("/control/testing/reset:", yaml, StringComparison.Ordinal);
+        Assert.Contains("/control/update/status:", yaml, StringComparison.Ordinal);
+        Assert.Contains("/control/update/check:", yaml, StringComparison.Ordinal);
+        Assert.Contains("/control/update/download:", yaml, StringComparison.Ordinal);
+        Assert.Contains("/control/update/apply:", yaml, StringComparison.Ordinal);
+        Assert.Contains("- noReleases", yaml, StringComparison.Ordinal);
+        Assert.Contains("- checkFailed", yaml, StringComparison.Ordinal);
         Assert.Contains("minimumCompatibleApiVersion:", yaml, StringComparison.Ordinal);
         Assert.Contains("supportedApiVersions:", yaml, StringComparison.Ordinal);
         Assert.Contains("capabilities:", yaml, StringComparison.Ordinal);

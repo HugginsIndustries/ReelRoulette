@@ -26,14 +26,14 @@ ReelRoulette is a server-first media randomizer with thin desktop and web client
 
 These paths are for **people who want to run packaged builds**. If you are changing code, skip to [Developing from source](#developing-from-source).
 
-Official **installers** for stable tags are on **[GitHub Releases](https://github.com/HugginsIndustries/ReelRoulette/releases)** (Velopack **`Setup.exe`** on Windows, **`.AppImage`** on Linux). The release pipeline also publishes **Velopack update feeds** to Backblaze B2 for future in-app updates; **installed apps do not check or apply updates yet**—upgrade by installing a newer release build. You usually want **two pieces**: the **server** (hosts your library, API, WebUI, Operator) and optionally the **desktop** app (a native client). The **WebUI** is served by the server at the root URL once the server is running.
+Official **installers** for stable tags are on **[GitHub Releases](https://github.com/HugginsIndustries/ReelRoulette/releases)** (Velopack **`Setup.exe`** on Windows, **`.AppImage`** on Linux). The release pipeline also publishes **Velopack update feeds** to Backblaze B2. **Velopack-installed** server and desktop builds can check, download, and apply updates from Operator or Desktop Settings (stable or preview/dev channel). You usually want **two pieces**: the **server** (hosts your library, API, WebUI, Operator) and optionally the **desktop** app (a native client). The **WebUI** is served by the server at the root URL once the server is running.
 
 ### Windows
 
 1. From the latest **stable** GitHub release (or your dev feed URL), download the **server** and (optionally) **desktop** **`Setup.exe`** installers produced by Velopack.
 2. Run each installer. Installs are **per-user** under `%LocalAppData%` (no elevation, no MSI, no Program Files layout). Desktop and Start Menu shortcuts are created when the installer offers them.
 3. Start the **server** first. Open **[http://localhost:45123/operator](http://localhost:45123/operator)** in a browser for the Operator UI, or connect the desktop app to that server. The tray icon (when available) can open Operator, refresh the library, and toggle “launch on startup.”
-4. **Upgrades:** download and run a newer **`Setup.exe`** from GitHub Releases when you want a new version. In-app update prompts and background feed checks are **not implemented yet** (packaged apps only run **`VelopackApp` install/update/uninstall hooks** when Velopack drives those operations).
+4. **Upgrades:** On a Velopack-installed build, use **Check for Updates** in Operator (server) or Desktop **Settings**. Download and Apply are separate confirmed steps; the app does not restart until you apply. You can also install a newer **`Setup.exe`** from GitHub Releases. **v0.11.0** Inno/portable installs use a different layout — replace them with the Velopack **`Setup.exe`** (per-user under `%LocalAppData%`). `dotnet run` / unpackaged sessions are not Velopack-installed and cannot apply feed updates.
 
 ### Linux
 
@@ -52,7 +52,7 @@ Official **installers** for stable tags are on **[GitHub Releases](https://githu
    **AppImage runtime:** most builds need **FUSE 2** on the host (`libfuse2`, or **`libfuse2t64`** on newer Ubuntu-based releases). If the AppImage will not start, install that package or run with **`--appimage-extract-and-run`**.
 
 3. Install **FFmpeg** (with **`ffprobe`**) and **LibVLC** (libraries/plugins per your distro—the dependency dialog’s copy-paste command is verified minimal) before relying on playback and library refresh—Linux packages do not bundle those tools. If the **desktop** AppImage starts but LibVLC is missing, it shows a dialog with a **copy-paste command** for your distribution instead of exiting silently.
-4. **Upgrades:** download a newer **`.AppImage`** from GitHub Releases and run it (replace or rename your copy as you prefer). In-app update checks are **not implemented yet**.
+4. **Upgrades:** On a Velopack AppImage, use **Check for Updates** in Operator (server) or Desktop **Settings**. Download and Apply are separate confirmed steps; the app does not restart until you apply. You can also download a newer **`.AppImage`** from GitHub Releases and run it. **v0.11.0** portable tarballs / legacy AppImages are a different packaging path — replace them with the Velopack **`.AppImage`**. `dotnet run` sessions cannot apply feed updates.
 
 ### Developing from source
 
@@ -192,7 +192,7 @@ The **HTTP server and Operator UI are unaffected**. If the tray is missing or un
 
 ## Packaging and releases
 
-ReelRoulette ships through **Velopack** only. The **`.github/workflows/release.yml`** workflow (tag push or manual dispatch) builds self-contained **ServerApp** and **DesktopApp** outputs for **Windows** and **Linux**, stages WebUI assets for server legs, bundles Windows native dependencies in CI, packs with **`vpk`**, and publishes update feeds to **Backblaze B2**. Stable tag releases also mirror install artifacts onto the existing **GitHub release**. **Runtime update checking and apply-from-feed in the apps are a follow-up slice**; today both hosts call **`VelopackApp` hooks** at startup so install/update/uninstall hook invocations work when Velopack runs them.
+ReelRoulette ships through **Velopack** only. The **`.github/workflows/release.yml`** workflow (tag push or manual dispatch) builds self-contained **ServerApp** and **DesktopApp** outputs for **Windows** and **Linux**, stages WebUI assets for server legs, bundles Windows native dependencies in CI, packs with **`vpk`**, and publishes update feeds to **Backblaze B2**. Stable tag releases also mirror install artifacts onto the existing **GitHub release**. **Velopack-installed** builds check those feeds (background check-only, plus operator/Settings **Check → Download → Apply**); both hosts also call **`VelopackApp` hooks** at startup so install/update/uninstall hook invocations work.
 
 ### Maintainer flow
 

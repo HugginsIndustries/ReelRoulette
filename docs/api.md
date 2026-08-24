@@ -205,7 +205,7 @@ Reconnect/resync behavior:
 
 - `GET /control/settings` / `POST /control/settings` — `ControlRuntimeSettingsSnapshot` includes `adminAuthMode`, optional `adminSharedToken`, and optional `devChannelEnabled` (defaults to `false` / stable update channel; when toggled, the server runs an immediate Velopack **check** against the persisted value and continues periodic **check-only** background polls on schedule).
 
-- `GET /control/update/status` — current Velopack self-update phase (`notInstalled`, `idle`, `upToDate`, `updateAvailable`, `downloading`, `updateReady`, `restarting`), running/target versions when relevant, and `velopackInstalled`.
+- `GET /control/update/status` — current Velopack self-update phase (`notInstalled`, `idle`, `noReleases`, `checkFailed`, `upToDate`, `updateAvailable`, `downloading`, `updateReady`, `restarting`), running/target versions when relevant, and `velopackInstalled`.
 - `POST /control/update/check` — query the configured feed; does not download or apply.
 - `POST /control/update/download` — download the update from the last successful check; does not apply.
 - `POST /control/update/apply` — apply a downloaded update and restart the server process (operator UI disconnects).

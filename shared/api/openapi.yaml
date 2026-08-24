@@ -1522,6 +1522,8 @@ components:
       enum:
         - notInstalled
         - idle
+        - noReleases
+        - checkFailed
         - upToDate
         - updateAvailable
         - downloading

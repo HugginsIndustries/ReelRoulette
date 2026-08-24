@@ -62,6 +62,8 @@ Boundary:
 
 - `src/core/ReelRoulette.ServerApp/Program.cs`
   - single-process host for API + SSE + media + WebUI static assets + `/operator`.
+- `src/core/ReelRoulette.ServerApp/Hosting/UpdateService.cs`
+  - Velopack self-update for packaged ServerApp: check-only background poll, operator check/download/apply under `/control/update/*`, stable vs dev channel via `devChannelEnabled`.
 - `src/core/ReelRoulette.ServerApp/Hosting/IHostUi.cs`
   - host-UI abstraction boundary keeping server runtime tray-agnostic.
 - `src/core/ReelRoulette.ServerApp/Hosting/AvaloniaTrayHostUi.cs`
@@ -83,7 +85,7 @@ Boundary:
 
 Includes:
 
-- control-plane surfaces (`/control/status`, `/control/settings`, `/control/pair`, `/control/restart`, `/control/stop`, testing/log endpoints),
+- control-plane surfaces (`/control/status`, `/control/settings`, `/control/pair`, `/control/restart`, `/control/stop`, `/control/update/*`, testing/log endpoints),
 - startup-launch control surface (`/control/startup`),
 - operator diagnostics and manual testing controls.
 
@@ -108,7 +110,9 @@ Desktop is orchestration/render for migrated flows.
 - `src/clients/desktop/ReelRoulette.DesktopApp/AutoTagDialog.axaml.cs`
   - API-backed auto-tag scan/apply orchestration.
 - `src/clients/desktop/ReelRoulette.DesktopApp/SettingsDialog.axaml(.cs)`
-  - client-side settings orchestration including playback policy toggle UX.
+  - client-side settings orchestration including playback policy toggle UX and Velopack check → download → apply.
+- `src/clients/desktop/ReelRoulette.DesktopApp/UpdateService.cs`
+  - Velopack self-update for packaged desktop builds (same check-only background poll and confirmed download/apply as the server; channel via `DevChannelEnabled`).
 - `src/clients/desktop/ReelRoulette.DesktopApp/ClientLogRelay.cs`
   - client log relay to server-side log ingestion API.
 
