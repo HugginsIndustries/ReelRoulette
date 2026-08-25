@@ -342,7 +342,7 @@ jobs:
         if: matrix.native_component == 'server'
         uses: AnimMouse/setup-ffmpeg@v1.2.5
         with:
-          version: "7.1"
+          version: "release"
 
       - name: Bundle FFmpeg into publish output (Windows server)
         if: matrix.native_component == 'server'
