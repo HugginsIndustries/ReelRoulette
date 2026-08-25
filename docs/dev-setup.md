@@ -135,9 +135,9 @@ All shipping packages are produced by **`.github/workflows/release.yml`** (tag p
 - Builds **ServerApp** and **DesktopApp** self-contained for `win-x64` and `linux-x64`.
 - Stages WebUI via **`stage-webui-assets.ps1`** on server legs.
 - Bundles Windows FFmpeg (server) and relocates NuGet LibVLC (desktop) inline on Windows legs.
-- Packs with **`vpk`** and uploads feeds to Backblaze B2; stable tags also mirror assets to GitHub Releases.
+- Packs with **`vpk`** (Windows skips portable zips) and uploads feeds to Backblaze B2; stable tags also mirror **`Setup.exe`** and **`.AppImage`** to GitHub Releases.
 
-Windows output is a per-user **`Setup.exe`** (no MSI). Linux output is a Velopack **AppImage**-style bundle. Update channels follow `{os}-{component}` for stable and `{os}-{component}-dev` for dev builds.
+Windows output is a per-user **`Setup.exe`** (no MSI, no portable zip). Linux output is a Velopack **AppImage**-style bundle. Update channels follow `{os}-{component}` for stable and `{os}-{component}-dev` for dev builds.
 
 **Linux AppImage menu integration:** When `APPIMAGE` is set (running the downloaded `.AppImage` file), ServerApp and DesktopApp reconcile a Freedesktop launcher under `$XDG_DATA_HOME/applications/` (default `~/.local/share/applications/`) and hicolor icons on every startup—silent, no first-run flag. `dotnet run` and Windows builds skip registration. Dangling entries after deleting an AppImage are not removed automatically.
 
@@ -157,7 +157,7 @@ With no argument, the script publishes and `vpk pack`s a server AppImage (matchi
 
 Repo-root **`.version`** holds the canonical release version as a single v-prefixed semver2 line (for example `v0.12.0-dev`). Use one command to align release-version surfaces:
 
-- `pwsh ./tools/scripts/set-release-version.ps1 -Version v0.12.0`
+- `pwsh ./tools/scripts/set-release-version.ps1 -Version v0.13.0-dev.1`
 - Omit `-Version` to read `.version` and fan out without changing the file.
 - By default, the script also updates the desktop app `<Version>`, runs `npm run generate:contracts` in WebUI, runs solution build/test plus WebUI verify and `verify-web-deploy.ps1`, and updates release command examples in `README.md` and `docs/dev-setup.md`.
 - Use `-NoDocUpdates` to skip the README/dev-setup example updates.

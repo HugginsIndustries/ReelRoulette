@@ -165,6 +165,7 @@ Use `pwsh ./tools/scripts/reset-checklist.ps1` to reset metadata/check states be
 - [x] **Desktop in-app updates (manual):** From packaged build *N*, Settings check surfaces *N+1* without downloading; Download reaches ready without restart; Apply & Restart relaunches on *N+1*; no restart without explicit Apply confirmation.
 - [x] **Packaged server smoke:** `./tools/scripts/verify-linux-packaged-server-smoke.sh` passes (builds Velopack server AppImage when no path given).
 - [x] **Branding:** icon parity across shortcuts, menus, and WebUI.
+- [ ] **GitHub installer mirror:** Stable GitHub release assets are `Setup.exe` and `.AppImage` only (no `.nupkg`, `releases.*.json`, or `Portable.zip`).
 
 ## CI/Workflow Readiness
 
@@ -201,6 +202,7 @@ Use `pwsh ./tools/scripts/reset-checklist.ps1` to reset metadata/check states be
 
 - [ ] Version aligned via `pwsh ./tools/scripts/set-release-version.ps1 -Version {VERSION}`; tag matches `.version`.
 - [ ] `release.yml` matrix legs succeed for the tag (Windows + Linux, server + desktop).
+- [ ] GitHub release assets are `Setup.exe` and `.AppImage` only (plus GitHub source archives); no `.nupkg`, feed JSON, or `Portable.zip`.
 - [ ] Installed server and desktop apps launch and function after Velopack install.
 - [ ] `CHANGELOG.md`: cut `Unreleased` into the new release section, then initialize a fresh `Unreleased` block.
 

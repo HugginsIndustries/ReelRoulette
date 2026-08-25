@@ -139,7 +139,7 @@ pwsh ./tools/scripts/run-server-rebuild.ps1
 Set release-aligned version surfaces in one step (repo-root `.version` is the source of truth; bare semver is written to consumers):
 
 ```bash
-pwsh ./tools/scripts/set-release-version.ps1 -Version v0.12.0
+pwsh ./tools/scripts/set-release-version.ps1 -Version v0.13.0-dev.1
 ```
 
 Omit `-Version` to read the current value from `.version` and fan out without changing the file. By default this also updates the desktop app `<Version>`, regenerates WebUI OpenAPI contracts (`npm run generate:contracts`), and runs solution build/test, WebUI verify, and deploy smoke. Pass `-NoUpdateDesktopVersion`, `-NoRegenerateContracts`, and/or `-NoRunVerify` to skip any of those. Use `-NoDocUpdates` to leave `README.md` / `docs/dev-setup.md` release command examples unchanged.
@@ -192,14 +192,14 @@ The **HTTP server and Operator UI are unaffected**. If the tray is missing or un
 
 ## Packaging and releases
 
-ReelRoulette ships through **Velopack** only. The **`.github/workflows/release.yml`** workflow (tag push or manual dispatch) builds self-contained **ServerApp** and **DesktopApp** outputs for **Windows** and **Linux**, stages WebUI assets for server legs, bundles Windows native dependencies in CI, packs with **`vpk`**, and publishes update feeds to **Backblaze B2**. Stable tag releases also mirror install artifacts onto the existing **GitHub release**. **Velopack-installed** builds check those feeds (background check-only, plus operator/Settings **Check → Download → Apply**); both hosts also call **`VelopackApp` hooks** at startup so install/update/uninstall hook invocations work.
+ReelRoulette ships through **Velopack** only. The **`.github/workflows/release.yml`** workflow (tag push or manual dispatch) builds self-contained **ServerApp** and **DesktopApp** outputs for **Windows** and **Linux**, stages WebUI assets for server legs, bundles Windows native dependencies in CI, packs with **`vpk`**, and publishes update feeds to **Backblaze B2**. Stable tag releases also mirror **`Setup.exe`** and **`.AppImage`** onto the existing **GitHub release** (not update packages, feed JSON, or portable zips). **Velopack-installed** builds check those feeds (background check-only, plus operator/Settings **Check → Download → Apply**); both hosts also call **`VelopackApp` hooks** at startup so install/update/uninstall hook invocations work.
 
 ### Maintainer flow
 
 1. Set the repo version and align contract/project surfaces:
 
    ```bash
-   pwsh ./tools/scripts/set-release-version.ps1 -Version v0.12.0
+   pwsh ./tools/scripts/set-release-version.ps1 -Version v0.13.0-dev.1
    ```
 
 2. Commit, push, and create/publish the GitHub release notes for the tag.

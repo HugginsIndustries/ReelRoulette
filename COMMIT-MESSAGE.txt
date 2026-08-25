@@ -19,6 +19,7 @@ Instructions:
 
 Commit Message:
 
-Docs: Update RELEASE-NOTES for v0.12.0
+Chore: Mirror only installers to GitHub Releases
 
-- Clarify the desktop grid functionality by changing the interaction from single-click to double-click for playing tiles.
+- Skip Windows Velopack portable zips at pack time.
+- Upload Setup.exe and AppImage to the GitHub release; leave update packages and feed JSON on B2.

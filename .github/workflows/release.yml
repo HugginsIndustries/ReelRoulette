@@ -433,6 +433,7 @@ jobs:
           if [[ "${{ matrix.os_key }}" == "win" ]]; then
             pack_args+=(--icon "assets/HI.ico")
             pack_args+=(--shortcuts "Desktop,StartMenuRoot")
+            pack_args+=(--noPortable true)
           else
             pack_args+=(--icon "assets/HI-256.png")
           fi
@@ -464,13 +465,20 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          vpk upload github \
-            -o "$VPK_OUTPUT_DIR" \
-            -c "${{ matrix.channel }}" \
-            --repoUrl "https://github.com/${GITHUB_REPOSITORY}" \
-            --token "$GH_TOKEN" \
-            --merge true \
-            --tag "${{ needs.validate.outputs.tag }}"
+          shopt -s nullglob
+          files=(
+            "$VPK_OUTPUT_DIR"/*.AppImage
+            "$VPK_OUTPUT_DIR"/*-Setup.exe
+          )
+          shopt -u nullglob
+          if [[ ${#files[@]} -eq 0 ]]; then
+            echo "::error::No GitHub install assets (*.AppImage or *-Setup.exe) in $VPK_OUTPUT_DIR"
+            ls -la "$VPK_OUTPUT_DIR" || true
+            exit 1
+          fi
+          gh release upload "${{ needs.validate.outputs.tag }}" "${files[@]}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --clobber
 
       - name: Leg summary
         shell: bash

@@ -9,9 +9,13 @@ This file follows a Keep a Changelog style format.
 
 ### Changed
 
+- **GitHub Releases mirror:** Stable tags attach Windows `Setup.exe` and Linux `.AppImage` only. Velopack update packages and feed JSON stay on Backblaze B2.
+
 ### Deprecated
 
 ### Removed
+
+- **Windows portable ZIP:** Velopack pack no longer generates `*-Portable.zip`. Windows shipping path is per-user `Setup.exe` only.
 
 ### Fixed
 

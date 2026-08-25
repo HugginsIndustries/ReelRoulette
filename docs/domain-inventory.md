@@ -230,7 +230,7 @@ Web verification:
 
 Packaging and release:
 
-- `.github/workflows/release.yml` (Velopack matrix build/pack/upload; sole shipping pipeline)
+- `.github/workflows/release.yml` (Velopack matrix build/pack/upload to B2; stable GitHub mirror of `Setup.exe` / `.AppImage` only; sole shipping pipeline)
 - `tools/scripts/stage-webui-assets.ps1`
 - shared icon assets: `assets/HI.ico`, `assets/HI-256.png`, `assets/HI-512.png`
 
