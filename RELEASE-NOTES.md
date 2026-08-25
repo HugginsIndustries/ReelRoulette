@@ -34,7 +34,7 @@ v0.12.0 replaces the old installer zoo with one path that updates in-app, puts L
 
 **Browse the library in the WebUI.** A full-screen library overlay (browse icon, left of Filter) loads your catalog, filters/searches/sorts like desktop, and shows a virtualized thumbnail grid that stays live while it's open. Click a tile to play it. Escape closes. It works in light and dark, including a wrapped toolbar on a narrow screen.
 
-**Desktop grid grows up.** Multi-select, a bulk context menu, **Date added** sort, and thumbnails that come from the server. Click a tile and it plays through the same play API as the WebUI. The list view — and the grid/list toggle — are gone.
+**Desktop grid grows up.** Multi-select, a bulk context menu, **Date added** sort, and thumbnails that come from the server. Double-click a tile and it plays through the same play API as the WebUI. The list view — and the grid/list toggle — are gone.
 
 ## Also in This Release
 

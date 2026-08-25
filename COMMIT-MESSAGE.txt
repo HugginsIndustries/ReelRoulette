@@ -19,6 +19,6 @@ Instructions:
 
 Commit Message:
 
-Docs: Add changelog version compare links
+Docs: Update RELEASE-NOTES for v0.12.0
 
-- Add a Keep a Changelog footer so Unreleased and released version headings resolve to GitHub compare/release URLs.
+- Clarify the desktop grid functionality by changing the interaction from single-click to double-click for playing tiles.
