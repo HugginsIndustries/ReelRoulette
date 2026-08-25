@@ -19,7 +19,8 @@ Instructions:
 
 Commit Message:
 
-Bugfix: Use latest BtbN FFmpeg on Windows server release builds
+Docs: Consolidate Unreleased changelog for 0.12.0
 
-- Stop pinning FFmpeg 7.1 in release.yml; AnimMouse/setup-ffmpeg now takes the current BtbN latest release line.
-- Windows server packages still copy ffmpeg/ffprobe into the publish tree after install.
+- Rewrite `[Unreleased]` as the 0.12.0 product delta: group by outcome, drop slice-level and process-only bullets.
+- Use the full Keep a Changelog section set (empty Deprecated/Security kept until the version cut).
+- Move legacy installers and the desktop list view into Removed.
