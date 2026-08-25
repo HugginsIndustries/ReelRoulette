@@ -452,7 +452,7 @@ Last milestone completed: M10h
 - **Deferrals / Follow-ups**:
   - Client-side requests for source access, approval workflows, and external sharing remain out of scope.
 
-### M10y - Final Verification and v0.12.0 Sign-Off
+### M10y - Final Verification and Sign-Off
 
 - **Status**: ⏳ Planned
 - **Goal**: Complete release-gate verification and documentation sign-off for the account, auth, access-control, and source-permission series.
@@ -462,13 +462,13 @@ Last milestone completed: M10h
   - Complete manual cross-client smoke for desktop and WebUI login, admin setup, account add/edit/remove, per-user source access, self-service PIN change, lockout behavior, and Operator source management.
   - Update the testing checklist for all new behavior in this series.
   - Confirm milestone docs, API docs, and CHANGELOG entries for this series are accurate and complete.
-  - Resolve or explicitly defer any open regressions before treating this as the v0.12.0 release gate.
+  - Resolve or explicitly defer any open regressions before treating this series as complete.
 - **Acceptance criteria**:
   - `dotnet build ReelRoulette.sln`, `dotnet test ReelRoulette.sln`, and WebUI `npm run verify` pass for the completed series.
   - Manual verification covers all listed cross-client account, auth, lockout, permission, and source-management workflows.
   - Testing checklist, API docs, CHANGELOG, and milestone evidence match implemented behavior.
-  - No open regressions remain from the series unless explicitly documented as accepted deferrals outside the v0.12.0 gate.
-  - This milestone is the final gate for the v0.12.0 release.
+  - No open regressions remain from the series unless explicitly documented as accepted deferrals.
+  - This milestone is the final verification gate for the series.
 - **Verification evidence**:
   - Evidence placeholders maintained at planned state; completion evidence must include full automated command output summaries and manual smoke PASS/FAIL results.
   - Docs evidence must include testing checklist, API docs, CHANGELOG, and milestone evidence review results.

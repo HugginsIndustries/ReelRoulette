@@ -7,6 +7,22 @@ This file follows a Keep a Changelog style format.
 
 ### Added
 
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+
+---
+
+## [0.12.0] — Stay Current (2026-08-25)
+
+### Added
+
 - **Linux — AppImage application menu:** Velopack AppImages for the server and desktop client register in the application menu on launch and keep the shortcut pointed at the current AppImage if you move it; no installer or `--install` step.
 - **In-app updates (server and desktop):** Velopack-installed builds check a Backblaze B2 feed (stable or preview/dev via the dev-channel toggle) and expose check → download → apply. Background polling is check-only; download and apply never run without confirmation, and the app never restarts for an update without asking. Operator UI shows the running build version and the update actions; desktop exposes the same flow in Settings. Toggling the dev channel still triggers an immediate check.
 - **Release pipeline — Velopack on B2:** Tag and manual `release.yml` packs ServerApp and DesktopApp, publishes dev/stable update feeds to Backblaze B2, and mirrors stable builds to GitHub Releases.
@@ -24,8 +40,6 @@ This file follows a Keep a Changelog style format.
 - **Library grid polish:** WebUI and desktop tile hover opacity is **0.79**. Both skip grid re-sort on `playbackRecorded` when sort is **Duration**. WebUI justified rows pack to the full overlay scrollport (no desktop 8px right gutter).
 - **WebUI playback stats:** POST `/api/record-playback` when playback starts so weighted randomization sees updated play counts.
 - **Desktop thin-client cleanup:** Loudness baseline aggregation moved into `LoudnessNormalizationService`; unused local fingerprint/history, source-stat, global-stat, and duration/loudness scan wrappers removed; `LibraryItemViewModel` holds thumbnail/UI binding while `LibraryItem` stays a serializable projection model.
-
-### Deprecated
 
 ### Removed
 
@@ -45,8 +59,6 @@ This file follows a Keep a Changelog style format.
 - **Server — update channel preference:** Omitting `devChannelEnabled` on a control-settings POST no longer silently resets the persisted preference to stable.
 - **Desktop — import source names:** Importing a folder names the source after the folder even when the picker path ends with a slash; the same folder with or without a trailing slash is one source. Blank stored names show the folder name in source lists without rewriting `library.json`. Trailing separators are not collapsed through a Windows drive root (`D:\` stays `D:\`).
 - **Verification / smoke scripts:** Development verify and packaged-server smoke isolate application data so they do not read or write the developer’s real settings tree, and they stop the server process they started before deleting that temp config (including on failure and interrupt).
-
-### Security
 
 ---
 

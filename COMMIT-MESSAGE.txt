@@ -19,8 +19,9 @@ Instructions:
 
 Commit Message:
 
-Docs: Consolidate Unreleased changelog for 0.12.0
+Chore: Cut 0.12.0 and publish release notes
 
-- Rewrite `[Unreleased]` as the 0.12.0 product delta: group by outcome, drop slice-level and process-only bullets.
-- Use the full Keep a Changelog section set (empty Deprecated/Security kept until the version cut).
-- Move legacy installers and the desktop list view into Removed.
+- Set `.version` to v0.12.0 and fan out csproj, OpenAPI, server assetsVersion, fixtures, and README/dev-setup examples.
+- Promote `[Unreleased]` to `[0.12.0] — Stay Current` (2026-08-25) and restore an empty Keep a Changelog `[Unreleased]` skeleton.
+- Write public GitHub release notes for v0.12.0.
+- Treat M10y as series sign-off, not the v0.12.0 product gate.

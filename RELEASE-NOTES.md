@@ -20,6 +20,52 @@ Use this document for public GitHub releases. Rules:
 
 ---
 
+## ReelRoulette v0.12.0 — Stay Current
+
+Install it once. Keep it current. Pick a reel from the grid — on the desktop or in the browser.
+
+v0.12.0 replaces the old installer zoo with one path that updates in-app, puts Linux builds on your application menu without an extra `--install` step, and finally lets the WebUI browse the library the way the desktop always could.
+
+## What's New
+
+**Updates when you say so.** Velopack-installed server and desktop builds check a feed (stable, or preview/dev if you flip that toggle) and walk you through check → download → apply. Background polling only looks; nothing downloads, applies, or restarts until you confirm. Operator shows the running version and the update actions; desktop has the same flow in Settings.
+
+**One install path, both platforms.** Windows gets a per-user `Setup.exe`. Linux gets an AppImage that registers in the application menu on launch and keeps the shortcut pointed at the file even if you move it — no installer, no `--install`. Stable builds still land on GitHub Releases; update feeds live on Backblaze B2.
+
+**Browse the library in the WebUI.** A full-screen library overlay (browse icon, left of Filter) loads your catalog, filters/searches/sorts like desktop, and shows a virtualized thumbnail grid that stays live while it's open. Click a tile to play it. Escape closes. It works in light and dark, including a wrapped toolbar on a narrow screen.
+
+**Desktop grid grows up.** Multi-select, a bulk context menu, **Date added** sort, and thumbnails that come from the server. Click a tile and it plays through the same play API as the WebUI. The list view — and the grid/list toggle — are gone.
+
+## Also in This Release
+
+- Filters, random play, and preset labels on desktop now follow the server, so both clients stay in agreement.
+- Weighted randomization in the WebUI sees recent plays, because the browser records playback when a clip starts.
+- Linux first-run is less brittle: system LibVLC is enough, a missing library gets a distro-specific install dialog instead of a silent exit, and LAN hostname discovery won't rename your machine or advertise on VPN/tunnel interfaces. You can turn advertisement off and still use the LAN.
+- Light-theme chips keep white labels; pending tag actions tint the plus/minus in Huggins Orange on desktop and web.
+- Importing a folder names the source after the folder even when the picker path ends with a slash.
+
+## What's Coming
+
+- Control who can see which sources, with accounts and a PIN so the same server can serve more than one person.
+- A clearer window into what the server is doing, without drowning you in raw logs.
+- Playback that remembers where you were and holds up better from start to finish.
+- An Android client, built on the same API foundation everything else already uses.
+- Continued UI polish across desktop, web, and Operator.
+
+## Verification
+
+Full build, test, and WebUI verify passed. Manual validation covered CachyOS (desktop, server, WebUI on Firefox), a Windows 11 VM, iPad Safari, and a Pixel 8 Pro in Chrome.
+
+## Notes
+
+- **Upgrading from v0.11.0:** Windows Inno installers and portable ZIPs, and Linux portable tarballs / legacy AppImages (`--install`), are gone. Replace them with the Velopack **`Setup.exe`** (Windows, per-user under `%LocalAppData%`) or **`.AppImage`** (Linux). Unpackaged `dotnet run` sessions cannot apply feed updates.
+- **Linux still needs system FFmpeg (with ffprobe) and LibVLC.** Packages do not bundle those. If the AppImage won't start, you likely need FUSE 2 (`libfuse2` / `libfuse2t64`) or `--appimage-extract-and-run`.
+- **Updates never apply themselves.** Check is automatic; download, apply, and restart wait for you.
+- **Desktop is grid-only.** The library list view is removed. A leftover `libraryGridViewEnabled` setting is ignored if it's still in your desktop settings.
+- **Android PWA install** still adds a shortcut that opens in the browser rather than a standalone shell. Full PWA behavior is working on iOS.
+
+---
+
 ## ReelRoulette v0.11.0 — Cross-Platform Unlocked
 
 This one's been a long time coming.
