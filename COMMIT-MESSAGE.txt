@@ -19,9 +19,6 @@ Instructions:
 
 Commit Message:
 
-Chore: Cut 0.12.0 and publish release notes
+Docs: Add changelog version compare links
 
-- Set `.version` to v0.12.0 and fan out csproj, OpenAPI, server assetsVersion, fixtures, and README/dev-setup examples.
-- Promote `[Unreleased]` to `[0.12.0] — Stay Current` (2026-08-25) and restore an empty Keep a Changelog `[Unreleased]` skeleton.
-- Write public GitHub release notes for v0.12.0.
-- Treat M10y as series sign-off, not the v0.12.0 product gate.
+- Add a Keep a Changelog footer so Unreleased and released version headings resolve to GitHub compare/release URLs.
