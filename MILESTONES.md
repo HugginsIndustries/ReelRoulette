@@ -91,28 +91,152 @@ Do not use this file for detailed architecture explanation or current capability
 
 Last milestone completed: M10h
 
-### M10i - Server-Authoritative Source State Model
+### M10i1 - SQLite Library Catalog Store
+
+- **Status**: ⏳ Planned
+- **Goal**: Make SQLite the live library catalog store so catalog mutations are transactional row updates instead of whole-document JSON rewrites.
+- **Scope**:
+  - Depends on: completed WebUI library browser series.
+  - Introduce a server-owned SQLite catalog for library items, sources, tags, and related item state currently persisted in `library.json`.
+  - Migrate existing `library.json` libraries into SQLite on server startup without operator intervention or data loss.
+  - Change refresh, tag apply (including auto-tag), playback-stats, and other catalog writers to update the affected rows rather than loading and writing the entire catalog document.
+  - After migration, do not treat leftover `library.json` as a source of truth: do not dual-write it, do not read it for live catalog operations, and do not copy it for export or backup.
+  - Disable desktop Library Export / Import and server `library.json` catalog backups after migration, with a clear unavailable message; do not export, import, or back up a stale JSON snapshot.
+  - Make auto-tag scan scope server-authoritative: `scanFullLibrary: true` scans every item (client `itemIds` ignored); `scanFullLibrary: false` with no `itemIds` scans enabled sources only (zero enabled sources scans nothing); explicit `itemIds` scans those items. Existing clients that still send an ID list keep working.
+  - Keep `GET /api/library/projection` working by reading SQLite so existing clients remain usable until the list-query cutovers.
+  - Do not change desktop or WebUI browse UX in this milestone.
+- **Acceptance criteria**:
+  - After upgrade, an existing `library.json` library is available from SQLite with equivalent items, sources, tags, and item flags/stats.
+  - Concurrent catalog writers (for example refresh fingerprint and auto-tag apply) cannot silently drop each other's committed row updates.
+  - Refresh, auto-tag apply, and other catalog mutations persist through SQLite; leftover `library.json` is not read, written, exported, or backed up as the live catalog.
+  - Desktop Library Export / Import and server JSON catalog backups are disabled with a clear message until the export and import cutover.
+  - Auto-tag scan with `scanFullLibrary: false` and no `itemIds` matches enabled sources only, not the full library.
+  - Existing clients can still load the library through the current full-catalog projection API.
+- **Verification evidence**:
+  - Evidence placeholders maintained at planned state; completion evidence must include core/server tests for JSON-to-SQLite migration, row-level persist of representative mutations, a concurrent refresh-plus-tag-apply case that keeps both writes, auto-tag enabled-source scope without `itemIds`, and that export/import/JSON-backup paths refuse leftover JSON.
+  - Docs evidence must identify SQLite as the live catalog store, document the temporary export/import/backup unavailability, and not document unimplemented list-query browse or new export formats as shipping.
+- **Deferrals / Follow-ups**:
+  - Library list/query API and client browse cutover are later slices in this store/query sequence.
+  - Re-enabling export, import, and catalog backups (zip envelope with live `.db`, legacy `library.json` zip import, separate JSON dump that is not a restore path) is deferred to the library catalog export and import cutover.
+  - Removing `GET /api/library/projection` is deferred until both clients browse through the list-query API.
+
+### M10i2 - Library List Query API
+
+- **Status**: ⏳ Planned
+- **Goal**: Add a server-authoritative library list/query API so browse filter, search, sort, and paging run on the server.
+- **Scope**:
+  - Depends on: SQLite library catalog store.
+  - Define OpenAPI list/query contracts that accept playback-equivalent `filterState`, free-text search, sort, offset/limit, and return items plus `totalCount`.
+  - Include per-item thumbnail layout fields (`hasThumbnail`, `thumbnailWidth`, `thumbnailHeight`) on listed items without stating thumbnail files for the entire catalog on each request.
+  - Keep list results ordered stably for justified-row layout so clients can append pages in sort order.
+  - Update generated clients, API docs, and validation/error behavior for the new query surface.
+  - Keep the existing full-catalog projection endpoint until both clients have cut over.
+- **Acceptance criteria**:
+  - Clients can request a window of library items with the same filter, search, and sort semantics the library UIs use today.
+  - Responses include `totalCount` and enough thumbnail layout metadata for justified-row virtualization.
+  - Query results honor server-owned source enabled state and other catalog eligibility already enforced for random/play.
+  - Contract documentation describes list/query as the browse path and does not treat full-catalog projection as the long-term browse API.
+- **Verification evidence**:
+  - Evidence placeholders maintained at planned state; completion evidence must include server API tests for filter/search/sort/paging, empty and large-offset windows, and thumbnail metadata on listed items.
+  - Contract evidence must include OpenAPI and docs updates plus generated client verification where applicable.
+- **Deferrals / Follow-ups**:
+  - Desktop and WebUI browse cutover to this API are later slices in this store/query sequence.
+  - Infinite-scroll client behavior is out of scope here.
+  - Library export, import, and JSON catalog backups remain disabled until the library catalog export and import cutover.
+
+### M10i3 - Desktop Library Query Cutover
+
+- **Status**: ⏳ Planned
+- **Goal**: Cut the desktop library panel over to the server list/query API with fill-on-scroll, without keeping a full local catalog replica for browse.
+- **Scope**:
+  - Depends on: library list query API.
+  - Replace desktop library-panel browse that filters a full in-memory projection with list/query requests using the active filter, search, and sort.
+  - Load additional result windows as the user scrolls (including overscan) and treat the last loaded justified row as provisional until the query is exhausted.
+  - Preserve current desktop library UX: justified grid, search/sort, multi-select, bulk actions, and click-to-play.
+  - Stop sending a replica-built `itemIds` list for auto-tag scan; scoped scan is `scanFullLibrary: false` with no `itemIds` (server enabled-source semantics from the catalog store). Do not page list/query to collect IDs.
+  - Keep random/play API-authoritative; do not reintroduce client-side eligibility authority.
+- **Acceptance criteria**:
+  - Desktop library browse no longer requires downloading the full catalog to filter, search, sort, or scroll.
+  - Scrolling loads further query windows and layout remains stable except for the expected last-row pack of an incomplete page.
+  - Filter, search, and sort changes requery the server and reset browse to the start of the result set.
+  - Auto-tag scoped scan does not depend on a full local item replica or a client-assembled ID list.
+- **Verification evidence**:
+  - Evidence placeholders maintained at planned state; completion evidence must include desktop tests or focused integration tests for query browse, scroll paging, and requery on filter/search/sort.
+  - Manual evidence must include fill-on-scroll smoke on a large library and parity of filter/search/sort with pre-cutover desktop behavior.
+- **Deferrals / Follow-ups**:
+  - WebUI overlay cutover is the next slice in this store/query sequence.
+  - Jump-to-middle scrollbar accuracy without loading the result prefix remains out of scope.
+
+### M10i4 - WebUI Library Query Cutover
+
+- **Status**: ⏳ Planned
+- **Goal**: Cut the WebUI library overlay over to the same list/query API as desktop so both clients browse identically through the server.
+- **Scope**:
+  - Depends on: desktop library query cutover.
+  - Replace WebUI overlay browse that filters a full in-memory projection with the server list/query API (filter, search, sort, fill-on-scroll).
+  - Preserve current WebUI library UX: overlay shell, header counts, justified grid, overscan, click-to-play, and SSE live update of the open overlay via requery or in-window patches—not a full-catalog refetch.
+  - Stop fetching full-catalog projection to build auto-tag `itemIds` when scan-full-library is off; scoped scan is `scanFullLibrary: false` with no `itemIds`. Do not page list/query to collect IDs.
+  - Do not introduce WebUI-local catalog mutation or eligibility authority.
+- **Acceptance criteria**:
+  - WebUI library overlay browse uses the same server list/query contract as desktop.
+  - Scrolling loads further query windows; filter/search/sort requery the server.
+  - Open-overlay SSE/resync does not refetch the entire catalog.
+  - Auto-tag scoped scan does not depend on a full-catalog projection fetch or a client-assembled ID list.
+- **Verification evidence**:
+  - Evidence placeholders maintained at planned state; completion evidence must include WebUI tests for query browse, scroll paging, requery, and overlay SSE/resync behavior.
+  - Manual evidence must include fill-on-scroll smoke and desktop/WebUI browse parity for filter, search, sort, and counts.
+- **Deferrals / Follow-ups**:
+  - Export/import format cutover is the next slice in this store/query sequence.
+
+### M10i5 - Library Catalog Export and Import Cutover
+
+- **Status**: ⏳ Planned
+- **Goal**: Re-enable library export, import, and catalog backups around a live SQLite `.db` in the existing zip envelope, keep JSON dump as a separate non-restore action, and keep importing existing `library.json` zips.
+- **Scope**:
+  - Depends on: WebUI library query cutover.
+  - Re-enable desktop Library Export / Import and server catalog backups that were disabled after the SQLite store landed.
+  - Keep the current migration zip envelope (settings, presets, optional thumbnails and backups). The live catalog entry is a SQLite checkpoint/backup of the live store (not a raw copy of an open WAL file), not leftover `library.json`.
+  - Import Library restores a new export by reading that `.db` from the zip and replacing the live SQLite catalog (plus current remap/skip for sources). Also accept existing migration zips that contain `library.json` and migrate them into the live SQLite catalog.
+  - Add a separate JSON dump action; JSON is not the default new export format, is not the live catalog, and is not an import or restore path.
+  - Server catalog backups snapshot the live SQLite catalog, not leftover JSON.
+  - Remove full-catalog projection as a client browse path if nothing still requires it after both query cutovers; otherwise document the leftover and defer removal explicitly.
+  - Update testing checklist and current-state docs for export/import and browse-via-query.
+- **Acceptance criteria**:
+  - New catalog exports produce a zip whose catalog artifact is a usable SQLite database of the live library; Import Library can restore that export into the live catalog.
+  - Import still accepts existing `library.json` zip archives and migrates them into the live SQLite catalog.
+  - JSON dump is a separate explicit action and cannot be used as Import Library input.
+  - Server catalog backups capture the live SQLite catalog.
+  - Desktop and WebUI library browse do not depend on full-catalog projection.
+  - Docs and testing checklist describe `.db`-in-zip export and restore, JSON dump (not restore), and legacy zip import without treating `library.json` as the live store.
+- **Verification evidence**:
+  - Evidence placeholders maintained at planned state; completion evidence must include export/import tests for `.db`-in-zip round-trip, JSON dump that is rejected as import, `library.json` zip import, live SQLite backups, plus confirmation that browse clients use list/query.
+  - Docs evidence must include current-state and checklist updates for the new export/import and browse paths.
+- **Deferrals / Follow-ups**:
+  - Account/PIN persistence in SQLite is deferred to the account and PIN data model work.
+  - Presets, core settings, and desktop-settings remain on their current files unless a later slice moves them.
+
+### M10j - Server-Authoritative Source State Model
 
 - **Status**: ⏳ Planned
 - **Goal**: Move source enabled/disabled state into a server-owned domain model shared by all clients.
 - **Scope**:
-  - Depends on: completed WebUI library browser series.
-  - Define the canonical persisted source state shape for enabled/disabled status, source identity, display metadata, and future access-control annotations.
+  - Depends on: library catalog export and import cutover.
+  - Persist canonical source state (enabled/disabled, identity, display metadata, and future access-control annotations) in the server SQLite catalog, not in a parallel JSON catalog document.
   - Migrate any client-local enabled/disabled source preference into server-owned settings/state without breaking existing libraries.
-  - Ensure random selection, projection queries, refresh behavior, and source inclusion decisions read source enabled state from the server-owned model.
+  - Ensure random selection, library list queries, refresh behavior, and source inclusion decisions read source enabled state from the server-owned model.
   - Keep the first implementation single-operator/default-access only while preserving a clean model boundary for later per-user access decisions.
 - **Acceptance criteria**:
-  - Source enabled/disabled state persists in server-owned state and is shared across clients.
+  - Source enabled/disabled state persists in server-owned SQLite state and is shared across clients.
   - Existing client-local source enabled settings are migrated or ignored harmlessly with deterministic defaults.
-  - Server-side selection/projection behavior honors server-owned enabled state consistently.
+  - Server-side selection and library list-query behavior honors server-owned enabled state consistently.
   - The data model includes a non-authoritative placeholder or extension point for future source access policy without requiring user accounts.
 - **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include core/server tests for source-state persistence, migration/default behavior, and selection/projection filtering.
+  - Evidence placeholders maintained at planned state; completion evidence must include core/server tests for source-state persistence, migration/default behavior, and selection/list-query filtering.
   - Docs evidence must identify server ownership and the future access-control extension point without documenting unimplemented user-account behavior.
 - **Deferrals / Follow-ups**:
   - Full user accounts, roles, sharing UI, and per-user permission editing are future considerations.
 
-### M10j - Source Management API and SSE Contract
+### M10k - Source Management API and SSE Contract
 
 - **Status**: ⏳ Planned
 - **Goal**: Expose source management through authoritative API and SSE contracts.
@@ -133,15 +257,15 @@ Last milestone completed: M10h
 - **Deferrals / Follow-ups**:
   - Per-user source visibility enforcement is staged behind the source access policy groundwork.
 
-### M10k - Desktop Source Management Cutover
+### M10l - Desktop Source Management Cutover
 
 - **Status**: ⏳ Planned
 - **Goal**: Convert desktop source enabled/disabled UX to the server-authoritative source management API.
 - **Scope**:
   - Depends on: source management API and SSE contract.
-  - Replace desktop client-local source enabled/disabled reads and writes with API calls and SSE projection updates.
+  - Replace desktop client-local source enabled/disabled reads and writes with API calls and SSE updates.
   - Keep desktop source-management UI behavior familiar while removing dual-writer authority.
-  - Ensure source changes from other clients update desktop source state and dependent library/filter views.
+  - Ensure source changes from other clients update desktop source state and requery library list/filter views.
   - Remove obsolete desktop-local source enabled-state persistence once server cutover is verified.
 - **Acceptance criteria**:
   - Desktop source enabled/disabled changes persist through the server API and are reflected after restart/reconnect.
@@ -155,7 +279,7 @@ Last milestone completed: M10h
   - Any redesigned source-management UI is out of scope; this milestone is an ownership cutover.
   - The desktop Manage Sources dialog is left intact in this milestone; removing it is deferred to Cross-Client Source Access Cutover. Only source enabled/disabled state ownership moves to the server here.
 
-### M10l - WebUI Source Management Alignment
+### M10m - WebUI Source Management Alignment
 
 - **Status**: ⏳ Planned
 - **Goal**: Align WebUI source-dependent behavior with server-authoritative source state.
@@ -163,53 +287,53 @@ Last milestone completed: M10h
   - Depends on: desktop source management cutover.
   - Update WebUI source-aware filter/library behavior to read server-owned source state and react to source SSE updates.
   - Remove any WebUI-local source enabled/disabled authority or duplicated source-state assumptions.
-  - Ensure the library browser projection and random playback requests honor the same source state as desktop.
+  - Ensure library list-query browse and random playback requests honor the same source state as desktop.
   - Keep UI changes minimal unless source state needs clearer feedback in existing WebUI filter/library surfaces.
 - **Acceptance criteria**:
-  - WebUI source-dependent filtering and library projection behavior reflects server-owned enabled/disabled state.
-  - Source-state changes from desktop or another client update WebUI behavior through SSE/resync.
+  - WebUI source-dependent filtering and library list-query behavior reflects server-owned enabled/disabled state.
+  - Source-state changes from desktop or another client update WebUI behavior through SSE/resync and list requery.
   - Random playback and item playback do not diverge from server source eligibility decisions.
   - No new WebUI-local source authority is introduced.
 - **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include WebUI tests for source-state projection, SSE updates, and source-dependent random/library behavior.
+  - Evidence placeholders maintained at planned state; completion evidence must include WebUI tests for source-state list-query behavior, SSE updates, and source-dependent random/library behavior.
   - Manual evidence must include cross-client desktop-to-WebUI source-state sync smoke.
 - **Deferrals / Follow-ups**:
   - Full WebUI source administration UI is deferred unless needed to complete server-authoritative behavior.
 
-### M10m - Source Access Policy Groundwork
+### M10n - Source Access Policy Groundwork
 
 - **Status**: ⏳ Planned
 - **Goal**: Add minimal access-policy architecture hooks for future per-user source access.
 - **Scope**:
   - Depends on: WebUI source management alignment.
   - Introduce a server-side source access policy abstraction that evaluates client/session context and source identity, with default behavior matching current all-authorized paired-client access.
-  - Thread the policy boundary through projection, random selection, item play, and source query paths without adding user accounts or permission editing UI.
+  - Thread the policy boundary through library list query, random selection, item play, and source query paths without adding user accounts or permission editing UI.
   - Document the intended future direction for per-user source access at a high level without treating it as implemented behavior.
 - **Acceptance criteria**:
   - Source access checks flow through a single server-side policy boundary with default allow-all behavior for current authenticated clients.
-  - Projection, random selection, item play, and source APIs can be constrained by the policy boundary in tests without client-side authority.
+  - Library list query, random selection, item play, and source APIs can be constrained by the policy boundary in tests without client-side authority.
   - Current user-visible behavior remains unchanged except for shared server-authoritative enabled/disabled state.
   - Documentation clearly separates implemented source-state authority from future per-user access control.
 - **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include policy-boundary tests for projection, random selection, item play, and source APIs.
+  - Evidence placeholders maintained at planned state; completion evidence must include policy-boundary tests for library list query, random selection, item play, and source APIs.
   - Docs evidence must keep implemented source-state authority separate from future per-user access-control behavior.
 - **Deferrals / Follow-ups**:
   - User accounts, role management, operator permission UI, source sharing invitations, and per-user audit/reporting are handled by later account and source-permission work where applicable.
 
-### M10n - Account and PIN Data Model
+### M10o - Account and PIN Data Model
 
 - **Status**: ⏳ Planned
 - **Goal**: Establish the server/core account model required for PIN-authenticated clients and future per-user source access.
 - **Scope**:
   - Depends on: source access policy groundwork.
-  - Add persisted account records with name, account level, hashed PIN, and stable identity suitable for later source-permission references.
+  - Add persisted account records in the same server SQLite database as the library catalog, with name, account level, hashed PIN, and stable identity suitable for later source-permission references.
   - Require PIN hashes to use bcrypt or Argon2; do not introduce custom, fast, or reversible PIN storage.
   - Support admin and user account levels, including multiple admin accounts.
   - Seed a default admin account with placeholder name `Admin` and default PIN `1234`.
   - Persist per-account, per-device failed PIN attempt state with one-hour lockout after 10 failed attempts.
   - Keep the model free of guest/anonymous access assumptions; every interactive client session must resolve to an account in later milestones.
 - **Acceptance criteria**:
-  - Accounts can be persisted and loaded with name, level, bcrypt- or Argon2-hashed PIN, stable account identity, and no plaintext PIN storage.
+  - Accounts can be persisted and loaded from the server SQLite catalog database with name, level, bcrypt- or Argon2-hashed PIN, stable account identity, and no plaintext PIN storage.
   - Default startup state contains exactly one admin account named `Admin` with default PIN `1234` when no accounts exist.
   - Multiple admin accounts can exist while account identity remains stable across name and PIN changes.
   - Failed PIN attempt tracking is isolated by account and device and records lockout expiration deterministically.
@@ -220,7 +344,7 @@ Last milestone completed: M10h
 - **Deferrals / Follow-ups**:
   - Login endpoints, session tokens, account administration UI, and source-permission editing are deferred to later account-system milestones.
 
-### M10o - PIN Authentication API and Session Foundation
+### M10p - PIN Authentication API and Session Foundation
 
 - **Status**: ⏳ Planned
 - **Goal**: Replace pairing/control-token authentication with PIN login and transient session tokens.
@@ -243,7 +367,7 @@ Last milestone completed: M10h
 - **Deferrals / Follow-ups**:
   - Full endpoint authorization cutover and client login screens are deferred until the session foundation exists.
 
-### M10p - Auth Cutover for API and Operator UI
+### M10q - Auth Cutover for API and Operator UI
 
 - **Status**: ⏳ Planned
 - **Goal**: Require session-token authentication across existing API surfaces and remove the separate Operator UI control-token layer.
@@ -266,7 +390,7 @@ Last milestone completed: M10h
 - **Deferrals / Follow-ups**:
   - Client-specific login screens and account-management UI are deferred to later milestones.
 
-### M10q - Admin First-Run Setup Flow
+### M10r - Admin First-Run Setup Flow
 
 - **Status**: ⏳ Planned
 - **Goal**: Require the default admin account to be secured through Operator UI before other clients can log in.
@@ -289,7 +413,7 @@ Last milestone completed: M10h
 - **Deferrals / Follow-ups**:
   - General account add/edit/remove workflows are deferred to the Operator access-control milestone.
 
-### M10r - Operator Access Control Administration
+### M10s - Operator Access Control Administration
 
 - **Status**: ⏳ Planned
 - **Goal**: Add admin-only Operator UI account management for creating and maintaining admin and user accounts.
@@ -313,7 +437,7 @@ Last milestone completed: M10h
 - **Deferrals / Follow-ups**:
   - Per-source permission editing is deferred until source management moves to Operator UI.
 
-### M10s - Self-Service PIN Change
+### M10t - Self-Service PIN Change
 
 - **Status**: ⏳ Planned
 - **Goal**: Let authenticated users change their own PIN from every client without admin assistance.
@@ -334,7 +458,7 @@ Last milestone completed: M10h
 - **Deferrals / Follow-ups**:
   - Broader profile editing beyond name and PIN remains out of scope.
 
-### M10t - Desktop Login Gate
+### M10u - Desktop Login Gate
 
 - **Status**: ⏳ Planned
 - **Goal**: Require PIN login before the desktop main window loads.
@@ -358,7 +482,7 @@ Last milestone completed: M10h
 - **Deferrals / Follow-ups**:
   - Remembered-account convenience, biometric auth, and offline login are out of scope.
 
-### M10u - WebUI Login Gate
+### M10v - WebUI Login Gate
 
 - **Status**: ⏳ Planned
 - **Goal**: Require PIN login before any WebUI library or player surface is accessible.
@@ -382,7 +506,7 @@ Last milestone completed: M10h
 - **Deferrals / Follow-ups**:
   - PWA offline auth behavior and persistent "remember me" sessions are out of scope.
 
-### M10v - Operator Source Management
+### M10w - Operator Source Management
 
 - **Status**: ⏳ Planned
 - **Goal**: Move source administration into an admin-only Operator UI section.
@@ -396,7 +520,7 @@ Last milestone completed: M10h
 - **Acceptance criteria**:
   - Admin accounts can add, remove, rename, scan duplicates, and handle duplicate groups from Operator UI.
   - User-level accounts cannot access Operator source-management actions.
-  - Source mutations persist through the server and propagate to connected clients through existing projection/SSE behavior.
+  - Source mutations persist through the server and propagate to connected clients through SSE and library list requery.
   - Duplicate detection and handling are no longer exposed as non-admin client-local source-management workflows.
   - Existing libraries remain usable after source-management ownership moves to Operator UI.
 - **Verification evidence**:
@@ -405,7 +529,7 @@ Last milestone completed: M10h
 - **Deferrals / Follow-ups**:
   - Per-source per-user visibility grants are deferred to the source permission milestone.
 
-### M10w - Per-User Source Permission Management
+### M10x - Per-User Source Permission Management
 
 - **Status**: ⏳ Planned
 - **Goal**: Let admins manage source visibility per user and enforce it through the server policy boundary.
@@ -413,12 +537,12 @@ Last milestone completed: M10h
   - Depends on: Operator source management.
   - Add per-source per-user access controls to Operator UI source management.
   - Persist source permission assignments against stable account and source identities.
-  - Enforce denied sources through the server-side source access policy for projection, random selection, library browser, source queries, item playback, and `POST /api/play/{itemId}`.
+  - Enforce denied sources through the server-side source access policy for library list query, random selection, library browser, source queries, item playback, and `POST /api/play/{itemId}`.
   - Ensure admins retain source-management authority while user accounts see only allowed sources.
   - Keep source sharing invitations, groups, and audit/reporting out of scope.
 - **Acceptance criteria**:
   - Admins can grant or deny each user access to each source from Operator UI.
-  - Denied sources are invisible to the affected user across source lists, projection, random selection, library browser, and item playback.
+  - Denied sources are invisible to the affected user across source lists, library list query, random selection, library browser, and item playback.
   - Denied-source items cannot be played through `POST /api/play/{itemId}` regardless of whether the requesting client has the item ID.
   - Permission changes take effect for active sessions through SSE/resync or deterministic requery behavior.
   - Server tests prove clients cannot bypass source denial by requesting hidden source IDs or item IDs directly.
@@ -429,14 +553,14 @@ Last milestone completed: M10h
 - **Deferrals / Follow-ups**:
   - Role templates, account groups, source sharing invitations, and per-user audit/reporting remain future considerations.
 
-### M10x - Cross-Client Source Access Cutover
+### M10y - Cross-Client Source Access Cutover
 
 - **Status**: ⏳ Planned
 - **Goal**: Align desktop and WebUI with server-authoritative source permissions and remove desktop source administration.
 - **Scope**:
   - Depends on: per-user source permission management.
   - Remove the Manage Sources dialog from the desktop client entirely.
-  - Ensure desktop and WebUI source lists, projection, random playback, library browser, and item playback rely only on server-authoritative account permissions.
+  - Ensure desktop and WebUI source lists, library list query, random playback, library browser, and item playback rely only on server-authoritative account permissions.
   - Remove or hide any client-side source-management entry points that would conflict with Operator-only administration.
   - Add user-facing empty/denied-state messaging where a user has no visible sources or a previously visible item becomes inaccessible.
   - Update docs and testing checklist for Operator-only source management and per-user source visibility behavior.
@@ -452,14 +576,14 @@ Last milestone completed: M10h
 - **Deferrals / Follow-ups**:
   - Client-side requests for source access, approval workflows, and external sharing remain out of scope.
 
-### M10y - Final Verification and Sign-Off
+### M10z - Final Verification and Sign-Off
 
 - **Status**: ⏳ Planned
 - **Goal**: Complete release-gate verification and documentation sign-off for the account, auth, access-control, and source-permission series.
 - **Scope**:
   - Depends on: cross-client source access cutover.
   - Run full build, test, and WebUI verification passes.
-  - Complete manual cross-client smoke for desktop and WebUI login, admin setup, account add/edit/remove, per-user source access, self-service PIN change, lockout behavior, and Operator source management.
+  - Complete manual cross-client smoke for desktop and WebUI login, admin setup, account add/edit/remove, per-user source access, self-service PIN change, lockout behavior, Operator source management, and library list-query browse under authenticated sessions.
   - Update the testing checklist for all new behavior in this series.
   - Confirm milestone docs, API docs, and CHANGELOG entries for this series are accurate and complete.
   - Resolve or explicitly defer any open regressions before treating this series as complete.

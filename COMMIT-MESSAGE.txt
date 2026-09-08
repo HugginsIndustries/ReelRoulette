@@ -19,7 +19,9 @@ Instructions:
 
 Commit Message:
 
-Chore: Mirror only installers to GitHub Releases
+Docs: Plan SQLite library catalog store, list query, and export cutover
 
-- Skip Windows Velopack portable zips at pack time.
-- Upload Setup.exe and AppImage to the GitHub release; leave update packages and feed JSON on B2.
+- Insert active M10i1–M10i5 for SQLite catalog store, list/query API, desktop and WebUI browse cutover, and `.db`-in-zip export with separate JSON dump.
+- Disable library export, import, and JSON catalog backups after the SQLite store until the export cutover; restore of a new export is the `.db` inside the existing zip; JSON dump is not a restore path.
+- Put enabled-source auto-tag scan scope on the catalog store slice so query cutovers omit the replica ID list.
+- Shift former M10i–M10y to M10j–M10z and retarget later slices for SQLite persistence and server list/query browse.
