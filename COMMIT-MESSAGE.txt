@@ -19,8 +19,12 @@ Instructions:
 
 Commit Message:
 
-Docs: Split the SQLite catalog store from its live cutover
+M10i1: Add a SQLite library catalog store and JSON migration
 
-- Keep schema, JSON migration, and refusal rules in the catalog store milestone, and leave the running server on library.json until the cutover.
-- Move live readers and writers, auto-tag scope, projection, and the export/import/backup disablement into the following cutover milestone.
-- Renumber the list-query, desktop, WebUI, and export milestones, and depend on the live catalog before list/query work.
+- Migrate library.json into library.db in the roaming config directory, and leave the running server reading and writing library.json.
+- Publish the database only after it is committed and synced through a writable handle, sync the directory after that publish (directory-list access on Windows), and rename library.json only after the directory sync succeeds.
+- Quarantine a partial, unversioned, corrupt, or non-database file, including one whose header opens but whose rows are corrupt, without consuming library.json or the migration-time snapshot. Leave a locked or busy library.db in place and fail that open within about a second.
+- Do not publish library.db when library.json.migrated is already present, and name that snapshot only when the file exists.
+- Keep a missing fingerprintStatus null so a legacy SHA-256 fingerprint can still count as ready.
+- Match the server loader: skip a source that lacks an id or root path, skip an item with no full path, force the uncategorized category name and sort order (and add it when missing), and keep the last tag when names collide case-insensitively.
+- Disable pooling on catalog test connections so Windows can rename and delete library.db.

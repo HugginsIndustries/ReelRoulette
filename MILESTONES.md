@@ -89,28 +89,7 @@ Do not use this file for detailed architecture explanation or current capability
 
 ## Active Milestones
 
-Last milestone completed: M10h
-
-### M10i1 - SQLite Library Catalog Store
-
-- **Status**: ⏳ Planned
-- **Goal**: Add a tested SQLite catalog store and JSON migration without opening that database from the running server.
-- **Scope**:
-  - Depends on: completed WebUI library browser series.
-  - Introduce a server-owned SQLite catalog at `library.db` in the same roaming config directory as `library.json`, versioned with `user_version` and run in WAL mode. Tables cover sources, items, categories, tags, item-tag assignments, and legacy `availableTags`. Item primary key is the existing item `id`. Paths, filenames, and tag names keep invariant-lowercase fold columns for substring search and case-insensitive path/tag match. Name sort does not use those fold columns. Duration is stored as `TimeSpan` ticks. Thumbnails, presets, core settings, and desktop settings stay in their current files. `fingerprintIndex` is not stored.
-  - Migrate an existing `library.json` when no `library.db` exists, in one transaction, using the parsers the server already uses: `mediaType` and `fingerprintStatus` may be numbers or strings, and duration may be a `TimeSpan`, a seconds number, or a string. Keep legacy `availableTags` when that list is what the library has. Write that database to a temporary file in the same directory, set `user_version`, commit, and sync it. Rename the temporary file to `library.db` only after it is complete. Rename `library.json` to `library.json.migrated` only after that rename has succeeded. A crash before the database rename leaves `library.json` in place and no `library.db`. A crash after it leaves a healthy `library.db`.
-  - A healthy `library.db` is authoritative: ignore `library.json` and `library.json.migrated`. A partial or unversioned `library.db` refuses to serve and is not migrated over. When `library.json` is still present, quarantine that database by renaming it aside and leave `library.json` in place, so a later open with no `library.db` can migrate the preserved JSON. When `library.json` is already gone, quarantine the bad database and refuse to serve: do not migrate `library.json.migrated`, and do not create an empty catalog. The same refusal applies when the open finds `library.json.migrated` but neither `library.db` nor `library.json`. Report that the live database was refused and that the migration-time snapshot is still at `library.json.migrated`.
-  - The running server does not open `library.db` in this milestone. Live readers and writers stay on `library.json` until the catalog cutover.
-- **Acceptance criteria**:
-  - An existing `library.json` library can be migrated into SQLite with equivalent items, sources, categories, tags, legacy `availableTags`, and item flags/stats. `fingerprintIndex` need not survive.
-  - Successful migration renames `library.json` to `library.json.migrated` only after `library.db` is in place and healthy. A crash before that publish leaves `library.json` unmoved. A later open of a healthy `library.db` does not read either JSON file. A partial or unversioned `library.db` does not serve and does not consume `library.json`. When `library.json` is still present, quarantine lets a later open migrate it. When only `library.json.migrated` remains, the open refuses and does not create an empty catalog.
-  - The running server still reads and writes `library.json`. It does not publish `library.db` on startup.
-- **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include core tests for JSON-to-SQLite migration (including string enums, numeric duration, and `availableTags`), a crash before publish that leaves `library.json` unmoved, a healthy `library.db` that does not read either JSON file, partial-database refusal plus quarantine so a later open migrates preserved `library.json`, and refusal that does not load `library.json.migrated` or create an empty catalog.
-- **Deferrals / Follow-ups**:
-  - Opening this database from the running server, moving live readers and writers onto row updates, auto-tag scan scope, projection from SQLite, and disabling export, import, and JSON catalog backups are the next slice in this store/query sequence.
-  - Library list/query API and client browse cutover remain later slices. This store/query sequence ships as one release, ahead of the later account and Operator milestones.
-  - Account tables in this database are deferred to the account and PIN data model work. They extend `user_version` rather than replacing this catalog schema.
+Last milestone completed: M10i1
 
 ### M10i2 - SQLite Library Catalog Cutover
 
@@ -1327,6 +1306,29 @@ Last milestone completed: M10h
 ## Completed Milestones
 
 Latest completions first:
+
+### M10i1 - SQLite Library Catalog Store
+
+- **Status**: ✅ Complete
+- **Goal**: Add a tested SQLite catalog store and JSON migration without opening that database from the running server.
+- **Scope**:
+  - Depends on: completed WebUI library browser series.
+  - Introduce a server-owned SQLite catalog at `library.db` in the same roaming config directory as `library.json`, versioned with `user_version` and run in WAL mode. Tables cover sources, items, categories, tags, item-tag assignments, and legacy `availableTags`. Item primary key is the existing item `id`. Paths, filenames, and tag names keep invariant-lowercase fold columns for substring search and case-insensitive path/tag match. Name sort does not use those fold columns. Duration is stored as `TimeSpan` ticks. Thumbnails, presets, core settings, and desktop settings stay in their current files. `fingerprintIndex` is not stored.
+  - Migrate an existing `library.json` when no `library.db` exists, in one transaction, using the parsers the server already uses: `mediaType` and `fingerprintStatus` may be numbers or strings, and duration may be a `TimeSpan`, a seconds number, or a string. Keep legacy `availableTags` when that list is what the library has. Write that database to a temporary file in the same directory, set `user_version`, commit, and sync it. Rename the temporary file to `library.db` only after it is complete. Rename `library.json` to `library.json.migrated` only after that rename has succeeded. A crash before the database rename leaves `library.json` in place and no `library.db`. A crash after it leaves a healthy `library.db`.
+  - A healthy `library.db` is authoritative: ignore `library.json` and `library.json.migrated`. A partial or unversioned `library.db` refuses to serve and is not migrated over. When `library.json` is still present, quarantine that database by renaming it aside and leave `library.json` in place, so a later open with no `library.db` can migrate the preserved JSON. When `library.json` is already gone, quarantine the bad database and refuse to serve: do not migrate `library.json.migrated`, and do not create an empty catalog. The same refusal applies when the open finds `library.json.migrated` but neither `library.db` nor `library.json`. Report that the live database was refused and that the migration-time snapshot is still at `library.json.migrated`.
+  - The running server does not open `library.db` in this milestone. Live readers and writers stay on `library.json` until the catalog cutover.
+- **Acceptance criteria**:
+  - An existing `library.json` library can be migrated into SQLite with equivalent items, sources, categories, tags, legacy `availableTags`, and item flags/stats. `fingerprintIndex` need not survive.
+  - Successful migration renames `library.json` to `library.json.migrated` only after `library.db` is in place and healthy. A crash before that publish leaves `library.json` unmoved. A later open of a healthy `library.db` does not read either JSON file. A partial or unversioned `library.db` does not serve and does not consume `library.json`. When `library.json` is still present, quarantine lets a later open migrate it. When only `library.json.migrated` remains, the open refuses and does not create an empty catalog.
+  - The running server still reads and writes `library.json`. It does not publish `library.db` on startup.
+- **Verification evidence**:
+  - `dotnet build ReelRoulette.sln` — pass. `dotnet test ReelRoulette.sln` — pass (168 Core + 58 Desktop).
+  - `LibraryCatalogStoreTests`: JSON-to-SQLite migration (string enums, numeric duration, TimeSpan duration, legacy `availableTags`, fold columns, `fingerprintIndex` absent), crash before publish leaves `library.json` unmoved and creates no `library.db`, a failed directory sync after publish leaves `library.json` unmoved, a healthy `library.db` ignores both JSON files, a partial database is quarantined so the next open migrates preserved `library.json`, an unversioned database with only `library.json.migrated` is refused, a migrated snapshot alone does not create `library.db`, an existing `library.json.migrated` blocks publish so `library.json` stays put, a bad database with neither JSON file does not name a missing snapshot, a database whose header opens but whose later pages are corrupt is quarantined without consuming `library.json`, a read-only database file fails the pre-publish sync, the Windows directory-sync access mask is `FILE_LIST_DIRECTORY`, a missing `fingerprintStatus` stays null while an explicit Pending `0` stays `0`, a source without an id or root path is omitted, an item with no full path is omitted, a locked `library.db` fails within about a second and stays in place, a blank category id is forced to `Uncategorized` with sort order `int.MaxValue` and a later duplicate id is skipped, that category is appended when the file does not have it, duplicate tag names collapse case-insensitively to the last one, and catalog test connections disable pooling so Windows can rename and delete `library.db`.
+  - `ReelRoulette.Server` has no reference to `LibraryCatalogStore`. Startup does not publish `library.db`.
+- **Deferrals / Follow-ups**:
+  - Opening this database from the running server, moving live readers and writers onto row updates, auto-tag scan scope, projection from SQLite, and disabling export, import, and JSON catalog backups are the next slice in this store/query sequence.
+  - Library list/query API and client browse cutover remain later slices. This store/query sequence ships as one release, ahead of the later account and Operator milestones.
+  - Account tables in this database are deferred to the account and PIN data model work. They extend `user_version` rather than replacing this catalog schema.
 
 ### M10h - WebUI Library Click-to-Play and Responsive Sign-off
 
