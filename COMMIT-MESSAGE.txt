@@ -19,9 +19,9 @@ Instructions:
 
 Commit Message:
 
-Docs: Plan SQLite library catalog store, list query, and export cutover
+Docs: Refine the SQLite catalog roadmap and Operator export handoff
 
-- Insert active M10i1–M10i5 for SQLite catalog store, list/query API, desktop and WebUI browse cutover, and `.db`-in-zip export with separate JSON dump.
-- Disable library export, import, and JSON catalog backups after the SQLite store until the export cutover; restore of a new export is the `.db` inside the existing zip; JSON dump is not a restore path.
-- Put enabled-source auto-tag scan scope on the catalog store slice so query cutovers omit the replica ID list.
-- Shift former M10i–M10y to M10j–M10z and retarget later slices for SQLite persistence and server list/query browse.
+- Spell out library.db migration, authority, and auto-tag path-list scope so the catalog store replaces library.json only after a finished database is in place.
+- Align list/query search, filter, and sort with the desktop library panel, using a filename then item-id tie-break so offset pages stay stable.
+- Remove the source-state model, API, and desktop cutover slices; enabled state is already server-owned and persists with the catalog store.
+- Keep desktop zip export in the store/query release, and add a later Operator catalog transfer so a server plus WebUI install can export and import without the desktop app. Import publishes the replacement database by rename.
