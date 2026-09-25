@@ -19,6 +19,7 @@ Instructions:
 
 Commit Message:
 
-Docs: Split the SQLite catalog cutover into a session milestone
+Bugfix: Make Windows catalog publish durable without a directory flush
 
-- Add a Core catalog session milestone before the server cutover, and shift the later library list-query milestones up by one.
+- Publish `library.db` on Windows with a write-through rename, and sync the directory only on Linux and macOS.
+- Clear the read-only attribute before catalog tests delete a temp directory.

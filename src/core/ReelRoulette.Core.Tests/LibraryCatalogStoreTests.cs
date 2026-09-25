@@ -370,9 +370,9 @@ public sealed class LibraryCatalogStoreTests
     }
 
     [Fact]
-    public void DirectorySyncDesiredAccess_IsFileListDirectory()
+    public void WindowsPublishMoveFlags_IsWriteThrough()
     {
-        Assert.Equal(1u, LibraryCatalogStore.DirectorySyncDesiredAccess);
+        Assert.Equal(8u, LibraryCatalogStore.WindowsPublishMoveFlags);
     }
 
     [Fact]
@@ -670,6 +670,18 @@ public sealed class LibraryCatalogStoreTests
         {
             try
             {
+                if (Directory.Exists(Path))
+                {
+                    foreach (var file in Directory.EnumerateFiles(Path, "*", SearchOption.AllDirectories))
+                    {
+                        var attributes = File.GetAttributes(file);
+                        if ((attributes & FileAttributes.ReadOnly) != 0)
+                        {
+                            File.SetAttributes(file, attributes & ~FileAttributes.ReadOnly);
+                        }
+                    }
+                }
+
                 Directory.Delete(Path, recursive: true);
             }
             catch (IOException)

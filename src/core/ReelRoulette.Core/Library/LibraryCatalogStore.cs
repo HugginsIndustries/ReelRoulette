@@ -108,7 +108,7 @@ public static class LibraryCatalogStore
     public const string SnapshotAlreadyExistsMessage =
         "library.json was not migrated because library.json.migrated already exists.";
 
-    internal const uint DirectorySyncDesiredAccess = 1;
+    internal const uint WindowsPublishMoveFlags = 0x8;
 
     private const int SqliteNotADatabase = 26;
     private const int SqliteCorrupt = 11;
@@ -223,7 +223,7 @@ public static class LibraryCatalogStore
                 throw new InvalidOperationException(SnapshotAlreadyExistsMessage);
             }
 
-            File.Move(tempPath, databasePath);
+            PublishDatabase(tempPath, databasePath);
             published = true;
             SyncDirectory(directory, options);
             File.Move(libraryPath, migratedPath);
@@ -1196,6 +1196,22 @@ public static class LibraryCatalogStore
         stream.Flush(true);
     }
 
+    private static void PublishDatabase(string tempPath, string databasePath)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            if (!MoveFileExW(tempPath, databasePath, WindowsPublishMoveFlags))
+            {
+                var error = Marshal.GetLastWin32Error();
+                throw new IOException($"Could not publish '{databasePath}'. Error {error}.");
+            }
+
+            return;
+        }
+
+        File.Move(tempPath, databasePath);
+    }
+
     private static void SyncDirectory(string directory, LibraryCatalogOpenOptions? options)
     {
         if (options?.DirectorySync != null)
@@ -1206,7 +1222,7 @@ public static class LibraryCatalogStore
 
         if (OperatingSystem.IsWindows())
         {
-            SyncDirectoryWindows(directory);
+            // The publish rename uses MOVEFILE_WRITE_THROUGH, so the new name is already on disk.
             return;
         }
 
@@ -1241,54 +1257,8 @@ public static class LibraryCatalogStore
         }
     }
 
-    private static void SyncDirectoryWindows(string directory)
-    {
-        const uint shareReadWriteDelete = 0x1 | 0x2 | 0x4;
-        const uint openExisting = 3;
-        const uint fileFlagBackupSemantics = 0x02000000;
-
-        var handle = CreateFileW(
-            directory,
-            DirectorySyncDesiredAccess,
-            shareReadWriteDelete,
-            IntPtr.Zero,
-            openExisting,
-            fileFlagBackupSemantics,
-            IntPtr.Zero);
-        if (handle == IntPtr.Zero || handle == new IntPtr(-1))
-        {
-            throw new IOException($"Could not open '{directory}' to sync it. Error {Marshal.GetLastWin32Error()}.");
-        }
-
-        try
-        {
-            if (!FlushFileBuffers(handle))
-            {
-                var error = Marshal.GetLastWin32Error();
-                throw new IOException($"Could not sync '{directory}'. Error {error}.");
-            }
-        }
-        finally
-        {
-            _ = CloseHandle(handle);
-        }
-    }
-
-    [DllImport("kernel32.dll", EntryPoint = "CreateFileW", SetLastError = true, CharSet = CharSet.Unicode)]
-    private static extern IntPtr CreateFileW(
-        string lpFileName,
-        uint dwDesiredAccess,
-        uint dwShareMode,
-        IntPtr lpSecurityAttributes,
-        uint dwCreationDisposition,
-        uint dwFlagsAndAttributes,
-        IntPtr hTemplateFile);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern bool FlushFileBuffers(IntPtr hFile);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern bool CloseHandle(IntPtr hObject);
+    [DllImport("kernel32.dll", EntryPoint = "MoveFileExW", SetLastError = true, CharSet = CharSet.Unicode)]
+    private static extern bool MoveFileExW(string lpExistingFileName, string lpNewFileName, uint dwFlags);
 
     [DllImport("libc", EntryPoint = "open", SetLastError = true)]
     private static extern int open(string pathname, int flags);
