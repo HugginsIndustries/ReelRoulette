@@ -91,14 +91,41 @@ Do not use this file for detailed architecture explanation or current capability
 
 Last milestone completed: M10i1
 
-### M10i2 - SQLite Library Catalog Cutover
+### M10i2 - SQLite Library Catalog Session
+
+- **Status**: ⏳ Planned
+- **Goal**: Add a Core catalog session whose mutations are transactional row updates, and a projection builder for the current library document shape, without opening that database from the running server.
+- **Scope**:
+  - Depends on: SQLite library catalog store.
+  - `Open` stays the health and migration gate. `Opened` returns a session for the published database. `Refused` returns no session and does not create an empty catalog. `Absent` (no `library.db` and no `library.json`) creates an empty healthy database.
+  - Each operation uses its own connection, WAL, and a short busy timeout. A shared connection is not safe across the refresh pipeline and request threads. Mutations update the affected rows. They do not load a snapshot and write every row back.
+  - Row writes cover the live catalog writers the cutover will move: sources (insert, display name, enabled flag); items (insert, path and identity, delete, favorite with blacklist cleared, blacklist, play count and last played, clear playback stats, fingerprint fields, duration, loudness, file size, last write time); tags and categories (upsert, rename, delete, catalog sync, per-item tag add, remove, and replace). `availableTags` stays as migrated. New writes do not invent a second tag list.
+  - `loudnessError` is a nullable item column. Opening a version 1 database adds that column and sets `user_version` to 2. A failed upgrade stays refused and is not half-migrated. Version 1 JSON migration behavior stays as it is.
+  - Each committing transaction increments a `catalog_meta` revision so the cutover can drop playback's file-timestamp cache.
+  - The session can build the current library document from SQLite: sources, items, categories, tags, and legacy `availableTags` when that list was present. `mediaType` and `fingerprintStatus` are integers. `duration` is an `hh:mm:ss` string. Both current clients already parse those forms. Thumbnail fields are not in this document. `fingerprintIndex` is not emitted.
+  - The running server still reads and writes `library.json` and does not open `library.db`.
+- **Acceptance criteria**:
+  - A missing database and missing `library.json` produce an empty healthy `library.db`. A refused database does not.
+  - A version 1 database opens at `user_version` 2 with `loudnessError` stored. A failed upgrade does not leave a half-migrated database.
+  - A committed row update is still present after another connection commits a different row. A tag update is not wiped by a later source-enabled update.
+  - Built projection JSON uses integer `mediaType` and `fingerprintStatus` and an `hh:mm:ss` duration. Thumbnail fields and `fingerprintIndex` are absent.
+  - The revision increments only when a transaction commits.
+  - The running server still reads and writes `library.json`. It does not open `library.db`.
+- **Verification evidence**:
+  - Evidence placeholders maintained at planned state; completion evidence must include core tests for empty create, version 1 upgrade to `user_version` 2 with `loudness_error`, refused and crash-before-publish behavior unchanged, a favorite update and a duration update on two connections both remaining, a tag update surviving a later source-enabled update, projection integers and `hh:mm:ss` duration, and revision bumps only on commit.
+  - `ReelRoulette.Server` still has no runtime use of the catalog session. Startup does not open `library.db`.
+- **Deferrals / Follow-ups**:
+  - Opening this session from the running server, moving live readers and writers onto it, auto-tag scan scope, projection served from SQLite, and disabling export, import, and JSON catalog backups are the next slice in this store/query sequence.
+  - Account tables in this database are deferred to the account and PIN data model work. They extend `user_version` rather than replacing this catalog schema.
+
+### M10i3 - SQLite Library Catalog Cutover
 
 - **Status**: ⏳ Planned
 - **Goal**: Make the SQLite catalog the live library store so catalog mutations are transactional row updates instead of whole-document JSON rewrites.
 - **Scope**:
-  - Depends on: SQLite library catalog store.
-  - On startup, open the catalog store so a healthy `library.db` is authoritative and a missing `library.db` migrates `library.json` using that store.
-  - Move every live catalog reader and writer onto the database: library operations (source import, tags, favorites, blacklist, playback stats, duplicates, auto-tag, stats, and projection), the refresh pipeline, source enabled state, and playback's catalog cache. Each updates the affected rows rather than loading and writing the entire catalog document.
+  - Depends on: SQLite library catalog session.
+  - On startup, open the catalog session so a healthy `library.db` is authoritative and a missing `library.db` migrates `library.json` using that store.
+  - Move every live catalog reader and writer onto the database: library operations (source import, tags, favorites, blacklist, playback stats, duplicates, auto-tag, stats, and projection), the refresh pipeline, source enabled state, and playback's catalog cache. Each updates the affected rows rather than loading and writing the entire catalog document. Playback cache invalidation uses the session revision, not `library.json` last-write time.
   - After migration, do not treat leftover `library.json` as a source of truth: do not dual-write it, do not read it for live catalog operations, and do not copy it for export or backup.
   - Disable desktop Library Export / Import and server `library.json` catalog backups after migration, with a clear unavailable message; do not export, import, or back up a stale JSON snapshot.
   - Make auto-tag scan scope server-authoritative. `scanFullLibrary: true` scans every item and ignores the client list. `scanFullLibrary: false` with no list scans enabled sources only (zero enabled sources scans nothing). An explicit list scans those items. Values in that list are full paths, matched the way scan matches `fullPath` today, so current clients keep working.
@@ -112,7 +139,7 @@ Last milestone completed: M10i1
   - Auto-tag scan with `scanFullLibrary: false` and no path list matches enabled sources only. An explicit path list still scans those paths. `scanFullLibrary: true` scans every item.
   - Existing clients can still load the library through the current full-catalog projection API.
 - **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include core/server tests for row-level persist of representative mutations, a concurrent refresh-plus-tag-apply case that keeps both writes, auto-tag enabled-source scope without a path list, path-list scan still matching `fullPath`, and export/import/JSON-backup paths refusing leftover JSON.
+  - Evidence placeholders maintained at planned state; completion evidence must include server tests for row-level persist of representative mutations, a concurrent refresh-plus-tag-apply case that keeps both writes, auto-tag enabled-source scope without a path list, path-list scan still matching `fullPath`, and export/import/JSON-backup paths refusing leftover JSON.
   - Completion evidence must include a packaged server opening `library.db`.
   - Docs evidence must identify SQLite as the live catalog store, document the temporary export/import/backup unavailability, and not document unimplemented list-query browse or new export formats as shipping.
 - **Deferrals / Follow-ups**:
@@ -121,7 +148,7 @@ Last milestone completed: M10i1
   - Removing `GET /api/library/projection` is deferred until both clients browse through the list-query API.
   - Account tables in this database are deferred to the account and PIN data model work. They extend `user_version` rather than replacing this catalog schema.
 
-### M10i3 - Library List Query API
+### M10i4 - Library List Query API
 
 - **Status**: ⏳ Planned
 - **Goal**: Add a server-authoritative library list/query API so browse filter, search, sort, and paging run on the server.
@@ -147,7 +174,7 @@ Last milestone completed: M10i1
   - Infinite-scroll client behavior is out of scope here.
   - Library export, import, and JSON catalog backups remain disabled until the library catalog export and import cutover. That gap is intentional because this store/query sequence ships as one release, ahead of the later account and Operator milestones.
 
-### M10i4 - Desktop Library Query Cutover
+### M10i5 - Desktop Library Query Cutover
 
 - **Status**: ⏳ Planned
 - **Goal**: Cut the desktop library panel over to the server list/query API with fill-on-scroll, without keeping a full local catalog replica for browse.
@@ -174,7 +201,7 @@ Last milestone completed: M10i1
   - Jump-to-middle scrollbar accuracy without loading the result prefix remains out of scope. Shift-click range selection of items that are not yet loaded is the same limitation.
   - Removing the startup full-catalog fetch, and moving the video/photo header and now-playing tag grouping off that replica, is deferred until full-catalog projection is removed or explicitly documented as leftover.
 
-### M10i5 - WebUI Library Query Cutover
+### M10i6 - WebUI Library Query Cutover
 
 - **Status**: ⏳ Planned
 - **Goal**: Cut the WebUI library overlay over to the same list/query API as desktop so both clients browse identically through the server.
@@ -196,7 +223,7 @@ Last milestone completed: M10i1
 - **Deferrals / Follow-ups**:
   - Export/import format cutover is the next slice in this store/query sequence.
 
-### M10i6 - Library Catalog Export and Import Cutover
+### M10i7 - Library Catalog Export and Import Cutover
 
 - **Status**: ⏳ Planned
 - **Goal**: Re-enable library export, import, and catalog backups around a live SQLite `.db` in the existing zip envelope, keep JSON dump as a separate non-restore action, and keep importing existing `library.json` zips.

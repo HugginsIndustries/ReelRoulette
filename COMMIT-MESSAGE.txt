@@ -19,12 +19,6 @@ Instructions:
 
 Commit Message:
 
-M10i1: Add a SQLite library catalog store and JSON migration
+Docs: Split the SQLite catalog cutover into a session milestone
 
-- Migrate library.json into library.db in the roaming config directory, and leave the running server reading and writing library.json.
-- Publish the database only after it is committed and synced through a writable handle, sync the directory after that publish (directory-list access on Windows), and rename library.json only after the directory sync succeeds.
-- Quarantine a partial, unversioned, corrupt, or non-database file, including one whose header opens but whose rows are corrupt, without consuming library.json or the migration-time snapshot. Leave a locked or busy library.db in place and fail that open within about a second.
-- Do not publish library.db when library.json.migrated is already present, and name that snapshot only when the file exists.
-- Keep a missing fingerprintStatus null so a legacy SHA-256 fingerprint can still count as ready.
-- Match the server loader: skip a source that lacks an id or root path, skip an item with no full path, force the uncategorized category name and sort order (and add it when missing), and keep the last tag when names collide case-insensitively.
-- Disable pooling on catalog test connections so Windows can rename and delete library.db.
+- Add a Core catalog session milestone before the server cutover, and shift the later library list-query milestones up by one.
