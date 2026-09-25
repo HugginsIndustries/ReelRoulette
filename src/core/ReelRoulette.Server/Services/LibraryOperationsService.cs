@@ -1,10 +1,28 @@
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging.Abstractions;
 using ReelRoulette.Core.Fingerprints;
+using ReelRoulette.Core.Library;
 using ReelRoulette.Core.Storage;
 using ReelRoulette.Server.Contracts;
 
 namespace ReelRoulette.Server.Services;
+
+public static class LibraryQueryLimits
+{
+    public const int DefaultLimit = 100;
+    public const int MaxLimit = 500;
+}
+
+public sealed class LibraryQueryOutcome
+{
+    public bool Accepted { get; init; }
+    public string? Error { get; init; }
+    public JsonObject? Body { get; init; }
+
+    public static LibraryQueryOutcome Reject(string error) => new() { Accepted = false, Error = error };
+
+    public static LibraryQueryOutcome Ok(JsonObject body) => new() { Accepted = true, Body = body };
+}
 
 public sealed class LibraryOperationsService
 {
@@ -131,6 +149,62 @@ public sealed class LibraryOperationsService
         {
             return LoadLibraryRoot();
         }
+    }
+
+    public LibraryQueryOutcome QueryLibrary(LibraryQueryRequest? request)
+    {
+        request ??= new LibraryQueryRequest();
+        if (!TryParseSort(request.SortMode, out var sort, out var sortError))
+        {
+            return LibraryQueryOutcome.Reject(sortError!);
+        }
+
+        var offset = request.Offset ?? 0;
+        if (offset < 0)
+        {
+            return LibraryQueryOutcome.Reject("offset must be zero or greater");
+        }
+
+        var limit = request.Limit ?? LibraryQueryLimits.DefaultLimit;
+        if (limit < 1 || limit > LibraryQueryLimits.MaxLimit)
+        {
+            return LibraryQueryOutcome.Reject($"limit must be from 1 through {LibraryQueryLimits.MaxLimit}");
+        }
+
+        if (!LibraryListFilterParser.TryParse(request.FilterState, out var filter, out var filterError))
+        {
+            return LibraryQueryOutcome.Reject(filterError!);
+        }
+
+        LibraryListResult page;
+        lock (_lock)
+        {
+            page = _catalog.Session.QueryList(new LibraryListRequest
+            {
+                Search = request.Search,
+                Filter = filter,
+                Sort = sort,
+                SortDescending = request.SortDescending ?? false,
+                Offset = offset,
+                Limit = limit
+            });
+        }
+
+        var items = new JsonArray();
+        foreach (var item in page.Items)
+        {
+            items.Add(LibraryCatalogSession.ToItemJson(item));
+        }
+
+        AppendServerLog(
+            "info",
+            $"Library query offset={offset} limit={limit} sort={sort} descending={request.SortDescending ?? false} total={page.TotalCount} baseline={page.SearchBaselineCount} returned={page.Items.Count}.");
+        return LibraryQueryOutcome.Ok(new JsonObject
+        {
+            ["items"] = items,
+            ["totalCount"] = page.TotalCount,
+            ["searchBaselineCount"] = page.SearchBaselineCount
+        });
     }
 
     public LibraryStatsResponse GetLibraryStats()
@@ -1128,6 +1202,42 @@ public sealed class LibraryOperationsService
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to append client log.");
+        }
+    }
+
+    private static bool TryParseSort(string? sortMode, out LibraryListSort sort, out string? error)
+    {
+        if (string.IsNullOrWhiteSpace(sortMode))
+        {
+            sort = LibraryListSort.Name;
+            error = null;
+            return true;
+        }
+
+        foreach (var name in Enum.GetNames<LibraryListSort>())
+        {
+            if (string.Equals(name, sortMode.Trim(), StringComparison.OrdinalIgnoreCase))
+            {
+                sort = Enum.Parse<LibraryListSort>(name);
+                error = null;
+                return true;
+            }
+        }
+
+        sort = LibraryListSort.Name;
+        error = "sortMode must be Name, LastPlayed, PlayCount, Duration, or DateAdded";
+        return false;
+    }
+
+    private void AppendServerLog(string level, string message)
+    {
+        try
+        {
+            File.AppendAllText(_logPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] [server] [{level}] {message}{Environment.NewLine}");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to append library query log.");
         }
     }
 

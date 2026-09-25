@@ -19,9 +19,9 @@ Core/server domain services own business rules and persisted state semantics.
 - `src/core/ReelRoulette.Core/*`
   - filtering/randomization helpers, storage abstractions, verification modules, **`LibraryGridLayout`** (shared justified-row thumbnail grid layout).
 - `src/core/ReelRoulette.Core/Library/LibraryCatalogStore.cs` and `LibraryCatalogSession.cs`
-  - SQLite catalog at `library.db` (WAL, `user_version` 1) is the live library store. Startup opens it, migrates a missing database from `library.json`, and updates catalog rows in place. Leftover `library.json` is not a live reader, writer, export, or backup. Desktop library export and import are unavailable until catalog transfer returns.
+  - SQLite catalog at `library.db` (WAL, `user_version` 1) is the live library store. Startup opens it, migrates a missing database from `library.json`, and updates catalog rows in place. `LibraryCatalogSession.QueryList` is the browse query (enabled sources, search, filter, sort, paging). Leftover `library.json` is not a live reader, writer, export, or backup. Desktop library export and import are unavailable until catalog transfer returns.
 - `src/core/ReelRoulette.Server/Services/LibraryOperationsService.cs`
-  - source import, duplicate scan/apply, auto-tag scan/apply, playback-stats clear, related command orchestration.
+  - source import, library list/query (`POST /api/library/query`), duplicate scan/apply, auto-tag scan/apply, playback-stats clear, related command orchestration.
 - `src/core/ReelRoulette.Server/Services/RefreshPipelineService.cs`
   - unified refresh pipeline stage execution (including `fingerprintScan` for per-file SHA-256 backfill), overlap guards, status snapshots, thumbnail generation/invalidation, duration/loudness scans, server-scheduled **auto-refresh**, and **library projection thumbnail metadata enrichment** at serve time.
 - `src/core/ReelRoulette.Server/Services/ServerStateService.cs`

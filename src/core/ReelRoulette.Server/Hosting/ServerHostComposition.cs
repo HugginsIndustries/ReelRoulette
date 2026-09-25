@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Net;
 using Microsoft.AspNetCore.StaticFiles;
 using ReelRoulette.Server.Auth;
@@ -308,6 +309,22 @@ public static class ServerHostComposition
             var projection = operations.GetLibraryProjection();
             refresh.EnrichLibraryProjection(projection);
             return Results.Json(projection);
+        });
+
+        app.MapPost("/api/library/query", (LibraryQueryRequest? request, LibraryOperationsService operations, RefreshPipelineService refresh) =>
+        {
+            var outcome = operations.QueryLibrary(request);
+            if (!outcome.Accepted || outcome.Body == null)
+            {
+                return Results.BadRequest(new { error = outcome.Error ?? "Invalid library query" });
+            }
+
+            if (outcome.Body["items"] is JsonArray items)
+            {
+                refresh.EnrichListedItems(items);
+            }
+
+            return Results.Json(outcome.Body);
         });
 
         app.MapGet("/api/library/stats", (LibraryOperationsService operations) =>

@@ -28,6 +28,7 @@ Use `pwsh ./tools/scripts/reset-checklist.ps1` to reset metadata/check states be
 
 ## Server Baseline + Tray
 
+- [ ] `POST /api/library/query` returns a page with `totalCount` and `searchBaselineCount`, keeps missing files, and leaves `GET /api/library/projection` available for current clients.
 - [x] `ReelRoulette.ServerApp` starts without fatal startup errors.
 - [x] `/health` and WebUI static assets respond correctly.
 - [x] Server launches with no command prompt window on Windows.

@@ -89,33 +89,7 @@ Do not use this file for detailed architecture explanation or current capability
 
 ## Active Milestones
 
-Last milestone completed: M10i3
-
-### M10i4 - Library List Query API
-
-- **Status**: ⏳ Planned
-- **Goal**: Add a server-authoritative library list/query API so browse filter, search, sort, and paging run on the server.
-- **Scope**:
-  - Depends on: SQLite library catalog cutover.
-  - Define OpenAPI list/query contracts that accept `filterState`, free-text search, sort, and offset/limit. Apply the desktop library-panel order: enabled sources, then a filename and relative-path substring search, then `FilterState`, then sort. Search uses the invariant-lowercase fold column, accent-sensitive, matching desktop `ToLowerInvariant` substring match. Name sort uses an `OrdinalIgnoreCase` collation, accent-sensitive, matching desktop, not the fold column. Missing files stay in the result.
-  - Return items plus `totalCount` (after search and filter; the pageable set) and `searchBaselineCount` (after search, before filter) so WebUI can keep "Showing N of M".
-  - Sort modes are Name, LastPlayed, PlayCount, Duration, and DateAdded, each with direction. Direction applies only to the primary key. Null last-played, duration, and last-write sort as the minimum, as in the desktop panel. Ties follow filename with `OrdinalIgnoreCase` ascending, as in the desktop panel `ThenBy`, then item id ascending, including when the primary sort is descending, so offset pages do not skip or repeat ties.
-  - Include per-item thumbnail layout fields (`hasThumbnail`, `thumbnailWidth`, `thumbnailHeight`) on listed items without stating thumbnail files for the entire catalog on each request.
-  - Update generated clients, API docs, and validation/error behavior for the new query surface.
-  - Keep the existing full-catalog projection endpoint until both clients have cut over.
-- **Acceptance criteria**:
-  - Clients can request a window of library items with desktop library-panel filter, search, and sort semantics, including missing files and invariant case folding.
-  - Responses include `totalCount`, `searchBaselineCount`, and enough thumbnail layout metadata for justified-row virtualization.
-  - Equal sort keys stay in ascending filename order, then item id ascending, across adjacent offset windows, including when the primary sort is descending, with no skipped or repeated rows.
-  - Query results honor server-owned source enabled state. They do not drop items whose files are missing.
-  - Contract documentation describes list/query as the browse path and does not treat full-catalog projection as the long-term browse API.
-- **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include server API tests for filter/search/sort/paging, the search-then-filter count split, null sort placement, ascending filename-then-id tie-break stability across offset windows, including a descending primary sort, empty and large-offset windows, missing-file inclusion, and thumbnail metadata on listed items.
-  - Contract evidence must include OpenAPI and docs updates plus generated client verification where applicable.
-- **Deferrals / Follow-ups**:
-  - Desktop and WebUI browse cutover to this API are later slices in this store/query sequence.
-  - Infinite-scroll client behavior is out of scope here.
-  - Library export, import, and JSON catalog backups remain disabled until the library catalog export and import cutover. That gap is intentional because this store/query sequence ships as one release, ahead of the later account and Operator milestones.
+Last milestone completed: M10i4
 
 ### M10i5 - Desktop Library Query Cutover
 
@@ -1276,6 +1250,34 @@ Last milestone completed: M10i3
 ## Completed Milestones
 
 Latest completions first:
+
+### M10i4 - Library List Query API
+
+- **Status**: ✅ Complete
+- **Goal**: Add a server-authoritative library list/query API so browse filter, search, sort, and paging run on the server.
+- **Scope**:
+  - Depends on: SQLite library catalog cutover.
+  - Define OpenAPI list/query contracts that accept `filterState`, free-text search, sort, and offset/limit. Apply the desktop library-panel order: enabled sources, then a filename and relative-path substring search, then `FilterState`, then sort. Search uses the invariant-lowercase fold column, accent-sensitive, matching desktop `ToLowerInvariant` substring match. Name sort uses an `OrdinalIgnoreCase` collation, accent-sensitive, matching desktop, not the fold column. Missing files stay in the result.
+  - Return items plus `totalCount` (after search and filter; the pageable set) and `searchBaselineCount` (after search, before filter) so WebUI can keep "Showing N of M".
+  - Sort modes are Name, LastPlayed, PlayCount, Duration, and DateAdded, each with direction. Direction applies only to the primary key. Null last-played, duration, and last-write sort as the minimum, as in the desktop panel. Ties follow filename with `OrdinalIgnoreCase` ascending, as in the desktop panel `ThenBy`, then item id ascending, including when the primary sort is descending, so offset pages do not skip or repeat ties.
+  - Include per-item thumbnail layout fields (`hasThumbnail`, `thumbnailWidth`, `thumbnailHeight`) on listed items without stating thumbnail files for the entire catalog on each request.
+  - Update generated clients, API docs, and validation/error behavior for the new query surface.
+  - Keep the existing full-catalog projection endpoint until both clients have cut over.
+- **Acceptance criteria**:
+  - Clients can request a window of library items with desktop library-panel filter, search, and sort semantics, including missing files and invariant case folding.
+  - Responses include `totalCount`, `searchBaselineCount`, and enough thumbnail layout metadata for justified-row virtualization.
+  - Equal sort keys stay in ascending filename order, then item id ascending, across adjacent offset windows, including when the primary sort is descending, with no skipped or repeated rows.
+  - Query results honor server-owned source enabled state. They do not drop items whose files are missing.
+  - Contract documentation describes list/query as the browse path and does not treat full-catalog projection as the long-term browse API.
+- **Verification evidence**:
+  - `LibraryListQueryTests` covers enabled sources then search then filter, the search-then-filter count split, invariant accent-sensitive search, name sort with ordinal ignore-case and id tie-break across descending offset windows, null last-played / duration / last-write placement, play-count and date-added sort, category and legacy tag filters, photo duration/audio skip, missing-file inclusion, empty and large-offset windows, and thumbnail metadata on the returned page only.
+  - `dotnet build ReelRoulette.sln` and `dotnet test ReelRoulette.sln` passed (Core.Tests 201, DesktopApp.Tests 58).
+  - OpenAPI, `docs/api.md`, `CONTEXT.md`, `docs/domain-inventory.md`, and the testing checklist describe list/query as the browse path. `npm run generate:contracts` refreshed `openapi.generated.ts`.
+  - Desktop and WebUI still browse through full-catalog projection. Export and import stay disabled.
+- **Deferrals / Follow-ups**:
+  - Desktop and WebUI browse cutover to this API are later slices in this store/query sequence.
+  - Infinite-scroll client behavior is out of scope here.
+  - Library export, import, and JSON catalog backups remain disabled until the library catalog export and import cutover. That gap is intentional because this store/query sequence ships as one release, ahead of the later account and Operator milestones.
 
 ### M10i3 - SQLite Library Catalog Cutover
 

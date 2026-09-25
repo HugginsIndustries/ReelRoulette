@@ -19,11 +19,8 @@ Instructions:
 
 Commit Message:
 
-M10i3: Make the SQLite catalog the live library store
+M10i4: Add a server library list query
 
-- Open `library.db` at server startup, migrate `library.json` when the database is missing, and stop when that database is refused.
-- Persist catalog edits as one transaction of row updates, including a path rename that only changes casing, and invalidate the playback cache from the catalog revision.
-- Leave leftover `library.json` unread, unwritten, and out of export and backup.
-- Disable library export, import, and JSON catalog backups until catalog transfer returns.
-- Scan auto-tag from enabled sources when the client sends no path list.
-- Treat integer fingerprint status as pending, ready, failed, or stale during duplicate scan.
+- Page the SQLite catalog with desktop library-panel filter, search, sort, and stable tie-breaks.
+- Return `totalCount`, `searchBaselineCount`, and thumbnail layout fields for the page.
+- Keep missing files in the result and leave full-catalog projection in place for current clients.

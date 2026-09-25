@@ -352,6 +352,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/library/query": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Query a page of library items
+         * @description Browse path for library filter, search, sort, and paging. Applies enabled sources, then a filename
+         *     or relative-path substring search, then `filterState`, then sort. `searchBaselineCount` is the count
+         *     after search and before `filterState`. `totalCount` is the pageable count after both. Missing files
+         *     stay in the result. `GET /api/library/projection` remains for current clients until they cut over.
+         */
+        post: operations["postLibraryQuery"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/library/projection": {
         parameters: {
             query?: never;
@@ -359,7 +382,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get current library projection snapshot */
+        /**
+         * Get the full library catalog snapshot
+         * @description Full catalog document for current clients. Not the long-term browse API. New browse traffic uses
+         *     `POST /api/library/query`.
+         */
         get: operations["getLibraryProjection"];
         put?: never;
         post?: never;
@@ -1067,6 +1094,50 @@ export interface components {
             importedCount: number;
             /** Format: int32 */
             updatedCount: number;
+        };
+        LibraryQueryRequest: {
+            /**
+             * @description Omitted or null applies no filter predicates. A present object uses the same field defaults as
+             *     playback filters, including `excludeBlacklisted` true when that field is omitted.
+             */
+            filterState?: {
+                [key: string]: unknown;
+            } | null;
+            /** @description Filename or relative-path substring. Blank or whitespace matches every enabled-source item. */
+            search?: string | null;
+            /**
+             * @default Name
+             * @enum {string|null}
+             */
+            sortMode: "Name" | "LastPlayed" | "PlayCount" | "Duration" | "DateAdded" | null;
+            /**
+             * @description Direction of the primary sort key only. Filename and item id tie-breaks stay ascending.
+             * @default false
+             */
+            sortDescending: boolean;
+            /**
+             * Format: int32
+             * @default 0
+             */
+            offset: number;
+            /**
+             * Format: int32
+             * @default 100
+             */
+            limit: number;
+        };
+        LibraryQueryResponse: {
+            items: components["schemas"]["LibraryProjectionItem"][];
+            /**
+             * Format: int32
+             * @description Count after search and filter. This is the pageable set.
+             */
+            totalCount: number;
+            /**
+             * Format: int32
+             * @description Count after search and before filter.
+             */
+            searchBaselineCount: number;
         };
         /** @description Library item entry in the projection snapshot. Thumbnail metadata is derived from the server thumbnail cache at serve time and is not stored in the catalog. */
         LibraryProjectionItem: {
@@ -2294,6 +2365,39 @@ export interface operations {
                 };
             };
             /** @description Invalid import request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    postLibraryQuery: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["LibraryQueryRequest"];
+            };
+        };
+        responses: {
+            /** @description One page of library items plus counts */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LibraryQueryResponse"];
+                };
+            };
+            /** @description Invalid sort, paging, or filterState */
             400: {
                 headers: {
                     [name: string]: unknown;

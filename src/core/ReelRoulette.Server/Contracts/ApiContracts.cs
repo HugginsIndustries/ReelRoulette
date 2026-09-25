@@ -590,3 +590,13 @@ public sealed class ClientLogRequest
     public string Level { get; set; } = "info";
     public string Message { get; set; } = string.Empty;
 }
+
+public sealed class LibraryQueryRequest
+{
+    public JsonElement? FilterState { get; set; }
+    public string? Search { get; set; }
+    public string? SortMode { get; set; }
+    public bool? SortDescending { get; set; }
+    public int? Offset { get; set; }
+    public int? Limit { get; set; }
+}

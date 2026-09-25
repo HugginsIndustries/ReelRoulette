@@ -222,12 +222,15 @@ public sealed class RefreshPipelineService : BackgroundService
             return;
         }
 
-        var index = LoadThumbnailIndex();
-        if (projection["items"] is not JsonArray items)
+        if (projection["items"] is JsonArray items)
         {
-            return;
+            EnrichListedItems(items);
         }
+    }
 
+    public void EnrichListedItems(JsonArray items)
+    {
+        var index = LoadThumbnailIndex();
         foreach (var node in items)
         {
             if (node is not JsonObject item)

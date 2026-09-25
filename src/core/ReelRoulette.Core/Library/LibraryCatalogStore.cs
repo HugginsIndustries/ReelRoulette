@@ -1128,7 +1128,7 @@ public static class LibraryCatalogStore
         };
     }
 
-    private static DateTime? ReadUtc(SqliteDataReader reader, int ordinal)
+    internal static DateTime? ReadUtc(SqliteDataReader reader, int ordinal)
     {
         if (reader.IsDBNull(ordinal))
         {
@@ -1195,7 +1195,7 @@ public static class LibraryCatalogStore
         command.ExecuteNonQuery();
     }
 
-    private static int ExecuteScalarInt(SqliteConnection connection, string sql)
+    internal static int ExecuteScalarInt(SqliteConnection connection, string sql)
     {
         using var command = connection.CreateCommand();
         command.CommandText = sql;

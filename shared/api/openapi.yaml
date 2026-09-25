@@ -613,9 +613,41 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/library/query:
+    post:
+      summary: Query a page of library items
+      description: |
+        Browse path for library filter, search, sort, and paging. Applies enabled sources, then a filename
+        or relative-path substring search, then `filterState`, then sort. `searchBaselineCount` is the count
+        after search and before `filterState`. `totalCount` is the pageable count after both. Missing files
+        stay in the result. `GET /api/library/projection` remains for current clients until they cut over.
+      operationId: postLibraryQuery
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LibraryQueryRequest"
+      responses:
+        "200":
+          description: One page of library items plus counts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LibraryQueryResponse"
+        "400":
+          description: Invalid sort, paging, or filterState
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/library/projection:
     get:
-      summary: Get current library projection snapshot
+      summary: Get the full library catalog snapshot
+      description: |
+        Full catalog document for current clients. Not the long-term browse API. New browse traffic uses
+        `POST /api/library/query`.
       operationId: getLibraryProjection
       responses:
         "200":
@@ -1910,6 +1942,66 @@ components:
         updatedCount:
           type: integer
           format: int32
+
+    LibraryQueryRequest:
+      type: object
+      properties:
+        filterState:
+          type: object
+          nullable: true
+          additionalProperties: true
+          description: |
+            Omitted or null applies no filter predicates. A present object uses the same field defaults as
+            playback filters, including `excludeBlacklisted` true when that field is omitted.
+        search:
+          type: string
+          nullable: true
+          description: Filename or relative-path substring. Blank or whitespace matches every enabled-source item.
+        sortMode:
+          type: string
+          nullable: true
+          enum:
+            - Name
+            - LastPlayed
+            - PlayCount
+            - Duration
+            - DateAdded
+          default: Name
+        sortDescending:
+          type: boolean
+          default: false
+          description: Direction of the primary sort key only. Filename and item id tie-breaks stay ascending.
+        offset:
+          type: integer
+          format: int32
+          minimum: 0
+          default: 0
+        limit:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 500
+          default: 100
+
+    LibraryQueryResponse:
+      type: object
+      required:
+        - items
+        - totalCount
+        - searchBaselineCount
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/LibraryProjectionItem"
+        totalCount:
+          type: integer
+          format: int32
+          description: Count after search and filter. This is the pageable set.
+        searchBaselineCount:
+          type: integer
+          format: int32
+          description: Count after search and before filter.
 
     LibraryProjectionItem:
       type: object
