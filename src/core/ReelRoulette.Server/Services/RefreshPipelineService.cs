@@ -94,7 +94,8 @@ public sealed class RefreshPipelineService : BackgroundService
     private readonly ILogger<RefreshPipelineService> _logger;
     private readonly FileFingerprintService _fingerprintService = new();
     private readonly object _runLock = new();
-    private readonly string _libraryPath;
+    private readonly LibraryCatalogHost _catalog;
+    private JsonObject? _libraryBaseline;
     private readonly string _thumbnailDir;
     private readonly string _thumbnailIndexPath;
     private readonly CoreSettingsService _coreSettings;
@@ -106,7 +107,8 @@ public sealed class RefreshPipelineService : BackgroundService
         ServerStateService state,
         ILogger<RefreshPipelineService> logger,
         CoreSettingsService coreSettings,
-        string? appDataPathOverride = null)
+        string? appDataPathOverride = null,
+        LibraryCatalogHost? catalog = null)
     {
         _state = state;
         _logger = logger;
@@ -114,7 +116,7 @@ public sealed class RefreshPipelineService : BackgroundService
         var roamingAppData = appDataPathOverride ??
                              Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ReelRoulette");
         Directory.CreateDirectory(roamingAppData);
-        _libraryPath = Path.Combine(roamingAppData, "library.json");
+        _catalog = catalog ?? LibraryCatalogHost.Open(roamingAppData);
 
         var localAppData = appDataPathOverride ??
                            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ReelRoulette");
@@ -1328,26 +1330,25 @@ public sealed class RefreshPipelineService : BackgroundService
             $"Thumbnail generation complete ({generated} generated, {regenerated} regenerated, {reused} reused, {failed} failed, {metadataUpdated} metadata updated, {skippedMissing} missing source, {staleRemoved} stale removed, {evicted} evicted)");
     }
 
-    private async Task<JsonObject> LoadLibraryJsonAsync(CancellationToken cancellationToken)
+    private Task<JsonObject> LoadLibraryJsonAsync(CancellationToken cancellationToken)
     {
-        if (!File.Exists(_libraryPath))
-        {
-            return new JsonObject
-            {
-                ["sources"] = new JsonArray(),
-                ["items"] = new JsonArray()
-            };
-        }
-
-        await using var stream = File.OpenRead(_libraryPath);
-        var node = await JsonNode.ParseAsync(stream, cancellationToken: cancellationToken) as JsonObject;
-        return node ?? new JsonObject { ["sources"] = new JsonArray(), ["items"] = new JsonArray() };
+        cancellationToken.ThrowIfCancellationRequested();
+        var baseline = _catalog.LoadDocument();
+        _libraryBaseline = baseline;
+        return Task.FromResult(baseline.DeepClone() as JsonObject ?? new JsonObject());
     }
 
     private Task SaveLibraryJsonAsync(JsonObject root, CancellationToken cancellationToken)
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(_libraryPath)!);
-        return File.WriteAllTextAsync(_libraryPath, root.ToJsonString(JsonOptions), cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (_libraryBaseline == null)
+        {
+            throw new InvalidOperationException("Catalog edit has no baseline.");
+        }
+
+        _catalog.SaveChanges(_libraryBaseline, root);
+        _libraryBaseline = null;
+        return Task.CompletedTask;
     }
 
     private IEnumerable<string> EnumerateMediaFiles(string rootPath)
@@ -1403,7 +1404,7 @@ public sealed class RefreshPipelineService : BackgroundService
         {
             var info = new FileInfo(fullPath);
             var oldSize = item["fileSizeBytes"]?.GetValue<long?>();
-            var oldWrite = item["lastWriteTimeUtc"]?.GetValue<DateTime?>();
+            var oldWrite = ReadUtc(item["lastWriteTimeUtc"]);
             item["fileSizeBytes"] = info.Length;
             item["lastWriteTimeUtc"] = info.LastWriteTimeUtc;
 
@@ -1534,11 +1535,42 @@ public sealed class RefreshPipelineService : BackgroundService
         nextStatusUtc = now.AddMilliseconds(500);
     }
 
+    private static DateTime? ReadUtc(JsonNode? node)
+    {
+        if (node is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            var value = node.GetValue<DateTime>();
+            return value.Kind == DateTimeKind.Utc ? value : value.ToUniversalTime();
+        }
+        catch
+        {
+            try
+            {
+                var text = node.GetValue<string>();
+                if (DateTime.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var parsed))
+                {
+                    return parsed.Kind == DateTimeKind.Utc ? parsed : parsed.ToUniversalTime();
+                }
+            }
+            catch
+            {
+                return null;
+            }
+
+            return null;
+        }
+    }
+
     private static string GetThumbnailSourceRevision(JsonObject item, string fullPath)
     {
         var info = new FileInfo(fullPath);
         var fingerprint = item["fingerprint"]?.GetValue<string>() ?? string.Empty;
-        var writeUtc = item["lastWriteTimeUtc"]?.GetValue<DateTime?>() ?? info.LastWriteTimeUtc;
+        var writeUtc = ReadUtc(item["lastWriteTimeUtc"]) ?? info.LastWriteTimeUtc;
         var size = item["fileSizeBytes"]?.GetValue<long?>() ?? info.Length;
         return $"{fingerprint}|{size}|{writeUtc:O}";
     }

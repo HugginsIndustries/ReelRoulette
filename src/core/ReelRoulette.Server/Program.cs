@@ -24,6 +24,7 @@ builder.Services.AddSingleton(runtimeOptions);
 builder.Services.AddReelRouletteServer();
 
 var app = builder.Build();
+_ = app.Services.GetRequiredService<LibraryCatalogHost>();
 app.MapReelRouletteEndpoints(runtimeOptions);
 corsOrigins.Start(
     app.Services.GetRequiredService<CoreSettingsService>(),

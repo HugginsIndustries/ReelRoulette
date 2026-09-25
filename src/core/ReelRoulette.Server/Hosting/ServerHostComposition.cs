@@ -16,9 +16,19 @@ public static class ServerHostComposition
     {
         services.AddSingleton(sp =>
         {
-            var logger = sp.GetRequiredService<ILogger<ServerStateService>>();
             var appDataRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ReelRoulette");
-            return new ServerStateService(logger, appDataRoot);
+            var host = LibraryCatalogHost.Open(appDataRoot);
+            sp.GetRequiredService<ILogger<LibraryCatalogHost>>().LogInformation(
+                "Opened library catalog {DatabasePath}.",
+                host.Session.DatabasePath);
+            return host;
+        });
+        services.AddSingleton(sp =>
+        {
+            var logger = sp.GetRequiredService<ILogger<ServerStateService>>();
+            var catalog = sp.GetRequiredService<LibraryCatalogHost>();
+            var appDataRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ReelRoulette");
+            return new ServerStateService(logger, appDataRoot, catalog);
         });
         services.AddSingleton(sp =>
         {

@@ -130,11 +130,8 @@ Use `pwsh ./tools/scripts/reset-checklist.ps1` to reset metadata/check states be
 - [x] Tag chips render correctly in both light and dark themes.
 - [x] Filter dialog Tags tab shows per-category collapse toggles and legacy flat tag model renders correctly.
 - [x] Clear playback stats flow works with confirmation.
-- [x] `Library → Export Library…` saves a zip with expected contents based on selected options.
-- [x] `Library → Import Library…` lists source paths from the zip and allows remap or skip per source.
-- [x] Import shows an overwrite confirmation when a non-empty library already exists.
-- [x] After import, server resync succeeds and media plays when paths are valid.
-- [x] Cross-platform round-trip (Windows ↔ Linux) completes without path errors.
+- [ ] `Library → Export Library…` shows that export, import, and catalog backups are unavailable and does not write a zip.
+- [ ] `Library → Import Library…` shows the same message and does not read a zip.
 
 ## Cross-Client Parity + Sync
 

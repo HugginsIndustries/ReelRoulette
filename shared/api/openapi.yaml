@@ -591,7 +591,7 @@ paths:
 
   /api/sources/import:
     post:
-      summary: Import a media source folder into library.json
+      summary: Import a media source folder into the SQLite catalog
       operationId: postSourceImport
       requestBody:
         required: true
@@ -1913,7 +1913,7 @@ components:
 
     LibraryProjectionItem:
       type: object
-      description: Library item entry in the projection snapshot. Thumbnail metadata is derived from the server thumbnail cache at serve time and is not persisted in library.json.
+      description: Library item entry in the projection snapshot. Thumbnail metadata is derived from the server thumbnail cache at serve time and is not stored in the catalog.
       additionalProperties: true
       properties:
         id:
@@ -2518,8 +2518,10 @@ components:
       properties:
         scanFullLibrary:
           type: boolean
+          description: When true, scan every item and ignore itemIds. When false with no itemIds, scan enabled sources only. A non-empty itemIds list is full paths to scan.
         itemIds:
           type: array
+          description: Full paths. Used only when scanFullLibrary is false and the list is non-empty.
           items:
             type: string
 

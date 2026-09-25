@@ -7,6 +7,7 @@ namespace ReelRoulette.Core.Library;
 public sealed class LibraryCatalogSession
 {
     private readonly string _databasePath;
+    private readonly AsyncLocal<WriteScope?> _writeScope = new();
 
     public LibraryCatalogSession(string databasePath)
     {
@@ -44,6 +45,49 @@ public sealed class LibraryCatalogSession
         }
 
         return root;
+    }
+
+    public void RunInTransaction(Action work)
+    {
+        ArgumentNullException.ThrowIfNull(work);
+        if (_writeScope.Value != null)
+        {
+            work();
+            return;
+        }
+
+        using var connection = LibraryCatalogStore.OpenWrite(_databasePath);
+        using var transaction = connection.BeginTransaction();
+        var scope = new WriteScope(connection, transaction);
+        _writeScope.Value = scope;
+        try
+        {
+            work();
+            if (!scope.Changed)
+            {
+                transaction.Rollback();
+                return;
+            }
+
+            LibraryCatalogStore.Execute(
+                connection,
+                transaction,
+                """
+                UPDATE catalog_meta
+                SET value = CAST((CAST(value AS INTEGER) + 1) AS TEXT)
+                WHERE key = 'revision';
+                """);
+            transaction.Commit();
+        }
+        catch
+        {
+            transaction.Rollback();
+            throw;
+        }
+        finally
+        {
+            _writeScope.Value = null;
+        }
     }
 
     public bool InsertSource(string id, string rootPath, string? displayName, bool isEnabled)
@@ -722,6 +766,22 @@ public sealed class LibraryCatalogSession
 
     private bool Commit(Func<SqliteConnection, SqliteTransaction, bool> mutate)
     {
+        if (_writeScope.Value is { } scope)
+        {
+            var savepoint = scope.NextSavepoint();
+            LibraryCatalogStore.Execute(scope.Connection, scope.Transaction, $"SAVEPOINT {savepoint};");
+            if (!mutate(scope.Connection, scope.Transaction))
+            {
+                LibraryCatalogStore.Execute(scope.Connection, scope.Transaction, $"ROLLBACK TO {savepoint};");
+                LibraryCatalogStore.Execute(scope.Connection, scope.Transaction, $"RELEASE {savepoint};");
+                return false;
+            }
+
+            LibraryCatalogStore.Execute(scope.Connection, scope.Transaction, $"RELEASE {savepoint};");
+            scope.Changed = true;
+            return true;
+        }
+
         using var connection = LibraryCatalogStore.OpenWrite(_databasePath);
         using var transaction = connection.BeginTransaction();
         if (!mutate(connection, transaction))
@@ -740,6 +800,25 @@ public sealed class LibraryCatalogSession
             """);
         transaction.Commit();
         return true;
+    }
+
+    private sealed class WriteScope
+    {
+        private int _savepoints;
+
+        public WriteScope(SqliteConnection connection, SqliteTransaction transaction)
+        {
+            Connection = connection;
+            Transaction = transaction;
+        }
+
+        public SqliteConnection Connection { get; }
+
+        public SqliteTransaction Transaction { get; }
+
+        public bool Changed { get; set; }
+
+        public string NextSavepoint() => "catalog_save_" + _savepoints++;
     }
 
     private static void WriteItemTags(SqliteConnection connection, SqliteTransaction transaction, string itemId, IReadOnlyList<string> tags)

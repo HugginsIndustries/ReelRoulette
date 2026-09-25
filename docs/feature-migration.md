@@ -186,7 +186,7 @@ All settings are core-owned and synced via API (`/api/refresh/settings`, `/api/b
 
 **Desktop location:** `LibraryImportRemapDialog.axaml` / `LibraryImportRemapDialog.axaml.cs`, `LibraryExportOptionsDialog.axaml` / `LibraryExportOptionsDialog.axaml.cs`, `LibraryOverwriteConfirmDialog.axaml` / `LibraryOverwriteConfirmDialog.axaml.cs`; backed by `src/clients/desktop/ReelRoulette.LibraryArchive/LibraryArchiveMigration.cs`
 
-Export `library.json`, thumbnails, and desktop settings to a zip archive. Import from a zip with a source-path remapping wizard (handles cross-machine or cross-OS path differences).
+`Library → Export Library…` and `Library → Import Library…` show that library export, import, and catalog backups are unavailable. They do not write or read a zip. The dialogs and `LibraryArchiveMigration` remain in the tree for the later catalog-transfer work.
 
 **Target surface:** Operator UI
 

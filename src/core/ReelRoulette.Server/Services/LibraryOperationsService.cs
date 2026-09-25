@@ -1,4 +1,3 @@
-using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging.Abstractions;
 using ReelRoulette.Core.Fingerprints;
@@ -12,30 +11,24 @@ public sealed class LibraryOperationsService
     private const string UncategorizedCategoryId = "uncategorized";
     private const string UncategorizedCategoryName = "Uncategorized";
 
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
-    {
-        WriteIndented = true,
-        PropertyNameCaseInsensitive = true
-    };
-
     private readonly object _lock = new();
-    private readonly string _libraryPath;
-    private readonly string _coreSettingsPath;
-    private readonly string _backupDirectory;
     private readonly string _logPath;
     private readonly ILogger<LibraryOperationsService> _logger;
+    private readonly LibraryCatalogHost _catalog;
+    private JsonObject? _editBaseline;
+    private bool _loggedBackupUnavailable;
 
-    public LibraryOperationsService(ILogger<LibraryOperationsService>? logger = null, string? appDataPathOverride = null)
+    public LibraryOperationsService(
+        ILogger<LibraryOperationsService>? logger = null,
+        string? appDataPathOverride = null,
+        LibraryCatalogHost? catalog = null)
     {
         _logger = logger ?? NullLogger<LibraryOperationsService>.Instance;
         var appData = appDataPathOverride ??
                       Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ReelRoulette");
         Directory.CreateDirectory(appData);
-        _libraryPath = Path.Combine(appData, "library.json");
-        _coreSettingsPath = Path.Combine(appData, "core-settings.json");
-        _backupDirectory = Path.Combine(appData, "backups");
         _logPath = Path.Combine(appData, "last.log");
-        CreateLibraryBackupIfNeeded();
+        _catalog = catalog ?? LibraryCatalogHost.Open(appData);
     }
 
     public SourceImportResponse ImportSource(SourceImportRequest request)
@@ -855,9 +848,9 @@ public sealed class LibraryOperationsService
             }
 
             var list = scopeItems.ToList();
-            var excludedPending = list.Count(item => string.Equals(GetNodeString(item["fingerprintStatus"]), "Pending", StringComparison.OrdinalIgnoreCase));
-            var excludedFailed = list.Count(item => string.Equals(GetNodeString(item["fingerprintStatus"]), "Failed", StringComparison.OrdinalIgnoreCase));
-            var excludedStale = list.Count(item => string.Equals(GetNodeString(item["fingerprintStatus"]), "Stale", StringComparison.OrdinalIgnoreCase));
+            var excludedPending = list.Count(item => ReadFingerprintStatus(item["fingerprintStatus"]) == 0);
+            var excludedFailed = list.Count(item => ReadFingerprintStatus(item["fingerprintStatus"]) == 2);
+            var excludedStale = list.Count(item => ReadFingerprintStatus(item["fingerprintStatus"]) == 3);
 
             var readyItems = list
                 .Where(IsFingerprintReadyForDuplicateScan)
@@ -998,9 +991,28 @@ public sealed class LibraryOperationsService
             var selectedSet = (request.ItemIds ?? [])
                 .Where(id => !string.IsNullOrWhiteSpace(id))
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
-            var scanItems = request.ScanFullLibrary || selectedSet.Count == 0
-                ? allItems
-                : allItems.Where(item => selectedSet.Contains(item["fullPath"]?.GetValue<string>() ?? string.Empty)).ToList();
+            List<JsonObject> scanItems;
+            if (request.ScanFullLibrary)
+            {
+                scanItems = allItems;
+            }
+            else if (selectedSet.Count == 0)
+            {
+                var enabledSourceIds = (root["sources"] as JsonArray)?.OfType<JsonObject>()
+                    .Where(source => source["isEnabled"]?.GetValue<bool?>() ?? true)
+                    .Select(source => source["id"]?.GetValue<string>() ?? string.Empty)
+                    .Where(id => !string.IsNullOrWhiteSpace(id))
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase) ?? [];
+                scanItems = allItems
+                    .Where(item => enabledSourceIds.Contains(item["sourceId"]?.GetValue<string>() ?? string.Empty))
+                    .ToList();
+            }
+            else
+            {
+                scanItems = allItems
+                    .Where(item => selectedSet.Contains(item["fullPath"]?.GetValue<string>() ?? string.Empty))
+                    .ToList();
+            }
 
             var response = new AutoTagScanResponse();
             foreach (var tagName in tags)
@@ -1121,106 +1133,24 @@ public sealed class LibraryOperationsService
 
     private JsonObject LoadLibraryRoot()
     {
-        if (!File.Exists(_libraryPath))
-        {
-            return new JsonObject
-            {
-                ["sources"] = new JsonArray(),
-                ["items"] = new JsonArray(),
-                ["tags"] = new JsonArray(),
-                ["categories"] = new JsonArray()
-            };
-        }
-
-        try
-        {
-            return JsonNode.Parse(File.ReadAllText(_libraryPath)) as JsonObject ?? new JsonObject();
-        }
-        catch
-        {
-            return new JsonObject
-            {
-                ["sources"] = new JsonArray(),
-                ["items"] = new JsonArray(),
-                ["tags"] = new JsonArray(),
-                ["categories"] = new JsonArray()
-            };
-        }
+        var baseline = _catalog.LoadDocument();
+        _editBaseline = baseline;
+        return baseline.DeepClone() as JsonObject ?? new JsonObject();
     }
 
     private void SaveLibraryRoot(JsonObject root)
     {
-        CreateLibraryBackupIfNeeded();
-        File.WriteAllText(_libraryPath, root.ToJsonString(JsonOptions));
-    }
-
-    private void CreateLibraryBackupIfNeeded()
-    {
-        var policy = ReadBackupPolicy();
-        if (!policy.Enabled || !File.Exists(_libraryPath))
+        if (_editBaseline == null)
         {
-            return;
+            throw new InvalidOperationException("Catalog edit has no baseline.");
         }
 
-        Directory.CreateDirectory(_backupDirectory);
-        var backupFiles = Directory.GetFiles(_backupDirectory, "library.json.backup.*")
-            .Select(path => new FileInfo(path))
-            .OrderBy(BackupFileNaming.GetFileOrderingUtcTimestamp)
-            .ToList();
-
-        var maxBackups = Math.Max(1, policy.NumberOfBackups);
-        var minGapMinutes = Math.Max(1, policy.MinimumBackupGapMinutes);
-        var nowUtc = DateTime.UtcNow;
-        var lastBackupTime = backupFiles.Count > 0 ? BackupFileNaming.GetFileOrderingUtcTimestamp(backupFiles[^1]) : DateTime.MinValue;
-        var hasLastBackup = backupFiles.Count > 0;
-        var timeSinceLastBackup = hasLastBackup ? nowUtc - lastBackupTime : TimeSpan.MaxValue;
-
-        if (hasLastBackup && timeSinceLastBackup.TotalMinutes < minGapMinutes)
+        _catalog.SaveChanges(_editBaseline, root);
+        _editBaseline = null;
+        if (!_loggedBackupUnavailable)
         {
-            return;
-        }
-
-        var timestamp = BackupFileNaming.FormatNowForBackupSuffix();
-        var backupPath = Path.Combine(_backupDirectory, $"library.json.backup.{timestamp}");
-        File.Copy(_libraryPath, backupPath, true);
-
-        var filesAfterCreate = Directory.GetFiles(_backupDirectory, "library.json.backup.*")
-            .Select(path => new FileInfo(path))
-            .OrderBy(BackupFileNaming.GetFileOrderingUtcTimestamp)
-            .ToList();
-
-        while (filesAfterCreate.Count > maxBackups)
-        {
-            filesAfterCreate[0].Delete();
-            filesAfterCreate.RemoveAt(0);
-        }
-    }
-
-    private BackupPolicySnapshot ReadBackupPolicy()
-    {
-        if (!File.Exists(_coreSettingsPath))
-        {
-            return BackupPolicySnapshot.Default;
-        }
-
-        try
-        {
-            var parsed = JsonSerializer.Deserialize<CoreSettingsBackupDocument>(File.ReadAllText(_coreSettingsPath), JsonOptions);
-            if (parsed?.Backup == null)
-            {
-                return BackupPolicySnapshot.Default;
-            }
-
-            return new BackupPolicySnapshot
-            {
-                Enabled = parsed.Backup.Enabled,
-                MinimumBackupGapMinutes = Math.Clamp(parsed.Backup.MinimumBackupGapMinutes, 1, 10080),
-                NumberOfBackups = Math.Clamp(parsed.Backup.NumberOfBackups, 1, 100)
-            };
-        }
-        catch
-        {
-            return BackupPolicySnapshot.Default;
+            _loggedBackupUnavailable = true;
+            _logger.LogInformation("Catalog JSON backups are unavailable. The live catalog is {DatabasePath}.", _catalog.Session.DatabasePath);
         }
     }
 
@@ -1544,6 +1474,42 @@ public sealed class LibraryOperationsService
         }
     }
 
+    private static int? ReadFingerprintStatus(JsonNode? node)
+    {
+        if (node is null)
+        {
+            return null;
+        }
+
+        if (node is JsonValue value && value.TryGetValue<int>(out var number))
+        {
+            return number;
+        }
+
+        var text = GetNodeString(node);
+        if (text.Equals("Pending", StringComparison.OrdinalIgnoreCase))
+        {
+            return 0;
+        }
+
+        if (text.Equals("Ready", StringComparison.OrdinalIgnoreCase))
+        {
+            return 1;
+        }
+
+        if (text.Equals("Failed", StringComparison.OrdinalIgnoreCase))
+        {
+            return 2;
+        }
+
+        if (text.Equals("Stale", StringComparison.OrdinalIgnoreCase))
+        {
+            return 3;
+        }
+
+        return null;
+    }
+
     private static bool IsFingerprintReadyForDuplicateScan(JsonObject item)
     {
         var fingerprint = GetNodeString(item["fingerprint"]);
@@ -1552,15 +1518,13 @@ public sealed class LibraryOperationsService
             return false;
         }
 
-        var status = GetNodeString(item["fingerprintStatus"]);
-        if (string.Equals(status, "Pending", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(status, "Failed", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(status, "Stale", StringComparison.OrdinalIgnoreCase))
+        var status = ReadFingerprintStatus(item["fingerprintStatus"]);
+        if (status is 0 or 2 or 3)
         {
             return false;
         }
 
-        if (string.Equals(status, "Ready", StringComparison.OrdinalIgnoreCase))
+        if (status == 1)
         {
             return true;
         }
@@ -1864,22 +1828,4 @@ public sealed class LibraryOperationsService
         return false;
     }
 
-    private sealed class CoreSettingsBackupDocument
-    {
-        public BackupPolicySnapshot? Backup { get; set; }
-    }
-
-    private sealed class BackupPolicySnapshot
-    {
-        public static BackupPolicySnapshot Default { get; } = new()
-        {
-            Enabled = true,
-            MinimumBackupGapMinutes = 360,
-            NumberOfBackups = 8
-        };
-
-        public bool Enabled { get; set; } = true;
-        public int MinimumBackupGapMinutes { get; set; } = 360;
-        public int NumberOfBackups { get; set; } = 8;
-    }
 }

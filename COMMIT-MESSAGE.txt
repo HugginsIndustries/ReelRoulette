@@ -19,11 +19,11 @@ Instructions:
 
 Commit Message:
 
-M10i2: Add a SQLite catalog session of row updates
+M10i3: Make the SQLite catalog the live library store
 
-- Open a catalog session for row updates and a library-document projection, with `loudnessError` on schema version 1.
-- Create an empty `library.db` when no catalog exists, and leave the running server on `library.json`.
-- Keep the earlier tag category when a rename or catalog sync collapses two names, unless that category is `Uncategorized`.
-- Leave an existing tag's name in place on upsert, and its category when the upsert omits one.
-- Add a missing catalog tag when a tag is added to an item, without changing an existing catalog tag.
-- Store a missing fingerprint version as 1, and inserted local timestamps as UTC.
+- Open `library.db` at server startup, migrate `library.json` when the database is missing, and stop when that database is refused.
+- Persist catalog edits as one transaction of row updates, including a path rename that only changes casing, and invalidate the playback cache from the catalog revision.
+- Leave leftover `library.json` unread, unwritten, and out of export and backup.
+- Disable library export, import, and JSON catalog backups until catalog transfer returns.
+- Scan auto-tag from enabled sources when the client sends no path list.
+- Treat integer fingerprint status as pending, ready, failed, or stale during duplicate scan.

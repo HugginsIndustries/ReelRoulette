@@ -7728,285 +7728,50 @@ namespace ReelRoulette
             }
         }
 
-        private static string ReadZipEntryText(string zipPath, string entryName)
-        {
-            using var archive = ZipFile.OpenRead(zipPath);
-            var entry = archive.GetEntry(entryName) ?? archive.GetEntry(entryName.Replace('/', '\\'));
-            if (entry == null)
-            {
-                throw new InvalidOperationException($"Missing '{entryName}' in archive.");
-            }
-
-            using var reader = new StreamReader(entry.Open(), Encoding.UTF8);
-            return reader.ReadToEnd();
-        }
-
         private async void ExportLibraryMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
             Log("UI ACTION: Export Library clicked");
-            try
-            {
-                var optionsDialog = new LibraryExportOptionsDialog();
-                var optionsResult = await optionsDialog.ShowDialog<bool?>(this);
-                if (optionsResult != true)
-                {
-                    return;
-                }
-
-                var suggested = $"ReelRoulette-Library-{DateTime.UtcNow:yyyyMMdd-HHmmss}Z.zip";
-                var saveTarget = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
-                {
-                    Title = "Export Library",
-                    SuggestedFileName = suggested,
-                    DefaultExtension = "zip",
-                    ShowOverwritePrompt = true,
-                    FileTypeChoices =
-                    [
-                        new FilePickerFileType("Zip archive")
-                        {
-                            Patterns = ["*.zip"]
-                        }
-                    ]
-                });
-
-                if (saveTarget == null)
-                {
-                    return;
-                }
-
-                if (!StoragePickerPath.TryGetLocalFilesystemPath(saveTarget, out var outPath) ||
-                    string.IsNullOrWhiteSpace(outPath))
-                {
-                    StatusTextBlock.Text = "Could not resolve export path from picker.";
-                    return;
-                }
-
-                await Dispatcher.UIThread.InvokeAsync(BeginLibraryArchiveOperationUI);
-                try
-                {
-                    await using (var fileStream = new FileStream(
-                                     outPath,
-                                     FileMode.Create,
-                                     FileAccess.Write,
-                                     FileShare.None,
-                                     bufferSize: 81920,
-                                     FileOptions.Asynchronous))
-                    {
-                        await LibraryArchiveMigration.WriteExportZipAsync(
-                            fileStream,
-                            optionsDialog.IncludeThumbnails,
-                            optionsDialog.IncludeBackups,
-                            CancellationToken.None).ConfigureAwait(true);
-                    }
-                }
-                finally
-                {
-                    await Dispatcher.UIThread.InvokeAsync(EndLibraryArchiveOperationUI);
-                }
-
-                SetStatusMessage("Library export complete.", 0);
-            }
-            catch (Exception ex)
-            {
-                await Dispatcher.UIThread.InvokeAsync(() =>
-                {
-                    if (_suppressStatusUpdatesForLibraryArchive)
-                    {
-                        EndLibraryArchiveOperationUI();
-                    }
-                });
-                SetStatusMessage($"Export error: {ex.Message}", 0);
-                Log($"ExportLibraryMenuItem_Click: {ex}");
-            }
+            await ShowCatalogTransferUnavailableAsync();
         }
 
         private async void ImportLibraryMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
             Log("UI ACTION: Import Library clicked");
-            try
-            {
-                var pick = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
-                {
-                    Title = "Select library export zip",
-                    AllowMultiple = false,
-                    FileTypeFilter =
-                    [
-                        new FilePickerFileType("Zip archive")
-                        {
-                            Patterns = ["*.zip"]
-                        }
-                    ]
-                });
-
-                if (pick.Count == 0 || pick[0] == null)
-                {
-                    return;
-                }
-
-                if (!StoragePickerPath.TryGetLocalFilesystemPath(pick[0], out var zipPath) ||
-                    string.IsNullOrWhiteSpace(zipPath))
-                {
-                    StatusTextBlock.Text = "Could not resolve zip path from picker.";
-                    return;
-                }
-
-                string libraryJson;
-                try
-                {
-                    libraryJson = ReadZipEntryText(zipPath, "library.json");
-                }
-                catch (Exception ex)
-                {
-                    StatusTextBlock.Text = $"Could not read library from zip: {ex.Message}";
-                    return;
-                }
-
-                var libRoot = JsonNode.Parse(libraryJson) as JsonObject;
-                if (libRoot == null)
-                {
-                    StatusTextBlock.Text = "Invalid library.json in zip.";
-                    return;
-                }
-
-                var roots = LibraryArchiveMigration.CollectUniqueSourceRootPaths(libRoot);
-                if (roots.Count == 0)
-                {
-                    StatusTextBlock.Text = "This export has no source folders to map.";
-                    return;
-                }
-
-                var remapDialog = new LibraryImportRemapDialog(roots);
-                var remapOk = await remapDialog.ShowDialog<bool?>(this);
-                if (remapOk != true || string.IsNullOrWhiteSpace(remapDialog.PlanJson))
-                {
-                    return;
-                }
-
-                LibraryImportRemapDialog.LibraryImportPlanPayload? planPayload;
-                try
-                {
-                    planPayload = JsonSerializer.Deserialize<LibraryImportRemapDialog.LibraryImportPlanPayload>(
-                        remapDialog.PlanJson!,
-                        new JsonSerializerOptions(JsonSerializerDefaults.Web)
-                        {
-                            PropertyNameCaseInsensitive = true
-                        });
-                }
-                catch (Exception ex)
-                {
-                    StatusTextBlock.Text = $"Invalid import plan: {ex.Message}";
-                    return;
-                }
-
-                if (planPayload == null)
-                {
-                    StatusTextBlock.Text = "Invalid import plan.";
-                    return;
-                }
-
-                var remap = planPayload.Remap ?? new Dictionary<string, string>(StringComparer.Ordinal);
-                var skipped = new HashSet<string>(planPayload.SkippedRoots ?? [], StringComparer.Ordinal);
-
-                var hasExisting = LibraryArchiveMigration.LibraryExistsWithContentOnDisk(AppDataManager.AppDataDirectory);
-                var force = false;
-                if (hasExisting)
-                {
-                    var confirm = new LibraryOverwriteConfirmDialog();
-                    var replace = await confirm.ShowDialog<bool?>(this);
-                    if (replace != true)
-                    {
-                        return;
-                    }
-
-                    force = true;
-                }
-
-                string? importErrorStatus = null;
-                await Dispatcher.UIThread.InvokeAsync(BeginLibraryArchiveOperationUI);
-                try
-                {
-                    LibraryArchiveImportResult importResult;
-                    await using (var zipStream = File.OpenRead(zipPath))
-                    {
-                        importResult = LibraryArchiveMigration.ImportFromZipStream(zipStream, remap, skipped, force);
-                    }
-
-                    if (!importResult.Accepted)
-                    {
-                        if (importResult.NeedsForceConfirmation)
-                        {
-                            var confirmRetry = new LibraryOverwriteConfirmDialog();
-                            var replace = await confirmRetry.ShowDialog<bool?>(this);
-                            if (replace != true)
-                            {
-                                importErrorStatus = "Import cancelled.";
-                            }
-                            else
-                            {
-                                await using var zipRetry = File.OpenRead(zipPath);
-                                importResult = LibraryArchiveMigration.ImportFromZipStream(zipRetry, remap, skipped, force: true);
-                            }
-                        }
-
-                        if (importErrorStatus == null && !importResult.Accepted)
-                        {
-                            importErrorStatus = $"Import failed: {importResult.Message ?? "unknown error"}";
-                        }
-                    }
-
-                    if (importErrorStatus == null)
-                    {
-                        try
-                        {
-                            var desktopJson = ReadZipEntryText(zipPath, "desktop-settings.json");
-                            var dest = AppDataManager.GetSettingsPath();
-                            var dir = Path.GetDirectoryName(dest);
-                            if (!string.IsNullOrEmpty(dir))
-                            {
-                                Directory.CreateDirectory(dir);
-                            }
-
-                            await File.WriteAllTextAsync(dest, desktopJson).ConfigureAwait(true);
-                        }
-                        catch (Exception ex)
-                        {
-                            Log($"ImportLibraryMenuItem_Click: desktop-settings.json not written: {ex.Message}");
-                        }
-
-                        if (await EnsureCoreRuntimeAvailableAsync())
-                        {
-                            await SyncLibraryProjectionFromCoreAsync();
-                            _ = SyncSourcesFromCoreAsync();
-                            _ = SyncPresetsFromCoreAsync();
-                        }
-                    }
-                }
-                finally
-                {
-                    await Dispatcher.UIThread.InvokeAsync(EndLibraryArchiveOperationUI);
-                }
-
-                if (importErrorStatus != null)
-                {
-                    StatusTextBlock.Text = importErrorStatus;
-                    return;
-                }
-
-                SetStatusMessage("Library import complete.", 0);
-            }
-            catch (Exception ex)
-            {
-                await Dispatcher.UIThread.InvokeAsync(() =>
-                {
-                    if (_suppressStatusUpdatesForLibraryArchive)
-                    {
-                        EndLibraryArchiveOperationUI();
-                    }
-                });
-                SetStatusMessage($"Import error: {ex.Message}", 0);
-                Log($"ImportLibraryMenuItem_Click: {ex}");
-            }
+            await ShowCatalogTransferUnavailableAsync();
         }
+
+        private async Task ShowCatalogTransferUnavailableAsync()
+        {
+            var dialog = new Window
+            {
+                Title = "Library transfer unavailable",
+                Width = 460,
+                Height = 180,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                Content = new StackPanel
+                {
+                    Margin = new Avalonia.Thickness(20),
+                    Spacing = 12,
+                    Children =
+                    {
+                        new TextBlock
+                        {
+                            Text = "Library export, import, and catalog backups are unavailable. The live catalog is the SQLite database, and a JSON snapshot is not a backup or restore path.",
+                            TextWrapping = Avalonia.Media.TextWrapping.Wrap
+                        },
+                        new Button
+                        {
+                            Content = "OK",
+                            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+                            MinWidth = 80
+                        }
+                    }
+                }
+            };
+            ((Button)((StackPanel)dialog.Content).Children[1]).Click += (_, _) => dialog.Close();
+            await dialog.ShowDialog(this);
+        }
+
 
         private void PlayRandom_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {

@@ -202,20 +202,8 @@ public sealed class RefreshPipelineServiceTests
         var firstWrite = File.GetLastWriteTimeUtc(thumbPath);
 
         await Task.Delay(20);
-        await SeedLibraryAsync(scope.LibraryPath, new JsonObject
-        {
-            ["sources"] = new JsonArray(),
-            ["items"] = new JsonArray
-            {
-                new JsonObject
-                {
-                    ["id"] = "thumb-1",
-                    ["mediaType"] = 1,
-                    ["fullPath"] = mediaPath,
-                    ["fingerprint"] = "fp-b"
-                }
-            }
-        });
+        var catalog = ReelRoulette.Core.Library.LibraryCatalogStore.Open(scope.RootPath);
+        Assert.True(catalog.Session!.SetFingerprint("thumb-1", "fp-b", "SHA-256", 1, 1, DateTime.UtcNow));
 
         Assert.True(service.TryStartManual().Accepted);
         var completed = await WaitForCompletionAsync(service, TimeSpan.FromSeconds(10));
@@ -648,7 +636,7 @@ public sealed class RefreshPipelineServiceTests
         var items = root["items"] as JsonArray;
         Assert.NotNull(items);
         var item = Assert.Single(items!.OfType<JsonObject>());
-        Assert.Equal("Ready", item["fingerprintStatus"]?.GetValue<string>());
+        Assert.Equal(1, item["fingerprintStatus"]?.GetValue<int>());
         var fp = item["fingerprint"]?.GetValue<string>();
         Assert.False(string.IsNullOrWhiteSpace(fp));
         Assert.Equal(ComputeSha256(mediaPath), fp, StringComparer.OrdinalIgnoreCase);
@@ -729,6 +717,14 @@ public sealed class RefreshPipelineServiceTests
 
     private static async Task<JsonObject> LoadLibraryAsync(string path)
     {
+        if (string.Equals(Path.GetFileName(path), "library.json", StringComparison.OrdinalIgnoreCase))
+        {
+            var directory = Path.GetDirectoryName(path)!;
+            var opened = ReelRoulette.Core.Library.LibraryCatalogStore.Open(directory);
+            Assert.NotNull(opened.Session);
+            return opened.Session!.BuildDocument();
+        }
+
         await using var stream = File.OpenRead(path);
         return (await JsonNode.ParseAsync(stream) as JsonObject) ?? new JsonObject();
     }

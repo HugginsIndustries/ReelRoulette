@@ -513,7 +513,7 @@ public sealed class LibraryPlaybackServiceTests : IDisposable
             }
           ],
           "sources": [
-            { "id": "s1", "isEnabled": false }
+            { "id": "s1", "rootPath": "{{_tempDir.Replace("\\", "\\\\")}}", "isEnabled": false }
           ]
         }
         """);

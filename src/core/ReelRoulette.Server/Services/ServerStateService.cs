@@ -46,7 +46,7 @@ public sealed class ServerStateService
     private readonly object _sourceLock = new();
     private readonly ILogger<ServerStateService> _logger;
     private readonly string _presetsPath;
-    private readonly string _libraryPath;
+    private readonly LibraryCatalogHost? _catalog;
     private long _revision;
     private readonly Dictionary<string, ItemStateRecord> _itemStates = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<Channel<ServerEventEnvelope>> _subscribers = new();
@@ -63,15 +63,30 @@ public sealed class ServerStateService
         PropertyNameCaseInsensitive = true
     };
 
-    public ServerStateService(ILogger<ServerStateService>? logger = null, string? appDataPathOverride = null)
+    public ServerStateService(
+        ILogger<ServerStateService>? logger = null,
+        string? appDataPathOverride = null,
+        LibraryCatalogHost? catalog = null)
     {
         _logger = logger ?? NullLogger<ServerStateService>.Instance;
         var roamingAppData = appDataPathOverride ??
                              Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ReelRoulette");
         Directory.CreateDirectory(roamingAppData);
         _presetsPath = Path.Combine(roamingAppData, "presets.json");
-        _libraryPath = Path.Combine(roamingAppData, "library.json");
-        if (!string.IsNullOrWhiteSpace(appDataPathOverride))
+        if (catalog != null)
+        {
+            _catalog = catalog;
+        }
+        else if (!string.IsNullOrWhiteSpace(appDataPathOverride))
+        {
+            _catalog = LibraryCatalogHost.Open(roamingAppData);
+        }
+        else
+        {
+            _catalog = null;
+        }
+
+        if (_catalog != null)
         {
             BootstrapFromDisk();
         }
@@ -275,9 +290,9 @@ public sealed class ServerStateService
             return false;
         }
 
-        if (changed)
-        {
-            PersistSourceStates();
+            if (changed)
+            {
+                PersistSourceEnabled(updated.Id, updated.IsEnabled);
             Publish("sourceStateChanged", new SourceStateChangedPayload
             {
                 SourceId = updated.Id,
@@ -652,12 +667,12 @@ public sealed class ServerStateService
 
         try
         {
-            if (!File.Exists(_libraryPath))
+            if (_catalog == null)
             {
                 return;
             }
 
-            var root = JsonNode.Parse(File.ReadAllText(_libraryPath)) as JsonObject;
+            var root = _catalog.Session.BuildDocument();
             if (root == null)
             {
                 return;
@@ -786,7 +801,7 @@ public sealed class ServerStateService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to bootstrap server state from '{Path}'.", _libraryPath);
+            _logger.LogWarning(ex, "Failed to bootstrap server state from '{Path}'.", _catalog?.Session.DatabasePath);
         }
     }
 
@@ -922,64 +937,20 @@ public sealed class ServerStateService
         };
     }
 
-    private void PersistSourceStates()
+    private void PersistSourceEnabled(string sourceId, bool isEnabled)
     {
         try
         {
-            if (!File.Exists(_libraryPath))
+            if (_catalog == null)
             {
                 return;
             }
 
-            JsonObject? root;
-            try
-            {
-                root = JsonNode.Parse(File.ReadAllText(_libraryPath)) as JsonObject;
-            }
-            catch
-            {
-                return;
-            }
-
-            if (root == null)
-            {
-                return;
-            }
-
-            var sourceStateById = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
-            lock (_sourceLock)
-            {
-                foreach (var source in _sources)
-                {
-                    sourceStateById[source.Id] = source.IsEnabled;
-                }
-            }
-
-            var sources = root["sources"] as JsonArray;
-            if (sources == null)
-            {
-                return;
-            }
-
-            foreach (var sourceNode in sources.OfType<JsonObject>())
-            {
-                var id = sourceNode["id"]?.GetValue<string>()?.Trim();
-                if (string.IsNullOrWhiteSpace(id))
-                {
-                    continue;
-                }
-
-                if (sourceStateById.TryGetValue(id, out var isEnabled))
-                {
-                    sourceNode["isEnabled"] = isEnabled;
-                }
-            }
-
-            File.WriteAllText(_libraryPath, root.ToJsonString(JsonOptions));
+            _catalog.Session.SetSourceEnabled(sourceId, isEnabled);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to persist source enabled states to '{Path}'.", _libraryPath);
+            _logger.LogWarning(ex, "Failed to persist source enabled state to '{Path}'.", _catalog?.Session.DatabasePath);
         }
     }
 

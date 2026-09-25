@@ -9,26 +9,27 @@ namespace ReelRoulette.Server.Services;
 
 public sealed class LibraryPlaybackService
 {
-    private readonly string _libraryPath;
+    private readonly LibraryCatalogHost _catalog;
     private readonly ServerMediaTokenStore _tokenStore;
     private readonly ILogger<LibraryPlaybackService> _logger;
     private readonly object _cacheLock = new();
     private readonly object _randomizationLock = new();
-    private DateTime _cachedLibraryWriteUtc = DateTime.MinValue;
+    private long _cachedRevision = -1;
     private List<LibraryItemRecord> _cachedItems = [];
     private readonly Dictionary<string, RandomizationRuntimeStateCore> _clientRandomizationStates = new(StringComparer.OrdinalIgnoreCase);
 
     public LibraryPlaybackService(
         ServerMediaTokenStore tokenStore,
         ILogger<LibraryPlaybackService> logger,
-        string? appDataPathOverride = null)
+        string? appDataPathOverride = null,
+        LibraryCatalogHost? catalog = null)
     {
         _tokenStore = tokenStore;
         _logger = logger;
         var roamingAppData = appDataPathOverride ??
                              Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ReelRoulette");
         Directory.CreateDirectory(roamingAppData);
-        _libraryPath = Path.Combine(roamingAppData, "library.json");
+        _catalog = catalog ?? LibraryCatalogHost.Open(roamingAppData);
     }
 
     public IReadOnlyList<PresetResponse> GetPresets(IReadOnlyList<FilterPresetSnapshot> presets)
@@ -423,23 +424,17 @@ public sealed class LibraryPlaybackService
 
     private List<LibraryItemRecord> LoadItems()
     {
-        if (!File.Exists(_libraryPath))
-        {
-            return [];
-        }
-
         lock (_cacheLock)
         {
-            var currentWriteUtc = File.GetLastWriteTimeUtc(_libraryPath);
-            if (_cachedItems.Count > 0 && currentWriteUtc == _cachedLibraryWriteUtc)
+            var revision = _catalog.Session.Revision;
+            if (_cachedItems.Count > 0 && revision == _cachedRevision)
             {
                 return _cachedItems;
             }
 
             try
             {
-                var json = File.ReadAllText(_libraryPath);
-                var root = JsonNode.Parse(json) as JsonObject;
+                var root = _catalog.Session.BuildDocument();
                 var nodes = root?["items"]?.AsArray() ?? [];
                 var sourceEnabledById = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
                 foreach (var sourceNode in root?["sources"] as JsonArray ?? [])
@@ -512,12 +507,12 @@ public sealed class LibraryPlaybackService
                 }
 
                 _cachedItems = result;
-                _cachedLibraryWriteUtc = currentWriteUtc;
+                _cachedRevision = revision;
                 return _cachedItems;
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Could not parse library index from '{LibraryPath}'.", _libraryPath);
+                _logger.LogWarning(ex, "Could not read library catalog from '{DatabasePath}'.", _catalog.Session.DatabasePath);
                 return _cachedItems;
             }
         }

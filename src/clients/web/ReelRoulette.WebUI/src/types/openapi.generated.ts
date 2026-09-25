@@ -344,7 +344,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Import a media source folder into library.json */
+        /** Import a media source folder into the SQLite catalog */
         post: operations["postSourceImport"];
         delete?: never;
         options?: never;
@@ -1068,7 +1068,7 @@ export interface components {
             /** Format: int32 */
             updatedCount: number;
         };
-        /** @description Library item entry in the projection snapshot. Thumbnail metadata is derived from the server thumbnail cache at serve time and is not persisted in library.json. */
+        /** @description Library item entry in the projection snapshot. Thumbnail metadata is derived from the server thumbnail cache at serve time and is not stored in the catalog. */
         LibraryProjectionItem: {
             id?: string;
             sourceId?: string;
@@ -1330,7 +1330,9 @@ export interface components {
             reason: string;
         };
         AutoTagScanRequest: {
+            /** @description When true, scan every item and ignore itemIds. When false with no itemIds, scan enabled sources only. A non-empty itemIds list is full paths to scan. */
             scanFullLibrary?: boolean;
+            /** @description Full paths. Used only when scanFullLibrary is false and the list is non-empty. */
             itemIds?: string[];
         };
         AutoTagScanResponse: {

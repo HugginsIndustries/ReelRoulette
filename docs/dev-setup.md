@@ -124,10 +124,10 @@ For broader manual passes, use `docs/checklists/testing-checklist.md` and `pwsh 
 
 Per-user data uses .NET `Environment.SpecialFolder` mappings:
 
-- **Linux** (XDG): config / roaming (`ApplicationData`) → `~/.config/ReelRoulette/` (includes `library.json`). Local cache (`LocalApplicationData`) → `~/.local/share/ReelRoulette/` (thumbnails in `thumbnails/`).
+- **Linux** (XDG): config / roaming (`ApplicationData`) → `~/.config/ReelRoulette/` (includes `library.db`). Local cache (`LocalApplicationData`) → `~/.local/share/ReelRoulette/` (thumbnails in `thumbnails/`).
 - **Windows**: config / roaming (`ApplicationData`) → `%APPDATA%/ReelRoulette/`. Local cache (`LocalApplicationData`) → `%LOCALAPPDATA%/ReelRoulette/` (thumbnails in `thumbnails/`).
 
-The running server still reads and writes `library.json`. A Core catalog migrator can write `library.db` beside it; the server does not open that file.
+The server opens `library.db` in that roaming directory at startup. A missing database is migrated from `library.json`, which is then renamed to `library.json.migrated`. A refused database stops the process. Leftover `library.json` is not the live catalog.
 
 ## Velopack packaging and release
 

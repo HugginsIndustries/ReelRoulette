@@ -9,7 +9,7 @@ namespace ReelRoulette.Core.Tests;
 public sealed class LibraryOperationsServiceTests
 {
     [Fact]
-    public void Constructor_WhenNoRecentLibraryBackupExists_ShouldCreateStartupBackup()
+    public void Constructor_DoesNotCreateLibraryJsonBackup()
     {
         var appDataRoot = CreateTempAppDataRoot();
         try
@@ -26,8 +26,13 @@ public sealed class LibraryOperationsServiceTests
             _ = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot);
 
             var backupDir = Path.Combine(appDataRoot, "backups");
-            var backupFiles = Directory.GetFiles(backupDir, "library.json.backup.*");
-            Assert.Single(backupFiles);
+            if (Directory.Exists(backupDir))
+            {
+                Assert.Empty(Directory.GetFiles(backupDir, "library.json.backup.*"));
+            }
+
+            Assert.False(File.Exists(Path.Combine(appDataRoot, "library.json")));
+            Assert.True(File.Exists(Path.Combine(appDataRoot, "library.db")));
         }
         finally
         {
@@ -39,31 +44,41 @@ public sealed class LibraryOperationsServiceTests
     }
 
     [Fact]
-    public void Constructor_WhenRecentLibraryBackupExists_ShouldSkipStartupBackup()
+    public void RecordPlayback_DoesNotCopyOrTrimLibraryJsonBackups()
     {
         var appDataRoot = CreateTempAppDataRoot();
         try
         {
-            SeedCoreSettings(appDataRoot, enabled: true, minimumGapMinutes: 360, numberOfBackups: 8);
+            SeedCoreSettings(appDataRoot, enabled: true, minimumGapMinutes: 1, numberOfBackups: 1);
             SeedLibrary(appDataRoot, new JsonObject
             {
                 ["sources"] = new JsonArray(),
-                ["items"] = new JsonArray(),
+                ["items"] = new JsonArray
+                {
+                    new JsonObject
+                    {
+                        ["id"] = "item-1",
+                        ["fullPath"] = @"C:\media\movie.mp4",
+                        ["playCount"] = 1
+                    }
+                },
                 ["tags"] = new JsonArray(),
                 ["categories"] = new JsonArray()
             });
 
             var backupDir = Path.Combine(appDataRoot, "backups");
             Directory.CreateDirectory(backupDir);
-            var recentBackup = Path.Combine(backupDir, "library.json.backup.recent");
-            File.WriteAllText(recentBackup, "{}");
-            SetBackupTimestampUtc(recentBackup, DateTime.UtcNow.AddMinutes(-5));
+            var leftover = Path.Combine(backupDir, "library.json.backup.leftover");
+            File.WriteAllText(leftover, "{\"items\":[]}");
+            SetBackupTimestampUtc(leftover, DateTime.UtcNow.AddHours(-12));
 
-            _ = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot);
+            var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot);
+            Assert.True(service.RecordPlayback(@"C:\media\movie.mp4").Found);
 
             var backupFiles = Directory.GetFiles(backupDir, "library.json.backup.*");
-            Assert.Single(backupFiles);
-            Assert.Equal(recentBackup, backupFiles[0]);
+            Assert.Equal(leftover, Assert.Single(backupFiles));
+            Assert.Equal("{\"items\":[]}", File.ReadAllText(leftover));
+            Assert.False(File.Exists(Path.Combine(appDataRoot, "library.json")));
         }
         finally
         {
@@ -275,8 +290,7 @@ public sealed class LibraryOperationsServiceTests
                 },
                 ["tags"] = new JsonArray
                 {
-                    new JsonObject { ["name"] = "TagA", ["categoryId"] = "cat-1" },
-                    new JsonObject { ["name"] = "TagA", ["categoryId"] = "uncategorized" }
+                    new JsonObject { ["name"] = "TagA", ["categoryId"] = "cat-1" }
                 },
                 ["categories"] = new JsonArray
                 {
@@ -693,7 +707,7 @@ public sealed class LibraryOperationsServiceTests
     }
 
     [Fact]
-    public void RecordPlayback_WhenGapSatisfiedAtMax_ShouldCreateBackupAndTrimOldest()
+    public void RecordPlayback_WhenBackupGapIsSatisfied_DoesNotTrimOrCreateJsonBackups()
     {
         var appDataRoot = CreateTempAppDataRoot();
         try
@@ -732,8 +746,8 @@ public sealed class LibraryOperationsServiceTests
             _ = service.RecordPlayback(@"C:\media\movie.mp4");
             var after = Directory.GetFiles(backupDir, "library.json.backup.*").OrderBy(path => path).ToArray();
 
-            Assert.Equal(3, after.Length);
-            Assert.DoesNotContain(backupA, after);
+            Assert.Equal([backupA, backupB, backupC], after);
+            Assert.False(File.Exists(Path.Combine(appDataRoot, "library.json")));
         }
         finally
         {
@@ -937,8 +951,331 @@ public sealed class LibraryOperationsServiceTests
             Assert.Equal(storedRoot, source.RootPath);
 
             var stored = Assert.Single((LoadLibrary(appDataRoot)["sources"] as JsonArray)!.OfType<JsonObject>());
-            Assert.Equal("", stored["displayName"]?.GetValue<string>());
+            Assert.Null(stored["displayName"]);
             Assert.Equal(storedRoot, stored["rootPath"]?.GetValue<string>());
+        }
+        finally
+        {
+            if (Directory.Exists(appDataRoot))
+            {
+                Directory.Delete(appDataRoot, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void ScanAutoTags_ScopeFollowsFullLibraryFlagAndPathList()
+    {
+        var appDataRoot = CreateTempAppDataRoot();
+        try
+        {
+            SeedLibrary(appDataRoot, new JsonObject
+            {
+                ["sources"] = new JsonArray
+                {
+                    new JsonObject { ["id"] = "on", ["rootPath"] = "/media/on", ["isEnabled"] = true },
+                    new JsonObject { ["id"] = "off", ["rootPath"] = "/media/off", ["isEnabled"] = false }
+                },
+                ["items"] = new JsonArray
+                {
+                    new JsonObject
+                    {
+                        ["id"] = "a",
+                        ["sourceId"] = "on",
+                        ["fullPath"] = "/media/on/Holiday-a.mp4",
+                        ["fileName"] = "Holiday-a.mp4"
+                    },
+                    new JsonObject
+                    {
+                        ["id"] = "b",
+                        ["sourceId"] = "off",
+                        ["fullPath"] = "/media/off/Holiday-b.mp4",
+                        ["fileName"] = "Holiday-b.mp4"
+                    }
+                },
+                ["tags"] = new JsonArray
+                {
+                    new JsonObject { ["name"] = "Holiday", ["categoryId"] = "uncategorized" }
+                },
+                ["categories"] = new JsonArray()
+            });
+
+            var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot);
+            var enabledOnly = service.ScanAutoTags(new AutoTagScanRequest { ScanFullLibrary = false, ItemIds = [] });
+            var enabledPaths = enabledOnly.Rows.SelectMany(row => row.Files).Select(file => file.FullPath).ToList();
+            Assert.Equal(["/media/on/Holiday-a.mp4"], enabledPaths);
+
+            var listed = service.ScanAutoTags(new AutoTagScanRequest
+            {
+                ScanFullLibrary = false,
+                ItemIds = ["/media/off/Holiday-b.mp4"]
+            });
+            var listedPaths = listed.Rows.SelectMany(row => row.Files).Select(file => file.FullPath).ToList();
+            Assert.Equal(["/media/off/Holiday-b.mp4"], listedPaths);
+
+            var full = service.ScanAutoTags(new AutoTagScanRequest
+            {
+                ScanFullLibrary = true,
+                ItemIds = ["/media/off/Holiday-b.mp4"]
+            });
+            var fullPaths = full.Rows.SelectMany(row => row.Files).Select(file => file.FullPath).OrderBy(path => path).ToList();
+            Assert.Equal(["/media/off/Holiday-b.mp4", "/media/on/Holiday-a.mp4"], fullPaths);
+        }
+        finally
+        {
+            if (Directory.Exists(appDataRoot))
+            {
+                Directory.Delete(appDataRoot, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void ScanAutoTags_WhenNoEnabledSourcesAndNoList_ScansNothing()
+    {
+        var appDataRoot = CreateTempAppDataRoot();
+        try
+        {
+            SeedLibrary(appDataRoot, new JsonObject
+            {
+                ["sources"] = new JsonArray
+                {
+                    new JsonObject { ["id"] = "off", ["rootPath"] = "/media/off", ["isEnabled"] = false }
+                },
+                ["items"] = new JsonArray
+                {
+                    new JsonObject
+                    {
+                        ["id"] = "b",
+                        ["sourceId"] = "off",
+                        ["fullPath"] = "/media/off/Holiday-b.mp4",
+                        ["fileName"] = "Holiday-b.mp4"
+                    }
+                },
+                ["tags"] = new JsonArray
+                {
+                    new JsonObject { ["name"] = "Holiday", ["categoryId"] = "uncategorized" }
+                },
+                ["categories"] = new JsonArray()
+            });
+
+            var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot);
+            var response = service.ScanAutoTags(new AutoTagScanRequest { ScanFullLibrary = false, ItemIds = [] });
+            Assert.Empty(response.Rows);
+        }
+        finally
+        {
+            if (Directory.Exists(appDataRoot))
+            {
+                Directory.Delete(appDataRoot, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void ScanDuplicates_HonorsIntegerFingerprintStatus()
+    {
+        var appDataRoot = CreateTempAppDataRoot();
+        try
+        {
+            SeedLibrary(appDataRoot, new JsonObject
+            {
+                ["sources"] = new JsonArray(),
+                ["items"] = new JsonArray
+                {
+                    Item("ready-a", "/media/ready-a.mp4", "fp-ready", "Ready"),
+                    Item("ready-b", "/media/ready-b.mp4", "fp-ready", "Ready"),
+                    Item("stale-1", "/media/stale.mp4", "fp-ready", "Stale"),
+                    Item("failed-1", "/media/failed.mp4", null, "Failed"),
+                    Item("legacy-a", "/media/legacy-a.mp4", "fp-legacy", null),
+                    Item("legacy-b", "/media/legacy-b.mp4", "fp-legacy", null)
+                },
+                ["tags"] = new JsonArray(),
+                ["categories"] = new JsonArray()
+            });
+
+            var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot);
+            var response = service.ScanDuplicates(new DuplicateScanRequest());
+
+            Assert.Equal(0, response.ExcludedPending);
+            Assert.Equal(1, response.ExcludedFailed);
+            Assert.Equal(1, response.ExcludedStale);
+            Assert.Equal(2, response.Groups.Count);
+            var scannedIds = response.Groups.SelectMany(group => group.Items.Select(item => item.ItemId)).ToHashSet(StringComparer.Ordinal);
+            Assert.Equal(["legacy-a", "legacy-b", "ready-a", "ready-b"], scannedIds.OrderBy(id => id, StringComparer.Ordinal).ToArray());
+        }
+        finally
+        {
+            if (Directory.Exists(appDataRoot))
+            {
+                Directory.Delete(appDataRoot, recursive: true);
+            }
+        }
+    }
+
+    private static JsonObject Item(string id, string fullPath, string? fingerprint, string? fingerprintStatus)
+    {
+        var item = new JsonObject
+        {
+            ["id"] = id,
+            ["fullPath"] = fullPath,
+            ["fileName"] = Path.GetFileName(fullPath),
+            ["fingerprintAlgorithm"] = "SHA-256",
+            ["fingerprintVersion"] = 1
+        };
+        if (fingerprint != null)
+        {
+            item["fingerprint"] = fingerprint;
+        }
+
+        if (fingerprintStatus != null)
+        {
+            item["fingerprintStatus"] = fingerprintStatus;
+        }
+
+        return item;
+    }
+
+    [Fact]
+    public void SaveChanges_KeepsTagApplyWhenDurationIsCommittedFromAnEarlierSnapshot()
+    {
+        var appDataRoot = CreateTempAppDataRoot();
+        try
+        {
+            SeedLibrary(appDataRoot, new JsonObject
+            {
+                ["sources"] = new JsonArray(),
+                ["items"] = new JsonArray
+                {
+                    new JsonObject
+                    {
+                        ["id"] = "item-1",
+                        ["fullPath"] = "/media/clip.mp4",
+                        ["fileName"] = "clip.mp4",
+                        ["tags"] = new JsonArray()
+                    }
+                },
+                ["tags"] = new JsonArray(),
+                ["categories"] = new JsonArray()
+            });
+
+            var host = LibraryCatalogHost.Open(appDataRoot);
+            var baseline = host.LoadDocument();
+            var edited = baseline.DeepClone()!.AsObject();
+            var item = edited["items"]!.AsArray().OfType<JsonObject>().Single();
+            item["duration"] = "00:01:30";
+
+            Assert.True(host.Session.AddItemTags("item-1", ["Holiday"]));
+            host.SaveChanges(baseline, edited);
+
+            var stored = host.LoadDocument();
+            var storedItem = stored["items"]!.AsArray().OfType<JsonObject>().Single();
+            Assert.Equal("00:01:30", storedItem["duration"]?.GetValue<string>());
+            Assert.Equal("Holiday", storedItem["tags"]!.AsArray().Single()!.GetValue<string>());
+        }
+        finally
+        {
+            if (Directory.Exists(appDataRoot))
+            {
+                Directory.Delete(appDataRoot, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void SaveChanges_PersistsCaseOnlyPathRename()
+    {
+        var appDataRoot = CreateTempAppDataRoot();
+        try
+        {
+            SeedLibrary(appDataRoot, new JsonObject
+            {
+                ["sources"] = new JsonArray(),
+                ["items"] = new JsonArray
+                {
+                    new JsonObject
+                    {
+                        ["id"] = "item-1",
+                        ["fullPath"] = "/media/Clip.mp4",
+                        ["relativePath"] = "Clip.mp4",
+                        ["fileName"] = "Clip.mp4"
+                    }
+                },
+                ["tags"] = new JsonArray(),
+                ["categories"] = new JsonArray()
+            });
+
+            var host = LibraryCatalogHost.Open(appDataRoot);
+            var baseline = host.LoadDocument();
+            var edited = baseline.DeepClone()!.AsObject();
+            var item = edited["items"]!.AsArray().OfType<JsonObject>().Single();
+            item["fullPath"] = "/media/clip.mp4";
+            item["relativePath"] = "clip.mp4";
+            item["fileName"] = "clip.mp4";
+            host.SaveChanges(baseline, edited);
+
+            var stored = host.LoadDocument();
+            var storedItem = stored["items"]!.AsArray().OfType<JsonObject>().Single();
+            Assert.Equal("/media/clip.mp4", storedItem["fullPath"]?.GetValue<string>());
+            Assert.Equal("clip.mp4", storedItem["relativePath"]?.GetValue<string>());
+            Assert.Equal("clip.mp4", storedItem["fileName"]?.GetValue<string>());
+        }
+        finally
+        {
+            if (Directory.Exists(appDataRoot))
+            {
+                Directory.Delete(appDataRoot, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void SaveChanges_RollsBackEarlierEditsWhenALaterUpdateFails()
+    {
+        var appDataRoot = CreateTempAppDataRoot();
+        try
+        {
+            SeedLibrary(appDataRoot, new JsonObject
+            {
+                ["sources"] = new JsonArray(),
+                ["items"] = new JsonArray
+                {
+                    new JsonObject
+                    {
+                        ["id"] = "item-1",
+                        ["fullPath"] = "/media/clip.mp4",
+                        ["fileName"] = "clip.mp4"
+                    }
+                },
+                ["tags"] = new JsonArray(),
+                ["categories"] = new JsonArray
+                {
+                    new JsonObject
+                    {
+                        ["id"] = "people",
+                        ["name"] = "People",
+                        ["sortOrder"] = 1
+                    }
+                }
+            });
+
+            var host = LibraryCatalogHost.Open(appDataRoot);
+            var revision = host.Session.Revision;
+            var baseline = host.LoadDocument();
+            var edited = baseline.DeepClone()!.AsObject();
+            var category = edited["categories"]!.AsArray().OfType<JsonObject>()
+                .Single(node => node["id"]?.GetValue<string>() == "people");
+            category["name"] = "Cast";
+            baseline["items"] = new JsonArray();
+
+            Assert.ThrowsAny<Exception>(() => host.SaveChanges(baseline, edited));
+
+            var stored = host.LoadDocument();
+            var storedCategory = stored["categories"]!.AsArray().OfType<JsonObject>()
+                .Single(node => node["id"]?.GetValue<string>() == "people");
+            Assert.Equal("People", storedCategory["name"]?.GetValue<string>());
+            Assert.Single(stored["items"]!.AsArray());
+            Assert.Equal(revision, host.Session.Revision);
         }
         finally
         {
@@ -975,8 +1312,9 @@ public sealed class LibraryOperationsServiceTests
 
     private static JsonObject LoadLibrary(string appDataRoot)
     {
-        var libraryPath = Path.Combine(appDataRoot, "library.json");
-        return JsonNode.Parse(File.ReadAllText(libraryPath)) as JsonObject ?? new JsonObject();
+        var opened = ReelRoulette.Core.Library.LibraryCatalogStore.Open(appDataRoot);
+        Assert.NotNull(opened.Session);
+        return opened.Session.BuildDocument();
     }
 
     private static void SeedCoreSettings(string appDataRoot, bool enabled, int minimumGapMinutes, int numberOfBackups)
