@@ -100,17 +100,19 @@ Desktop is orchestration/render for migrated flows.
 - `src/clients/desktop/ReelRoulette.LibraryArchive/`
   - shared `net10.0` library: library zip export/import (manifest, source-root remap/skip, zip validation, atomic writes, optional thumbnails/backups) against roaming + local cache paths.
 - `src/clients/desktop/ReelRoulette.DesktopApp.Tests/`
-  - xUnit tests for `ReelRoulette.LibraryArchive` migration helpers and export→import round-trip.
+  - xUnit tests for `ReelRoulette.LibraryArchive` migration helpers, export→import round-trip, and library-panel browse window decisions.
+- `src/clients/desktop/ReelRoulette.DesktopApp/LibraryPanelBrowse.cs`
+  - pure decisions for infinite-scroll fill, append reflow, whether an open-panel event patches tiles or reloads the loaded window, whether an open query or a further page still in flight is read again, whether a deferred refresh keeps that query open, where a query page reflows, how an unknown tag id is handled, the committed loaded span a reload uses after a splice stops halfway, which copy supplies now-playing stats, and when a missing current file downloads the snapshot.
 - `src/clients/desktop/ReelRoulette.DesktopApp/MainWindow.axaml.cs`
-  - API/SSE lifecycle orchestration, reconnect/resync guidance, compatibility gating, playback orchestration (library grid click-to-play via `POST /api/play/{itemId}`); grid-only library panel with Date Added sort.
+  - API/SSE lifecycle orchestration, reconnect/resync guidance, compatibility gating, playback orchestration (library grid click-to-play via `POST /api/play/{itemId}`); grid-only library panel that browses through `POST /api/library/query`.
 - `src/clients/desktop/ReelRoulette.DesktopApp/CoreServerApiClient.cs`
-  - typed desktop API adapter (commands/queries/SSE wiring), including `RequestPlayItemAsync` for server-authoritative library item play.
+  - typed desktop API adapter (commands/queries/SSE wiring), including `QueryLibraryAsync` and `RequestPlayItemAsync`.
 - `src/clients/desktop/ReelRoulette.DesktopApp/ManageSourcesDialog.axaml.cs`
   - API-backed source/duplicate orchestration behavior.
 - `src/clients/desktop/ReelRoulette.DesktopApp/LibraryExportOptionsDialog.*`, `LibraryImportRemapDialog.*`, `LibraryOverwriteConfirmDialog.*`
   - desktop UI for local-disk library zip export/import (options, per-source remap/skip, overwrite confirm, server-stopped acknowledgment on import); writes imported `desktop-settings.json` locally after successful import.
 - `src/clients/desktop/ReelRoulette.DesktopApp/AutoTagDialog.axaml.cs`
-  - API-backed auto-tag scan/apply orchestration.
+  - API-backed auto-tag scan/apply orchestration. Scoped scan sends no path list.
 - `src/clients/desktop/ReelRoulette.DesktopApp/SettingsDialog.axaml(.cs)`
   - client-side settings orchestration including playback policy toggle UX and Velopack check → download → apply.
 - `src/clients/desktop/ReelRoulette.DesktopApp/UpdateService.cs`

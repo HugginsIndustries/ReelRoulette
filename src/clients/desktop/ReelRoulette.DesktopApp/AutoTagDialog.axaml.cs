@@ -275,13 +275,7 @@ namespace ReelRoulette
 
             if (_scanViaApiAsync != null)
             {
-                var scopedPaths = _getScopeItems(ScanFullLibrary)
-                    .Select(item => item.FullPath)
-                    .Where(path => !string.IsNullOrWhiteSpace(path))
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToList();
-
-                var response = await _scanViaApiAsync(ScanFullLibrary, scopedPaths);
+                var response = await _scanViaApiAsync(ScanFullLibrary, []);
                 if (response == null)
                 {
                     StatusTextBlock.Text = "Auto-tag scan failed. Core runtime is unavailable or still recovering.";

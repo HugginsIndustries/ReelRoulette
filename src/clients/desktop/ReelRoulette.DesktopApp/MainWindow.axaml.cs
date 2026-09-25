@@ -215,7 +215,7 @@ namespace ReelRoulette
         private bool _rememberLastFolder = true;
         private string? _lastFolderPath = null;
 
-        // Library projection (server-backed); panel filtering is local display-only.
+        // Library projection (server-backed) for non-browse readers. The library grid browses through the list query.
         private LibraryIndex? _libraryIndex;
         private FilterState? _currentFilterState;
         private string? _activePresetName; // Track which preset is currently active for display in library panel
@@ -241,6 +241,16 @@ namespace ReelRoulette
         private string _librarySearchText = "";
         private string _librarySortMode = "Name"; // "Name", "LastPlayed", "PlayCount", "Duration", "DateAdded"
         private bool _librarySortDescending = false;
+        private int _libraryBrowseTotalCount;
+        private bool _libraryBrowseHasResult;
+        private bool _libraryBrowseInFlight;
+        private bool _libraryBrowseAppendFailed;
+        private bool _libraryBrowseQueryOpen;
+        private bool _libraryBrowseResetQueued;
+        private bool _libraryBrowseResetOnNextOpen;
+        private LibraryPanelBrowseRequest _pendingLibraryBrowseKind = LibraryPanelBrowseRequest.Reset;
+        private readonly LibraryBrowseSpan _libraryBrowseSpan = new();
+        private Task _libraryGridEdit = Task.CompletedTask;
         private int _libraryGridColumns = 2;
         private string? _lastAppliedRefreshCompletionRunId;
         private bool _autoTagScanFullLibrary = true;
@@ -1024,7 +1034,7 @@ namespace ReelRoulette
                                     Log($"LibraryVideoSplitter DragCompleted: Captured new panel width: {_libraryPanelWidth}");
                                     if (_showLibraryPanel)
                                     {
-                                        UpdateLibraryPanel();
+                                        ScheduleLibraryGridReflow();
                                     }
                                 }
                             }
@@ -1383,44 +1393,51 @@ namespace ReelRoulette
 
         private void RefreshLibraryPanelFromServiceState()
         {
-            if (!_showLibraryPanel)
+            if (_showLibraryPanel)
             {
-                return;
+                UpdateLibraryPanel();
             }
-
-            UpdateLibraryPanel();
         }
 
         private void ApplyRemoteItemStateProjection(string fullPath, bool isFavorite, bool isBlacklisted, string statusMessage, bool persistLibrary = false)
         {
-            if (_libraryIndex == null || string.IsNullOrWhiteSpace(fullPath))
+            if (string.IsNullOrWhiteSpace(fullPath))
             {
-                Log($"CoreEvents: Projection skipped (library unavailable or empty path): '{fullPath ?? "null"}'");
+                Log("CoreEvents: Projection skipped (empty path).");
                 return;
             }
 
-            var item = _libraryIndex.Items.FirstOrDefault(candidate =>
+            var item = _libraryIndex?.Items.FirstOrDefault(candidate =>
                 string.Equals(candidate.FullPath, fullPath, StringComparison.OrdinalIgnoreCase));
-            if (item == null)
+            var boundItem = FindLoadedLibraryItem(fullPath);
+            if (item == null && boundItem == null)
             {
-                Log($"CoreEvents: Projection skipped (item not found in library): {Path.GetFileName(fullPath)}");
+                if (IsCurrentVideoPath(fullPath) &&
+                    LibraryPanelBrowse.NeedsCurrentFileSnapshotSync(snapshotHasItem: false, loadedHasItem: false))
+                {
+                    Log($"CoreEvents: Projection downloads the catalog snapshot for the current file {Path.GetFileName(fullPath)}.");
+                    _ = SyncCurrentFileSnapshotAsync();
+                    return;
+                }
+
+                Log($"CoreEvents: Projection has no loaded tile for {Path.GetFileName(fullPath)}.");
+                ApplyLibraryBrowseEvent(LibraryPanelBrowseEvent.FavoriteOrBlacklist);
                 return;
             }
 
             _isApplyingCoreSync = true;
             try
             {
-                item.IsFavorite = isFavorite;
-                item.IsBlacklisted = isBlacklisted;
-
-                // Keep currently bound library-panel item state in sync with canonical projection state.
-                // This ensures overlay indicators update immediately even when bound instances differ.
-                var boundItem = _libraryItems.FirstOrDefault(listItem =>
-                    string.Equals(listItem.FullPath, fullPath, StringComparison.OrdinalIgnoreCase));
-                if (boundItem != null && !ReferenceEquals(boundItem.Item, item))
+                if (boundItem != null)
                 {
                     boundItem.IsFavorite = isFavorite;
                     boundItem.IsBlacklisted = isBlacklisted;
+                }
+
+                if (item != null && (boundItem == null || !ReferenceEquals(boundItem.Item, item)))
+                {
+                    item.IsFavorite = isFavorite;
+                    item.IsBlacklisted = isBlacklisted;
                 }
 
                 var isCurrentItem = string.Equals(_currentVideoPath, fullPath, StringComparison.OrdinalIgnoreCase);
@@ -1430,7 +1447,7 @@ namespace ReelRoulette
                     UpdateCurrentFileStatsUi();
                 }
 
-                RefreshLibraryPanelFromServiceState();
+                ApplyLibraryBrowseEvent(LibraryPanelBrowseEvent.FavoriteOrBlacklist);
 
                 _ = RefreshGlobalStatsFromCoreAsync();
                 StatusTextBlock.Text = statusMessage;
@@ -1616,31 +1633,50 @@ namespace ReelRoulette
 
         private bool TryApplyPlaybackProjectionFromEvent(CorePlaybackRecordedPayload playback)
         {
-            if (_libraryIndex == null || string.IsNullOrWhiteSpace(playback.Path))
+            if (string.IsNullOrWhiteSpace(playback.Path))
             {
                 return false;
             }
 
-            var item = _libraryIndex.Items.FirstOrDefault(candidate =>
+            var item = _libraryIndex?.Items.FirstOrDefault(candidate =>
                 string.Equals(candidate.FullPath, playback.Path, StringComparison.OrdinalIgnoreCase));
-            if (item == null)
+            var loaded = FindLoadedLibraryItem(playback.Path);
+            if (item == null && loaded == null)
             {
-                return false;
+                if (!_showLibraryPanel ||
+                    (IsCurrentVideoPath(playback.Path) &&
+                     LibraryPanelBrowse.NeedsCurrentFileSnapshotSync(snapshotHasItem: false, loadedHasItem: false)))
+                {
+                    return false;
+                }
+
+                ApplyLibraryBrowseEvent(LibraryPanelBrowseEvent.Playback);
+                _ = RefreshGlobalStatsFromCoreAsync();
+                return true;
             }
 
-            _previousLastPlayedUtc = item.LastPlayedUtc;
-            item.PlayCount = Math.Max(0, playback.PlayCount ?? (item.PlayCount + 1));
-            item.LastPlayedUtc = playback.LastPlayedUtc?.ToUniversalTime() ?? DateTime.UtcNow;
+            var playCount = Math.Max(0, playback.PlayCount ?? ((item?.PlayCount ?? loaded!.Item.PlayCount) + 1));
+            var lastPlayed = playback.LastPlayedUtc?.ToUniversalTime() ?? DateTime.UtcNow;
+            if (item != null)
+            {
+                _previousLastPlayedUtc = item.LastPlayedUtc;
+                item.PlayCount = playCount;
+                item.LastPlayedUtc = lastPlayed;
+            }
+            else if (loaded != null)
+            {
+                _previousLastPlayedUtc = loaded.Item.LastPlayedUtc;
+            }
+
+            if (loaded != null && !ReferenceEquals(loaded.Item, item))
+            {
+                loaded.Item.PlayCount = playCount;
+                loaded.Item.LastPlayedUtc = lastPlayed;
+            }
 
             UpdateCurrentFileStatsUi();
             _ = RefreshGlobalStatsFromCoreAsync();
-
-            var playbackSensitiveSort = _librarySortMode is "LastPlayed" or "PlayCount";
-            if (_showLibraryPanel && ((_currentFilterState?.OnlyNeverPlayed ?? false) || playbackSensitiveSort))
-            {
-                UpdateLibraryPanel();
-            }
-
+            ApplyLibraryBrowseEvent(LibraryPanelBrowseEvent.Playback);
             return true;
         }
 
@@ -1840,30 +1876,27 @@ namespace ReelRoulette
             double? peakDb = null;
             LibraryItem? item = null;
             
-            if (path != null && _libraryIndex != null)
+            item = FindCurrentFileLibraryItem(path);
+            if (item != null)
             {
-                item = FindProjectionItemByPath(path);
-                if (item != null)
-                {
-                    playCount = item.PlayCount;
-                    lastPlayedUtc = item.LastPlayedUtc;
-                    isFavorite = item.IsFavorite;
-                    isBlacklisted = item.IsBlacklisted;
-                    duration = item.Duration;
-                    hasAudio = item.HasAudio;
-                    integratedLoudness = item.IntegratedLoudness;
-                    peakDb = item.PeakDb;
-                    
-                    // Set media type for visibility binding
-                    IsCurrentFileVideo = item.MediaType == MediaType.Video;
-                    
-                    Log($"UpdateCurrentFileStatsUi: Found library item - MediaType: {item.MediaType}, PlayCount: {playCount}, Favorite: {isFavorite}, Blacklisted: {isBlacklisted}, HasAudio: {hasAudio}, Duration: {duration?.TotalSeconds ?? -1}s");
-                }
-                else
-                {
-                    Log($"UpdateCurrentFileStatsUi: Library item not found for path: {path}");
-                    IsCurrentFileVideo = true; // Default to video for backward compatibility
-                }
+                playCount = item.PlayCount;
+                lastPlayedUtc = item.LastPlayedUtc;
+                isFavorite = item.IsFavorite;
+                isBlacklisted = item.IsBlacklisted;
+                duration = item.Duration;
+                hasAudio = item.HasAudio;
+                integratedLoudness = item.IntegratedLoudness;
+                peakDb = item.PeakDb;
+
+                // Set media type for visibility binding
+                IsCurrentFileVideo = item.MediaType == MediaType.Video;
+
+                Log($"UpdateCurrentFileStatsUi: Found library item - MediaType: {item.MediaType}, PlayCount: {playCount}, Favorite: {isFavorite}, Blacklisted: {isBlacklisted}, HasAudio: {hasAudio}, Duration: {duration?.TotalSeconds ?? -1}s");
+            }
+            else
+            {
+                Log($"UpdateCurrentFileStatsUi: Library item not found for path: {path}");
+                IsCurrentFileVideo = true; // Default to video for backward compatibility
             }
 
             CurrentVideoPlayCount = playCount;
@@ -2079,14 +2112,21 @@ namespace ReelRoulette
                 UpdateLibraryPresetComboBox();
                 UpdateRandomizationModeComboBox();
                 
-                // Update the panel (only if library is loaded)
                 Log($"  Checking library index (null: {_libraryIndex == null})...");
                 if (_libraryIndex != null)
                 {
                     Log($"  Library index has {_libraryIndex.Items.Count} items, {_libraryIndex.Sources.Count} sources");
-                    Log("  Updating Library panel...");
+                }
+
+                if (_isCoreApiReachable)
+                {
+                    Log("  Updating Library panel from the list query...");
                     UpdateLibraryPanel();
                     Log("  Library panel update initiated.");
+                }
+
+                if (_libraryIndex != null)
+                {
                     
                     // Update library info text
                     UpdateLibraryInfoText();
@@ -2109,9 +2149,9 @@ namespace ReelRoulette
                         Log("InitializeLibraryPanel: Connected with empty server library projection.");
                     }
                 }
-                else
+                else if (!_isCoreApiReachable)
                 {
-                    Log("  WARNING: _libraryIndex is null, skipping UpdateLibraryPanel()");
+                    Log("  WARNING: _libraryIndex is null and core is unreachable, skipping library browse.");
                     LibraryInfoText = "Library • 🎞️ 0 videos • 📷 0 photos";
                     UpdateFilterSummaryText();
                     StatusTextBlock.Text = BuildCoreReconnectWaitingStatusText();
@@ -2137,11 +2177,59 @@ namespace ReelRoulette
 
         private void UpdateLibraryPanel()
         {
+            _libraryBrowseResetOnNextOpen = false;
+            RequestLibraryBrowse(LibraryPanelBrowseRequest.Reset);
+        }
+
+        private void ReloadLibraryBrowseWindow()
+        {
+            RequestLibraryBrowse(LibraryPanelBrowseRequest.ReloadLoaded);
+        }
+
+        private void RefreshLibraryBrowseKeepingScroll()
+        {
+            if (_libraryBrowseHasResult)
+            {
+                ReloadLibraryBrowseWindow();
+            }
+            else
+            {
+                UpdateLibraryPanel();
+            }
+        }
+
+        private void PresentLibraryBrowseOnShow()
+        {
+            if (_libraryBrowseResetOnNextOpen)
+            {
+                UpdateLibraryPanel();
+                return;
+            }
+
+            RefreshLibraryBrowseKeepingScroll();
+        }
+
+        private void RequestLibraryBrowse(LibraryPanelBrowseRequest kind)
+        {
+            if (kind == LibraryPanelBrowseRequest.Reset)
+            {
+                _libraryBrowseResetQueued = true;
+            }
+
+            kind = LibraryPanelBrowse.CoalesceRequest(
+                _libraryBrowseResetQueued ? LibraryPanelBrowseRequest.Reset : null,
+                kind);
+            _libraryBrowseQueryOpen = true;
+            if (!_isGridScrollInteracting || !_pendingLibraryPanelRefresh || kind == LibraryPanelBrowseRequest.Reset)
+            {
+                _pendingLibraryBrowseKind = kind;
+            }
+
             var refreshGeneration = Interlocked.Increment(ref _libraryPanelRefreshGeneration);
             if (_isGridScrollInteracting)
             {
                 _pendingLibraryPanelRefresh = true;
-                Log($"UpdateLibraryPanel: Deferring refresh during grid scroll interaction (generation={refreshGeneration})");
+                Log($"UpdateLibraryPanel: Deferring { _pendingLibraryBrowseKind } during grid scroll interaction (generation={refreshGeneration})");
                 return;
             }
 
@@ -2187,10 +2275,11 @@ namespace ReelRoulette
                     }
                     
                     var cancellationToken = _updateLibraryPanelCancellationSource.Token;
+                    var browseKind = _pendingLibraryBrowseKind;
                     
                     try
                     {
-                        await UpdateLibraryPanelInternal(cancellationToken, timerGeneration);
+                        await QueryLibraryBrowseAsync(browseKind, cancellationToken, timerGeneration);
                     }
                     finally
                     {
@@ -2211,181 +2300,142 @@ namespace ReelRoulette
             _updateLibraryPanelDebounceTimer.Start();
         }
 
-        private async Task UpdateLibraryPanelInternal(CancellationToken cancellationToken, int refreshGeneration)
+        private async Task QueryLibraryBrowseAsync(LibraryPanelBrowseRequest kind, CancellationToken cancellationToken, int refreshGeneration)
         {
             try
             {
-                Log("UpdateLibraryPanel: Starting");
-                if (_libraryIndex == null)
+                if (ShouldAbortLibraryPanelRefresh(cancellationToken, refreshGeneration))
                 {
-                    Log("UpdateLibraryPanel: _libraryIndex is null, returning.");
                     return;
                 }
 
-                Log($"UpdateLibraryPanel: Processing {_libraryIndex.Items.Count} items, sort: {_librarySortMode}, descending: {_librarySortDescending}, search: '{_librarySearchText}'");
-                // Run filtering and sorting on background thread
-                await Task.Run(() =>
+                if (!_isCoreApiReachable || string.IsNullOrWhiteSpace(_coreServerBaseUrl))
                 {
-                    try
+                    if (kind == LibraryPanelBrowseRequest.Reset)
                     {
-                        Log("UpdateLibraryPanel: Task.Run started.");
-                        var items = _libraryIndex.Items.ToList();
-                        Log($"UpdateLibraryPanel: Got {items.Count} items from library.");
-
-                        // Filter out items from disabled sources
-                        var enabledSourceIds = _libraryIndex.Sources
-                            .Where(s => s.IsEnabled)
-                            .Select(s => s.Id)
-                            .ToHashSet();
-                        items = items.Where(item => enabledSourceIds.Contains(item.SourceId)).ToList();
-                        Log($"UpdateLibraryPanel: After disabled source filter: {items.Count} items.");
-
-                        // Apply search filter
-                        if (!string.IsNullOrWhiteSpace(_librarySearchText))
+                        await Dispatcher.UIThread.InvokeAsync(async () =>
                         {
-                            var searchLower = _librarySearchText.ToLowerInvariant();
-                            items = items.Where(item =>
-                                item.FileName.ToLowerInvariant().Contains(searchLower) ||
-                                item.RelativePath.ToLowerInvariant().Contains(searchLower)
-                            ).ToList();
-                            Log($"UpdateLibraryPanel: After search filter: {items.Count} items.");
+                            await EnqueueLibraryGridEditAsync(() =>
+                            {
+                                ClearLibraryBrowseGrid("Core runtime is required to browse the library.");
+                                return Task.CompletedTask;
+                            });
+                        });
+                    }
+
+                    return;
+                }
+
+                IReadOnlyList<(int Offset, int Limit)> windows = kind == LibraryPanelBrowseRequest.ReloadLoaded
+                    ? _libraryBrowseSpan.ReloadWindows(_libraryItems.Count)
+                    : [(0, LibraryPanelBrowse.WindowSize)];
+                var collected = new List<LibraryItem>();
+                var totalCount = 0;
+                foreach (var window in windows)
+                {
+                    var page = await _coreServerApiClient.QueryLibraryAsync(
+                        _coreServerBaseUrl,
+                        CurrentLibraryFilterJson(),
+                        _librarySearchText,
+                        _librarySortMode,
+                        _librarySortDescending,
+                        window.Offset,
+                        window.Limit,
+                        cancellationToken);
+                    if (ShouldAbortLibraryPanelRefresh(cancellationToken, refreshGeneration))
+                    {
+                        return;
+                    }
+
+                    if (page == null)
+                    {
+                        await Dispatcher.UIThread.InvokeAsync(async () =>
+                        {
+                            await EnqueueLibraryGridEditAsync(() =>
+                            {
+                                if (kind == LibraryPanelBrowseRequest.Reset)
+                                {
+                                    ClearLibraryBrowseGrid("Library browse failed.");
+                                }
+                                else
+                                {
+                                    StatusTextBlock.Text = "Library browse failed. Showing the tiles already loaded.";
+                                }
+
+                                return Task.CompletedTask;
+                            });
+                        });
+                        return;
+                    }
+
+                    collected.AddRange(ReadLibraryQueryItems(page));
+                    totalCount = page.TotalCount;
+                    if (collected.Count >= totalCount || page.Items.Count < window.Limit)
+                    {
+                        break;
+                    }
+                }
+
+                var restoreAnchor = kind == LibraryPanelBrowseRequest.ReloadLoaded;
+                await Dispatcher.UIThread.InvokeAsync(async () =>
+                {
+                    await EnqueueLibraryGridEditAsync(async () =>
+                    {
+                        if (ShouldAbortLibraryPanelRefresh(cancellationToken, refreshGeneration))
+                        {
+                            return;
                         }
 
-                        // Apply FilterState whenever one is active.
-                        bool shouldApplyFilterState = _currentFilterState != null;
-                        
-                        if (shouldApplyFilterState && _currentFilterState != null)
+                        var anchor = restoreAnchor ? CaptureGridViewportAnchor() : null;
+                        _libraryBrowseTotalCount = totalCount;
+                        _libraryBrowseHasResult = true;
+                        _libraryBrowseAppendFailed = false;
+                        var (firstChanged, firstLayout) = await ApplyLibraryItemsDiffChunkedAsync(collected, cancellationToken, refreshGeneration);
+                        if (ShouldAbortLibraryPanelRefresh(cancellationToken, refreshGeneration))
                         {
-                            Log("UpdateLibraryPanel: Applying FilterState (library panel display projection)...");
-                            var beforeFilter = items.Count;
-                            items = items
-                                .Where(item =>
-                                    LibraryProjectionDisplayFilter.PassesFilterState(item, _libraryIndex, _currentFilterState))
-                                .ToList();
-                            Log($"UpdateLibraryPanel: After FilterState: {items.Count} items (was {beforeFilter}).");
+                            return;
+                        }
+
+                        var reflowIndex = LibraryPanelBrowse.QueryReflowIndex(kind == LibraryPanelBrowseRequest.Reset, firstChanged, firstLayout);
+                        if (reflowIndex >= 0)
+                        {
+                            await RebuildLibraryGridRowsCoreAsync(_libraryItems.ToList(), reflowIndex, cancellationToken, refreshGeneration, isAppend: false, deferForScroll: true);
                         }
                         else
                         {
-                            Log("UpdateLibraryPanel: Skipping FilterState (no active filter state)");
+                            HydrateThumbnailsForVisibleGridItems();
                         }
 
-                        // Apply sorting
-                        items = ApplySort(items);
-                        Log($"UpdateLibraryPanel: After sorting: {items.Count} items. Final count ready for UI.");
-                        // Update UI on UI thread
-                        Log("UpdateLibraryPanel: Posting to UI thread...");
-                        Dispatcher.UIThread.Post(async () =>
+                        if (ShouldAbortLibraryPanelRefresh(cancellationToken, refreshGeneration))
                         {
-                            try
-                            {
-                                if (ShouldAbortLibraryPanelRefresh(cancellationToken, refreshGeneration))
-                                {
-                                    Log($"UpdateLibraryPanel: Skipping stale UI apply (generation={refreshGeneration}, latest={Volatile.Read(ref _libraryPanelRefreshGeneration)})");
-                                    return;
-                                }
-
-                                Log($"UpdateLibraryPanel: UI thread callback started, about to add {items.Count} items");
-
-                                // Preserve grid scroll offset across row rebuilds to prevent jumpy drag/scroll behavior.
-                                var shouldRestoreGridOffset = LibraryGridScrollViewer != null && !_isGridScrollInteracting;
-                                var gridOffsetYBeforeUpdate = shouldRestoreGridOffset
-                                    ? LibraryGridScrollViewer!.Offset.Y
-                                    : 0d;
-                                var gridViewportAnchor = shouldRestoreGridOffset
-                                    ? CaptureGridViewportAnchor()
-                                    : null;
-                                
-                                var firstChangedItemIndex = await ApplyLibraryItemsDiffChunkedAsync(items, cancellationToken, refreshGeneration);
-                                    if (ShouldAbortLibraryPanelRefresh(cancellationToken, refreshGeneration))
-                                    {
-                                        return;
-                                    }
-
-                                    var thumbnailLayoutChanged = SyncLibraryItemViewModelsFromProjection(items);
-                                    if (thumbnailLayoutChanged && firstChangedItemIndex < 0)
-                                    {
-                                        firstChangedItemIndex = 0;
-                                    }
-
-                                    await RebuildLibraryGridRowsIncrementalAsync(_libraryItems.ToList(), firstChangedItemIndex, cancellationToken, refreshGeneration);
-                                    if (ShouldAbortLibraryPanelRefresh(cancellationToken, refreshGeneration))
-                                    {
-                                        return;
-                                    }
-
-                                    EnsureLibraryGridInitialized();
-                                    Log($"UpdateLibraryPanel: UI thread callback completed. _libraryItems now has {_libraryItems.Count} items. LibraryPanelContainer.IsVisible: {LibraryPanelContainer?.IsVisible}");
-
-                                    if (shouldRestoreGridOffset)
-                                    {
-                                        Dispatcher.UIThread.Post(() =>
-                                        {
-                                            if (LibraryGridScrollViewer == null || _isGridScrollInteracting)
-                                            {
-                                                return;
-                                            }
-
-                                            var maxY = Math.Max(0, LibraryGridScrollViewer.Extent.Height - LibraryGridScrollViewer.Viewport.Height);
-                                            var restoredY = gridViewportAnchor != null
-                                                ? RestoreGridViewportAnchor(gridViewportAnchor)
-                                                : gridOffsetYBeforeUpdate;
-                                            var clampedY = Math.Clamp(restoredY, 0, maxY);
-                                            LibraryGridScrollViewer.Offset = new Vector(LibraryGridScrollViewer.Offset.X, clampedY);
-                                        }, DispatcherPriority.Loaded);
-                                    }
-                                    
-                                    // Update filter count display
-                                    UpdateFilterCountDisplay(_libraryItems.Count);
-                                    
-                                    // Restore selection state (only for items that are still in the filtered list)
-                                    if (_selectedItemPaths.Count > 0 || _gridCtrlBasePaths.Count > 0)
-                                    {
-                                        var visiblePaths = new HashSet<string>(_libraryItems.Select(i => i.FullPath), StringComparer.OrdinalIgnoreCase);
-                                        _selectedItemPaths.RemoveWhere(path => !visiblePaths.Contains(path));
-                                        _gridCtrlBasePaths.RemoveWhere(path => !visiblePaths.Contains(path));
-                                    }
-
-                                    if (_selectedItemPaths.Count > 0 || !string.IsNullOrWhiteSpace(_shiftAnchorPath))
-                                    {
-                                        ReconcileShiftAnchorIndex();
-                                    }
-
-                                    if (_selectedItemPaths.Count > 0)
-                                    {
-                                        ApplyLibrarySelectionUiState();
-                                    }
-                            }
-                            catch (OperationCanceledException)
-                            {
-                                Log("UpdateLibraryPanel: Operation cancelled");
-                            }
-                            catch (Exception ex)
-                            {
-                                var errorMsg = $"EXCEPTION in UpdateLibraryPanel UI thread callback: {ex.GetType().Name} - {ex.Message}\n{ex.StackTrace}";
-                                if (ex.InnerException != null)
-                                {
-                                    errorMsg += $"\nInner Exception: {ex.InnerException.Message}";
-                                }
-                                Log(errorMsg);
-                            }
-                        }, DispatcherPriority.Background);
-                        Log("UpdateLibraryPanel: Task.Run completed.");
-                    }
-                    catch (OperationCanceledException)
-                    {
-                        Log("UpdateLibraryPanel: Task.Run cancelled");
-                    }
-                    catch (Exception ex)
-                    {
-                        var errorMsg = $"EXCEPTION in UpdateLibraryPanel Task.Run: {ex.GetType().Name} - {ex.Message}\n{ex.StackTrace}";
-                        if (ex.InnerException != null)
-                        {
-                            errorMsg += $"\nInner Exception: {ex.InnerException.Message}";
+                            return;
                         }
-                        Log(errorMsg);
-                    }
-                }, cancellationToken);
-                Log("UpdateLibraryPanel: Completed successfully.");
+
+                        EnsureLibraryGridInitialized();
+                        UpdateFilterCountDisplay(totalCount);
+                        PruneLibrarySelectionToLoadedItems();
+                        if (kind == LibraryPanelBrowseRequest.Reset && LibraryGridScrollViewer != null)
+                        {
+                            LibraryGridScrollViewer.Offset = new Vector(LibraryGridScrollViewer.Offset.X, 0);
+                        }
+                        else if (anchor != null)
+                        {
+                            ScheduleLibraryBrowseAnchorRestore(anchor, refreshGeneration);
+                        }
+
+                        if (Volatile.Read(ref _libraryPanelRefreshGeneration) == refreshGeneration)
+                        {
+                            _libraryBrowseSpan.Commit(_libraryItems.Count);
+                            _libraryBrowseQueryOpen = false;
+                            if (kind == LibraryPanelBrowseRequest.Reset)
+                            {
+                                _libraryBrowseResetQueued = false;
+                            }
+
+                            ConsiderLibraryBrowseFill();
+                        }
+                    });
+                });
             }
             catch (OperationCanceledException)
             {
@@ -2393,29 +2443,295 @@ namespace ReelRoulette
             }
             catch (Exception ex)
             {
-                var errorMsg = $"EXCEPTION in UpdateLibraryPanel: {ex.GetType().Name} - {ex.Message}\n{ex.StackTrace}";
-                if (ex.InnerException != null)
+                Log($"UpdateLibraryPanel: Query failed ({ex.Message})");
+                if (kind == LibraryPanelBrowseRequest.Reset && !cancellationToken.IsCancellationRequested)
                 {
-                    errorMsg += $"\nInner Exception: {ex.InnerException.Message}\n{ex.InnerException.StackTrace}";
+                    await Dispatcher.UIThread.InvokeAsync(async () =>
+                    {
+                        await EnqueueLibraryGridEditAsync(() =>
+                        {
+                            ClearLibraryBrowseGrid("Library browse failed.");
+                            return Task.CompletedTask;
+                        });
+                    });
                 }
-                Log(errorMsg);
+            }
+            finally
+            {
+                if (LibraryPanelBrowse.ShouldReleaseBrowseQuery(
+                        Volatile.Read(ref _libraryPanelRefreshGeneration) == refreshGeneration,
+                        _pendingLibraryPanelRefresh))
+                {
+                    _libraryBrowseQueryOpen = false;
+                }
             }
         }
 
-        private List<LibraryItem> ApplySort(List<LibraryItem> items)
+        private static List<LibraryItem> ReadLibraryQueryItems(CoreLibraryQueryResponse page)
         {
-            return LibraryPanelSort.Apply(items, _librarySortMode, _librarySortDescending);
+            var items = new List<LibraryItem>(page.Items.Count);
+            foreach (var element in page.Items)
+            {
+                var item = element.Deserialize<LibraryItem>(CoreServerApiClient.LibraryItemJsonOptions);
+                if (item != null)
+                {
+                    items.Add(item);
+                }
+            }
+
+            return items;
         }
+
+        private JsonElement? CurrentLibraryFilterJson()
+        {
+            if (_currentFilterState == null)
+            {
+                return null;
+            }
+
+            return JsonSerializer.SerializeToElement(_currentFilterState, CoreServerApiClient.LibraryItemJsonOptions);
+        }
+
+        private void ClearLibraryBrowseGrid(string status)
+        {
+            foreach (var item in _libraryItems)
+            {
+                item.Dispose();
+            }
+
+            _libraryItems.Clear();
+            _libraryGridRows.Clear();
+            _libraryBrowseSpan.Commit(0);
+            _libraryBrowseTotalCount = 0;
+            _libraryBrowseHasResult = true;
+            _libraryBrowseAppendFailed = false;
+            RebuildLibraryGridOffsetIndex();
+            UpdateLibraryGridVisibleRowsWindow(forceRefreshRows: true);
+            UpdateFilterCountDisplay(0);
+            PruneLibrarySelectionToLoadedItems();
+            StatusTextBlock.Text = status;
+        }
+
+        private void PruneLibrarySelectionToLoadedItems()
+        {
+            if (_selectedItemPaths.Count == 0 && _gridCtrlBasePaths.Count == 0 && string.IsNullOrWhiteSpace(_shiftAnchorPath))
+            {
+                return;
+            }
+
+            var visiblePaths = new HashSet<string>(_libraryItems.Select(item => item.FullPath), StringComparer.OrdinalIgnoreCase);
+            _selectedItemPaths.RemoveWhere(path => !visiblePaths.Contains(path));
+            _gridCtrlBasePaths.RemoveWhere(path => !visiblePaths.Contains(path));
+            ReconcileShiftAnchorIndex();
+            ApplyLibrarySelectionUiState();
+        }
+
+        private void ApplyLibraryBrowseEvent(LibraryPanelBrowseEvent kind)
+        {
+            if (!_showLibraryPanel)
+            {
+                return;
+            }
+
+            var queryOpen = LibraryPanelBrowse.IsBrowseQueryOpen(_libraryBrowseQueryOpen, _libraryBrowseInFlight);
+            if (!_libraryBrowseHasResult && !queryOpen)
+            {
+                return;
+            }
+
+            var effect = LibraryPanelBrowse.EffectFor(
+                kind,
+                _currentFilterState?.FavoritesOnly ?? false,
+                _currentFilterState?.ExcludeBlacklisted ?? false,
+                _currentFilterState?.OnlyNeverPlayed ?? false,
+                ((_currentFilterState?.SelectedTags?.Count ?? 0) > 0) || ((_currentFilterState?.ExcludedTags?.Count ?? 0) > 0),
+                _librarySortMode);
+            if (LibraryPanelBrowse.ShouldReplayBrowse(queryOpen, effect))
+            {
+                ReloadLibraryBrowseWindow();
+            }
+        }
+
+        private void ConsiderLibraryBrowseFill()
+        {
+            if (!_showLibraryPanel || !_libraryBrowseHasResult || _libraryBrowseInFlight || _libraryBrowseAppendFailed ||
+                LibraryPanelBrowse.ShouldSuppressAppend(_libraryBrowseQueryOpen, _pendingLibraryPanelRefresh))
+            {
+                return;
+            }
+
+            if (LibraryGridScrollViewer == null)
+            {
+                return;
+            }
+
+            var viewportBottom = LibraryGridScrollViewer.Offset.Y + Math.Max(0, LibraryGridScrollViewer.Viewport.Height);
+            if (!LibraryPanelBrowse.ShouldFill(_libraryItems.Count, _libraryBrowseTotalCount, _libraryGridTotalExtentHeight, viewportBottom))
+            {
+                return;
+            }
+
+            _ = AppendLibraryBrowseAsync();
+        }
+
+        private async Task AppendLibraryBrowseAsync()
+        {
+            if (_libraryBrowseInFlight || _libraryBrowseAppendFailed || !_libraryBrowseHasResult ||
+                LibraryPanelBrowse.ShouldSuppressAppend(_libraryBrowseQueryOpen, _pendingLibraryPanelRefresh))
+            {
+                return;
+            }
+
+            var generation = Volatile.Read(ref _libraryPanelRefreshGeneration);
+            var window = _libraryBrowseSpan.NextWindow(_libraryItems.Count);
+            if (!LibraryPanelBrowse.CanApplyAppend(_libraryItems.Count, window.Offset))
+            {
+                Log($"LibraryBrowse: Skipping append at offset {window.Offset} because {_libraryItems.Count} items are loaded.");
+                return;
+            }
+
+            _libraryBrowseInFlight = true;
+            var appendApplied = false;
+            try
+            {
+                var page = await _coreServerApiClient.QueryLibraryAsync(
+                    _coreServerBaseUrl,
+                    CurrentLibraryFilterJson(),
+                    _librarySearchText,
+                    _librarySortMode,
+                    _librarySortDescending,
+                    window.Offset,
+                    window.Limit);
+                if (generation != Volatile.Read(ref _libraryPanelRefreshGeneration))
+                {
+                    return;
+                }
+
+                if (page == null)
+                {
+                    _libraryBrowseAppendFailed = true;
+                    await Dispatcher.UIThread.InvokeAsync(() =>
+                    {
+                        StatusTextBlock.Text = "Library browse failed. Showing the tiles already loaded.";
+                    });
+                    return;
+                }
+
+                await Dispatcher.UIThread.InvokeAsync(async () =>
+                {
+                    await EnqueueLibraryGridEditAsync(async () =>
+                    {
+                        if (generation != Volatile.Read(ref _libraryPanelRefreshGeneration))
+                        {
+                            return;
+                        }
+
+                        if (!LibraryPanelBrowse.CanApplyAppend(_libraryItems.Count, window.Offset))
+                        {
+                            Log($"LibraryBrowse: Discarding append page at offset {window.Offset} because {_libraryItems.Count} items are loaded.");
+                            return;
+                        }
+
+                        var previousCount = _libraryItems.Count;
+                        var combined = _libraryItems.Select(item => item.Item).ToList();
+                        combined.AddRange(ReadLibraryQueryItems(page));
+                        var lastRowStart = _libraryGridRows.Count > 0 ? _libraryGridRows[^1].StartItemIndex : -1;
+                        var (firstChanged, firstLayout) = await ApplyLibraryItemsDiffChunkedAsync(combined, CancellationToken.None, generation, isAppend: true);
+                        if (generation != Volatile.Read(ref _libraryPanelRefreshGeneration))
+                        {
+                            return;
+                        }
+
+                        var appendIndex = LibraryPanelBrowse.AppendReflowItemIndex(
+                            firstChanged >= 0 ? firstChanged : previousCount,
+                            lastRowStart);
+                        var reflowIndex = LibraryPanelBrowse.QueryReflowIndex(reset: false, appendIndex, firstLayout);
+                        if (reflowIndex >= 0)
+                        {
+                            await RebuildLibraryGridRowsCoreAsync(_libraryItems.ToList(), reflowIndex, CancellationToken.None, generation, isAppend: true, deferForScroll: true);
+                        }
+
+                        if (generation != Volatile.Read(ref _libraryPanelRefreshGeneration))
+                        {
+                            return;
+                        }
+
+                        _libraryBrowseSpan.Commit(_libraryItems.Count);
+                        _libraryBrowseTotalCount = page.TotalCount;
+                        _libraryBrowseAppendFailed = false;
+                        UpdateFilterCountDisplay(page.TotalCount);
+                        appendApplied = true;
+                    });
+                });
+            }
+            catch (Exception ex)
+            {
+                Log($"LibraryBrowse: Append failed ({ex.Message})");
+                _libraryBrowseAppendFailed = true;
+            }
+            finally
+            {
+                _libraryBrowseInFlight = false;
+            }
+
+            if (appendApplied && !_libraryBrowseAppendFailed && generation == Volatile.Read(ref _libraryPanelRefreshGeneration))
+            {
+                await Dispatcher.UIThread.InvokeAsync(ConsiderLibraryBrowseFill);
+            }
+        }
+
+        private LibraryItemViewModel? FindLoadedLibraryItem(string? fullPath)
+        {
+            if (string.IsNullOrWhiteSpace(fullPath))
+            {
+                return null;
+            }
+
+            return _libraryItems.FirstOrDefault(item =>
+                string.Equals(item.FullPath, fullPath, StringComparison.OrdinalIgnoreCase));
+        }
+
+        private LibraryItemViewModel? FindLoadedLibraryItemByIdOrPath(string identifier)
+        {
+            return _libraryItems.FirstOrDefault(item =>
+                string.Equals(item.Id, identifier, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(item.FullPath, identifier, StringComparison.OrdinalIgnoreCase));
+        }
+
+        private void ScheduleLibraryGridReflow()
+        {
+            if (!_showLibraryPanel)
+            {
+                return;
+            }
+
+            var refreshGeneration = Volatile.Read(ref _libraryPanelRefreshGeneration);
+            _ = EnqueueLibraryGridEditAsync(async () =>
+            {
+                if (!_showLibraryPanel)
+                {
+                    return;
+                }
+
+                var anchor = CaptureGridViewportAnchor();
+                await RebuildLibraryGridRowsCoreAsync(_libraryItems.ToList(), 0, CancellationToken.None, refreshGeneration, isAppend: false, deferForScroll: false);
+                if (anchor != null && Volatile.Read(ref _libraryPanelRefreshGeneration) == refreshGeneration)
+                {
+                    ScheduleLibraryBrowseAnchorRestore(anchor, refreshGeneration);
+                }
+            });
+        }
+
 
         private List<LibraryItem> GetSelectedLibraryItems()
         {
             var selectedItems = new List<LibraryItem>();
             foreach (var path in _selectedItemPaths)
             {
-                var item = FindProjectionItemByPath(path);
-                if (item != null)
+                var loaded = FindLoadedLibraryItem(path);
+                if (loaded != null)
                 {
-                    selectedItems.Add(item);
+                    selectedItems.Add(loaded.Item);
                 }
             }
             return selectedItems;
@@ -2579,6 +2895,33 @@ namespace ReelRoulette
             SetLibrarySelectionPaths(paths, anchorIndex);
         }
 
+        private bool IsCurrentVideoPath(string? path)
+        {
+            return !string.IsNullOrWhiteSpace(path) &&
+                   !string.IsNullOrWhiteSpace(_currentVideoPath) &&
+                   string.Equals(_currentVideoPath, path, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private LibraryItem? FindCurrentFileLibraryItem(string? fullPath)
+        {
+            var snapshotItem = FindProjectionItemByPath(fullPath);
+            var loadedItem = FindLoadedLibraryItem(fullPath)?.Item;
+            return LibraryPanelBrowse.CurrentFileSource(snapshotItem != null, loadedItem != null) switch
+            {
+                LibraryCurrentFileSource.Snapshot => snapshotItem,
+                LibraryCurrentFileSource.LoadedTile => loadedItem,
+                _ => null
+            };
+        }
+
+        private async Task SyncCurrentFileSnapshotAsync()
+        {
+            if (await SyncLibraryProjectionFromCoreAsync())
+            {
+                UpdateCurrentFileStatsUi();
+            }
+        }
+
         private LibraryItem? FindProjectionItemByPath(string? fullPath)
         {
             if (_libraryIndex == null || string.IsNullOrWhiteSpace(fullPath))
@@ -2611,44 +2954,6 @@ namespace ReelRoulette
                 .ToList();
         }
 
-        private List<LibraryItem> GetCurrentFilteredLibraryItems()
-        {
-            if (_libraryIndex == null)
-            {
-                return new List<LibraryItem>();
-            }
-
-            var items = _libraryIndex.Items.ToList();
-
-            // Match library panel behavior for "current filtered/visible items".
-            var enabledSourceIds = _libraryIndex.Sources
-                .Where(s => s.IsEnabled)
-                .Select(s => s.Id)
-                .ToHashSet();
-            items = items.Where(item => enabledSourceIds.Contains(item.SourceId)).ToList();
-
-            if (!string.IsNullOrWhiteSpace(_librarySearchText))
-            {
-                var searchLower = _librarySearchText.ToLowerInvariant();
-                items = items.Where(item =>
-                    item.FileName.ToLowerInvariant().Contains(searchLower) ||
-                    item.RelativePath.ToLowerInvariant().Contains(searchLower)
-                ).ToList();
-            }
-
-            bool shouldApplyFilterState = _currentFilterState != null;
-
-            if (shouldApplyFilterState && _currentFilterState != null)
-            {
-                items = items
-                    .Where(item =>
-                        LibraryProjectionDisplayFilter.PassesFilterState(item, _libraryIndex, _currentFilterState))
-                    .ToList();
-            }
-
-            return ApplySort(items);
-        }
-
         private static bool ContainsTagCaseInsensitive(List<string>? tags, string tagName)
         {
             if (tags == null)
@@ -2661,12 +2966,7 @@ namespace ReelRoulette
 
         private void UpdateSelectionCountDisplay()
         {
-            if (LibraryCountTextBlock != null)
-            {
-                var selectedCount = _selectedItemPaths.Count;
-                var filteredCount = _libraryItems.Count;
-                LibraryCountTextBlock.Text = $"🎯 {filteredCount} filtered • 📝 {selectedCount} selected";
-            }
+            UpdateFilterCountDisplay(_libraryBrowseTotalCount);
         }
 
 
@@ -2739,7 +3039,7 @@ namespace ReelRoulette
                         return;
                     }
 
-                    RebuildLibraryGridRowsFromCurrentItems();
+                    ScheduleLibraryGridReflow();
                 };
             }
 
@@ -2753,7 +3053,7 @@ namespace ReelRoulette
             UpdateLibraryGridVisibleRowsWindow(forceRefreshRows: true);
         }
 
-        private bool ShouldAbortLibraryPanelRefresh(CancellationToken cancellationToken, int refreshGeneration)
+        private bool ShouldAbortLibraryPanelRefresh(CancellationToken cancellationToken, int refreshGeneration, bool isAppend = false, bool deferForScroll = true)
         {
             if (cancellationToken.IsCancellationRequested ||
                 refreshGeneration != Volatile.Read(ref _libraryPanelRefreshGeneration))
@@ -2761,7 +3061,7 @@ namespace ReelRoulette
                 return true;
             }
 
-            if (_isGridScrollInteracting)
+            if (deferForScroll && LibraryPanelBrowse.ShouldDeferBrowseForScroll(_isGridScrollInteracting, isAppend))
             {
                 _pendingLibraryPanelRefresh = true;
                 return true;
@@ -2840,27 +3140,28 @@ namespace ReelRoulette
             };
         }
 
-        private async Task<int> ApplyLibraryItemsDiffChunkedAsync(IReadOnlyList<LibraryItem> items, CancellationToken cancellationToken, int refreshGeneration)
+        private async Task<(int FirstChangedIndex, int FirstLayoutIndex)> ApplyLibraryItemsDiffChunkedAsync(IReadOnlyList<LibraryItem> items, CancellationToken cancellationToken, int refreshGeneration, bool isAppend = false)
         {
             const int chunkSize = 200;
             var diffWindow = ComputeLibraryItemDiffWindow(_libraryItems, items);
             if (!diffWindow.HasChanges)
             {
-                return -1;
+                var unchangedLayout = SyncLibraryItemViewModelsFromProjection(items, 0, items.Count);
+                return (-1, unchangedLayout);
             }
 
             Log($"UpdateLibraryPanel: Applying item diff window start={diffWindow.StartIndex}, oldCount={diffWindow.OldCount}, newCount={diffWindow.NewCount}");
 
-            SyncLibraryItemViewModelsFromProjection(items, 0, diffWindow.StartIndex);
+            var firstLayout = SyncLibraryItemViewModelsFromProjection(items, 0, diffWindow.StartIndex);
 
             if (diffWindow.OldCount > 0)
             {
                 for (var i = 0; i < diffWindow.OldCount; i++)
                 {
-                    if (ShouldAbortLibraryPanelRefresh(cancellationToken, refreshGeneration))
+                    if (ShouldAbortLibraryPanelRefresh(cancellationToken, refreshGeneration, isAppend))
                     {
                         Log($"UpdateLibraryPanel: Cancelled during item removal");
-                        return -1;
+                        return (-1, -1);
                     }
 
                     _libraryItems[diffWindow.StartIndex].Dispose();
@@ -2877,10 +3178,10 @@ namespace ReelRoulette
                 var inserted = 0;
                 for (var index = diffWindow.StartIndex; index < diffWindow.StartIndex + diffWindow.NewCount; index++)
                 {
-                    if (ShouldAbortLibraryPanelRefresh(cancellationToken, refreshGeneration))
+                    if (ShouldAbortLibraryPanelRefresh(cancellationToken, refreshGeneration, isAppend))
                     {
                         Log($"UpdateLibraryPanel: Cancelled during item insertion");
-                        return -1;
+                        return (-1, -1);
                     }
 
                     _libraryItems.Insert(index, new LibraryItemViewModel(items[index]));
@@ -2892,7 +3193,17 @@ namespace ReelRoulette
                 }
             }
 
-            return diffWindow.StartIndex;
+            var suffixLayout = SyncLibraryItemViewModelsFromProjection(items, diffWindow.StartIndex + diffWindow.NewCount, items.Count);
+            if (firstLayout < 0)
+            {
+                firstLayout = suffixLayout;
+            }
+            else if (suffixLayout >= 0)
+            {
+                firstLayout = Math.Min(firstLayout, suffixLayout);
+            }
+
+            return (diffWindow.StartIndex, firstLayout);
         }
 
         private (List<LibraryGridRowViewModel> Rows, int MaxColumns) BuildGridRowModels(IReadOnlyList<LibraryItemViewModel> items, double layoutWidth)
@@ -2994,13 +3305,13 @@ namespace ReelRoulette
             return firstRowStartingAfterChangedIndex - 1;
         }
 
-        private async Task ApplyGridRowSpliceChunkedAsync(int startRowIndex, int replaceCount, IReadOnlyList<LibraryGridRowViewModel> newRows, CancellationToken cancellationToken, int refreshGeneration)
+        private async Task ApplyGridRowSpliceChunkedAsync(int startRowIndex, int replaceCount, IReadOnlyList<LibraryGridRowViewModel> newRows, CancellationToken cancellationToken, int refreshGeneration, bool isAppend = false, bool deferForScroll = true)
         {
             const int rowChunkSize = 24;
 
             for (var i = 0; i < replaceCount; i++)
             {
-                if (ShouldAbortLibraryPanelRefresh(cancellationToken, refreshGeneration))
+                if (ShouldAbortLibraryPanelRefresh(cancellationToken, refreshGeneration, isAppend, deferForScroll))
                 {
                     return;
                 }
@@ -3023,7 +3334,7 @@ namespace ReelRoulette
 
             for (var i = 0; i < newRows.Count; i++)
             {
-                if (ShouldAbortLibraryPanelRefresh(cancellationToken, refreshGeneration))
+                if (ShouldAbortLibraryPanelRefresh(cancellationToken, refreshGeneration, isAppend, deferForScroll))
                 {
                     return;
                 }
@@ -3036,7 +3347,41 @@ namespace ReelRoulette
             }
         }
 
-        private async Task RebuildLibraryGridRowsIncrementalAsync(IReadOnlyList<LibraryItemViewModel> items, int firstChangedItemIndex, CancellationToken cancellationToken, int refreshGeneration)
+        private Task EnqueueLibraryGridEditAsync(Func<Task> edit)
+        {
+            var previous = _libraryGridEdit;
+            var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            _libraryGridEdit = gate.Task;
+            return RunQueuedLibraryGridEditAsync(previous, gate, edit);
+        }
+
+        private async Task RunQueuedLibraryGridEditAsync(Task previous, TaskCompletionSource gate, Func<Task> edit)
+        {
+            try
+            {
+                try
+                {
+                    await previous;
+                }
+                catch (Exception ex)
+                {
+                    Log($"LibraryGrid: Prior row rebuild failed ({ex.Message})");
+                }
+
+                if (!Dispatcher.UIThread.CheckAccess())
+                {
+                    await Dispatcher.UIThread.InvokeAsync(() => { });
+                }
+
+                await edit();
+            }
+            finally
+            {
+                gate.TrySetResult();
+            }
+        }
+
+        private async Task RebuildLibraryGridRowsCoreAsync(IReadOnlyList<LibraryItemViewModel> items, int firstChangedItemIndex, CancellationToken cancellationToken, int refreshGeneration, bool isAppend, bool deferForScroll)
         {
             if (firstChangedItemIndex < 0)
             {
@@ -3067,7 +3412,7 @@ namespace ReelRoulette
 
             var (reflowRows, _) = BuildGridRowModelsRange(items, reflowStartItemIndex, items.Count, layoutWidth);
             var replaceCount = Math.Max(0, _libraryGridRows.Count - startRowIndex);
-            await ApplyGridRowSpliceChunkedAsync(startRowIndex, replaceCount, reflowRows, cancellationToken, refreshGeneration);
+            await ApplyGridRowSpliceChunkedAsync(startRowIndex, replaceCount, reflowRows, cancellationToken, refreshGeneration, isAppend, deferForScroll);
 
             LibraryGridColumns = Math.Clamp(_libraryGridRows.Count == 0 ? 1 : _libraryGridRows.Max(row => Math.Max(1, row.ItemCount)), 1, 12);
             RebuildLibraryGridOffsetIndex(startRowIndex);
@@ -3140,6 +3485,23 @@ namespace ReelRoulette
             }
 
             return anchorState.RawOffsetY;
+        }
+
+        private void ScheduleLibraryBrowseAnchorRestore(GridViewportAnchorState anchor, int refreshGeneration)
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (Volatile.Read(ref _libraryPanelRefreshGeneration) != refreshGeneration || LibraryGridScrollViewer == null)
+                {
+                    return;
+                }
+
+                var clamped = LibraryPanelBrowse.ClampScrollOffset(
+                    RestoreGridViewportAnchor(anchor),
+                    _libraryGridTotalExtentHeight,
+                    LibraryGridScrollViewer.Viewport.Height);
+                LibraryGridScrollViewer.Offset = new Vector(LibraryGridScrollViewer.Offset.X, clamped);
+            }, DispatcherPriority.Loaded);
         }
 
         private double GetGridRowMeasuredHeight(LibraryGridRowViewModel row)
@@ -3317,31 +3679,35 @@ namespace ReelRoulette
             }
 
             HydrateThumbnailsForVisibleGridItems();
+            ConsiderLibraryBrowseFill();
         }
 
         private void LibraryGridScrollViewer_ScrollChanged(object? sender, ScrollChangedEventArgs e)
         {
+            if (_libraryBrowseAppendFailed && Math.Abs(e.OffsetDelta.Y) > 0.5)
+            {
+                _libraryBrowseAppendFailed = false;
+            }
+
             UpdateLibraryGridVisibleRowsWindow();
         }
 
-        private bool SyncLibraryItemViewModelsFromProjection(IReadOnlyList<LibraryItem> items, int startIndex = 0, int? endExclusive = null)
+        private int SyncLibraryItemViewModelsFromProjection(IReadOnlyList<LibraryItem> items, int startIndex = 0, int? endExclusive = null)
         {
             var end = endExclusive ?? Math.Min(items.Count, _libraryItems.Count);
-            end = Math.Min(end, _libraryItems.Count);
+            end = Math.Min(end, Math.Min(items.Count, _libraryItems.Count));
             startIndex = Math.Clamp(startIndex, 0, end);
-            var layoutChanged = false;
+            var firstLayoutIndex = -1;
 
             for (var i = startIndex; i < end; i++)
             {
-                var viewModel = _libraryItems[i];
-                var nextItem = items[i];
-                if (viewModel.SyncFromProjectionItem(nextItem))
+                if (_libraryItems[i].SyncFromProjectionItem(items[i]) && firstLayoutIndex < 0)
                 {
-                    layoutChanged = true;
+                    firstLayoutIndex = i;
                 }
             }
 
-            return layoutChanged;
+            return firstLayoutIndex;
         }
 
         private void HydrateThumbnailsForVisibleGridItems()
@@ -3392,11 +3758,6 @@ namespace ReelRoulette
 
                 await item.LoadThumbnailAsync(LibraryGridThumbnailHttpClient, _coreServerBaseUrl).ConfigureAwait(false);
             }
-        }
-
-        private void RebuildLibraryGridRowsFromCurrentItems()
-        {
-            _ = RebuildLibraryGridRowsIncrementalAsync(_libraryItems.ToList(), 0, CancellationToken.None, Volatile.Read(ref _libraryPanelRefreshGeneration));
         }
 
         private double ComputeLibraryGridAvailableWidth()
@@ -3608,6 +3969,10 @@ namespace ReelRoulette
             {
                 UpdateLibraryPanel();
             }
+            else
+            {
+                _libraryBrowseResetOnNextOpen = true;
+            }
             StatusTextBlock.Text = $"Applied filter preset: {selectedPresetName}";
             _ = SyncPresetsToCoreAsync();
         }
@@ -3705,7 +4070,7 @@ namespace ReelRoulette
             if (_pendingLibraryPanelRefresh)
             {
                 _pendingLibraryPanelRefresh = false;
-                UpdateLibraryPanel();
+                RequestLibraryBrowse(_pendingLibraryBrowseKind);
             }
         }
 
@@ -3992,7 +4357,7 @@ namespace ReelRoulette
             ApplyViewPreferences();
             if (_showLibraryPanel)
             {
-                UpdateLibraryPanel();
+                PresentLibraryBrowseOnShow();
             }
         }
 
@@ -5378,9 +5743,26 @@ namespace ReelRoulette
             return true;
         }
 
+        private static List<string> MergeItemTags(List<string>? tags, IReadOnlyList<string> addTags, IReadOnlyList<string> removeTags)
+        {
+            var updatedTags = (tags ?? [])
+                .Where(tag => !removeTags.Contains(tag, StringComparer.OrdinalIgnoreCase))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            foreach (var addTag in addTags)
+            {
+                if (!updatedTags.Contains(addTag, StringComparer.OrdinalIgnoreCase))
+                {
+                    updatedTags.Add(addTag);
+                }
+            }
+
+            return updatedTags;
+        }
+
         private void ApplyItemTagsProjection(CoreItemTagsChangedPayload payload)
         {
-            if (_libraryIndex == null || payload.ItemIds.Count == 0)
+            if (payload.ItemIds.Count == 0)
             {
                 return;
             }
@@ -5406,24 +5788,58 @@ namespace ReelRoulette
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
-            var byId = _libraryIndex.Items
+            var catalogItems = _libraryIndex?.Items ?? [];
+            var byId = catalogItems
                 .Where(item => !string.IsNullOrWhiteSpace(item.Id))
                 .GroupBy(item => item.Id, StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
-            var byPath = _libraryIndex.Items
+            var byPath = catalogItems
                 .Where(item => !string.IsNullOrWhiteSpace(item.FullPath))
                 .GroupBy(item => item.FullPath, StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
 
+            var hasTagFilters = ((_currentFilterState?.SelectedTags?.Count ?? 0) > 0)
+                || ((_currentFilterState?.ExcludedTags?.Count ?? 0) > 0);
+            var reloadLoadedForUnknownTag = false;
+            var currentFileTileUpdated = false;
+            var downloadCurrentFileSnapshot = false;
             var targetItems = new List<LibraryItem>(identifiers.Count);
             foreach (var identifier in identifiers)
             {
                 if (!byId.TryGetValue(identifier, out var item) &&
                     !byPath.TryGetValue(identifier, out item))
                 {
-                    Log($"CoreEvents: itemTagsChanged fallback to full projection sync (unknown item '{identifier}').");
-                    _ = SyncLibraryProjectionFromCoreAsync();
-                    return;
+                    var loadedUnknown = FindLoadedLibraryItemByIdOrPath(identifier);
+                    if (loadedUnknown != null)
+                    {
+                        loadedUnknown.Item.Tags = MergeItemTags(loadedUnknown.Item.Tags, addTags, removeTags);
+                        if (IsCurrentVideoPath(loadedUnknown.FullPath))
+                        {
+                            currentFileTileUpdated = true;
+                        }
+
+                        continue;
+                    }
+
+                    if (IsCurrentVideoPath(identifier) &&
+                        LibraryPanelBrowse.NeedsCurrentFileSnapshotSync(snapshotHasItem: false, loadedHasItem: false))
+                    {
+                        downloadCurrentFileSnapshot = true;
+                        continue;
+                    }
+
+                    switch (LibraryPanelBrowse.UnknownTagItem(_showLibraryPanel, hasTagFilters))
+                    {
+                        case LibraryPanelBrowseUnknownTag.Skip:
+                            continue;
+                        case LibraryPanelBrowseUnknownTag.ReloadLoadedAfterBatch:
+                            reloadLoadedForUnknownTag = true;
+                            continue;
+                        default:
+                            Log($"CoreEvents: itemTagsChanged fallback to full projection sync (unknown item '{identifier}').");
+                            _ = SyncLibraryProjectionFromCoreAsync();
+                            return;
+                    }
                 }
 
                 if (!targetItems.Contains(item))
@@ -5434,37 +5850,33 @@ namespace ReelRoulette
 
             foreach (var item in targetItems)
             {
-                var updatedTags = (item.Tags ?? [])
-                    .Where(tag => !removeTags.Contains(tag))
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToList();
-
-                foreach (var addTag in addTags)
+                item.Tags = MergeItemTags(item.Tags, addTags, removeTags);
+                var loaded = FindLoadedLibraryItem(item.FullPath);
+                if (loaded != null && !ReferenceEquals(loaded.Item, item))
                 {
-                    if (!updatedTags.Contains(addTag, StringComparer.OrdinalIgnoreCase))
-                    {
-                        updatedTags.Add(addTag);
-                    }
+                    loaded.Item.Tags = MergeItemTags(loaded.Item.Tags, addTags, removeTags);
                 }
-
-                item.Tags = updatedTags;
             }
 
-            var hasTagFilters = ((_currentFilterState?.SelectedTags?.Count ?? 0) > 0)
-                || ((_currentFilterState?.ExcludedTags?.Count ?? 0) > 0);
-            if (_showLibraryPanel && hasTagFilters)
+            if (reloadLoadedForUnknownTag)
             {
-                UpdateLibraryPanel();
+                Log("CoreEvents: itemTagsChanged reloads the loaded library window (unknown item under a tag filter).");
+                RefreshLibraryBrowseKeepingScroll();
+            }
+            else
+            {
+                ApplyLibraryBrowseEvent(LibraryPanelBrowseEvent.ItemTags);
             }
 
-            if (_currentVideoPath != null)
+            if (currentFileTileUpdated || (_currentVideoPath != null && targetItems.Any(item => IsCurrentVideoPath(item.FullPath))))
             {
-                var currentItemUpdated = targetItems.Any(item =>
-                    string.Equals(item.FullPath, _currentVideoPath, StringComparison.OrdinalIgnoreCase));
-                if (currentItemUpdated)
-                {
-                    UpdateCurrentFileStatsUi();
-                }
+                UpdateCurrentFileStatsUi();
+            }
+
+            if (downloadCurrentFileSnapshot)
+            {
+                Log($"CoreEvents: itemTagsChanged downloads the catalog snapshot for the current file '{_currentVideoPath}'.");
+                _ = SyncCurrentFileSnapshotAsync();
             }
 
             Log($"CoreEvents: itemTagsChanged applied to {targetItems.Count} item(s) via targeted projection update.");
@@ -5514,7 +5926,7 @@ namespace ReelRoulette
             source.IsEnabled = payload.IsEnabled;
             if (_showLibraryPanel)
             {
-                UpdateLibraryPanel();
+                RefreshLibraryBrowseKeepingScroll();
             }
             UpdateLibraryInfoText();
         }
@@ -5836,7 +6248,7 @@ namespace ReelRoulette
                 {
                     if (_showLibraryPanel)
                     {
-                        UpdateLibraryPanel();
+                        RefreshLibraryBrowseKeepingScroll();
                     }
 
                     UpdateLibraryInfoText();
@@ -6666,14 +7078,7 @@ namespace ReelRoulette
 
                 _filterPresets = mapped;
                 _activePresetName = await MatchPresetNameFromCoreAsync(_currentFilterState);
-                await Dispatcher.UIThread.InvokeAsync(() =>
-                {
-                    UpdateLibraryPresetComboBox();
-                    if (_showLibraryPanel)
-                    {
-                        UpdateLibraryPanel();
-                    }
-                });
+                await Dispatcher.UIThread.InvokeAsync(UpdateLibraryPresetComboBox);
             }
             catch (Exception ex)
             {
@@ -6814,6 +7219,7 @@ namespace ReelRoulette
                 await Dispatcher.UIThread.InvokeAsync(() =>
                 {
                     var sourceById = _libraryIndex.Sources.ToDictionary(s => s.Id, StringComparer.OrdinalIgnoreCase);
+                    var enabledChanged = false;
                     foreach (var source in sources)
                     {
                         if (string.IsNullOrWhiteSpace(source.Id))
@@ -6823,7 +7229,12 @@ namespace ReelRoulette
 
                         if (sourceById.TryGetValue(source.Id, out var local))
                         {
-                            local.IsEnabled = source.IsEnabled;
+                            if (local.IsEnabled != source.IsEnabled)
+                            {
+                                local.IsEnabled = source.IsEnabled;
+                                enabledChanged = true;
+                            }
+
                             if (!string.IsNullOrWhiteSpace(source.DisplayName))
                             {
                                 local.DisplayName = source.DisplayName;
@@ -6831,9 +7242,9 @@ namespace ReelRoulette
                         }
                     }
 
-                    if (_showLibraryPanel)
+                    if (_showLibraryPanel && enabledChanged)
                     {
-                        UpdateLibraryPanel();
+                        RefreshLibraryBrowseKeepingScroll();
                     }
                     UpdateLibraryInfoText();
                 });
@@ -8067,7 +8478,7 @@ namespace ReelRoulette
 
             if (_showLibraryPanel)
             {
-                UpdateLibraryPanel();
+                RefreshLibraryBrowseKeepingScroll();
             }
 
             if (_currentVideoPath != null && changedPaths.Contains(_currentVideoPath))
@@ -8095,10 +8506,9 @@ namespace ReelRoulette
             
             Log("ManageSourcesMenuItem_Click: Dialog closed, refreshing UI");
             await SyncSourcesFromCoreAsync();
-            // Refresh UI after dialog closes
             if (_showLibraryPanel)
             {
-                UpdateLibraryPanel();
+                RefreshLibraryBrowseKeepingScroll();
             }
             RecalculateGlobalStats();
             UpdateLibraryInfoText();
@@ -9371,6 +9781,10 @@ namespace ReelRoulette
                     Log("  Updating Library panel after filter change");
                     UpdateLibraryPanel();
                 }
+                else
+                {
+                    _libraryBrowseResetOnNextOpen = true;
+                }
                 
                 // Update library info text to reflect new filter state
                 UpdateLibraryInfoText();
@@ -9591,10 +10005,10 @@ namespace ReelRoulette
         /// </summary>
         private FileLoudnessInfo? GetLoudnessInfoFromLibrary(string? path)
         {
-            if (string.IsNullOrEmpty(path) || _libraryIndex == null)
+            if (string.IsNullOrEmpty(path))
                 return null;
-                
-            var item = FindProjectionItemByPath(path);
+
+            var item = FindCurrentFileLibraryItem(path);
             if (item == null || !item.HasAudio.HasValue || item.HasAudio != true)
                 return null;
                 
@@ -10478,7 +10892,7 @@ namespace ReelRoulette
                     ToggleViewPreference(ref _showLibraryPanel, ShowLibraryPanelMenuItem);
                     if (_showLibraryPanel)
                     {
-                        UpdateLibraryPanel();
+                        PresentLibraryBrowseOnShow();
                     }
                     e.Handled = true;
                     break;

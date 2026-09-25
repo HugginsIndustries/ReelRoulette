@@ -7,6 +7,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json.Nodes;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -134,6 +135,53 @@ public sealed class CoreServerApiClient
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
         return await JsonSerializer.DeserializeAsync<JsonElement>(stream, _serializerOptions, cancellationToken).ConfigureAwait(false);
     }
+
+    public async Task<CoreLibraryQueryResponse?> QueryLibraryAsync(
+        string baseUrl,
+        JsonElement? filterState,
+        string? search,
+        string sortMode,
+        bool sortDescending,
+        int offset,
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        var body = new JsonObject
+        {
+            ["sortMode"] = sortMode,
+            ["sortDescending"] = sortDescending,
+            ["offset"] = offset,
+            ["limit"] = limit
+        };
+        if (filterState.HasValue && filterState.Value.ValueKind == JsonValueKind.Object)
+        {
+            body["filterState"] = JsonNode.Parse(filterState.Value.GetRawText());
+        }
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            body["search"] = search;
+        }
+
+        using var content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json");
+        using var response = await _httpClient.PostAsync($"{baseUrl.TrimEnd('/')}/api/library/query", content, cancellationToken).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        return await JsonSerializer.DeserializeAsync<CoreLibraryQueryResponse>(stream, LibraryItemJsonOptions, cancellationToken).ConfigureAwait(false);
+    }
+
+    internal static readonly JsonSerializerOptions LibraryItemJsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        PropertyNameCaseInsensitive = true,
+        Converters =
+        {
+            new JsonStringEnumConverter(allowIntegerValues: true)
+        }
+    };
 
     public async Task<CoreLibraryStatsResponse?> GetLibraryStatsAsync(string baseUrl, CancellationToken cancellationToken = default)
     {
@@ -748,6 +796,13 @@ public sealed class CoreSourceResponse
     public string RootPath { get; set; } = string.Empty;
     public string? DisplayName { get; set; }
     public bool IsEnabled { get; set; } = true;
+}
+
+public sealed class CoreLibraryQueryResponse
+{
+    public List<JsonElement> Items { get; set; } = [];
+    public int TotalCount { get; set; }
+    public int SearchBaselineCount { get; set; }
 }
 
 public sealed class CoreLibraryStatsResponse

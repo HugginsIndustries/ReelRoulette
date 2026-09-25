@@ -33,6 +33,89 @@ public sealed class RefreshPipelineServiceTests
     }
 
     [Fact]
+    public async Task ShutdownCancel_ShouldStopManualRunWithoutRecordingAFailure()
+    {
+        using var scope = new AppDataScope();
+        await SeedLibraryAsync(scope.LibraryPath, new JsonObject
+        {
+            ["sources"] = new JsonArray(),
+            ["items"] = new JsonArray()
+        });
+
+        var service = CreateService(new ServerStateService(), scope.RootPath);
+        service.CancelRunsForShutdown();
+
+        var started = service.TryStartManual();
+        Assert.True(started.Accepted);
+
+        var final = await WaitForStopAsync(service, TimeSpan.FromSeconds(10));
+        Assert.False(final.IsRunning);
+        Assert.Null(final.LastError);
+        Assert.Null(final.CompletedUtc);
+        Assert.Contains(final.Stages, stage => !stage.IsComplete);
+    }
+
+    [Fact]
+    public async Task ShutdownCancel_DuringFfmpegCheck_DoesNotRecordLoudnessAsUnavailable()
+    {
+        using var scope = new AppDataScope();
+        await SeedLibraryAsync(scope.LibraryPath, new JsonObject
+        {
+            ["sources"] = new JsonArray(),
+            ["items"] = new JsonArray()
+        });
+
+        var service = CreateService(new ServerStateService(), scope.RootPath);
+        var hold = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        service.HoldNextFfmpegCheck(hold.Task);
+
+        var started = service.TryStartManual();
+        Assert.True(started.Accepted);
+        await service.FfmpegCheckEntered.WaitAsync(TimeSpan.FromSeconds(10));
+        service.CancelRunsForShutdown();
+
+        var final = await WaitForStopAsync(service, TimeSpan.FromSeconds(10));
+        Assert.False(final.IsRunning);
+        Assert.Null(final.LastError);
+        Assert.Null(final.CompletedUtc);
+        var loudness = Assert.Single(final.Stages, stage => stage.Stage == "loudnessScan");
+        Assert.False(loudness.IsComplete);
+        Assert.DoesNotContain("ffmpeg not found", loudness.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ShutdownCancel_LeavesForcedRescansPending()
+    {
+        using var scope = new AppDataScope();
+        await SeedLibraryAsync(scope.LibraryPath, new JsonObject
+        {
+            ["sources"] = new JsonArray(),
+            ["items"] = new JsonArray()
+        });
+
+        var service = CreateService(new ServerStateService(), scope.RootPath);
+        service.UpdateSettings(new ReelRoulette.Server.Contracts.RefreshSettingsSnapshot
+        {
+            AutoRefreshEnabled = true,
+            AutoRefreshIntervalMinutes = 15,
+            ForceRescanDuration = true,
+            ForceRescanLoudness = true
+        });
+
+        await RunCancelledOneShotAsync(service, "RunDurationStageWithOneShotAsync");
+        await RunCancelledOneShotAsync(service, "RunLoudnessStageWithOneShotAsync");
+        AssertForcedRescansStillPending(service);
+
+        service.CancelRunsForShutdown();
+        Assert.True(service.TryStartManual().Accepted);
+        var final = await WaitForStopAsync(service, TimeSpan.FromSeconds(10));
+        Assert.False(final.IsRunning);
+        Assert.Null(final.LastError);
+        Assert.Null(final.CompletedUtc);
+        AssertForcedRescansStillPending(service);
+    }
+
+    [Fact]
     public async Task PipelineRun_ShouldCompleteStagesInDefinedOrder_AndPublishStatusEvents()
     {
         using var scope = new AppDataScope();
@@ -642,6 +725,23 @@ public sealed class RefreshPipelineServiceTests
         Assert.Equal(ComputeSha256(mediaPath), fp, StringComparer.OrdinalIgnoreCase);
     }
 
+    private static async Task RunCancelledOneShotAsync(RefreshPipelineService service, string methodName)
+    {
+        var method = typeof(RefreshPipelineService).GetMethod(methodName, BindingFlags.NonPublic | BindingFlags.Instance);
+        Assert.NotNull(method);
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        var task = (Task)method!.Invoke(service, [cts.Token])!;
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => task);
+    }
+
+    private static void AssertForcedRescansStillPending(RefreshPipelineService service)
+    {
+        var settings = service.GetSettings();
+        Assert.True(settings.ForceRescanDuration);
+        Assert.True(settings.ForceRescanLoudness);
+    }
+
     private static RefreshPipelineService CreateService(ServerStateService state, string appDataPathOverride)
     {
         var logger = new Microsoft.Extensions.Logging.Abstractions.NullLogger<RefreshPipelineService>();
@@ -689,15 +789,31 @@ public sealed class RefreshPipelineServiceTests
         return (DateTimeOffset)(field!.GetValue(service) ?? DateTimeOffset.MinValue);
     }
 
-    private static async Task<ReelRoulette.Server.Contracts.RefreshStatusSnapshot> WaitForCompletionAsync(
+    private static Task<ReelRoulette.Server.Contracts.RefreshStatusSnapshot> WaitForCompletionAsync(
         RefreshPipelineService service,
         TimeSpan timeout)
+    {
+        return WaitForStatusAsync(service, timeout, requireCompletedUtc: true, "Refresh pipeline did not complete in time.");
+    }
+
+    private static Task<ReelRoulette.Server.Contracts.RefreshStatusSnapshot> WaitForStopAsync(
+        RefreshPipelineService service,
+        TimeSpan timeout)
+    {
+        return WaitForStatusAsync(service, timeout, requireCompletedUtc: false, "Refresh pipeline did not stop in time.");
+    }
+
+    private static async Task<ReelRoulette.Server.Contracts.RefreshStatusSnapshot> WaitForStatusAsync(
+        RefreshPipelineService service,
+        TimeSpan timeout,
+        bool requireCompletedUtc,
+        string timeoutMessage)
     {
         var started = DateTime.UtcNow;
         while (DateTime.UtcNow - started < timeout)
         {
             var status = service.GetStatus();
-            if (!status.IsRunning && status.CompletedUtc.HasValue)
+            if (!status.IsRunning && (!requireCompletedUtc || status.CompletedUtc.HasValue))
             {
                 return status;
             }
@@ -705,7 +821,7 @@ public sealed class RefreshPipelineServiceTests
             await Task.Delay(50);
         }
 
-        throw new TimeoutException("Refresh pipeline did not complete in time.");
+        throw new TimeoutException(timeoutMessage);
     }
 
     private static async Task SeedLibraryAsync(string path, JsonObject root)

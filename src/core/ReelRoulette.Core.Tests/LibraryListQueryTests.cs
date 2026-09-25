@@ -338,6 +338,46 @@ public sealed class LibraryListQueryTests
         }
     }
 
+    [Fact]
+    public void QueryLibrary_AcceptsDesktopDurationFilterJson()
+    {
+        var appData = Path.Combine(Path.GetTempPath(), "reelroulette-library-query", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(appData);
+        try
+        {
+            File.WriteAllText(Path.Combine(appData, "library.json"), """
+                {
+                  "sources": [ { "id": "on", "rootPath": "/media", "isEnabled": true } ],
+                  "items": [
+                    { "id": "brief", "sourceId": "on", "fullPath": "/media/brief.mp4", "fileName": "brief.mp4", "relativePath": "brief.mp4", "duration": "00:00:30" },
+                    { "id": "long", "sourceId": "on", "fullPath": "/media/long.mp4", "fileName": "long.mp4", "relativePath": "long.mp4", "duration": "00:02:00" }
+                  ]
+                }
+                """);
+            var operations = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appData);
+            var outcome = operations.QueryLibrary(new LibraryQueryRequest
+            {
+                FilterState = JsonSerializer.SerializeToElement(new
+                {
+                    minDuration = "00:01:00",
+                    maxDuration = "01:00:00"
+                }),
+                Limit = 10
+            });
+
+            Assert.True(outcome.Accepted);
+            var ids = outcome.Body!["items"]!.AsArray().Select(item => item!["id"]!.GetValue<string>()).ToList();
+            Assert.Equal(["long"], ids);
+        }
+        finally
+        {
+            if (Directory.Exists(appData))
+            {
+                Directory.Delete(appData, recursive: true);
+            }
+        }
+    }
+
     private static RefreshPipelineService CreateRefresh(string appData)
     {
         var settings = new CoreSettingsService(

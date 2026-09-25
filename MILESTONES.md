@@ -89,34 +89,7 @@ Do not use this file for detailed architecture explanation or current capability
 
 ## Active Milestones
 
-Last milestone completed: M10i4
-
-### M10i5 - Desktop Library Query Cutover
-
-- **Status**: ⏳ Planned
-- **Goal**: Cut the desktop library panel over to the server list/query API with fill-on-scroll, without keeping a full local catalog replica for browse.
-- **Scope**:
-  - Depends on: library list query API.
-  - Replace desktop library-panel browse that filters a full in-memory projection with list/query requests using the active filter, search, and sort.
-  - Load additional result windows as the user scrolls (including overscan) and treat the last loaded justified row as provisional until the query is exhausted.
-  - Preserve current desktop library UX: justified grid, search/sort, multi-select, bulk actions, and click-to-play. Shift-click range selection covers loaded items only.
-  - While the panel is open, favorite, blacklist, playback, and tag SSE update the loaded window by patch or requery. They do not refetch the whole catalog.
-  - The startup full-catalog fetch may remain in this slice for non-browse readers (video/photo header, now-playing tag grouping, and other library-index uses outside the grid). Browse, scroll, and filter/search/sort do not depend on it.
-  - Stop sending a replica-built path list for auto-tag scan; scoped scan is `scanFullLibrary: false` with no path list (server enabled-source semantics from the catalog store). Do not page list/query to collect paths.
-  - Keep random/play API-authoritative; do not reintroduce client-side eligibility authority.
-- **Acceptance criteria**:
-  - Desktop library browse no longer requires downloading the full catalog to filter, search, sort, or scroll.
-  - Scrolling loads further query windows and layout remains stable except for the expected last-row pack of an incomplete page.
-  - Filter, search, and sort changes requery the server and reset browse to the start of the result set.
-  - Favorite, blacklist, playback, and tag SSE while the panel is open update the loaded window without a full-catalog refetch.
-  - Auto-tag scoped scan does not depend on a full local item replica or a client-assembled path list.
-- **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include desktop tests or focused integration tests for query browse, scroll paging, requery on filter/search/sort, and in-window SSE update.
-  - Manual evidence must include fill-on-scroll smoke on a large library and parity of filter/search/sort with pre-cutover desktop behavior.
-- **Deferrals / Follow-ups**:
-  - WebUI overlay cutover is the next slice in this store/query sequence.
-  - Jump-to-middle scrollbar accuracy without loading the result prefix remains out of scope. Shift-click range selection of items that are not yet loaded is the same limitation.
-  - Removing the startup full-catalog fetch, and moving the video/photo header and now-playing tag grouping off that replica, is deferred until full-catalog projection is removed or explicitly documented as leftover.
+Last milestone completed: M10i5
 
 ### M10i6 - WebUI Library Query Cutover
 
@@ -1250,6 +1223,37 @@ Last milestone completed: M10i4
 ## Completed Milestones
 
 Latest completions first:
+
+### M10i5 - Desktop Library Query Cutover
+
+- **Status**: ✅ Complete
+- **Goal**: Cut the desktop library panel over to the server list/query API with fill-on-scroll, without keeping a full local catalog replica for browse.
+- **Scope**:
+  - Depends on: library list query API.
+  - Replace desktop library-panel browse that filters a full in-memory projection with list/query requests using the active filter, search, and sort.
+  - Load additional result windows as the user scrolls (including overscan) and treat the last loaded justified row as provisional until the query is exhausted.
+  - Preserve current desktop library UX: justified grid, search/sort, multi-select, bulk actions, and click-to-play. Shift-click range selection covers loaded items only.
+  - While the panel is open, favorite, blacklist, playback, and tag SSE update the loaded window by patch or requery. They do not refetch the whole catalog.
+  - The startup full-catalog fetch may remain in this slice for non-browse readers (video/photo header, now-playing tag grouping, and other library-index uses outside the grid). Browse, scroll, and filter/search/sort do not depend on it.
+  - Stop sending a replica-built path list for auto-tag scan; scoped scan is `scanFullLibrary: false` with no path list (server enabled-source semantics from the catalog store). Do not page list/query to collect paths.
+  - Keep random/play API-authoritative; do not reintroduce client-side eligibility authority.
+- **Acceptance criteria**:
+  - Desktop library browse no longer requires downloading the full catalog to filter, search, sort, or scroll.
+  - Scrolling loads further query windows and layout remains stable except for the expected last-row pack of an incomplete page.
+  - Filter, search, and sort changes requery the server and reset browse to the start of the result set.
+  - Favorite, blacklist, playback, and tag SSE while the panel is open update the loaded window without a full-catalog refetch.
+  - Auto-tag scoped scan does not depend on a full local item replica or a client-assembled path list.
+- **Verification evidence**:
+  - `dotnet build ReelRoulette.sln` — pass. `dotnet test ReelRoulette.sln` — pass (Core + Desktop, including `LibraryPanelBrowseTests`, `QueryLibrary_AcceptsDesktopDurationFilterJson`, `ShutdownCancel_ShouldStopManualRunWithoutRecordingAFailure`, `ShutdownCancel_DuringFfmpegCheck_DoesNotRecordLoudnessAsUnavailable`, and `ShutdownCancel_LeavesForcedRescansPending`).
+  - `LibraryPanelBrowseTests`: another window is requested until the loaded rows cover the viewport plus overscan or the result is exhausted; an append continues at the loaded count and reflows from the last loaded row; a reload covers the loaded count in window-sized slices. A torn live count does not shrink that reload or move the next append offset; only a finished apply commits the span. A queued reset is not replaced by a reload. An append page applies only when the loaded count is still the offset it was fetched against. A held scrollbar defers a query or reload and does not defer an append, so the drag does not replay a reset. That deferred refresh keeps the browse query open and suppresses a further page, so the new filter or sort is not appended onto the old tiles. An open query is read again after a tile update, including a patch and including before the first page arrives. A further page that has not been applied yet counts as that open query, so a patch reloads the loaded window and that page is discarded. A restored scroll offset stays inside the row-model extent. Favorite, blacklist, playback, and tag events patch loaded tiles when the active filter and sort cannot change membership or order. They reload the loaded window when favorites-only, exclude-blacklisted, never-played, a tag filter, or a last-played or play-count sort can. An unchanged id page reflows from the first tile whose aspect changed, and does not reflow when nothing changed. An item in neither the snapshot nor the loaded tiles syncs the full snapshot when the panel is closed, is skipped when the panel is open with no tag filter, and reloads the loaded window after the rest of the event when a tag filter is active. Now-playing stats use the loaded tile when the snapshot misses that file. The current file downloads the snapshot when it is in neither copy. A playback for any other file missing from both copies still refreshes global play totals. A tag event applies the rest of its items before that snapshot download.
+  - A finished item splice applies thumbnail fields on the unchanged tail. An append whose loaded count is no longer the requested offset does not request another page. A panel resize waits for the current grid update, then reflows the loaded rows and restores the viewport anchor.
+  - `LibraryListQueryTests.QueryLibrary_AcceptsDesktopDurationFilterJson`: a `minDuration` / `maxDuration` string in desktop `HH:MM:SS` form filters the page.
+  - Manual fill-on-scroll, filter/search/sort, and in-place favorite updates were confirmed on a large library before the membership reload rules.
+  - Server shutdown during a refresh cancels the manual or automatic run, does not record it as a pipeline failure, and does not set a completion time. `ShutdownCancel_DuringFfmpegCheck_DoesNotRecordLoudnessAsUnavailable`: a cancel while the ffmpeg check is blocked leaves the loudness stage incomplete and does not record "ffmpeg not found" or a pipeline error. `ShutdownCancel_LeavesForcedRescansPending`: cancelling the duration and loudness stages leaves both one-shot rescan flags set, and a cancelled manual run still has no pipeline error.
+- **Deferrals / Follow-ups**:
+  - WebUI overlay cutover is the next slice in this store/query sequence.
+  - Jump-to-middle scrollbar accuracy without loading the result prefix remains out of scope. Shift-click range selection of items that are not yet loaded is the same limitation.
+  - Removing the startup full-catalog fetch, and moving the video/photo header and now-playing tag grouping off that replica, is deferred until full-catalog projection is removed or explicitly documented as leftover.
 
 ### M10i4 - Library List Query API
 

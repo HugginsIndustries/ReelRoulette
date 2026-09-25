@@ -102,6 +102,9 @@ public sealed class RefreshPipelineService : BackgroundService
     private RefreshStatusSnapshot _status = new();
     private DateTimeOffset _nextAutoRunUtc;
     private bool _isRunLoopActive;
+    private readonly CancellationTokenSource _shutdown = new();
+    private readonly TaskCompletionSource _ffmpegCheckEntered = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private Task? _ffmpegCheckHold;
 
     public RefreshPipelineService(
         ServerStateService state,
@@ -175,7 +178,7 @@ public sealed class RefreshPipelineService : BackgroundService
             }
         }
 
-        _ = Task.Run(() => ExecuteReservedRunAsync(CancellationToken.None));
+        _ = Task.Run(() => ExecuteReservedRunAsync(_shutdown.Token));
         return new RefreshStartResponse
         {
             Accepted = true,
@@ -186,29 +189,58 @@ public sealed class RefreshPipelineService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        while (!stoppingToken.IsCancellationRequested)
+        using var registration = stoppingToken.Register(static state => ((CancellationTokenSource)state!).Cancel(), _shutdown);
+        try
         {
-            bool shouldRun;
-            lock (_runLock)
+            while (!stoppingToken.IsCancellationRequested)
             {
-                var refreshSettings = _coreSettings.GetRefreshSettings();
-                shouldRun = refreshSettings.AutoRefreshEnabled &&
-                            !_status.IsRunning &&
-                            !_isRunLoopActive &&
-                            DateTimeOffset.UtcNow >= _nextAutoRunUtc;
-            }
-
-            if (shouldRun)
-            {
-                if (TryReserveRun("auto", out _))
+                bool shouldRun;
+                lock (_runLock)
                 {
-                    await ExecuteReservedRunAsync(stoppingToken);
+                    var refreshSettings = _coreSettings.GetRefreshSettings();
+                    shouldRun = refreshSettings.AutoRefreshEnabled &&
+                                !_status.IsRunning &&
+                                !_isRunLoopActive &&
+                                DateTimeOffset.UtcNow >= _nextAutoRunUtc;
                 }
-            }
 
-            await Task.Delay(TimeSpan.FromSeconds(2), stoppingToken);
+                if (shouldRun)
+                {
+                    if (TryReserveRun("auto", out _))
+                    {
+                        await ExecuteReservedRunAsync(_shutdown.Token);
+                    }
+                }
+
+                await Task.Delay(TimeSpan.FromSeconds(2), stoppingToken);
+            }
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
         }
     }
+
+    public override async Task StopAsync(CancellationToken cancellationToken)
+    {
+        _shutdown.Cancel();
+        await base.StopAsync(cancellationToken);
+    }
+
+    internal void CancelRunsForShutdown()
+    {
+        _shutdown.Cancel();
+    }
+
+    /// <summary>
+    /// The next ffmpeg availability check waits on <paramref name="hold"/> inside its try.
+    /// A shutdown cancel is then observed by the same catch as a blocked ffmpeg process.
+    /// </summary>
+    internal void HoldNextFfmpegCheck(Task hold)
+    {
+        _ffmpegCheckHold = hold ?? throw new ArgumentNullException(nameof(hold));
+    }
+
+    internal Task FfmpegCheckEntered => _ffmpegCheckEntered.Task;
 
     public string GetThumbnailPath(string itemId)
     {
@@ -321,6 +353,17 @@ public sealed class RefreshPipelineService : BackgroundService
                 PublishStatusLocked();
             }
         }
+        catch (Exception ex) when (IsPipelineCancellation(ex, cancellationToken))
+        {
+            _logger.LogInformation("Refresh pipeline canceled.");
+            lock (_runLock)
+            {
+                _status.IsRunning = false;
+                _status.CurrentStage = null;
+                // Leave CompletedUtc unset so clients do not treat shutdown as a finished refresh.
+                PublishStatusLocked();
+            }
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Refresh pipeline failed");
@@ -340,6 +383,22 @@ public sealed class RefreshPipelineService : BackgroundService
                 _isRunLoopActive = false;
             }
         }
+    }
+
+    private static bool IsPipelineCancellation(Exception exception, CancellationToken cancellationToken)
+    {
+        if (!cancellationToken.IsCancellationRequested)
+        {
+            return false;
+        }
+
+        if (exception is OperationCanceledException)
+        {
+            return true;
+        }
+
+        return exception is AggregateException aggregate &&
+               aggregate.Flatten().InnerExceptions.All(inner => inner is OperationCanceledException);
     }
 
     private void ScheduleNextAutoRunFromNowLocked()
@@ -837,11 +896,12 @@ public sealed class RefreshPipelineService : BackgroundService
         var forceFullRescan = settings.ForceRescanDuration;
         try
         {
+            cancellationToken.ThrowIfCancellationRequested();
             await RunDurationStageAsync(cancellationToken, forceFullRescan);
         }
         finally
         {
-            if (forceFullRescan)
+            if (forceFullRescan && !cancellationToken.IsCancellationRequested)
             {
                 ConsumeRefreshRescanFlags(clearDuration: true, clearLoudness: false);
             }
@@ -951,11 +1011,12 @@ public sealed class RefreshPipelineService : BackgroundService
         var forceFullRescan = settings.ForceRescanLoudness;
         try
         {
+            cancellationToken.ThrowIfCancellationRequested();
             await RunLoudnessStageAsync(cancellationToken, forceFullRescan);
         }
         finally
         {
-            if (forceFullRescan)
+            if (forceFullRescan && !cancellationToken.IsCancellationRequested)
             {
                 ConsumeRefreshRescanFlags(clearDuration: false, clearLoudness: true);
             }
@@ -1209,6 +1270,7 @@ public sealed class RefreshPipelineService : BackgroundService
 
         for (int i = 0; i < items.Count; i++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (items[i] is not JsonObject item)
             {
                 continue;
@@ -1658,11 +1720,24 @@ public sealed class RefreshPipelineService : BackgroundService
             using var process = new Process { StartInfo = startInfo };
             using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
             using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
-            process.Start();
-            var stdoutTask = process.StandardOutput.ReadToEndAsync(linkedCts.Token);
-            _ = process.StandardError.ReadToEndAsync(linkedCts.Token);
-            await process.WaitForExitAsync(linkedCts.Token);
-            await stdoutTask;
+            try
+            {
+                process.Start();
+                var stdoutTask = process.StandardOutput.ReadToEndAsync(linkedCts.Token);
+                _ = process.StandardError.ReadToEndAsync(linkedCts.Token);
+                await process.WaitForExitAsync(linkedCts.Token);
+                await stdoutTask;
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                await TryTerminateProcessAsync(process);
+                throw;
+            }
+            catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested)
+            {
+                await TryTerminateProcessAsync(process);
+                return null;
+            }
 
             if (process.ExitCode != 0 || !File.Exists(tempPath) || new FileInfo(tempPath).Length <= 0)
             {
@@ -1681,6 +1756,10 @@ public sealed class RefreshPipelineService : BackgroundService
                 Width = width,
                 Height = height
             };
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch
         {
@@ -2093,6 +2172,16 @@ public sealed class RefreshPipelineService : BackgroundService
                     }
                 }
             }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                await TryTerminateProcessAsync(process);
+                throw;
+            }
+            catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested)
+            {
+                await TryTerminateProcessAsync(process);
+                return null;
+            }
             catch
             {
                 return null;
@@ -2109,10 +2198,18 @@ public sealed class RefreshPipelineService : BackgroundService
         }
     }
 
-    private static async Task<bool> VerifyFfmpegAsync(string ffmpegPath, CancellationToken cancellationToken)
+    private async Task<bool> VerifyFfmpegAsync(string ffmpegPath, CancellationToken cancellationToken)
     {
         try
         {
+            var hold = _ffmpegCheckHold;
+            if (hold != null)
+            {
+                _ffmpegCheckHold = null;
+                _ffmpegCheckEntered.TrySetResult();
+                await hold.WaitAsync(cancellationToken);
+            }
+
             var testStartInfo = new ProcessStartInfo
             {
                 FileName = ffmpegPath,
@@ -2123,9 +2220,21 @@ public sealed class RefreshPipelineService : BackgroundService
                 CreateNoWindow = true
             };
             using var process = new Process { StartInfo = testStartInfo };
-            process.Start();
-            await process.WaitForExitAsync(cancellationToken);
-            return process.ExitCode == 0;
+            try
+            {
+                process.Start();
+                await process.WaitForExitAsync(cancellationToken);
+                return process.ExitCode == 0;
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                await TryTerminateProcessAsync(process);
+                throw;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch
         {
@@ -2203,6 +2312,11 @@ public sealed class RefreshPipelineService : BackgroundService
                 await process.WaitForExitAsync(linkedCts.Token);
                 exitCode = process.ExitCode;
             }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                await TryTerminateProcessAsync(process);
+                throw;
+            }
             catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested)
             {
                 await TryTerminateProcessAsync(process);
@@ -2265,11 +2379,11 @@ public sealed class RefreshPipelineService : BackgroundService
         startInfo.ArgumentList.Add("json");
         startInfo.ArgumentList.Add(filePath);
 
+        using var process = new Process { StartInfo = startInfo };
+        using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
         try
         {
-            using var process = new Process { StartInfo = startInfo };
-            using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
             process.Start();
             var stdout = await process.StandardOutput.ReadToEndAsync(linkedCts.Token);
             _ = await process.StandardError.ReadToEndAsync(linkedCts.Token);
@@ -2307,6 +2421,16 @@ public sealed class RefreshPipelineService : BackgroundService
             }
 
             return false;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            await TryTerminateProcessAsync(process);
+            throw;
+        }
+        catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested)
+        {
+            await TryTerminateProcessAsync(process);
+            return null;
         }
         catch
         {
