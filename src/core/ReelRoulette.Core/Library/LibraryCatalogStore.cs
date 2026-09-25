@@ -25,6 +25,7 @@ public sealed class LibraryCatalogOpenResult
     public LibraryCatalogOpenStatus Status { get; init; }
     public string? Message { get; init; }
     public LibraryCatalogSnapshot? Catalog { get; init; }
+    public LibraryCatalogSession? Session { get; init; }
 }
 
 public sealed class LibraryCatalogSnapshot
@@ -86,6 +87,7 @@ public sealed class LibraryCatalogItem
     public DateTime? LastWriteTimeUtc { get; init; }
     public DateTime? FingerprintLastUtc { get; init; }
     public int? FingerprintStatus { get; init; }
+    public string? LoudnessError { get; init; }
     public IReadOnlyList<string> Tags { get; init; } = [];
 }
 
@@ -115,8 +117,8 @@ public static class LibraryCatalogStore
 
     private const string MigratingFileName = "library.db.migrating";
     private const string RefusedFileName = "library.db.refused";
-    private const string UncategorizedCategoryId = "uncategorized";
-    private const string UncategorizedCategoryName = "Uncategorized";
+    internal const string UncategorizedCategoryId = "uncategorized";
+    internal const string UncategorizedCategoryName = "Uncategorized";
 
     private static readonly string[] RequiredTables =
     [
@@ -172,7 +174,8 @@ public static class LibraryCatalogStore
             return Refused(RefusedMessageWithSnapshot);
         }
 
-        return new LibraryCatalogOpenResult { Status = LibraryCatalogOpenStatus.Absent };
+        CreateEmpty(directory, databasePath);
+        return Opened(databasePath);
     }
 
     public static LibraryCatalogSnapshot Read(string databasePath)
@@ -186,7 +189,8 @@ public static class LibraryCatalogStore
         return new LibraryCatalogOpenResult
         {
             Status = LibraryCatalogOpenStatus.Opened,
-            Catalog = Read(databasePath)
+            Catalog = Read(databasePath),
+            Session = new LibraryCatalogSession(databasePath)
         };
     }
 
@@ -197,6 +201,28 @@ public static class LibraryCatalogStore
             Status = LibraryCatalogOpenStatus.Refused,
             Message = message
         };
+    }
+
+    private static void CreateEmpty(string directory, string databasePath)
+    {
+        var tempPath = Path.Combine(directory, MigratingFileName);
+        DeleteSidecars(tempPath);
+        var published = false;
+        try
+        {
+            WriteDatabase(tempPath, new JsonObject());
+            SyncFile(tempPath);
+            PublishDatabase(tempPath, databasePath);
+            published = true;
+            SyncDirectory(directory, options: null);
+        }
+        finally
+        {
+            if (!published)
+            {
+                DeleteSidecars(tempPath);
+            }
+        }
     }
 
     private static void Migrate(string directory, string libraryPath, string databasePath, LibraryCatalogOpenOptions? options)
@@ -293,7 +319,8 @@ public static class LibraryCatalogStore
                 file_size_bytes INTEGER NULL,
                 last_write_time_utc INTEGER NULL,
                 fingerprint_last_utc INTEGER NULL,
-                fingerprint_status INTEGER NULL
+                fingerprint_status INTEGER NULL,
+                loudness_error TEXT NULL
             );
             CREATE TABLE categories (
                 id TEXT PRIMARY KEY,
@@ -342,6 +369,7 @@ public static class LibraryCatalogStore
             connection,
             "INSERT INTO catalog_meta (key, value) VALUES ('available_tags_present', $present);",
             ("$present", availableTags.Present ? "1" : "0"));
+        Execute(connection, "INSERT INTO catalog_meta (key, value) VALUES ('revision', '0');");
         transaction.Commit();
 
         Execute(connection, $"PRAGMA user_version = {SchemaVersion};");
@@ -373,7 +401,23 @@ public static class LibraryCatalogStore
                 names.Add(reader.GetString(0));
             }
 
-            return RequiredTables.All(names.Contains);
+            if (!RequiredTables.All(names.Contains))
+            {
+                return false;
+            }
+
+            using var columns = connection.CreateCommand();
+            columns.CommandText = "SELECT name FROM pragma_table_info('items');";
+            using var columnReader = columns.ExecuteReader();
+            while (columnReader.Read())
+            {
+                if (string.Equals(columnReader.GetString(0), "loudness_error", StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
         catch (SqliteException ex) when (ex.SqliteErrorCode is SqliteNotADatabase or SqliteCorrupt)
         {
@@ -494,7 +538,7 @@ public static class LibraryCatalogStore
                    file_name, file_name_fold, duration_ticks, has_audio, integrated_loudness, peak_db,
                    is_favorite, is_blacklisted, play_count, last_played_utc, media_type, fingerprint,
                    fingerprint_algorithm, fingerprint_version, file_size_bytes, last_write_time_utc,
-                   fingerprint_last_utc, fingerprint_status
+                   fingerprint_last_utc, fingerprint_status, loudness_error
             FROM items
             ORDER BY position;
             """;
@@ -529,6 +573,7 @@ public static class LibraryCatalogStore
                 LastWriteTimeUtc = ReadUtc(reader, 21),
                 FingerprintLastUtc = ReadUtc(reader, 22),
                 FingerprintStatus = reader.IsDBNull(23) ? null : reader.GetInt32(23),
+                LoudnessError = reader.IsDBNull(24) ? null : reader.GetString(24),
                 Tags = tagsByItem.TryGetValue(id, out var names) ? names : []
             });
         }
@@ -605,12 +650,12 @@ public static class LibraryCatalogStore
                     file_name, file_name_fold, duration_ticks, has_audio, integrated_loudness, peak_db,
                     is_favorite, is_blacklisted, play_count, last_played_utc, media_type, fingerprint,
                     fingerprint_algorithm, fingerprint_version, file_size_bytes, last_write_time_utc,
-                    fingerprint_last_utc, fingerprint_status)
+                    fingerprint_last_utc, fingerprint_status, loudness_error)
                 VALUES (
                     $id, $position, $source, $full, $fullFold, $relative, $relativeFold,
                     $file, $fileFold, $duration, $audio, $loudness, $peak,
                     $favorite, $blacklisted, $plays, $played, $media, $fingerprint,
-                    $algorithm, $fpVersion, $size, $write, $fpLast, $fpStatus);
+                    $algorithm, $fpVersion, $size, $write, $fpLast, $fpStatus, $loudnessError);
                 """,
                 ("$id", item.Id),
                 ("$position", i),
@@ -636,7 +681,8 @@ public static class LibraryCatalogStore
                 ("$size", (object?)item.FileSizeBytes ?? DBNull.Value),
                 ("$write", (object?)item.LastWriteTimeUtcTicks ?? DBNull.Value),
                 ("$fpLast", (object?)item.FingerprintLastUtcTicks ?? DBNull.Value),
-                ("$fpStatus", (object?)item.FingerprintStatus ?? DBNull.Value));
+                ("$fpStatus", (object?)item.FingerprintStatus ?? DBNull.Value),
+                ("$loudnessError", (object?)item.LoudnessError ?? DBNull.Value));
 
             for (var tagIndex = 0; tagIndex < item.Tags.Count; tagIndex++)
             {
@@ -829,6 +875,7 @@ public static class LibraryCatalogStore
                 GetNodeNullableBool(node["hasAudio"]),
                 GetNodeNullableDouble(node["integratedLoudness"]),
                 GetNodeNullableDouble(node["peakDb"]),
+                NullIfEmpty(GetNodeString(node["loudnessError"])),
                 GetNodeBool(node["isFavorite"], false),
                 GetNodeBool(node["isBlacklisted"], false),
                 GetNodeInt(node["playCount"], 0),
@@ -870,7 +917,7 @@ public static class LibraryCatalogStore
         return 0;
     }
 
-    private static string NormalizeCategoryId(string? categoryId)
+    internal static string NormalizeCategoryId(string? categoryId)
     {
         return string.IsNullOrWhiteSpace(categoryId) ? UncategorizedCategoryId : categoryId.Trim();
     }
@@ -1091,7 +1138,7 @@ public static class LibraryCatalogStore
         return new DateTime(reader.GetInt64(ordinal), DateTimeKind.Utc);
     }
 
-    private static string Fold(string value) => value.ToLowerInvariant();
+    internal static string Fold(string value) => value.ToLowerInvariant();
 
     private static string? NullIfEmpty(string value) => string.IsNullOrWhiteSpace(value) ? null : value;
 
@@ -1104,6 +1151,29 @@ public static class LibraryCatalogStore
             Pooling = false
         };
         return builder.ToString();
+    }
+
+    internal static SqliteConnection OpenWrite(string databasePath)
+    {
+        var connection = new SqliteConnection(ConnectionString(databasePath, readOnly: false));
+        connection.Open();
+        connection.DefaultTimeout = 1;
+        Execute(connection, "PRAGMA journal_mode=WAL;");
+        Execute(connection, "PRAGMA busy_timeout=1000;");
+        return connection;
+    }
+
+    internal static int Execute(SqliteConnection connection, SqliteTransaction transaction, string sql, params (string Name, object Value)[] parameters)
+    {
+        using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = sql;
+        foreach (var (name, value) in parameters)
+        {
+            command.Parameters.AddWithValue(name, value);
+        }
+
+        return command.ExecuteNonQuery();
     }
 
     private static SqliteConnection OpenReadOnly(string databasePath)
@@ -1283,6 +1353,7 @@ public static class LibraryCatalogStore
         bool? HasAudio,
         double? IntegratedLoudness,
         double? PeakDb,
+        string? LoudnessError,
         bool IsFavorite,
         bool IsBlacklisted,
         int PlayCount,

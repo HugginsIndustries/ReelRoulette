@@ -89,34 +89,7 @@ Do not use this file for detailed architecture explanation or current capability
 
 ## Active Milestones
 
-Last milestone completed: M10i1
-
-### M10i2 - SQLite Library Catalog Session
-
-- **Status**: ⏳ Planned
-- **Goal**: Add a Core catalog session whose mutations are transactional row updates, and a projection builder for the current library document shape, without opening that database from the running server.
-- **Scope**:
-  - Depends on: SQLite library catalog store.
-  - `Open` stays the health and migration gate. `Opened` returns a session for the published database. `Refused` returns no session and does not create an empty catalog. `Absent` (no `library.db` and no `library.json`) creates an empty healthy database.
-  - Each operation uses its own connection, WAL, and a short busy timeout. A shared connection is not safe across the refresh pipeline and request threads. Mutations update the affected rows. They do not load a snapshot and write every row back.
-  - Row writes cover the live catalog writers the cutover will move: sources (insert, display name, enabled flag); items (insert, path and identity, delete, favorite with blacklist cleared, blacklist, play count and last played, clear playback stats, fingerprint fields, duration, loudness, file size, last write time); tags and categories (upsert, rename, delete, catalog sync, per-item tag add, remove, and replace). `availableTags` stays as migrated. New writes do not invent a second tag list.
-  - `loudnessError` is a nullable item column. Opening a version 1 database adds that column and sets `user_version` to 2. A failed upgrade stays refused and is not half-migrated. Version 1 JSON migration behavior stays as it is.
-  - Each committing transaction increments a `catalog_meta` revision so the cutover can drop playback's file-timestamp cache.
-  - The session can build the current library document from SQLite: sources, items, categories, tags, and legacy `availableTags` when that list was present. `mediaType` and `fingerprintStatus` are integers. `duration` is an `hh:mm:ss` string. Both current clients already parse those forms. Thumbnail fields are not in this document. `fingerprintIndex` is not emitted.
-  - The running server still reads and writes `library.json` and does not open `library.db`.
-- **Acceptance criteria**:
-  - A missing database and missing `library.json` produce an empty healthy `library.db`. A refused database does not.
-  - A version 1 database opens at `user_version` 2 with `loudnessError` stored. A failed upgrade does not leave a half-migrated database.
-  - A committed row update is still present after another connection commits a different row. A tag update is not wiped by a later source-enabled update.
-  - Built projection JSON uses integer `mediaType` and `fingerprintStatus` and an `hh:mm:ss` duration. Thumbnail fields and `fingerprintIndex` are absent.
-  - The revision increments only when a transaction commits.
-  - The running server still reads and writes `library.json`. It does not open `library.db`.
-- **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include core tests for empty create, version 1 upgrade to `user_version` 2 with `loudness_error`, refused and crash-before-publish behavior unchanged, a favorite update and a duration update on two connections both remaining, a tag update surviving a later source-enabled update, projection integers and `hh:mm:ss` duration, and revision bumps only on commit.
-  - `ReelRoulette.Server` still has no runtime use of the catalog session. Startup does not open `library.db`.
-- **Deferrals / Follow-ups**:
-  - Opening this session from the running server, moving live readers and writers onto it, auto-tag scan scope, projection served from SQLite, and disabling export, import, and JSON catalog backups are the next slice in this store/query sequence.
-  - Account tables in this database are deferred to the account and PIN data model work. They extend `user_version` rather than replacing this catalog schema.
+Last milestone completed: M10i2
 
 ### M10i3 - SQLite Library Catalog Cutover
 
@@ -1333,6 +1306,35 @@ Last milestone completed: M10i1
 ## Completed Milestones
 
 Latest completions first:
+
+### M10i2 - SQLite Library Catalog Session
+
+- **Status**: ✅ Complete
+- **Goal**: Add a Core catalog session whose mutations are transactional row updates, and a projection builder for the current library document shape, without opening that database from the running server.
+- **Scope**:
+  - Depends on: SQLite library catalog store.
+  - `Open` stays the health and migration gate. `Opened` returns a session for the published database. `Refused` returns no session and does not create an empty catalog. `Absent` (no `library.db` and no `library.json`) creates an empty healthy database.
+  - Each operation uses its own connection, WAL, and a short busy timeout. A shared connection is not safe across the refresh pipeline and request threads. Mutations update the affected rows. They do not load a snapshot and write every row back.
+  - Row writes cover the live catalog writers the cutover will move: sources (insert, display name, enabled flag); items (insert, path and identity, delete, favorite with blacklist cleared, blacklist, play count and last played, clear playback stats, fingerprint fields, duration, loudness, file size, last write time); tags and categories (upsert, rename, delete, catalog sync, per-item tag add, remove, and replace). Adding a tag to an item inserts a missing catalog tag as `uncategorized` and does not change an existing catalog tag's name or category. An upsert does not rename an existing tag; a blank category leaves its category in place, and a different category updates only that category. `availableTags` stays as migrated. New writes do not invent a second tag list.
+  - `loudnessError` is a nullable item column on the version 1 schema. `user_version` stays 1. JSON migration stores the field when `library.json` has it. There is no second schema version.
+  - Each committing transaction increments a `catalog_meta` revision so the cutover can drop playback's file-timestamp cache.
+  - The session can build the current library document from SQLite: sources, items, categories, tags, and legacy `availableTags` when that list was present. `mediaType` and `fingerprintStatus` are integers. `duration` is an `hh:mm:ss` string. Both current clients already parse those forms. Thumbnail fields are not in this document. `fingerprintIndex` is not emitted.
+  - The running server still reads and writes `library.json` and does not open `library.db`.
+- **Acceptance criteria**:
+  - A missing database and missing `library.json` produce an empty healthy `library.db`. A refused database does not.
+  - Migrated and empty databases stay at `user_version` 1 and store `loudnessError`.
+  - A committed row update is still present after another connection commits a different row. A tag update is not wiped by a later source-enabled update.
+  - Built projection JSON uses integer `mediaType` and `fingerprintStatus` and an `hh:mm:ss` duration. Thumbnail fields and `fingerprintIndex` are absent.
+  - The revision increments only when a transaction commits.
+  - The running server still reads and writes `library.json`. It does not open `library.db`.
+- **Verification evidence**:
+  - `dotnet build ReelRoulette.sln` — pass. `dotnet test ReelRoulette.sln` — pass (188 Core + 58 Desktop).
+  - `LibraryCatalogStoreTests`: an empty directory creates a healthy `library.db` at `user_version` 1 with a session and revision 0. A migrated snapshot alone is still refused and returns no session.
+  - `LibraryCatalogSessionTests`: JSON `loudnessError` is stored at `user_version` 1, a favorite update and a duration update on two connections both remain, a tag update survives a later source-enabled update and does not create `availableTags`, an inserted tag with surrounding whitespace and a case-duplicate collapses to one trimmed tag that a later remove clears, renaming a tag onto an existing name leaves one catalog row and one `bar` item tag for items that had either name or both, that rename keeps the earlier category unless it is `Uncategorized` and the other is not, a blank-category upsert keeps an existing name and category and does not bump the revision, a same-category upsert with a different spelling changes nothing, a different category updates only the category, a new tag with a blank category is stored as `uncategorized`, adding a tag to an item inserts a missing catalog tag as `uncategorized` and leaves an existing catalog tag's name and category in place, a repeat add fills a missing catalog row without duplicating the item tag, and a missing item creates no catalog tag, a catalog sync of duplicate names keeps the earlier spelling and category unless that category is `Uncategorized`, an insert that omits fingerprint version stores `1`, an inserted local timestamp is stored as UTC, projection JSON uses integer `mediaType` and `fingerprintStatus` and `00:01:30` for 90.5 seconds, thumbnail fields and `fingerprintIndex` are absent, and revision stays 0 across a read and a missing-item update then increments on commit.
+  - `ReelRoulette.Server` has no reference to `LibraryCatalogStore` or `LibraryCatalogSession`. Startup does not open `library.db`.
+- **Deferrals / Follow-ups**:
+  - Opening this session from the running server, moving live readers and writers onto it, auto-tag scan scope, projection served from SQLite, and disabling export, import, and JSON catalog backups are the next slice in this store/query sequence.
+  - Account tables in this database are deferred to the account and PIN data model work. They extend `user_version` rather than replacing this catalog schema.
 
 ### M10i1 - SQLite Library Catalog Store
 

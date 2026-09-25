@@ -345,6 +345,7 @@ public sealed class LibraryCatalogStoreTests
 
         Assert.Equal(LibraryCatalogOpenStatus.Refused, refused.Status);
         Assert.Equal(LibraryCatalogStore.RefusedMessageWithSnapshot, refused.Message);
+        Assert.Null(refused.Session);
         Assert.True(File.Exists(migratedPath));
         Assert.False(File.Exists(Path.Combine(dir.Path, "library.db")));
         Assert.Empty(Directory.GetFiles(dir.Path, "library.db*"));
@@ -376,14 +377,21 @@ public sealed class LibraryCatalogStoreTests
     }
 
     [Fact]
-    public void Open_EmptyDirectory_CreatesNothing()
+    public void Open_EmptyDirectory_CreatesEmptyDatabase()
     {
         using var dir = new TempDirectory();
 
         var result = LibraryCatalogStore.Open(dir.Path);
 
-        Assert.Equal(LibraryCatalogOpenStatus.Absent, result.Status);
-        Assert.Empty(Directory.GetFiles(dir.Path));
+        Assert.Equal(LibraryCatalogOpenStatus.Opened, result.Status);
+        Assert.NotNull(result.Session);
+        Assert.Empty(result.Catalog!.Sources);
+        Assert.Empty(result.Catalog.Items);
+        Assert.False(result.Catalog.AvailableTagsPresent);
+        Assert.Equal(0, result.Session.Revision);
+        Assert.Equal("1", ReadPragma(dir.Path, "user_version"));
+        Assert.Contains("loudness_error", ReadSchema(dir.Path), StringComparison.Ordinal);
+        Assert.False(File.Exists(Path.Combine(dir.Path, "library.json")));
     }
 
     [Fact]
