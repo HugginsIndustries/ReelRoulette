@@ -208,20 +208,14 @@ public sealed class LibraryPanelBrowseTests
     }
 
     [Fact]
-    public void UnknownTagItem_ReloadsAfterTheBatchOnlyWhenThePanelIsOpenAndATagFilterIsActive()
+    public void UnknownTagItem_ReloadsAfterTheBatchOnlyWhenATagFilterIsActive()
     {
         Assert.Equal(
-            LibraryPanelBrowseUnknownTag.SyncFullProjection,
-            LibraryPanelBrowse.UnknownTagItem(panelOpen: false, hasTagFilter: false));
-        Assert.Equal(
-            LibraryPanelBrowseUnknownTag.SyncFullProjection,
-            LibraryPanelBrowse.UnknownTagItem(panelOpen: false, hasTagFilter: true));
-        Assert.Equal(
             LibraryPanelBrowseUnknownTag.Skip,
-            LibraryPanelBrowse.UnknownTagItem(panelOpen: true, hasTagFilter: false));
+            LibraryPanelBrowse.UnknownTagItem(hasTagFilter: false));
         Assert.Equal(
             LibraryPanelBrowseUnknownTag.ReloadLoadedAfterBatch,
-            LibraryPanelBrowse.UnknownTagItem(panelOpen: true, hasTagFilter: true));
+            LibraryPanelBrowse.UnknownTagItem(hasTagFilter: true));
     }
 
 }

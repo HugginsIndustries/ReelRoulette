@@ -247,7 +247,6 @@ namespace ReelRoulette
         private bool _libraryBrowseAppendFailed;
         private bool _libraryBrowseQueryOpen;
         private bool _libraryBrowseResetQueued;
-        private bool _libraryBrowseResetOnNextOpen;
         private LibraryPanelBrowseRequest _pendingLibraryBrowseKind = LibraryPanelBrowseRequest.Reset;
         private readonly LibraryBrowseSpan _libraryBrowseSpan = new();
         private Task _libraryGridEdit = Task.CompletedTask;
@@ -1393,10 +1392,7 @@ namespace ReelRoulette
 
         private void RefreshLibraryPanelFromServiceState()
         {
-            if (_showLibraryPanel)
-            {
-                UpdateLibraryPanel();
-            }
+            UpdateLibraryPanel();
         }
 
         private void ApplyRemoteItemStateProjection(string fullPath, bool isFavorite, bool isBlacklisted, string statusMessage, bool persistLibrary = false)
@@ -1643,9 +1639,8 @@ namespace ReelRoulette
             var loaded = FindLoadedLibraryItem(playback.Path);
             if (item == null && loaded == null)
             {
-                if (!_showLibraryPanel ||
-                    (IsCurrentVideoPath(playback.Path) &&
-                     LibraryPanelBrowse.NeedsCurrentFileSnapshotSync(snapshotHasItem: false, loadedHasItem: false)))
+                if (IsCurrentVideoPath(playback.Path) &&
+                    LibraryPanelBrowse.NeedsCurrentFileSnapshotSync(snapshotHasItem: false, loadedHasItem: false))
                 {
                     return false;
                 }
@@ -2177,7 +2172,6 @@ namespace ReelRoulette
 
         private void UpdateLibraryPanel()
         {
-            _libraryBrowseResetOnNextOpen = false;
             RequestLibraryBrowse(LibraryPanelBrowseRequest.Reset);
         }
 
@@ -2196,17 +2190,6 @@ namespace ReelRoulette
             {
                 UpdateLibraryPanel();
             }
-        }
-
-        private void PresentLibraryBrowseOnShow()
-        {
-            if (_libraryBrowseResetOnNextOpen)
-            {
-                UpdateLibraryPanel();
-                return;
-            }
-
-            RefreshLibraryBrowseKeepingScroll();
         }
 
         private void RequestLibraryBrowse(LibraryPanelBrowseRequest kind)
@@ -2528,11 +2511,6 @@ namespace ReelRoulette
 
         private void ApplyLibraryBrowseEvent(LibraryPanelBrowseEvent kind)
         {
-            if (!_showLibraryPanel)
-            {
-                return;
-            }
-
             var queryOpen = LibraryPanelBrowse.IsBrowseQueryOpen(_libraryBrowseQueryOpen, _libraryBrowseInFlight);
             if (!_libraryBrowseHasResult && !queryOpen)
             {
@@ -3965,14 +3943,7 @@ namespace ReelRoulette
             SaveSettings();
             
             // Update library panel and rebuild queue
-            if (_showLibraryPanel)
-            {
-                UpdateLibraryPanel();
-            }
-            else
-            {
-                _libraryBrowseResetOnNextOpen = true;
-            }
+            UpdateLibraryPanel();
             StatusTextBlock.Text = $"Applied filter preset: {selectedPresetName}";
             _ = SyncPresetsToCoreAsync();
         }
@@ -4355,10 +4326,6 @@ namespace ReelRoulette
             }
             SaveSettings();
             ApplyViewPreferences();
-            if (_showLibraryPanel)
-            {
-                PresentLibraryBrowseOnShow();
-            }
         }
 
         #endregion
@@ -5828,18 +5795,12 @@ namespace ReelRoulette
                         continue;
                     }
 
-                    switch (LibraryPanelBrowse.UnknownTagItem(_showLibraryPanel, hasTagFilters))
+                    if (LibraryPanelBrowse.UnknownTagItem(hasTagFilters) == LibraryPanelBrowseUnknownTag.ReloadLoadedAfterBatch)
                     {
-                        case LibraryPanelBrowseUnknownTag.Skip:
-                            continue;
-                        case LibraryPanelBrowseUnknownTag.ReloadLoadedAfterBatch:
-                            reloadLoadedForUnknownTag = true;
-                            continue;
-                        default:
-                            Log($"CoreEvents: itemTagsChanged fallback to full projection sync (unknown item '{identifier}').");
-                            _ = SyncLibraryProjectionFromCoreAsync();
-                            return;
+                        reloadLoadedForUnknownTag = true;
                     }
+
+                    continue;
                 }
 
                 if (!targetItems.Contains(item))
@@ -5924,10 +5885,7 @@ namespace ReelRoulette
             }
 
             source.IsEnabled = payload.IsEnabled;
-            if (_showLibraryPanel)
-            {
-                RefreshLibraryBrowseKeepingScroll();
-            }
+            RefreshLibraryBrowseKeepingScroll();
             UpdateLibraryInfoText();
         }
 
@@ -6078,10 +6036,7 @@ namespace ReelRoulette
             _loudnessNormalizationService.ResetCache();
             Dispatcher.UIThread.Post(() =>
             {
-                if (_showLibraryPanel)
-                {
-                    UpdateLibraryPanel();
-                }
+                UpdateLibraryPanel();
 
                 RecalculateGlobalStats();
                 UpdateLibraryInfoText();
@@ -6246,10 +6201,7 @@ namespace ReelRoulette
 
                 await Dispatcher.UIThread.InvokeAsync(() =>
                 {
-                    if (_showLibraryPanel)
-                    {
-                        RefreshLibraryBrowseKeepingScroll();
-                    }
+                    RefreshLibraryBrowseKeepingScroll();
 
                     UpdateLibraryInfoText();
                     UpdateFilterSummaryText();
@@ -7242,7 +7194,7 @@ namespace ReelRoulette
                         }
                     }
 
-                    if (_showLibraryPanel && enabledChanged)
+                    if (enabledChanged)
                     {
                         RefreshLibraryBrowseKeepingScroll();
                     }
@@ -8476,10 +8428,7 @@ namespace ReelRoulette
                 return;
             }
 
-            if (_showLibraryPanel)
-            {
-                RefreshLibraryBrowseKeepingScroll();
-            }
+            RefreshLibraryBrowseKeepingScroll();
 
             if (_currentVideoPath != null && changedPaths.Contains(_currentVideoPath))
             {
@@ -8506,10 +8455,7 @@ namespace ReelRoulette
             
             Log("ManageSourcesMenuItem_Click: Dialog closed, refreshing UI");
             await SyncSourcesFromCoreAsync();
-            if (_showLibraryPanel)
-            {
-                RefreshLibraryBrowseKeepingScroll();
-            }
+            RefreshLibraryBrowseKeepingScroll();
             RecalculateGlobalStats();
             UpdateLibraryInfoText();
         }
@@ -9775,16 +9721,8 @@ namespace ReelRoulette
                 Log("  Saving filter state on UI thread...");
                 SaveSettingsInternal(intervalValue);
                 
-                // Update Library panel if it's visible and respecting filters
-                if (_showLibraryPanel)
-                {
-                    Log("  Updating Library panel after filter change");
-                    UpdateLibraryPanel();
-                }
-                else
-                {
-                    _libraryBrowseResetOnNextOpen = true;
-                }
+                Log("  Updating Library panel after filter change");
+                UpdateLibraryPanel();
                 
                 // Update library info text to reflect new filter state
                 UpdateLibraryInfoText();
@@ -10890,10 +10828,6 @@ namespace ReelRoulette
 
                 case Key.D4: // Number 4 - Show Library Panel
                     ToggleViewPreference(ref _showLibraryPanel, ShowLibraryPanelMenuItem);
-                    if (_showLibraryPanel)
-                    {
-                        PresentLibraryBrowseOnShow();
-                    }
                     e.Handled = true;
                     break;
 

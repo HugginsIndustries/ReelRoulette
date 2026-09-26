@@ -19,11 +19,8 @@ Instructions:
 
 Commit Message:
 
-M10i5: Browse the desktop library through the list query
+Bugfix: Keep the desktop library updating while it is hidden
 
-- Drive the infinite-scrolling library grid from `POST /api/library/query` for filter, search, sort, and scroll.
-- Patch a loaded tile when a favorite, blacklist, playback, or tag change cannot affect membership or order. Reload the loaded window, keeping scroll, when it can. A splice that stops halfway does not shrink that window. Holding the scrollbar does not request further pages while it is torn, and a deferred filter, sort, or reload is not appended onto the old tiles. A tile update while a browse query is open, including a further page that has not been applied yet, reads that query again.
-- Keep the filtered count on the server total, including while tiles are selected. Apply thumbnail fields and reflow when an aspect changes, including on the unchanged tiles after an inserted or removed id. A panel resize reflows after the current grid update and keeps the viewport tile.
-- Replace the grid from the start only when the filter, search, preset, or sort changes. Showing the panel again keeps the loaded window.
-- Send scoped auto-tag scans with no client path list. Keep the full catalog snapshot for non-browse readers. Now-playing stats use a loaded tile when the snapshot does not have that file, and download the snapshot when the current file is in neither copy. A playback for any other file missing from both copies still refreshes global play totals. A tag event applies the rest of its items before that snapshot download.
-- Cancel an in-progress manual or automatic library refresh on server shutdown without recording it as a failure or a completed refresh. A probe canceled by shutdown is not stored as a missing tool or a failed frame. A forced duration or loudness rescan stays pending if shutdown cancels that stage.
+- Favorite, blacklist, playback, tag, refresh, source, and auto-tag updates apply to the grid whether the library panel is shown or hidden.
+- A filter or preset change still starts over, including while the panel is hidden.
+- Opening the panel or leaving player view shows the tiles already updated.

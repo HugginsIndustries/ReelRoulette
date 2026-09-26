@@ -14,7 +14,7 @@ Write **[Unreleased]** bullets at the same level as the released sections below.
 
 ### Changed
 
-- **Desktop — library browse:** The library grid loads filter, search, sort, and further pages from `POST /api/library/query` instead of filtering a full in-memory catalog. The filtered count stays the server total. Favorite, blacklist, playback, and tag updates patch loaded tiles when membership and order cannot change, and reload the loaded window without jumping to the top when they can. Filter, search, preset, and sort changes start over; showing the panel again keeps the loaded window. Scoped auto-tag scan sends no client path list. Startup still loads the full catalog snapshot for the video/photo header and now-playing tags.
+- **Desktop — library browse:** The library grid loads filter, search, sort, and further pages from `POST /api/library/query` instead of filtering a full in-memory catalog. The filtered count stays the server total. Favorite, blacklist, playback, and tag updates patch loaded tiles when membership and order cannot change, and reload the loaded window without jumping to the top when they can. Filter, search, preset, and sort changes start over. The grid takes those updates whether the library panel is shown or hidden. Scoped auto-tag scan sends no client path list. Startup still loads the full catalog snapshot for the video/photo header and now-playing tags.
 - **Refresh shutdown:** Stopping the server cancels a library refresh that is still running. That stop is not recorded as a failure or a completed refresh, and a forced duration or loudness rescan stays pending.
 - **GitHub Releases mirror:** Stable tags attach Windows `Setup.exe` and Linux `.AppImage` only. Velopack update packages and feed JSON stay on Backblaze B2.
 

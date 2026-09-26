@@ -20,8 +20,7 @@ public enum LibraryPanelBrowseEffect
 public enum LibraryPanelBrowseUnknownTag
 {
     Skip,
-    ReloadLoadedAfterBatch,
-    SyncFullProjection
+    ReloadLoadedAfterBatch
 }
 
 public enum LibraryPanelBrowseRequest
@@ -200,13 +199,8 @@ public static class LibraryPanelBrowse
     /// An id that is neither in the catalog snapshot nor the loaded tiles. A tag filter can change
     /// membership for an item the grid has not loaded, so that case reloads after the rest of the event.
     /// </summary>
-    public static LibraryPanelBrowseUnknownTag UnknownTagItem(bool panelOpen, bool hasTagFilter)
+    public static LibraryPanelBrowseUnknownTag UnknownTagItem(bool hasTagFilter)
     {
-        if (!panelOpen)
-        {
-            return LibraryPanelBrowseUnknownTag.SyncFullProjection;
-        }
-
         if (hasTagFilter)
         {
             return LibraryPanelBrowseUnknownTag.ReloadLoadedAfterBatch;

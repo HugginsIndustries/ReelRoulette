@@ -102,7 +102,7 @@ Desktop is orchestration/render for migrated flows.
 - `src/clients/desktop/ReelRoulette.DesktopApp.Tests/`
   - xUnit tests for `ReelRoulette.LibraryArchive` migration helpers, export→import round-trip, and library-panel browse window decisions.
 - `src/clients/desktop/ReelRoulette.DesktopApp/LibraryPanelBrowse.cs`
-  - pure decisions for infinite-scroll fill, append reflow, whether an open-panel event patches tiles or reloads the loaded window, whether an open query or a further page still in flight is read again, whether a deferred refresh keeps that query open, where a query page reflows, how an unknown tag id is handled, the committed loaded span a reload uses after a splice stops halfway, which copy supplies now-playing stats, and when a missing current file downloads the snapshot.
+  - pure decisions for infinite-scroll fill, append reflow, whether a catalog event patches tiles or reloads the loaded window, whether an open query or a further page still in flight is read again, whether a deferred refresh keeps that query open, where a query page reflows, how an unknown tag id is handled, the committed loaded span a reload uses after a splice stops halfway, which copy supplies now-playing stats, and when a missing current file downloads the snapshot.
 - `src/clients/desktop/ReelRoulette.DesktopApp/MainWindow.axaml.cs`
   - API/SSE lifecycle orchestration, reconnect/resync guidance, compatibility gating, playback orchestration (library grid click-to-play via `POST /api/play/{itemId}`); grid-only library panel that browses through `POST /api/library/query`.
 - `src/clients/desktop/ReelRoulette.DesktopApp/CoreServerApiClient.cs`
