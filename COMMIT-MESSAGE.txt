@@ -19,8 +19,8 @@ Instructions:
 
 Commit Message:
 
-Bugfix: Keep the desktop library updating while it is hidden
+Docs: Plan the WebUI library window to stay ready across hide and show
 
-- Favorite, blacklist, playback, tag, refresh, source, and auto-tag updates apply to the grid whether the library panel is shown or hidden.
-- A filter or preset change still starts over, including while the panel is hidden.
-- Opening the panel or leaving player view shows the tiles already updated.
+- Revise the WebUI library query cutover so the planned overlay matches the desktop grid: a first query window after connect, that window and its scroll position kept while hidden, and favorite, blacklist, playback, tag, and resync updates whether it is shown or hidden.
+- In that plan, filter, search, sort, and a header preset still start over either way, and fill-on-scroll stays limited to an open overlay.
+- Leave source enable/disable refresh deferred to the later WebUI source-management work.
