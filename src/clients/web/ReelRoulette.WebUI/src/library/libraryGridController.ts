@@ -11,18 +11,27 @@ import type { LibraryProjectionItem } from "./libraryProjectionModel";
 const RESIZE_DEBOUNCE_MS = 90;
 const MIN_FALLBACK_WIDTH = 280;
 
+export interface LibraryGridCoverage {
+  scrollTop: number;
+  viewportBottom: number;
+  extentHeight: number;
+}
+
 export interface LibraryGridController {
   setBrowseContent(input: {
     visibleItems: readonly LibraryProjectionItem[];
     searchQuery: string;
     resetScroll?: boolean;
   }): void;
+  measureCoverage(): LibraryGridCoverage | null;
+  flushDeferredLayout(): void;
   destroy(): void;
 }
 
 export function createLibraryGridController(
   container: HTMLElement,
-  apiBaseUrl: string
+  apiBaseUrl: string,
+  options?: { onCoverage?: (coverage: LibraryGridCoverage) => void }
 ): LibraryGridController {
   let browseRoot: HTMLElement | null = null;
   let scrollEl: HTMLElement | null = null;
@@ -38,6 +47,8 @@ export function createLibraryGridController(
   let lastVisibleEnd = -1;
   let resizeTimer: ReturnType<typeof setTimeout> | null = null;
   let resizeObserver: ResizeObserver | null = null;
+  let layoutStale = false;
+  let pendingScrollReset = false;
 
   function ensureBrowseShell(): void {
     if (browseRoot) {
@@ -133,10 +144,30 @@ export function createLibraryGridController(
     const visibleRows = virtualizerState.rows.slice(window.firstVisibleRow, window.endExclusive);
     const html = visibleRows.map((row) => renderGridRowHtml(row, items, apiBaseUrl)).join("");
     rowsEl.innerHTML = html;
+    reportCoverage();
+  }
+
+  function reportCoverage(): void {
+    const coverage = measureCoverage();
+    if (coverage && options?.onCoverage) {
+      options.onCoverage(coverage);
+    }
+  }
+
+  function measureCoverage(): LibraryGridCoverage | null {
+    if (!scrollEl) {
+      return null;
+    }
+    return {
+      scrollTop: scrollEl.scrollTop,
+      viewportBottom: scrollEl.scrollTop + Math.max(0, scrollEl.clientHeight),
+      extentHeight: virtualizerState.offsetIndex.totalExtentHeight
+    };
   }
 
   function onScroll(): void {
     updateVisibleRows(false);
+    reportCoverage();
   }
 
   function scheduleResizeReflow(): void {
@@ -145,12 +176,18 @@ export function createLibraryGridController(
     }
     resizeTimer = setTimeout(() => {
       resizeTimer = null;
+      if ((browseRoot?.clientWidth ?? 0) < 1 || scrollEl?.hidden) {
+        return;
+      }
       const nextWidth = measureLayoutWidth();
-      if (Math.abs(nextWidth - layoutWidth) < 0.5 && items.length > 0) {
+      if (!layoutStale && Math.abs(nextWidth - layoutWidth) < 0.5 && items.length > 0 && virtualizerState.rows.length > 0) {
         updateVisibleRows(true);
         return;
       }
-      rebuildVirtualizer(false);
+      const resetScroll = pendingScrollReset;
+      layoutStale = false;
+      pendingScrollReset = false;
+      rebuildVirtualizer(resetScroll);
     }, RESIZE_DEBOUNCE_MS);
   }
 
@@ -163,21 +200,26 @@ export function createLibraryGridController(
     items = input.visibleItems;
 
     const hasItems = input.visibleItems.length > 0;
-    if (emptyEl && scrollEl) {
-      if (!hasItems) {
+    const wantsReset = input.resetScroll !== false || pendingScrollReset;
+    if (!hasItems) {
+      if (wantsReset && scrollEl && !scrollEl.hidden && scrollEl.clientWidth >= 1) {
+        scrollEl.scrollTop = 0;
+        pendingScrollReset = false;
+        layoutStale = false;
+      } else if (wantsReset) {
+        pendingScrollReset = true;
+        layoutStale = true;
+      }
+
+      if (emptyEl && scrollEl) {
         const trimmed = String(input.searchQuery || "").trim();
         emptyEl.textContent = trimmed
           ? `No matches for “${trimmed}”.`
           : "No items match the current filter.";
         emptyEl.hidden = false;
         scrollEl.hidden = true;
-      } else {
-        emptyEl.hidden = true;
-        scrollEl.hidden = false;
       }
-    }
 
-    if (!hasItems) {
       virtualizerState = { rows: [], offsetIndex: { rowTopOffsets: [], rowBottomOffsets: [], totalExtentHeight: 0 } };
       if (rowsEl && topSpacerEl && bottomSpacerEl) {
         rowsEl.replaceChildren();
@@ -187,7 +229,30 @@ export function createLibraryGridController(
       return;
     }
 
-    rebuildVirtualizer(input.resetScroll !== false);
+    if (emptyEl && scrollEl) {
+      emptyEl.hidden = true;
+      scrollEl.hidden = false;
+    }
+
+    if ((browseRoot?.clientWidth ?? 0) < 1) {
+      layoutStale = true;
+      pendingScrollReset = wantsReset;
+      return;
+    }
+
+    layoutStale = false;
+    pendingScrollReset = false;
+    rebuildVirtualizer(wantsReset);
+  }
+
+  function flushDeferredLayout(): void {
+    if (!layoutStale || (browseRoot?.clientWidth ?? 0) < 1 || scrollEl?.hidden) {
+      return;
+    }
+    const resetScroll = pendingScrollReset;
+    layoutStale = false;
+    pendingScrollReset = false;
+    rebuildVirtualizer(resetScroll);
   }
 
   function destroy(): void {
@@ -212,11 +277,15 @@ export function createLibraryGridController(
     virtualizerState = { rows: [], offsetIndex: { rowTopOffsets: [], rowBottomOffsets: [], totalExtentHeight: 0 } };
     lastVisibleStart = -1;
     lastVisibleEnd = -1;
+    layoutStale = false;
+    pendingScrollReset = false;
     container.replaceChildren();
   }
 
   return {
     setBrowseContent,
+    measureCoverage,
+    flushDeferredLayout,
     destroy
   };
 }

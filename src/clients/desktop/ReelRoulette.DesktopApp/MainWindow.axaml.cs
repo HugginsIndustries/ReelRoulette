@@ -218,7 +218,9 @@ namespace ReelRoulette
         // Library projection (server-backed) for non-browse readers. The library grid browses through the list query.
         private LibraryIndex? _libraryIndex;
         private FilterState? _currentFilterState;
-        private string? _activePresetName; // Track which preset is currently active for display in library panel
+        private string? _activePresetName; // Base preset for the library list. Null is None.
+        private bool _libraryExplicitNone; // Header None stays on None until the filter changes.
+        private bool _presetCatalogLoaded;
         private List<FilterPreset>? _filterPresets; // Store filter presets
         private bool _isUpdatingPresetComboBox = false; // Flag to suppress SelectionChanged event during programmatic updates
         private bool _isUpdatingRandomizationModeComboBox = false;
@@ -3832,6 +3834,27 @@ namespace ReelRoulette
         }
 
         /// <summary>
+        /// Library preset row for the current filter. An explicit None stays on None
+        /// until that filter changes, including when a saved preset equals the default.
+        /// </summary>
+        private LibraryPresetSelection.PresetAnchor CurrentLibraryPresetAnchor(bool commitBase)
+        {
+            var holdNone = _libraryExplicitNone && LibraryPresetSelection.FiltersEqual(_currentFilterState, new FilterState());
+            if (!holdNone)
+            {
+                _libraryExplicitNone = false;
+            }
+
+            var anchor = LibraryPresetSelection.Resolve(_currentFilterState, _filterPresets, _activePresetName, holdNone);
+            if (commitBase && _presetCatalogLoaded)
+            {
+                _activePresetName = anchor.BaseName;
+            }
+
+            return anchor;
+        }
+
+        /// <summary>
         /// Populates and updates the filter preset dropdown in the library panel.
         /// </summary>
         private void UpdateLibraryPresetComboBox()
@@ -3843,25 +3866,14 @@ namespace ReelRoulette
             
             try
             {
+                var anchor = CurrentLibraryPresetAnchor(commitBase: true);
+                var selectedTag = LibraryPresetSelection.SelectedTag(anchor);
                 LibraryPresetComboBox.Items.Clear();
-                
-                // Always add "None" as first option
-                var noneItem = new ComboBoxItem { Content = "None", Tag = "None" };
-                LibraryPresetComboBox.Items.Add(noneItem);
-                
-                // Add all presets
-                if (_filterPresets != null)
+                foreach (var row in LibraryPresetSelection.BuildRows(anchor, _filterPresets))
                 {
-                    foreach (var preset in _filterPresets)
-                    {
-                        var item = new ComboBoxItem { Content = preset.Name, Tag = preset.Name };
-                        LibraryPresetComboBox.Items.Add(item);
-                    }
+                    LibraryPresetComboBox.Items.Add(new ComboBoxItem { Content = row.Label, Tag = row.Tag });
                 }
-                
-                // Select active preset or "None"
-                string selectedTag = _activePresetName ?? "None";
-                bool foundMatch = false;
+
                 if (LibraryPresetComboBox.Items != null)
                 {
                     foreach (var itemObj in LibraryPresetComboBox.Items)
@@ -3869,23 +3881,12 @@ namespace ReelRoulette
                         if (itemObj is ComboBoxItem item && item.Tag?.ToString() == selectedTag)
                         {
                             LibraryPresetComboBox.SelectedItem = item;
-                            foundMatch = true;
                             break;
                         }
                     }
                 }
                 
-                // Fallback: If no match found (e.g., preset was deleted or settings corrupted), select "None"
-                if (!foundMatch && LibraryPresetComboBox.Items != null && LibraryPresetComboBox.Items.Count > 0)
-                {
-                    var missingPresetName = _activePresetName; // Capture for logging before clearing
-                    LibraryPresetComboBox.SelectedItem = LibraryPresetComboBox.Items[0]; // "None" is always first
-                    selectedTag = "None";
-                    _activePresetName = null; // Clear active preset name since it no longer exists
-                    Log($"UpdateLibraryPresetComboBox: Active preset '{missingPresetName}' not found, selected 'None' as fallback and cleared active preset name");
-                }
-                
-                Log($"UpdateLibraryPresetComboBox: Populated {LibraryPresetComboBox.Items?.Count ?? 0} items, selected: {selectedTag}");
+                Log($"UpdateLibraryPresetComboBox: Populated {LibraryPresetComboBox.Items?.Count ?? 0} items, selected: {anchor.Label}");
             }
             finally
             {
@@ -3905,17 +3906,24 @@ namespace ReelRoulette
                 return;
             
             var selectedPresetName = selectedItem.Tag?.ToString();
-            
-            // Handle "None" selection
-            if (selectedPresetName == "None" || string.IsNullOrEmpty(selectedPresetName))
+            var pick = LibraryPresetSelection.Pick(selectedPresetName);
+            if (pick == LibraryPresetSelection.PresetPick.Keep)
             {
-                Log("LibraryPresetComboBox: Selected 'None' - clearing active preset");
+                return;
+            }
+
+            // Handle "None" selection — same default filter the WebUI header preset list applies.
+            if (pick == LibraryPresetSelection.PresetPick.Default)
+            {
+                Log("LibraryPresetComboBox: Selected 'None' - resetting filter to defaults");
+                _currentFilterState = LibraryPresetSelection.FilterStateForSelection(null);
                 _activePresetName = null;
+                _libraryExplicitNone = true;
+                Dispatcher.UIThread.Post(UpdateLibraryPresetComboBox);
                 UpdateFilterSummaryText();
-                
-                // Rebuild queue and update library panel
+
                 RefreshLibraryPanelFromServiceState();
-                StatusTextBlock.Text = "Cleared filter preset";
+                StatusTextBlock.Text = "Reset filters to defaults";
                 SaveSettings();
                 _ = SyncPresetsToCoreAsync();
                 return;
@@ -3931,10 +3939,10 @@ namespace ReelRoulette
             
             Log($"LibraryPresetComboBox: Loading preset '{selectedPresetName}' immediately");
             
-            // Deep copy preset's FilterState
-            var json = JsonSerializer.Serialize(preset.FilterState);
-            _currentFilterState = JsonSerializer.Deserialize<FilterState>(json) ?? new FilterState();
+            _currentFilterState = LibraryPresetSelection.FilterStateForSelection(preset);
             _activePresetName = selectedPresetName;
+            _libraryExplicitNone = false;
+            Dispatcher.UIThread.Post(UpdateLibraryPresetComboBox);
             
             // Update filter summary
             UpdateFilterSummaryText();
@@ -5409,11 +5417,14 @@ namespace ReelRoulette
                 return;
             }
 
-            var activePresetName = await MatchPresetNameFromCoreAsync(_currentFilterState);
-            if (string.IsNullOrWhiteSpace(activePresetName))
+            var presetId = string.Empty;
+            FilterState? filter = null;
+            await Dispatcher.UIThread.InvokeAsync(() =>
             {
-                activePresetName = _activePresetName;
-            }
+                var anchor = CurrentLibraryPresetAnchor(commitBase: false);
+                presetId = anchor.Starred || string.IsNullOrEmpty(anchor.BaseName) ? string.Empty : anchor.BaseName;
+                filter = LibraryPresetSelection.CopyFilter(_currentFilterState);
+            });
 
             PlaybackTarget? randomTarget = null;
             try
@@ -5422,8 +5433,8 @@ namespace ReelRoulette
                     _coreServerBaseUrl,
                     new CoreRandomRequest
                     {
-                        PresetId = activePresetName ?? string.Empty,
-                        FilterState = _currentFilterState == null ? null : JsonSerializer.SerializeToElement(_currentFilterState),
+                        PresetId = presetId,
+                        FilterState = filter == null ? null : JsonSerializer.SerializeToElement(filter),
                         ClientId = _coreClientId,
                         SessionId = _coreSessionId,
                         IncludeVideos = true,
@@ -7028,41 +7039,17 @@ namespace ReelRoulette
                     .Select(group => group.First())
                     .ToList();
 
-                _filterPresets = mapped;
-                _activePresetName = await MatchPresetNameFromCoreAsync(_currentFilterState);
-                await Dispatcher.UIThread.InvokeAsync(UpdateLibraryPresetComboBox);
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    _filterPresets = mapped;
+                    _presetCatalogLoaded = true;
+                    UpdateLibraryPresetComboBox();
+                });
             }
             catch (Exception ex)
             {
                 Log($"CorePresetSync: Failed to fetch presets ({ex.Message})");
             }
-        }
-
-        private async Task<string?> MatchPresetNameFromCoreAsync(FilterState? filterState)
-        {
-            if (!_isCoreApiReachable || filterState == null)
-            {
-                return null;
-            }
-
-            try
-            {
-                var response = await _coreServerApiClient.MatchPresetAsync(_coreServerBaseUrl, new CorePresetMatchRequest
-                {
-                    FilterState = JsonSerializer.SerializeToElement(filterState)
-                });
-
-                if (response?.Matched == true && !string.IsNullOrWhiteSpace(response.PresetName))
-                {
-                    return response.PresetName.Trim();
-                }
-            }
-            catch (Exception ex)
-            {
-                Log($"CorePresetSync: Failed to match preset ({ex.Message})");
-            }
-
-            return null;
         }
 
         private static FilterState ParseCorePresetFilterState(JsonElement? filterState)
@@ -7540,9 +7527,11 @@ namespace ReelRoulette
             
             // Preset catalog is API-owned; no local preset fallback.
             _filterPresets = [];
-            _activePresetName = null;
+            _presetCatalogLoaded = false;
+            _activePresetName = string.IsNullOrWhiteSpace(settings.ActivePresetName) ? null : settings.ActivePresetName.Trim();
+            _libraryExplicitNone = settings.LibraryExplicitNone;
             _autoTagScanFullLibrary = settings.AutoTagScanFullLibrary;
-            Log("LoadSettings: Presets will be loaded from API; active preset will be derived from filter state.");
+            Log($"LoadSettings: Presets will be loaded from API; the saved preset base is restored with the filter. ExplicitNone={_libraryExplicitNone}");
             
             // Update filter summary after loading (to show preset name if active)
             UpdateFilterSummaryText();
@@ -7680,6 +7669,8 @@ namespace ReelRoulette
 
                 // Filter state (always save an object, never null)
                 settings.FilterState = _currentFilterState ?? new FilterState();
+                settings.ActivePresetName = _activePresetName;
+                settings.LibraryExplicitNone = _libraryExplicitNone;
                 
                 settings.AutoTagScanFullLibrary = _autoTagScanFullLibrary;
                 
@@ -9683,7 +9674,8 @@ namespace ReelRoulette
 
             var dialog = new FilterDialog(_currentFilterState, _libraryIndex, 
                                          _filterPresets ?? new List<FilterPreset>(),
-                                         _activePresetName);
+                                         _activePresetName,
+                                         _libraryExplicitNone);
             await dialog.ShowDialog<bool?>(this);
 
             if (dialog.WasApplied)
@@ -9692,7 +9684,8 @@ namespace ReelRoulette
                 
                 // Save presets and active preset name to local fields
                 _filterPresets = dialog.GetPresets();
-                _activePresetName = await MatchPresetNameFromCoreAsync(_currentFilterState);
+                _activePresetName = dialog.GetActivePresetName();
+                _libraryExplicitNone = dialog.KeepsExplicitNone;
                 
                 Log($"FilterMenuItem: Saved {_filterPresets?.Count ?? 0} presets, active preset: {_activePresetName ?? "None"}");
                 _ = SyncPresetsToCoreAsync();

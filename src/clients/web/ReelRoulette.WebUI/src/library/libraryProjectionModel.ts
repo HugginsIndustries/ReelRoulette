@@ -196,11 +196,8 @@ function parseOptionalPositiveInt(value: unknown): number | null {
   return null;
 }
 
-function parseItem(row: Record<string, unknown>, enabledSourceIds: Set<string>): LibraryProjectionItem | null {
+function parseQueryItem(row: Record<string, unknown>): LibraryProjectionItem {
   const sourceId = row.sourceId != null ? String(row.sourceId) : "";
-  if (!enabledSourceIds.has(sourceId)) {
-    return null;
-  }
   const fileName = row.fileName != null ? String(row.fileName) : "";
   const fullPathRaw = row.fullPath != null ? String(row.fullPath).trim() : "";
   return {
@@ -226,6 +223,43 @@ function parseItem(row: Record<string, unknown>, enabledSourceIds: Set<string>):
     thumbnailWidth: parseOptionalPositiveInt(row.thumbnailWidth),
     thumbnailHeight: parseOptionalPositiveInt(row.thumbnailHeight)
   };
+}
+
+function parseItem(row: Record<string, unknown>, enabledSourceIds: Set<string>): LibraryProjectionItem | null {
+  const sourceId = row.sourceId != null ? String(row.sourceId) : "";
+  if (!enabledSourceIds.has(sourceId)) {
+    return null;
+  }
+  return parseQueryItem(row);
+}
+
+export interface LibraryQueryPageParsed {
+  items: LibraryProjectionItem[];
+  totalCount: number;
+  searchBaselineCount: number;
+}
+
+export function parseLibraryQueryPage(raw: unknown): LibraryQueryPageParsed {
+  const body = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  const items: LibraryProjectionItem[] = [];
+  for (const item of Array.isArray(body.items) ? body.items : []) {
+    if (!item || typeof item !== "object") {
+      continue;
+    }
+    items.push(parseQueryItem(item as Record<string, unknown>));
+  }
+  return {
+    items,
+    totalCount: readCount(body.totalCount),
+    searchBaselineCount: readCount(body.searchBaselineCount)
+  };
+}
+
+function readCount(value: unknown): number {
+  if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
+    return Math.trunc(value);
+  }
+  return 0;
 }
 
 export function parseLibraryProjection(raw: unknown): ParsedLibraryProjection {

@@ -5,37 +5,36 @@ import {
   TAG_MATCH_MODE,
   cloneFilterState,
   createDefaultFilterState,
+  dialogPresetBase,
   filterStateFromApiObject,
   filterStatesEqualForPresetMatch,
   formatDurationForDisplay,
+  headerPresetListAfterPick,
+  headerPresetListForFilter,
+  headerPresetPick,
   parseDurationInputToSeconds,
+  presetAnchorForDisplay,
+  presetHeading,
   presetsToPostBody,
   serializeFilterStateForApi
 } from "./filter/filterStateModel.ts";
 import {
-  applyLibraryBrowse,
   createDefaultBrowseControls,
-  formatBrowseResultSummary,
   getSortDirectionLabel,
   isDefaultDescendingForSortMode
 } from "./library/libraryBrowseModel.ts";
-import { parseLibraryProjection } from "./library/libraryProjectionModel.ts";
-import {
-  applyItemStateChanged,
-  applyPlaybackRecorded,
-  shouldRebrowseAfterPlaybackUpdate
-} from "./library/libraryProjectionSync.ts";
+import { parseLibraryQueryPage } from "./library/libraryProjectionModel.ts";
 import { createLibraryGridController } from "./library/libraryGridController.ts";
 import { mapPlayItemErrorToStatus } from "./library/libraryPlayModel.ts";
 import {
   LIBRARY_OVERLAY_FETCH_ERROR,
-  beginLibraryOverlayOpen,
-  closeLibraryOverlayState,
-  completeLibraryOverlayFetch,
-  createLibraryOverlayState,
-  failLibraryOverlayFetch,
   renderLibraryOverlayBodyHtml
 } from "./library/libraryOverlayModel.ts";
+import {
+  LIBRARY_QUERY_SEARCH_DEBOUNCE_MS,
+  createAutoTagScanRequest,
+  createLibraryQuerySession
+} from "./library/libraryQuerySession.ts";
 import { requestPlayItem } from "./api/coreApi.ts";
 
 const CLIENT_ID_KEY = "rr_clientId";
@@ -220,16 +219,17 @@ export function startApp(config) {
     libraryOverlayOpen: false
   };
 
-  let libraryOverlayState = createLibraryOverlayState();
-  let libraryOverlayOpenGeneration = 0;
   let libraryBrowseControls = createDefaultBrowseControls();
-  /** @type {import("./library/libraryProjectionModel.ts").LibraryProjectionCatalog | null} */
-  let libraryOverlayCatalog = null;
-  /** @type {import("./library/libraryProjectionModel.ts").LibraryProjectionItem[] | null} */
-  let libraryOverlayItems = null;
-  /** @type {import("./library/libraryGridController.ts").LibraryGridController | null} */
   let libraryGridController = null;
   let libraryPlayInFlight = false;
+  let librarySearchTimer = null;
+  const librarySession = createLibraryQuerySession((request, signal) => postLibraryQuery(request, signal));
+  librarySession.setListener((event) => {
+    renderLibraryWindow(event.scroll);
+    if (event.statusMessage) {
+      setStatus(event.statusMessage);
+    }
+  });
 
   function destroyLibraryGridController() {
     if (libraryGridController) {
@@ -421,6 +421,12 @@ export function startApp(config) {
   let filterActiveTab = "general";
   /** Preset name selected inside the filter dialog only (header combobox uses `state.activePresetName` after Apply). */
   let filterDialogActiveName = null;
+  let suppressFilterDialogPresetSelect = false;
+  let suppressHeaderPresetChange = false;
+  /** Header None stays on None until the applied filter changes. */
+  let headerExplicitNone = false;
+  /** Copy of that hold for the open filter dialog. A named pick in the dialog clears it. */
+  let filterDialogHoldNone = false;
   /** Category ids (and uncategorized sentinel) with collapsed tag grids in the filter dialog; persisted in sessionStorage. */
   let filterDialogCollapsedCategories = new Set();
 
@@ -490,16 +496,55 @@ export function startApp(config) {
     const dirty = now !== filterDialogOriginalJson || filterPresetCatalogDirty;
     filterApplyBtn.classList.toggle("has-pending", dirty);
     filterApplyBtn.textContent = dirty ? "Apply*" : "Apply";
+    setFilterDialogHeading();
   }
 
   function setFilterDialogHeading() {
     if (!state.filterDialogOpen) {
       return;
     }
-    if (filterDialogActiveName) {
-      filterDialogHeading.textContent = `Filter Media — Active preset: ${filterDialogActiveName}`;
+    if (filterDialogHoldNone && !filterStatesEqualForPresetMatch(filterWorking, createDefaultFilterState())) {
+      filterDialogHoldNone = false;
+    }
+    const holdNone = filterDialogHoldNone;
+    if (holdNone) {
+      filterDialogActiveName = null;
     } else {
-      filterDialogHeading.textContent = "Filter Media";
+      filterDialogActiveName = dialogPresetBase(filterWorking, filterWorkingPresets, filterDialogActiveName);
+    }
+    const anchor = presetAnchorForDisplay(filterWorking, filterWorkingPresets, filterDialogActiveName, holdNone);
+    filterDialogHeading.textContent = presetHeading(anchor);
+    syncFilterDialogPresetSelect();
+  }
+
+  function currentHeaderPresetList() {
+    const stillDefault = filterStatesEqualForPresetMatch(state.appliedFilterState, createDefaultFilterState());
+    if (headerExplicitNone && !stillDefault) {
+      headerExplicitNone = false;
+    }
+    return headerPresetListForFilter(
+      state.appliedFilterState,
+      state.presets,
+      state.activePresetName,
+      headerExplicitNone && stillDefault
+    );
+  }
+
+  function syncFilterDialogPresetSelect() {
+    const sel = filterPanelPresets.querySelector("#filter-dialog-preset-select");
+    if (!(sel instanceof HTMLSelectElement)) {
+      return;
+    }
+    const names = filterWorkingPresets.map((preset) => preset.name);
+    const next = filterDialogActiveName && names.includes(filterDialogActiveName) ? filterDialogActiveName : "";
+    if (sel.value === next) {
+      return;
+    }
+    suppressFilterDialogPresetSelect = true;
+    try {
+      sel.value = next;
+    } finally {
+      suppressFilterDialogPresetSelect = false;
     }
   }
 
@@ -932,8 +977,14 @@ export function startApp(config) {
     if (sel) {
       sel.value = filterDialogActiveName && names.includes(filterDialogActiveName) ? filterDialogActiveName : "";
       sel.addEventListener("change", () => {
+        if (suppressFilterDialogPresetSelect) {
+          return;
+        }
         const v = sel.value;
         if (!v) {
+          if (!filterStatesEqualForPresetMatch(filterWorking, createDefaultFilterState())) {
+            filterDialogHoldNone = false;
+          }
           filterDialogActiveName = null;
           setFilterDialogHeading();
           updateFilterApplyButtonPending();
@@ -941,6 +992,7 @@ export function startApp(config) {
         }
         const preset = filterWorkingPresets.find((p) => p.name === v);
         if (preset) {
+          filterDialogHoldNone = false;
           filterWorking = cloneFilterState(preset.filterState);
           filterDialogActiveName = v;
           renderFilterGeneralPanel();
@@ -1117,14 +1169,15 @@ export function startApp(config) {
     }
     filterWorking = cloneFilterState(state.appliedFilterState);
     filterDialogActiveName = state.activePresetName;
+    filterDialogHoldNone = headerExplicitNone;
     filterDialogOriginalJson = JSON.stringify(serializeFilterStateForApi(filterWorking));
     filterPresetCatalogDirty = false;
     filterDialogCollapsedCategories = loadFilterDialogCollapsedCategories();
+    state.filterDialogOpen = true;
     setFilterDialogHeading();
     switchFilterTab("general");
     renderAllFilterPanels();
     filterDialog.style.display = "flex";
-    state.filterDialogOpen = true;
     filterPanelTags.addEventListener("click", onFilterTagPanelClick);
   }
 
@@ -1157,167 +1210,141 @@ export function startApp(config) {
     );
   }
 
-  function renderLibraryOverlayBody(options = {}) {
-    const resetScroll = options.resetScroll !== false;
-    const phase = libraryOverlayState.phase;
-    if (phase === "loading" || phase === "error" || phase === "empty") {
+  function applyLibraryWindowChrome(snap) {
+    if (snap.phase !== "ready") {
+      return;
+    }
+    setLibraryOverlayToolbarVisible(true);
+    syncLibraryOverlayToolbarFromControls();
+    setLibraryOverlaySummary(snap.summaryText);
+  }
+
+  function renderLibraryWindow(scroll) {
+    const snap = librarySession.snapshot();
+    const showGrid = snap.phase === "ready";
+    if (!state.libraryOverlayOpen) {
+      if (!libraryGridController || !showGrid) {
+        return;
+      }
+      applyLibraryWindowChrome(snap);
+      libraryGridController.setBrowseContent({
+        visibleItems: snap.items,
+        searchQuery: libraryBrowseControls.searchQuery,
+        resetScroll: scroll === "top"
+      });
+      return;
+    }
+
+    if (!showGrid) {
       destroyLibraryGridController();
       setLibraryOverlayToolbarVisible(false);
       setLibraryOverlaySummary(null);
+      const phase = snap.phase === "error" ? "error" : snap.phase === "empty" ? "empty" : "loading";
       libraryOverlayBody.innerHTML = renderLibraryOverlayBodyHtml(
         phase,
-        libraryOverlayState.summary,
-        libraryOverlayState.lastError
+        null,
+        snap.errorMessage || LIBRARY_OVERLAY_FETCH_ERROR
       );
       return;
     }
 
-    if (phase !== "ready" || !libraryOverlayCatalog || !libraryOverlayItems) {
-      destroyLibraryGridController();
-      setLibraryOverlayToolbarVisible(false);
-      setLibraryOverlaySummary(null);
-      libraryOverlayBody.innerHTML = "";
-      return;
-    }
-
-    setLibraryOverlayToolbarVisible(true);
-    syncLibraryOverlayToolbarFromControls();
-
-    const browse = applyLibraryBrowse(
-      libraryOverlayCatalog,
-      libraryOverlayItems,
-      state.appliedFilterState,
-      libraryBrowseControls
-    );
-    setLibraryOverlaySummary(
-      formatBrowseResultSummary(browse.visibleItems.length, browse.filterBaselineCount)
-    );
-
+    applyLibraryWindowChrome(snap);
     if (!libraryGridController) {
-      libraryGridController = createLibraryGridController(libraryOverlayBody, apiBaseUrl);
+      libraryGridController = createLibraryGridController(libraryOverlayBody, apiBaseUrl, {
+        onCoverage: onLibraryGridCoverage
+      });
     }
     libraryGridController.setBrowseContent({
-      visibleItems: browse.visibleItems,
+      visibleItems: snap.items,
       searchQuery: libraryBrowseControls.searchQuery,
-      resetScroll
+      resetScroll: scroll === "top"
     });
   }
 
-  function refreshLibraryOverlayBrowse(options = {}) {
-    if (!state.libraryOverlayOpen || libraryOverlayState.phase !== "ready") {
-      return;
-    }
-    renderLibraryOverlayBody(options);
-  }
-
-  function isLibraryOverlayReadyForSync() {
-    return (
-      state.libraryOverlayOpen &&
-      libraryOverlayState.phase === "ready" &&
-      libraryOverlayCatalog &&
-      libraryOverlayItems
-    );
-  }
-
-  async function syncLibraryOverlayProjectionFromServer() {
+  function onLibraryGridCoverage(coverage) {
+    librarySession.noteScroll(coverage.scrollTop);
     if (!state.libraryOverlayOpen) {
       return;
     }
+    void librarySession.considerFill(coverage.extentHeight, coverage.viewportBottom);
+  }
 
-    libraryOverlayOpenGeneration += 1;
-    const syncGeneration = libraryOverlayOpenGeneration;
+  function commitLibraryQuery() {
+    if (librarySearchTimer) {
+      clearTimeout(librarySearchTimer);
+      librarySearchTimer = null;
+    }
+    return librarySession.resetQuery(state.appliedFilterState, libraryBrowseControls);
+  }
 
+  function renderHeaderPresetOptions(list) {
+    state.activePresetName = list.baseName;
+    state.currentPresetId = headerPresetPick(list.selectedValue) === "named" ? list.selectedValue : "";
+    suppressHeaderPresetChange = true;
     try {
-      const projection = await fetchJson("/api/library/projection");
-      if (syncGeneration !== libraryOverlayOpenGeneration || !state.libraryOverlayOpen) {
-        return;
+      presetSelect.innerHTML = "";
+      for (const entry of list.entries) {
+        const option = document.createElement("option");
+        option.value = entry.value;
+        option.textContent = entry.label;
+        presetSelect.appendChild(option);
       }
-      const parsed = parseLibraryProjection(projection);
-      libraryOverlayCatalog = parsed.catalog;
-      libraryOverlayItems = parsed.items;
-      libraryOverlayState = completeLibraryOverlayFetch(libraryOverlayState, parsed.summary);
-      refreshLibraryOverlayBrowse({ resetScroll: false });
-    } catch (error) {
-      if (syncGeneration !== libraryOverlayOpenGeneration || !state.libraryOverlayOpen) {
-        return;
-      }
-      const message = error?.message ? String(error.message) : LIBRARY_OVERLAY_FETCH_ERROR;
-      libraryOverlayState = failLibraryOverlayFetch(libraryOverlayState, message);
-      renderLibraryOverlayBody({ resetScroll: false });
-      setStatus(`Library sync failed: ${message}`);
+      presetSelect.value = list.selectedValue;
+    } finally {
+      suppressHeaderPresetChange = false;
     }
   }
 
-  function handleLibraryOverlayItemStateChanged(payload) {
-    if (!isLibraryOverlayReadyForSync()) {
-      return;
-    }
-
-    const result = applyItemStateChanged(libraryOverlayItems, payload);
-    if (!result.changed) {
-      return;
-    }
-
-    refreshLibraryOverlayBrowse({ resetScroll: false });
-  }
-
-  function handleLibraryOverlayPlaybackRecorded(payload) {
-    if (!isLibraryOverlayReadyForSync()) {
-      return;
-    }
-
-    const result = applyPlaybackRecorded(libraryOverlayItems, payload);
-    if (!result.changed) {
-      return;
-    }
-
-    if (shouldRebrowseAfterPlaybackUpdate(libraryBrowseControls.sortMode, state.appliedFilterState)) {
-      refreshLibraryOverlayBrowse({ resetScroll: false });
-    }
-  }
-
-  async function openLibraryOverlay() {
+  function openLibraryOverlay() {
     if (state.compatibilityBlocked) {
       return;
     }
 
-    libraryOverlayOpenGeneration += 1;
-    const openGeneration = libraryOverlayOpenGeneration;
-    libraryOverlayState = beginLibraryOverlayOpen(libraryOverlayState);
     libraryOverlay.style.display = "flex";
     state.libraryOverlayOpen = true;
-    renderLibraryOverlayBody();
-
-    try {
-      const projection = await fetchJson("/api/library/projection");
-      if (openGeneration !== libraryOverlayOpenGeneration || !state.libraryOverlayOpen) {
-        return;
-      }
-      const parsed = parseLibraryProjection(projection);
-      libraryOverlayCatalog = parsed.catalog;
-      libraryOverlayItems = parsed.items;
-      libraryOverlayState = completeLibraryOverlayFetch(libraryOverlayState, parsed.summary);
-      renderLibraryOverlayBody();
-    } catch (error) {
-      if (openGeneration !== libraryOverlayOpenGeneration || !state.libraryOverlayOpen) {
-        return;
-      }
-      const message = error?.message ? String(error.message) : LIBRARY_OVERLAY_FETCH_ERROR;
-      libraryOverlayState = failLibraryOverlayFetch(libraryOverlayState, message);
-      renderLibraryOverlayBody();
-      setStatus(`Library load failed: ${message}`);
+    librarySession.setOverlayVisible(true);
+    const snap = librarySession.snapshot();
+    if (snap.phase !== "ready" || !libraryGridController) {
+      renderLibraryWindow("keep");
+    } else {
+      applyLibraryWindowChrome(snap);
+      libraryGridController.flushDeferredLayout();
     }
+    if (!snap.hasResult) {
+      void librarySession.ensureLoaded(state.appliedFilterState, libraryBrowseControls);
+    }
+    requestAnimationFrame(() => {
+      if (!state.libraryOverlayOpen) {
+        return;
+      }
+      const coverage = libraryGridController?.measureCoverage();
+      if (coverage) {
+        void librarySession.considerFill(coverage.extentHeight, coverage.viewportBottom);
+      }
+    });
   }
 
   function closeLibraryOverlay() {
-    libraryOverlayOpenGeneration += 1;
     libraryOverlay.style.display = "none";
     state.libraryOverlayOpen = false;
-    libraryOverlayCatalog = null;
-    libraryOverlayItems = null;
-    libraryOverlayState = closeLibraryOverlayState(libraryOverlayState);
-    setLibraryOverlayToolbarVisible(false);
-    renderLibraryOverlayBody();
+    librarySession.setOverlayVisible(false);
+  }
+
+  async function postLibraryQuery(request, signal) {
+    const raw = await fetchJson("/api/library/query", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        filterState: request.filterState,
+        search: request.search,
+        sortMode: request.sortMode,
+        sortDescending: request.sortDescending,
+        offset: request.offset,
+        limit: request.limit
+      }),
+      signal
+    });
+    return parseLibraryQueryPage(raw);
   }
 
   async function playFromLibraryItemId(itemId) {
@@ -1428,18 +1455,18 @@ export function startApp(config) {
     }
 
     readGeneralPanelIntoWorking();
-    const matched = filterWorkingPresets.find((p) => filterStatesEqualForPresetMatch(p.filterState, filterWorking));
-    if (matched) {
-      state.activePresetName = matched.name;
-    } else {
-      state.activePresetName = null;
-    }
+    const appliedDefault = filterStatesEqualForPresetMatch(filterWorking, createDefaultFilterState());
+    headerExplicitNone = filterDialogHoldNone && appliedDefault;
+    state.activePresetName = headerExplicitNone
+      ? null
+      : dialogPresetBase(filterWorking, filterWorkingPresets, filterDialogActiveName);
+    filterDialogActiveName = state.activePresetName;
     state.appliedFilterState = cloneFilterState(filterWorking);
     filterDialogOriginalJson = JSON.stringify(serializeFilterStateForApi(filterWorking));
     await loadPresets();
     closeFilterDialog();
     setStatus("Filters applied.");
-    refreshLibraryOverlayBrowse();
+    await commitLibraryQuery();
   }
 
   function clearAllFiltersInDialog() {
@@ -1814,26 +1841,7 @@ export function startApp(config) {
     try {
       const presets = await fetchJson("/api/presets");
       state.presets = Array.isArray(presets) ? presets : [];
-      presetSelect.innerHTML = "<option value=\"\">None</option>";
-      for (const preset of state.presets) {
-        const option = document.createElement("option");
-        option.value = preset.id;
-        option.textContent = preset.name || preset.id;
-        presetSelect.appendChild(option);
-      }
-      if (state.activePresetName) {
-        const match = state.presets.find(
-          (p) => tagEqualsCi(p.id, state.activePresetName) || tagEqualsCi(p.name, state.activePresetName)
-        );
-        if (match) {
-          presetSelect.value = match.id;
-        } else {
-          presetSelect.value = "";
-          state.activePresetName = null;
-        }
-      } else {
-        presetSelect.value = "";
-      }
+      renderHeaderPresetOptions(currentHeaderPresetList());
     } catch (error) {
       presetSelect.innerHTML = "<option value=\"\">Error loading presets</option>";
       setStatus(`Error loading presets: ${error?.message || error}`);
@@ -1851,6 +1859,7 @@ export function startApp(config) {
       state.compatibilityBlocked = false;
       pairSection.style.display = "none";
       setStatus(`Ready (API ${version.apiVersion || "unknown"})`);
+      void librarySession.ensureLoaded(state.appliedFilterState, libraryBrowseControls);
       return true;
     } catch {
       setStatus("Ready (API offline)");
@@ -1864,7 +1873,12 @@ export function startApp(config) {
       return;
     }
 
-    const presetId = String(presetSelect.value || "").trim();
+    const presetPick = headerPresetPick(presetSelect.value);
+    const selectedPreset = presetPick === "named" ? state.presets.find((preset) => preset.id === presetSelect.value) : null;
+    const presetStillMatches = selectedPreset
+      ? filterStatesEqualForPresetMatch(filterStateFromApiObject(selectedPreset.filterState), state.appliedFilterState)
+      : false;
+    const presetId = presetStillMatches ? String(selectedPreset.id || "").trim() : "";
     const filterState = serializeFilterStateForApi(state.appliedFilterState);
     const body = {
       clientId: state.clientId,
@@ -2338,31 +2352,6 @@ export function startApp(config) {
     updateTagOverlaySaveButtonState();
   }
 
-  async function fetchAutoTagScopeItemIds() {
-    const proj = await fetchJson("/api/library/projection");
-    const sources = Array.isArray(proj.sources) ? proj.sources : [];
-    const enabled = new Set();
-    for (const s of sources) {
-      if (s && s.id != null && s.isEnabled !== false) {
-        enabled.add(String(s.id));
-      }
-    }
-    const items = Array.isArray(proj.items) ? proj.items : [];
-    const paths = [];
-    const seen = new Set();
-    for (const item of items) {
-      const sid = item.sourceId != null ? String(item.sourceId) : "";
-      if (!enabled.has(sid)) continue;
-      const fp = item.fullPath != null ? String(item.fullPath).trim() : "";
-      if (!fp) continue;
-      const low = fp.toLowerCase();
-      if (seen.has(low)) continue;
-      seen.add(low);
-      paths.push(fp);
-    }
-    return paths;
-  }
-
   function renderAutoTagPanel() {
     if (!tagAutotagResults) return;
     if (!state.autoTagScanHasRun) {
@@ -2441,19 +2430,7 @@ export function startApp(config) {
     if (tagAutotagStatus) tagAutotagStatus.textContent = "Scanning…";
     try {
       const scanFull = !!(tagAutotagScanFull && tagAutotagScanFull.checked);
-      /** @type {{ scanFullLibrary: boolean, itemIds: string[] }} */
-      const payload = { scanFullLibrary: scanFull, itemIds: [] };
-      if (!scanFull) {
-        const ids = await fetchAutoTagScopeItemIds();
-        if (ids.length === 0) {
-          if (tagAutotagStatus) tagAutotagStatus.textContent = "No items available in this scan scope.";
-          state.autoTagRows = [];
-          state.autoTagScanHasRun = true;
-          renderAutoTagPanel();
-          return;
-        }
-        payload.itemIds = ids;
-      }
+      const payload = createAutoTagScanRequest(scanFull);
       const resp = await apiPost("/api/autotag/scan", payload);
       if (!resp.ok) {
         throw new Error(String(resp.status));
@@ -2973,7 +2950,7 @@ export function startApp(config) {
         state.current.isBlacklisted = !!payload.isBlacklisted;
         updateToggleButtons();
       }
-      handleLibraryOverlayItemStateChanged(payload);
+      void librarySession.applyFavorite(payload);
       const fileName = basenameFromPath(itemPath);
       if (payload.isBlacklisted) {
         setStatus(`Synced: Blacklisted: ${fileName}`);
@@ -2985,7 +2962,16 @@ export function startApp(config) {
     });
     eventSource.addEventListener("playbackRecorded", (event) => {
       const payload = parseEnvelopePayload(event.data);
-      handleLibraryOverlayPlaybackRecorded(payload);
+      void librarySession.applyPlayback(payload);
+    });
+    eventSource.addEventListener("itemTagsChanged", (event) => {
+      const payload = parseEnvelopePayload(event.data);
+      if (!payload) return;
+      void librarySession.applyTags({
+        itemIds: payload.itemIds || payload.ItemIds || [],
+        addedTags: payload.addedTags || payload.AddedTags || [],
+        removedTags: payload.removedTags || payload.RemovedTags || []
+      });
     });
     eventSource.addEventListener("refreshStatusChanged", (event) => {
       const payload = parseEnvelopePayload(event.data);
@@ -3004,9 +2990,7 @@ export function startApp(config) {
         // best effort
       }
       void loadPresets();
-      if (state.libraryOverlayOpen) {
-        await syncLibraryOverlayProjectionFromServer();
-      }
+      await librarySession.resync();
     });
   }
 
@@ -3073,18 +3057,39 @@ export function startApp(config) {
   }
 
   presetSelect.addEventListener("change", () => {
-    state.currentPresetId = presetSelect.value;
-    const v = String(presetSelect.value || "").trim();
-    if (!v) {
-      state.activePresetName = null;
+    if (suppressHeaderPresetChange) {
       return;
     }
-    const preset = state.presets.find((p) => p.id === v);
-    if (preset) {
-      state.activePresetName = preset.name || preset.id;
-      state.appliedFilterState = filterStateFromApiObject(preset.filterState);
+    const presetPick = headerPresetPick(presetSelect.value);
+    if (presetPick === "default") {
+      headerExplicitNone = true;
+    } else if (presetPick === "named") {
+      headerExplicitNone = false;
     }
-    refreshLibraryOverlayBrowse();
+    const list = headerPresetListAfterPick(
+      state.appliedFilterState,
+      state.presets,
+      state.activePresetName,
+      presetSelect.value
+    );
+    const changed = !filterStatesEqualForPresetMatch(list.filter, state.appliedFilterState);
+    if (changed) {
+      state.appliedFilterState = list.filter;
+    }
+    renderHeaderPresetOptions(list);
+    if (!changed) {
+      return;
+    }
+    if (state.filterDialogOpen) {
+      filterWorking = cloneFilterState(state.appliedFilterState);
+      filterDialogHoldNone = headerExplicitNone;
+      filterDialogActiveName = state.activePresetName;
+      filterDialogOriginalJson = JSON.stringify(serializeFilterStateForApi(filterWorking));
+      renderAllFilterPanels();
+      setFilterDialogHeading();
+      updateFilterApplyButtonPending();
+    }
+    void commitLibraryQuery();
   });
   playBtn.addEventListener("click", (event) => {
     event.stopPropagation();
@@ -3364,7 +3369,12 @@ export function startApp(config) {
       ...libraryBrowseControls,
       searchQuery: librarySearchInput.value
     };
-    refreshLibraryOverlayBrowse();
+    if (librarySearchTimer) {
+      clearTimeout(librarySearchTimer);
+    }
+    librarySearchTimer = setTimeout(() => {
+      void commitLibraryQuery();
+    }, LIBRARY_QUERY_SEARCH_DEBOUNCE_MS);
   });
   librarySortSelect.addEventListener("change", () => {
     const sortMode = librarySortSelect.value || "Name";
@@ -3373,14 +3383,14 @@ export function startApp(config) {
       sortMode,
       sortDescending: isDefaultDescendingForSortMode(sortMode)
     };
-    refreshLibraryOverlayBrowse();
+    void commitLibraryQuery();
   });
   librarySortDirectionBtn.addEventListener("click", () => {
     libraryBrowseControls = {
       ...libraryBrowseControls,
       sortDescending: !libraryBrowseControls.sortDescending
     };
-    refreshLibraryOverlayBrowse();
+    void commitLibraryQuery();
   });
   filterDialogCloseBtn.addEventListener("click", () => {
     closeFilterDialog();

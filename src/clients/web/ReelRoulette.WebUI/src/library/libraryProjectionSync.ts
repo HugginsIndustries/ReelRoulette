@@ -1,5 +1,3 @@
-import type { FilterState } from "../filter/filterStateModel";
-import type { LibrarySortMode } from "./libraryBrowseModel";
 import type { LibraryProjectionItem } from "./libraryProjectionModel";
 
 export function normalizeLibraryPath(path: string | null | undefined): string {
@@ -125,35 +123,4 @@ function parsePlaybackLastPlayedUtcMs(value: string | number | null | undefined)
     return Number.isFinite(ms) ? ms : null;
   }
   return null;
-}
-
-export function shouldRebrowseAfterItemStateChange(
-  filterState: FilterState,
-  before: LibraryProjectionItem | null,
-  after: LibraryProjectionItem | null
-): boolean {
-  if (!before || !after) {
-    return false;
-  }
-
-  if (filterState.favoritesOnly && before.isFavorite !== after.isFavorite) {
-    return true;
-  }
-
-  if (filterState.excludeBlacklisted && before.isBlacklisted !== after.isBlacklisted) {
-    return true;
-  }
-
-  return false;
-}
-
-export function shouldRebrowseAfterPlaybackUpdate(
-  sortMode: LibrarySortMode,
-  filterState: FilterState
-): boolean {
-  if (filterState.onlyNeverPlayed) {
-    return true;
-  }
-
-  return sortMode === "LastPlayed" || sortMode === "PlayCount";
 }

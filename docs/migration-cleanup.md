@@ -145,7 +145,7 @@ The preset-matching logic performs a client-local JSON string comparison that sh
 
 **Action:** Migrate; use `/api/presets/match` for active-preset auto-detection and remove the client-local JSON-compare path.
 
-**Status:** Completed — removed local JSON preset comparison (`ResolveMatchingPresetName`) and now resolve active preset name via `CoreServerApiClient.MatchPresetAsync` (`/api/presets/match`); retained `_filterPresets` only for preset list UI/dialog/sync responsibilities.
+**Status:** Completed, then revised — preset labels compare the loaded catalog in memory on both clients. An explicit **None** stays on **None** until the filter changes. `POST /api/presets/match` remains on the server; the desktop preset list does not call it.
 
 ---
 

@@ -71,8 +71,11 @@ public sealed class DesktopAppSettings
     // Library view settings
     public bool LibraryGridViewEnabled { get; set; } = false;
 
-    // Filter state
+    // Filter state. ActivePresetName is the base for that filter. The star is derived.
+    // LibraryExplicitNone keeps header None across restart when a saved preset equals the default filter.
     public FilterState? FilterState { get; set; }
+    public string? ActivePresetName { get; set; }
+    public bool LibraryExplicitNone { get; set; }
 
     public bool AutoTagScanFullLibrary { get; set; } = true;
     public string CoreServerBaseUrl { get; set; } = "http://localhost:45123";

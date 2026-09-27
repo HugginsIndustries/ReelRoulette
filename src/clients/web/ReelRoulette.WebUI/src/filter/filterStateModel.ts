@@ -51,6 +51,188 @@ export function createDefaultFilterState(): FilterState {
   };
 }
 
+/** Header preset dropdown. None selects the default filter; a named preset selects that preset's filter. */
+export function filterStateForHeaderPresetSelection(
+  preset: { filterState?: unknown } | null | undefined
+): FilterState {
+  if (!preset) {
+    return createDefaultFilterState();
+  }
+  return filterStateFromApiObject(preset.filterState);
+}
+
+export const HEADER_PRESET_NONE_LABEL = "None";
+export const HEADER_PRESET_STARRED_VALUE = "\u0000starred";
+
+export interface PresetAnchor {
+  baseName: string | null;
+  starred: boolean;
+  label: string;
+}
+
+export interface PresetListEntry {
+  label: string;
+  value: string;
+}
+
+export type HeaderPresetPick = "keep" | "default" | "named";
+
+function presetNamesEqual(left: string, right: string): boolean {
+  return left.toLowerCase() === right.toLowerCase();
+}
+
+function describePresetAnchor(baseName: string | null, starred: boolean): PresetAnchor {
+  const shown = baseName ?? HEADER_PRESET_NONE_LABEL;
+  return {
+    baseName,
+    starred,
+    label: starred ? `${shown}*` : shown
+  };
+}
+
+/** None, a named preset, or a starred unsaved row. A server match is not consulted here. */
+export function resolvePresetAnchor(
+  current: FilterState,
+  presets: readonly { name: string; filterState: FilterState }[],
+  previousBase: string | null | undefined
+): PresetAnchor {
+  return presetAnchorForDisplay(current, presets, previousBase, false);
+}
+
+/**
+ * While holdNone is set, the default filter stays on None even when a saved preset has that same filter.
+ */
+export function presetAnchorForDisplay(
+  current: FilterState,
+  presets: readonly { name: string; filterState: FilterState }[],
+  previousBase: string | null | undefined,
+  holdNone: boolean
+): PresetAnchor {
+  if (holdNone && filterStatesEqualForPresetMatch(current, createDefaultFilterState())) {
+    return describePresetAnchor(null, false);
+  }
+  const match = presets.find((preset) => filterStatesEqualForPresetMatch(preset.filterState, current));
+  if (match?.name) {
+    return describePresetAnchor(match.name, false);
+  }
+  if (filterStatesEqualForPresetMatch(current, createDefaultFilterState())) {
+    return describePresetAnchor(null, false);
+  }
+  const base = String(previousBase || "").trim();
+  const existing = base ? presets.find((preset) => presetNamesEqual(preset.name, base)) : undefined;
+  if (existing) {
+    return describePresetAnchor(existing.name, true);
+  }
+  return describePresetAnchor(null, true);
+}
+
+export function presetHeading(anchor: PresetAnchor): string {
+  return `Preset: ${anchor.label}`;
+}
+
+export function buildHeaderPresetOptions(
+  anchor: PresetAnchor,
+  presets: readonly { id: string; name: string }[]
+): { entries: PresetListEntry[]; selectedValue: string } {
+  const entries: PresetListEntry[] = [];
+  if (anchor.starred) {
+    entries.push({ label: anchor.label, value: HEADER_PRESET_STARRED_VALUE });
+  }
+  entries.push({ label: HEADER_PRESET_NONE_LABEL, value: "" });
+  for (const preset of presets) {
+    const name = String(preset.name || preset.id || "").trim();
+    if (!name) {
+      continue;
+    }
+    entries.push({ label: name, value: preset.id });
+  }
+  if (anchor.starred) {
+    return { entries, selectedValue: HEADER_PRESET_STARRED_VALUE };
+  }
+  if (!anchor.baseName) {
+    return { entries, selectedValue: "" };
+  }
+  const selected = presets.find((preset) => presetNamesEqual(String(preset.name || preset.id || ""), anchor.baseName || ""));
+  return { entries, selectedValue: selected?.id ?? "" };
+}
+
+export function headerPresetPick(value: string | null | undefined): HeaderPresetPick {
+  if (value === HEADER_PRESET_STARRED_VALUE) {
+    return "keep";
+  }
+  if (!String(value || "").trim()) {
+    return "default";
+  }
+  return "named";
+}
+
+/** Base stored by the filter dialog. The previous base is the dialog's, after the heading has followed the working filter. */
+export function dialogPresetBase(
+  working: FilterState,
+  presets: readonly { name: string; filterState: FilterState }[],
+  dialogBase: string | null | undefined
+): string | null {
+  return resolvePresetAnchor(working, presets, dialogBase).baseName;
+}
+
+export interface HeaderPresetList {
+  filter: FilterState;
+  baseName: string | null;
+  entries: PresetListEntry[];
+  selectedValue: string;
+}
+
+function presetRowsFromHeaderPresets(
+  presets: readonly { id?: string; name?: string; filterState?: unknown }[]
+): { name: string; filterState: FilterState }[] {
+  const rows: { name: string; filterState: FilterState }[] = [];
+  for (const preset of presets) {
+    const name = String(preset.name || preset.id || "").trim();
+    if (!name) {
+      continue;
+    }
+    rows.push({ name, filterState: filterStateFromApiObject(preset.filterState) });
+  }
+  return rows;
+}
+
+export function headerPresetListForFilter(
+  filter: FilterState,
+  presets: readonly { id: string; name: string; filterState?: unknown }[],
+  previousBase: string | null | undefined,
+  holdNone = false
+): HeaderPresetList {
+  const anchor = presetAnchorForDisplay(filter, presetRowsFromHeaderPresets(presets), previousBase, holdNone);
+  const options = buildHeaderPresetOptions(anchor, presets);
+  return {
+    filter: cloneFilterState(filter),
+    baseName: anchor.baseName,
+    entries: options.entries,
+    selectedValue: options.selectedValue
+  };
+}
+
+/** None and a named preset replace the filter. The starred row keeps it. The returned list matches that filter. */
+export function headerPresetListAfterPick(
+  filter: FilterState,
+  presets: readonly { id: string; name: string; filterState?: unknown }[],
+  previousBase: string | null | undefined,
+  pickedValue: string | null | undefined
+): HeaderPresetList {
+  const pick = headerPresetPick(pickedValue);
+  if (pick === "default") {
+    return headerPresetListForFilter(createDefaultFilterState(), presets, null, true);
+  }
+  if (pick === "named") {
+    const preset = presets.find((candidate) => candidate.id === pickedValue);
+    if (preset) {
+      const name = String(preset.name || preset.id || "").trim() || null;
+      return headerPresetListForFilter(filterStateForHeaderPresetSelection(preset), presets, name);
+    }
+  }
+  return headerPresetListForFilter(filter, presets, previousBase);
+}
+
 export function cloneFilterState(source: FilterState): FilterState {
   return {
     ...source,

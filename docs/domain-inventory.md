@@ -131,19 +131,19 @@ Boundary:
 WebUI is runtime-config-driven API/SSE client orchestration.
 
 - `src/clients/web/ReelRoulette.WebUI/src/app.js`
-  - main client runtime behavior and orchestration (playback, filter dialog, library overlay browse + SSE live sync + click-to-play, tag overlay with **Edit Tags** + **Auto Tag** API flows).
+  - main client runtime behavior and orchestration (playback, filter dialog, library overlay browse + SSE live sync + click-to-play, header counts from the current query window, tag overlay with **Edit Tags** + **Auto Tag** API flows).
 - `src/clients/web/ReelRoulette.WebUI/src/filter/filterStateModel.ts`
   - filter JSON serialize/parse aligned with desktop/server `FilterState`.
 - `src/clients/web/ReelRoulette.WebUI/src/library/libraryOverlayModel.ts`
-  - library overlay lifecycle, projection summary parsing, and body render helpers.
+  - library overlay status HTML and projection summary parsing.
 - `src/clients/web/ReelRoulette.WebUI/src/library/libraryProjectionModel.ts`
-  - projection item/catalog parse for library overlay browse (includes optional `fullPath` for SSE path matching).
+  - projection item parse and list-query page parse (includes optional `fullPath` for SSE path matching).
 - `src/clients/web/ReelRoulette.WebUI/src/library/libraryProjectionSync.ts`
-  - pure SSE projection patch helpers (`itemStateChanged`, `playbackRecorded`) and rebrowse decision logic for open overlay sync.
-- `src/clients/web/ReelRoulette.WebUI/src/library/libraryProjectionDisplayFilter.ts`
-  - in-memory FilterState display filter for library overlay (desktop parity).
+  - pure SSE patch helpers for favorite, blacklist, and playback fields on loaded tiles.
+- `src/clients/web/ReelRoulette.WebUI/src/library/libraryQuerySession.ts`
+  - list-query window: first page, fill-on-scroll, hide/show, patch or reload, and resync. Scoped auto-tag scan sends no path list.
 - `src/clients/web/ReelRoulette.WebUI/src/library/libraryBrowseModel.ts`
-  - search, sort, and browse pipeline for library overlay.
+  - sort mode, direction labels, and search text held by the library overlay.
 - `src/clients/web/ReelRoulette.WebUI/src/library/libraryGridLayout.ts`
   - Core-aligned justified-row layout port (`getAspectRatio`, `buildRows`); layout width uses full scrollport (no desktop 8px right gutter).
 - `src/clients/web/ReelRoulette.WebUI/src/library/libraryGridTileModel.ts`
@@ -153,7 +153,7 @@ WebUI is runtime-config-driven API/SSE client orchestration.
 - `src/clients/web/ReelRoulette.WebUI/src/library/libraryGridVirtualizer.ts`
   - row offset index and visible-window calculation (900px overscan).
 - `src/clients/web/ReelRoulette.WebUI/src/library/libraryGridController.ts`
-  - library overlay grid DOM lifecycle (mount, scroll, optional scroll reset on re-browse, resize debounce, destroy).
+  - library overlay grid DOM lifecycle (mount, scroll, fill coverage, deferred layout while hidden, optional scroll reset on a new query, resize debounce, destroy).
 - `src/clients/web/ReelRoulette.WebUI/src/library/libraryPlayModel.ts`
   - play-item error status mapping and request identity helpers for library tile activation.
 - `src/clients/web/ReelRoulette.WebUI/src/shell.ts`

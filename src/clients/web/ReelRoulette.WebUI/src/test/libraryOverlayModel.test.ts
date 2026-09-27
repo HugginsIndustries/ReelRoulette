@@ -1,13 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  beginLibraryOverlayOpen,
-  closeLibraryOverlayState,
-  completeLibraryOverlayFetch,
-  createLibraryOverlayState,
-  failLibraryOverlayFetch,
-  parseLibraryProjectionSummary,
-  renderLibraryOverlayBodyHtml
-} from "../library/libraryOverlayModel";
+import { parseLibraryProjectionSummary, renderLibraryOverlayBodyHtml } from "../library/libraryOverlayModel";
 
 describe("libraryOverlayModel", () => {
   it("parses populated projection with enabled-source item counts", () => {
@@ -49,60 +41,6 @@ describe("libraryOverlayModel", () => {
     });
     expect(summary.enabledSourceCount).toBe(1);
     expect(summary.totalItems).toBe(1);
-  });
-
-  it("transitions open → ready/empty/error and close clears cached summary", () => {
-    let overlayState = createLibraryOverlayState();
-    overlayState = beginLibraryOverlayOpen(overlayState);
-    expect(overlayState.phase).toBe("loading");
-    expect(overlayState.fetchCount).toBe(1);
-    expect(overlayState.summary).toBeNull();
-
-    const summary = parseLibraryProjectionSummary({
-      sources: [{ id: "s1" }],
-      items: [{ sourceId: "s1" }]
-    });
-    overlayState = completeLibraryOverlayFetch(overlayState, summary);
-    expect(overlayState.phase).toBe("ready");
-    expect(overlayState.summary?.totalItems).toBe(1);
-
-    overlayState = closeLibraryOverlayState(overlayState);
-    expect(overlayState.phase).toBe("closed");
-    expect(overlayState.summary).toBeNull();
-  });
-
-  it("sets empty phase when enabled sources have no items", () => {
-    let overlayState = beginLibraryOverlayOpen(createLibraryOverlayState());
-    const summary = parseLibraryProjectionSummary({
-      sources: [{ id: "s1" }],
-      items: []
-    });
-    overlayState = completeLibraryOverlayFetch(overlayState, summary);
-    expect(overlayState.phase).toBe("empty");
-  });
-
-  it("records fetch error state", () => {
-    let overlayState = beginLibraryOverlayOpen(createLibraryOverlayState());
-    overlayState = failLibraryOverlayFetch(overlayState, "HTTP 503");
-    expect(overlayState.phase).toBe("error");
-    expect(overlayState.lastError).toBe("HTTP 503");
-    expect(overlayState.summary).toBeNull();
-  });
-
-  it("refetches on each open cycle", () => {
-    let overlayState = createLibraryOverlayState();
-    overlayState = beginLibraryOverlayOpen(overlayState);
-    overlayState = completeLibraryOverlayFetch(
-      overlayState,
-      parseLibraryProjectionSummary({ sources: [{ id: "s1" }], items: [{ sourceId: "s1" }] })
-    );
-    overlayState = closeLibraryOverlayState(overlayState);
-
-    overlayState = beginLibraryOverlayOpen(overlayState);
-    expect(overlayState.fetchCount).toBe(2);
-    expect(overlayState.openCount).toBe(2);
-    expect(overlayState.phase).toBe("loading");
-    expect(overlayState.summary).toBeNull();
   });
 
   it("renders loading, empty, error body HTML", () => {

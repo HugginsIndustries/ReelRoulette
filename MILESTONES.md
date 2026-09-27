@@ -89,37 +89,7 @@ Do not use this file for detailed architecture explanation or current capability
 
 ## Active Milestones
 
-Last milestone completed: M10i5
-
-### M10i6 - WebUI Library Query Cutover
-
-- **Status**: ⏳ Planned
-- **Goal**: Cut the WebUI library overlay over to the same list/query API as desktop so both clients browse identically through the server, and keep that window current so showing or hiding the overlay is close to instant.
-- **Scope**:
-  - Depends on: desktop library query cutover.
-  - Replace WebUI overlay browse that filters a full in-memory projection with the server list/query API (filter, search, sort, fill-on-scroll).
-  - After the WebUI session can reach the server, load the first query window even if the overlay has never been opened.
-  - Preserve current WebUI library UX: overlay shell, header counts, justified grid, overscan, and click-to-play. Header "Showing N of M" uses `totalCount` and `searchBaselineCount`.
-  - Keep the loaded window across hide and show. Hiding or showing the overlay does not drop that window, does not call list/query, and does not move the scroll position. Showing it again is instant when a window is already loaded.
-  - Favorite, blacklist, playback, and tag updates patch the loaded tiles or reload the loaded window whether the overlay is shown or hidden. Filter, search, sort, and a header preset start over from the first page either way.
-  - Fill-on-scroll runs only while the overlay is shown. Showing it again requests further pages only when the restored viewport is not already covered.
-  - `resyncRequired` reloads the loaded window the same way, shown or hidden. It does not fetch the full catalog.
-  - Stop fetching full-catalog projection to build an auto-tag path list when scan-full-library is off; scoped scan is `scanFullLibrary: false` with no path list. Do not page list/query to collect paths.
-  - Do not introduce WebUI-local catalog mutation or eligibility authority.
-- **Acceptance criteria**:
-  - WebUI library overlay browse uses the same server list/query contract as desktop.
-  - The first query window is loaded after connect, before the overlay is opened.
-  - Hiding or showing the overlay does not drop the loaded window, does not query, and keeps the scroll position.
-  - Scrolling loads further query windows while the overlay is shown; filter/search/sort/preset requery the server from the first page whether the overlay is shown or hidden.
-  - Header counts show the filtered total against the post-search, pre-filter baseline.
-  - Favorite, blacklist, playback, tag, and resync updates keep the loaded window current whether the overlay is shown or hidden, without a full-catalog refetch.
-  - Auto-tag scoped scan does not depend on a full-catalog projection fetch or a client-assembled path list.
-- **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include WebUI tests for query browse, scroll paging, requery, header counts from `totalCount` and `searchBaselineCount`, overlay hide/show that issues no query and keeps scroll, a favorite or playback event while hidden that patches or reloads the saved window, a filter change while hidden that is what the next show displays, and resync that reloads the loaded window without a catalog fetch.
-  - Manual evidence must include instant hide/show of an already-loaded overlay, fill-on-scroll smoke, and desktop/WebUI browse parity for filter, search, sort, and counts.
-- **Deferrals / Follow-ups**:
-  - Source enable/disable list-query refresh stays with the later WebUI source-management alignment work.
-  - Export/import format cutover is the next slice in this store/query sequence.
+Last milestone completed: M10i6
 
 ### M10i7 - Library Catalog Export and Import Cutover
 
@@ -1231,6 +1201,37 @@ Last milestone completed: M10i5
 ## Completed Milestones
 
 Latest completions first:
+
+### M10i6 - WebUI Library Query Cutover
+
+- **Status**: ✅ Complete
+- **Goal**: Cut the WebUI library overlay over to the same list/query API as desktop so both clients browse identically through the server, and keep that window current so showing or hiding the overlay is close to instant.
+- **Scope**:
+  - Depends on: desktop library query cutover.
+  - Replace WebUI overlay browse that filters a full in-memory projection with the server list/query API (filter, search, sort, fill-on-scroll).
+  - After the WebUI session can reach the server, load the first query window even if the overlay has never been opened.
+  - Preserve current WebUI library UX: overlay shell, header counts, justified grid, overscan, and click-to-play. Header "Showing N of M" uses `totalCount` and `searchBaselineCount`.
+  - Keep the loaded window across hide and show. Hiding or showing the overlay does not drop that window, does not call list/query, and does not move the scroll position. Showing it again is instant when a window is already loaded.
+  - Favorite, blacklist, playback, and tag updates patch the loaded tiles or reload the loaded window whether the overlay is shown or hidden. Filter, search, sort, and a header preset start over from the first page either way. Header **None** restores the default filter and stays on **None** until that filter changes, even when a saved preset has the same filter. A filter that matches neither a preset nor the default shows a starred row first and does not requery when that row is chosen.
+  - Fill-on-scroll runs only while the overlay is shown. Showing it again requests further pages only when the restored viewport is not already covered.
+  - `resyncRequired` reloads the loaded window the same way, shown or hidden. It does not fetch the full catalog.
+  - Stop fetching full-catalog projection to build an auto-tag path list when scan-full-library is off; scoped scan is `scanFullLibrary: false` with no path list. Do not page list/query to collect paths.
+  - Do not introduce WebUI-local catalog mutation or eligibility authority.
+- **Acceptance criteria**:
+  - WebUI library overlay browse uses the same server list/query contract as desktop.
+  - The first query window is loaded after connect, before the overlay is opened.
+  - Hiding or showing the overlay does not drop the loaded window, does not query, and keeps the scroll position.
+  - Scrolling loads further query windows while the overlay is shown; filter/search/sort/preset requery the server from the first page whether the overlay is shown or hidden.
+  - Header counts show the filtered total against the post-search, pre-filter baseline.
+  - Favorite, blacklist, playback, tag, and resync updates keep the loaded window current whether the overlay is shown or hidden, without a full-catalog refetch.
+  - Auto-tag scoped scan does not depend on a full-catalog projection fetch or a client-assembled path list.
+- **Verification evidence**:
+  - `npm test` in `src/clients/web/ReelRoulette.WebUI` — pass (98 tests). `libraryQuerySession` covers the first list-query window and header counts from `totalCount` and `searchBaselineCount`, the next page when the loaded rows do not cover the viewport, no fill while hidden, hide/show that issues no query and keeps scroll, a filter change while hidden that replaces the saved window and resets scroll, a favorite patch while hidden when membership cannot change, a favorite reload while hidden under the default blacklist filter, a playback patch and a playback reload, resync that reloads the loaded window through list query, a further page still in flight that is discarded when a tile update arrives, an open first page that is read again instead of being replaced by a reload, tag patch versus tag-filter reload, and a failed further page that retries after the scroll position changes. Scoped auto-tag sends `scanFullLibrary` with an empty path list. Header **None** selects the default filter and stays on **None** when a saved preset equals that default. A later comparison without that hold selects the preset. A filter that matches neither a preset nor the default shows a starred row first. A dirty filter-dialog edit keeps that dialog's base. Choosing None in the filter dialog stays on a preset the working filter still equals. A header None or named pick drops the starred row. `libraryGridController` scrolls an empty reset to the top while the scroller has a box, and applies that reset when the scroller is shown again if it had no box. Desktop preset labels use the same in-memory comparison, and an explicit **None** stays on **None** until the filter changes. `DesktopAppSettingsTests` pass: an explicit **None** hold round-trips with a null preset name, and a settings file without the flag loads as no hold.
+  - `node --check` on `src/clients/web/ReelRoulette.WebUI/src/app.js` — pass. The WebUI client no longer calls `GET /api/library/projection`.
+  - Manual instant hide/show, fill-on-scroll, and desktop/WebUI browse parity were not run in the browser.
+- **Deferrals / Follow-ups**:
+  - Source enable/disable list-query refresh stays with the later WebUI source-management alignment work.
+  - Export/import format cutover is the next slice in this store/query sequence.
 
 ### M10i5 - Desktop Library Query Cutover
 

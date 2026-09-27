@@ -4,7 +4,16 @@ import {
   cloneFilterState,
   createDefaultFilterState,
   filterStateFromApiObject,
+  buildHeaderPresetOptions,
+  dialogPresetBase,
+  filterStateForHeaderPresetSelection,
   filterStatesEqualForPresetMatch,
+  headerPresetListAfterPick,
+  headerPresetListForFilter,
+  headerPresetPick,
+  HEADER_PRESET_STARRED_VALUE,
+  presetHeading,
+  resolvePresetAnchor,
   formatDurationForDisplay,
   parseDurationInputToSeconds,
   presetsToPostBody,
@@ -100,5 +109,106 @@ describe("filterStateModel", () => {
     expect(body).toHaveLength(1);
     expect(body[0].name).toBe("P1");
     expect(body[0].filterState.excludeBlacklisted).toBe(true);
+  });
+
+  it("header None selects the default filter and a named preset selects that filter", () => {
+    const none = filterStateForHeaderPresetSelection(null);
+    expect(none).toEqual(createDefaultFilterState());
+    const named = filterStateForHeaderPresetSelection({
+      filterState: { favoritesOnly: true, excludeBlacklisted: false }
+    });
+    expect(named.favoritesOnly).toBe(true);
+    expect(named.excludeBlacklisted).toBe(false);
+  });
+
+  it("classifies None, a named preset, a starred base, and a missing base", () => {
+    const youtube = { name: "YouTube", filterState: { ...createDefaultFilterState(), favoritesOnly: true } };
+    const presets = [youtube];
+    const cleanNone = resolvePresetAnchor(createDefaultFilterState(), presets, "YouTube");
+    expect(cleanNone.label).toBe("None");
+    expect(presetHeading(cleanNone)).toBe("Preset: None");
+    expect(buildHeaderPresetOptions(cleanNone, [{ id: "yt", name: "YouTube" }]).entries.map((entry) => entry.label)).toEqual([
+      "None",
+      "YouTube"
+    ]);
+
+    const cleanNamed = resolvePresetAnchor(youtube.filterState, presets, null);
+    expect(cleanNamed.label).toBe("YouTube");
+    expect(presetHeading(cleanNamed)).toBe("Preset: YouTube");
+
+    const dirty = { ...createDefaultFilterState(), favoritesOnly: true, onlyNeverPlayed: true };
+    const starred = resolvePresetAnchor(dirty, presets, "YouTube");
+    expect(starred.label).toBe("YouTube*");
+    expect(presetHeading(starred)).toBe("Preset: YouTube*");
+    const starredOptions = buildHeaderPresetOptions(starred, [{ id: "yt", name: "YouTube" }]);
+    expect(starredOptions.entries.map((entry) => entry.label)).toEqual(["YouTube*", "None", "YouTube"]);
+    expect(starredOptions.selectedValue).toBe(HEADER_PRESET_STARRED_VALUE);
+    expect(headerPresetPick(starredOptions.selectedValue)).toBe("keep");
+
+    const missing = resolvePresetAnchor(dirty, presets, "Gone");
+    expect(missing.label).toBe("None*");
+    expect(presetHeading(missing)).toBe("Preset: None*");
+    expect(buildHeaderPresetOptions(missing, [{ id: "yt", name: "YouTube" }]).entries[0]?.label).toBe("None*");
+  });
+
+  it("keeps the dialog base on a dirty edit and adopts a preset the filter comes to match", () => {
+    const youtube = { name: "YouTube", filterState: { ...createDefaultFilterState(), favoritesOnly: true } };
+    const favorites = { name: "Favorites", filterState: { ...createDefaultFilterState(), onlyNeverPlayed: true } };
+    const presets = [youtube, favorites];
+    const dirty = { ...favorites.filterState, favoritesOnly: true };
+
+    expect(dialogPresetBase(dirty, presets, "Favorites")).toBe("Favorites");
+    expect(dialogPresetBase(dirty, presets, "YouTube")).toBe("YouTube");
+    expect(dialogPresetBase(dirty, presets, null)).toBeNull();
+    expect(dialogPresetBase(favorites.filterState, presets, "YouTube")).toBe("Favorites");
+  });
+
+  it("rebuilds the header list without a starred row after None or a named preset", () => {
+    const youtube = {
+      id: "yt",
+      name: "YouTube",
+      filterState: { ...createDefaultFilterState(), favoritesOnly: true }
+    };
+    const dirty = { ...createDefaultFilterState(), favoritesOnly: true, onlyNeverPlayed: true };
+    const before = headerPresetListForFilter(dirty, [youtube], "YouTube");
+    expect(before.selectedValue).toBe(HEADER_PRESET_STARRED_VALUE);
+
+    const named = headerPresetListAfterPick(dirty, [youtube], "YouTube", "yt");
+    expect(named.entries.some((entry) => entry.value === HEADER_PRESET_STARRED_VALUE)).toBe(false);
+    expect(named.selectedValue).toBe("yt");
+    expect(named.baseName).toBe("YouTube");
+    expect(named.filter.favoritesOnly).toBe(true);
+    expect(named.filter.onlyNeverPlayed).toBe(false);
+
+    const none = headerPresetListAfterPick(dirty, [youtube], "YouTube", "");
+    expect(none.filter).toEqual(createDefaultFilterState());
+    expect(none.baseName).toBeNull();
+    expect(none.selectedValue).toBe("");
+    expect(none.entries.some((entry) => entry.value === HEADER_PRESET_STARRED_VALUE)).toBe(false);
+
+    const everything = {
+      id: "all",
+      name: "Everything",
+      filterState: createDefaultFilterState()
+    };
+    const heldNone = headerPresetListAfterPick(dirty, [everything], null, "");
+    expect(heldNone.baseName).toBeNull();
+    expect(heldNone.selectedValue).toBe("");
+    expect(heldNone.filter).toEqual(createDefaultFilterState());
+    const stillHeld = headerPresetListForFilter(createDefaultFilterState(), [everything], null, true);
+    expect(stillHeld.selectedValue).toBe("");
+    expect(stillHeld.baseName).toBeNull();
+    const released = headerPresetListForFilter(createDefaultFilterState(), [everything], null);
+    expect(released.baseName).toBe("Everything");
+    expect(released.selectedValue).toBe("all");
+
+    const kept = headerPresetListAfterPick(dirty, [youtube], "YouTube", HEADER_PRESET_STARRED_VALUE);
+    expect(kept.filter.onlyNeverPlayed).toBe(true);
+    expect(kept.baseName).toBe("YouTube");
+    expect(kept.selectedValue).toBe(HEADER_PRESET_STARRED_VALUE);
+
+    const unknown = headerPresetListAfterPick(dirty, [youtube], "YouTube", "missing");
+    expect(unknown.filter.onlyNeverPlayed).toBe(true);
+    expect(unknown.selectedValue).toBe(HEADER_PRESET_STARRED_VALUE);
   });
 });

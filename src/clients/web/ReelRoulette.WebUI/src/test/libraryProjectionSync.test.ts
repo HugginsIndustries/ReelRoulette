@@ -1,12 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { createDefaultFilterState } from "../filter/filterStateModel";
 import {
   applyItemStateChanged,
   applyPlaybackRecorded,
   findProjectionItem,
-  normalizeLibraryPath,
-  shouldRebrowseAfterItemStateChange,
-  shouldRebrowseAfterPlaybackUpdate
+  normalizeLibraryPath
 } from "../library/libraryProjectionSync";
 import type { LibraryProjectionItem } from "../library/libraryProjectionModel";
 
@@ -90,37 +87,5 @@ describe("libraryProjectionSync", () => {
     applyPlaybackRecorded(items, { path: "/media/videos/clip.mp4" }, nowMs);
     expect(items[0]?.playCount).toBe(3);
     expect(items[0]?.lastPlayedUtcMs).toBe(nowMs);
-  });
-
-  it("shouldRebrowseAfterItemStateChange when favoritesOnly visibility changes", () => {
-    const filterState = { ...createDefaultFilterState(), favoritesOnly: true };
-    const before = item({ isFavorite: true });
-    const after = item({ isFavorite: false });
-    expect(shouldRebrowseAfterItemStateChange(filterState, before, after)).toBe(true);
-  });
-
-  it("shouldRebrowseAfterItemStateChange when excludeBlacklisted visibility changes", () => {
-    const filterState = { ...createDefaultFilterState(), excludeBlacklisted: true };
-    const before = item({ isBlacklisted: false });
-    const after = item({ isBlacklisted: true });
-    expect(shouldRebrowseAfterItemStateChange(filterState, before, after)).toBe(true);
-  });
-
-  it("shouldRebrowseAfterItemStateChange false for badge-only change without filter impact", () => {
-    const filterState = createDefaultFilterState();
-    const before = item({ isFavorite: false });
-    const after = item({ isFavorite: true });
-    expect(shouldRebrowseAfterItemStateChange(filterState, before, after)).toBe(false);
-  });
-
-  it("shouldRebrowseAfterPlaybackUpdate for playback-sensitive sort modes and onlyNeverPlayed", () => {
-    expect(shouldRebrowseAfterPlaybackUpdate("Name", createDefaultFilterState())).toBe(false);
-    expect(shouldRebrowseAfterPlaybackUpdate("LastPlayed", createDefaultFilterState())).toBe(true);
-    expect(shouldRebrowseAfterPlaybackUpdate("PlayCount", createDefaultFilterState())).toBe(true);
-    expect(shouldRebrowseAfterPlaybackUpdate("Duration", createDefaultFilterState())).toBe(false);
-    expect(shouldRebrowseAfterPlaybackUpdate("DateAdded", createDefaultFilterState())).toBe(false);
-    expect(
-      shouldRebrowseAfterPlaybackUpdate("Name", { ...createDefaultFilterState(), onlyNeverPlayed: true })
-    ).toBe(true);
   });
 });

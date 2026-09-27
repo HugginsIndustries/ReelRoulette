@@ -114,7 +114,7 @@ export function renderApp(container: HTMLElement, config: RuntimeConfig): void {
     </div>
     <div id="filter-dialog" class="filter-dialog" style="display:none">
       <div class="filter-dialog-header">
-        <h2 id="filter-dialog-heading">Filter Media</h2>
+        <h2 id="filter-dialog-heading">Preset: None</h2>
         <div class="filter-dialog-actions">
           <button id="filter-dialog-refresh-btn" class="icon-glyph-base icon-glyph-button" type="button" title="Refresh" aria-label="Refresh"><span class="material-symbol-icon">refresh</span></button>
           <button id="filter-dialog-close-btn" class="icon-glyph-base icon-glyph-button" type="button" title="Close" aria-label="Close"><span class="material-symbol-icon">close</span></button>

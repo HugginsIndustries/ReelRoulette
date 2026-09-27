@@ -51,6 +51,35 @@ public sealed class DesktopAppSettingsTests : IDisposable
     }
 
     [Fact]
+    public void LibraryExplicitNone_RoundTripsWithANullPresetName()
+    {
+        var storage = CreateStorage();
+
+        var settings = storage.Load();
+        settings.LibraryExplicitNone = true;
+        settings.ActivePresetName = null;
+        storage.Save(settings);
+
+        var reload = CreateStorage().Load();
+        Assert.True(reload.LibraryExplicitNone);
+        Assert.Null(reload.ActivePresetName);
+    }
+
+    [Fact]
+    public void LoadLegacySettingsWithoutLibraryExplicitNone_DoesNotInventAHold()
+    {
+        File.WriteAllText(_settingsPath, """
+{
+  "ActivePresetName": null
+}
+""");
+
+        var reload = CreateStorage().Load();
+        Assert.False(reload.LibraryExplicitNone);
+        Assert.Null(reload.ActivePresetName);
+    }
+
+    [Fact]
     public void LoadLegacySettingsWithoutDevChannel_ShouldDefaultToStable()
     {
         File.WriteAllText(_settingsPath, """

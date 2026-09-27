@@ -1,4 +1,4 @@
-export type LibraryOverlayPhase = "closed" | "loading" | "ready" | "empty" | "error";
+export type LibraryOverlayPhase = "loading" | "ready" | "empty" | "error";
 
 export interface LibraryProjectionSummary {
   totalItems: number;
@@ -6,26 +6,8 @@ export interface LibraryProjectionSummary {
   hasItems: boolean;
 }
 
-export interface LibraryOverlayState {
-  phase: LibraryOverlayPhase;
-  openCount: number;
-  fetchCount: number;
-  summary: LibraryProjectionSummary | null;
-  lastError: string | null;
-}
-
 export const LIBRARY_OVERLAY_FETCH_ERROR =
   "Could not load library. Core runtime is unavailable or still recovering.";
-
-export function createLibraryOverlayState(): LibraryOverlayState {
-  return {
-    phase: "closed",
-    openCount: 0,
-    fetchCount: 0,
-    summary: null,
-    lastError: null
-  };
-}
 
 export function parseLibraryProjectionSummary(raw: unknown): LibraryProjectionSummary {
   const proj = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
@@ -59,53 +41,6 @@ export function parseLibraryProjectionSummary(raw: unknown): LibraryProjectionSu
     enabledSourceCount: enabled.size,
     hasItems: totalItems > 0
   };
-}
-
-export function beginLibraryOverlayOpen(state: LibraryOverlayState): LibraryOverlayState {
-  return {
-    ...state,
-    phase: "loading",
-    openCount: state.openCount + 1,
-    fetchCount: state.fetchCount + 1,
-    summary: null,
-    lastError: null
-  };
-}
-
-export function completeLibraryOverlayFetch(
-  state: LibraryOverlayState,
-  summary: LibraryProjectionSummary
-): LibraryOverlayState {
-  return {
-    ...state,
-    phase: summary.hasItems ? "ready" : "empty",
-    summary,
-    lastError: null
-  };
-}
-
-export function failLibraryOverlayFetch(state: LibraryOverlayState, message: string): LibraryOverlayState {
-  return {
-    ...state,
-    phase: "error",
-    summary: null,
-    lastError: message
-  };
-}
-
-export function closeLibraryOverlayState(state: LibraryOverlayState): LibraryOverlayState {
-  return {
-    ...state,
-    phase: "closed",
-    summary: null,
-    lastError: null
-  };
-}
-
-export function formatLibrarySummaryMessage(summary: LibraryProjectionSummary): string {
-  const itemLabel = summary.totalItems.toLocaleString();
-  const sourceLabel = summary.enabledSourceCount.toLocaleString();
-  return `Library loaded — ${itemLabel} items (${sourceLabel} enabled sources)`;
 }
 
 function escapeHtml(value: string): string {

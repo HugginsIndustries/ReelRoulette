@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   parseDurationSeconds,
   parseLibraryProjection,
+  parseLibraryQueryPage,
   parseMediaType,
   parseUtcMs
 } from "../library/libraryProjectionModel";
@@ -114,6 +115,35 @@ describe("libraryProjectionModel", () => {
       hasThumbnail: false,
       thumbnailWidth: null,
       thumbnailHeight: null
+    });
+  });
+
+  it("parses a list query page without dropping items for a missing source list", () => {
+    const page = parseLibraryQueryPage({
+      items: [
+        {
+          id: "i1",
+          sourceId: "s1",
+          fileName: "clip.mp4",
+          isFavorite: true,
+          tags: ["Night"],
+          hasThumbnail: true,
+          thumbnailWidth: 320,
+          thumbnailHeight: 180
+        }
+      ],
+      totalCount: 40,
+      searchBaselineCount: 55
+    });
+    expect(page.totalCount).toBe(40);
+    expect(page.searchBaselineCount).toBe(55);
+    expect(page.items).toHaveLength(1);
+    expect(page.items[0]).toMatchObject({
+      id: "i1",
+      isFavorite: true,
+      tags: ["Night"],
+      hasThumbnail: true,
+      thumbnailWidth: 320
     });
   });
 });

@@ -35,6 +35,7 @@ namespace ReelRoulette
         private readonly string _initialPresetsJson;
         private readonly string? _initialActivePresetName;
         private bool _hasPendingChanges;
+        private bool _holdNone;
         private bool _isApplyingSourceSelection;
 
         private static void Log(string message)
@@ -43,7 +44,7 @@ namespace ReelRoulette
         }
 
         public FilterDialog(FilterState filterState, LibraryIndex? libraryIndex, 
-                           List<FilterPreset>? presets = null, string? activePresetName = null)
+                           List<FilterPreset>? presets = null, string? activePresetName = null, bool holdNone = false)
         {
             InitializeComponent();
             _originalFilterState = filterState ?? new FilterState();
@@ -74,6 +75,7 @@ namespace ReelRoulette
             }
             
             _activePresetName = activePresetName;
+            _holdNone = holdNone;
             _initialFilterStateJson = SerializeFilterState(_filterState);
             _initialPresetsJson = SerializePresets(_presets);
             _initialActivePresetName = _activePresetName;
@@ -162,18 +164,15 @@ namespace ReelRoulette
         }
 
         /// <summary>
-        /// Header text that shows active preset name if one is selected, with "*" if modified.
+        /// Header text. Preset: None, None*, or a preset name with a star while the working filter differs.
         /// </summary>
         public string HeaderText
         {
             get
             {
-                if (!string.IsNullOrEmpty(_activePresetName))
-                {
-                    var modifiedMarker = _presetModified ? "*" : "";
-                    return $"Configure Filters - Active Preset: {_activePresetName}{modifiedMarker}";
-                }
-                return "Configure Filters";
+                var holdNone = _holdNone && LibraryPresetSelection.FiltersEqual(_filterState, new FilterState());
+                var anchor = LibraryPresetSelection.Resolve(_filterState, _presets, _activePresetName, holdNone);
+                return LibraryPresetSelection.Heading(anchor);
             }
         }
 
@@ -482,8 +481,15 @@ namespace ReelRoulette
         /// <summary>
         /// Marks the current preset as modified and updates the header text.
         /// </summary>
+        public bool KeepsExplicitNone =>
+            _holdNone && LibraryPresetSelection.FiltersEqual(_filterState, new FilterState());
+
         private void MarkPresetModified()
         {
+            if (_holdNone && !LibraryPresetSelection.FiltersEqual(_filterState, new FilterState()))
+            {
+                _holdNone = false;
+            }
             if (!string.IsNullOrEmpty(_activePresetName) && !_presetModified)
             {
                 _presetModified = true;
@@ -495,6 +501,7 @@ namespace ReelRoulette
             // Check if current filters match any preset (including the active one)
             // This will auto-select matching presets and remove asterisk if filters match
             CheckAndSelectMatchingPreset();
+            OnPropertyChanged(nameof(HeaderText));
             RefreshPendingState();
         }
 
@@ -529,7 +536,30 @@ namespace ReelRoulette
         private void CheckAndSelectMatchingPreset()
         {
             if (_filterState == null) return;
-            
+
+            if (_holdNone && LibraryPresetSelection.FiltersEqual(_filterState, new FilterState()))
+            {
+                _activePresetName = null;
+                _presetModified = false;
+                _originalPresetState = null;
+                if (SelectedPresetName != NonePresetName)
+                {
+                    _isInitializing = true;
+                    try
+                    {
+                        SelectedPresetName = NonePresetName;
+                    }
+                    finally
+                    {
+                        _isInitializing = false;
+                    }
+                }
+
+                OnPropertyChanged(nameof(HeaderText));
+                OnPropertyChanged(nameof(CanUpdatePreset));
+                return;
+            }
+
             var currentJson = JsonSerializer.Serialize(_filterState);
             
             // Check if current state matches any preset
@@ -578,8 +608,31 @@ namespace ReelRoulette
                 }
             }
             
-            // No match found - if we have an active preset, keep it modified
-            // (This maintains the existing behavior when filters don't match any preset)
+            if (LibraryPresetSelection.FiltersEqual(_filterState, new FilterState()))
+            {
+                _activePresetName = null;
+                _presetModified = false;
+                _originalPresetState = null;
+                if (SelectedPresetName != NonePresetName)
+                {
+                    _isInitializing = true;
+                    try
+                    {
+                        SelectedPresetName = NonePresetName;
+                    }
+                    finally
+                    {
+                        _isInitializing = false;
+                    }
+                }
+
+                OnPropertyChanged(nameof(HeaderText));
+                OnPropertyChanged(nameof(CanUpdatePreset));
+                return;
+            }
+
+            // No named preset matches. Keep the base so the heading can show it with a star.
+            OnPropertyChanged(nameof(HeaderText));
         }
 
         /// <summary>
@@ -939,7 +992,8 @@ namespace ReelRoulette
         }
 
         /// <summary>
-        /// Handles preset selection from dropdown. If "None" is selected, clears active preset but preserves filters.
+        /// Handles preset selection from dropdown. None keeps the working filter.
+        /// If that filter still equals a saved preset, the dropdown stays on that preset.
         /// </summary>
         private void PresetComboBox_SelectionChanged(object? sender, SelectionChangedEventArgs e)
         {
@@ -948,13 +1002,51 @@ namespace ReelRoulette
             
             if (SelectedPresetName == null) return;
             
-            // Handle "None" selection - clear active preset but don't reset filters
             if (SelectedPresetName == NonePresetName)
             {
-                Log("FilterDialog: Clearing active preset (switching to None)");
-                _activePresetName = null;
+                if (_holdNone && LibraryPresetSelection.FiltersEqual(_filterState, new FilterState()))
+                {
+                    _activePresetName = null;
+                    _presetModified = false;
+                    _originalPresetState = null;
+                    OnPropertyChanged(nameof(HeaderText));
+                    OnPropertyChanged(nameof(CanUpdatePreset));
+                    RefreshPendingState();
+                    return;
+                }
+
+                var choice = LibraryPresetSelection.AfterDialogNone(_filterState, _presets);
+                _activePresetName = choice.ActivePresetName;
                 _presetModified = false;
-                _originalPresetState = null;
+                if (choice.ActivePresetName == null)
+                {
+                    Log("FilterDialog: Clearing active preset (switching to None)");
+                    _originalPresetState = null;
+                }
+                else
+                {
+                    Log($"FilterDialog: None kept preset '{choice.ActivePresetName}' because the filter still matches it");
+                    var matched = _presets.FirstOrDefault(preset => preset.Name == choice.ActivePresetName);
+                    if (matched != null)
+                    {
+                        var matchedJson = JsonSerializer.Serialize(matched.FilterState);
+                        _originalPresetState = JsonSerializer.Deserialize<FilterState>(matchedJson);
+                    }
+
+                    if (SelectedPresetName != choice.SelectedPresetName)
+                    {
+                        _isInitializing = true;
+                        try
+                        {
+                            SelectedPresetName = choice.SelectedPresetName;
+                        }
+                        finally
+                        {
+                            _isInitializing = false;
+                        }
+                    }
+                }
+
                 OnPropertyChanged(nameof(HeaderText));
                 OnPropertyChanged(nameof(CanUpdatePreset));
                 RefreshPendingState();
@@ -969,6 +1061,7 @@ namespace ReelRoulette
             }
             
             Log($"FilterDialog: Loading preset '{SelectedPresetName}'");
+            _holdNone = false;
             
             // Deep copy the preset's FilterState into our working copy
             var json = JsonSerializer.Serialize(preset.FilterState);
@@ -1263,12 +1356,20 @@ namespace ReelRoulette
             _filterState.SelectedTags.Clear();
             _filterState.ExcludedTags.Clear();
             TagMatchAnd = true;
-            
-            // Clear active preset when all filters are cleared
-            _activePresetName = null;
-            _presetModified = false;
-            _originalPresetState = null;
-            SelectedPresetName = NonePresetName;
+
+            if (_holdNone && LibraryPresetSelection.FiltersEqual(_filterState, new FilterState()))
+            {
+                _activePresetName = null;
+                _presetModified = false;
+                _originalPresetState = null;
+                SelectedPresetName = NonePresetName;
+            }
+            else
+            {
+                _holdNone = false;
+                CheckAndSelectMatchingPreset();
+            }
+
             OnPropertyChanged(nameof(HeaderText));
             OnPropertyChanged(nameof(CanUpdatePreset));
             
@@ -1339,10 +1440,8 @@ namespace ReelRoulette
                         Log($"FilterDialog: Filters match preset '{matchedPreset.Name}', switching to it");
                         _activePresetName = matchedPreset.Name;
                     }
-                    else
+                    else if (LibraryPresetSelection.FiltersEqual(_filterState, new FilterState()))
                     {
-                        // Doesn't match any preset - clear active preset name
-                        Log($"FilterDialog: Clearing active preset '{_activePresetName}' because filters differ and don't match any preset");
                         _activePresetName = null;
                     }
                 }

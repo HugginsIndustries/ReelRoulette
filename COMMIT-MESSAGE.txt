@@ -19,8 +19,10 @@ Instructions:
 
 Commit Message:
 
-Docs: Plan the WebUI library window to stay ready across hide and show
+M10i6: Cut the WebUI library overlay over to list query
 
-- Revise the WebUI library query cutover so the planned overlay matches the desktop grid: a first query window after connect, that window and its scroll position kept while hidden, and favorite, blacklist, playback, tag, and resync updates whether it is shown or hidden.
-- In that plan, filter, search, sort, and a header preset still start over either way, and fill-on-scroll stays limited to an open overlay.
-- Leave source enable/disable refresh deferred to the later WebUI source-management work.
+- Browse the WebUI library through the server list query, and keep that window loaded so hiding and showing the overlay stays instant.
+- Apply favorite, blacklist, playback, tag, and resync updates to the loaded window even while it is hidden. Filter, search, sort, and a header preset start over.
+- Keep the overlay header counts on the current query totals after a filter or preset change that finishes while the overlay is hidden.
+- Stop fetching the full catalog for WebUI browse and for scoped auto-tag scan.
+- Choosing None in the desktop library preset list and the WebUI header list restores the default filter and stays on None until that filter changes, even when a saved preset has the same filter. A filter that matches neither a saved preset nor the default shows a starred base, both clients compare loaded presets in memory the same way, both filter dialogs use that label, and desktop keeps the base, and an explicit None, across restart.
