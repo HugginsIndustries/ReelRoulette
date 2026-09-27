@@ -19,10 +19,8 @@ Instructions:
 
 Commit Message:
 
-M10i6: Cut the WebUI library overlay over to list query
+Docs: Plan the rest of the SQLite catalog row updates
 
-- Browse the WebUI library through the server list query, and keep that window loaded so hiding and showing the overlay stays instant.
-- Apply favorite, blacklist, playback, tag, and resync updates to the loaded window even while it is hidden. Filter, search, sort, and a header preset start over.
-- Keep the overlay header counts on the current query totals after a filter or preset change that finishes while the overlay is hidden.
-- Stop fetching the full catalog for WebUI browse and for scoped auto-tag scan.
-- Choosing None in the desktop library preset list and the WebUI header list restores the default filter and stays on None until that filter changes, even when a saved preset has the same filter. A filter that matches neither a saved preset nor the default shows a starred base, both clients compare loaded presets in memory the same way, both filter dialogs use that label, and desktop keeps the base, and an explicit None, across restart.
+- Sequence favorite and playback row updates, random selection from the catalog query, stats and item-state reads, auto-tag and duplicate scans, desktop projection removal, and source-folder import ahead of catalog export.
+- Leave refresh column updates last, after export, so live catalog writes can drop the full-document adapter.
+- Keep responsive tag apply as the next slice.

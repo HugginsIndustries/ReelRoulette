@@ -91,19 +91,191 @@ Do not use this file for detailed architecture explanation or current capability
 
 Last milestone completed: M10i6
 
-### M10i7 - Library Catalog Export and Import Cutover
+### M10i7 - Responsive Tag Apply
+
+- **Status**: ⏳ Planned
+- **Goal**: Make tag apply a SQLite row update so desktop and WebUI saves return immediately and do not stall on a full-catalog load.
+- **Scope**:
+  - Depends on: WebUI library query cutover.
+  - Move tag-editor writes and the tag-editor model read onto catalog-session row operations: item-tag add and remove, category and tag upsert, rename, and delete, and auto-tag apply. Match items by catalog id or full path, as current clients already send.
+  - Publish item-tag and tag-catalog events from those writes. When a catalog row changes, read that event's payload from the category and tag tables. Do not build or diff the full catalog document for these operations, and do not load it only to return a model the clients ignore.
+  - WebUI save sends only pending category, tag, and item-tag edits. It does not upsert unchanged categories. It uses the catalog returned by the mutation instead of fetching the tag-editor model again.
+  - Desktop and WebUI close the tag editor as soon as the user saves. The current file and loaded tiles show the new tags immediately, and the request runs in the background. On failure, restore the previous tags and show the error. The server remains the authority; the local change is that same delta, not a second catalog.
+  - The save's own echoed event must not duplicate tags or undo the local update. A tag filter that can change which items are shown still reloads the loaded window once the save lands, and keeps the scroll position.
+  - Leave refresh, source import, favorites, blacklist, and playback stats on the full-document catalog adapter.
+  - Update the testing checklist and current-state docs for the immediate save.
+- **Acceptance criteria**:
+  - Adding, removing, renaming, deleting, and auto-applying tags persists in SQLite and does not load or diff the full catalog document.
+  - Opening the tag editor and reading its model does not load the full catalog document.
+  - A WebUI save that only changes item tags does not upsert categories or tags and does not fetch the tag-editor model a second time.
+  - Desktop and WebUI close the editor without waiting for the request. The current file and loaded tiles show the edit immediately. A failed request restores the previous tags and shows an error.
+  - The save's own event does not duplicate tags. The other client still receives the item-tag and catalog events and updates.
+  - When a tag filter can change which files are shown, the loaded window reloads after the save lands and keeps the scroll position.
+  - Docs and the testing checklist describe the immediate save and the server-authoritative rollback.
+- **Verification evidence**:
+  - Evidence placeholders maintained at planned state; completion evidence must include catalog-session tests that item-tag, category, tag, and auto-tag writes persist without a full-document load, WebUI tests that a tag-only save skips unchanged category upserts and a second model fetch, and client tests that the editor closes immediately, tiles update, a failure rolls back, and the echoed event does not duplicate tags.
+  - Manual evidence must include a tag save on a large library from desktop and WebUI that returns immediately, plus a forced failure that restores the previous tags.
+  - Docs evidence must include current-state and checklist updates for the immediate save.
+- **Deferrals / Follow-ups**:
+  - Favorites, blacklist, playback stats, the playback catalog cache, stats and item-state reads, auto-tag and duplicate scans, the desktop full-catalog download, source folder import, and refresh each move in the following slices of this series.
+  - Library export, import, and catalog backups stay with the library catalog export and import cutover, after the desktop full-catalog download is gone.
+
+### M10i8 - Favorite, Blacklist, and Playback Row Updates
+
+- **Status**: ⏳ Planned
+- **Goal**: Make favorite, blacklist, playback recording, and clear-stats SQLite row updates so they do not stall on a full-catalog load.
+- **Scope**:
+  - Depends on: responsive tag apply.
+  - Move favorite, blacklist, record-playback, and clear-stats onto the existing single-row catalog updates. Resolve the item by catalog id or full path, as current clients already send.
+  - A favorite still clears blacklist, and a blacklist still clears favorite.
+  - Clear-stats with no path list clears every row that has a play count or last-played time in one update. A path list clears only those items.
+  - Publish the same item-state and playback events as today. Do not build or diff the full catalog document for these operations.
+  - Leave the playback catalog cache, library stats, auto-tag scan, duplicate scan, the desktop full-catalog download, source folder import, and refresh on their current paths.
+  - Update the testing checklist and current-state docs.
+- **Acceptance criteria**:
+  - Setting a favorite, setting a blacklist flag, recording a playback, and clearing playback stats persist in SQLite and do not load or diff the full catalog document.
+  - A favorite still clears blacklist, and a blacklist still clears favorite.
+  - Clearing stats with an empty path list clears played items across the library. A path list clears only those items.
+  - Other clients still receive the item-state and playback events and update the loaded window the same way they do today.
+  - Docs and the testing checklist describe these as row updates.
+- **Verification evidence**:
+  - Evidence placeholders maintained at planned state; completion evidence must include catalog-session tests that favorite, blacklist, record-playback, and clear-stats persist without a full-document load, including favorite/blacklist mutual exclusion and clear-all versus a path list.
+  - Manual evidence must include a favorite toggle and a playback on a large library that do not stall browse.
+  - Docs evidence must include current-state and checklist updates for these row updates.
+- **Deferrals / Follow-ups**:
+  - The playback catalog cache stays until random selection from the catalog query. A row update still bumps the catalog revision.
+  - Library stats, item-state reads, auto-tag scan, duplicate scan, the desktop full-catalog download, source folder import, refresh, and catalog export stay on their current paths until their own slices.
+
+### M10i9 - Random Selection from the Catalog Query
+
+- **Status**: ⏳ Planned
+- **Goal**: Choose random and play eligibility through the list-query filter so a catalog revision does not reload the full library into memory.
+- **Scope**:
+  - Depends on: favorite, blacklist, and playback row updates.
+  - Random selection loads the eligible set through the same server filter as library list query. It does not keep a full-catalog cache that rebuilds when the revision changes.
+  - The current weighting still runs on that eligible set. An empty eligible set still returns no item.
+  - Playing one item reads that item and its source state by id or path. It does not read the rest of the catalog.
+  - Eligibility stays server-authoritative. Clients do not gain a local eligibility replica.
+  - Update the testing checklist and current-state docs.
+- **Acceptance criteria**:
+  - A random draw after a favorite, playback, or tag change does not build the full catalog document.
+  - Eligible items for a draw match library list query for the same filter, enabled sources, and media-type options.
+  - The current weighting still chooses among that eligible set. An empty eligible set still returns no item.
+  - Playing one item reads that item only.
+  - Docs and the testing checklist describe random and play eligibility as query-backed.
+- **Verification evidence**:
+  - Evidence placeholders maintained at planned state; completion evidence must include tests that a revision bump does not build the full catalog document, that random eligibility matches list query for the same filter, that weighting still runs on that set, and that playing one item does not load the catalog.
+  - Manual evidence must include a random draw on a large library immediately after a playback.
+  - Docs evidence must include current-state and checklist updates for query-backed eligibility.
+- **Deferrals / Follow-ups**:
+  - Library stats, item-state reads, auto-tag scan, duplicate scan, the desktop full-catalog download, source folder import, refresh, and catalog export stay on their current paths until their own slices.
+
+### M10i10 - Catalog Stats and Item-State Reads
+
+- **Status**: ⏳ Planned
+- **Goal**: Answer library stats and item-state reads with SQL so they do not load the full catalog document.
+- **Scope**:
+  - Depends on: random selection from the catalog query.
+  - Library stats, including global totals and per-source totals, are SQL aggregates. The figures stay the ones clients already show.
+  - An item-state read returns only the requested paths and does not load the full catalog document. An empty path list returns no items.
+  - WebUI resync stops posting an item-state read with an empty path list and discarding the body.
+  - Leave auto-tag scan, duplicate scan, and the desktop full-catalog download on their current paths.
+  - Update the testing checklist and current-state docs.
+- **Acceptance criteria**:
+  - Library stats match the current global and per-source figures and do not load the full catalog document.
+  - An item-state request returns only the requested items. An empty path list returns no items and does not load the catalog.
+  - WebUI resync does not call item-state with an empty path list.
+  - Docs and the testing checklist describe stats and item-state as scoped reads.
+- **Verification evidence**:
+  - Evidence placeholders maintained at planned state; completion evidence must include tests that stats match the current aggregates without a full-document load, that an item-state read returns only the requested paths, and that an empty path list returns nothing. WebUI tests cover resync not posting that empty read.
+  - Docs evidence must include current-state and checklist updates for these reads.
+- **Deferrals / Follow-ups**:
+  - Auto-tag scan, duplicate scan, the desktop full-catalog download, source folder import, refresh, and catalog export stay on their current paths until their own slices.
+  - The loudness baseline stays on the desktop full-catalog download until that download is removed.
+
+### M10i11 - Auto-Tag and Duplicate Scans
+
+- **Status**: ⏳ Planned
+- **Goal**: Run auto-tag scan, duplicate scan, and duplicate apply without loading the full catalog document.
+- **Scope**:
+  - Depends on: catalog stats and item-state reads.
+  - Auto-tag scan matches tags to items without building the catalog document. `scanFullLibrary: true` still scans every item and ignores a path list. `scanFullLibrary: false` with no list still scans enabled sources only. An explicit list still matches full paths.
+  - Duplicate scan groups ready fingerprints without building the catalog document. Pending, failed, and stale fingerprints stay excluded, matching the current scan.
+  - Duplicate apply removes the non-kept items from the catalog with the existing item delete and still deletes those files on disk. It does not load the full catalog document. The kept item stays.
+  - Update the testing checklist and current-state docs.
+- **Acceptance criteria**:
+  - Auto-tag scan, duplicate scan, and duplicate apply do not load or diff the full catalog document.
+  - Auto-tag scan scope matches today's full-library, enabled-source, and explicit-path rules.
+  - Duplicate groups match today's ready-fingerprint grouping, including the pending, failed, and stale exclusions.
+  - Duplicate apply deletes the non-kept files and catalog rows and leaves the kept item in place.
+  - Docs and the testing checklist describe these scans as query-backed.
+- **Verification evidence**:
+  - Evidence placeholders maintained at planned state; completion evidence must include tests for auto-tag scan scope, duplicate grouping and exclusions, and duplicate apply deleting non-kept rows and files, all without a full-document load.
+  - Docs evidence must include current-state and checklist updates for these scans.
+- **Deferrals / Follow-ups**:
+  - The desktop full-catalog download, source folder import, refresh, and catalog export stay on their current paths until their own slices.
+
+### M10i12 - Desktop Full-Catalog Projection Removal
+
+- **Status**: ⏳ Planned
+- **Goal**: Stop desktop from downloading the full catalog at startup and on resync, and remove that endpoint once nothing calls it.
+- **Scope**:
+  - Depends on: auto-tag and duplicate scans.
+  - Desktop connect and resync do not call the full-catalog projection endpoint. WebUI already does not call it.
+  - Header video and photo counts come from library stats. Source names in the filter summary come from the sources API. Tag and category lists for the filter and tag editor come from the tag catalog, not from a full item download.
+  - Now-playing tags, favorite, blacklist, and playback stats come from the loaded tile or a single-item read. The loudness baseline is a server aggregate that preserves the current baseline, not a scan of a local item replica.
+  - Scoped auto-tag scan does not rebuild a path list from a local item replica.
+  - Remove the full-catalog projection endpoint once desktop has stopped calling it. Thumbnail layout fields stay on list query.
+  - Update the testing checklist and current-state docs.
+- **Acceptance criteria**:
+  - Desktop connect and resync do not download the full catalog. WebUI still does not.
+  - Header counts, source names, tag and category lists, now-playing tags, and the loudness baseline still match current behavior.
+  - The full-catalog projection endpoint is removed. List query still returns thumbnail layout fields.
+  - Docs and the testing checklist no longer describe that endpoint as a client read.
+- **Verification evidence**:
+  - Evidence placeholders maintained at planned state; completion evidence must include a desktop test or check that connect and resync do not request the full catalog, tests that header stats, a single-item read, and the loudness baseline cover the readers that download replaced, and confirmation that the projection endpoint is gone while list query still returns thumbnail fields.
+  - Manual evidence must include desktop startup and a resync on a large library without a full-catalog download, with header counts, now-playing tags, and loudness normalization still working.
+  - Docs evidence must include current-state and checklist updates that drop the projection client read.
+- **Deferrals / Follow-ups**:
+  - Source folder import, refresh, and catalog export stay on their current paths until their own slices.
+
+### M10i13 - Source Folder Import Row Updates
+
+- **Status**: ⏳ Planned
+- **Goal**: Add or refresh a media folder with row inserts and updates, without holding the catalog lock across the disk walk or loading the full catalog document.
+- **Scope**:
+  - Depends on: desktop full-catalog projection removal.
+  - Enumerate the folder outside the catalog lock. Then insert new items and update existing ones in one transaction.
+  - Match existing items by path. Keep their id, tags, favorite, blacklist, and playback stats. New files get new rows. Report the same imported and updated counts as today.
+  - Do not remove items that are missing on disk. That stays with refresh.
+  - Do not build or diff the full catalog document.
+  - Update the testing checklist and current-state docs.
+- **Acceptance criteria**:
+  - Importing a folder persists new and updated items in SQLite and does not load or diff the full catalog document.
+  - The disk walk does not hold the catalog lock, so browse is not blocked for the whole scan.
+  - An existing item matched by path keeps its id, tags, favorite, blacklist, and playback stats.
+  - Items missing on disk are not removed by this import.
+  - Docs and the testing checklist describe folder import as a row update.
+- **Verification evidence**:
+  - Evidence placeholders maintained at planned state; completion evidence must include tests that a new file is inserted, an existing path keeps id and tags and updates identity fields, missing files are not deleted, and the operation does not load the full catalog document.
+  - Manual evidence must include importing a large folder while browse still answers.
+  - Docs evidence must include current-state and checklist updates for folder import.
+- **Deferrals / Follow-ups**:
+  - Refresh stays on the full-document adapter until refresh column updates.
+  - Catalog export, import, and backups stay with the library catalog export and import cutover.
+
+### M10i14 - Library Catalog Export and Import Cutover
 
 - **Status**: ⏳ Planned
 - **Goal**: Re-enable library export, import, and catalog backups around a live SQLite `.db` in the existing zip envelope, keep JSON dump as a separate non-restore action, and keep importing existing `library.json` zips.
 - **Scope**:
-  - Depends on: WebUI library query cutover.
+  - Depends on: source folder import row updates.
   - Re-enable desktop Library Export / Import and server catalog backups that were disabled after the SQLite store landed.
   - Keep the current migration zip envelope (settings, presets, optional thumbnails and backups). The server produces the catalog checkpoint while it has `library.db` open, and the desktop zip embeds that checkpoint. It is not a raw copy of an open WAL file and not leftover `library.json`.
   - Import Library restores a new export by reading that `.db` from the zip and replacing the live SQLite catalog (plus current remap/skip for sources). Keep today's server-stopped acknowledgment, because the desktop replaces the database file. The replacement is written to a temporary file, checkpointed so it does not depend on a WAL sidecar, then published by rename. The previous `library.db` stays aside until the new file is in place and opens. A crash between those renames restores the previous file, or promotes the finished temporary file if that is the one that landed. Also accept existing migration zips that contain `library.json` and migrate them into the live SQLite catalog.
   - Add a separate JSON dump action; JSON is not the default new export format, is not the live catalog, and is not an import or restore path.
   - Server catalog backups use the same server-produced checkpoint, not leftover JSON.
-  - Remove full-catalog projection as a client browse path if nothing still requires it after both query cutovers; otherwise document the leftover and defer removal explicitly.
-  - Update testing checklist and current-state docs for export/import and browse-via-query.
+  - Update testing checklist and current-state docs for export, import, and catalog backups.
 - **Acceptance criteria**:
   - New catalog exports produce a zip whose catalog artifact is a usable SQLite database of the live library; Import Library can restore that export into the live catalog.
   - Import Library still requires the server-stopped acknowledgment before it replaces the live database.
@@ -111,15 +283,45 @@ Last milestone completed: M10i6
   - Import still accepts existing `library.json` zip archives and migrates them into the live SQLite catalog.
   - JSON dump is a separate explicit action and cannot be used as Import Library input.
   - Server catalog backups capture the live SQLite catalog.
-  - Desktop and WebUI library browse do not depend on full-catalog projection.
   - Docs and testing checklist describe `.db`-in-zip export and restore, JSON dump (not restore), and legacy zip import without treating `library.json` as the live store.
 - **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include export/import tests for `.db`-in-zip round-trip, JSON dump that is rejected as import, `library.json` zip import, live SQLite backups, interrupted replace recovery, plus confirmation that browse clients use list/query.
-  - Docs evidence must include current-state and checklist updates for the new export/import and browse paths.
+  - Evidence placeholders maintained at planned state; completion evidence must include export/import tests for `.db`-in-zip round-trip, JSON dump that is rejected as import, `library.json` zip import, live SQLite backups, and interrupted replace recovery.
+  - Docs evidence must include current-state and checklist updates for the new export, import, and backup paths.
 - **Deferrals / Follow-ups**:
   - Account/PIN persistence in SQLite is deferred to the account and PIN data model work.
   - Presets, core settings, and desktop-settings remain on their current files unless a later slice moves them.
   - Running-server import, Operator export/import, and removal of the desktop Library Export / Import menus are deferred to Operator library catalog transfer. That work ships with the later account and Operator milestones, in the release after the SQLite store/query sequence.
+  - Refresh stays on the full-document adapter until refresh column updates.
+
+### M10i15 - Refresh Column Updates
+
+- **Status**: ⏳ Planned
+- **Goal**: Make each refresh stage write only its own columns as work completes, so a long stage no longer diffs a full catalog snapshot, and so unchanged thumbnails are not revisited file by file.
+- **Scope**:
+  - Depends on: library catalog export and import cutover.
+  - Source refresh, fingerprint, duration, and loudness write the columns that stage owns as work completes. They do not load a snapshot at the start and diff it back at the end.
+  - A tag, favorite, blacklist, or playback change that commits during a stage is still present when the stage finishes. The stage does not write those columns.
+  - Source refresh still adds, removes, renames, and updates item identity. Missing files are still removed here, not by folder import.
+  - The thumbnail stage reads the rows it needs without building the full catalog document. It treats a stored thumbnail revision that still matches the item's fingerprint, size, and write time as current, the same way duration and loudness trust a stored result. It does not stat those source files again. Fingerprint still notices a size or write-time change and updates the fingerprint, which changes the revision.
+  - Generate a thumbnail when the item is new, that stored revision differs, or the JPEG is missing. Remove the index entry and JPEG for an item the source stage removed.
+  - Remove the thumbnail file-count and byte caps. Every item still in the library keeps its thumbnail. The stage does not delete JPEGs to get under a size or count limit, and it does not stat every JPEG to measure one.
+  - After this slice, live catalog mutations do not load or diff the full catalog document.
+  - Update the testing checklist and current-state docs.
+- **Acceptance criteria**:
+  - A refresh run persists source, fingerprint, duration, and loudness changes without loading or diffing a full catalog snapshot.
+  - A tag, favorite, or playback change committed during a stage is still present after that stage writes.
+  - Source refresh still adds, removes, and renames items. Folder import still does not remove missing files.
+  - The thumbnail stage does not build the full catalog document.
+  - A refresh where every thumbnail revision still matches does not stat those source files. A new item, a changed revision, or a missing JPEG still generates. An item removed by source refresh loses its thumbnail index entry and JPEG.
+  - There is no thumbnail file-count or byte cap. A refresh does not delete thumbnails for items still in the library, and it does not stat every JPEG to enforce a cap.
+  - Live catalog mutations no longer have a full-document write path.
+  - Docs and the testing checklist describe refresh as column updates, including thumbnail reuse without a full file walk and no file-count or byte cap.
+- **Verification evidence**:
+  - Evidence placeholders maintained at planned state; completion evidence must include a test that a tag or favorite committed during a duration or fingerprint stage is still present afterward, and that source add/remove, fingerprint, duration, and loudness persist without a full-document load. Thumbnail evidence must show an all-matching revision pass that does not stat those sources, a generate for a new item, a changed revision, and a missing JPEG, removal of a deleted item's thumbnail, and no deletion of thumbnails for items still in the library.
+  - Docs evidence must include current-state and checklist updates for refresh column updates, thumbnail reuse, and removal of the thumbnail caps.
+- **Deferrals / Follow-ups**:
+  - A one-shot JSON dump may still build a catalog document. It is not a live read or write path.
+  - Account and PIN tables stay with the account and PIN data model work.
 
 ### M10m - WebUI Source Management Alignment
 
