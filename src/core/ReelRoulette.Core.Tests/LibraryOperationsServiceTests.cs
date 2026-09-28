@@ -753,7 +753,9 @@ public sealed class LibraryOperationsServiceTests
                 ["categories"] = new JsonArray()
             });
 
-            var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot);
+            var host = LibraryCatalogHost.Open(appDataRoot);
+            var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot, host);
+            var builds = host.Session.DocumentBuilds;
             var stats = service.GetLibraryStats();
 
             Assert.Equal(2, stats.Global.TotalVideos);
@@ -779,6 +781,9 @@ public sealed class LibraryOperationsServiceTests
             Assert.Equal(1, sourceA.VideosWithoutAudio);
             Assert.Equal(300, sourceA.TotalDurationSeconds);
             Assert.Equal(150, sourceA.AverageDurationSeconds);
+            Assert.Equal(builds, host.Session.DocumentBuilds);
+            _ = host.Session.BuildDocument();
+            Assert.Equal(builds + 1, host.Session.DocumentBuilds);
         }
         finally
         {
@@ -829,7 +834,9 @@ public sealed class LibraryOperationsServiceTests
                 ["categories"] = new JsonArray()
             });
 
-            var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot);
+            var host = LibraryCatalogHost.Open(appDataRoot);
+            var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot, host);
+            var builds = host.Session.DocumentBuilds;
             var stats = service.GetLibraryStats();
 
             Assert.Equal(1, stats.Global.TotalVideos);
@@ -841,6 +848,116 @@ public sealed class LibraryOperationsServiceTests
             Assert.Equal(1, sourceA.TotalVideos);
             Assert.Equal(1, sourceA.TotalPhotos);
             Assert.Equal(2, sourceA.TotalMedia);
+            Assert.Equal(builds, host.Session.DocumentBuilds);
+        }
+        finally
+        {
+            if (Directory.Exists(appDataRoot))
+            {
+                Directory.Delete(appDataRoot, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void GetLibraryStatsAndItemStates_MatchCurrentFiguresWithoutBuildingTheCatalogDocument()
+    {
+        var appDataRoot = CreateTempAppDataRoot();
+        try
+        {
+            SeedCoreSettings(appDataRoot, enabled: true, minimumGapMinutes: 360, numberOfBackups: 8);
+            SeedLibrary(appDataRoot, new JsonObject
+            {
+                ["sources"] = new JsonArray
+                {
+                    new JsonObject
+                    {
+                        ["id"] = "src-a",
+                        ["rootPath"] = @"C:\media\a",
+                        ["displayName"] = "A",
+                        ["isEnabled"] = true
+                    }
+                },
+                ["items"] = new JsonArray
+                {
+                    new JsonObject
+                    {
+                        ["id"] = "video-fraction",
+                        ["sourceId"] = "src-a",
+                        ["fullPath"] = @"C:\media\a\fraction.mp4",
+                        ["mediaType"] = "Video",
+                        ["duration"] = 120.5,
+                        ["playCount"] = -2
+                    },
+                    new JsonObject
+                    {
+                        ["id"] = "video-whole",
+                        ["sourceId"] = "src-a",
+                        ["fullPath"] = @"C:\media\a\whole.mp4",
+                        ["mediaType"] = "Video",
+                        ["hasAudio"] = false,
+                        ["duration"] = 60,
+                        ["playCount"] = 4
+                    },
+                    new JsonObject
+                    {
+                        ["id"] = "photo-odd",
+                        ["fullPath"] = @"C:\media\a\odd.jpg",
+                        ["mediaType"] = 2,
+                        ["playCount"] = 0
+                    }
+                },
+                ["tags"] = new JsonArray(),
+                ["categories"] = new JsonArray()
+            });
+
+            var host = LibraryCatalogHost.Open(appDataRoot);
+            var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot, host);
+            var builds = host.Session.DocumentBuilds;
+            var stats = service.GetLibraryStats();
+
+            Assert.Equal(2, stats.Global.TotalVideos);
+            Assert.Equal(1, stats.Global.TotalPhotos);
+            Assert.Equal(3, stats.Global.TotalMedia);
+            Assert.Equal(0, stats.Global.VideosWithAudio);
+            Assert.Equal(1, stats.Global.VideosWithoutAudio);
+            Assert.Equal(1, stats.Global.UniquePlayedVideos);
+            Assert.Equal(0, stats.Global.UniquePlayedPhotos);
+            Assert.Equal(4, stats.Global.TotalPlays);
+            Assert.Equal(1, stats.Global.NeverPlayedVideos);
+            var source = Assert.Single(stats.Sources);
+            Assert.Equal(2, source.TotalVideos);
+            Assert.Equal(1, source.TotalPhotos);
+            Assert.Equal(180, source.TotalDurationSeconds);
+            Assert.Equal(90, source.AverageDurationSeconds);
+
+            var states = service.GetLibraryStates(new ReelRoulette.Server.Contracts.LibraryStatesRequest
+            {
+                Paths = [@"C:\MEDIA\A\FRACTION.MP4", @"C:\media\missing.mp4"]
+            });
+            var state = Assert.Single(states);
+            Assert.Equal("video-fraction", state.ItemId);
+            Assert.Equal(@"C:\media\a\fraction.mp4", state.Path);
+
+            Assert.Empty(service.GetLibraryStates(null));
+            Assert.Empty(service.GetLibraryStates(new ReelRoulette.Server.Contracts.LibraryStatesRequest()));
+            Assert.Empty(service.GetLibraryStates(new ReelRoulette.Server.Contracts.LibraryStatesRequest
+            {
+                Paths = [" ", ""]
+            }));
+
+            var ordered = service.GetLibraryStates(new ReelRoulette.Server.Contracts.LibraryStatesRequest
+            {
+                Paths = [@"C:\media\a\whole.mp4", @"C:\media\a\fraction.mp4"]
+            });
+            Assert.Equal(
+                [@"C:\media\a\fraction.mp4", @"C:\media\a\whole.mp4"],
+                ordered.Select(item => item.Path).ToArray());
+            Assert.DoesNotContain(ordered, item => item.ItemId == "photo-odd");
+
+            Assert.Equal(builds, host.Session.DocumentBuilds);
+            _ = host.Session.BuildDocument();
+            Assert.Equal(builds + 1, host.Session.DocumentBuilds);
         }
         finally
         {
@@ -1141,11 +1258,14 @@ public sealed class LibraryOperationsServiceTests
                 ["categories"] = new JsonArray()
             });
 
-            var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot);
+            var host = LibraryCatalogHost.Open(appDataRoot);
+            var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot, host);
+            var builds = host.Session.DocumentBuilds;
             var stats = service.GetLibraryStats();
             var source = Assert.Single(stats.Sources);
             Assert.Equal("YouTube", source.DisplayName);
             Assert.Equal(storedRoot, source.RootPath);
+            Assert.Equal(builds, host.Session.DocumentBuilds);
 
             var stored = Assert.Single((LoadLibrary(appDataRoot)["sources"] as JsonArray)!.OfType<JsonObject>());
             Assert.Null(stored["displayName"]);

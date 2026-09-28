@@ -30,31 +30,35 @@ const CONFIG: RuntimeConfig = {
 };
 
 describe("sseClient", () => {
-  it("handles resyncRequired by requerying and syncing refresh status", async () => {
+  it("handles resyncRequired by syncing refresh status without an item-state read", async () => {
     const fakeSource = new FakeEventSource();
     let connectedUrl = "";
     const setConnectionStatus = vi.fn();
     const setRefreshStatus = vi.fn();
-    const requery = vi.fn().mockResolvedValue(undefined);
     const snapshot: RefreshStatusSnapshot = {
       isRunning: false,
       trigger: "manual",
       completedUtc: "2026-03-05T00:00:00Z",
       stages: []
     };
-    const getRefresh = vi.fn().mockResolvedValue(snapshot);
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/api/refresh/status")) {
+        return new Response(JSON.stringify(snapshot), { status: 200 });
+      }
+
+      return new Response("{}", { status: 500 });
+    });
 
     const client = createSseClient(
       CONFIG,
       { setConnectionStatus, setRefreshStatus },
-      fetch,
+      fetchMock as unknown as typeof fetch,
       {
         createEventSource: (url) => {
           connectedUrl = url;
           return fakeSource;
-        },
-        requeryAuthoritativeState: requery,
-        getRefreshStatus: getRefresh
+        }
       }
     );
 
@@ -68,8 +72,9 @@ describe("sseClient", () => {
 
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(requery).toHaveBeenCalledTimes(1);
-    expect(getRefresh).toHaveBeenCalledTimes(1);
+    const urls = fetchMock.mock.calls.map((call) => String(call[0]));
+    expect(urls.some((url) => url.includes("/api/library-states"))).toBe(false);
+    expect(urls.some((url) => url.includes("/api/refresh/status"))).toBe(true);
     expect(setConnectionStatus).toHaveBeenCalledWith("SSE resync completed.");
     expect(setRefreshStatus).toHaveBeenCalled();
     expect(connectedUrl).toContain("clientId=");

@@ -3128,15 +3128,6 @@ export function startApp(config) {
       setStatus(buildRefreshStatusMessage(coerceRefreshSnapshot(raw)));
     });
     eventSource.addEventListener("resyncRequired", async () => {
-      try {
-        await fetchJson("/api/library-states", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ clientId: state.clientId, sessionId: state.sessionId, paths: [] })
-        });
-      } catch {
-        // best effort
-      }
       void loadPresets();
       await librarySession.resync();
     });

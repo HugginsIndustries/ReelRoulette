@@ -89,30 +89,7 @@ Do not use this file for detailed architecture explanation or current capability
 
 ## Active Milestones
 
-Last milestone completed: M10i9
-
-### M10i10 - Catalog Stats and Item-State Reads
-
-- **Status**: ⏳ Planned
-- **Goal**: Answer library stats and item-state reads with SQL so they do not load the full catalog document.
-- **Scope**:
-  - Depends on: random selection from the catalog query.
-  - Library stats, including global totals and per-source totals, are SQL aggregates. The figures stay the ones clients already show.
-  - An item-state read returns only the requested paths and does not load the full catalog document. An empty path list returns no items.
-  - WebUI resync stops posting an item-state read with an empty path list and discarding the body.
-  - Leave auto-tag scan, duplicate scan, and the desktop full-catalog download on their current paths.
-  - Update the testing checklist and current-state docs.
-- **Acceptance criteria**:
-  - Library stats match the current global and per-source figures and do not load the full catalog document.
-  - An item-state request returns only the requested items. An empty path list returns no items and does not load the catalog.
-  - WebUI resync does not call item-state with an empty path list.
-  - Docs and the testing checklist describe stats and item-state as scoped reads.
-- **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include tests that stats match the current aggregates without a full-document load, that an item-state read returns only the requested paths, and that an empty path list returns nothing. WebUI tests cover resync not posting that empty read.
-  - Docs evidence must include current-state and checklist updates for these reads.
-- **Deferrals / Follow-ups**:
-  - Auto-tag scan, duplicate scan, the desktop full-catalog download, source folder import, refresh, and catalog export stay on their current paths until their own slices.
-  - The loudness baseline stays on the desktop full-catalog download until that download is removed.
+Last milestone completed: M10i10
 
 ### M10i11 - Auto-Tag and Duplicate Scans
 
@@ -1324,6 +1301,29 @@ Last milestone completed: M10i9
 ## Completed Milestones
 
 Latest completions first:
+
+### M10i10 - Catalog Stats and Item-State Reads
+
+- **Status**: ✅ Complete
+- **Goal**: Answer library stats and item-state reads with SQL so they do not load the full catalog document.
+- **Scope**:
+  - Depends on: random selection from the catalog query.
+  - Library stats, including global totals and per-source totals, are SQL aggregates. The figures stay the ones clients already show.
+  - An item-state read returns only the requested paths and does not load the full catalog document. An empty path list returns no items.
+  - WebUI resync stops posting an item-state read with an empty path list and discarding the body.
+  - Leave auto-tag scan, duplicate scan, and the desktop full-catalog download on their current paths.
+  - Update the testing checklist and current-state docs.
+- **Acceptance criteria**:
+  - Library stats match the current global and per-source figures and do not load the full catalog document.
+  - An item-state request returns only the requested items. An empty path list returns no items and does not load the catalog.
+  - WebUI resync does not call item-state with an empty path list.
+  - Docs and the testing checklist describe stats and item-state as scoped reads.
+- **Verification evidence**:
+  - `dotnet build ReelRoulette.sln` — pass. `dotnet test ReelRoulette.sln` — pass (Core 218, Desktop 115). `GetLibraryStats_ShouldAggregateGlobalAndPerSourceTotals` and `GetLibraryStats_ShouldHandleLegacyMediaTypeAndMissingSourceId` still match the current global and per-source figures, including a missing source id matched by path, and the catalog document build count stays put. `GetLibraryStatsAndItemStates_MatchCurrentFiguresWithoutBuildingTheCatalogDocument`: a 120.5 second duration counts as 120 whole seconds (total 180, average 90), a negative play count is ignored, a stored media type other than video or photo follows the file extension, an item-state read returns only the requested path, an empty or blank list returns nothing, and the document build count stays put until an explicit document read. WebUI `sseClient` test: resync syncs refresh status and does not request `/api/library-states`. WebUI unit tests 129 passed. OpenAPI contracts regenerated and the freshness check passed.
+  - Docs: `CONTEXT.md`, `docs/api.md`, `docs/architecture.md`, `docs/domain-inventory.md`, `docs/checklists/testing-checklist.md`, and `CHANGELOG.md` [Unreleased].
+- **Deferrals / Follow-ups**:
+  - Auto-tag scan, duplicate scan, the desktop full-catalog download, source folder import, refresh, and catalog export stay on their current paths until their own slices.
+  - The loudness baseline stays on the desktop full-catalog download until that download is removed.
 
 ### M10i9 - Random Selection from the Catalog Query
 

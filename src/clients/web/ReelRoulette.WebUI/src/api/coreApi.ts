@@ -142,25 +142,6 @@ export async function getRefreshStatus(
   return (await response.json()) as RefreshStatusSnapshot;
 }
 
-export async function requeryAuthoritativeState(
-  config: RuntimeConfig,
-  fetchImpl: typeof fetch = fetch
-): Promise<void> {
-  const clientId = getClientId();
-  const sessionId = getSessionId();
-  const response = await fetchImpl(buildApiUrl(config, "/api/library-states"), {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({ clientId, sessionId, paths: [] })
-  });
-  if (!response.ok) {
-    throw new Error(`Authoritative requery failed with HTTP ${response.status}.`);
-  }
-}
-
 export async function getVersionJson(
   config: RuntimeConfig,
   fetchImpl: typeof fetch = fetch

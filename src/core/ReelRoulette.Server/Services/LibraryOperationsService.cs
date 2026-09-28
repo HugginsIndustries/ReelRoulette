@@ -211,138 +211,42 @@ public sealed class LibraryOperationsService
     {
         lock (_lock)
         {
-            var root = LoadLibraryRoot();
-            var sourceNodes = EnsureArray(root, "sources").OfType<JsonObject>().ToList();
-            var itemNodes = EnsureArray(root, "items").OfType<JsonObject>().ToList();
-
-            var totalVideos = 0;
-            var totalPhotos = 0;
-            var favorites = 0;
-            var blacklisted = 0;
-            var uniquePlayedVideos = 0;
-            var uniquePlayedPhotos = 0;
-            var uniquePlayedMedia = 0;
-            var totalPlays = 0;
-            var videosWithAudio = 0;
-            var videosWithoutAudio = 0;
-
-            foreach (var item in itemNodes)
-            {
-                var isVideo = IsVideoItem(item);
-                if (isVideo)
-                {
-                    totalVideos++;
-                    if (item["hasAudio"] is not null)
-                    {
-                        if (GetNodeBool(item["hasAudio"], defaultValue: false))
-                        {
-                            videosWithAudio++;
-                        }
-                        else
-                        {
-                            videosWithoutAudio++;
-                        }
-                    }
-                }
-                else
-                {
-                    totalPhotos++;
-                }
-
-                if (GetNodeBool(item["isFavorite"], defaultValue: false))
-                {
-                    favorites++;
-                }
-
-                if (GetNodeBool(item["isBlacklisted"], defaultValue: false))
-                {
-                    blacklisted++;
-                }
-
-                var playCount = Math.Max(0, GetNodeInt(item["playCount"], defaultValue: 0));
-                totalPlays += playCount;
-                if (playCount > 0)
-                {
-                    uniquePlayedMedia++;
-                    if (isVideo)
-                    {
-                        uniquePlayedVideos++;
-                    }
-                    else
-                    {
-                        uniquePlayedPhotos++;
-                    }
-                }
-            }
-
-            var sourceStats = new List<SourceStatsResponse>();
-            foreach (var source in sourceNodes)
-            {
-                var sourceId = GetNodeString(source["id"]);
-                if (string.IsNullOrWhiteSpace(sourceId))
-                {
-                    continue;
-                }
-
-                var sourceItems = itemNodes
-                    .Where(item => ItemBelongsToSource(item, sourceId, GetNodeString(source["rootPath"])))
-                    .ToList();
-                var sourceVideos = sourceItems
-                    .Where(IsVideoItem)
-                    .ToList();
-
-                var totalDurationTicks = sourceVideos
-                    .Select(video => TryGetNodeTimeSpan(video["duration"]))
-                    .Where(duration => duration.HasValue)
-                    .Select(duration => duration!.Value.Ticks)
-                    .DefaultIfEmpty(0L)
-                    .Sum();
-
-                var videosWithDuration = sourceVideos
-                    .Select(video => TryGetNodeTimeSpan(video["duration"]))
-                    .Where(duration => duration.HasValue)
-                    .ToList();
-
-                sourceStats.Add(new SourceStatsResponse
-                {
-                    SourceId = sourceId,
-                    RootPath = GetNodeString(source["rootPath"]),
-                    DisplayName = LibrarySourcePath.ResolveDisplayName(
-                        GetNodeString(source["displayName"]),
-                        GetNodeString(source["rootPath"])),
-                    IsEnabled = GetNodeBool(source["isEnabled"], defaultValue: true),
-                    TotalVideos = sourceVideos.Count,
-                    TotalPhotos = sourceItems.Count - sourceVideos.Count,
-                    TotalMedia = sourceItems.Count,
-                    VideosWithAudio = sourceVideos.Count(video => video["hasAudio"] is not null && GetNodeBool(video["hasAudio"], defaultValue: false)),
-                    VideosWithoutAudio = sourceVideos.Count(video => video["hasAudio"] is not null && !GetNodeBool(video["hasAudio"], defaultValue: true)),
-                    TotalDurationSeconds = TimeSpan.FromTicks(Math.Max(0, totalDurationTicks)).TotalSeconds,
-                    AverageDurationSeconds = videosWithDuration.Count == 0
-                        ? null
-                        : TimeSpan.FromTicks((long)videosWithDuration.Average(duration => duration!.Value.Ticks)).TotalSeconds
-                });
-            }
-
+            var stats = _catalog.Session.ReadLibraryStats();
             return new LibraryStatsResponse
             {
                 Global = new LibraryGlobalStatsResponse
                 {
-                    TotalVideos = totalVideos,
-                    TotalPhotos = totalPhotos,
-                    TotalMedia = itemNodes.Count,
-                    Favorites = favorites,
-                    Blacklisted = blacklisted,
-                    UniquePlayedVideos = uniquePlayedVideos,
-                    UniquePlayedPhotos = uniquePlayedPhotos,
-                    UniquePlayedMedia = uniquePlayedMedia,
-                    NeverPlayedVideos = Math.Max(0, totalVideos - uniquePlayedVideos),
-                    NeverPlayedPhotos = Math.Max(0, totalPhotos - uniquePlayedPhotos),
-                    NeverPlayedMedia = Math.Max(0, itemNodes.Count - uniquePlayedMedia),
-                    TotalPlays = totalPlays,
-                    VideosWithAudio = videosWithAudio,
-                    VideosWithoutAudio = videosWithoutAudio
+                    TotalVideos = stats.Global.TotalVideos,
+                    TotalPhotos = stats.Global.TotalPhotos,
+                    TotalMedia = stats.Global.TotalMedia,
+                    Favorites = stats.Global.Favorites,
+                    Blacklisted = stats.Global.Blacklisted,
+                    UniquePlayedVideos = stats.Global.UniquePlayedVideos,
+                    UniquePlayedPhotos = stats.Global.UniquePlayedPhotos,
+                    UniquePlayedMedia = stats.Global.UniquePlayedMedia,
+                    NeverPlayedVideos = stats.Global.NeverPlayedVideos,
+                    NeverPlayedPhotos = stats.Global.NeverPlayedPhotos,
+                    NeverPlayedMedia = stats.Global.NeverPlayedMedia,
+                    TotalPlays = stats.Global.TotalPlays,
+                    VideosWithAudio = stats.Global.VideosWithAudio,
+                    VideosWithoutAudio = stats.Global.VideosWithoutAudio
                 },
-                Sources = sourceStats
+                Sources = stats.Sources
+                    .Select(source => new SourceStatsResponse
+                    {
+                        SourceId = source.SourceId,
+                        RootPath = source.RootPath,
+                        DisplayName = LibrarySourcePath.ResolveDisplayName(source.DisplayName, source.RootPath),
+                        IsEnabled = source.IsEnabled,
+                        TotalVideos = source.TotalVideos,
+                        TotalPhotos = source.TotalPhotos,
+                        TotalMedia = source.TotalMedia,
+                        VideosWithAudio = source.VideosWithAudio,
+                        VideosWithoutAudio = source.VideosWithoutAudio,
+                        TotalDurationSeconds = source.TotalDurationSeconds,
+                        AverageDurationSeconds = source.AverageDurationSeconds
+                    })
+                    .ToList()
             };
         }
     }
@@ -377,19 +281,16 @@ public sealed class LibraryOperationsService
     {
         lock (_lock)
         {
-            var root = LoadLibraryRoot();
-            var requestedPaths = (request?.Paths ?? [])
-                .Where(path => !string.IsNullOrWhiteSpace(path))
-                .ToHashSet(StringComparer.OrdinalIgnoreCase);
-            var filterByPath = requestedPaths.Count > 0;
-
-            var items = EnsureArray(root, "items")
-                .OfType<JsonObject>()
-                .Where(item => !filterByPath || requestedPaths.Contains(GetNodeString(item["fullPath"])))
-                .OrderBy(item => GetNodeString(item["fullPath"]), StringComparer.OrdinalIgnoreCase)
-                .Select(CreateLibraryStateResponse)
+            return _catalog.Session.ReadItemStates(request?.Paths)
+                .Select(item => new LibraryStateResponse
+                {
+                    ItemId = item.Id,
+                    Path = item.FullPath,
+                    IsFavorite = item.IsFavorite,
+                    IsBlacklisted = item.IsBlacklisted,
+                    Revision = 0
+                })
                 .ToList();
-            return items;
         }
     }
 
@@ -1044,123 +945,6 @@ public sealed class LibraryOperationsService
         return MediaPlayableExtensions.IsVideoExtension(extension) ? "Video" : "Photo";
     }
 
-    private static bool ItemBelongsToSource(JsonObject item, string sourceId, string sourceRootPath)
-    {
-        var itemSourceId = GetNodeString(item["sourceId"]);
-        if (!string.IsNullOrWhiteSpace(itemSourceId) && !string.IsNullOrWhiteSpace(sourceId))
-        {
-            return string.Equals(itemSourceId, sourceId, StringComparison.OrdinalIgnoreCase);
-        }
-
-        var fullPath = GetNodeString(item["fullPath"]);
-        if (string.IsNullOrWhiteSpace(fullPath) || string.IsNullOrWhiteSpace(sourceRootPath))
-        {
-            return false;
-        }
-
-        return IsPathUnderRoot(fullPath, sourceRootPath);
-    }
-
-    private static bool IsVideoItem(JsonObject item)
-    {
-        if (TryGetMediaTypeIsVideo(item["mediaType"], out var parsedIsVideo))
-        {
-            return parsedIsVideo;
-        }
-
-        var fullPath = GetNodeString(item["fullPath"]);
-        if (!string.IsNullOrWhiteSpace(fullPath))
-        {
-            var extension = Path.GetExtension(fullPath).ToLowerInvariant();
-            if (MediaPlayableExtensions.IsVideoExtension(extension))
-            {
-                return true;
-            }
-
-            if (MediaPlayableExtensions.IsPhotoExtension(extension))
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    private static bool TryGetMediaTypeIsVideo(JsonNode? node, out bool isVideo)
-    {
-        isVideo = true;
-        if (node is JsonValue value)
-        {
-            if (value.TryGetValue<int>(out var intValue))
-            {
-                if (intValue == 0)
-                {
-                    isVideo = true;
-                    return true;
-                }
-
-                if (intValue == 1)
-                {
-                    isVideo = false;
-                    return true;
-                }
-            }
-
-            if (value.TryGetValue<string>(out var textValue))
-            {
-                var text = (textValue ?? string.Empty).Trim();
-                if (string.Equals(text, "Video", StringComparison.OrdinalIgnoreCase) || text == "0")
-                {
-                    isVideo = true;
-                    return true;
-                }
-
-                if (string.Equals(text, "Photo", StringComparison.OrdinalIgnoreCase) || text == "1")
-                {
-                    isVideo = false;
-                    return true;
-                }
-            }
-        }
-
-        return false;
-    }
-
-    private static bool IsPathUnderRoot(string fullPath, string rootPath)
-    {
-        try
-        {
-            var normalizedPath = NormalizePathForPrefixComparison(fullPath);
-            var normalizedRoot = NormalizePathForPrefixComparison(rootPath);
-            if (string.IsNullOrWhiteSpace(normalizedPath) || string.IsNullOrWhiteSpace(normalizedRoot))
-            {
-                return false;
-            }
-
-            var rootWithSeparator = normalizedRoot + "/";
-
-            return string.Equals(normalizedPath, normalizedRoot, StringComparison.OrdinalIgnoreCase) ||
-                normalizedPath.StartsWith(rootWithSeparator, StringComparison.OrdinalIgnoreCase);
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
-    private static string NormalizePathForPrefixComparison(string path)
-    {
-        if (string.IsNullOrWhiteSpace(path))
-        {
-            return string.Empty;
-        }
-
-        var full = Path.GetFullPath(path.Trim());
-        return full
-            .Replace('\\', '/')
-            .TrimEnd('/');
-    }
-
     private static string GetRelativePath(string rootPath, string fullPath) =>
         ReelRoulette.Core.Storage.LibraryRelativePath.GetRelativePath(rootPath, fullPath);
 
@@ -1255,47 +1039,6 @@ public sealed class LibraryOperationsService
 
             return defaultValue;
         }
-    }
-
-    private static TimeSpan? TryGetNodeTimeSpan(JsonNode? node)
-    {
-        if (node is null)
-        {
-            return null;
-        }
-
-        try
-        {
-            if (node is JsonValue value)
-            {
-                if (value.TryGetValue<TimeSpan>(out var timeSpan))
-                {
-                    return timeSpan;
-                }
-
-                if (value.TryGetValue<double>(out var seconds))
-                {
-                    return TimeSpan.FromSeconds(Math.Max(0, seconds));
-                }
-            }
-        }
-        catch
-        {
-            // Fall through to string parsing.
-        }
-
-        var text = GetNodeString(node);
-        if (TimeSpan.TryParse(text, out var parsed))
-        {
-            return parsed;
-        }
-
-        if (double.TryParse(text, out var parsedSeconds))
-        {
-            return TimeSpan.FromSeconds(Math.Max(0, parsedSeconds));
-        }
-
-        return null;
     }
 
     private static int GetNodeInt(JsonNode? node, int defaultValue)
@@ -1408,18 +1151,6 @@ public sealed class LibraryOperationsService
             Path = after.FullPath,
             IsFavorite = after.IsFavorite,
             IsBlacklisted = after.IsBlacklisted
-        };
-    }
-
-    private static LibraryStateResponse CreateLibraryStateResponse(JsonObject item)
-    {
-        return new LibraryStateResponse
-        {
-            ItemId = GetNodeString(item["id"]),
-            Path = GetNodeString(item["fullPath"]),
-            IsFavorite = GetNodeBool(item["isFavorite"], defaultValue: false),
-            IsBlacklisted = GetNodeBool(item["isBlacklisted"], defaultValue: false),
-            Revision = 0
         };
     }
 

@@ -19,8 +19,8 @@ Instructions:
 
 Commit Message:
 
-M10i9: Choose random playback from the catalog query
+M10i10: Read library stats and item state without the full catalog
 
-- Load random eligibility with the library list filter so a catalog revision does not rebuild the full library.
-- Keep the current weighting on that eligible set, and return no item when the set is empty.
-- Read one item and its source for direct play and media lookup by id or path.
+- Answer library stats with SQL aggregates that keep the current global and per-source figures.
+- Return item state only for the requested paths, and return nothing when that list is empty.
+- Stop WebUI resync from posting an item-state read with an empty path list.

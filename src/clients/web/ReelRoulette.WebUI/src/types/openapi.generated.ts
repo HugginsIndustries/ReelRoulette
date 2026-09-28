@@ -567,10 +567,9 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Fetch authoritative item state snapshots
-         * @description Re-fetch endpoint used during SSE reconnect/resync flows.
-         *     Clients submit known item paths and receive current favorite/blacklist
-         *     state with the latest revision observed for each item.
+         * Fetch item state for requested paths
+         * @description Returns favorite and blacklist state for the requested item paths.
+         *     An empty path list returns no items. The read does not load the full catalog.
          */
         post: operations["postLibraryStates"];
         delete?: never;
@@ -900,7 +899,8 @@ export interface paths {
          *     - Client reconnects with `Last-Event-ID`.
          *     - Server replays buffered events newer than that revision when available.
          *     - If the revision gap exceeds replay buffer retention, server emits a
-         *       `resyncRequired` event and client must call `/api/library-states`.
+         *       `resyncRequired` event. Clients requery the state they still show.
+         *       An item-state read returns only the requested paths. An empty path list returns no items.
          *     Identity/session continuity:
          *     - Clients should provide a stable `clientId` per installation/device.
          *     - Clients may provide an optional `sessionId` per runtime session to
@@ -2845,7 +2845,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description State snapshots for requested paths (or all known states when no paths are provided) */
+            /** @description State snapshots for the requested paths. An empty path list returns no items. */
             200: {
                 headers: {
                     [name: string]: unknown;

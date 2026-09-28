@@ -976,12 +976,11 @@ paths:
 
   /api/library-states:
     post:
-      summary: Fetch authoritative item state snapshots
+      summary: Fetch item state for requested paths
       operationId: postLibraryStates
       description: |
-        Re-fetch endpoint used during SSE reconnect/resync flows.
-        Clients submit known item paths and receive current favorite/blacklist
-        state with the latest revision observed for each item.
+        Returns favorite and blacklist state for the requested item paths.
+        An empty path list returns no items. The read does not load the full catalog.
       requestBody:
         required: true
         content:
@@ -990,7 +989,7 @@ paths:
               $ref: "#/components/schemas/LibraryStatesRequest"
       responses:
         "200":
-          description: State snapshots for requested paths (or all known states when no paths are provided)
+          description: State snapshots for the requested paths. An empty path list returns no items.
           content:
             application/json:
               schema:
@@ -1400,7 +1399,8 @@ paths:
         - Client reconnects with `Last-Event-ID`.
         - Server replays buffered events newer than that revision when available.
         - If the revision gap exceeds replay buffer retention, server emits a
-          `resyncRequired` event and client must call `/api/library-states`.
+          `resyncRequired` event. Clients requery the state they still show.
+          An item-state read returns only the requested paths. An empty path list returns no items.
         Identity/session continuity:
         - Clients should provide a stable `clientId` per installation/device.
         - Clients may provide an optional `sessionId` per runtime session to

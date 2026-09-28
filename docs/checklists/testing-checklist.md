@@ -80,7 +80,7 @@ Use `pwsh ./tools/scripts/reset-checklist.ps1` to reset metadata/check states be
 - [x] WebUI library grid visual parity: side-by-side with desktop grid at equivalent width (tile scrim, bar, badges, gaps).
 - [x] WebUI library SSE sync: with overlay open, desktop favorite/blacklist toggles update visible and scrolled-off WebUI tiles without closing overlay.
 - [x] WebUI library SSE sync: with overlay open, desktop playback updates **Play count** / **Last played** sort and **Only never played** filter correctly.
-- [ ] WebUI library SSE sync: `resyncRequired` reloads the loaded list-query window whether the overlay is shown or hidden, and does not fetch the full catalog. Closing and reopening an already-loaded overlay does not query.
+- [ ] WebUI library SSE sync: `resyncRequired` reloads the loaded list-query window whether the overlay is shown or hidden, does not fetch the full catalog, and does not post an item-state read with an empty path list. Closing and reopening an already-loaded overlay does not query.
 - [ ] WebUI library SSE sync regression: search, sort, and filter requery still scrolls the grid to the top; playback continues while the overlay stays open.
 - [x] WebUI library click-to-play: single-click tile calls `POST /api/play/{itemId}`, overlay closes on success, media plays in WebUI player without duplicate `record-playback`.
 - [x] WebUI library click-to-play errors: missing/disabled/unsupported items show clear status messages (404/409/415); overlay stays open on failure.
@@ -206,6 +206,7 @@ Use `pwsh ./tools/scripts/reset-checklist.ps1` to reset metadata/check states be
 - [x] Favorite, blacklist, playback record, and clear-stats for a selection persist as catalog row updates and do not stall browse on a large library. A favorite still clears blacklist, and a blacklist still clears favorite. A selection clears only those items. The other client still updates from the same item-state and playback events.
 - [ ] Clear stats with no selection clears played items across the library and does not change favorites or blacklist.
 - [ ] WebUI in Firefox reloads and stays connected, including several reloads in a row. An installed home-screen app still opens.
+- [ ] Library stats still show the same global and per-source totals. An item-state read for a path returns that item, and an empty path list returns nothing. WebUI resync does not request item state with an empty path list.
 
 ## Optional Release Flow
 

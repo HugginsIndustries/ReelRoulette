@@ -74,7 +74,7 @@ flowchart LR
 - Clients issue command/query calls through APIs and project state from API plus SSE.
 - Desktop library activation (grid) is server-authoritative via `POST /api/play/{itemId}`; local LibVLC render only, with no duplicate client `record-playback` for that start. Desktop library browse is an infinite-scrolling grid fed by `POST /api/library/query`. `GET /api/library/projection` remains for the video/photo header and now-playing tags.
 - WebUI Auto Tag performs filename/path matching only on the server. The web client sends `scanFullLibrary` with no path list and applies selected suggestions via API without client-local tag-matching authority.
-- WebUI library overlay grid uses a TypeScript port of Core `LibraryGridLayout` for justified-row packing and row-level virtual scrolling. Browse is `POST /api/library/query`; tile JPEGs load from `GET /api/thumbnail/{itemId}` using that page's thumbnail fields. The first page loads after connect and stays loaded across hide and show. Header counts stay the current query totals after a change that finishes while the overlay is hidden. Tile activation is server-authoritative via `POST /api/play/{itemId}` (overlay closes on success; no duplicate client `record-playback`). Favorite, blacklist, playback, and tag events patch or reload the loaded window whether the overlay is shown or hidden. `resyncRequired` reloads that window and does not fetch the full catalog.
+- WebUI library overlay grid uses a TypeScript port of Core `LibraryGridLayout` for justified-row packing and row-level virtual scrolling. Browse is `POST /api/library/query`; tile JPEGs load from `GET /api/thumbnail/{itemId}` using that page's thumbnail fields. The first page loads after connect and stays loaded across hide and show. Header counts stay the current query totals after a change that finishes while the overlay is hidden. Tile activation is server-authoritative via `POST /api/play/{itemId}` (overlay closes on success; no duplicate client `record-playback`). Favorite, blacklist, playback, and tag events patch or reload the loaded window whether the overlay is shown or hidden. `resyncRequired` reloads that window, does not fetch the full catalog, and does not post an empty item-state read.
 - Clients must not reintroduce local authoritative mutation fallbacks for migrated domains.
 - Library export/import applies zip packaging and JSON path remapping on the server; the desktop supplies UI and writes only imported `desktop-settings.json` locally after a successful import.
 
@@ -99,7 +99,7 @@ Reconnect and recovery:
 
 - Clients reconnect with revision continuity hints (`Last-Event-ID` and fallback query semantics where applicable).
 - Server replays retained events when available.
-- On replay gaps, server emits `resyncRequired`, and clients must requery authoritative state via API.
+- On replay gaps, server emits `resyncRequired`. WebUI reloads the loaded library list and does not post an empty item-state read. An item-state read returns only the requested paths.
 
 ## Auth and Access Model
 

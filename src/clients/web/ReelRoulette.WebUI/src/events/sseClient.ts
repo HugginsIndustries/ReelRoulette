@@ -1,4 +1,4 @@
-import { getClientId, getClientType, getDeviceName, getRefreshStatus, getSessionId, requeryAuthoritativeState } from "../api/coreApi";
+import { getClientId, getClientType, getDeviceName, getRefreshStatus, getSessionId } from "../api/coreApi";
 import { buildEventsUrl, parseEventEnvelope } from "./eventEnvelope";
 import { buildRefreshStatusMessage } from "./refreshStatusProjection";
 import type { RuntimeConfig } from "../types/runtimeConfig";
@@ -28,7 +28,6 @@ interface EventSourceLike {
 interface SseClientDependencies {
   createEventSource?: (url: string) => EventSourceLike;
   getRefreshStatus?: typeof getRefreshStatus;
-  requeryAuthoritativeState?: typeof requeryAuthoritativeState;
 }
 
 export function createSseClient(
@@ -41,7 +40,6 @@ export function createSseClient(
     dependencies.createEventSource ??
     ((url: string): EventSourceLike => new EventSource(url, { withCredentials: true }));
   const getRefreshStatusFn = dependencies.getRefreshStatus ?? getRefreshStatus;
-  const requeryAuthoritativeStateFn = dependencies.requeryAuthoritativeState ?? requeryAuthoritativeState;
 
   let source: EventSourceLike | null = null;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -100,7 +98,6 @@ export function createSseClient(
     );
 
     try {
-      await requeryAuthoritativeStateFn(config, fetchImpl);
       await syncRefreshStatus();
       ui.setConnectionStatus("SSE resync completed.");
     } catch (error) {
