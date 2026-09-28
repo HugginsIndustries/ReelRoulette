@@ -148,7 +148,7 @@ Reconnect/resync behavior:
 - `GET /api/library/projection` — full catalog document read from the SQLite catalog. `mediaType` and `fingerprintStatus` are integers and `duration` is `hh:mm:ss`. Each item is enriched at serve time with **`hasThumbnail`**, **`thumbnailWidth`**, and **`thumbnailHeight`** from the server thumbnail index (not stored in the catalog). JPEG bytes come from `GET /api/thumbnail/{itemId}`. This is not the browse API. Desktop library browse uses `POST /api/library/query` and still fetches this snapshot for the video/photo header and now-playing tags. WebUI library browse uses `POST /api/library/query`.
 - `GET /api/library/stats` — global totals and per-source totals from SQL aggregates. The figures match the previous full-catalog walk, including whole-second durations. The read does not load the full catalog document.
 - `POST /api/library-states` — favorite and blacklist for the requested paths only. Matching is case-insensitive. An empty path list, or a list of blank paths, returns no items and does not load the catalog. A path that is not in the library is omitted.
-- `POST /api/favorite`, `POST /api/blacklist`, `POST /api/record-playback`, and `POST /api/playback/clear-stats` update SQLite catalog rows. They match an item by catalog id or full path and do not load the full catalog document. A favorite clears blacklist, and a blacklist clears favorite. `itemStateChanged` and `playbackRecorded` stay the same events. Clear-stats with no path list clears every row that has a play count or a last-played time. A path list clears only those items. `resyncRequired` with reason `playbackStatsCleared` is published only when at least one row was cleared. Auto-tag scan and duplicate scan still load the full catalog document.
+- `POST /api/favorite`, `POST /api/blacklist`, `POST /api/record-playback`, and `POST /api/playback/clear-stats` update SQLite catalog rows. They match an item by catalog id or full path and do not load the full catalog document. A favorite clears blacklist, and a blacklist clears favorite. `itemStateChanged` and `playbackRecorded` stay the same events. Clear-stats with no path list clears every row that has a play count or a last-played time. A path list clears only those items. `resyncRequired` with reason `playbackStatsCleared` is published only when at least one row was cleared.
 
 ### Web runtime settings
 
@@ -188,9 +188,9 @@ Reconnect/resync behavior:
 ### Duplicates and auto-tag
 
 - Duplicate scan item payload includes per-item duplicate metadata (`itemId`, path/source identity, favorite/blacklist flags, play count) and `tagCount` for faster keep/delete review.
-- `POST /api/duplicates/scan`
-- `POST /api/duplicates/apply`
-- `POST /api/autotag/scan` — body `scanFullLibrary` and `itemIds` (library item `fullPath` values). `scanFullLibrary: true` scans every item and ignores `itemIds`. `scanFullLibrary: false` with no `itemIds` scans enabled sources only (zero enabled sources scans nothing). A non-empty `itemIds` list scans those full paths.
+- `POST /api/duplicates/scan` reads catalog rows and does not load the full catalog document. Groups are items whose fingerprint status is ready and whose fingerprint is set. Pending, failed, and stale fingerprints stay excluded. Scope is the current source, all enabled sources, or every item.
+- `POST /api/duplicates/apply` deletes the non-kept files and catalog rows and leaves the kept item. A missing file is reported and that row stays. The apply does not load the full catalog document.
+- `POST /api/autotag/scan` — body `scanFullLibrary` and `itemIds` (library item `fullPath` values). The scan reads catalog rows and does not load the full catalog document. `scanFullLibrary: true` scans every item and ignores `itemIds`. `scanFullLibrary: false` with no `itemIds` scans enabled sources only (zero enabled sources scans nothing). A non-empty `itemIds` list scans those full paths.
 - `POST /api/autotag/apply` returns `assignmentsAdded`, `changedItemPaths`, and `applied` (one entry per tag that was newly written, with only the files that gained that tag). When any file gains a tag, it publishes one `itemTagsChanged` event per tag that was newly applied, listing only the files that gained that tag, and one `tagCatalogChanged` event.
 
 ### Media, thumbnail, events, client logs

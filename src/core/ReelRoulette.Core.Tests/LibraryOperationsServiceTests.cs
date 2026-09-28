@@ -1083,6 +1083,7 @@ public sealed class LibraryOperationsServiceTests
             Directory.CreateDirectory(mediaDir);
             var keepPath = Path.Combine(mediaDir, "keep.mp4");
             var removePath = Path.Combine(mediaDir, "remove.mp4");
+            var missingPath = Path.Combine(mediaDir, "missing.mp4");
             File.WriteAllText(keepPath, "keep");
             File.WriteAllText(removePath, "remove");
 
@@ -1104,13 +1105,36 @@ public sealed class LibraryOperationsServiceTests
                         ["fullPath"] = removePath,
                         ["isFavorite"] = false,
                         ["isBlacklisted"] = false
+                    },
+                    new JsonObject
+                    {
+                        ["id"] = "missing-1",
+                        ["fullPath"] = missingPath,
+                        ["isFavorite"] = false,
+                        ["isBlacklisted"] = false
                     }
                 },
                 ["tags"] = new JsonArray(),
                 ["categories"] = new JsonArray()
             });
 
-            var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot);
+            var host = LibraryCatalogHost.Open(appDataRoot);
+            var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot, host);
+            var builds = host.Session.DocumentBuilds;
+            var skipped = service.ApplyDuplicateSelection(new ReelRoulette.Server.Contracts.DuplicateApplyRequest
+            {
+                Selections =
+                [
+                    new ReelRoulette.Server.Contracts.DuplicateApplySelection
+                    {
+                        KeepItemId = "missing-keep",
+                        ItemIds = ["keep-1", "remove-1"]
+                    }
+                ]
+            });
+            Assert.Equal(0, skipped.RemovedFromLibrary);
+            Assert.True(File.Exists(removePath));
+
             var response = service.ApplyDuplicateSelection(new ReelRoulette.Server.Contracts.DuplicateApplyRequest
             {
                 Selections =
@@ -1118,21 +1142,24 @@ public sealed class LibraryOperationsServiceTests
                     new ReelRoulette.Server.Contracts.DuplicateApplySelection
                     {
                         KeepItemId = "keep-1",
-                        ItemIds = ["keep-1", "remove-1"]
+                        ItemIds = ["keep-1", "remove-1", "missing-1"]
                     }
                 ]
             });
 
             Assert.Equal(1, response.DeletedOnDisk);
             Assert.Equal(1, response.RemovedFromLibrary);
-            Assert.Empty(response.Failures);
+            var failure = Assert.Single(response.Failures);
+            Assert.Equal(missingPath, failure.FullPath);
+            Assert.Equal("File not found", failure.Reason);
             Assert.False(File.Exists(removePath));
             Assert.True(File.Exists(keepPath));
+            Assert.Equal(builds, host.Session.DocumentBuilds);
 
             var root = LoadLibrary(appDataRoot);
             var items = (root["items"] as JsonArray)!.OfType<JsonObject>().ToList();
-            var kept = Assert.Single(items);
-            Assert.Equal("keep-1", kept["id"]?.GetValue<string>());
+            Assert.Equal(["keep-1", "missing-1"], items.Select(item => item["id"]!.GetValue<string>()).ToArray());
+            var kept = items[0];
 
             var states = service.GetLibraryStates(new ReelRoulette.Server.Contracts.LibraryStatesRequest
             {
@@ -1304,10 +1331,33 @@ public sealed class LibraryOperationsServiceTests
                     },
                     new JsonObject
                     {
+                        ["id"] = "kept",
+                        ["sourceId"] = "on",
+                        ["fullPath"] = "/media/on/Holiday-kept.mp4",
+                        ["fileName"] = "Holiday-kept.mp4",
+                        ["tags"] = new JsonArray { "Holiday" }
+                    },
+                    new JsonObject
+                    {
+                        ["id"] = "plain",
+                        ["sourceId"] = "on",
+                        ["fullPath"] = "/media/on/plain.mp4",
+                        ["relativePath"] = "clips/Holiday/plain.mp4",
+                        ["fileName"] = "plain.mp4"
+                    },
+                    new JsonObject
+                    {
                         ["id"] = "b",
                         ["sourceId"] = "off",
                         ["fullPath"] = "/media/off/Holiday-b.mp4",
                         ["fileName"] = "Holiday-b.mp4"
+                    },
+                    new JsonObject
+                    {
+                        ["id"] = "orphan",
+                        ["sourceId"] = "missing",
+                        ["fullPath"] = "/media/missing/Holiday-c.mp4",
+                        ["fileName"] = "Holiday-c.mp4"
                     }
                 },
                 ["tags"] = new JsonArray
@@ -1317,15 +1367,24 @@ public sealed class LibraryOperationsServiceTests
                 ["categories"] = new JsonArray()
             });
 
-            var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot);
+            var host = LibraryCatalogHost.Open(appDataRoot);
+            var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot, host);
+            var builds = host.Session.DocumentBuilds;
             var enabledOnly = service.ScanAutoTags(new AutoTagScanRequest { ScanFullLibrary = false, ItemIds = [] });
-            var enabledPaths = enabledOnly.Rows.SelectMany(row => row.Files).Select(file => file.FullPath).ToList();
-            Assert.Equal(["/media/on/Holiday-a.mp4"], enabledPaths);
+            var enabledFiles = Assert.Single(enabledOnly.Rows).Files;
+            Assert.Equal(
+                ["/media/on/Holiday-a.mp4", "/media/on/Holiday-kept.mp4", "/media/on/plain.mp4"],
+                enabledFiles.Select(file => file.FullPath).ToArray());
+            Assert.Equal([true, false, true], enabledFiles.Select(file => file.NeedsChange).ToArray());
+            Assert.Equal("clips/Holiday/plain.mp4", enabledFiles[2].DisplayPath);
+            var enabledRow = Assert.Single(enabledOnly.Rows);
+            Assert.Equal(3, enabledRow.TotalMatchedCount);
+            Assert.Equal(2, enabledRow.WouldChangeCount);
 
             var listed = service.ScanAutoTags(new AutoTagScanRequest
             {
                 ScanFullLibrary = false,
-                ItemIds = ["/media/off/Holiday-b.mp4"]
+                ItemIds = ["/MEDIA/OFF/Holiday-b.mp4"]
             });
             var listedPaths = listed.Rows.SelectMany(row => row.Files).Select(file => file.FullPath).ToList();
             Assert.Equal(["/media/off/Holiday-b.mp4"], listedPaths);
@@ -1335,8 +1394,17 @@ public sealed class LibraryOperationsServiceTests
                 ScanFullLibrary = true,
                 ItemIds = ["/media/off/Holiday-b.mp4"]
             });
-            var fullPaths = full.Rows.SelectMany(row => row.Files).Select(file => file.FullPath).OrderBy(path => path).ToList();
-            Assert.Equal(["/media/off/Holiday-b.mp4", "/media/on/Holiday-a.mp4"], fullPaths);
+            var fullPaths = full.Rows.SelectMany(row => row.Files).Select(file => file.FullPath).ToList();
+            Assert.Equal(
+                [
+                    "/media/on/Holiday-a.mp4",
+                    "/media/on/Holiday-kept.mp4",
+                    "/media/on/plain.mp4",
+                    "/media/off/Holiday-b.mp4",
+                    "/media/missing/Holiday-c.mp4"
+                ],
+                fullPaths);
+            Assert.Equal(builds, host.Session.DocumentBuilds);
         }
         finally
         {
@@ -1376,9 +1444,12 @@ public sealed class LibraryOperationsServiceTests
                 ["categories"] = new JsonArray()
             });
 
-            var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot);
+            var host = LibraryCatalogHost.Open(appDataRoot);
+            var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot, host);
+            var builds = host.Session.DocumentBuilds;
             var response = service.ScanAutoTags(new AutoTagScanRequest { ScanFullLibrary = false, ItemIds = [] });
             Assert.Empty(response.Rows);
+            Assert.Equal(builds, host.Session.DocumentBuilds);
         }
         finally
         {
@@ -1395,31 +1466,42 @@ public sealed class LibraryOperationsServiceTests
         var appDataRoot = CreateTempAppDataRoot();
         try
         {
+            var readyA = Item("ready-a", "/media/ready-a.mp4", "fp-ready", 1);
+            readyA["isFavorite"] = true;
+            readyA["playCount"] = 4;
+            readyA["tags"] = new JsonArray { "One", "Two" };
             SeedLibrary(appDataRoot, new JsonObject
             {
                 ["sources"] = new JsonArray(),
                 ["items"] = new JsonArray
                 {
-                    Item("ready-a", "/media/ready-a.mp4", "fp-ready", "Ready"),
-                    Item("ready-b", "/media/ready-b.mp4", "fp-ready", "Ready"),
-                    Item("stale-1", "/media/stale.mp4", "fp-ready", "Stale"),
-                    Item("failed-1", "/media/failed.mp4", null, "Failed"),
-                    Item("legacy-a", "/media/legacy-a.mp4", "fp-legacy", null),
-                    Item("legacy-b", "/media/legacy-b.mp4", "fp-legacy", null)
+                    readyA,
+                    Item("ready-b", "/media/ready-b.mp4", "fp-ready", 1),
+                    Item("pending-1", "/media/pending.mp4", "fp-pending", 0),
+                    Item("stale-1", "/media/stale.mp4", "fp-stale", 3),
+                    Item("failed-1", "/media/failed.mp4", null, 2),
+                    Item("unset-a", "/media/unset-a.mp4", "fp-unset", null),
+                    Item("unset-b", "/media/unset-b.mp4", "fp-unset", null)
                 },
                 ["tags"] = new JsonArray(),
                 ["categories"] = new JsonArray()
             });
 
-            var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot);
+            var host = LibraryCatalogHost.Open(appDataRoot);
+            var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot, host);
+            var builds = host.Session.DocumentBuilds;
             var response = service.ScanDuplicates(new DuplicateScanRequest());
 
-            Assert.Equal(0, response.ExcludedPending);
+            Assert.Equal(1, response.ExcludedPending);
             Assert.Equal(1, response.ExcludedFailed);
             Assert.Equal(1, response.ExcludedStale);
-            Assert.Equal(2, response.Groups.Count);
-            var scannedIds = response.Groups.SelectMany(group => group.Items.Select(item => item.ItemId)).ToHashSet(StringComparer.Ordinal);
-            Assert.Equal(["legacy-a", "legacy-b", "ready-a", "ready-b"], scannedIds.OrderBy(id => id, StringComparer.Ordinal).ToArray());
+            var group = Assert.Single(response.Groups);
+            Assert.Equal(["ready-a", "ready-b"], group.Items.Select(item => item.ItemId).ToArray());
+            var ready = group.Items[0];
+            Assert.True(ready.IsFavorite);
+            Assert.Equal(4, ready.PlayCount);
+            Assert.Equal(2, ready.TagCount);
+            Assert.Equal(builds, host.Session.DocumentBuilds);
         }
         finally
         {
@@ -1430,7 +1512,64 @@ public sealed class LibraryOperationsServiceTests
         }
     }
 
-    private static JsonObject Item(string id, string fullPath, string? fingerprint, string? fingerprintStatus)
+    [Fact]
+    public void ScanDuplicates_ScopeFollowsCurrentSourceAndEnabledSources()
+    {
+        var appDataRoot = CreateTempAppDataRoot();
+        try
+        {
+            SeedLibrary(appDataRoot, new JsonObject
+            {
+                ["sources"] = new JsonArray
+                {
+                    new JsonObject { ["id"] = "src-on", ["rootPath"] = "/media/on", ["isEnabled"] = true },
+                    new JsonObject { ["id"] = "src-off", ["rootPath"] = "/media/off", ["isEnabled"] = false }
+                },
+                ["items"] = new JsonArray
+                {
+                    Item("on-a", "/media/on/a.mp4", "fp-on", 1, "src-on"),
+                    Item("on-b", "/media/on/b.mp4", "fp-on", 1, "src-on"),
+                    Item("on-pending", "/media/on/pending.mp4", "fp-pending", 0, "src-on"),
+                    Item("off-a", "/media/off/a.mp4", "fp-off", 1, "src-off"),
+                    Item("off-b", "/media/off/b.mp4", "fp-off", 1, "src-off"),
+                    Item("off-stale", "/media/off/stale.mp4", "fp-stale", 3, "src-off")
+                },
+                ["tags"] = new JsonArray(),
+                ["categories"] = new JsonArray()
+            });
+
+            var host = LibraryCatalogHost.Open(appDataRoot);
+            var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot, host);
+            var builds = host.Session.DocumentBuilds;
+
+            var current = service.ScanDuplicates(new DuplicateScanRequest { Scope = "CurrentSource", SourceId = "SRC-ON" });
+            var currentGroup = Assert.Single(current.Groups);
+            Assert.Equal(["on-a", "on-b"], currentGroup.Items.Select(item => item.ItemId).ToArray());
+            Assert.Equal(1, current.ExcludedPending);
+            Assert.Equal(0, current.ExcludedStale);
+
+            var enabled = service.ScanDuplicates(new DuplicateScanRequest { Scope = "AllEnabledSources" });
+            var enabledGroup = Assert.Single(enabled.Groups);
+            Assert.Equal(["on-a", "on-b"], enabledGroup.Items.Select(item => item.ItemId).ToArray());
+            Assert.Equal(1, enabled.ExcludedPending);
+            Assert.Equal(0, enabled.ExcludedStale);
+
+            var all = service.ScanDuplicates(new DuplicateScanRequest { Scope = "AllSources" });
+            Assert.Equal(2, all.Groups.Count);
+            Assert.Equal(1, all.ExcludedPending);
+            Assert.Equal(1, all.ExcludedStale);
+            Assert.Equal(builds, host.Session.DocumentBuilds);
+        }
+        finally
+        {
+            if (Directory.Exists(appDataRoot))
+            {
+                Directory.Delete(appDataRoot, recursive: true);
+            }
+        }
+    }
+
+    private static JsonObject Item(string id, string fullPath, string? fingerprint, int? fingerprintStatus, string? sourceId = null)
     {
         var item = new JsonObject
         {
@@ -1440,6 +1579,11 @@ public sealed class LibraryOperationsServiceTests
             ["fingerprintAlgorithm"] = "SHA-256",
             ["fingerprintVersion"] = 1
         };
+        if (sourceId != null)
+        {
+            item["sourceId"] = sourceId;
+        }
+
         if (fingerprint != null)
         {
             item["fingerprint"] = fingerprint;

@@ -19,8 +19,8 @@ Instructions:
 
 Commit Message:
 
-M10i10: Read library stats and item state without the full catalog
+M10i11: Scan auto-tags and duplicates without the full catalog
 
-- Answer library stats with SQL aggregates that keep the current global and per-source figures.
-- Return item state only for the requested paths, and return nothing when that list is empty.
-- Stop WebUI resync from posting an item-state read with an empty path list.
+- Match auto-tag suggestions from catalog rows, with the same full-library, enabled-source, and explicit-path rules.
+- Group ready duplicate fingerprints, and keep pending, failed, and stale fingerprints out.
+- Delete non-kept duplicate files and catalog rows without loading the full catalog.

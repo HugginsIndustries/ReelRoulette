@@ -207,6 +207,7 @@ Use `pwsh ./tools/scripts/reset-checklist.ps1` to reset metadata/check states be
 - [ ] Clear stats with no selection clears played items across the library and does not change favorites or blacklist.
 - [ ] WebUI in Firefox reloads and stays connected, including several reloads in a row. An installed home-screen app still opens.
 - [ ] Library stats still show the same global and per-source totals. An item-state read for a path returns that item, and an empty path list returns nothing. WebUI resync does not request item state with an empty path list.
+- [ ] Auto-tag scan and duplicate scan read catalog rows and do not load the full library. Full-library scan still scans every item and ignores a path list. A scan with full library off and no path list still scans enabled sources only. An explicit path list still matches those files. Duplicate groups include only ready fingerprints. Pending, failed, and stale fingerprints stay out. Applying a duplicate choice deletes the other files and catalog rows and leaves the kept item. A missing file is reported and that row stays.
 
 ## Optional Release Flow
 

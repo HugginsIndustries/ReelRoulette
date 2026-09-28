@@ -226,6 +226,179 @@ public sealed class LibraryCatalogSession
         return items;
     }
 
+    public IReadOnlyList<string> ReadAutoTagNames()
+    {
+        using var connection = LibraryCatalogStore.OpenWrite(_databasePath);
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT name FROM tags ORDER BY position;";
+        using var reader = command.ExecuteReader();
+        var names = new List<string>();
+        while (reader.Read())
+        {
+            if (!reader.IsDBNull(0))
+            {
+                names.Add(reader.GetString(0));
+            }
+        }
+
+        return names;
+    }
+
+    public IReadOnlyList<CatalogAutoTagScanItem> ReadAutoTagScanItems(CatalogAutoTagScanScope scope, IReadOnlyList<string>? paths)
+    {
+        using var connection = LibraryCatalogStore.OpenWrite(_databasePath);
+        List<CatalogAutoTagScanItem> items;
+        if (scope == CatalogAutoTagScanScope.Paths)
+        {
+            items = ReadAutoTagItemsByPaths(connection, paths);
+        }
+        else
+        {
+            using var command = connection.CreateCommand();
+            command.CommandText = scope == CatalogAutoTagScanScope.EnabledSources
+                ? """
+                  SELECT items.id, items.full_path, items.relative_path, items.file_name
+                  FROM items
+                  WHERE EXISTS (
+                      SELECT 1 FROM sources
+                      WHERE sources.is_enabled != 0
+                        AND sources.id = items.source_id COLLATE NOCASE)
+                  ORDER BY items.position
+                  """
+                : """
+                  SELECT id, full_path, relative_path, file_name
+                  FROM items
+                  ORDER BY position
+                  """;
+            items = ReadAutoTagItems(command);
+        }
+
+        if (items.Count == 0)
+        {
+            return items;
+        }
+
+        var tags = scope == CatalogAutoTagScanScope.Paths
+            ? ReadTagsForItems(connection, items.Select(item => item.Id).ToList())
+            : ReadAllItemTags(connection);
+        foreach (var item in items)
+        {
+            if (tags.TryGetValue(item.Id, out var names))
+            {
+                item.Tags.AddRange(names);
+            }
+        }
+
+        return items;
+    }
+
+    public IReadOnlyList<CatalogDuplicateScanItem> ReadDuplicateScanItems(CatalogDuplicateScanScope scope, string? sourceId)
+    {
+        using var connection = LibraryCatalogStore.OpenWrite(_databasePath);
+        using var command = connection.CreateCommand();
+        var where = scope switch
+        {
+            CatalogDuplicateScanScope.EnabledSources => """
+                WHERE EXISTS (
+                    SELECT 1 FROM sources
+                    WHERE sources.is_enabled != 0
+                      AND sources.id = items.source_id COLLATE NOCASE)
+                """,
+            CatalogDuplicateScanScope.Source => "WHERE items.source_id = $source COLLATE NOCASE",
+            _ => string.Empty
+        };
+        if (scope == CatalogDuplicateScanScope.Source)
+        {
+            command.Parameters.AddWithValue("$source", sourceId ?? string.Empty);
+        }
+
+        command.CommandText = $"""
+            SELECT items.id, items.full_path, items.source_id, items.fingerprint, items.fingerprint_status,
+                   items.is_favorite, items.is_blacklisted, items.play_count,
+                   (SELECT COUNT(*) FROM item_tags WHERE item_tags.item_id = items.id)
+            FROM items
+            {where}
+            ORDER BY items.position
+            """;
+        using var reader = command.ExecuteReader();
+        var items = new List<CatalogDuplicateScanItem>();
+        while (reader.Read())
+        {
+            var fingerprint = reader.IsDBNull(3) ? null : reader.GetString(3).Trim();
+            items.Add(new CatalogDuplicateScanItem
+            {
+                Id = reader.GetString(0),
+                FullPath = reader.GetString(1),
+                SourceId = reader.GetString(2),
+                Fingerprint = string.IsNullOrEmpty(fingerprint) ? null : fingerprint,
+                FingerprintStatus = reader.IsDBNull(4) ? null : reader.GetInt32(4),
+                IsFavorite = reader.GetInt32(5) != 0,
+                IsBlacklisted = reader.GetInt32(6) != 0,
+                PlayCount = reader.GetInt32(7),
+                TagCount = Convert.ToInt32(reader.GetInt64(8), CultureInfo.InvariantCulture)
+            });
+        }
+
+        return items;
+    }
+
+    public IReadOnlyList<CatalogStoredItem> ReadItemsByIds(IReadOnlyList<string> ids)
+    {
+        var requested = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var id in ids)
+        {
+            if (string.IsNullOrWhiteSpace(id))
+            {
+                continue;
+            }
+
+            var trimmed = id.Trim();
+            if (seen.Add(trimmed))
+            {
+                requested.Add(trimmed);
+            }
+        }
+
+        if (requested.Count == 0)
+        {
+            return [];
+        }
+
+        using var connection = LibraryCatalogStore.OpenWrite(_databasePath);
+        var rows = new List<(int Position, CatalogStoredItem Item)>();
+        for (var offset = 0; offset < requested.Count; offset += ItemStatePathChunk)
+        {
+            var count = Math.Min(ItemStatePathChunk, requested.Count - offset);
+            using var command = connection.CreateCommand();
+            var parameters = new string[count];
+            for (var index = 0; index < count; index++)
+            {
+                var name = "$p" + index.ToString(CultureInfo.InvariantCulture);
+                parameters[index] = name;
+                command.Parameters.AddWithValue(name, requested[offset + index]);
+            }
+
+            command.CommandText = $"""
+                SELECT id, full_path, position
+                FROM items
+                WHERE id COLLATE NOCASE IN ({string.Join(", ", parameters)});
+                """;
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                rows.Add((reader.GetInt32(2), new CatalogStoredItem
+                {
+                    Id = reader.GetString(0),
+                    FullPath = reader.GetString(1)
+                }));
+            }
+        }
+
+        rows.Sort((left, right) => left.Position.CompareTo(right.Position));
+        return rows.Select(row => row.Item).ToList();
+    }
+
     public static JsonObject ToItemJson(LibraryCatalogItem item) => ToItem(item);
 
     public void RunInTransaction(Action work)
@@ -1718,6 +1891,132 @@ public sealed class LibraryCatalogSession
         return value is long count ? (int)count : Convert.ToInt32(value, CultureInfo.InvariantCulture);
     }
 
+    private static List<CatalogAutoTagScanItem> ReadAutoTagItemsByPaths(SqliteConnection connection, IReadOnlyList<string>? paths)
+    {
+        var folds = new List<string>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var path in paths ?? [])
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                continue;
+            }
+
+            var fold = LibraryCatalogStore.Fold(path);
+            if (seen.Add(fold))
+            {
+                folds.Add(fold);
+            }
+        }
+
+        var rows = new List<(int Position, CatalogAutoTagScanItem Item)>();
+        for (var offset = 0; offset < folds.Count; offset += ItemStatePathChunk)
+        {
+            var count = Math.Min(ItemStatePathChunk, folds.Count - offset);
+            using var command = connection.CreateCommand();
+            var parameters = new string[count];
+            for (var index = 0; index < count; index++)
+            {
+                var name = "$p" + index.ToString(CultureInfo.InvariantCulture);
+                parameters[index] = name;
+                command.Parameters.AddWithValue(name, folds[offset + index]);
+            }
+
+            command.CommandText = $"""
+                SELECT id, full_path, relative_path, file_name, position
+                FROM items
+                WHERE full_path_fold IN ({string.Join(", ", parameters)});
+                """;
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                rows.Add((reader.GetInt32(4), ReadAutoTagItem(reader)));
+            }
+        }
+
+        rows.Sort((left, right) => left.Position.CompareTo(right.Position));
+        return rows.Select(row => row.Item).ToList();
+    }
+
+    private static List<CatalogAutoTagScanItem> ReadAutoTagItems(SqliteCommand command)
+    {
+        using var reader = command.ExecuteReader();
+        var items = new List<CatalogAutoTagScanItem>();
+        while (reader.Read())
+        {
+            items.Add(ReadAutoTagItem(reader));
+        }
+
+        return items;
+    }
+
+    private static CatalogAutoTagScanItem ReadAutoTagItem(SqliteDataReader reader)
+    {
+        return new CatalogAutoTagScanItem
+        {
+            Id = reader.GetString(0),
+            FullPath = reader.GetString(1),
+            RelativePath = reader.GetString(2),
+            FileName = reader.GetString(3)
+        };
+    }
+
+    private static Dictionary<string, List<string>> ReadAllItemTags(SqliteConnection connection)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT item_id, name FROM item_tags ORDER BY item_id, position;";
+        return ReadTagGroups(command);
+    }
+
+    private static Dictionary<string, List<string>> ReadTagsForItems(SqliteConnection connection, IReadOnlyList<string> itemIds)
+    {
+        var tags = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+        for (var offset = 0; offset < itemIds.Count; offset += ItemStatePathChunk)
+        {
+            var count = Math.Min(ItemStatePathChunk, itemIds.Count - offset);
+            using var command = connection.CreateCommand();
+            var parameters = new string[count];
+            for (var index = 0; index < count; index++)
+            {
+                var name = "$p" + index.ToString(CultureInfo.InvariantCulture);
+                parameters[index] = name;
+                command.Parameters.AddWithValue(name, itemIds[offset + index]);
+            }
+
+            command.CommandText = $"""
+                SELECT item_id, name
+                FROM item_tags
+                WHERE item_id IN ({string.Join(", ", parameters)})
+                ORDER BY item_id, position;
+                """;
+            foreach (var pair in ReadTagGroups(command))
+            {
+                tags[pair.Key] = pair.Value;
+            }
+        }
+
+        return tags;
+    }
+
+    private static Dictionary<string, List<string>> ReadTagGroups(SqliteCommand command)
+    {
+        var tags = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+        using var reader = command.ExecuteReader();
+        while (reader.Read())
+        {
+            var itemId = reader.GetString(0);
+            if (!tags.TryGetValue(itemId, out var names))
+            {
+                names = [];
+                tags[itemId] = names;
+            }
+
+            names.Add(reader.GetString(1));
+        }
+
+        return tags;
+    }
+
     private static List<LibraryCatalogTag> ReadCatalogTags(SqliteConnection connection)
     {
         using var command = connection.CreateCommand();
@@ -2232,6 +2531,48 @@ public sealed class CatalogPlaybackItem
     public bool IsFavorite { get; init; }
     public bool IsBlacklisted { get; init; }
     public bool IsSourceEnabled { get; init; }
+}
+
+public enum CatalogAutoTagScanScope
+{
+    All,
+    EnabledSources,
+    Paths
+}
+
+public enum CatalogDuplicateScanScope
+{
+    All,
+    EnabledSources,
+    Source
+}
+
+public sealed class CatalogAutoTagScanItem
+{
+    public string Id { get; init; } = string.Empty;
+    public string FullPath { get; init; } = string.Empty;
+    public string RelativePath { get; init; } = string.Empty;
+    public string FileName { get; init; } = string.Empty;
+    public List<string> Tags { get; init; } = [];
+}
+
+public sealed class CatalogDuplicateScanItem
+{
+    public string Id { get; init; } = string.Empty;
+    public string FullPath { get; init; } = string.Empty;
+    public string SourceId { get; init; } = string.Empty;
+    public string? Fingerprint { get; init; }
+    public int? FingerprintStatus { get; init; }
+    public bool IsFavorite { get; init; }
+    public bool IsBlacklisted { get; init; }
+    public int PlayCount { get; init; }
+    public int TagCount { get; init; }
+}
+
+public sealed class CatalogStoredItem
+{
+    public string Id { get; init; } = string.Empty;
+    public string FullPath { get; init; } = string.Empty;
 }
 
 public sealed class CatalogAutoTagAssignment

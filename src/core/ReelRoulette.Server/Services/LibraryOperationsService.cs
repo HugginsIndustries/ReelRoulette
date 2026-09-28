@@ -559,42 +559,31 @@ public sealed class LibraryOperationsService
     {
         lock (_lock)
         {
-            var root = LoadLibraryRoot();
-            var items = (root["items"] as JsonArray)?.OfType<JsonObject>().ToList() ?? [];
-            var sources = (root["sources"] as JsonArray)?.OfType<JsonObject>().ToList() ?? [];
-
-            IEnumerable<JsonObject> scopeItems = items;
+            CatalogDuplicateScanScope scope;
+            string? sourceId = null;
             if (request.Scope == "CurrentSource" && !string.IsNullOrWhiteSpace(request.SourceId))
             {
-                scopeItems = scopeItems.Where(item =>
-                    string.Equals(GetNodeString(item["sourceId"]), request.SourceId, StringComparison.OrdinalIgnoreCase));
+                scope = CatalogDuplicateScanScope.Source;
+                sourceId = request.SourceId;
             }
             else if (request.Scope == "AllEnabledSources")
             {
-                var enabledIds = sources
-                    .Where(source => GetNodeBool(source["isEnabled"], defaultValue: true))
-                    .Select(source => GetNodeString(source["id"]))
-                    .Where(id => !string.IsNullOrWhiteSpace(id))
-                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
-                scopeItems = scopeItems.Where(item => enabledIds.Contains(GetNodeString(item["sourceId"])));
+                scope = CatalogDuplicateScanScope.EnabledSources;
+            }
+            else
+            {
+                scope = CatalogDuplicateScanScope.All;
             }
 
-            var list = scopeItems.ToList();
-            var excludedPending = list.Count(item => ReadFingerprintStatus(item["fingerprintStatus"]) == 0);
-            var excludedFailed = list.Count(item => ReadFingerprintStatus(item["fingerprintStatus"]) == 2);
-            var excludedStale = list.Count(item => ReadFingerprintStatus(item["fingerprintStatus"]) == 3);
-
-            var readyItems = list
-                .Where(IsFingerprintReadyForDuplicateScan)
-                .ToList();
-
-            var candidateItems = readyItems.Select(item => new FingerprintDuplicateItem
+            var list = _catalog.Session.ReadDuplicateScanItems(scope, sourceId);
+            var readyItems = list.Where(IsReadyFingerprint).ToList();
+            var readyById = readyItems.ToDictionary(item => item.Id, StringComparer.OrdinalIgnoreCase);
+            var groups = FingerprintDuplicateHelper.BuildExactDuplicateGroups(readyItems.Select(item => new FingerprintDuplicateItem
             {
-                ItemId = GetNodeString(item["id"]),
-                Fingerprint = GetNodeString(item["fingerprint"]),
+                ItemId = item.Id,
+                Fingerprint = item.Fingerprint ?? string.Empty,
                 IsReady = true
-            });
-            var groups = FingerprintDuplicateHelper.BuildExactDuplicateGroups(candidateItems);
+            }));
 
             var responseGroups = groups.Select(group =>
             {
@@ -605,22 +594,20 @@ public sealed class LibraryOperationsService
 
                 foreach (var itemId in group.ItemIds)
                 {
-                    var item = readyItems.FirstOrDefault(entry =>
-                        string.Equals(GetNodeString(entry["id"]), itemId, StringComparison.OrdinalIgnoreCase));
-                    if (item == null)
+                    if (!readyById.TryGetValue(itemId, out var item))
                     {
                         continue;
                     }
 
                     responseGroup.Items.Add(new DuplicateGroupItemResponse
                     {
-                        ItemId = itemId,
-                        FullPath = GetNodeString(item["fullPath"]),
-                        SourceId = GetNodeString(item["sourceId"]),
-                        IsFavorite = GetNodeBool(item["isFavorite"], defaultValue: false),
-                        IsBlacklisted = GetNodeBool(item["isBlacklisted"], defaultValue: false),
-                        PlayCount = GetNodeInt(item["playCount"], defaultValue: 0),
-                        TagCount = (item["tags"] as JsonArray)?.Count ?? 0
+                        ItemId = item.Id,
+                        FullPath = item.FullPath,
+                        SourceId = item.SourceId,
+                        IsFavorite = item.IsFavorite,
+                        IsBlacklisted = item.IsBlacklisted,
+                        PlayCount = item.PlayCount,
+                        TagCount = item.TagCount
                     });
                 }
 
@@ -630,9 +617,9 @@ public sealed class LibraryOperationsService
             return new DuplicateScanResponse
             {
                 Groups = responseGroups,
-                ExcludedPending = excludedPending,
-                ExcludedFailed = excludedFailed,
-                ExcludedStale = excludedStale
+                ExcludedPending = list.Count(item => item.FingerprintStatus == 0),
+                ExcludedFailed = list.Count(item => item.FingerprintStatus == 2),
+                ExcludedStale = list.Count(item => item.FingerprintStatus == 3)
             };
         }
     }
@@ -647,10 +634,6 @@ public sealed class LibraryOperationsService
 
         lock (_lock)
         {
-            var root = LoadLibraryRoot();
-            var items = EnsureArray(root, "items");
-            var itemNodes = items.OfType<JsonObject>().ToList();
-
             foreach (var selection in request.Selections)
             {
                 if (string.IsNullOrWhiteSpace(selection.KeepItemId) || selection.ItemIds.Count == 0)
@@ -658,49 +641,43 @@ public sealed class LibraryOperationsService
                     continue;
                 }
 
-                var matched = itemNodes.Where(item =>
-                    selection.ItemIds.Any(id => string.Equals(id, item["id"]?.GetValue<string>(), StringComparison.OrdinalIgnoreCase)))
-                    .ToList();
-                var keep = matched.FirstOrDefault(item =>
-                    string.Equals(item["id"]?.GetValue<string>(), selection.KeepItemId, StringComparison.OrdinalIgnoreCase));
-                if (keep == null)
+                var matched = _catalog.Session.ReadItemsByIds(selection.ItemIds);
+                if (!matched.Any(item => string.Equals(item.Id, selection.KeepItemId, StringComparison.OrdinalIgnoreCase)))
                 {
                     continue;
                 }
 
                 foreach (var item in matched)
                 {
-                    var itemId = item["id"]?.GetValue<string>() ?? string.Empty;
-                    if (string.Equals(itemId, selection.KeepItemId, StringComparison.OrdinalIgnoreCase))
+                    if (string.Equals(item.Id, selection.KeepItemId, StringComparison.OrdinalIgnoreCase))
                     {
                         continue;
                     }
 
-                    var fullPath = item["fullPath"]?.GetValue<string>() ?? string.Empty;
                     try
                     {
-                        if (File.Exists(fullPath))
+                        if (File.Exists(item.FullPath))
                         {
-                            File.Delete(fullPath);
+                            File.Delete(item.FullPath);
                             response.DeletedOnDisk++;
                         }
                         else
                         {
-                            response.Failures.Add(new DuplicateApplyFailure { FullPath = fullPath, Reason = "File not found" });
+                            response.Failures.Add(new DuplicateApplyFailure { FullPath = item.FullPath, Reason = "File not found" });
                             continue;
                         }
 
-                        items.Remove(item);
-                        response.RemovedFromLibrary++;
+                        if (_catalog.Session.DeleteItem(item.Id))
+                        {
+                            response.RemovedFromLibrary++;
+                        }
                     }
                     catch (Exception ex)
                     {
-                        response.Failures.Add(new DuplicateApplyFailure { FullPath = fullPath, Reason = ex.Message });
+                        response.Failures.Add(new DuplicateApplyFailure { FullPath = item.FullPath, Reason = ex.Message });
                     }
                 }
             }
-
-            SaveLibraryRoot(root);
         }
 
         return response;
@@ -710,40 +687,28 @@ public sealed class LibraryOperationsService
     {
         lock (_lock)
         {
-            var root = LoadLibraryRoot();
-            var tags = (root["tags"] as JsonArray)?.OfType<JsonObject>()
-                .Select(tag => tag["name"]?.GetValue<string>()?.Trim())
+            var tags = _catalog.Session.ReadAutoTagNames()
+                .Select(name => name.Trim())
                 .Where(name => !string.IsNullOrWhiteSpace(name))
-                .Select(name => name!)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
-                .ToList() ?? [];
+                .ToList();
 
-            var allItems = (root["items"] as JsonArray)?.OfType<JsonObject>().ToList() ?? [];
-            var selectedSet = (request.ItemIds ?? [])
-                .Where(id => !string.IsNullOrWhiteSpace(id))
-                .ToHashSet(StringComparer.OrdinalIgnoreCase);
-            List<JsonObject> scanItems;
+            var selectedPaths = (request.ItemIds ?? [])
+                .Where(path => !string.IsNullOrWhiteSpace(path))
+                .ToList();
+            IReadOnlyList<CatalogAutoTagScanItem> scanItems;
             if (request.ScanFullLibrary)
             {
-                scanItems = allItems;
+                scanItems = _catalog.Session.ReadAutoTagScanItems(CatalogAutoTagScanScope.All, null);
             }
-            else if (selectedSet.Count == 0)
+            else if (selectedPaths.Count == 0)
             {
-                var enabledSourceIds = (root["sources"] as JsonArray)?.OfType<JsonObject>()
-                    .Where(source => source["isEnabled"]?.GetValue<bool?>() ?? true)
-                    .Select(source => source["id"]?.GetValue<string>() ?? string.Empty)
-                    .Where(id => !string.IsNullOrWhiteSpace(id))
-                    .ToHashSet(StringComparer.OrdinalIgnoreCase) ?? [];
-                scanItems = allItems
-                    .Where(item => enabledSourceIds.Contains(item["sourceId"]?.GetValue<string>() ?? string.Empty))
-                    .ToList();
+                scanItems = _catalog.Session.ReadAutoTagScanItems(CatalogAutoTagScanScope.EnabledSources, null);
             }
             else
             {
-                scanItems = allItems
-                    .Where(item => selectedSet.Contains(item["fullPath"]?.GetValue<string>() ?? string.Empty))
-                    .ToList();
+                scanItems = _catalog.Session.ReadAutoTagScanItems(CatalogAutoTagScanScope.Paths, selectedPaths);
             }
 
             var response = new AutoTagScanResponse();
@@ -766,16 +731,15 @@ public sealed class LibraryOperationsService
 
                 foreach (var item in matches)
                 {
-                    var fullPath = item["fullPath"]?.GetValue<string>() ?? string.Empty;
-                    if (string.IsNullOrWhiteSpace(fullPath))
+                    if (string.IsNullOrWhiteSpace(item.FullPath))
                     {
                         continue;
                     }
 
                     row.Files.Add(new AutoTagMatchedFileResponse
                     {
-                        FullPath = fullPath,
-                        DisplayPath = item["relativePath"]?.GetValue<string>() ?? fullPath,
+                        FullPath = item.FullPath,
+                        DisplayPath = item.RelativePath,
                         NeedsChange = !ItemHasTag(item, tagName)
                     });
                 }
@@ -948,17 +912,20 @@ public sealed class LibraryOperationsService
     private static string GetRelativePath(string rootPath, string fullPath) =>
         ReelRoulette.Core.Storage.LibraryRelativePath.GetRelativePath(rootPath, fullPath);
 
-    private static bool ItemMatchesTag(JsonObject item, string tagName)
+    private static bool IsReadyFingerprint(CatalogDuplicateScanItem item) =>
+        item.FingerprintStatus == 1 && !string.IsNullOrWhiteSpace(item.Fingerprint);
+
+    private static bool ItemMatchesTag(CatalogAutoTagScanItem item, string tagName)
     {
         if (string.IsNullOrWhiteSpace(tagName))
         {
             return false;
         }
 
-        var fileName = item["fileName"]?.GetValue<string>() ?? string.Empty;
+        var fileName = item.FileName;
         if (string.IsNullOrWhiteSpace(fileName))
         {
-            fileName = Path.GetFileName(item["fullPath"]?.GetValue<string>() ?? string.Empty);
+            fileName = Path.GetFileName(item.FullPath);
         }
 
         var fileNameWithoutExtension = Path.GetFileNameWithoutExtension(fileName);
@@ -968,27 +935,18 @@ public sealed class LibraryOperationsService
             return true;
         }
 
-        var relativePath = item["relativePath"]?.GetValue<string>() ?? string.Empty;
-        if (!string.IsNullOrWhiteSpace(relativePath) &&
-            relativePath.Replace('\\', '/').Contains(tagName, StringComparison.OrdinalIgnoreCase))
+        if (!string.IsNullOrWhiteSpace(item.RelativePath) &&
+            item.RelativePath.Replace('\\', '/').Contains(tagName, StringComparison.OrdinalIgnoreCase))
         {
             return true;
         }
 
-        var fullPath = item["fullPath"]?.GetValue<string>() ?? string.Empty;
-        return !string.IsNullOrWhiteSpace(fullPath) &&
-               fullPath.Replace('\\', '/').Contains(tagName, StringComparison.OrdinalIgnoreCase);
+        return !string.IsNullOrWhiteSpace(item.FullPath) &&
+               item.FullPath.Replace('\\', '/').Contains(tagName, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static bool ItemHasTag(JsonObject item, string tagName)
-    {
-        if (item["tags"] is not JsonArray tags)
-        {
-            return false;
-        }
-
-        return tags.Any(tag => string.Equals(tag?.GetValue<string>(), tagName, StringComparison.OrdinalIgnoreCase));
-    }
+    private static bool ItemHasTag(CatalogAutoTagScanItem item, string tagName) =>
+        item.Tags.Any(tag => string.Equals(tag, tagName, StringComparison.OrdinalIgnoreCase));
 
     private static string GetNodeString(JsonNode? node)
     {
@@ -1039,95 +997,6 @@ public sealed class LibraryOperationsService
 
             return defaultValue;
         }
-    }
-
-    private static int GetNodeInt(JsonNode? node, int defaultValue)
-    {
-        if (node is null)
-        {
-            return defaultValue;
-        }
-
-        try
-        {
-            return node.GetValue<int>();
-        }
-        catch
-        {
-            var text = GetNodeString(node);
-            if (int.TryParse(text, out var parsedInt))
-            {
-                return parsedInt;
-            }
-
-            if (long.TryParse(text, out var parsedLong))
-            {
-                return (int)Math.Clamp(parsedLong, int.MinValue, int.MaxValue);
-            }
-
-            return defaultValue;
-        }
-    }
-
-    private static int? ReadFingerprintStatus(JsonNode? node)
-    {
-        if (node is null)
-        {
-            return null;
-        }
-
-        if (node is JsonValue value && value.TryGetValue<int>(out var number))
-        {
-            return number;
-        }
-
-        var text = GetNodeString(node);
-        if (text.Equals("Pending", StringComparison.OrdinalIgnoreCase))
-        {
-            return 0;
-        }
-
-        if (text.Equals("Ready", StringComparison.OrdinalIgnoreCase))
-        {
-            return 1;
-        }
-
-        if (text.Equals("Failed", StringComparison.OrdinalIgnoreCase))
-        {
-            return 2;
-        }
-
-        if (text.Equals("Stale", StringComparison.OrdinalIgnoreCase))
-        {
-            return 3;
-        }
-
-        return null;
-    }
-
-    private static bool IsFingerprintReadyForDuplicateScan(JsonObject item)
-    {
-        var fingerprint = GetNodeString(item["fingerprint"]);
-        if (string.IsNullOrWhiteSpace(fingerprint))
-        {
-            return false;
-        }
-
-        var status = ReadFingerprintStatus(item["fingerprintStatus"]);
-        if (status is 0 or 2 or 3)
-        {
-            return false;
-        }
-
-        if (status == 1)
-        {
-            return true;
-        }
-
-        // Backward-compat path for legacy libraries that predate fingerprintStatus.
-        var algorithm = GetNodeString(item["fingerprintAlgorithm"]);
-        var version = GetNodeInt(item["fingerprintVersion"], defaultValue: 1);
-        return string.Equals(algorithm, "SHA-256", StringComparison.OrdinalIgnoreCase) && version == 1;
     }
 
     private LibraryStateResponse? UpdateItemFlag(string identifier, Action update)

@@ -11,6 +11,7 @@ Write **[Unreleased]** bullets at the same level as the released sections below.
 
 ### Changed
 
+- **Auto-tag and duplicate scans:** Auto-tag scan and duplicate scan read catalog rows and do not load the whole library. Full-library, enabled-source, and explicit-path scans stay the same. Duplicate groups include only ready fingerprints. Applying a duplicate choice still deletes the other files and catalog rows and leaves the kept item.
 - **Library stats and item state:** Library stats and an item-state read for specific files no longer load the whole library. An empty item-state request returns nothing. WebUI resync reloads the library list and no longer asks for item state with an empty path list.
 - **Random and direct play:** Random play uses the same filter as the library list, including enabled sources and the request's video or photo options, and does not reload the whole library after a favorite, playback, or tag change. Playing one item reads that item only. An empty match still returns no item.
 - **Favorite, blacklist, and playback:** Setting a favorite, setting a blacklist flag, recording a playback, and clearing playback stats update that catalog row and do not wait on a full library load. A favorite still clears blacklist, and a blacklist still clears favorite. Clearing stats with no selection clears every played item. A selection clears only those items.

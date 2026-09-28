@@ -89,29 +89,7 @@ Do not use this file for detailed architecture explanation or current capability
 
 ## Active Milestones
 
-Last milestone completed: M10i10
-
-### M10i11 - Auto-Tag and Duplicate Scans
-
-- **Status**: ⏳ Planned
-- **Goal**: Run auto-tag scan, duplicate scan, and duplicate apply without loading the full catalog document.
-- **Scope**:
-  - Depends on: catalog stats and item-state reads.
-  - Auto-tag scan matches tags to items without building the catalog document. `scanFullLibrary: true` still scans every item and ignores a path list. `scanFullLibrary: false` with no list still scans enabled sources only. An explicit list still matches full paths.
-  - Duplicate scan groups ready fingerprints without building the catalog document. Pending, failed, and stale fingerprints stay excluded, matching the current scan.
-  - Duplicate apply removes the non-kept items from the catalog with the existing item delete and still deletes those files on disk. It does not load the full catalog document. The kept item stays.
-  - Update the testing checklist and current-state docs.
-- **Acceptance criteria**:
-  - Auto-tag scan, duplicate scan, and duplicate apply do not load or diff the full catalog document.
-  - Auto-tag scan scope matches today's full-library, enabled-source, and explicit-path rules.
-  - Duplicate groups match today's ready-fingerprint grouping, including the pending, failed, and stale exclusions.
-  - Duplicate apply deletes the non-kept files and catalog rows and leaves the kept item in place.
-  - Docs and the testing checklist describe these scans as query-backed.
-- **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include tests for auto-tag scan scope, duplicate grouping and exclusions, and duplicate apply deleting non-kept rows and files, all without a full-document load.
-  - Docs evidence must include current-state and checklist updates for these scans.
-- **Deferrals / Follow-ups**:
-  - The desktop full-catalog download, source folder import, refresh, and catalog export stay on their current paths until their own slices.
+Last milestone completed: M10i11
 
 ### M10i12 - Desktop Full-Catalog Projection Removal
 
@@ -1301,6 +1279,28 @@ Last milestone completed: M10i10
 ## Completed Milestones
 
 Latest completions first:
+
+### M10i11 - Auto-Tag and Duplicate Scans
+
+- **Status**: ✅ Complete
+- **Goal**: Run auto-tag scan, duplicate scan, and duplicate apply without loading the full catalog document.
+- **Scope**:
+  - Depends on: catalog stats and item-state reads.
+  - Auto-tag scan matches tags to items without building the catalog document. `scanFullLibrary: true` still scans every item and ignores a path list. `scanFullLibrary: false` with no list still scans enabled sources only. An explicit list still matches full paths.
+  - Duplicate scan groups items whose fingerprint status is ready and whose fingerprint is set, without building the catalog document. Pending, failed, and stale fingerprints stay excluded. A missing fingerprint status is not treated as ready.
+  - Duplicate apply removes the non-kept items from the catalog with the existing item delete and still deletes those files on disk. It does not load the full catalog document. The kept item stays.
+  - Update the testing checklist and current-state docs.
+- **Acceptance criteria**:
+  - Auto-tag scan, duplicate scan, and duplicate apply do not load or diff the full catalog document.
+  - Auto-tag scan scope matches today's full-library, enabled-source, and explicit-path rules.
+  - Duplicate groups are ready fingerprints only. Pending, failed, and stale stay excluded. A missing fingerprint status is not treated as ready.
+  - Duplicate apply deletes the non-kept files and catalog rows and leaves the kept item in place.
+  - Docs and the testing checklist describe these scans as query-backed.
+- **Verification evidence**:
+  - `dotnet build ReelRoulette.sln` — pass. `dotnet test ReelRoulette.sln` — pass (Core 219, Desktop 115). `ScanAutoTags_ScopeFollowsFullLibraryFlagAndPathList`: enabled sources return the filename match, the already-tagged file, and the relative-path match; a differently cased path matches that full path; full-library scan ignores the path list and includes a disabled source and an unknown source; the document build count stays put. `ScanAutoTags_WhenNoEnabledSourcesAndNoList_ScansNothing` returns no rows and does not build the document. `ScanDuplicates_HonorsIntegerFingerprintStatus`: one ready pair is grouped with favorite, play count, and tag count; pending, failed, and stale are excluded; two items with a fingerprint and no status are not grouped; the document build count stays put. `ScanDuplicates_ScopeFollowsCurrentSourceAndEnabledSources`: current source and enabled sources return the enabled pair and that source's pending exclusion; all sources also return the disabled pair and its stale exclusion; the document build count stays put. `ApplyDuplicateSelection_ShouldPersistRemovedItems_AndKeepProjectionParity`: a missing keep id deletes nothing; apply deletes the other file and row, reports a missing file and leaves that row, leaves the kept file and its favorite flag, and does not build the document.
+  - Docs: `CONTEXT.md`, `docs/api.md`, `docs/architecture.md`, `docs/domain-inventory.md`, `docs/checklists/testing-checklist.md`, and `CHANGELOG.md` [Unreleased].
+- **Deferrals / Follow-ups**:
+  - The desktop full-catalog download, source folder import, refresh, and catalog export stay on their current paths until their own slices.
 
 ### M10i10 - Catalog Stats and Item-State Reads
 
