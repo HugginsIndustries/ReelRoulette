@@ -555,6 +555,121 @@ public sealed class LibraryCatalogSessionTests
         Assert.Equal(["/clips/two.mp4"], dog.ChangedItemPaths);
     }
 
+    [Fact]
+    public void FavoriteBlacklistAndPlayback_PersistByIdOrPath_WithoutBuildingTheCatalogDocument()
+    {
+        using var dir = new TempDirectory();
+        var session = LibraryCatalogStore.Open(dir.Path).Session!;
+        var playedAt = new DateTime(2024, 1, 2, 3, 4, 5, DateTimeKind.Utc);
+        Assert.True(session.InsertItem(new LibraryCatalogItem
+        {
+            Id = "item-a",
+            FullPath = "/clips/a.mp4",
+            FileName = "a.mp4",
+            IsBlacklisted = true
+        }));
+        Assert.True(session.InsertItem(new LibraryCatalogItem
+        {
+            Id = "item-b",
+            FullPath = "/clips/b.mp4",
+            FileName = "b.mp4",
+            IsFavorite = true,
+            PlayCount = 4,
+            LastPlayedUtc = playedAt
+        }));
+        Assert.True(session.InsertItem(new LibraryCatalogItem
+        {
+            Id = "item-max",
+            FullPath = "/clips/max.mp4",
+            FileName = "max.mp4",
+            PlayCount = int.MaxValue
+        }));
+        Assert.True(session.InsertItem(new LibraryCatalogItem
+        {
+            Id = "item-time",
+            FullPath = "/clips/time.mp4",
+            FileName = "time.mp4",
+            LastPlayedUtc = playedAt
+        }));
+        Assert.True(session.InsertItem(new LibraryCatalogItem
+        {
+            Id = "item-clean",
+            FullPath = "/clips/clean.mp4",
+            FileName = "clean.mp4"
+        }));
+        var builds = session.DocumentBuilds;
+        var revision = session.Revision;
+
+        Assert.True(session.SetFavorite("/CLIPS/A.MP4", true));
+        var favorited = session.ReadItemState("item-a");
+        Assert.NotNull(favorited);
+        Assert.True(favorited!.IsFavorite);
+        Assert.False(favorited.IsBlacklisted);
+        Assert.Equal(revision + 1, session.Revision);
+        Assert.False(session.SetFavorite("/clips/a.mp4", true));
+        Assert.False(session.SetFavorite("missing", true));
+        Assert.Equal(revision + 1, session.Revision);
+
+        Assert.True(session.SetBlacklist("ITEM-B", true));
+        var blacklisted = session.ReadItemState("/clips/b.mp4");
+        Assert.NotNull(blacklisted);
+        Assert.True(blacklisted!.IsBlacklisted);
+        Assert.False(blacklisted.IsFavorite);
+        Assert.Equal(4, blacklisted.PlayCount);
+        Assert.True(session.SetBlacklist("item-b", false));
+        var blacklistCleared = session.ReadItemState("item-b");
+        Assert.False(blacklistCleared!.IsBlacklisted);
+        Assert.False(blacklistCleared.IsFavorite);
+        Assert.False(session.SetBlacklist("item-a", false));
+        Assert.True(session.ReadItemState("item-a")!.IsFavorite);
+
+        var beforePlay = DateTime.UtcNow;
+        var firstPlay = session.RecordPlayback("item-b");
+        var afterPlay = DateTime.UtcNow;
+        Assert.NotNull(firstPlay);
+        Assert.Equal("item-b", firstPlay!.Id);
+        Assert.Equal("/clips/b.mp4", firstPlay.FullPath);
+        Assert.Equal(5, firstPlay.PlayCount);
+        Assert.NotNull(firstPlay.LastPlayedUtc);
+        Assert.InRange(firstPlay.LastPlayedUtc!.Value, beforePlay.AddSeconds(-1), afterPlay.AddSeconds(1));
+        var secondPlay = session.RecordPlayback("/clips/b.mp4");
+        Assert.Equal(6, secondPlay!.PlayCount);
+        var saturated = session.RecordPlayback("ITEM-MAX");
+        Assert.NotNull(saturated);
+        Assert.Equal(int.MaxValue, saturated!.PlayCount);
+        Assert.NotNull(saturated.LastPlayedUtc);
+        Assert.Null(session.RecordPlayback("missing"));
+
+        var revisionBeforeClear = session.Revision;
+        Assert.Equal(0, session.ClearPlaybackStats(["missing"]));
+        Assert.Equal(revisionBeforeClear, session.Revision);
+        Assert.Equal(6, session.ReadItemState("item-b")!.PlayCount);
+        Assert.NotNull(session.ReadItemState("item-time")!.LastPlayedUtc);
+
+        Assert.Equal(1, session.ClearPlaybackStats(["/clips/b.mp4", "item-b", "missing"]));
+        var clearedB = session.ReadItemState("item-b");
+        Assert.Equal(0, clearedB!.PlayCount);
+        Assert.Null(clearedB.LastPlayedUtc);
+        Assert.Equal(int.MaxValue, session.ReadItemState("item-max")!.PlayCount);
+        Assert.NotNull(session.ReadItemState("item-time")!.LastPlayedUtc);
+        Assert.Equal(0, session.ReadItemState("item-clean")!.PlayCount);
+
+        Assert.Equal(2, session.ClearPlaybackStats(null));
+        Assert.Equal(0, session.ReadItemState("item-max")!.PlayCount);
+        Assert.Null(session.ReadItemState("item-max")!.LastPlayedUtc);
+        Assert.Equal(0, session.ReadItemState("item-time")!.PlayCount);
+        Assert.Null(session.ReadItemState("item-time")!.LastPlayedUtc);
+        Assert.True(session.ReadItemState("item-a")!.IsFavorite);
+        Assert.Equal(0, session.ReadItemState("item-clean")!.PlayCount);
+
+        var revisionAfterClear = session.Revision;
+        Assert.Equal(0, session.ClearPlaybackStats([]));
+        Assert.Equal(revisionAfterClear, session.Revision);
+        Assert.Equal(builds, session.DocumentBuilds);
+        _ = session.BuildDocument();
+        Assert.Equal(builds + 1, session.DocumentBuilds);
+    }
+
     private static string ReadUserVersion(string directory)
     {
         using var connection = new Microsoft.Data.Sqlite.SqliteConnection(new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder

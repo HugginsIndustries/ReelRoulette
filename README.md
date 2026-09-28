@@ -94,7 +94,7 @@ npm run dev
 
 - app icon: `assets/HI.ico` -> `public/HI.ico`
 - PWA / home-screen icons: `assets/HI-256.png` and `assets/HI-512.png` are resized with **`sharp`** (devDependency) into `public/icons/icon-192.png` (**192×192**), `public/icons/icon-512.png` (**512×512**), and `public/icons/apple-touch-icon.png` (**180×180**) so `manifest.webmanifest` `sizes` matches the PNGs
-- PWA installability on **Chromium/Android**: `public/sw.js` is a minimal root-scoped service worker (network-only `fetch`) registered from the client in secure contexts so **Install app** can yield a standalone shell together with `manifest.webmanifest`; the server serves `sw.js` with `Cache-Control: no-store` so updates are not stuck behind caching
+- PWA installability on **Chromium/Android**: `public/sw.js` is a minimal root-scoped service worker registered from the client in secure contexts so **Install app** can yield a standalone shell together with `manifest.webmanifest`. It intercepts document navigations only; API calls, the event stream, and media go straight to the server. The server serves `sw.js` with `Cache-Control: no-store` so updates are not stuck behind caching
 - Material Symbols font: `assets/fonts/MaterialSymbolsOutlined.var.ttf` -> `public/assets/fonts/MaterialSymbolsOutlined.var.ttf`
 
 ## Helper Scripts

@@ -356,24 +356,7 @@ public sealed class LibraryOperationsService
 
         lock (_lock)
         {
-            var root = LoadLibraryRoot();
-            var item = EnsureArray(root, "items")
-                .OfType<JsonObject>()
-                .FirstOrDefault(candidate =>
-                    string.Equals(GetNodeString(candidate["fullPath"]), path, StringComparison.OrdinalIgnoreCase));
-            if (item == null)
-            {
-                return null;
-            }
-
-            item["isFavorite"] = isFavorite;
-            if (isFavorite)
-            {
-                item["isBlacklisted"] = false;
-            }
-
-            SaveLibraryRoot(root);
-            return CreateLibraryStateResponse(item);
+            return UpdateItemFlag(path, () => _catalog.Session.SetFavorite(path, isFavorite));
         }
     }
 
@@ -386,24 +369,7 @@ public sealed class LibraryOperationsService
 
         lock (_lock)
         {
-            var root = LoadLibraryRoot();
-            var item = EnsureArray(root, "items")
-                .OfType<JsonObject>()
-                .FirstOrDefault(candidate =>
-                    string.Equals(GetNodeString(candidate["fullPath"]), path, StringComparison.OrdinalIgnoreCase));
-            if (item == null)
-            {
-                return null;
-            }
-
-            item["isBlacklisted"] = isBlacklisted;
-            if (isBlacklisted)
-            {
-                item["isFavorite"] = false;
-            }
-
-            SaveLibraryRoot(root);
-            return CreateLibraryStateResponse(item);
+            return UpdateItemFlag(path, () => _catalog.Session.SetBlacklist(path, isBlacklisted));
         }
     }
 
@@ -657,42 +623,9 @@ public sealed class LibraryOperationsService
     {
         lock (_lock)
         {
-            var root = LoadLibraryRoot();
-            var items = EnsureArray(root, "items").OfType<JsonObject>().ToList();
-            var targetPaths = (request.ItemPaths ?? [])
-                .Where(path => !string.IsNullOrWhiteSpace(path))
-                .ToHashSet(StringComparer.OrdinalIgnoreCase);
-            var clearAll = targetPaths.Count == 0;
-            var clearedCount = 0;
-
-            foreach (var item in items)
-            {
-                var fullPath = item["fullPath"]?.GetValue<string>() ?? string.Empty;
-                if (!clearAll && !targetPaths.Contains(fullPath))
-                {
-                    continue;
-                }
-
-                var playCount = item["playCount"]?.GetValue<int?>() ?? 0;
-                var hadLastPlayed = item["lastPlayedUtc"] is not null;
-                if (playCount == 0 && !hadLastPlayed)
-                {
-                    continue;
-                }
-
-                item["playCount"] = 0;
-                item["lastPlayedUtc"] = null;
-                clearedCount++;
-            }
-
-            if (clearedCount > 0)
-            {
-                SaveLibraryRoot(root);
-            }
-
             return new ClearPlaybackStatsResponse
             {
-                ClearedCount = clearedCount
+                ClearedCount = _catalog.Session.ClearPlaybackStats(request.ItemPaths)
             };
         }
     }
@@ -706,33 +639,17 @@ public sealed class LibraryOperationsService
 
         lock (_lock)
         {
-            var root = LoadLibraryRoot();
-            var item = EnsureArray(root, "items")
-                .OfType<JsonObject>()
-                .FirstOrDefault(candidate =>
-                    string.Equals(candidate["fullPath"]?.GetValue<string>(), path, StringComparison.OrdinalIgnoreCase));
-
-            if (item == null)
+            var recorded = _catalog.Session.RecordPlayback(path);
+            if (recorded == null)
             {
                 return new RecordPlaybackResult { Found = false };
             }
 
-            var nextPlayCount = GetNodeInt(item["playCount"], defaultValue: 0);
-            if (nextPlayCount < int.MaxValue)
-            {
-                nextPlayCount++;
-            }
-
-            var nowUtc = DateTime.UtcNow;
-            item["playCount"] = nextPlayCount;
-            item["lastPlayedUtc"] = nowUtc;
-            SaveLibraryRoot(root);
-
             return new RecordPlaybackResult
             {
                 Found = true,
-                PlayCount = nextPlayCount,
-                LastPlayedUtc = nowUtc
+                PlayCount = recorded.PlayCount,
+                LastPlayedUtc = recorded.LastPlayedUtc
             };
         }
     }
@@ -1468,6 +1385,30 @@ public sealed class LibraryOperationsService
         var algorithm = GetNodeString(item["fingerprintAlgorithm"]);
         var version = GetNodeInt(item["fingerprintVersion"], defaultValue: 1);
         return string.Equals(algorithm, "SHA-256", StringComparison.OrdinalIgnoreCase) && version == 1;
+    }
+
+    private LibraryStateResponse? UpdateItemFlag(string identifier, Action update)
+    {
+        var before = _catalog.Session.ReadItemState(identifier);
+        if (before == null)
+        {
+            return null;
+        }
+
+        update();
+        var after = _catalog.Session.ReadItemState(before.Id);
+        if (after == null)
+        {
+            return null;
+        }
+
+        return new LibraryStateResponse
+        {
+            ItemId = after.Id,
+            Path = after.FullPath,
+            IsFavorite = after.IsFavorite,
+            IsBlacklisted = after.IsBlacklisted
+        };
     }
 
     private static LibraryStateResponse CreateLibraryStateResponse(JsonObject item)

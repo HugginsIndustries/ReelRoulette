@@ -296,36 +296,66 @@ public sealed class LibraryCatalogSession
         });
     }
 
-    public bool SetFavorite(string id, bool isFavorite)
+    public bool SetFavorite(string identifier, bool isFavorite)
     {
+        if (string.IsNullOrWhiteSpace(identifier))
+        {
+            return false;
+        }
+
+        var favorite = isFavorite ? 1 : 0;
         return Commit((connection, transaction) =>
-            LibraryCatalogStore.Execute(
+        {
+            var id = ResolveItemId(connection, transaction, identifier);
+            if (id == null)
+            {
+                return false;
+            }
+
+            return LibraryCatalogStore.Execute(
                 connection,
                 transaction,
                 """
                 UPDATE items
                 SET is_favorite = $favorite,
                     is_blacklisted = CASE WHEN $favorite = 1 THEN 0 ELSE is_blacklisted END
-                WHERE id = $id;
+                WHERE id = $id
+                  AND (is_favorite != $favorite OR ($favorite = 1 AND is_blacklisted != 0));
                 """,
                 ("$id", id),
-                ("$favorite", isFavorite ? 1 : 0)) > 0);
+                ("$favorite", favorite)) > 0;
+        });
     }
 
-    public bool SetBlacklist(string id, bool isBlacklisted)
+    public bool SetBlacklist(string identifier, bool isBlacklisted)
     {
+        if (string.IsNullOrWhiteSpace(identifier))
+        {
+            return false;
+        }
+
+        var blacklisted = isBlacklisted ? 1 : 0;
         return Commit((connection, transaction) =>
-            LibraryCatalogStore.Execute(
+        {
+            var id = ResolveItemId(connection, transaction, identifier);
+            if (id == null)
+            {
+                return false;
+            }
+
+            return LibraryCatalogStore.Execute(
                 connection,
                 transaction,
                 """
                 UPDATE items
                 SET is_blacklisted = $blacklisted,
                     is_favorite = CASE WHEN $blacklisted = 1 THEN 0 ELSE is_favorite END
-                WHERE id = $id;
+                WHERE id = $id
+                  AND (is_blacklisted != $blacklisted OR ($blacklisted = 1 AND is_favorite != 0));
                 """,
                 ("$id", id),
-                ("$blacklisted", isBlacklisted ? 1 : 0)) > 0);
+                ("$blacklisted", blacklisted)) > 0;
+        });
     }
 
     public bool SetPlayback(string id, int playCount, DateTime? lastPlayedUtc)
@@ -340,31 +370,113 @@ public sealed class LibraryCatalogSession
                 ("$played", lastPlayedUtc is null ? DBNull.Value : lastPlayedUtc.Value.ToUniversalTime().Ticks)) > 0);
     }
 
-    public bool ClearPlaybackStats(IReadOnlyCollection<string>? itemIds)
+    public CatalogItemState? RecordPlayback(string identifier)
     {
-        var ids = (itemIds ?? []).Where(id => !string.IsNullOrWhiteSpace(id)).Distinct(StringComparer.Ordinal).ToArray();
-        return Commit((connection, transaction) =>
+        if (string.IsNullOrWhiteSpace(identifier))
         {
-            if (ids.Length == 0)
+            return null;
+        }
+
+        CatalogItemState? recorded = null;
+        var committed = Commit((connection, transaction) =>
+        {
+            var id = ResolveItemId(connection, transaction, identifier);
+            if (id == null)
             {
-                return LibraryCatalogStore.Execute(
-                    connection,
-                    transaction,
-                    "UPDATE items SET play_count = 0, last_played_utc = NULL WHERE play_count != 0 OR last_played_utc IS NOT NULL;") > 0;
+                return false;
             }
 
-            var changed = false;
-            foreach (var id in ids)
+            var current = ReadItemState(connection, transaction, id);
+            if (current == null)
             {
-                changed |= LibraryCatalogStore.Execute(
+                return false;
+            }
+
+            var nextPlayCount = current.PlayCount;
+            if (nextPlayCount < int.MaxValue)
+            {
+                nextPlayCount++;
+            }
+
+            var nowUtc = DateTime.UtcNow;
+            var updated = LibraryCatalogStore.Execute(
+                connection,
+                transaction,
+                "UPDATE items SET play_count = $plays, last_played_utc = $played WHERE id = $id;",
+                ("$id", id),
+                ("$plays", nextPlayCount),
+                ("$played", nowUtc.Ticks)) > 0;
+            if (!updated)
+            {
+                return false;
+            }
+
+            recorded = new CatalogItemState
+            {
+                Id = current.Id,
+                FullPath = current.FullPath,
+                IsFavorite = current.IsFavorite,
+                IsBlacklisted = current.IsBlacklisted,
+                PlayCount = nextPlayCount,
+                LastPlayedUtc = nowUtc
+            };
+            return true;
+        });
+        return committed ? recorded : null;
+    }
+
+    public int ClearPlaybackStats(IReadOnlyCollection<string>? identifiers)
+    {
+        var requested = (identifiers ?? [])
+            .Where(identifier => !string.IsNullOrWhiteSpace(identifier))
+            .Select(identifier => identifier.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var cleared = 0;
+        var committed = Commit((connection, transaction) =>
+        {
+            if (requested.Length == 0)
+            {
+                cleared = LibraryCatalogStore.Execute(
+                    connection,
+                    transaction,
+                    "UPDATE items SET play_count = 0, last_played_utc = NULL WHERE play_count != 0 OR last_played_utc IS NOT NULL;");
+                return cleared > 0;
+            }
+
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var identifier in requested)
+            {
+                var id = ResolveItemId(connection, transaction, identifier);
+                if (id == null || !seen.Add(id))
+                {
+                    continue;
+                }
+
+                cleared += LibraryCatalogStore.Execute(
                     connection,
                     transaction,
                     "UPDATE items SET play_count = 0, last_played_utc = NULL WHERE id = $id AND (play_count != 0 OR last_played_utc IS NOT NULL);",
-                    ("$id", id)) > 0;
+                    ("$id", id));
             }
 
-            return changed;
+            return cleared > 0;
         });
+        return committed ? cleared : 0;
+    }
+
+    public CatalogItemState? ReadItemState(string identifier)
+    {
+        if (string.IsNullOrWhiteSpace(identifier))
+        {
+            return null;
+        }
+
+        using var connection = LibraryCatalogStore.OpenWrite(_databasePath);
+        using var transaction = connection.BeginTransaction();
+        var state = ReadItemState(connection, transaction, identifier);
+        transaction.Rollback();
+        return state;
     }
 
     public bool SetFingerprint(string id, string? fingerprint, string algorithm, int version, int? status, DateTime? fingerprintLastUtc)
@@ -1096,6 +1208,40 @@ public sealed class LibraryCatalogSession
             ("$fold", LibraryCatalogStore.Fold(fullPath.Trim())));
     }
 
+    private static CatalogItemState? ReadItemState(SqliteConnection connection, SqliteTransaction transaction, string identifier)
+    {
+        var id = ResolveItemId(connection, transaction, identifier);
+        if (id == null)
+        {
+            return null;
+        }
+
+        using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            SELECT id, full_path, is_favorite, is_blacklisted, play_count, last_played_utc
+            FROM items
+            WHERE id = $id
+            LIMIT 1;
+            """;
+        command.Parameters.AddWithValue("$id", id);
+        using var reader = command.ExecuteReader();
+        if (!reader.Read())
+        {
+            return null;
+        }
+
+        return new CatalogItemState
+        {
+            Id = reader.GetString(0),
+            FullPath = reader.GetString(1),
+            IsFavorite = reader.GetInt32(2) != 0,
+            IsBlacklisted = reader.GetInt32(3) != 0,
+            PlayCount = reader.GetInt32(4),
+            LastPlayedUtc = LibraryCatalogStore.ReadUtc(reader, 5)
+        };
+    }
+
     private static List<string> ReadItemIdsForTagFold(SqliteConnection connection, SqliteTransaction transaction, string fold)
     {
         using var command = connection.CreateCommand();
@@ -1665,6 +1811,16 @@ public sealed class CatalogItemTagRead
 {
     public string ItemId { get; init; } = string.Empty;
     public List<string> Tags { get; init; } = [];
+}
+
+public sealed class CatalogItemState
+{
+    public string Id { get; init; } = string.Empty;
+    public string FullPath { get; init; } = string.Empty;
+    public bool IsFavorite { get; init; }
+    public bool IsBlacklisted { get; init; }
+    public int PlayCount { get; init; }
+    public DateTime? LastPlayedUtc { get; init; }
 }
 
 public sealed class CatalogAutoTagAssignment

@@ -202,6 +202,9 @@ Use `pwsh ./tools/scripts/reset-checklist.ps1` to reset metadata/check states be
 - [ ] A tag save that only changes item tags does not upsert unchanged categories or tags. When a tag filter can change which files are shown, a rename replaces that name in the applied filter and saved presets, a delete removes it, including when that delete removes the last filtered tag, and the loaded window reloads once after the save lands and keeps the scroll position. The other client does the same from the rename or delete event before it reloads.
 - [ ] Desktop library grid mixed-aspect layout reflows after refresh completion, including when the same files stay on screen and when a file is inserted or removed ahead of them. Resizing the panel reflows after the current grid update and keeps the tile in view. The video/photo header still uses the full catalog snapshot. Now-playing stats use the loaded tile when that snapshot does not have the current file. Global play totals still update when a played file is in neither the snapshot nor the loaded tiles and is not the current video.
 - [ ] Stopping the server while a library refresh is running does not log that refresh as a failure or show it as complete. A forced duration or loudness rescan stays pending.
+- [x] Favorite, blacklist, playback record, and clear-stats for a selection persist as catalog row updates and do not stall browse on a large library. A favorite still clears blacklist, and a blacklist still clears favorite. A selection clears only those items. The other client still updates from the same item-state and playback events.
+- [ ] Clear stats with no selection clears played items across the library and does not change favorites or blacklist.
+- [ ] WebUI in Firefox reloads and stays connected, including several reloads in a row. An installed home-screen app still opens.
 
 ## Optional Release Flow
 

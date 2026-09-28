@@ -89,33 +89,7 @@ Do not use this file for detailed architecture explanation or current capability
 
 ## Active Milestones
 
-Last milestone completed: M10i7
-
-### M10i8 - Favorite, Blacklist, and Playback Row Updates
-
-- **Status**: ⏳ Planned
-- **Goal**: Make favorite, blacklist, playback recording, and clear-stats SQLite row updates so they do not stall on a full-catalog load.
-- **Scope**:
-  - Depends on: responsive tag apply.
-  - Move favorite, blacklist, record-playback, and clear-stats onto the existing single-row catalog updates. Resolve the item by catalog id or full path, as current clients already send.
-  - A favorite still clears blacklist, and a blacklist still clears favorite.
-  - Clear-stats with no path list clears every row that has a play count or last-played time in one update. A path list clears only those items.
-  - Publish the same item-state and playback events as today. Do not build or diff the full catalog document for these operations.
-  - Leave the playback catalog cache, library stats, auto-tag scan, duplicate scan, the desktop full-catalog download, source folder import, and refresh on their current paths.
-  - Update the testing checklist and current-state docs.
-- **Acceptance criteria**:
-  - Setting a favorite, setting a blacklist flag, recording a playback, and clearing playback stats persist in SQLite and do not load or diff the full catalog document.
-  - A favorite still clears blacklist, and a blacklist still clears favorite.
-  - Clearing stats with an empty path list clears played items across the library. A path list clears only those items.
-  - Other clients still receive the item-state and playback events and update the loaded window the same way they do today.
-  - Docs and the testing checklist describe these as row updates.
-- **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include catalog-session tests that favorite, blacklist, record-playback, and clear-stats persist without a full-document load, including favorite/blacklist mutual exclusion and clear-all versus a path list.
-  - Manual evidence must include a favorite toggle and a playback on a large library that do not stall browse.
-  - Docs evidence must include current-state and checklist updates for these row updates.
-- **Deferrals / Follow-ups**:
-  - The playback catalog cache stays until random selection from the catalog query. A row update still bumps the catalog revision.
-  - Library stats, item-state reads, auto-tag scan, duplicate scan, the desktop full-catalog download, source folder import, refresh, and catalog export stay on their current paths until their own slices.
+Last milestone completed: M10i8
 
 ### M10i9 - Random Selection from the Catalog Query
 
@@ -1374,6 +1348,32 @@ Last milestone completed: M10i7
 ## Completed Milestones
 
 Latest completions first:
+
+### M10i8 - Favorite, Blacklist, and Playback Row Updates
+
+- **Status**: ✅ Complete
+- **Goal**: Make favorite, blacklist, playback recording, and clear-stats SQLite row updates so they do not stall on a full-catalog load.
+- **Scope**:
+  - Depends on: responsive tag apply.
+  - Move favorite, blacklist, record-playback, and clear-stats onto the existing single-row catalog updates. Resolve the item by catalog id or full path, as current clients already send.
+  - A favorite still clears blacklist, and a blacklist still clears favorite.
+  - Clear-stats with no path list clears every row that has a play count or last-played time in one update. A path list clears only those items.
+  - Publish the same item-state and playback events as today. Do not build or diff the full catalog document for these operations.
+  - Leave the playback catalog cache, library stats, auto-tag scan, duplicate scan, the desktop full-catalog download, source folder import, and refresh on their current paths.
+  - Update the testing checklist and current-state docs.
+- **Acceptance criteria**:
+  - Setting a favorite, setting a blacklist flag, recording a playback, and clearing playback stats persist in SQLite and do not load or diff the full catalog document.
+  - A favorite still clears blacklist, and a blacklist still clears favorite.
+  - Clearing stats with an empty path list clears played items across the library. A path list clears only those items.
+  - Other clients still receive the item-state and playback events and update the loaded window the same way they do today.
+  - Docs and the testing checklist describe these as row updates.
+- **Verification evidence**:
+  - `dotnet build ReelRoulette.sln` — pass. `dotnet test ReelRoulette.sln` — pass (Core 211, Desktop 115). `FavoriteBlacklistAndPlayback_PersistByIdOrPath_WithoutBuildingTheCatalogDocument`: favorite and blacklist persist by catalog id or full path, a favorite clears blacklist, a blacklist clears favorite, repeating the same flag does not bump the catalog revision, record-playback increments and stops at the maximum play count, a list that matches nothing clears nothing, a path list clears only those items, and an empty list clears every played row including a last-played time with no play count. The catalog document build count stays put until an explicit document read. `FavoriteBlacklistAndPlayback_PersistWithoutBuildingTheCatalogDocument`: the operations service returns the stored id, path, and flags for those writes, and the catalog document build count stays put until an explicit document read. `itemStateChanged`, `playbackRecorded`, and clear-stats `resyncRequired` are still published from the same endpoint handlers.
+  - Manual favorite, blacklist, playback record, and clear-stats for a selection on a large library passed: a favorite clears blacklist, a blacklist clears favorite, browse does not stall, a selection clears only those items, and the other client updates. Clear-all was not run on the real library.
+  - Docs: `CONTEXT.md`, `docs/api.md`, `docs/domain-inventory.md`, `docs/checklists/testing-checklist.md`, and `CHANGELOG.md` [Unreleased].
+- **Deferrals / Follow-ups**:
+  - The playback catalog cache stays until random selection from the catalog query. A row update still bumps the catalog revision.
+  - Library stats, item-state reads, auto-tag scan, duplicate scan, the desktop full-catalog download, source folder import, refresh, and catalog export stay on their current paths until their own slices.
 
 ### M10i7 - Responsive Tag Apply
 

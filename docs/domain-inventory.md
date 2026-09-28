@@ -19,9 +19,9 @@ Core/server domain services own business rules and persisted state semantics.
 - `src/core/ReelRoulette.Core/*`
   - filtering/randomization helpers, storage abstractions, verification modules, **`LibraryGridLayout`** (shared justified-row thumbnail grid layout).
 - `src/core/ReelRoulette.Core/Library/LibraryCatalogStore.cs` and `LibraryCatalogSession.cs`
-  - SQLite catalog at `library.db` (WAL, `user_version` 1) is the live library store. Startup opens it, migrates a missing database from `library.json`, and updates catalog rows in place. `LibraryCatalogSession.QueryList` is the browse query (enabled sources, search, filter, sort, paging). Tag-editor model reads and tag-editor writes (item tags, categories, tags, and auto-tag apply) update those rows and do not build the full catalog document. Tag catalog sync still loads that document. Leftover `library.json` is not a live reader, writer, export, or backup. Desktop library export and import are unavailable until catalog transfer returns.
+  - SQLite catalog at `library.db` (WAL, `user_version` 1) is the live library store. Startup opens it, migrates a missing database from `library.json`, and updates catalog rows in place. `LibraryCatalogSession.QueryList` is the browse query (enabled sources, search, filter, sort, paging). Tag-editor model reads and tag-editor writes (item tags, categories, tags, and auto-tag apply) update those rows and do not build the full catalog document. Tag catalog sync still loads that document. Favorite, blacklist, record-playback, and clear-stats update those rows and do not build the full catalog document. Library stats, item-state reads, auto-tag scan, duplicate scan, source import, and refresh still do. Leftover `library.json` is not a live reader, writer, export, or backup. Desktop library export and import are unavailable until catalog transfer returns.
 - `src/core/ReelRoulette.Server/Services/LibraryOperationsService.cs`
-  - source import, library list/query (`POST /api/library/query`), duplicate scan/apply, auto-tag scan/apply, playback-stats clear, tag-editor model and writes, and related command orchestration. Tag-editor reads and writes and auto-tag apply update catalog rows. Tag catalog sync still loads the full document.
+  - source import, library list/query (`POST /api/library/query`), duplicate scan/apply, auto-tag scan/apply, playback-stats clear, tag-editor model and writes, and related command orchestration. Tag-editor reads and writes, auto-tag apply, favorite, blacklist, record-playback, and clear-stats update catalog rows. Tag catalog sync, library stats, item-state reads, auto-tag scan, duplicate scan, source import, and refresh still load the full document.
 - `src/core/ReelRoulette.Server/Services/RefreshPipelineService.cs`
   - unified refresh pipeline stage execution (including `fingerprintScan` for per-file SHA-256 backfill), overlap guards, status snapshots, thumbnail generation/invalidation, duration/loudness scans, server-scheduled **auto-refresh**, and **library projection thumbnail metadata enrichment** at serve time.
 - `src/core/ReelRoulette.Server/Services/ServerStateService.cs`
@@ -193,7 +193,7 @@ Boundary:
   - `src/clients/web/ReelRoulette.WebUI/src/types/openapi.generated.ts`
   - `src/clients/web/ReelRoulette.WebUI/scripts/verify-openapi-contracts-fresh.mjs`
   - `src/clients/web/ReelRoulette.WebUI/scripts/sync-shared-icon.mjs` (copies shared `HI.ico` + font; uses **`sharp`** to resize `HI-256.png` / `HI-512.png` into manifest-accurate PWA PNGs under `public/icons/`)
-  - `src/clients/web/ReelRoulette.WebUI/public/sw.js` + `src/main.ts` service worker registration (Chromium PWA installability; network-only `fetch`)
+  - `src/clients/web/ReelRoulette.WebUI/public/sw.js` + `src/main.ts` service worker registration (Chromium PWA installability; document navigations only)
   - package scripts (`generate:contracts`, `verify:contracts`, `verify`).
 
 ---

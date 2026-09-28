@@ -214,6 +214,112 @@ public sealed class LibraryOperationsServiceTests
     }
 
     [Fact]
+    public void FavoriteBlacklistAndPlayback_PersistWithoutBuildingTheCatalogDocument()
+    {
+        var appDataRoot = CreateTempAppDataRoot();
+        try
+        {
+            SeedCoreSettings(appDataRoot, enabled: true, minimumGapMinutes: 360, numberOfBackups: 8);
+            SeedLibrary(appDataRoot, new JsonObject
+            {
+                ["sources"] = new JsonArray(),
+                ["items"] = new JsonArray
+                {
+                    new JsonObject
+                    {
+                        ["id"] = "item-1",
+                        ["fullPath"] = @"C:\media\movie.mp4",
+                        ["isFavorite"] = false,
+                        ["isBlacklisted"] = true,
+                        ["playCount"] = 2
+                    },
+                    new JsonObject
+                    {
+                        ["id"] = "item-2",
+                        ["fullPath"] = @"C:\media\other.mp4",
+                        ["isFavorite"] = true,
+                        ["isBlacklisted"] = false,
+                        ["playCount"] = 5
+                    },
+                    new JsonObject
+                    {
+                        ["id"] = "item-3",
+                        ["fullPath"] = @"C:\media\fresh.mp4",
+                        ["playCount"] = 0
+                    }
+                },
+                ["tags"] = new JsonArray(),
+                ["categories"] = new JsonArray()
+            });
+
+            var host = LibraryCatalogHost.Open(appDataRoot);
+            var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot, host);
+            var builds = host.Session.DocumentBuilds;
+            var revision = host.Session.Revision;
+
+            var favorited = service.SetFavorite(@"C:\MEDIA\MOVIE.MP4", isFavorite: true);
+            Assert.NotNull(favorited);
+            Assert.Equal("item-1", favorited!.ItemId);
+            Assert.Equal(@"C:\media\movie.mp4", favorited.Path);
+            Assert.True(favorited.IsFavorite);
+            Assert.False(favorited.IsBlacklisted);
+            var unchanged = service.SetFavorite(@"C:\media\movie.mp4", isFavorite: true);
+            Assert.NotNull(unchanged);
+            Assert.True(unchanged!.IsFavorite);
+            Assert.False(unchanged.IsBlacklisted);
+            Assert.Equal(revision + 1, host.Session.Revision);
+            Assert.Null(service.SetFavorite("missing", isFavorite: true));
+
+            var blacklisted = service.SetBlacklist("ITEM-2", isBlacklisted: true);
+            Assert.NotNull(blacklisted);
+            Assert.Equal("item-2", blacklisted!.ItemId);
+            Assert.Equal(@"C:\media\other.mp4", blacklisted.Path);
+            Assert.True(blacklisted.IsBlacklisted);
+            Assert.False(blacklisted.IsFavorite);
+
+            var before = DateTime.UtcNow;
+            var recorded = service.RecordPlayback("item-1");
+            var after = DateTime.UtcNow;
+            Assert.True(recorded.Found);
+            Assert.Equal(3, recorded.PlayCount);
+            Assert.NotNull(recorded.LastPlayedUtc);
+            Assert.InRange(recorded.LastPlayedUtc!.Value, before.AddSeconds(-1), after.AddSeconds(1));
+            Assert.False(service.RecordPlayback("missing").Found);
+
+            var selected = service.ClearPlaybackStats(new ClearPlaybackStatsRequest
+            {
+                ItemPaths = [@"C:\media\other.mp4", "missing"]
+            });
+            Assert.Equal(1, selected.ClearedCount);
+            Assert.Equal(3, host.Session.ReadItemState("item-1")!.PlayCount);
+            Assert.Equal(0, host.Session.ReadItemState("item-2")!.PlayCount);
+            Assert.Null(host.Session.ReadItemState("item-2")!.LastPlayedUtc);
+            Assert.Equal(0, host.Session.ReadItemState("item-3")!.PlayCount);
+
+            var all = service.ClearPlaybackStats(new ClearPlaybackStatsRequest());
+            Assert.Equal(1, all.ClearedCount);
+            Assert.Equal(0, host.Session.ReadItemState("item-1")!.PlayCount);
+            Assert.Null(host.Session.ReadItemState("item-1")!.LastPlayedUtc);
+            Assert.Equal(0, host.Session.ReadItemState("item-3")!.PlayCount);
+
+            var revisionAfterClear = host.Session.Revision;
+            var none = service.ClearPlaybackStats(new ClearPlaybackStatsRequest { ItemPaths = [] });
+            Assert.Equal(0, none.ClearedCount);
+            Assert.Equal(revisionAfterClear, host.Session.Revision);
+            Assert.Equal(builds, host.Session.DocumentBuilds);
+            _ = host.Session.BuildDocument();
+            Assert.Equal(builds + 1, host.Session.DocumentBuilds);
+        }
+        finally
+        {
+            if (Directory.Exists(appDataRoot))
+            {
+                Directory.Delete(appDataRoot, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public void ApplyItemTags_ShouldPersistTagChanges_ForItemIdAndPathInputs()
     {
         var appDataRoot = CreateTempAppDataRoot();

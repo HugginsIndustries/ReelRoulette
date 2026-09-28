@@ -148,10 +148,7 @@ Reconnect/resync behavior:
 - `GET /api/library/projection` — full catalog document read from the SQLite catalog. `mediaType` and `fingerprintStatus` are integers and `duration` is `hh:mm:ss`. Each item is enriched at serve time with **`hasThumbnail`**, **`thumbnailWidth`**, and **`thumbnailHeight`** from the server thumbnail index (not stored in the catalog). JPEG bytes come from `GET /api/thumbnail/{itemId}`. This is not the browse API. Desktop library browse uses `POST /api/library/query` and still fetches this snapshot for the video/photo header and now-playing tags. WebUI library browse uses `POST /api/library/query`.
 - `GET /api/library/stats`
 - `POST /api/library-states`
-- `POST /api/favorite`
-- `POST /api/blacklist`
-- `POST /api/record-playback`
-- `POST /api/playback/clear-stats`
+- `POST /api/favorite`, `POST /api/blacklist`, `POST /api/record-playback`, and `POST /api/playback/clear-stats` update SQLite catalog rows. They match an item by catalog id or full path and do not load the full catalog document. A favorite clears blacklist, and a blacklist clears favorite. `itemStateChanged` and `playbackRecorded` stay the same events. Clear-stats with no path list clears every row that has a play count or a last-played time. A path list clears only those items. `resyncRequired` with reason `playbackStatsCleared` is published only when at least one row was cleared. Library stats, item-state reads, auto-tag scan, and duplicate scan still load the full catalog document.
 
 ### Web runtime settings
 

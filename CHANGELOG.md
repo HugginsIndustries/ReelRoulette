@@ -11,6 +11,7 @@ Write **[Unreleased]** bullets at the same level as the released sections below.
 
 ### Changed
 
+- **Favorite, blacklist, and playback:** Setting a favorite, setting a blacklist flag, recording a playback, and clearing playback stats update that catalog row and do not wait on a full library load. A favorite still clears blacklist, and a blacklist still clears favorite. Clearing stats with no selection clears every played item. A selection clears only those items.
 - **Library catalog on SQLite:** The server stores the library in `library.db` and migrates `library.json` once when the database is missing, then ignores that JSON file. Catalog edits update the affected rows, and a failed save keeps the previous catalog. A refused database stops startup. Desktop Library Export and Import, and server `library.json` backups, are unavailable.
 - **Library list query:** `POST /api/library/query` pages the catalog in library-panel order (enabled sources, search, filter, then sort) and returns the filtered count plus thumbnail layout for the page. Missing files stay in the result. `GET /api/library/projection` remains for the desktop video/photo header and now-playing tags.
 - **Desktop — library browse:** The library grid loads filter, search, sort, and further pages from `POST /api/library/query` instead of filtering a full in-memory catalog. The filtered count stays the server total. Favorite, blacklist, playback, and tag updates patch loaded tiles when membership and order cannot change, and reload the loaded window without jumping to the top when they can. Filter, search, preset, and sort changes start over. The grid takes those updates whether the library panel is shown or hidden. Scoped auto-tag scan sends no client path list. Startup still loads the full catalog snapshot for the video/photo header and now-playing tags.
@@ -27,6 +28,7 @@ Write **[Unreleased]** bullets at the same level as the released sections below.
 
 ### Fixed
 
+- **WebUI — Firefox:** Reloading the page stays usable. The installable service worker proxies document loads only, so API calls and the event stream go straight to the server.
 - **Refresh shutdown:** Stopping the server cancels a library refresh that is still running. That stop is not recorded as a failure or a completed refresh, and a forced duration or loudness rescan stays pending.
 
 ### Security
