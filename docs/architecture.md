@@ -63,7 +63,7 @@ flowchart LR
 `src/core/ReelRoulette.Core` and server-side domain services are authoritative for behavior and state semantics.
 
 - Own domain mutation rules, projection inputs, and persistence semantics.
-- Execute library operations, refresh pipeline behavior, and randomization/filter logic.
+- Execute library operations, refresh pipeline behavior, and randomization/filter logic. Random eligibility is the library list filter. Direct play reads one item and its source.
 - Expose deterministic APIs for all migrated client flows.
 
 ### Client Layers

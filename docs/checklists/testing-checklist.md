@@ -106,6 +106,7 @@ Use `pwsh ./tools/scripts/reset-checklist.ps1` to reset metadata/check states be
 - [x] Desktop app can connect to server.
 - [x] Desktop loads and shows current runtime status without crash.
 - [x] Random play works from active preset.
+- [x] Random play from desktop or WebUI, on a large library and immediately after a playback, still follows the current filter. Playing one library item still starts that item.
 - [x] Manual library play works.
 - [x] Missing/unavailable library items show clear desktop errors (404/409/415 mapping) with no path-first fallback.
 - [x] Previous/next timeline navigation works.

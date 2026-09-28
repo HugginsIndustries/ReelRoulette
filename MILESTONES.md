@@ -89,31 +89,7 @@ Do not use this file for detailed architecture explanation or current capability
 
 ## Active Milestones
 
-Last milestone completed: M10i8
-
-### M10i9 - Random Selection from the Catalog Query
-
-- **Status**: ⏳ Planned
-- **Goal**: Choose random and play eligibility through the list-query filter so a catalog revision does not reload the full library into memory.
-- **Scope**:
-  - Depends on: favorite, blacklist, and playback row updates.
-  - Random selection loads the eligible set through the same server filter as library list query. It does not keep a full-catalog cache that rebuilds when the revision changes.
-  - The current weighting still runs on that eligible set. An empty eligible set still returns no item.
-  - Playing one item reads that item and its source state by id or path. It does not read the rest of the catalog.
-  - Eligibility stays server-authoritative. Clients do not gain a local eligibility replica.
-  - Update the testing checklist and current-state docs.
-- **Acceptance criteria**:
-  - A random draw after a favorite, playback, or tag change does not build the full catalog document.
-  - Eligible items for a draw match library list query for the same filter, enabled sources, and media-type options.
-  - The current weighting still chooses among that eligible set. An empty eligible set still returns no item.
-  - Playing one item reads that item only.
-  - Docs and the testing checklist describe random and play eligibility as query-backed.
-- **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include tests that a revision bump does not build the full catalog document, that random eligibility matches list query for the same filter, that weighting still runs on that set, and that playing one item does not load the catalog.
-  - Manual evidence must include a random draw on a large library immediately after a playback.
-  - Docs evidence must include current-state and checklist updates for query-backed eligibility.
-- **Deferrals / Follow-ups**:
-  - Library stats, item-state reads, auto-tag scan, duplicate scan, the desktop full-catalog download, source folder import, refresh, and catalog export stay on their current paths until their own slices.
+Last milestone completed: M10i9
 
 ### M10i10 - Catalog Stats and Item-State Reads
 
@@ -1348,6 +1324,30 @@ Last milestone completed: M10i8
 ## Completed Milestones
 
 Latest completions first:
+
+### M10i9 - Random Selection from the Catalog Query
+
+- **Status**: ✅ Complete
+- **Goal**: Choose random and play eligibility through the list-query filter so a catalog revision does not reload the full library into memory.
+- **Scope**:
+  - Depends on: favorite, blacklist, and playback row updates.
+  - Random selection loads the eligible set through the same server filter as library list query. It does not keep a full-catalog cache that rebuilds when the revision changes.
+  - The current weighting still runs on that eligible set. An empty eligible set still returns no item.
+  - Playing one item reads that item and its source state by id or path. It does not read the rest of the catalog.
+  - Eligibility stays server-authoritative. Clients do not gain a local eligibility replica.
+  - Update the testing checklist and current-state docs.
+- **Acceptance criteria**:
+  - A random draw after a favorite, playback, or tag change does not build the full catalog document.
+  - Eligible items for a draw match library list query for the same filter, enabled sources, and media-type options.
+  - The current weighting still chooses among that eligible set. An empty eligible set still returns no item.
+  - Playing one item reads that item only.
+  - Docs and the testing checklist describe random and play eligibility as query-backed.
+- **Verification evidence**:
+  - `dotnet build ReelRoulette.sln` — pass. `dotnet test ReelRoulette.sln` — pass (Core 217, Desktop 115). `QueryEligible_MatchesListQuery_ForFilterEnabledSourcesAndMediaType`: eligible ids match list query for the same favorites and tag filter, a disabled source and an unknown source stay out, and video or photo options match the list media-type filter. The catalog document build count stays put. `ReadPlaybackItem_ReadsThatItemAndSource_ByIdOrPath_WithoutBuildingTheCatalogDocument`: id or path returns that item, a disabled source is disabled, a missing source row stays enabled, and the document build count stays put. `TrySelectRandom_AfterFavoritePlaybackAndTagChange_DoesNotBuildTheCatalogDocument`: a draw after a favorite, a playback, and a tag change does not build the catalog document, and play plus media lookup by id or path do not either. `TrySelectRandom_WeightedRandom_PrefersNeverPlayedItemInTheEligibleSet`: weighted draws stay inside the list-query set and prefer the never-played item. An empty eligible set still returns no item. A library with no items still returns 503.
+  - Manual random draw on a large library immediately after a playback passed. The response came back immediately, and playing one item still started that item.
+  - Docs: `CONTEXT.md`, `docs/api.md`, `docs/architecture.md`, `docs/domain-inventory.md`, `docs/checklists/testing-checklist.md`, and `CHANGELOG.md` [Unreleased].
+- **Deferrals / Follow-ups**:
+  - Library stats, item-state reads, auto-tag scan, duplicate scan, the desktop full-catalog download, source folder import, refresh, and catalog export stay on their current paths until their own slices.
 
 ### M10i8 - Favorite, Blacklist, and Playback Row Updates
 

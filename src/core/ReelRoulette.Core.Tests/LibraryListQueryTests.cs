@@ -245,6 +245,83 @@ public sealed class LibraryListQueryTests
     }
 
     [Fact]
+    public void QueryEligible_MatchesListQuery_ForFilterEnabledSourcesAndMediaType()
+    {
+        using var dir = new TempDirectory();
+        var session = Open(dir);
+        var builds = session.DocumentBuilds;
+        session.InsertSource("on", "/media", "On", true);
+        session.InsertSource("off", "/other", "Off", false);
+        session.UpsertCategory("people", "People", 1);
+        session.UpsertTag("Ann", "people");
+        Add(session, "video", "on", "video.mp4", "video.mp4", favorite: true, tags: ["Ann"]);
+        Add(session, "photo", "on", "photo.jpg", "photo.jpg", favorite: true, mediaType: 1, tags: ["Ann"]);
+        Add(session, "plain", "on", "plain.mp4", "plain.mp4", tags: ["Ann"]);
+        Add(session, "blocked", "on", "blocked.mp4", "blocked.mp4", favorite: true, blacklisted: true, tags: ["Ann"]);
+        Add(session, "hidden", "off", "hidden.mp4", "hidden.mp4", favorite: true, tags: ["Ann"]);
+        Add(session, "ghost", "ghost", "ghost.mp4", "ghost.mp4", favorite: true, tags: ["Ann"]);
+
+        var filter = new FilterStateModel
+        {
+            FavoritesOnly = true,
+            ExcludeBlacklisted = true,
+            SelectedTags = ["Ann"]
+        };
+        var listed = session.QueryList(new LibraryListRequest { Filter = filter, Limit = 50 });
+        var eligible = session.QueryEligible(filter);
+        Assert.Equal(
+            listed.Items.Select(item => item.Id).OrderBy(id => id, StringComparer.Ordinal).ToArray(),
+            eligible.Select(item => item.Id).OrderBy(id => id, StringComparer.Ordinal).ToArray());
+        Assert.Equal(["photo", "video"], eligible.Select(item => item.Id).OrderBy(id => id, StringComparer.Ordinal).ToArray());
+        Assert.DoesNotContain(eligible, item => item.Id is "plain" or "blocked" or "hidden" or "ghost");
+
+        var videosOnly = new FilterStateModel
+        {
+            FavoritesOnly = true,
+            ExcludeBlacklisted = true,
+            SelectedTags = ["Ann"],
+            MediaTypeFilter = MediaTypeFilterValue.VideosOnly
+        };
+        var listedVideos = session.QueryList(new LibraryListRequest { Filter = videosOnly, Limit = 50 });
+        var eligibleVideos = session.QueryEligible(filter, MediaTypeValue.Video);
+        Assert.Equal(
+            listedVideos.Items.Select(item => item.Id).ToArray(),
+            eligibleVideos.Select(item => item.Id).ToArray());
+        Assert.Equal("video", Assert.Single(eligibleVideos).Id);
+
+        var eligiblePhotos = session.QueryEligible(filter, MediaTypeValue.Photo);
+        Assert.Equal("photo", Assert.Single(eligiblePhotos).Id);
+        Assert.Equal(builds, session.DocumentBuilds);
+    }
+
+    [Fact]
+    public void ReadPlaybackItem_ReadsThatItemAndSource_ByIdOrPath_WithoutBuildingTheCatalogDocument()
+    {
+        using var dir = new TempDirectory();
+        var session = Open(dir);
+        session.InsertSource("on", "/media", "On", true);
+        session.InsertSource("off", "/other", "Off", false);
+        Add(session, "keep", "on", "keep.mp4", "keep.mp4", duration: TimeSpan.FromSeconds(12));
+        Add(session, "hidden", "off", "hidden.mp4", "hidden.mp4");
+        Add(session, "ghost", "ghost", "ghost.mp4", "ghost.mp4");
+        var builds = session.DocumentBuilds;
+
+        var byId = session.ReadPlaybackItem("KEEP");
+        Assert.NotNull(byId);
+        Assert.Equal("keep", byId!.Id);
+        Assert.Equal("/media/keep.mp4", byId.FullPath);
+        Assert.True(byId.IsSourceEnabled);
+        Assert.Equal(TimeSpan.FromSeconds(12).Ticks, byId.DurationTicks);
+
+        var byPath = session.ReadPlaybackItem("/MEDIA/keep.mp4");
+        Assert.Equal("keep", byPath!.Id);
+        Assert.False(session.ReadPlaybackItem("hidden")!.IsSourceEnabled);
+        Assert.True(session.ReadPlaybackItem("ghost")!.IsSourceEnabled);
+        Assert.Null(session.ReadPlaybackItem("missing"));
+        Assert.Equal(builds, session.DocumentBuilds);
+    }
+
+    [Fact]
     public void Query_LegacyTagAnd_WhenCatalogHasNoCategories()
     {
         using var dir = new TempDirectory();

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
+using ReelRoulette.Core.Library;
 using ReelRoulette.Server.Contracts;
 using ReelRoulette.Server.Services;
 using Xunit;
@@ -44,11 +45,15 @@ public sealed class LibraryPlaybackServiceTests : IDisposable
               "fullPath": "{{mediaPath.Replace("\\", "\\\\")}}",
               "fileName": "clip.mp4",
               "mediaType": 0,
+              "sourceId": "s1",
               "isFavorite": true,
               "isBlacklisted": false,
               "duration": "00:00:12",
               "tags": ["tag-a"]
             }
+          ],
+          "sources": [
+            { "id": "s1", "rootPath": "{{_tempDir.Replace("\\", "\\\\")}}", "isEnabled": true }
           ]
         }
         """;
@@ -67,7 +72,7 @@ public sealed class LibraryPlaybackServiceTests : IDisposable
             IncludePhotos = false
         };
 
-        var ok = service.TrySelectRandom(request, presets, [], [], out var response, out var statusCode, out var error);
+        var ok = service.TrySelectRandom(request, presets, out var response, out var statusCode, out var error);
 
         Assert.True(ok);
         Assert.Equal(StatusCodes.Status200OK, statusCode);
@@ -94,9 +99,13 @@ public sealed class LibraryPlaybackServiceTests : IDisposable
               "fullPath": "{{mediaPath.Replace("\\", "\\\\")}}",
               "fileName": "clip-filter.mp4",
               "mediaType": 0,
+              "sourceId": "s1",
               "isFavorite": true,
               "isBlacklisted": false
             }
+          ],
+          "sources": [
+            { "id": "s1", "rootPath": "{{_tempDir.Replace("\\", "\\\\")}}", "isEnabled": true }
           ]
         }
         """);
@@ -106,7 +115,7 @@ public sealed class LibraryPlaybackServiceTests : IDisposable
         {
             PresetId = string.Empty,
             FilterState = ParseJson("{\"favoritesOnly\":true}")
-        }, [], [], [], out var response, out var statusCode, out var error);
+        }, [], out var response, out var statusCode, out var error);
 
         Assert.True(ok);
         Assert.Equal(StatusCodes.Status200OK, statusCode);
@@ -155,7 +164,7 @@ public sealed class LibraryPlaybackServiceTests : IDisposable
             { "id": "p1", "fullPath": "{{photoPath.Replace("\\", "\\\\")}}", "fileName": "photo-a.jpg", "mediaType": 1, "sourceId": "s1" }
           ],
           "sources": [
-            { "id": "s1", "isEnabled": true }
+            { "id": "s1", "rootPath": "{{_tempDir.Replace("\\", "\\\\")}}", "isEnabled": true }
           ]
         }
         """);
@@ -169,8 +178,6 @@ public sealed class LibraryPlaybackServiceTests : IDisposable
                 IncludeVideos = true,
                 IncludePhotos = true
             },
-            [],
-            [],
             [],
             out var response,
             out var statusCode,
@@ -200,7 +207,7 @@ public sealed class LibraryPlaybackServiceTests : IDisposable
             { "id": "p1", "fullPath": "{{playedPath.Replace("\\", "\\\\")}}", "fileName": "played.mp4", "mediaType": 0, "playCount": 4, "sourceId": "s1" }
           ],
           "sources": [
-            { "id": "s1", "isEnabled": true }
+            { "id": "s1", "rootPath": "{{_tempDir.Replace("\\", "\\\\")}}", "isEnabled": true }
           ]
         }
         """);
@@ -212,8 +219,6 @@ public sealed class LibraryPlaybackServiceTests : IDisposable
                 PresetId = string.Empty,
                 FilterState = ParseJson("{\"onlyNeverPlayed\":true}")
             },
-            [],
-            [],
             [],
             out var response,
             out var statusCode,
@@ -242,7 +247,7 @@ public sealed class LibraryPlaybackServiceTests : IDisposable
             { "id": "a2", "fullPath": "{{withoutAudioPath.Replace("\\", "\\\\")}}", "fileName": "without-audio.mp4", "mediaType": 0, "hasAudio": false, "sourceId": "s1" }
           ],
           "sources": [
-            { "id": "s1", "isEnabled": true }
+            { "id": "s1", "rootPath": "{{_tempDir.Replace("\\", "\\\\")}}", "isEnabled": true }
           ]
         }
         """);
@@ -254,8 +259,6 @@ public sealed class LibraryPlaybackServiceTests : IDisposable
                 PresetId = string.Empty,
                 FilterState = ParseJson("{\"audioFilter\":\"WithAudioOnly\",\"onlyKnownLoudness\":true}")
             },
-            [],
-            [],
             [],
             out var response,
             out var statusCode,
@@ -312,7 +315,7 @@ public sealed class LibraryPlaybackServiceTests : IDisposable
             }
           ],
           "sources": [
-            { "id": "s1", "isEnabled": true }
+            { "id": "s1", "rootPath": "{{_tempDir.Replace("\\", "\\\\")}}", "isEnabled": true }
           ]
         }
         """);
@@ -326,8 +329,6 @@ public sealed class LibraryPlaybackServiceTests : IDisposable
                 IncludeVideos = true,
                 IncludePhotos = true
             },
-            [],
-            [],
             [],
             out var response,
             out var statusCode,
@@ -359,7 +360,7 @@ public sealed class LibraryPlaybackServiceTests : IDisposable
             }
           ],
           "sources": [
-            { "id": "s1", "isEnabled": true }
+            { "id": "s1", "rootPath": "{{_tempDir.Replace("\\", "\\\\")}}", "isEnabled": true }
           ]
         }
         """);
@@ -396,7 +397,7 @@ public sealed class LibraryPlaybackServiceTests : IDisposable
             }
           ],
           "sources": [
-            { "id": "s1", "isEnabled": true }
+            { "id": "s1", "rootPath": "{{_tempDir.Replace("\\", "\\\\")}}", "isEnabled": true }
           ]
         }
         """);
@@ -448,7 +449,7 @@ public sealed class LibraryPlaybackServiceTests : IDisposable
             }
           ],
           "sources": [
-            { "id": "s1", "isEnabled": true }
+            { "id": "s1", "rootPath": "{{_tempDir.Replace("\\", "\\\\")}}", "isEnabled": true }
           ]
         }
         """);
@@ -481,7 +482,7 @@ public sealed class LibraryPlaybackServiceTests : IDisposable
             }
           ],
           "sources": [
-            { "id": "s1", "isEnabled": true }
+            { "id": "s1", "rootPath": "{{_tempDir.Replace("\\", "\\\\")}}", "isEnabled": true }
           ]
         }
         """);
@@ -546,7 +547,7 @@ public sealed class LibraryPlaybackServiceTests : IDisposable
             }
           ],
           "sources": [
-            { "id": "s1", "isEnabled": true }
+            { "id": "s1", "rootPath": "{{_tempDir.Replace("\\", "\\\\")}}", "isEnabled": true }
           ]
         }
         """);
@@ -557,6 +558,189 @@ public sealed class LibraryPlaybackServiceTests : IDisposable
         Assert.False(ok);
         Assert.Equal(StatusCodes.Status415UnsupportedMediaType, statusCode);
         Assert.Equal(LibraryPlaybackService.PlayItemErrorUnsupportedMedia, code);
+    }
+
+    [Fact]
+    public void TrySelectRandom_AfterFavoritePlaybackAndTagChange_DoesNotBuildTheCatalogDocument()
+    {
+        Directory.CreateDirectory(_tempDir);
+        var mediaPath = Path.Combine(_tempDir, "kept.mp4");
+        File.WriteAllBytes(mediaPath, [0x01]);
+        var host = LibraryCatalogHost.Open(_tempDir);
+        host.Session.InsertSource("s1", _tempDir, "Media", true);
+        host.Session.InsertItem(new LibraryCatalogItem
+        {
+            Id = "kept",
+            SourceId = "s1",
+            FullPath = mediaPath,
+            RelativePath = "kept.mp4",
+            FileName = "kept.mp4"
+        });
+        var playback = new LibraryPlaybackService(
+            new ServerMediaTokenStore(),
+            NullLogger<LibraryPlaybackService>.Instance,
+            _tempDir,
+            host);
+        var operations = new LibraryOperationsService(
+            NullLogger<LibraryOperationsService>.Instance,
+            _tempDir,
+            host);
+        var builds = host.Session.DocumentBuilds;
+        var request = new RandomRequest
+        {
+            FilterState = ParseJson("{}"),
+            IncludeVideos = true,
+            IncludePhotos = true
+        };
+
+        Assert.True(playback.TrySelectRandom(request, [], out var first, out var statusCode, out var error));
+        Assert.Equal(StatusCodes.Status200OK, statusCode);
+        Assert.Null(error);
+        Assert.Equal(mediaPath, first!.Id);
+        Assert.Equal(builds, host.Session.DocumentBuilds);
+
+        Assert.NotNull(operations.SetFavorite(mediaPath, true));
+        Assert.True(operations.RecordPlayback(mediaPath).Found);
+        Assert.True(operations.ApplyItemTags(new ApplyItemTagsRequest
+        {
+            ItemIds = ["kept"],
+            AddTags = ["Later"]
+        }));
+        Assert.True(playback.TrySelectRandom(request, [], out var second, out _, out _));
+        Assert.Equal(mediaPath, second!.Id);
+        Assert.Equal(builds, host.Session.DocumentBuilds);
+
+        Assert.True(playback.TryPlayItem("kept", false, out var played, out var playStatus, out var playError, out var code));
+        Assert.Equal(StatusCodes.Status200OK, playStatus);
+        Assert.Null(playError);
+        Assert.Null(code);
+        Assert.Equal(mediaPath, played!.Id);
+        Assert.True(playback.TryResolveMediaPath("kept", out var byId));
+        Assert.Equal(mediaPath, byId);
+        Assert.True(playback.TryResolveMediaPath(mediaPath, out var byPath));
+        Assert.Equal(mediaPath, byPath);
+        Assert.Equal(builds, host.Session.DocumentBuilds);
+    }
+
+    [Fact]
+    public void TrySelectRandom_WeightedRandom_PrefersNeverPlayedItemInTheEligibleSet()
+    {
+        Directory.CreateDirectory(_tempDir);
+        var host = LibraryCatalogHost.Open(_tempDir);
+        host.Session.InsertSource("on", "/media", "On", true);
+        host.Session.InsertSource("off", "/other", "Off", false);
+        host.Session.InsertItem(new LibraryCatalogItem
+        {
+            Id = "heavy",
+            SourceId = "on",
+            FullPath = "/media/heavy.mp4",
+            RelativePath = "heavy.mp4",
+            FileName = "heavy.mp4",
+            PlayCount = 100_000,
+            LastPlayedUtc = DateTime.UtcNow
+        });
+        host.Session.InsertItem(new LibraryCatalogItem
+        {
+            Id = "light",
+            SourceId = "on",
+            FullPath = "/media/light.mp4",
+            RelativePath = "light.mp4",
+            FileName = "light.mp4"
+        });
+        host.Session.InsertItem(new LibraryCatalogItem
+        {
+            Id = "blocked",
+            SourceId = "on",
+            FullPath = "/media/blocked.mp4",
+            RelativePath = "blocked.mp4",
+            FileName = "blocked.mp4",
+            IsBlacklisted = true
+        });
+        host.Session.InsertItem(new LibraryCatalogItem
+        {
+            Id = "hidden",
+            SourceId = "off",
+            FullPath = "/media/hidden.mp4",
+            RelativePath = "hidden.mp4",
+            FileName = "hidden.mp4"
+        });
+        var playback = new LibraryPlaybackService(
+            new ServerMediaTokenStore(),
+            NullLogger<LibraryPlaybackService>.Instance,
+            _tempDir,
+            host);
+        var listed = host.Session.QueryList(new LibraryListRequest
+        {
+            Filter = new ReelRoulette.Core.Filtering.FilterStateModel(),
+            Limit = 20
+        }).Items.Select(item => item.FullPath).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var builds = host.Session.DocumentBuilds;
+        var lightWins = 0;
+        for (var i = 0; i < 40; i++)
+        {
+            Assert.True(playback.TrySelectRandom(new RandomRequest
+            {
+                FilterState = ParseJson("{}"),
+                RandomizationMode = "WeightedRandom"
+            }, [], out var response, out _, out _));
+            Assert.NotNull(response);
+            Assert.Contains(response!.Id, listed);
+            Assert.NotEqual("/media/blocked.mp4", response.Id);
+            Assert.NotEqual("/media/hidden.mp4", response.Id);
+            if (string.Equals(response.Id, "/media/light.mp4", StringComparison.OrdinalIgnoreCase))
+            {
+                lightWins++;
+            }
+        }
+
+        Assert.True(lightWins >= 35, $"Expected the never-played item to win at least 35 of 40 weighted draws, got {lightWins}.");
+        Assert.Equal(builds, host.Session.DocumentBuilds);
+    }
+
+    [Fact]
+    public void TrySelectRandom_ShouldReturn503_WhenLibraryHasNoItems()
+    {
+        Directory.CreateDirectory(_tempDir);
+        var service = CreateService();
+        var ok = service.TrySelectRandom(new RandomRequest(), [], out var response, out var statusCode, out var error);
+
+        Assert.False(ok);
+        Assert.Equal(StatusCodes.Status503ServiceUnavailable, statusCode);
+        Assert.Null(response);
+        Assert.Equal("Library not loaded or empty.", error);
+    }
+
+    [Fact]
+    public void TrySelectRandom_ShouldReturnNoItem_WhenVideosAndPhotosAreExcluded()
+    {
+        Directory.CreateDirectory(_tempDir);
+        var host = LibraryCatalogHost.Open(_tempDir);
+        host.Session.InsertSource("s1", _tempDir, "Media", true);
+        host.Session.InsertItem(new LibraryCatalogItem
+        {
+            Id = "clip",
+            SourceId = "s1",
+            FullPath = Path.Combine(_tempDir, "clip.mp4"),
+            RelativePath = "clip.mp4",
+            FileName = "clip.mp4"
+        });
+        var service = new LibraryPlaybackService(
+            new ServerMediaTokenStore(),
+            NullLogger<LibraryPlaybackService>.Instance,
+            _tempDir,
+            host);
+
+        var ok = service.TrySelectRandom(new RandomRequest
+        {
+            FilterState = ParseJson("{}"),
+            IncludeVideos = false,
+            IncludePhotos = false
+        }, [], out var response, out var statusCode, out var error);
+
+        Assert.True(ok);
+        Assert.Equal(StatusCodes.Status200OK, statusCode);
+        Assert.Null(error);
+        Assert.Null(response);
     }
 
     [Fact]

@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json.Nodes;
 using Microsoft.Data.Sqlite;
+using ReelRoulette.Core.Filtering;
 
 namespace ReelRoulette.Core.Library;
 
@@ -101,6 +102,51 @@ public sealed class LibraryCatalogSession
             TotalCount = totalCount,
             SearchBaselineCount = searchBaselineCount
         };
+    }
+
+    public IReadOnlyList<LibraryCatalogItem> QueryEligible(FilterStateModel filter, MediaTypeValue? requiredMediaType = null)
+    {
+        ArgumentNullException.ThrowIfNull(filter);
+        using var connection = LibraryCatalogStore.OpenWrite(_databasePath);
+        LibraryCatalogListSql.RegisterCollation(connection);
+
+        var request = new LibraryListRequest { Filter = filter };
+        var hasCategories = LibraryCatalogStore.ExecuteScalarInt(connection, "SELECT COUNT(*) FROM categories;") > 0;
+        var catalogTags = hasCategories ? ReadCatalogTags(connection) : [];
+        var args = new LibraryCatalogListSql.SqlArgs();
+        var where = LibraryCatalogListSql.BuildWhere(request, includeFilter: true, hasCategories, catalogTags, args);
+        if (requiredMediaType.HasValue)
+        {
+            where += " AND items.media_type = " + ((int)requiredMediaType.Value).ToString(CultureInfo.InvariantCulture);
+        }
+
+        using var command = connection.CreateCommand();
+        command.CommandText = $"""
+            SELECT items.id, items.source_id, items.full_path, items.full_path_fold, items.relative_path, items.relative_path_fold,
+                   items.file_name, items.file_name_fold, items.duration_ticks, items.has_audio, items.integrated_loudness, items.peak_db,
+                   items.is_favorite, items.is_blacklisted, items.play_count, items.last_played_utc, items.media_type, items.fingerprint,
+                   items.fingerprint_algorithm, items.fingerprint_version, items.file_size_bytes, items.last_write_time_utc,
+                   items.fingerprint_last_utc, items.fingerprint_status, items.loudness_error
+            {LibraryCatalogListSql.FromClause}
+            {where};
+            """;
+        args.Bind(command);
+        var items = new List<LibraryCatalogItem>();
+        using (var reader = command.ExecuteReader())
+        {
+            while (reader.Read())
+            {
+                items.Add(ReadListedItem(reader));
+            }
+        }
+
+        return items;
+    }
+
+    public int CountItems()
+    {
+        using var connection = LibraryCatalogStore.OpenWrite(_databasePath);
+        return LibraryCatalogStore.ExecuteScalarInt(connection, "SELECT COUNT(*) FROM items;");
     }
 
     public static JsonObject ToItemJson(LibraryCatalogItem item) => ToItem(item);
@@ -477,6 +523,60 @@ public sealed class LibraryCatalogSession
         var state = ReadItemState(connection, transaction, identifier);
         transaction.Rollback();
         return state;
+    }
+
+    public CatalogPlaybackItem? ReadPlaybackItem(string identifier)
+    {
+        if (string.IsNullOrWhiteSpace(identifier))
+        {
+            return null;
+        }
+
+        using var connection = LibraryCatalogStore.OpenWrite(_databasePath);
+        using var transaction = connection.BeginTransaction();
+        var id = ResolveItemId(connection, transaction, identifier);
+        if (id == null)
+        {
+            transaction.Rollback();
+            return null;
+        }
+
+        using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            SELECT items.id, items.full_path, items.file_name, items.media_type, items.duration_ticks,
+                   items.is_favorite, items.is_blacklisted, sources.is_enabled
+            FROM items
+            LEFT JOIN sources ON sources.id = items.source_id
+            WHERE items.id = $id
+            LIMIT 1;
+            """;
+        command.Parameters.AddWithValue("$id", id);
+        CatalogPlaybackItem? item;
+        using (var reader = command.ExecuteReader())
+        {
+            if (!reader.Read())
+            {
+                item = null;
+            }
+            else
+            {
+                item = new CatalogPlaybackItem
+                {
+                    Id = reader.GetString(0),
+                    FullPath = reader.GetString(1),
+                    FileName = reader.GetString(2),
+                    MediaType = reader.GetInt32(3),
+                    DurationTicks = reader.IsDBNull(4) ? null : reader.GetInt64(4),
+                    IsFavorite = reader.GetInt32(5) != 0,
+                    IsBlacklisted = reader.GetInt32(6) != 0,
+                    IsSourceEnabled = reader.IsDBNull(7) || reader.GetInt32(7) != 0
+                };
+            }
+        }
+
+        transaction.Rollback();
+        return item;
     }
 
     public bool SetFingerprint(string id, string? fingerprint, string algorithm, int version, int? status, DateTime? fingerprintLastUtc)
@@ -1821,6 +1921,18 @@ public sealed class CatalogItemState
     public bool IsBlacklisted { get; init; }
     public int PlayCount { get; init; }
     public DateTime? LastPlayedUtc { get; init; }
+}
+
+public sealed class CatalogPlaybackItem
+{
+    public string Id { get; init; } = string.Empty;
+    public string FullPath { get; init; } = string.Empty;
+    public string FileName { get; init; } = string.Empty;
+    public int MediaType { get; init; }
+    public long? DurationTicks { get; init; }
+    public bool IsFavorite { get; init; }
+    public bool IsBlacklisted { get; init; }
+    public bool IsSourceEnabled { get; init; }
 }
 
 public sealed class CatalogAutoTagAssignment

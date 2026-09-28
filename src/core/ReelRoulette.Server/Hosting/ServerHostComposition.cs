@@ -363,16 +363,13 @@ public static class ServerHostComposition
             return Results.Ok(response);
         });
 
-        app.MapPost("/api/random", (RandomRequest request, ServerStateService state, LibraryPlaybackService playback, LibraryOperationsService operations, OperatorTestingService testingService) =>
+        app.MapPost("/api/random", (RandomRequest request, ServerStateService state, LibraryPlaybackService playback, OperatorTestingService testingService) =>
         {
             request.ClientId = NormalizeOptionalIdentity(request.ClientId);
             request.SessionId = NormalizeOptionalIdentity(request.SessionId);
-            var tagModel = operations.GetTagEditorModel(new TagEditorModelRequest());
             if (!playback.TrySelectRandom(
                     request,
                     state.GetPresetCatalogSnapshot(),
-                    tagModel.Categories,
-                    tagModel.Tags,
                     out var response,
                     out var statusCode,
                     out var error))

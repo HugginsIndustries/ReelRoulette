@@ -19,8 +19,8 @@ Instructions:
 
 Commit Message:
 
-M10i8: Make favorite and playback row updates
+M10i9: Choose random playback from the catalog query
 
-- Persist favorite, blacklist, record-playback, and clear-stats as catalog row updates so they do not load the full library.
-- Keep favorite and blacklist mutually exclusive. Clear every played item when no path list is sent, and only the named items when a list is sent.
-- Keep the WebUI service worker from proxying API calls and the event stream, so Firefox can reload the page.
+- Load random eligibility with the library list filter so a catalog revision does not rebuild the full library.
+- Keep the current weighting on that eligible set, and return no item when the set is empty.
+- Read one item and its source for direct play and media lookup by id or path.

@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using ReelRoulette.Core.Filtering;
+using ReelRoulette.Core.Library;
 using ReelRoulette.Core.Randomization;
 using ReelRoulette.Server.Contracts;
 
@@ -12,10 +12,7 @@ public sealed class LibraryPlaybackService
     private readonly LibraryCatalogHost _catalog;
     private readonly ServerMediaTokenStore _tokenStore;
     private readonly ILogger<LibraryPlaybackService> _logger;
-    private readonly object _cacheLock = new();
     private readonly object _randomizationLock = new();
-    private long _cachedRevision = -1;
-    private List<LibraryItemRecord> _cachedItems = [];
     private readonly Dictionary<string, RandomizationRuntimeStateCore> _clientRandomizationStates = new(StringComparer.OrdinalIgnoreCase);
 
     public LibraryPlaybackService(
@@ -83,8 +80,6 @@ public sealed class LibraryPlaybackService
     public bool TrySelectRandom(
         RandomRequest request,
         IReadOnlyList<FilterPresetSnapshot> presets,
-        IReadOnlyList<TagCategorySnapshot> categories,
-        IReadOnlyList<TagSnapshot> tags,
         out RandomResponse? response,
         out int statusCode,
         out string? error)
@@ -93,21 +88,59 @@ public sealed class LibraryPlaybackService
         error = null;
         statusCode = StatusCodes.Status200OK;
 
-        var items = LoadItems();
-        if (items.Count == 0)
+        int itemCount;
+        try
+        {
+            itemCount = _catalog.Session.CountItems();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not count library items in '{DatabasePath}'.", _catalog.Session.DatabasePath);
+            error = "Library not loaded or empty.";
+            statusCode = StatusCodes.Status503ServiceUnavailable;
+            return false;
+        }
+
+        if (itemCount == 0)
         {
             error = "Library not loaded or empty.";
             statusCode = StatusCodes.Status503ServiceUnavailable;
             return false;
         }
 
-        var filterState = ResolveEffectiveFilterState(request, presets, out statusCode, out error);
-        if (filterState is null)
+        if (!TryResolveFilter(request, presets, out var filter, out statusCode, out error) || filter is null)
         {
             return false;
         }
 
-        var eligible = FilterEligible(items, filterState, categories, tags, request).ToList();
+        if (!request.IncludeVideos && !request.IncludePhotos)
+        {
+            return true;
+        }
+
+        MediaTypeValue? requiredMediaType = null;
+        if (!request.IncludeVideos)
+        {
+            requiredMediaType = MediaTypeValue.Photo;
+        }
+        else if (!request.IncludePhotos)
+        {
+            requiredMediaType = MediaTypeValue.Video;
+        }
+
+        IReadOnlyList<LibraryCatalogItem> eligible;
+        try
+        {
+            eligible = _catalog.Session.QueryEligible(filter, requiredMediaType);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not query eligible library items in '{DatabasePath}'.", _catalog.Session.DatabasePath);
+            error = "Library not loaded or empty.";
+            statusCode = StatusCodes.Status503ServiceUnavailable;
+            return false;
+        }
+
         if (eligible.Count == 0)
         {
             return true;
@@ -147,19 +180,19 @@ public sealed class LibraryPlaybackService
 
         var selected = eligible.FirstOrDefault(item =>
             string.Equals(item.FullPath, selectedPath, StringComparison.OrdinalIgnoreCase));
-        if (string.IsNullOrWhiteSpace(selected.FullPath))
+        if (selected == null || string.IsNullOrWhiteSpace(selected.FullPath))
         {
             error = "Selected item not found.";
             statusCode = StatusCodes.Status500InternalServerError;
             return false;
         }
-        var token = _tokenStore.CreateToken(selected.FullPath);
 
+        var token = _tokenStore.CreateToken(selected.FullPath);
         response = ApiContractMapper.MapRandomResult(
             id: selected.FullPath,
-            displayName: selected.FileName,
-            mediaType: selected.MediaType,
-            durationSeconds: selected.DurationSeconds,
+            displayName: string.IsNullOrWhiteSpace(selected.FileName) ? Path.GetFileName(selected.FullPath) : selected.FileName,
+            mediaType: MediaTypeName(selected.MediaType),
+            durationSeconds: DurationSeconds(selected.DurationTicks),
             mediaUrl: $"/api/media/{token}",
             isFavorite: selected.IsFavorite,
             isBlacklisted: selected.IsBlacklisted);
@@ -194,11 +227,8 @@ public sealed class LibraryPlaybackService
         }
 
         var trimmedId = itemId.Trim();
-        var items = LoadItems();
-        var match = items.FirstOrDefault(item =>
-            string.Equals(item.Id, trimmedId, StringComparison.Ordinal));
-
-        if (string.IsNullOrWhiteSpace(match.FullPath))
+        var match = _catalog.Session.ReadPlaybackItem(trimmedId);
+        if (match == null || string.IsNullOrWhiteSpace(match.FullPath))
         {
             statusCode = StatusCodes.Status404NotFound;
             error = "Item not found";
@@ -233,9 +263,9 @@ public sealed class LibraryPlaybackService
         var token = _tokenStore.CreateToken(match.FullPath);
         response = ApiContractMapper.MapRandomResult(
             id: match.FullPath,
-            displayName: match.FileName,
-            mediaType: match.MediaType,
-            durationSeconds: match.DurationSeconds,
+            displayName: string.IsNullOrWhiteSpace(match.FileName) ? Path.GetFileName(match.FullPath) : match.FileName,
+            mediaType: MediaTypeName(match.MediaType),
+            durationSeconds: DurationSeconds(match.DurationTicks),
             mediaUrl: $"/api/media/{token}",
             isFavorite: match.IsFavorite,
             isBlacklisted: match.IsBlacklisted);
@@ -264,11 +294,8 @@ public sealed class LibraryPlaybackService
             return true;
         }
 
-        var items = LoadItems();
-        var match = items.FirstOrDefault(item =>
-            string.Equals(item.Id, idOrToken, StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(item.FullPath, idOrToken, StringComparison.OrdinalIgnoreCase));
-        if (string.IsNullOrWhiteSpace(match.FullPath))
+        var match = _catalog.Session.ReadPlaybackItem(idOrToken);
+        if (match == null || string.IsNullOrWhiteSpace(match.FullPath))
         {
             fullPath = string.Empty;
             return false;
@@ -299,284 +326,63 @@ public sealed class LibraryPlaybackService
         });
     }
 
-    private static FilterStateProjection? ResolveEffectiveFilterState(
+    private static bool TryResolveFilter(
         RandomRequest request,
         IReadOnlyList<FilterPresetSnapshot> presets,
+        out FilterStateModel? filter,
         out int statusCode,
         out string? error)
     {
         statusCode = StatusCodes.Status200OK;
         error = null;
+        filter = null;
 
+        JsonElement? element = null;
         if (request.FilterState.HasValue &&
             request.FilterState.Value.ValueKind is not JsonValueKind.Null and not JsonValueKind.Undefined)
         {
-            return ParseFilterState(request.FilterState.Value);
+            element = request.FilterState.Value;
         }
-
-        var preset = ResolvePreset(presets, request.PresetId);
-        var isAllMedia = string.Equals(request.PresetId, "all-media", StringComparison.OrdinalIgnoreCase);
-        if (preset is null && !isAllMedia)
+        else
         {
-            statusCode = string.IsNullOrWhiteSpace(request.PresetId)
-                ? StatusCodes.Status400BadRequest
-                : StatusCodes.Status404NotFound;
-            error = string.IsNullOrWhiteSpace(request.PresetId)
-                ? "Either filterState or presetId is required."
-                : $"Preset '{request.PresetId}' not found.";
-            return null;
+            var preset = ResolvePreset(presets, request.PresetId);
+            var isAllMedia = string.Equals(request.PresetId, "all-media", StringComparison.OrdinalIgnoreCase);
+            if (preset is null && !isAllMedia)
+            {
+                statusCode = string.IsNullOrWhiteSpace(request.PresetId)
+                    ? StatusCodes.Status400BadRequest
+                    : StatusCodes.Status404NotFound;
+                error = string.IsNullOrWhiteSpace(request.PresetId)
+                    ? "Either filterState or presetId is required."
+                    : $"Preset '{request.PresetId}' not found.";
+                return false;
+            }
+
+            if (preset != null &&
+                preset.FilterState.ValueKind is not JsonValueKind.Null and not JsonValueKind.Undefined)
+            {
+                element = preset.FilterState;
+            }
         }
 
-        return ParseFilterState(preset?.FilterState);
+        if (!LibraryListFilterParser.TryParse(element, out filter, out error))
+        {
+            statusCode = StatusCodes.Status400BadRequest;
+            return false;
+        }
+
+        filter ??= new FilterStateModel();
+        return true;
     }
 
-    private static IEnumerable<LibraryItemRecord> FilterEligible(
-        IReadOnlyList<LibraryItemRecord> items,
-        FilterStateProjection state,
-        IReadOnlyList<TagCategorySnapshot> categories,
-        IReadOnlyList<TagSnapshot> tags,
-        RandomRequest request)
+    private static string MediaTypeName(int mediaType)
     {
-        if (!request.IncludeVideos && !request.IncludePhotos)
-        {
-            return [];
-        }
-
-        var itemsByKey = new Dictionary<string, LibraryItemRecord>(StringComparer.OrdinalIgnoreCase);
-        var filterItems = new List<FilterItem>(items.Count);
-        var sourcesById = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
-        var hasSourceLessItems = false;
-
-        foreach (var item in items)
-        {
-            itemsByKey[item.FullPath] = item;
-            filterItems.Add(new FilterItem
-            {
-                Key = item.FullPath,
-                SourceId = item.SourceId,
-                FullPath = item.FullPath,
-                IsBlacklisted = item.IsBlacklisted,
-                IsFavorite = item.IsFavorite,
-                PlayCount = item.PlayCount,
-                HasAudio = item.HasAudio,
-                Duration = item.DurationSeconds.HasValue ? TimeSpan.FromSeconds(item.DurationSeconds.Value) : null,
-                IntegratedLoudness = item.IntegratedLoudness,
-                MediaType = ParseMediaTypeValue(item.MediaType),
-                Tags = item.Tags.Where(t => !string.IsNullOrWhiteSpace(t)).ToList()
-            });
-
-            if (string.IsNullOrWhiteSpace(item.SourceId))
-            {
-                hasSourceLessItems = true;
-                continue;
-            }
-
-            if (!sourcesById.TryGetValue(item.SourceId, out var isEnabled))
-            {
-                sourcesById[item.SourceId] = item.IsSourceEnabled;
-            }
-            else if (!isEnabled && item.IsSourceEnabled)
-            {
-                sourcesById[item.SourceId] = true;
-            }
-        }
-
-        if (hasSourceLessItems && !sourcesById.ContainsKey(string.Empty))
-        {
-            sourcesById[string.Empty] = true;
-        }
-
-        var filterRequest = new FilterSetRequest
-        {
-            Sources = sourcesById.Select(pair => new FilterSource
-            {
-                Id = pair.Key,
-                IsEnabled = pair.Value
-            }).ToList(),
-            Items = filterItems,
-            CategoryIds = categories.Select(c => c.Id).ToList(),
-            Tags = tags.Select(tag => new FilterTag
-            {
-                Name = tag.Name,
-                CategoryId = tag.CategoryId
-            }).ToList()
-        };
-
-        var filterState = state.ToModel();
-        var eligible = new FilterSetBuilder().BuildEligibleSetWithoutFileCheck(filterState, filterRequest);
-        var eligibleSet = eligible
-            .Select(item => item.Key)
-            .Where(key => !string.IsNullOrWhiteSpace(key))
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-        var query = items.Where(item => eligibleSet.Contains(item.FullPath));
-        if (!request.IncludeVideos)
-        {
-            query = query.Where(item => string.Equals(item.MediaType, "photo", StringComparison.OrdinalIgnoreCase));
-        }
-        else if (!request.IncludePhotos)
-        {
-            query = query.Where(item => string.Equals(item.MediaType, "video", StringComparison.OrdinalIgnoreCase));
-        }
-
-        return query;
+        return mediaType == (int)MediaTypeValue.Photo ? "photo" : "video";
     }
 
-    private List<LibraryItemRecord> LoadItems()
+    private static double? DurationSeconds(long? ticks)
     {
-        lock (_cacheLock)
-        {
-            var revision = _catalog.Session.Revision;
-            if (_cachedItems.Count > 0 && revision == _cachedRevision)
-            {
-                return _cachedItems;
-            }
-
-            try
-            {
-                var root = _catalog.Session.BuildDocument();
-                var nodes = root?["items"]?.AsArray() ?? [];
-                var sourceEnabledById = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
-                foreach (var sourceNode in root?["sources"] as JsonArray ?? [])
-                {
-                    if (sourceNode is not JsonObject sourceObject)
-                    {
-                        continue;
-                    }
-
-                    var sid = sourceObject["id"]?.GetValue<string>()?.Trim();
-                    if (string.IsNullOrWhiteSpace(sid))
-                    {
-                        continue;
-                    }
-
-                    sourceEnabledById[sid] = sourceObject["isEnabled"]?.GetValue<bool?>() ?? true;
-                }
-
-                var result = new List<LibraryItemRecord>();
-                foreach (var node in nodes)
-                {
-                    if (node is not JsonObject itemNode)
-                    {
-                        continue;
-                    }
-
-                    var fullPath = itemNode["fullPath"]?.GetValue<string>()?.Trim();
-                    if (string.IsNullOrWhiteSpace(fullPath))
-                    {
-                        continue;
-                    }
-
-                    var id = itemNode["id"]?.GetValue<string>()?.Trim();
-                    var fileName = itemNode["fileName"]?.GetValue<string>()?.Trim();
-                    var durationSeconds = ParseDurationSeconds(itemNode["duration"]);
-                    var mediaType = ParseMediaType(itemNode["mediaType"]);
-                    var sourceId = itemNode["sourceId"]?.GetValue<string>()?.Trim() ?? string.Empty;
-                    var isFavorite = itemNode["isFavorite"]?.GetValue<bool?>() ?? false;
-                    var isBlacklisted = itemNode["isBlacklisted"]?.GetValue<bool?>() ?? false;
-                    var playCount = itemNode["playCount"]?.GetValue<int?>() ?? 0;
-                    var lastPlayedUtc = ParseDateTime(itemNode["lastPlayedUtc"]);
-                    var hasAudio = itemNode["hasAudio"]?.GetValue<bool?>();
-                    var integratedLoudness = itemNode["integratedLoudness"]?.GetValue<double?>();
-                    var tags = itemNode["tags"] is JsonArray tagsArray
-                        ? tagsArray.Select(x => x?.GetValue<string>()?.Trim())
-                            .Where(x => !string.IsNullOrWhiteSpace(x))
-                            .Select(x => x!)
-                            .ToList()
-                        : [];
-
-                    var itemSourceEnabled = string.IsNullOrWhiteSpace(sourceId)
-                        || !sourceEnabledById.TryGetValue(sourceId, out var catalogSourceEnabled)
-                        || catalogSourceEnabled;
-
-                    result.Add(new LibraryItemRecord(
-                        Id: string.IsNullOrWhiteSpace(id) ? fullPath : id,
-                        FullPath: fullPath,
-                        SourceId: sourceId,
-                        IsSourceEnabled: itemSourceEnabled,
-                        FileName: string.IsNullOrWhiteSpace(fileName) ? Path.GetFileName(fullPath) : fileName,
-                        MediaType: mediaType,
-                        DurationSeconds: durationSeconds,
-                        IsFavorite: isFavorite,
-                        IsBlacklisted: isBlacklisted,
-                        PlayCount: playCount,
-                        LastPlayedUtc: lastPlayedUtc,
-                        HasAudio: hasAudio,
-                        IntegratedLoudness: integratedLoudness,
-                        Tags: tags));
-                }
-
-                _cachedItems = result;
-                _cachedRevision = revision;
-                return _cachedItems;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Could not read library catalog from '{DatabasePath}'.", _catalog.Session.DatabasePath);
-                return _cachedItems;
-            }
-        }
-    }
-
-    private static double? ParseDurationSeconds(JsonNode? node)
-    {
-        if (node is null)
-        {
-            return null;
-        }
-
-        if (node is JsonValue value)
-        {
-            if (value.TryGetValue<string>(out var asString) &&
-                TimeSpan.TryParse(asString, CultureInfo.InvariantCulture, out var parsed))
-            {
-                return parsed.TotalSeconds;
-            }
-
-            if (value.TryGetValue<double>(out var asDouble))
-            {
-                return asDouble;
-            }
-        }
-
-        return null;
-    }
-
-    private static string ParseMediaType(JsonNode? node)
-    {
-        if (node is JsonValue value)
-        {
-            if (value.TryGetValue<int>(out var mediaTypeCode))
-            {
-                return mediaTypeCode == 1 ? "photo" : "video";
-            }
-
-            if (value.TryGetValue<string>(out var asString))
-            {
-                return asString.Equals("photo", StringComparison.OrdinalIgnoreCase) ? "photo" : "video";
-            }
-        }
-
-        return "video";
-    }
-
-    private static MediaTypeValue ParseMediaTypeValue(string? mediaType)
-    {
-        return string.Equals(mediaType, "photo", StringComparison.OrdinalIgnoreCase)
-            ? MediaTypeValue.Photo
-            : MediaTypeValue.Video;
-    }
-
-    private static DateTime? ParseDateTime(JsonNode? node)
-    {
-        if (node is not JsonValue value || !value.TryGetValue<string>(out var asString) || string.IsNullOrWhiteSpace(asString))
-        {
-            return null;
-        }
-
-        return DateTime.TryParse(asString, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var parsed)
-            ? parsed
-            : null;
+        return ticks is long value ? value / (double)TimeSpan.TicksPerSecond : null;
     }
 
     private static RandomizationModeValue ParseRandomizationMode(string? mode)
@@ -827,22 +633,6 @@ public sealed class LibraryPlaybackService
 
         return values;
     }
-
-    private readonly record struct LibraryItemRecord(
-        string Id,
-        string FullPath,
-        string SourceId,
-        bool IsSourceEnabled,
-        string FileName,
-        string MediaType,
-        double? DurationSeconds,
-        bool IsFavorite,
-        bool IsBlacklisted,
-        int PlayCount,
-        DateTime? LastPlayedUtc,
-        bool? HasAudio,
-        double? IntegratedLoudness,
-        IReadOnlyList<string> Tags);
 
     private sealed class FilterStateProjection : IEquatable<FilterStateProjection>
     {
