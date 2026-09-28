@@ -431,55 +431,39 @@ public sealed class LibraryOperationsService
     {
         lock (_lock)
         {
-            var root = LoadLibraryRoot();
-            var categories = EnsureArray(root, "categories").OfType<JsonObject>().ToList();
-            var tags = EnsureArray(root, "tags").OfType<JsonObject>().ToList();
-            var items = EnsureArray(root, "items").OfType<JsonObject>().ToList();
-
-            EnsureUncategorizedCategory(categories);
-
             var requestedIds = (request?.ItemIds ?? [])
                 .Where(id => !string.IsNullOrWhiteSpace(id))
                 .Select(id => id.Trim())
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
-
-            var responseItems = new List<ItemTagsSnapshot>();
-            foreach (var requestedId in requestedIds)
-            {
-                var matchedItem = items.FirstOrDefault(item =>
-                    string.Equals(GetNodeString(item["id"]), requestedId, StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(GetNodeString(item["fullPath"]), requestedId, StringComparison.OrdinalIgnoreCase));
-                var tagsForItem = matchedItem == null
-                    ? []
-                    : EnsureArray(matchedItem, "tags")
-                        .Select(node => GetNodeString(node))
-                        .Where(tag => !string.IsNullOrWhiteSpace(tag))
-                        .Distinct(StringComparer.OrdinalIgnoreCase)
-                        .OrderBy(tag => tag, StringComparer.OrdinalIgnoreCase)
-                        .ToList();
-
-                responseItems.Add(new ItemTagsSnapshot
-                {
-                    ItemId = requestedId,
-                    Tags = tagsForItem
-                });
-            }
-
+            var read = _catalog.Session.ReadTagEditor(requestedIds);
+            var categories = read.Categories
+                .Select(MapCategory)
+                .Where(category => !string.IsNullOrWhiteSpace(category.Name))
+                .ToList();
+            EnsureUncategorizedSnapshot(categories);
             return new TagEditorModelResponse
             {
                 Categories = categories
-                    .Select(MapCategorySnapshot)
-                    .Where(category => !string.IsNullOrWhiteSpace(category.Name))
                     .OrderBy(category => category.SortOrder)
                     .ThenBy(category => category.Name, StringComparer.OrdinalIgnoreCase)
                     .ToList(),
-                Tags = tags
-                    .Select(MapTagSnapshot)
+                Tags = read.Tags
+                    .Select(tag => new TagSnapshot
+                    {
+                        Name = tag.Name,
+                        CategoryId = NormalizeCategoryId(tag.CategoryId)
+                    })
                     .Where(tag => !string.IsNullOrWhiteSpace(tag.Name))
                     .OrderBy(tag => tag.Name, StringComparer.OrdinalIgnoreCase)
                     .ToList(),
-                Items = responseItems
+                Items = read.Items
+                    .Select(item => new ItemTagsSnapshot
+                    {
+                        ItemId = item.ItemId,
+                        Tags = item.Tags
+                    })
+                    .ToList()
             };
         }
     }
@@ -515,46 +499,7 @@ public sealed class LibraryOperationsService
 
         lock (_lock)
         {
-            var root = LoadLibraryRoot();
-            var items = EnsureArray(root, "items").OfType<JsonObject>().ToList();
-            var categories = EnsureArray(root, "categories").OfType<JsonObject>().ToList();
-            EnsureUncategorizedCategory(categories);
-            var tags = EnsureArray(root, "tags");
-            var changed = false;
-
-            foreach (var itemId in itemIds)
-            {
-                var item = items.FirstOrDefault(candidate =>
-                    string.Equals(GetNodeString(candidate["id"]), itemId, StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(GetNodeString(candidate["fullPath"]), itemId, StringComparison.OrdinalIgnoreCase));
-                if (item == null)
-                {
-                    continue;
-                }
-
-                var itemTags = EnsureArray(item, "tags");
-                changed |= RemoveTagsFromItem(itemTags, removeTags);
-                changed |= AddTagsToItem(itemTags, addTags);
-            }
-
-            foreach (var addTag in addTags)
-            {
-                var tagCreatedOrUpdated = EnsureTagExists(tags, addTag, null, preserveExistingCategory: true);
-                changed |= tagCreatedOrUpdated;
-                catalogChanged |= tagCreatedOrUpdated;
-            }
-
-            var normalizedCatalog = NormalizeTagCatalog(tags);
-            catalogChanged |= normalizedCatalog;
-            changed |= normalizedCatalog;
-
-            if (!changed)
-            {
-                return false;
-            }
-
-            SaveLibraryRoot(root);
-            return true;
+            return _catalog.Session.ApplyItemTagEdits(itemIds, addTags, removeTags, out catalogChanged);
         }
     }
 
@@ -567,43 +512,7 @@ public sealed class LibraryOperationsService
 
         lock (_lock)
         {
-            var root = LoadLibraryRoot();
-            var categories = EnsureArray(root, "categories");
-            var categoryId = NormalizeCategoryId(request.Id);
-            if (string.IsNullOrWhiteSpace(categoryId))
-            {
-                categoryId = UncategorizedCategoryId;
-            }
-
-            if (string.Equals(categoryId, UncategorizedCategoryId, StringComparison.OrdinalIgnoreCase))
-            {
-                EnsureUncategorizedCategory(categories.OfType<JsonObject>().ToList());
-                SaveLibraryRoot(root);
-                return true;
-            }
-
-            var existing = categories.OfType<JsonObject>()
-                .FirstOrDefault(category => string.Equals(GetNodeString(category["id"]), categoryId, StringComparison.OrdinalIgnoreCase));
-            if (existing == null)
-            {
-                categories.Add(new JsonObject
-                {
-                    ["id"] = categoryId,
-                    ["name"] = request.Name.Trim(),
-                    ["sortOrder"] = request.SortOrder ?? categories.Count
-                });
-            }
-            else
-            {
-                existing["name"] = request.Name.Trim();
-                if (request.SortOrder.HasValue)
-                {
-                    existing["sortOrder"] = request.SortOrder.Value;
-                }
-            }
-
-            SaveLibraryRoot(root);
-            return true;
+            return _catalog.Session.UpsertCategory(request.Id, request.Name, request.SortOrder);
         }
     }
 
@@ -616,24 +525,18 @@ public sealed class LibraryOperationsService
 
         lock (_lock)
         {
-            var root = LoadLibraryRoot();
-            var categories = EnsureArray(root, "categories").OfType<JsonObject>().ToList();
-            EnsureUncategorizedCategory(categories);
-            var tags = EnsureArray(root, "tags");
-            var changed = EnsureTagExists(tags, request.Name.Trim(), request.CategoryId);
-            _ = NormalizeTagCatalog(tags);
-            if (!changed)
-            {
-                return false;
-            }
-
-            SaveLibraryRoot(root);
-            return true;
+            return _catalog.Session.UpsertTag(request.Name.Trim(), request.CategoryId);
         }
     }
 
     public bool RenameTag(RenameTagRequest request)
     {
+        return RenameTag(request, out _);
+    }
+
+    public bool RenameTag(RenameTagRequest request, out List<string> changedItemIds)
+    {
+        changedItemIds = [];
         if (string.IsNullOrWhiteSpace(request.OldName) || string.IsNullOrWhiteSpace(request.NewName))
         {
             return false;
@@ -641,39 +544,18 @@ public sealed class LibraryOperationsService
 
         lock (_lock)
         {
-            var root = LoadLibraryRoot();
-            var tags = EnsureArray(root, "tags").OfType<JsonObject>().ToList();
-            var items = EnsureArray(root, "items").OfType<JsonObject>().ToList();
-
-            var existing = tags.FirstOrDefault(tag =>
-                string.Equals(GetNodeString(tag["name"]), request.OldName, StringComparison.OrdinalIgnoreCase));
-            if (existing == null)
-            {
-                return false;
-            }
-
-            existing["name"] = request.NewName.Trim();
-            if (request.NewCategoryId != null)
-            {
-                existing["categoryId"] = NormalizeCategoryId(request.NewCategoryId);
-            }
-
-            foreach (var item in items)
-            {
-                var itemTags = EnsureArray(item, "tags");
-                RenameTagInItem(itemTags, request.OldName, request.NewName);
-                NormalizeItemTags(itemTags);
-            }
-
-            _ = NormalizeTagCatalog(EnsureArray(root, "tags"));
-
-            SaveLibraryRoot(root);
-            return true;
+            return _catalog.Session.RenameTag(request.OldName, request.NewName, request.NewCategoryId, out changedItemIds);
         }
     }
 
     public bool DeleteTag(DeleteTagRequest request)
     {
+        return DeleteTag(request, out _);
+    }
+
+    public bool DeleteTag(DeleteTagRequest request, out List<string> changedItemIds)
+    {
+        changedItemIds = [];
         if (string.IsNullOrWhiteSpace(request.Name))
         {
             return false;
@@ -681,23 +563,7 @@ public sealed class LibraryOperationsService
 
         lock (_lock)
         {
-            var root = LoadLibraryRoot();
-            var tags = EnsureArray(root, "tags");
-            var removed = RemoveTagFromCatalog(tags, request.Name);
-            var items = EnsureArray(root, "items").OfType<JsonObject>().ToList();
-            foreach (var item in items)
-            {
-                var itemTags = EnsureArray(item, "tags");
-                removed |= RemoveTagFromItem(itemTags, request.Name);
-            }
-
-            if (!removed)
-            {
-                return false;
-            }
-
-            SaveLibraryRoot(root);
-            return true;
+            return _catalog.Session.DeleteTag(request.Name, out changedItemIds);
         }
     }
 
@@ -710,33 +576,7 @@ public sealed class LibraryOperationsService
 
         lock (_lock)
         {
-            var root = LoadLibraryRoot();
-            var categories = EnsureArray(root, "categories");
-            var tags = EnsureArray(root, "tags").OfType<JsonObject>().ToList();
-            var sourceCategoryId = NormalizeCategoryId(request.CategoryId);
-            if (string.Equals(sourceCategoryId, UncategorizedCategoryId, StringComparison.OrdinalIgnoreCase))
-            {
-                return false;
-            }
-
-            var targetCategoryId = request.NewCategoryId == null
-                ? UncategorizedCategoryId
-                : NormalizeCategoryId(request.NewCategoryId);
-            var changed = RemoveCategory(categories, sourceCategoryId);
-            foreach (var tag in tags.Where(tag =>
-                         string.Equals(GetNodeString(tag["categoryId"]), sourceCategoryId, StringComparison.OrdinalIgnoreCase)))
-            {
-                tag["categoryId"] = targetCategoryId;
-                changed = true;
-            }
-
-            if (!changed)
-            {
-                return false;
-            }
-
-            SaveLibraryRoot(root);
-            return true;
+            return _catalog.Session.DeleteCategory(request.CategoryId, request.NewCategoryId);
         }
     }
 
@@ -1134,7 +974,13 @@ public sealed class LibraryOperationsService
 
     public AutoTagApplyResponse ApplyAutoTags(AutoTagApplyRequest request)
     {
+        return ApplyAutoTags(request, out _);
+    }
+
+    public AutoTagApplyResponse ApplyAutoTags(AutoTagApplyRequest request, out List<CatalogAutoTagAppliedAssignment> applied)
+    {
         var response = new AutoTagApplyResponse();
+        applied = [];
         if (request.Assignments.Count == 0)
         {
             return response;
@@ -1142,44 +988,23 @@ public sealed class LibraryOperationsService
 
         lock (_lock)
         {
-            var root = LoadLibraryRoot();
-            var items = (root["items"] as JsonArray)?.OfType<JsonObject>().ToList() ?? [];
-            var tags = EnsureArray(root, "tags");
-
-            foreach (var assignment in request.Assignments)
-            {
-                if (string.IsNullOrWhiteSpace(assignment.TagName))
+            var result = _catalog.Session.ApplyAutoTagAssignments(request.Assignments
+                .Select(assignment => new CatalogAutoTagAssignment
                 {
-                    continue;
-                }
-
-                _ = EnsureTagExists(tags, assignment.TagName.Trim(), null, preserveExistingCategory: true);
-                foreach (var itemPath in assignment.ItemPaths)
+                    TagName = assignment.TagName,
+                    ItemPaths = assignment.ItemPaths
+                })
+                .ToList());
+            response.AssignmentsAdded = result.AssignmentsAdded;
+            response.ChangedItemPaths = result.ChangedItemPaths;
+            response.Applied = result.Applied
+                .Select(row => new AutoTagAppliedAssignment
                 {
-                    var item = items.FirstOrDefault(candidate =>
-                        string.Equals(candidate["fullPath"]?.GetValue<string>(), itemPath, StringComparison.OrdinalIgnoreCase));
-                    if (item == null)
-                    {
-                        continue;
-                    }
-
-                    var itemTags = EnsureArray(item, "tags");
-                    if (itemTags.Any(tag => string.Equals(tag?.GetValue<string>(), assignment.TagName, StringComparison.OrdinalIgnoreCase)))
-                    {
-                        continue;
-                    }
-
-                    itemTags.Add(assignment.TagName);
-                    response.AssignmentsAdded++;
-                    response.ChangedItemPaths.Add(itemPath);
-                }
-            }
-
-            response.ChangedItemPaths = response.ChangedItemPaths
-                .Distinct(StringComparer.OrdinalIgnoreCase)
+                    TagName = row.TagName,
+                    ChangedItemPaths = row.ChangedItemPaths
+                })
                 .ToList();
-            _ = NormalizeTagCatalog(tags);
-            SaveLibraryRoot(root);
+            applied = result.Applied;
         }
 
         return response;
@@ -1667,10 +1492,9 @@ public sealed class LibraryOperationsService
         return categoryId.Trim();
     }
 
-    private static TagCategorySnapshot MapCategorySnapshot(JsonObject category)
+    private static TagCategorySnapshot MapCategory(LibraryCatalogCategory category)
     {
-        var id = NormalizeCategoryId(GetNodeString(category["id"]));
-        var name = GetNodeString(category["name"]);
+        var id = NormalizeCategoryId(category.Id);
         if (string.Equals(id, UncategorizedCategoryId, StringComparison.OrdinalIgnoreCase))
         {
             return new TagCategorySnapshot
@@ -1684,18 +1508,24 @@ public sealed class LibraryOperationsService
         return new TagCategorySnapshot
         {
             Id = id,
-            Name = name,
-            SortOrder = GetNodeInt(category["sortOrder"], defaultValue: 0)
+            Name = category.Name,
+            SortOrder = category.SortOrder
         };
     }
 
-    private static TagSnapshot MapTagSnapshot(JsonObject tag)
+    private static void EnsureUncategorizedSnapshot(List<TagCategorySnapshot> categories)
     {
-        return new TagSnapshot
+        if (categories.Any(category => string.Equals(category.Id, UncategorizedCategoryId, StringComparison.OrdinalIgnoreCase)))
         {
-            Name = GetNodeString(tag["name"]),
-            CategoryId = NormalizeCategoryId(GetNodeString(tag["categoryId"]))
-        };
+            return;
+        }
+
+        categories.Add(new TagCategorySnapshot
+        {
+            Id = UncategorizedCategoryId,
+            Name = UncategorizedCategoryName,
+            SortOrder = int.MaxValue
+        });
     }
 
     private static void EnsureUncategorizedCategory(List<JsonObject> categories)
@@ -1716,157 +1546,6 @@ public sealed class LibraryOperationsService
             ["name"] = UncategorizedCategoryName,
             ["sortOrder"] = int.MaxValue
         });
-    }
-
-    private static bool AddTagsToItem(JsonArray itemTags, IEnumerable<string> tagsToAdd)
-    {
-        var changed = false;
-        foreach (var addTag in tagsToAdd)
-        {
-            if (itemTags.Any(tag => string.Equals(GetNodeString(tag), addTag, StringComparison.OrdinalIgnoreCase)))
-            {
-                continue;
-            }
-
-            itemTags.Add(addTag);
-            changed = true;
-        }
-
-        return changed;
-    }
-
-    private static bool RemoveTagsFromItem(JsonArray itemTags, IEnumerable<string> tagsToRemove)
-    {
-        var changed = false;
-        foreach (var removeTag in tagsToRemove)
-        {
-            changed |= RemoveTagFromItem(itemTags, removeTag);
-        }
-
-        return changed;
-    }
-
-    private static bool RemoveTagFromItem(JsonArray itemTags, string tagName)
-    {
-        var changed = false;
-        for (var i = itemTags.Count - 1; i >= 0; i--)
-        {
-            if (!string.Equals(GetNodeString(itemTags[i]), tagName, StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-
-            itemTags.RemoveAt(i);
-            changed = true;
-        }
-
-        return changed;
-    }
-
-    private static bool RenameTagInItem(JsonArray itemTags, string oldName, string newName)
-    {
-        var changed = false;
-        for (var i = 0; i < itemTags.Count; i++)
-        {
-            if (!string.Equals(GetNodeString(itemTags[i]), oldName, StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-
-            itemTags[i] = newName;
-            changed = true;
-        }
-
-        return changed;
-    }
-
-    private static bool RemoveTagFromCatalog(JsonArray tags, string tagName)
-    {
-        var changed = false;
-        for (var i = tags.Count - 1; i >= 0; i--)
-        {
-            if (tags[i] is not JsonObject tag)
-            {
-                continue;
-            }
-
-            if (!string.Equals(GetNodeString(tag["name"]), tagName, StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-
-            tags.RemoveAt(i);
-            changed = true;
-        }
-
-        return changed;
-    }
-
-    private static bool RemoveCategory(JsonArray categories, string categoryId)
-    {
-        var changed = false;
-        for (var i = categories.Count - 1; i >= 0; i--)
-        {
-            if (categories[i] is not JsonObject category)
-            {
-                continue;
-            }
-
-            if (!string.Equals(GetNodeString(category["id"]), categoryId, StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-
-            categories.RemoveAt(i);
-            changed = true;
-        }
-
-        return changed;
-    }
-
-    private static bool EnsureTagExists(JsonArray tags, string tagName, string? categoryId, bool preserveExistingCategory = false)
-    {
-        var existing = tags.OfType<JsonObject>().FirstOrDefault(tag =>
-            string.Equals(GetNodeString(tag["name"]), tagName, StringComparison.OrdinalIgnoreCase));
-        if (existing != null)
-        {
-            if (preserveExistingCategory || string.IsNullOrWhiteSpace(categoryId))
-            {
-                return false;
-            }
-
-            var normalizedCategoryId = NormalizeCategoryId(categoryId);
-            if (!string.IsNullOrWhiteSpace(normalizedCategoryId) &&
-                !string.Equals(GetNodeString(existing["categoryId"]), normalizedCategoryId, StringComparison.OrdinalIgnoreCase))
-            {
-                existing["categoryId"] = normalizedCategoryId;
-                return true;
-            }
-
-            return false;
-        }
-
-        tags.Add(new JsonObject
-        {
-            ["name"] = tagName,
-            ["categoryId"] = NormalizeCategoryId(categoryId)
-        });
-        return true;
-    }
-
-    private static void NormalizeItemTags(JsonArray itemTags)
-    {
-        var deduped = itemTags
-            .Select(tag => GetNodeString(tag))
-            .Where(tag => !string.IsNullOrWhiteSpace(tag))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-        itemTags.Clear();
-        foreach (var tag in deduped)
-        {
-            itemTags.Add(tag);
-        }
     }
 
     private static bool NormalizeTagCatalog(JsonArray tags)

@@ -443,6 +443,118 @@ public sealed class LibraryCatalogSessionTests
         Assert.Equal("no audio stream", Assert.Single(LibraryCatalogStore.Read(session.DatabasePath).Items).LoudnessError);
     }
 
+    [Fact]
+    public void TagEdits_PersistByIdOrPath_WithoutBuildingTheCatalogDocument()
+    {
+        using var dir = new TempDirectory();
+        var session = LibraryCatalogStore.Open(dir.Path).Session!;
+        Assert.True(session.InsertItem(new LibraryCatalogItem
+        {
+            Id = "item-1",
+            FullPath = "/clips/one.mp4",
+            FileName = "one.mp4"
+        }));
+        Assert.True(session.InsertItem(new LibraryCatalogItem
+        {
+            Id = "item-2",
+            FullPath = "/clips/two.mp4",
+            FileName = "two.mp4"
+        }));
+        Assert.True(session.UpsertCategory("people", "People", 1));
+        Assert.True(session.UpsertTag("Old", "people"));
+        var builds = session.DocumentBuilds;
+
+        Assert.True(session.ApplyItemTagEdits(["item-1", "/clips/two.mp4"], ["New"], ["Old"], out var catalogChanged));
+        Assert.True(catalogChanged);
+        Assert.True(session.RenameTag("New", "Fresh", "people"));
+        Assert.True(session.DeleteTag("Fresh"));
+        Assert.True(session.UpsertTag("Auto", "people"));
+        var applied = session.ApplyAutoTagAssignments(
+        [
+            new CatalogAutoTagAssignment { TagName = "Auto", ItemPaths = ["/clips/one.mp4"] }
+        ]);
+
+        Assert.Equal(1, applied.AssignmentsAdded);
+        Assert.Equal(["/clips/one.mp4"], applied.ChangedItemPaths);
+        Assert.Equal(builds, session.DocumentBuilds);
+        var model = session.ReadTagEditor(["/clips/one.mp4"]);
+        Assert.Equal(["Auto"], Assert.Single(model.Items).Tags);
+        Assert.Equal(builds, session.DocumentBuilds);
+        _ = session.BuildDocument();
+        Assert.Equal(builds + 1, session.DocumentBuilds);
+    }
+
+    [Fact]
+    public void RenameAndDelete_ReturnTheItemIdsThatHadTheTag_WithoutBuildingTheCatalogDocument()
+    {
+        using var dir = new TempDirectory();
+        var session = LibraryCatalogStore.Open(dir.Path).Session!;
+        Assert.True(session.UpsertTag("Night", null));
+        Assert.True(session.UpsertTag("Day", null));
+        Assert.True(session.InsertItem(new LibraryCatalogItem
+        {
+            Id = "kept",
+            FullPath = "/clips/kept.mp4",
+            FileName = "kept.mp4",
+            Tags = ["Night"]
+        }));
+        Assert.True(session.InsertItem(new LibraryCatalogItem
+        {
+            Id = "other",
+            FullPath = "/clips/other.mp4",
+            FileName = "other.mp4",
+            Tags = ["Day"]
+        }));
+        var builds = session.DocumentBuilds;
+
+        Assert.True(session.RenameTag("Night", "Late", null, out var renamed));
+        Assert.Equal(["kept"], renamed);
+        Assert.False(session.RenameTag("Missing", "Nope", null, out var missingRename));
+        Assert.Empty(missingRename);
+        Assert.Equal(builds, session.DocumentBuilds);
+
+        Assert.True(session.DeleteTag("Late", out var deleted));
+        Assert.Equal(["kept"], deleted);
+        Assert.False(session.DeleteTag("Missing", out var missingDelete));
+        Assert.Empty(missingDelete);
+        Assert.Equal(builds, session.DocumentBuilds);
+        _ = session.BuildDocument();
+        Assert.Equal(builds + 1, session.DocumentBuilds);
+    }
+
+    [Fact]
+    public void ApplyAutoTagAssignments_ReportsChangedPathsPerTag()
+    {
+        using var dir = new TempDirectory();
+        var session = LibraryCatalogStore.Open(dir.Path).Session!;
+        Assert.True(session.InsertItem(new LibraryCatalogItem
+        {
+            Id = "item-1",
+            FullPath = "/clips/one.mp4",
+            FileName = "one.mp4"
+        }));
+        Assert.True(session.InsertItem(new LibraryCatalogItem
+        {
+            Id = "item-2",
+            FullPath = "/clips/two.mp4",
+            FileName = "two.mp4"
+        }));
+        Assert.True(session.ApplyItemTagEdits(["/clips/one.mp4"], ["Cat"], [], out _));
+
+        var applied = session.ApplyAutoTagAssignments(
+        [
+            new CatalogAutoTagAssignment { TagName = "Cat", ItemPaths = ["/clips/one.mp4", "/clips/two.mp4"] },
+            new CatalogAutoTagAssignment { TagName = "Dog", ItemPaths = ["/clips/two.mp4"] }
+        ]);
+
+        Assert.Equal(2, applied.AssignmentsAdded);
+        Assert.Equal(["/clips/two.mp4"], applied.ChangedItemPaths);
+        var cat = Assert.Single(applied.Applied, row => row.TagName == "Cat");
+        Assert.Equal(["/clips/two.mp4"], cat.ChangedItemPaths);
+        var dog = Assert.Single(applied.Applied, row => row.TagName == "Dog");
+        Assert.Equal(["/clips/two.mp4"], dog.ChangedItemPaths);
+    }
+
     private static string ReadUserVersion(string directory)
     {
         using var connection = new Microsoft.Data.Sqlite.SqliteConnection(new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder

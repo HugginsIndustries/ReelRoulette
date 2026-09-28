@@ -72,6 +72,9 @@ export interface LibraryQuerySession {
   applyFavorite(payload: ItemStateChangedPayload): Promise<void>;
   applyPlayback(payload: PlaybackRecordedPayload): Promise<void>;
   applyTags(payload: ItemTagsChangedPayload): Promise<void>;
+  writeTags(updates: readonly { itemId: string; tags: readonly string[] }[]): void;
+  reviseStoredFilter(revise: (selected: string[], excluded: string[]) => void): void;
+  reloadLoaded(): Promise<void>;
   resync(): Promise<void>;
 }
 
@@ -408,6 +411,29 @@ export function createLibraryQuerySession(query: LibraryQueryFn): LibraryQuerySe
       if (result.changed) {
         notify({ scroll: "keep", statusMessage: null });
       }
+    },
+    reviseStoredFilter(revise) {
+      revise(filterState.selectedTags, filterState.excludedTags);
+    },
+    writeTags(updates) {
+      let changed = false;
+      for (const update of updates) {
+        const item = findProjectionItem(items, { itemId: update.itemId, path: update.itemId });
+        if (!item) {
+          continue;
+        }
+        item.tags = update.tags.slice();
+        changed = true;
+      }
+      if (changed) {
+        notify({ scroll: "keep", statusMessage: null });
+      }
+    },
+    async reloadLoaded() {
+      if (!hasResult && !inFlight) {
+        return;
+      }
+      await run("reload");
     },
     async applyTags(payload) {
       const ids = (payload.itemIds ?? []).map((id) => String(id).trim()).filter(Boolean);

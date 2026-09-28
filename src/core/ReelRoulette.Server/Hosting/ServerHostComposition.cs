@@ -652,13 +652,27 @@ public static class ServerHostComposition
                 return Results.BadRequest(new { error = "oldName and newName are required" });
             }
 
-            var accepted = operations.RenameTag(request);
+            var accepted = operations.RenameTag(request, out var changedItemIds);
             if (!accepted)
             {
                 return Results.Json(new { error = "rename tag rejected or produced no changes" }, statusCode: StatusCodes.Status409Conflict);
             }
 
             _ = state.RenameTagInPresetCatalogOnly(request.OldName, request.NewName);
+            var oldName = request.OldName.Trim();
+            var newName = request.NewName.Trim();
+            if (changedItemIds.Count > 0 && !string.Equals(oldName, newName, StringComparison.Ordinal))
+            {
+                state.PublishExternal("itemTagsChanged", new ItemTagsChangedPayload
+                {
+                    ItemIds = changedItemIds,
+                    AddedTags = [newName],
+                    RemovedTags = [oldName],
+                    CatalogReplacedTag = oldName,
+                    CatalogReplacementTag = newName
+                });
+            }
+
             var model = operations.GetTagEditorModel(new TagEditorModelRequest());
             var envelope = state.PublishExternal("tagCatalogChanged", new TagCatalogChangedPayload
             {
@@ -682,13 +696,24 @@ public static class ServerHostComposition
                 return Results.BadRequest(new { error = "name is required" });
             }
 
-            var accepted = operations.DeleteTag(request);
+            var accepted = operations.DeleteTag(request, out var changedItemIds);
             if (!accepted)
             {
                 return Results.Json(new { error = "delete tag rejected or produced no changes" }, statusCode: StatusCodes.Status409Conflict);
             }
 
             _ = state.RemoveTagFromPresetCatalogOnly(request.Name);
+            if (changedItemIds.Count > 0)
+            {
+                state.PublishExternal("itemTagsChanged", new ItemTagsChangedPayload
+                {
+                    ItemIds = changedItemIds,
+                    AddedTags = [],
+                    RemovedTags = [request.Name.Trim()],
+                    CatalogReplacedTag = request.Name.Trim()
+                });
+            }
+
             var model = operations.GetTagEditorModel(new TagEditorModelRequest());
             var envelope = state.PublishExternal("tagCatalogChanged", new TagCatalogChangedPayload
             {
@@ -830,19 +855,23 @@ public static class ServerHostComposition
 
         app.MapPost("/api/autotag/apply", (AutoTagApplyRequest request, LibraryOperationsService operations, ServerStateService state) =>
         {
-            var response = operations.ApplyAutoTags(request);
+            var response = operations.ApplyAutoTags(request, out var applied);
             if (response.AssignmentsAdded > 0)
             {
-                state.PublishExternal("itemTagsChanged", new ItemTagsChangedPayload
+                foreach (var assignment in applied)
                 {
-                    ItemIds = response.ChangedItemPaths,
-                    AddedTags = request.Assignments
-                        .Select(assignment => assignment.TagName)
-                        .Where(tag => !string.IsNullOrWhiteSpace(tag))
-                        .Distinct(StringComparer.OrdinalIgnoreCase)
-                        .ToList(),
-                    RemovedTags = []
-                });
+                    if (assignment.ChangedItemPaths.Count == 0)
+                    {
+                        continue;
+                    }
+
+                    state.PublishExternal("itemTagsChanged", new ItemTagsChangedPayload
+                    {
+                        ItemIds = assignment.ChangedItemPaths,
+                        AddedTags = [assignment.TagName],
+                        RemovedTags = []
+                    });
+                }
 
                 var model = operations.GetTagEditorModel(new TagEditorModelRequest());
                 state.PublishExternal("tagCatalogChanged", new TagCatalogChangedPayload

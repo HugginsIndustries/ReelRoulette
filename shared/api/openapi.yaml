@@ -2674,9 +2674,21 @@ components:
           items:
             type: string
 
+    AutoTagAppliedAssignment:
+      type: object
+      required: [tagName, changedItemPaths]
+      properties:
+        tagName:
+          type: string
+        changedItemPaths:
+          type: array
+          description: Files that gained this tag.
+          items:
+            type: string
+
     AutoTagApplyResponse:
       type: object
-      required: [assignmentsAdded, changedItemPaths]
+      required: [assignmentsAdded, changedItemPaths, applied]
       properties:
         assignmentsAdded:
           type: integer
@@ -2685,6 +2697,11 @@ components:
           type: array
           items:
             type: string
+        applied:
+          type: array
+          description: One entry per tag that was newly written, listing only the files that gained that tag.
+          items:
+            $ref: "#/components/schemas/AutoTagAppliedAssignment"
 
     ClientLogRequest:
       type: object
@@ -2757,6 +2774,14 @@ components:
           type: array
           items:
             type: string
+        catalogReplacedTag:
+          type: string
+          nullable: true
+          description: Set when this event renames or deletes the tag in the catalog. Absent for a per-item edit.
+        catalogReplacementTag:
+          type: string
+          nullable: true
+          description: The new name when catalogReplacedTag is a rename. Absent when that tag was deleted.
 
     TagCatalogChangedPayload:
       type: object

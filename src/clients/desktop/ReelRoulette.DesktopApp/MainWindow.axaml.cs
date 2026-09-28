@@ -228,6 +228,7 @@ namespace ReelRoulette
 
         // Library panel state
         private ObservableCollection<LibraryItemViewModel> _libraryItems = new ObservableCollection<LibraryItemViewModel>();
+        private readonly TagSaveSession _tagSaves = new();
         private ObservableCollection<LibraryGridRowViewModel> _libraryGridRows = new ObservableCollection<LibraryGridRowViewModel>();
         private ObservableCollection<LibraryGridRowViewModel> _libraryGridVisibleRows = new ObservableCollection<LibraryGridRowViewModel>();
         private readonly List<double> _libraryGridRowTopOffsets = new();
@@ -4256,14 +4257,13 @@ namespace ReelRoulette
             if (result == true)
             {
                 Log($"ContextMenu_AddTags_Click: Tags updated for {selectedItems.Count} items");
+                if (dialog.PendingSave != null)
+                {
+                    BeginTagSave(dialog.PendingSave, "Tags updated.");
+                }
                 
                 // Save filter presets (in case tags were renamed/deleted)
                 SaveSettings();
-                
-                if (_currentVideoPath != null && selectedItems.Any(item => item.FullPath == _currentVideoPath))
-                {
-                    UpdateCurrentFileStatsUi();
-                }
             }
         }
 
@@ -4292,22 +4292,18 @@ namespace ReelRoulette
             }
 
             Log($"ContextMenu_RemoveTags_Click: Removing tags from {selectedItems.Count} items");
-            
-            var accepted = await ApplyItemTagDeltaAsync(
-                selectedItems.Select(item => item.FullPath).ToList(),
-                [],
-                commonTags.ToList());
-            if (!accepted)
+            BeginTagSave(new TagEditorSave
             {
-                StatusTextBlock.Text = "Tag removal failed (API required).";
-                return;
-            }
-
-            StatusTextBlock.Text = $"Removed {commonTags.Count} tag(s) from {selectedItems.Count} item(s)";
-            if (_currentVideoPath != null && selectedItems.Any(item => item.FullPath == _currentVideoPath))
-            {
-                UpdateCurrentFileStatsUi();
-            }
+                Steps =
+                [
+                    new TagEditorSaveStep
+                    {
+                        Kind = TagEditorSaveKind.ApplyItemTags,
+                        ItemIds = selectedItems.Select(item => item.FullPath).ToList(),
+                        RemoveTags = commonTags.ToList()
+                    }
+                ]
+            }, $"Removed {commonTags.Count} tag(s) from {selectedItems.Count} item(s)");
         }
 
         private void ShowLibraryPanelMenuItem_Click(object? sender, RoutedEventArgs e)
@@ -5695,6 +5691,245 @@ namespace ReelRoulette
             return true;
         }
 
+        private bool TagFilterCanChangeMembership()
+        {
+            return ((_currentFilterState?.SelectedTags?.Count ?? 0) > 0)
+                || ((_currentFilterState?.ExcludedTags?.Count ?? 0) > 0);
+        }
+
+        private bool TagReloadOnLand()
+        {
+            var hasTagFilter = TagFilterCanChangeMembership();
+            var effect = LibraryPanelBrowse.EffectFor(
+                LibraryPanelBrowseEvent.ItemTags,
+                _currentFilterState?.FavoritesOnly ?? false,
+                _currentFilterState?.ExcludeBlacklisted ?? false,
+                _currentFilterState?.OnlyNeverPlayed ?? false,
+                hasTagFilter,
+                _librarySortMode);
+            var queryOpen = LibraryPanelBrowse.IsBrowseQueryOpen(_libraryBrowseQueryOpen, _libraryBrowseInFlight);
+            return LibraryPanelBrowse.ShouldReplayBrowse(queryOpen, effect);
+        }
+
+        private void ReloadAfterTagSave(bool force)
+        {
+            if (force)
+            {
+                RefreshLibraryBrowseKeepingScroll();
+                return;
+            }
+
+            if (!_libraryBrowseHasResult
+                && !LibraryPanelBrowse.IsBrowseQueryOpen(_libraryBrowseQueryOpen, _libraryBrowseInFlight))
+            {
+                return;
+            }
+
+            ReloadLibraryBrowseWindow();
+        }
+
+        private List<LibraryItem> TagSaveSources()
+        {
+            var sources = new List<LibraryItem>();
+            var seen = new HashSet<LibraryItem>(ReferenceEqualityComparer.Instance);
+            foreach (var item in _libraryIndex?.Items ?? [])
+            {
+                if (seen.Add(item))
+                {
+                    sources.Add(item);
+                }
+            }
+
+            foreach (var loaded in _libraryItems)
+            {
+                if (loaded.Item != null && seen.Add(loaded.Item))
+                {
+                    sources.Add(loaded.Item);
+                }
+            }
+
+            return sources;
+        }
+
+        private static List<TagSaveItem> CopyTagSaveItems(IReadOnlyList<LibraryItem> sources)
+        {
+            return sources.Select(item => new TagSaveItem
+            {
+                Id = item.Id ?? string.Empty,
+                FullPath = item.FullPath ?? string.Empty,
+                Tags = (item.Tags ?? []).ToList()
+            }).ToList();
+        }
+
+        private static void WriteTagSaveItems(IReadOnlyList<LibraryItem> sources, IReadOnlyList<TagSaveItem> copies)
+        {
+            for (var i = 0; i < sources.Count && i < copies.Count; i++)
+            {
+                sources[i].Tags = copies[i].Tags.ToList();
+            }
+        }
+
+        private void BeginTagSave(TagEditorSave save, string successStatus, bool alwaysReloadOnLand = false)
+        {
+            if (save.Steps.Count == 0)
+            {
+                StatusTextBlock.Text = successStatus;
+                return;
+            }
+
+            var sources = TagSaveSources();
+            var copies = CopyTagSaveItems(sources);
+            var handle = _tagSaves.Begin(copies, save.Steps, alwaysReloadOnLand, TagFilterCanChangeMembership());
+            WriteTagSaveItems(sources, copies);
+            UpdateCurrentFileStatsUi();
+            StatusTextBlock.Text = "Saving tags...";
+            _ = FinishTagSaveAsync(handle, save, successStatus);
+        }
+
+        private async Task FinishTagSaveAsync(
+            TagSaveHandle handle,
+            TagEditorSave save,
+            string successStatus)
+        {
+            var accepted = new List<TagEditorSaveStep>();
+            try
+            {
+                foreach (var step in save.Steps)
+                {
+                    var acceptedStep = await ExecuteTagSaveStepAsync(handle, step);
+                    if (!acceptedStep)
+                    {
+                        FailTagSave(handle, accepted, successStatus);
+                        return;
+                    }
+
+                    accepted.Add(step);
+                    RetargetLiveTagFilters(step);
+                }
+
+                ProjectCurrentTagItems();
+                var decision = _tagSaves.Succeed(handle, TagReloadOnLand());
+                if (decision.Reload)
+                {
+                    ReloadAfterTagSave(decision.ForceReload);
+                }
+
+                StatusTextBlock.Text = successStatus;
+            }
+            catch (Exception ex)
+            {
+                Log($"FinishTagSaveAsync: Tag update failed ({ex.Message})");
+                FailTagSave(handle, accepted, successStatus);
+            }
+        }
+
+        private void FailTagSave(
+            TagSaveHandle handle,
+            IReadOnlyList<TagEditorSaveStep> accepted,
+            string successStatus)
+        {
+            var current = TagSaveSources();
+            var live = CopyTagSaveItems(current);
+            var rolledBack = _tagSaves.Fail(handle, live, accepted);
+            WriteTagSaveItems(current, live);
+            UpdateCurrentFileStatsUi();
+            StatusTextBlock.Text = rolledBack
+                ? "Tag update failed. The previous tags were restored."
+                : successStatus;
+        }
+
+        private void ProjectCurrentTagItems()
+        {
+            var current = TagSaveSources();
+            var live = CopyTagSaveItems(current);
+            _tagSaves.Project(live);
+            WriteTagSaveItems(current, live);
+            UpdateCurrentFileStatsUi();
+        }
+
+        private void RetargetLiveTagFilters(TagEditorSaveStep step)
+        {
+            if (step.Kind is not (TagEditorSaveKind.RenameTag or TagEditorSaveKind.DeleteTag))
+            {
+                return;
+            }
+
+            var filterChanged = false;
+            if (_currentFilterState != null)
+            {
+                filterChanged |= TagSaveApply.RetargetFilterTags(_currentFilterState.SelectedTags, step);
+                filterChanged |= TagSaveApply.RetargetFilterTags(_currentFilterState.ExcludedTags, step);
+            }
+
+            var presetsChanged = false;
+            foreach (var preset in _filterPresets ?? [])
+            {
+                if (preset?.FilterState == null)
+                {
+                    continue;
+                }
+
+                presetsChanged |= TagSaveApply.RetargetFilterTags(preset.FilterState.SelectedTags, step);
+                presetsChanged |= TagSaveApply.RetargetFilterTags(preset.FilterState.ExcludedTags, step);
+            }
+
+            if (filterChanged)
+            {
+                SaveSettings();
+            }
+
+            if (filterChanged || presetsChanged)
+            {
+                UpdateFilterSummaryText();
+                UpdateLibraryPresetComboBox();
+            }
+        }
+
+        private async Task<bool> ExecuteTagSaveStepAsync(TagSaveHandle handle, TagEditorSaveStep step)
+        {
+            switch (step.Kind)
+            {
+                case TagEditorSaveKind.DeleteCategory:
+                    return await DeleteCategoryAsync(step.CategoryId ?? string.Empty, step.NewCategoryId);
+                case TagEditorSaveKind.UpsertCategory:
+                    return await UpsertCategoryAsync(new TagCategory
+                    {
+                        Id = step.CategoryId ?? string.Empty,
+                        Name = step.Name ?? string.Empty,
+                        SortOrder = step.SortOrder
+                    });
+                case TagEditorSaveKind.DeleteTag:
+                    return await DeleteTagAsync(step.Name ?? string.Empty);
+                case TagEditorSaveKind.RenameTag:
+                    return await RenameTagAsync(step.OldName ?? string.Empty, step.NewName ?? string.Empty, step.NewCategoryId);
+                case TagEditorSaveKind.UpsertTag:
+                    return await UpsertTagAsync(step.Name ?? string.Empty, step.CategoryId ?? string.Empty);
+                case TagEditorSaveKind.ApplyItemTags:
+                    return await ApplyItemTagDeltaAsync(step.ItemIds, step.AddTags, step.RemoveTags);
+                case TagEditorSaveKind.ApplyAutoTags:
+                    var response = await ApplyAutoTagViaCoreAsync(step.Assignments.Select(assignment => new CoreAutoTagAssignment
+                    {
+                        TagName = assignment.TagName,
+                        ItemPaths = assignment.ItemPaths
+                    }).ToList());
+                    if (response == null)
+                    {
+                        return false;
+                    }
+
+                    _tagSaves.NoteAutoTagResult(
+                        handle,
+                        (response.Applied ?? []).Select(row => new TagSaveAppliedTag
+                        {
+                            TagName = row.TagName,
+                            ItemPaths = row.ChangedItemPaths ?? []
+                        }).ToList());
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
         public async Task<bool> ApplyItemTagDeltaAsync(List<string> itemIds, List<string> addTags, List<string> removeTags)
         {
             if (itemIds == null || itemIds.Count == 0)
@@ -5879,6 +6114,7 @@ namespace ReelRoulette
                 })
                 .ToList();
             Log($"CoreEvents: tagCatalogChanged applied from server (reason={payload.Reason}).");
+            UpdateCurrentFileStatsUi();
         }
 
         private void ApplySourceStateProjection(CoreSourceStateChangedPayload payload)
@@ -6442,7 +6678,44 @@ namespace ReelRoulette
 
                     await Dispatcher.UIThread.InvokeAsync(() =>
                     {
-                        ApplyItemTagsProjection(itemTags);
+                        var echo = new TagSaveEcho
+                        {
+                            ItemIds = itemTags.ItemIds ?? [],
+                            AddedTags = itemTags.AddedTags ?? [],
+                            RemovedTags = itemTags.RemovedTags ?? []
+                        };
+                        TagSaveApply.HandleIncomingItemTags(
+                            new IncomingItemTagsEvent
+                            {
+                                AddedTags = itemTags.AddedTags ?? [],
+                                RemovedTags = itemTags.RemovedTags ?? [],
+                                CatalogReplacedTag = itemTags.CatalogReplacedTag,
+                                CatalogReplacementTag = itemTags.CatalogReplacementTag
+                            },
+                            TagFilterCanChangeMembership,
+                            RetargetLiveTagFilters,
+                            handling =>
+                            {
+                                var decision = _tagSaves.OnEcho(echo, handling.HadTagFilter || TagReloadOnLand());
+                                if (decision.SkipPatch)
+                                {
+                                    ProjectCurrentTagItems();
+                                    _tagSaves.Sweep();
+                                    if (decision.Reload)
+                                    {
+                                        ReloadAfterTagSave(decision.ForceReload);
+                                    }
+
+                                    return;
+                                }
+
+                                _tagSaves.Sweep();
+                                ApplyItemTagsProjection(itemTags);
+                                if (handling.ReloadBecauseFilterCleared)
+                                {
+                                    ReloadAfterTagSave(false);
+                                }
+                            });
                     });
                     break;
                 case "tagCatalogChanged":
@@ -8381,8 +8654,7 @@ namespace ReelRoulette
                 return;
             }
 
-            var changedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var assignments = new List<CoreAutoTagAssignment>();
+            var assignments = new List<TagEditorAutoTagAssignment>();
 
             foreach (var row in acceptedRows)
             {
@@ -8395,15 +8667,11 @@ namespace ReelRoulette
                     continue;
                 }
 
-                assignments.Add(new CoreAutoTagAssignment
+                assignments.Add(new TagEditorAutoTagAssignment
                 {
                     TagName = row.TagName,
                     ItemPaths = itemPaths
                 });
-                foreach (var itemPath in itemPaths)
-                {
-                    changedPaths.Add(itemPath);
-                }
             }
 
             if (assignments.Count == 0)
@@ -8412,22 +8680,17 @@ namespace ReelRoulette
                 return;
             }
 
-            var applyResponse = await ApplyAutoTagViaCoreAsync(assignments);
-            if (applyResponse == null)
+            BeginTagSave(new TagEditorSave
             {
-                StatusTextBlock.Text = "Auto-tag apply failed (API required).";
-                return;
-            }
-
-            RefreshLibraryBrowseKeepingScroll();
-
-            if (_currentVideoPath != null && changedPaths.Contains(_currentVideoPath))
-            {
-                UpdateCurrentFileStatsUi();
-            }
-
-            Log($"AutoTagMenuItem_Click: Applied {applyResponse.AssignmentsAdded} tag assignments to {applyResponse.ChangedItemPaths.Count} item(s) across {acceptedRows.Count} selected tag row(s)");
-            StatusTextBlock.Text = $"Applied {applyResponse.AssignmentsAdded} tags to {applyResponse.ChangedItemPaths.Count} item(s).";
+                Steps =
+                [
+                    new TagEditorSaveStep
+                    {
+                        Kind = TagEditorSaveKind.ApplyAutoTags,
+                        Assignments = assignments
+                    }
+                ]
+            }, "Auto-tag changes saved.", alwaysReloadOnLand: true);
         }
 
         private async void ManageSourcesMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -9761,13 +10024,16 @@ namespace ReelRoulette
                 Log(items.Count > 0
                     ? $"ManageTagsForCurrentVideo_Click: Tags updated for: {items[0].FileName}"
                     : "ManageTagsForCurrentVideo_Click: Tag catalog updated (no selected item)");
+                if (dialog.PendingSave != null)
+                {
+                    BeginTagSave(
+                        dialog.PendingSave,
+                        items.Count > 0
+                            ? $"Tags updated for {Path.GetFileName(_currentVideoPath)}"
+                            : "Tag catalog updated.");
+                }
                 // Save filter presets (in case tags were renamed/deleted)
                 SaveSettings();
-                // Update stats for current video
-                UpdateCurrentFileStatsUi();
-                StatusTextBlock.Text = items.Count > 0
-                    ? $"Tags updated for {Path.GetFileName(_currentVideoPath)}"
-                    : "Tag catalog updated.";
             }
         }
 

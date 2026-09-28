@@ -326,6 +326,20 @@ describe("libraryQuerySession", () => {
     await session.applyTags({ itemIds: ["other"], addedTags: ["Night"], removedTags: [] });
     expect(calls).toHaveLength(3);
   });
+
+  it("reloads with a tag name revised on the stored filter", async () => {
+    const calls: string[] = [];
+    const session = createLibraryQuerySession(async (request) => {
+      calls.push(String(request.filterState.selectedTags));
+      return page([item("a")], 1, 1);
+    });
+    await session.ensureLoaded({ ...createDefaultFilterState(), selectedTags: ["Day"] }, controls());
+    session.reviseStoredFilter((selected) => {
+      selected[0] = "Evening";
+    });
+    await session.reloadLoaded();
+    expect(calls).toEqual(["Day", "Evening"]);
+  });
 });
 
 describe("library query decisions", () => {

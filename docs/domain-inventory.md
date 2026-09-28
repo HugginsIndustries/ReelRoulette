@@ -19,9 +19,9 @@ Core/server domain services own business rules and persisted state semantics.
 - `src/core/ReelRoulette.Core/*`
   - filtering/randomization helpers, storage abstractions, verification modules, **`LibraryGridLayout`** (shared justified-row thumbnail grid layout).
 - `src/core/ReelRoulette.Core/Library/LibraryCatalogStore.cs` and `LibraryCatalogSession.cs`
-  - SQLite catalog at `library.db` (WAL, `user_version` 1) is the live library store. Startup opens it, migrates a missing database from `library.json`, and updates catalog rows in place. `LibraryCatalogSession.QueryList` is the browse query (enabled sources, search, filter, sort, paging). Leftover `library.json` is not a live reader, writer, export, or backup. Desktop library export and import are unavailable until catalog transfer returns.
+  - SQLite catalog at `library.db` (WAL, `user_version` 1) is the live library store. Startup opens it, migrates a missing database from `library.json`, and updates catalog rows in place. `LibraryCatalogSession.QueryList` is the browse query (enabled sources, search, filter, sort, paging). Tag-editor model reads and tag-editor writes (item tags, categories, tags, and auto-tag apply) update those rows and do not build the full catalog document. Tag catalog sync still loads that document. Leftover `library.json` is not a live reader, writer, export, or backup. Desktop library export and import are unavailable until catalog transfer returns.
 - `src/core/ReelRoulette.Server/Services/LibraryOperationsService.cs`
-  - source import, library list/query (`POST /api/library/query`), duplicate scan/apply, auto-tag scan/apply, playback-stats clear, related command orchestration.
+  - source import, library list/query (`POST /api/library/query`), duplicate scan/apply, auto-tag scan/apply, playback-stats clear, tag-editor model and writes, and related command orchestration. Tag-editor reads and writes and auto-tag apply update catalog rows. Tag catalog sync still loads the full document.
 - `src/core/ReelRoulette.Server/Services/RefreshPipelineService.cs`
   - unified refresh pipeline stage execution (including `fingerprintScan` for per-file SHA-256 backfill), overlap guards, status snapshots, thumbnail generation/invalidation, duration/loudness scans, server-scheduled **auto-refresh**, and **library projection thumbnail metadata enrichment** at serve time.
 - `src/core/ReelRoulette.Server/Services/ServerStateService.cs`
@@ -100,7 +100,7 @@ Desktop is orchestration/render for migrated flows.
 - `src/clients/desktop/ReelRoulette.LibraryArchive/`
   - shared `net10.0` library: library zip export/import (manifest, source-root remap/skip, zip validation, atomic writes, optional thumbnails/backups) against roaming + local cache paths.
 - `src/clients/desktop/ReelRoulette.DesktopApp.Tests/`
-  - xUnit tests for `ReelRoulette.LibraryArchive` migration helpers, export→import round-trip, and library-panel browse window decisions.
+  - xUnit tests for `ReelRoulette.LibraryArchive` migration helpers, export→import round-trip, library-panel browse window decisions, and tag-save local apply (immediate tiles, a confirmed tag kept when the save fails, failed-tail undo that keeps a tag which arrived during the save, filter retarget, own-echo skip, and a rename event for a wider set of files that still applies).
 - `src/clients/desktop/ReelRoulette.DesktopApp/LibraryPanelBrowse.cs`
   - pure decisions for infinite-scroll fill, append reflow, whether a catalog event patches tiles or reloads the loaded window, whether an open query or a further page still in flight is read again, whether a deferred refresh keeps that query open, where a query page reflows, how an unknown tag id is handled, the committed loaded span a reload uses after a splice stops halfway, which copy supplies now-playing stats, and when a missing current file downloads the snapshot.
 - `src/clients/desktop/ReelRoulette.DesktopApp/MainWindow.axaml.cs`
@@ -112,7 +112,9 @@ Desktop is orchestration/render for migrated flows.
 - `src/clients/desktop/ReelRoulette.DesktopApp/LibraryExportOptionsDialog.*`, `LibraryImportRemapDialog.*`, `LibraryOverwriteConfirmDialog.*`
   - desktop UI for local-disk library zip export/import (options, per-source remap/skip, overwrite confirm, server-stopped acknowledgment on import); writes imported `desktop-settings.json` locally after successful import.
 - `src/clients/desktop/ReelRoulette.DesktopApp/AutoTagDialog.axaml.cs`
-  - API-backed auto-tag scan/apply orchestration. Scoped scan sends no path list.
+  - API-backed auto-tag scan/apply orchestration. Scoped scan sends no path list. The dialog closes on accept. Apply then updates the current file and loaded tiles before the request returns, and a failure undoes tags an event has not already confirmed.
+- `src/clients/desktop/ReelRoulette.DesktopApp/TagSaveApply.cs`
+  - local tag-save delta, undo of an unconfirmed failed tail on the tiles loaded now, retarget of a renamed or deleted filter tag, and skip of the save's own exact item-tag event. An incoming rename or delete retargets that filter before the reload. A rename or delete event for the files that had that tag still applies.
 - `src/clients/desktop/ReelRoulette.DesktopApp/SettingsDialog.axaml(.cs)`
   - client-side settings orchestration including playback policy toggle UX and Velopack check → download → apply.
 - `src/clients/desktop/ReelRoulette.DesktopApp/UpdateService.cs`
@@ -141,7 +143,9 @@ WebUI is runtime-config-driven API/SSE client orchestration.
 - `src/clients/web/ReelRoulette.WebUI/src/library/libraryProjectionSync.ts`
   - pure SSE patch helpers for favorite, blacklist, and playback fields on loaded tiles.
 - `src/clients/web/ReelRoulette.WebUI/src/library/libraryQuerySession.ts`
-  - list-query window: first page, fill-on-scroll, hide/show, patch or reload, and resync. Scoped auto-tag scan sends no path list.
+  - list-query window: first page, fill-on-scroll, hide/show, patch or reload, and resync. Scoped auto-tag scan sends no path list. Tag save writes the tiles loaded now, updates the stored filter when a tag is renamed or deleted, and reloads that window once when a tag filter can change which files are shown.
+- `src/clients/web/ReelRoulette.WebUI/src/library/tagSave.ts`
+  - pending-only tag-editor save plan, the same local delta, a confirmed tag kept when the request fails, failed-tail undo, the same filter retarget, and the same own-event skip for an exact item-tag echo. An incoming rename or delete retargets that filter before the reload. A rename or delete event for a wider set of files still applies.
 - `src/clients/web/ReelRoulette.WebUI/src/library/libraryBrowseModel.ts`
   - sort mode, direction labels, and search text held by the library overlay.
 - `src/clients/web/ReelRoulette.WebUI/src/library/libraryGridLayout.ts`

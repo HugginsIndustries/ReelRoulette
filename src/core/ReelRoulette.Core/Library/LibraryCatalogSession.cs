@@ -8,6 +8,7 @@ public sealed class LibraryCatalogSession
 {
     private readonly string _databasePath;
     private readonly AsyncLocal<WriteScope?> _writeScope = new();
+    private int _documentBuilds;
 
     public LibraryCatalogSession(string databasePath)
     {
@@ -16,6 +17,8 @@ public sealed class LibraryCatalogSession
     }
 
     public string DatabasePath => _databasePath;
+
+    public int DocumentBuilds => _documentBuilds;
 
     public long Revision
     {
@@ -31,6 +34,7 @@ public sealed class LibraryCatalogSession
 
     public JsonObject BuildDocument()
     {
+        Interlocked.Increment(ref _documentBuilds);
         var catalog = LibraryCatalogStore.Read(_databasePath);
         var root = new JsonObject
         {
@@ -537,6 +541,12 @@ public sealed class LibraryCatalogSession
 
     public bool RenameTag(string oldName, string newName, string? newCategoryId)
     {
+        return RenameTag(oldName, newName, newCategoryId, out _);
+    }
+
+    public bool RenameTag(string oldName, string newName, string? newCategoryId, out List<string> changedItemIds)
+    {
+        changedItemIds = [];
         if (string.IsNullOrWhiteSpace(oldName) || string.IsNullOrWhiteSpace(newName))
         {
             return false;
@@ -545,13 +555,16 @@ public sealed class LibraryCatalogSession
         var trimmed = newName.Trim();
         var oldFold = LibraryCatalogStore.Fold(oldName.Trim());
         var newFold = LibraryCatalogStore.Fold(trimmed);
-        return Commit((connection, transaction) =>
+        var affected = new List<string>();
+        var changed = Commit((connection, transaction) =>
         {
             var sourceRows = ReadTagsByFold(connection, transaction, oldFold);
             if (sourceRows.Count == 0)
             {
                 return false;
             }
+
+            affected.AddRange(ReadItemIdsForTagFold(connection, transaction, oldFold));
 
             var source = sourceRows[0];
             var sourceCategory = newCategoryId != null
@@ -606,22 +619,42 @@ public sealed class LibraryCatalogSession
                 ("$fold", newFold)) > 0;
             return changed;
         });
+        if (changed)
+        {
+            changedItemIds = affected;
+        }
+
+        return changed;
     }
 
     public bool DeleteTag(string name)
     {
+        return DeleteTag(name, out _);
+    }
+
+    public bool DeleteTag(string name, out List<string> changedItemIds)
+    {
+        changedItemIds = [];
         if (string.IsNullOrWhiteSpace(name))
         {
             return false;
         }
 
         var fold = LibraryCatalogStore.Fold(name.Trim());
-        return Commit((connection, transaction) =>
+        var affected = new List<string>();
+        var removed = Commit((connection, transaction) =>
         {
-            var removed = LibraryCatalogStore.Execute(connection, transaction, "DELETE FROM tags WHERE name_fold = $fold;", ("$fold", fold)) > 0;
-            removed |= LibraryCatalogStore.Execute(connection, transaction, "DELETE FROM item_tags WHERE name_fold = $fold;", ("$fold", fold)) > 0;
-            return removed;
+            affected.AddRange(ReadItemIdsForTagFold(connection, transaction, fold));
+            var deleted = LibraryCatalogStore.Execute(connection, transaction, "DELETE FROM tags WHERE name_fold = $fold;", ("$fold", fold)) > 0;
+            deleted |= LibraryCatalogStore.Execute(connection, transaction, "DELETE FROM item_tags WHERE name_fold = $fold;", ("$fold", fold)) > 0;
+            return deleted;
         });
+        if (removed)
+        {
+            changedItemIds = affected;
+        }
+
+        return removed;
     }
 
     public bool DeleteCategory(string categoryId, string? newCategoryId)
@@ -816,6 +849,299 @@ public sealed class LibraryCatalogSession
             WriteItemTags(connection, transaction, itemId, names);
             return true;
         });
+    }
+
+    public CatalogTagEditorRead ReadTagEditor(IReadOnlyList<string>? identifiers)
+    {
+        using var connection = LibraryCatalogStore.OpenWrite(_databasePath);
+        using var transaction = connection.BeginTransaction();
+        var categories = new List<LibraryCatalogCategory>();
+        using (var command = connection.CreateCommand())
+        {
+            command.Transaction = transaction;
+            command.CommandText = "SELECT id, name, sort_order FROM categories;";
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                categories.Add(new LibraryCatalogCategory
+                {
+                    Id = reader.GetString(0),
+                    Name = reader.GetString(1),
+                    SortOrder = reader.GetInt32(2)
+                });
+            }
+        }
+
+        var tags = new List<LibraryCatalogTag>();
+        using (var command = connection.CreateCommand())
+        {
+            command.Transaction = transaction;
+            command.CommandText = "SELECT name, name_fold, category_id FROM tags;";
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                tags.Add(new LibraryCatalogTag
+                {
+                    Name = reader.GetString(0),
+                    NameFold = reader.GetString(1),
+                    CategoryId = reader.GetString(2)
+                });
+            }
+        }
+
+        var items = new List<CatalogItemTagRead>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var identifier in identifiers ?? [])
+        {
+            if (string.IsNullOrWhiteSpace(identifier) || !seen.Add(identifier.Trim()))
+            {
+                continue;
+            }
+
+            var requested = identifier.Trim();
+            var itemId = ResolveItemId(connection, transaction, requested);
+            items.Add(new CatalogItemTagRead
+            {
+                ItemId = requested,
+                Tags = itemId == null ? [] : ReadItemTagNames(connection, transaction, itemId)
+            });
+        }
+
+        transaction.Rollback();
+        return new CatalogTagEditorRead
+        {
+            Categories = categories,
+            Tags = tags,
+            Items = items
+        };
+    }
+
+    public bool ApplyItemTagEdits(
+        IReadOnlyList<string> identifiers,
+        IReadOnlyList<string> addTags,
+        IReadOnlyList<string> removeTags,
+        out bool catalogChanged)
+    {
+        catalogChanged = false;
+        var ids = identifiers
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Select(id => id.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var adds = DistinctTagNames(addTags);
+        var removes = DistinctTagNames(removeTags);
+        if (ids.Count == 0 || (adds.Count == 0 && removes.Count == 0))
+        {
+            return false;
+        }
+
+        var insertedCatalog = false;
+        var committed = Commit((connection, transaction) =>
+        {
+            var changed = false;
+            foreach (var add in adds)
+            {
+                if (InsertCatalogTagIfMissing(connection, transaction, add))
+                {
+                    insertedCatalog = true;
+                    changed = true;
+                }
+            }
+
+            foreach (var identifier in ids)
+            {
+                var itemId = ResolveItemId(connection, transaction, identifier);
+                if (itemId == null)
+                {
+                    continue;
+                }
+
+                foreach (var remove in removes)
+                {
+                    changed |= LibraryCatalogStore.Execute(
+                        connection,
+                        transaction,
+                        "DELETE FROM item_tags WHERE item_id = $item AND name_fold = $fold;",
+                        ("$item", itemId),
+                        ("$fold", LibraryCatalogStore.Fold(remove))) > 0;
+                }
+
+                foreach (var add in adds)
+                {
+                    changed |= InsertItemTagIfMissing(connection, transaction, itemId, add);
+                }
+            }
+
+            return changed;
+        });
+        catalogChanged = committed && insertedCatalog;
+        return committed;
+    }
+
+    public CatalogAutoTagApplyResult ApplyAutoTagAssignments(IReadOnlyList<CatalogAutoTagAssignment> assignments)
+    {
+        var added = 0;
+        var paths = new List<string>();
+        var applied = new List<CatalogAutoTagAppliedAssignment>();
+        var committed = Commit((connection, transaction) =>
+        {
+            var changed = false;
+            foreach (var assignment in assignments)
+            {
+                if (string.IsNullOrWhiteSpace(assignment.TagName))
+                {
+                    continue;
+                }
+
+                var tagName = assignment.TagName.Trim();
+                changed |= InsertCatalogTagIfMissing(connection, transaction, tagName);
+                var changedPaths = new List<string>();
+                var seenPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var itemPath in assignment.ItemPaths)
+                {
+                    if (string.IsNullOrWhiteSpace(itemPath) || !seenPaths.Add(itemPath.Trim()))
+                    {
+                        continue;
+                    }
+
+                    var itemId = ResolveItemByPath(connection, transaction, itemPath);
+                    if (itemId == null)
+                    {
+                        continue;
+                    }
+
+                    if (!InsertItemTagIfMissing(connection, transaction, itemId, tagName))
+                    {
+                        continue;
+                    }
+
+                    changed = true;
+                    added++;
+                    var path = itemPath.Trim();
+                    changedPaths.Add(path);
+                    paths.Add(path);
+                }
+
+                if (changedPaths.Count > 0)
+                {
+                    applied.Add(new CatalogAutoTagAppliedAssignment
+                    {
+                        TagName = tagName,
+                        ChangedItemPaths = changedPaths
+                    });
+                }
+            }
+
+            return changed;
+        });
+        if (!committed)
+        {
+            return new CatalogAutoTagApplyResult();
+        }
+
+        return new CatalogAutoTagApplyResult
+        {
+            AssignmentsAdded = added,
+            ChangedItemPaths = paths.Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
+            Applied = applied
+        };
+    }
+
+    private static bool InsertItemTagIfMissing(SqliteConnection connection, SqliteTransaction transaction, string itemId, string name)
+    {
+        var fold = LibraryCatalogStore.Fold(name);
+        var existing = ScalarInt(
+            connection,
+            transaction,
+            "SELECT position FROM item_tags WHERE item_id = $item AND name_fold = $fold;",
+            ("$item", itemId),
+            ("$fold", fold));
+        if (existing != null)
+        {
+            return false;
+        }
+
+        var position = NextItemTagPosition(connection, transaction, itemId);
+        return LibraryCatalogStore.Execute(
+            connection,
+            transaction,
+            "INSERT INTO item_tags (item_id, position, name, name_fold) VALUES ($item, $position, $name, $fold);",
+            ("$item", itemId),
+            ("$position", position),
+            ("$name", name),
+            ("$fold", fold)) > 0;
+    }
+
+    private static string? ResolveItemId(SqliteConnection connection, SqliteTransaction transaction, string identifier)
+    {
+        var byId = ScalarString(
+            connection,
+            transaction,
+            "SELECT id FROM items WHERE id = $id COLLATE NOCASE LIMIT 1;",
+            ("$id", identifier.Trim()));
+        if (byId != null)
+        {
+            return byId;
+        }
+
+        return ResolveItemByPath(connection, transaction, identifier);
+    }
+
+    private static string? ResolveItemByPath(SqliteConnection connection, SqliteTransaction transaction, string fullPath)
+    {
+        return ScalarString(
+            connection,
+            transaction,
+            "SELECT id FROM items WHERE full_path_fold = $fold ORDER BY position LIMIT 1;",
+            ("$fold", LibraryCatalogStore.Fold(fullPath.Trim())));
+    }
+
+    private static List<string> ReadItemIdsForTagFold(SqliteConnection connection, SqliteTransaction transaction, string fold)
+    {
+        using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = "SELECT DISTINCT item_id FROM item_tags WHERE name_fold = $fold;";
+        command.Parameters.AddWithValue("$fold", fold);
+        using var reader = command.ExecuteReader();
+        var ids = new List<string>();
+        while (reader.Read())
+        {
+            if (reader.IsDBNull(0))
+            {
+                continue;
+            }
+
+            var id = reader.GetString(0);
+            if (!string.IsNullOrWhiteSpace(id))
+            {
+                ids.Add(id);
+            }
+        }
+
+        ids.Sort(StringComparer.Ordinal);
+        return ids;
+    }
+
+    private static List<string> ReadItemTagNames(SqliteConnection connection, SqliteTransaction transaction, string itemId)
+    {
+        using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = "SELECT name FROM item_tags WHERE item_id = $item ORDER BY position;";
+        command.Parameters.AddWithValue("$item", itemId);
+        using var reader = command.ExecuteReader();
+        var tags = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        while (reader.Read())
+        {
+            var name = reader.GetString(0);
+            if (seen.Add(name))
+            {
+                tags.Add(name);
+            }
+        }
+
+        tags.Sort(StringComparer.OrdinalIgnoreCase);
+        return tags;
     }
 
     private bool Commit(Func<SqliteConnection, SqliteTransaction, bool> mutate)
@@ -1326,4 +1652,36 @@ public sealed class LibraryCatalogSession
         var utc = value.Kind == DateTimeKind.Utc ? value : DateTime.SpecifyKind(value, DateTimeKind.Utc);
         return utc.ToString("o", CultureInfo.InvariantCulture);
     }
+}
+
+public sealed class CatalogTagEditorRead
+{
+    public List<LibraryCatalogCategory> Categories { get; init; } = [];
+    public List<LibraryCatalogTag> Tags { get; init; } = [];
+    public List<CatalogItemTagRead> Items { get; init; } = [];
+}
+
+public sealed class CatalogItemTagRead
+{
+    public string ItemId { get; init; } = string.Empty;
+    public List<string> Tags { get; init; } = [];
+}
+
+public sealed class CatalogAutoTagAssignment
+{
+    public string TagName { get; init; } = string.Empty;
+    public IReadOnlyList<string> ItemPaths { get; init; } = [];
+}
+
+public sealed class CatalogAutoTagAppliedAssignment
+{
+    public string TagName { get; init; } = string.Empty;
+    public List<string> ChangedItemPaths { get; init; } = [];
+}
+
+public sealed class CatalogAutoTagApplyResult
+{
+    public int AssignmentsAdded { get; init; }
+    public List<string> ChangedItemPaths { get; init; } = [];
+    public List<CatalogAutoTagAppliedAssignment> Applied { get; init; } = [];
 }

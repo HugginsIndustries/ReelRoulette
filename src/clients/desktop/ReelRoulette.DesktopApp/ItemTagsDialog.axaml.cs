@@ -589,102 +589,6 @@ namespace ReelRoulette
             return confirmed;
         }
 
-        private async System.Threading.Tasks.Task<bool> ApplyPendingCategoryMutationsAsync()
-        {
-            foreach (var categoryId in _pendingDeletedCategoryIds)
-            {
-                var accepted = await _tagMutationClient.DeleteCategoryAsync(categoryId, ItemTagsCategoryViewModel.UncategorizedCategoryId);
-                if (!accepted)
-                {
-                    ShowApiRequiredError();
-                    return false;
-                }
-            }
-
-            var orderedCategories = _categoryViewModels
-                .Where(c => c.IsReorderable)
-                .ToList();
-            var baselineOrderIndex = _baselineCategoryOrder
-                .Select((id, index) => new { id, index })
-                .ToDictionary(entry => entry.id, entry => entry.index, StringComparer.OrdinalIgnoreCase);
-
-            for (var i = 0; i < orderedCategories.Count; i++)
-            {
-                var categoryVm = orderedCategories[i];
-                var isNewCategory = !baselineOrderIndex.ContainsKey(categoryVm.CategoryId);
-                var hasNameChange = !_baselineCategoryNames.TryGetValue(categoryVm.CategoryId, out var baselineName)
-                    || !string.Equals(
-                        baselineName?.Trim(),
-                        (categoryVm.CategoryName ?? string.Empty).Trim(),
-                        StringComparison.OrdinalIgnoreCase);
-                var hasOrderChange = !baselineOrderIndex.TryGetValue(categoryVm.CategoryId, out var baselineIndex)
-                    || baselineIndex != i;
-
-                if (!isNewCategory && !hasNameChange && !hasOrderChange)
-                {
-                    continue;
-                }
-
-                var accepted = await _tagMutationClient.UpsertCategoryAsync(new TagCategory
-                {
-                    Id = categoryVm.CategoryId,
-                    Name = categoryVm.CategoryName ?? string.Empty,
-                    SortOrder = i
-                });
-                if (!accepted)
-                {
-                    ShowApiRequiredError();
-                    return false;
-                }
-            }
-
-            _pendingDeletedCategoryIds.Clear();
-            return true;
-        }
-
-        private async System.Threading.Tasks.Task<bool> ApplyPendingTagMutationsAsync()
-        {
-            foreach (var tagName in _pendingDeletedTagNames.ToList())
-            {
-                var deleted = await _tagMutationClient.DeleteTagAsync(tagName);
-                if (!deleted)
-                {
-                    ShowApiRequiredError();
-                    return false;
-                }
-            }
-
-            foreach (var rename in _pendingRenameTags.Values.ToList())
-            {
-                var renamed = await _tagMutationClient.RenameTagAsync(rename.OldName, rename.NewName, rename.NewCategoryId);
-                if (!renamed)
-                {
-                    ShowApiRequiredError();
-                    return false;
-                }
-
-                if (!string.Equals(rename.OldName, rename.NewName, StringComparison.OrdinalIgnoreCase))
-                {
-                    // Preset tag updates are server-owned; desktop refreshes the catalog from core after apply.
-                }
-            }
-
-            foreach (var upsert in _pendingUpsertTags.Values.ToList())
-            {
-                var upserted = await _tagMutationClient.UpsertTagAsync(upsert.Name, upsert.CategoryId);
-                if (!upserted)
-                {
-                    ShowApiRequiredError();
-                    return false;
-                }
-            }
-
-            _pendingDeletedTagNames.Clear();
-            _pendingRenameTags.Clear();
-            _pendingUpsertTags.Clear();
-            return true;
-        }
-
         private bool CategoryNameExists(string name, string? exceptCategoryId = null)
         {
             var normalized = (name ?? string.Empty).Trim();
@@ -1391,23 +1295,82 @@ namespace ReelRoulette
             errorDialog.ShowDialog(this);
         }
 
-        private async void OkButton_Click(object? sender, RoutedEventArgs e)
+        public TagEditorSave? PendingSave { get; private set; }
+
+        private TagEditorSave BuildPendingSave()
         {
-            Log($"ItemTagsDialog: Saving tags for {_items.Count} item(s)");
-            
-            var categoryMutationsAccepted = await ApplyPendingCategoryMutationsAsync();
-            if (!categoryMutationsAccepted)
+            var steps = new List<TagEditorSaveStep>();
+            foreach (var categoryId in _pendingDeletedCategoryIds)
             {
-                return;
+                steps.Add(new TagEditorSaveStep
+                {
+                    Kind = TagEditorSaveKind.DeleteCategory,
+                    CategoryId = categoryId,
+                    NewCategoryId = ItemTagsCategoryViewModel.UncategorizedCategoryId
+                });
             }
 
-            var tagMutationsAccepted = await ApplyPendingTagMutationsAsync();
-            if (!tagMutationsAccepted)
+            var orderedCategories = _categoryViewModels
+                .Where(category => category.IsReorderable)
+                .ToList();
+            var baselineOrderIndex = _baselineCategoryOrder
+                .Select((id, index) => new { id, index })
+                .ToDictionary(entry => entry.id, entry => entry.index, StringComparer.OrdinalIgnoreCase);
+            for (var i = 0; i < orderedCategories.Count; i++)
             {
-                return;
+                var categoryVm = orderedCategories[i];
+                var isNewCategory = !baselineOrderIndex.ContainsKey(categoryVm.CategoryId);
+                var hasNameChange = !_baselineCategoryNames.TryGetValue(categoryVm.CategoryId, out var baselineName)
+                    || !string.Equals(
+                        baselineName?.Trim(),
+                        (categoryVm.CategoryName ?? string.Empty).Trim(),
+                        StringComparison.Ordinal);
+                var hasOrderChange = !baselineOrderIndex.TryGetValue(categoryVm.CategoryId, out var baselineIndex)
+                    || baselineIndex != i;
+                if (!isNewCategory && !hasNameChange && !hasOrderChange)
+                {
+                    continue;
+                }
+
+                steps.Add(new TagEditorSaveStep
+                {
+                    Kind = TagEditorSaveKind.UpsertCategory,
+                    CategoryId = categoryVm.CategoryId,
+                    Name = categoryVm.CategoryName ?? string.Empty,
+                    SortOrder = i
+                });
             }
 
-            // Build batch item-tag deltas and apply through API.
+            foreach (var tagName in _pendingDeletedTagNames)
+            {
+                steps.Add(new TagEditorSaveStep
+                {
+                    Kind = TagEditorSaveKind.DeleteTag,
+                    Name = tagName
+                });
+            }
+
+            foreach (var rename in _pendingRenameTags.Values)
+            {
+                steps.Add(new TagEditorSaveStep
+                {
+                    Kind = TagEditorSaveKind.RenameTag,
+                    OldName = rename.OldName,
+                    NewName = rename.NewName,
+                    NewCategoryId = rename.NewCategoryId
+                });
+            }
+
+            foreach (var upsert in _pendingUpsertTags.Values)
+            {
+                steps.Add(new TagEditorSaveStep
+                {
+                    Kind = TagEditorSaveKind.UpsertTag,
+                    Name = upsert.Name,
+                    CategoryId = upsert.CategoryId
+                });
+            }
+
             var addTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var removeTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var categoryVm in _categoryViewModels)
@@ -1425,18 +1388,25 @@ namespace ReelRoulette
                 }
             }
 
-            var itemIds = _items.Select(i => i.FullPath).ToList();
+            var itemIds = _items.Select(item => item.FullPath).Where(path => !string.IsNullOrWhiteSpace(path)).ToList();
             if (itemIds.Count > 0 && (addTags.Count > 0 || removeTags.Count > 0))
             {
-                var accepted = await _tagMutationClient.ApplyItemTagDeltaAsync(itemIds, addTags.ToList(), removeTags.ToList());
-                if (!accepted)
+                steps.Add(new TagEditorSaveStep
                 {
-                    ShowApiRequiredError();
-                    return;
-                }
+                    Kind = TagEditorSaveKind.ApplyItemTags,
+                    ItemIds = itemIds,
+                    AddTags = addTags.ToList(),
+                    RemoveTags = removeTags.ToList()
+                });
             }
 
-            Log($"ItemTagsDialog: API tag delta applied for {itemIds.Count} item(s)");
+            return new TagEditorSave { Steps = steps };
+        }
+
+        private void OkButton_Click(object? sender, RoutedEventArgs e)
+        {
+            Log($"ItemTagsDialog: Saving tags for {_items.Count} item(s)");
+            PendingSave = BuildPendingSave();
             Close(true);
         }
 

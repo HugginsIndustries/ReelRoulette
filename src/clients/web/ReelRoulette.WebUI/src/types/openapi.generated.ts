@@ -1429,10 +1429,17 @@ export interface components {
             tagName: string;
             itemPaths: string[];
         };
+        AutoTagAppliedAssignment: {
+            tagName: string;
+            /** @description Files that gained this tag. */
+            changedItemPaths: string[];
+        };
         AutoTagApplyResponse: {
             /** Format: int32 */
             assignmentsAdded: number;
             changedItemPaths: string[];
+            /** @description One entry per tag that was newly written, listing only the files that gained that tag. */
+            applied: components["schemas"]["AutoTagAppliedAssignment"][];
         };
         ClientLogRequest: {
             source: string;
@@ -1462,6 +1469,10 @@ export interface components {
             itemIds: string[];
             addedTags: string[];
             removedTags: string[];
+            /** @description Set when this event renames or deletes the tag in the catalog. Absent for a per-item edit. */
+            catalogReplacedTag?: string | null;
+            /** @description The new name when catalogReplacedTag is a rename. Absent when that tag was deleted. */
+            catalogReplacementTag?: string | null;
         };
         TagCatalogChangedPayload: {
             reason: string;

@@ -450,6 +450,8 @@ public sealed class ItemTagsChangedPayload
     public List<string> ItemIds { get; set; } = [];
     public List<string> AddedTags { get; set; } = [];
     public List<string> RemovedTags { get; set; } = [];
+    public string? CatalogReplacedTag { get; set; }
+    public string? CatalogReplacementTag { get; set; }
 }
 
 public sealed class SourceStateChangedPayload
@@ -578,10 +580,17 @@ public sealed class AutoTagAssignment
     public List<string> ItemPaths { get; set; } = [];
 }
 
+public sealed class AutoTagAppliedAssignment
+{
+    public string TagName { get; set; } = string.Empty;
+    public List<string> ChangedItemPaths { get; set; } = [];
+}
+
 public sealed class AutoTagApplyResponse
 {
     public int AssignmentsAdded { get; set; }
     public List<string> ChangedItemPaths { get; set; } = [];
+    public List<AutoTagAppliedAssignment> Applied { get; set; } = [];
 }
 
 public sealed class ClientLogRequest

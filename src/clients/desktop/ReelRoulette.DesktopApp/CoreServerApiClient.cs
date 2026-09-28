@@ -959,10 +959,17 @@ public sealed class CoreAutoTagAssignment
     public List<string> ItemPaths { get; set; } = [];
 }
 
+public sealed class CoreAutoTagAppliedAssignment
+{
+    public string TagName { get; set; } = string.Empty;
+    public List<string> ChangedItemPaths { get; set; } = [];
+}
+
 public sealed class CoreAutoTagApplyResponse
 {
     public int AssignmentsAdded { get; set; }
     public List<string> ChangedItemPaths { get; set; } = [];
+    public List<CoreAutoTagAppliedAssignment> Applied { get; set; } = [];
 }
 
 public sealed class CoreClientLogRequest
@@ -1092,6 +1099,8 @@ public sealed class CoreItemTagsChangedPayload
     public List<string> ItemIds { get; set; } = [];
     public List<string> AddedTags { get; set; } = [];
     public List<string> RemovedTags { get; set; } = [];
+    public string? CatalogReplacedTag { get; set; }
+    public string? CatalogReplacementTag { get; set; }
 }
 
 public sealed class CoreTagCatalogChangedPayload

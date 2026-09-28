@@ -89,36 +89,7 @@ Do not use this file for detailed architecture explanation or current capability
 
 ## Active Milestones
 
-Last milestone completed: M10i6
-
-### M10i7 - Responsive Tag Apply
-
-- **Status**: ⏳ Planned
-- **Goal**: Make tag apply a SQLite row update so desktop and WebUI saves return immediately and do not stall on a full-catalog load.
-- **Scope**:
-  - Depends on: WebUI library query cutover.
-  - Move tag-editor writes and the tag-editor model read onto catalog-session row operations: item-tag add and remove, category and tag upsert, rename, and delete, and auto-tag apply. Match items by catalog id or full path, as current clients already send.
-  - Publish item-tag and tag-catalog events from those writes. When a catalog row changes, read that event's payload from the category and tag tables. Do not build or diff the full catalog document for these operations, and do not load it only to return a model the clients ignore.
-  - WebUI save sends only pending category, tag, and item-tag edits. It does not upsert unchanged categories. It uses the catalog returned by the mutation instead of fetching the tag-editor model again.
-  - Desktop and WebUI close the tag editor as soon as the user saves. The current file and loaded tiles show the new tags immediately, and the request runs in the background. On failure, restore the previous tags and show the error. The server remains the authority; the local change is that same delta, not a second catalog.
-  - The save's own echoed event must not duplicate tags or undo the local update. A tag filter that can change which items are shown still reloads the loaded window once the save lands, and keeps the scroll position.
-  - Leave refresh, source import, favorites, blacklist, and playback stats on the full-document catalog adapter.
-  - Update the testing checklist and current-state docs for the immediate save.
-- **Acceptance criteria**:
-  - Adding, removing, renaming, deleting, and auto-applying tags persists in SQLite and does not load or diff the full catalog document.
-  - Opening the tag editor and reading its model does not load the full catalog document.
-  - A WebUI save that only changes item tags does not upsert categories or tags and does not fetch the tag-editor model a second time.
-  - Desktop and WebUI close the editor without waiting for the request. The current file and loaded tiles show the edit immediately. A failed request restores the previous tags and shows an error.
-  - The save's own event does not duplicate tags. The other client still receives the item-tag and catalog events and updates.
-  - When a tag filter can change which files are shown, the loaded window reloads after the save lands and keeps the scroll position.
-  - Docs and the testing checklist describe the immediate save and the server-authoritative rollback.
-- **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include catalog-session tests that item-tag, category, tag, and auto-tag writes persist without a full-document load, WebUI tests that a tag-only save skips unchanged category upserts and a second model fetch, and client tests that the editor closes immediately, tiles update, a failure rolls back, and the echoed event does not duplicate tags.
-  - Manual evidence must include a tag save on a large library from desktop and WebUI that returns immediately, plus a forced failure that restores the previous tags.
-  - Docs evidence must include current-state and checklist updates for the immediate save.
-- **Deferrals / Follow-ups**:
-  - Favorites, blacklist, playback stats, the playback catalog cache, stats and item-state reads, auto-tag and duplicate scans, the desktop full-catalog download, source folder import, and refresh each move in the following slices of this series.
-  - Library export, import, and catalog backups stay with the library catalog export and import cutover, after the desktop full-catalog download is gone.
+Last milestone completed: M10i7
 
 ### M10i8 - Favorite, Blacklist, and Playback Row Updates
 
@@ -1403,6 +1374,37 @@ Last milestone completed: M10i6
 ## Completed Milestones
 
 Latest completions first:
+
+### M10i7 - Responsive Tag Apply
+
+- **Status**: ✅ Complete
+- **Goal**: Make tag apply a SQLite row update so desktop and WebUI saves return immediately and do not stall on a full-catalog load.
+- **Scope**:
+  - Depends on: WebUI library query cutover.
+  - Move tag-editor writes and the tag-editor model read onto catalog-session row operations: item-tag add and remove, category and tag upsert, rename, and delete, and auto-tag apply. Match items by catalog id or full path, as current clients already send.
+  - Publish item-tag and tag-catalog events from those writes. When a catalog row changes, read that event's payload from the category and tag tables. Do not build or diff the full catalog document for these operations, and do not load it only to return a model the clients ignore.
+  - WebUI save sends only pending category, tag, and item-tag edits. It does not upsert unchanged categories. It uses the catalog returned by the mutation instead of fetching the tag-editor model again.
+  - Desktop and WebUI close the tag editor as soon as the user saves. The current file and loaded tiles show the new tags immediately, and the request runs in the background. On failure, restore the previous tags and show the error. The server remains the authority; the local change is that same delta, not a second catalog.
+  - The save's own echoed event must not duplicate tags or undo the local update. A tag filter that can change which items are shown still reloads the loaded window once the save lands, and keeps the scroll position.
+  - Leave refresh, source import, favorites, blacklist, and playback stats on the full-document catalog adapter.
+  - Update the testing checklist and current-state docs for the immediate save.
+- **Acceptance criteria**:
+  - Adding, removing, renaming, deleting, and auto-applying tags persists in SQLite and does not load or diff the full catalog document.
+  - Opening the tag editor and reading its model does not load the full catalog document.
+  - A WebUI save that only changes item tags does not upsert categories or tags and does not fetch the tag-editor model a second time.
+  - Desktop and WebUI close the editor without waiting for the request. The current file and loaded tiles show the edit immediately. A failed request restores the previous tags and shows an error.
+  - The save's own event does not duplicate tags. The other client still receives the item-tag and catalog events and updates.
+  - When a tag filter can change which files are shown, the loaded window reloads after the save lands and keeps the scroll position.
+  - Docs and the testing checklist describe the immediate save and the server-authoritative rollback.
+- **Verification evidence**:
+  - `dotnet build ReelRoulette.sln` — pass. `dotnet test ReelRoulette.sln` — pass (Core 209, Desktop 115). `TagEdits_PersistByIdOrPath_WithoutBuildingTheCatalogDocument` and `TagEditorWrites_PersistWithoutBuildingTheCatalogDocument`: item-tag add and remove by catalog id or full path, category and tag upsert, rename, and delete, and auto-tag apply persist, and the catalog document build count stays put until an explicit document read. Opening the tag-editor model does not build that document. `RenameAndDelete_ReturnTheItemIdsThatHadTheTag_WithoutBuildingTheCatalogDocument`: rename and delete return the catalog ids of files that had the tag, and not files that did not, and a missing name returns no ids. The catalog document build count stays put until an explicit document read. `ApplyAutoTagAssignments_ReportsChangedPathsPerTag`: a file that already has the first tag is left out of that tag's changed paths, and the second tag reports only the file that gained it. The apply response includes that per-tag list.
+  - `npm test` in `src/clients/web/ReelRoulette.WebUI` — pass (130 tests). `tagSave.test.ts`: a tag-only save posts no category or tag upsert and does not fetch the tag-editor model again. A reorder upserts only the categories whose order changed. Categories whose stored sort numbers are not their display indexes are left alone. A category rename that only changes case is upserted. Local tags update before the request. The save's own echo does not add those tags again. A tag-filter reload runs once, including a rename that has no item-tag echo. A save that started under a tag filter reloads once after that filter is empty, and a save that did not does not. A per-tag auto-tag event for a subset of that assignment's paths is the save's own echo, and a different item-tag event is not. An item-tag echo does not match a subset of its items. The smaller of two matching auto-tag saves takes the event. An assignment with no changed paths is retired, and a later event for that tag is applied. An assignment whose tag was not written is retired when another tag changed the same path, and a later event for the unwritten tag is applied. A live empty tag list replaces the optimistic tags. A failed later step, including one that throws, restores only that tail. A tag added after the save starts is kept when the save fails. A failed rename puts the old name back and keeps a name that was already on the file. A rename replaces that name in the include and exclude lists, and a delete removes it. The stored library filter is what the next reload sends. Another client's echo is applied. A newer in-flight save that finishes first does not take the older save's echo. Failing the newer save leaves that echo. Failing the older save keeps the newer tags. A confirmed item-tag event keeps that tag when the save then fails, including on tiles that were replaced with the old tags. A confirmed rename for a wider set of files still applies, and a later unconfirmed step still rolls back. An in-flight save projects onto replaced tiles. A confirmed auto-tag assignment stays when the other assignment rolls back. An auto-tag the server did not newly write still rolls back. `handleIncomingItemTags`: a catalog rename replaces that name in the include and exclude lists before the reload sees them, a per-item add and remove leaves those lists, and a catalog delete removes the name and reloads when that clears the filter. Those two catalog cases fail when the filter is updated after the reload.
+  - `TagSaveApplyTests`: the same immediate tile update, failed-tail undo, and own-echo skip. A rename with no item-tag echo reloads once when a tag filter can change which files are shown. A save that started under a tag filter reloads once after that filter is empty, and a save that did not does not. A per-tag auto-tag event for a subset of that assignment's paths is the save's own echo, and a different item-tag event is not. An item-tag echo does not match a subset of its items. The smaller of two matching auto-tag saves takes the event. An assignment with no changed paths is retired, and a later event for that tag is applied. An assignment whose tag was not written is retired when another tag changed the same path, and a later event for the unwritten tag is applied. The same overlap cases, plus an auto-tag force reload that does not reload a different in-flight save. A tag added after the save starts is kept when the save fails. A failed rename puts the old name back and keeps a name that was already on the file. A rename replaces that name in the include and exclude lists, and a delete removes it. A confirmed item-tag event keeps that tag when the save then fails, including on tiles that were replaced with the old tags. A confirmed rename for a wider set of files still applies, and a later unconfirmed step still rolls back. An in-flight save projects onto replaced tiles. A confirmed auto-tag assignment stays when the other assignment rolls back. An auto-tag the server did not newly write still rolls back. `IncomingRename_UpdatesTheFilterBeforeTheOtherClientReloads`, `IncomingPerItemEdit_LeavesTheFilterInPlace`, and `IncomingDelete_RemovesTheTagBeforeTheOtherClientReloads`: the same catalog rename, per-item edit, and catalog delete. Those two catalog cases fail when the filter is updated after the reload.
+  - Manual tag save on a large library from desktop and WebUI, and a forced failure that restores the previous tags, were not run.
+  - Docs: `CONTEXT.md`, `docs/api.md`, `docs/domain-inventory.md`, `docs/checklists/testing-checklist.md`, and `CHANGELOG.md` [Unreleased].
+- **Deferrals / Follow-ups**:
+  - Favorites, blacklist, playback stats, the playback catalog cache, stats and item-state reads, auto-tag and duplicate scans, the desktop full-catalog download, source folder import, and refresh each move in the following slices of this series.
+  - Library export, import, and catalog backups stay with the library catalog export and import cutover, after the desktop full-catalog download is gone.
 
 ### M10i6 - WebUI Library Query Cutover
 

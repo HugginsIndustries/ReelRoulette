@@ -33,8 +33,16 @@ import {
 import {
   LIBRARY_QUERY_SEARCH_DEBOUNCE_MS,
   createAutoTagScanRequest,
-  createLibraryQuerySession
+  createLibraryQuerySession,
+  libraryQueryTileEffect
 } from "./library/libraryQuerySession.ts";
+import {
+  createTagSaveSession,
+  handleIncomingItemTags,
+  planTagEditorSave,
+  retargetTagFilter,
+  runTagEditorSave
+} from "./library/tagSave.ts";
 import { requestPlayItem } from "./api/coreApi.ts";
 
 const CLIENT_ID_KEY = "rr_clientId";
@@ -220,6 +228,7 @@ export function startApp(config) {
   };
 
   let libraryBrowseControls = createDefaultBrowseControls();
+  const tagSaveSession = createTagSaveSession();
   let libraryGridController = null;
   let libraryPlayInFlight = false;
   let librarySearchTimer = null;
@@ -2472,21 +2481,197 @@ export function startApp(config) {
     }
   }
 
-  async function applyFullTagOverlayAsync() {
-    if (state.autoTagScanInFlight) return;
-    if (hasPendingTagEditorMutations()) {
-      await applyTagEditorChangesAsync();
-      resetTagEditorPending();
-      await refreshTagEditorModel();
+  function tagFilterCanChangeMembership() {
+    const applied = state.appliedFilterState;
+    return (applied?.selectedTags?.length || 0) > 0 || (applied?.excludedTags?.length || 0) > 0;
+  }
+
+  function tagSaveReloadOnLand() {
+    const effect = libraryQueryTileEffect("tags", state.appliedFilterState, libraryBrowseControls.sortMode);
+    return librarySession.snapshot().inFlight || effect === "reload";
+  }
+
+  function collectTagSavePlan() {
+    const pending = state.tagEditorPending || createTagEditorPending();
+    const display = buildTagEditorDisplayModel();
+    const baseline = (Array.isArray(state.tagEditorModel?.categories) ? state.tagEditorModel.categories : []).map((category) => ({
+      id: String(category.id || ""),
+      name: String(category.name || ""),
+      sortOrder: Number(category.sortOrder || 0)
+    }));
+    const addTags = [];
+    const removeTags = [];
+    for (const selection of state.tagEditorSelections.values()) {
+      if (selection?.action === "add") addTags.push(selection.name);
+      else if (selection?.action === "remove") removeTags.push(selection.name);
     }
-    const assignments = buildAutoTagAssignments();
-    if (assignments.length > 0) {
-      const r = await apiPost("/api/autotag/apply", { assignments });
-      if (!r.ok) throw new Error(`Auto-tag apply failed (${r.status})`);
+    return planTagEditorSave({
+      baselineCategories: baseline,
+      displayCategories: (display.categories || []).map((category) => ({
+        id: String(category.id || ""),
+        name: String(category.name || ""),
+        sortOrder: Number(category.sortOrder || 0)
+      })),
+      deleteCategoryIds: [...pending.deleteCategoryIds.values()],
+      upsertTags: [...pending.upsertTags.values()],
+      renameTags: [...pending.renameTags.values()],
+      deleteTags: [...pending.deleteTags.values()],
+      itemIds: getCurrentTagEditorItemIds(),
+      addTags,
+      removeTags,
+      autoTagAssignments: buildAutoTagAssignments()
+    });
+  }
+
+  function loadedTagItems() {
+    return librarySession.snapshot().items.map((item) => ({
+      id: item.id,
+      fullPath: item.fullPath,
+      tags: item.tags.slice()
+    }));
+  }
+
+  function writeLoadedTagItems(items) {
+    librarySession.writeTags(items.map((item) => ({ itemId: item.id, tags: item.tags })));
+  }
+
+  function retargetLiveTagFilters(step) {
+    if (step.kind !== "rename-tag" && step.kind !== "delete-tag") {
+      return;
     }
-    resetTagEditorPending();
-    resetAutoTagState();
-    await refreshTagEditorModel();
+    const applied = state.appliedFilterState;
+    const filterChanged = applied
+      ? retargetTagFilter(applied.selectedTags || [], applied.excludedTags || [], step)
+      : false;
+    let presetsChanged = false;
+    for (const preset of state.presets || []) {
+      const filter = preset?.filterState;
+      if (!filter || !Array.isArray(filter.selectedTags) || !Array.isArray(filter.excludedTags)) {
+        continue;
+      }
+      presetsChanged = retargetTagFilter(filter.selectedTags, filter.excludedTags, step) || presetsChanged;
+    }
+    librarySession.reviseStoredFilter((selected, excluded) => {
+      retargetTagFilter(selected, excluded, step);
+    });
+    if (filterChanged || presetsChanged) {
+      renderHeaderPresetOptions(currentHeaderPresetList());
+    }
+  }
+
+  let tagSaveError = "";
+
+  async function postTagSaveStep(handle, step) {
+    let response;
+    let label = "Tag update";
+    if (step.kind === "upsert-category") {
+      label = "Category update";
+      response = await apiPost("/api/tag-editor/upsert-category", {
+        id: step.id,
+        name: step.name,
+        sortOrder: step.sortOrder
+      });
+    } else if (step.kind === "delete-category") {
+      label = "Category delete";
+      response = await apiPost("/api/tag-editor/delete-category", {
+        categoryId: step.categoryId,
+        newCategoryId: null
+      });
+    } else if (step.kind === "upsert-tag") {
+      label = "Tag create/update";
+      response = await apiPost("/api/tag-editor/upsert-tag", {
+        name: step.name,
+        categoryId: step.categoryId || ""
+      });
+    } else if (step.kind === "rename-tag") {
+      label = "Tag rename";
+      response = await apiPost("/api/tag-editor/rename-tag", {
+        oldName: step.oldName,
+        newName: step.newName,
+        newCategoryId: step.newCategoryId
+      });
+    } else if (step.kind === "delete-tag") {
+      label = "Tag delete";
+      response = await apiPost("/api/tag-editor/delete-tag", { name: step.name });
+    } else if (step.kind === "apply-item-tags") {
+      label = "Tag apply";
+      response = await apiPost("/api/tag-editor/apply-item-tags", {
+        itemIds: step.itemIds,
+        addTags: step.addTags,
+        removeTags: step.removeTags
+      });
+    } else if (step.kind === "apply-auto-tag") {
+      label = "Auto-tag apply";
+      response = await apiPost("/api/autotag/apply", { assignments: step.assignments });
+      if (!response.ok) {
+        tagSaveError = `${label} failed (${response.status})`;
+        return false;
+      }
+      const body = await response.json().catch(() => null);
+      const rows = body?.applied || body?.Applied || [];
+      const applied = Array.isArray(rows)
+        ? rows.map((row) => ({
+            tagName: String(row?.tagName || row?.TagName || ""),
+            changedItemPaths: Array.isArray(row?.changedItemPaths)
+              ? row.changedItemPaths
+              : Array.isArray(row?.ChangedItemPaths)
+                ? row.ChangedItemPaths
+                : []
+          }))
+        : [];
+      tagSaveSession.noteAutoTagResult(handle, applied);
+      retargetLiveTagFilters(step);
+      return true;
+    } else {
+      tagSaveError = "Tag update failed";
+      return false;
+    }
+    if (!response.ok) {
+      tagSaveError = `${label} failed (${response.status})`;
+      return false;
+    }
+    retargetLiveTagFilters(step);
+    return true;
+  }
+
+  function projectLoadedTagItems() {
+    const current = loadedTagItems();
+    tagSaveSession.project(current);
+    writeLoadedTagItems(current);
+  }
+
+  function failCurrentTagSave(handle, accepted) {
+    const current = loadedTagItems();
+    const rolledBack = tagSaveSession.fail(handle, current, accepted);
+    writeLoadedTagItems(current);
+    return rolledBack;
+  }
+
+  async function saveTagEditorInBackground(handle, steps) {
+    const successStatus = "Tag editor changes applied";
+    let result;
+    try {
+      result = await runTagEditorSave(steps, { post: (step) => postTagSaveStep(handle, step) });
+    } catch (error) {
+      const rolledBack = failCurrentTagSave(handle, []);
+      setStatus(rolledBack ? (error?.message || `Tag apply failed: ${error}`) : successStatus);
+      return;
+    }
+    if (!result.ok) {
+      const rolledBack = failCurrentTagSave(handle, result.accepted);
+      setStatus(rolledBack ? (tagSaveError || "Tag apply failed") : successStatus);
+      return;
+    }
+    try {
+      projectLoadedTagItems();
+      const decision = tagSaveSession.succeed(handle, tagSaveReloadOnLand());
+      if (decision.reload) {
+        await librarySession.reloadLoaded();
+      }
+      setStatus(successStatus);
+    } catch (error) {
+      setStatus(error?.message || successStatus);
+    }
   }
 
   function openTagEditModal(tag, categories) {
@@ -2814,71 +2999,6 @@ export function startApp(config) {
     renderTagEditor();
   }
 
-  async function applyTagEditorChangesAsync() {
-    if (!hasPendingTagEditorMutations()) {
-      return;
-    }
-    const pending = state.tagEditorPending || createTagEditorPending();
-    const itemIds = getCurrentTagEditorItemIds();
-    const display = buildTagEditorDisplayModel();
-    const categories = display.categories || [];
-
-    for (const category of categories) {
-      if (isUncategorizedCategoryId(category.id)) continue;
-      const upsertCategoryResponse = await apiPost("/api/tag-editor/upsert-category", {
-        id: category.id,
-        name: category.name,
-        sortOrder: category.sortOrder
-      });
-      if (!upsertCategoryResponse.ok) throw new Error(`Category update failed (${upsertCategoryResponse.status})`);
-    }
-
-    for (const categoryId of pending.deleteCategoryIds.values()) {
-      const deleteCategoryResponse = await apiPost("/api/tag-editor/delete-category", {
-        categoryId,
-        newCategoryId: null
-      });
-      if (!deleteCategoryResponse.ok) throw new Error(`Category delete failed (${deleteCategoryResponse.status})`);
-    }
-
-    for (const upsertTag of pending.upsertTags.values()) {
-      const upsertTagResponse = await apiPost("/api/tag-editor/upsert-tag", {
-        name: upsertTag.name,
-        categoryId: upsertTag.categoryId || ""
-      });
-      if (!upsertTagResponse.ok) throw new Error(`Tag create/update failed (${upsertTagResponse.status})`);
-    }
-
-    for (const renameTag of pending.renameTags.values()) {
-      const renameTagResponse = await apiPost("/api/tag-editor/rename-tag", {
-        oldName: renameTag.oldName,
-        newName: renameTag.newName,
-        newCategoryId: renameTag.newCategoryId
-      });
-      if (!renameTagResponse.ok) throw new Error(`Tag rename failed (${renameTagResponse.status})`);
-    }
-
-    for (const deleteTag of pending.deleteTags.values()) {
-      const deleteTagResponse = await apiPost("/api/tag-editor/delete-tag", { name: deleteTag.name });
-      if (!deleteTagResponse.ok) throw new Error(`Tag delete failed (${deleteTagResponse.status})`);
-    }
-
-    const addTags = [];
-    const removeTags = [];
-    for (const selection of state.tagEditorSelections.values()) {
-      if (selection?.action === "add") addTags.push(selection.name);
-      else if (selection?.action === "remove") removeTags.push(selection.name);
-    }
-    if (itemIds.length > 0 && (addTags.length > 0 || removeTags.length > 0)) {
-      const applyResponse = await apiPost("/api/tag-editor/apply-item-tags", {
-        itemIds,
-        addTags,
-        removeTags
-      });
-      if (!applyResponse.ok) throw new Error(`Tag apply failed (${applyResponse.status})`);
-    }
-  }
-
   function openTagEditor() {
     state.tagEditorOpen = true;
     state.tagEditorItemIds = getCurrentTagEditorItemIds();
@@ -2967,10 +3087,38 @@ export function startApp(config) {
     eventSource.addEventListener("itemTagsChanged", (event) => {
       const payload = parseEnvelopePayload(event.data);
       if (!payload) return;
-      void librarySession.applyTags({
+      const echo = {
         itemIds: payload.itemIds || payload.ItemIds || [],
         addedTags: payload.addedTags || payload.AddedTags || [],
         removedTags: payload.removedTags || payload.RemovedTags || []
+      };
+      handleIncomingItemTags({
+        itemIds: echo.itemIds,
+        addedTags: echo.addedTags,
+        removedTags: echo.removedTags,
+        catalogReplacedTag: payload.catalogReplacedTag || payload.CatalogReplacedTag || null,
+        catalogReplacementTag: payload.catalogReplacementTag || payload.CatalogReplacementTag || null
+      }, {
+        tagFilterCanChangeMembership,
+        retarget(step) {
+          retargetLiveTagFilters(step);
+        },
+        afterRetarget(handling) {
+          const decision = tagSaveSession.onEcho(echo, handling.hadTagFilter || tagSaveReloadOnLand());
+          if (decision.skipPatch) {
+            projectLoadedTagItems();
+            tagSaveSession.sweep();
+            if (decision.reload) {
+              void librarySession.reloadLoaded();
+            }
+            return;
+          }
+          tagSaveSession.sweep();
+          void librarySession.applyTags(echo);
+          if (handling.reloadBecauseFilterCleared) {
+            void librarySession.reloadLoaded();
+          }
+        }
       });
     });
     eventSource.addEventListener("refreshStatusChanged", (event) => {
@@ -3468,15 +3616,19 @@ export function startApp(config) {
     tagEditorNewTag.value = "";
     renderTagEditor();
   });
-  tagEditorApplyBtn.addEventListener("click", async () => {
+  tagEditorApplyBtn.addEventListener("click", () => {
     if (state.autoTagScanInFlight) return;
-    try {
-      await applyFullTagOverlayAsync();
-      setStatus("Tag editor changes applied");
-      closeTagEditor(true);
-    } catch (error) {
-      setStatus(error?.message || `Tag apply failed: ${error}`);
+    if (!hasPendingTagEditorMutations() && !hasAutoTagApplyPending()) return;
+    const steps = collectTagSavePlan();
+    if (steps.length === 0) {
+      setStatus("No tag changes to save.");
+      return;
     }
+    const loaded = loadedTagItems();
+    const handle = tagSaveSession.begin(loaded, steps, false, tagFilterCanChangeMembership());
+    writeLoadedTagItems(loaded);
+    closeTagEditor(true);
+    void saveTagEditorInBackground(handle, steps);
   });
   tagEditCancelBtn.addEventListener("click", () => {
     closeTagEditModal();

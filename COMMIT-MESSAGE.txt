@@ -19,8 +19,8 @@ Instructions:
 
 Commit Message:
 
-Docs: Plan the rest of the SQLite catalog row updates
+M10i7: Make tag apply a SQLite row update
 
-- Sequence favorite and playback row updates, random selection from the catalog query, stats and item-state reads, auto-tag and duplicate scans, desktop projection removal, and source-folder import ahead of catalog export.
-- Leave refresh column updates last, after export, so live catalog writes can drop the full-document adapter.
-- Keep responsive tag apply as the next slice.
+- Persist tag-editor reads and writes, and auto-tag apply, as catalog row updates so a save does not load the full library.
+- Close the desktop and WebUI tag editors immediately and show the new tags on the current file and loaded tiles. A failed save puts that save's tags back and keeps tags that arrived while it was running.
+- Skip the save's own echoed item-tag event. When a tag filter can change which files are shown, rename or delete that tag in the live filter and cached presets, then reload the loaded window once.

@@ -164,6 +164,7 @@ Reconnect/resync behavior:
 - Item/tag/category operations are API-driven.
 - Batch-oriented contracts support multi-item updates.
 - Compatibility sync endpoints remain available.
+- Tag-editor model reads, item-tag add and remove, category and tag upsert, rename, and delete, and `POST /api/autotag/apply` update SQLite catalog rows. They match an item by catalog id or full path and do not load the full catalog document. A model read with no item ids returns categories and tags. Uncategorized is included in that response when the table has no such row, and that read does not write one. `POST /api/tag-editor/sync-catalog` and `POST /api/tag-editor/sync-item-tags` still load the full catalog document. Desktop and WebUI close the editor and show that same delta on the current file and loaded tiles while the request runs. A failed request restores tags an event has not already confirmed. The save's own exact `itemTagsChanged` event updates the tiles loaded now and does not apply that delta a second time. `POST /api/tag-editor/rename-tag` publishes `itemTagsChanged` for the files that had the tag when the visible name changes, with the new name added and the old name removed, `catalogReplacedTag` set to the old name, and `catalogReplacementTag` set to the new name, and still publishes `tagCatalogChanged`. A rename that keeps the same display name publishes only `tagCatalogChanged`. `POST /api/tag-editor/delete-tag` publishes `itemTagsChanged` for the files that had the tag, with that name removed and `catalogReplacedTag` set to it, and still publishes `tagCatalogChanged`. A per-item edit leaves both catalog fields unset. Desktop and WebUI replace or remove that name in the applied filter and saved presets before they patch or reload, including on the other client.
 
 - `POST /api/tag-editor/model`
 - `POST /api/tag-editor/apply-item-tags`
@@ -193,7 +194,7 @@ Reconnect/resync behavior:
 - `POST /api/duplicates/scan`
 - `POST /api/duplicates/apply`
 - `POST /api/autotag/scan` — body `scanFullLibrary` and `itemIds` (library item `fullPath` values). `scanFullLibrary: true` scans every item and ignores `itemIds`. `scanFullLibrary: false` with no `itemIds` scans enabled sources only (zero enabled sources scans nothing). A non-empty `itemIds` list scans those full paths.
-- `POST /api/autotag/apply`
+- `POST /api/autotag/apply` returns `assignmentsAdded`, `changedItemPaths`, and `applied` (one entry per tag that was newly written, with only the files that gained that tag). When any file gains a tag, it publishes one `itemTagsChanged` event per tag that was newly applied, listing only the files that gained that tag, and one `tagCatalogChanged` event.
 
 ### Media, thumbnail, events, client logs
 

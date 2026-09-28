@@ -429,6 +429,97 @@ public sealed class LibraryOperationsServiceTests
     }
 
     [Fact]
+    public void TagEditorWrites_PersistWithoutBuildingTheCatalogDocument()
+    {
+        var appDataRoot = CreateTempAppDataRoot();
+        try
+        {
+            SeedCoreSettings(appDataRoot, enabled: true, minimumGapMinutes: 360, numberOfBackups: 8);
+            SeedLibrary(appDataRoot, new JsonObject
+            {
+                ["sources"] = new JsonArray(),
+                ["items"] = new JsonArray
+                {
+                    new JsonObject
+                    {
+                        ["id"] = "item-1",
+                        ["fullPath"] = "/media/one.mp4",
+                        ["fileName"] = "one.mp4",
+                        ["tags"] = new JsonArray("Old")
+                    },
+                    new JsonObject
+                    {
+                        ["id"] = "item-2",
+                        ["fullPath"] = "/media/two.mp4",
+                        ["fileName"] = "two.mp4",
+                        ["tags"] = new JsonArray()
+                    }
+                },
+                ["tags"] = new JsonArray
+                {
+                    new JsonObject { ["name"] = "Old", ["categoryId"] = "people" }
+                },
+                ["categories"] = new JsonArray
+                {
+                    new JsonObject { ["id"] = "people", ["name"] = "People", ["sortOrder"] = 1 }
+                }
+            });
+
+            var host = LibraryCatalogHost.Open(appDataRoot);
+            var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot, host);
+            var builds = host.Session.DocumentBuilds;
+
+            var changed = service.ApplyItemTags(new ApplyItemTagsRequest
+            {
+                ItemIds = ["item-1", "/media/two.mp4"],
+                AddTags = ["Fresh"],
+                RemoveTags = ["Old"]
+            }, out var catalogChanged);
+            Assert.True(changed);
+            Assert.True(catalogChanged);
+            Assert.True(service.UpsertCategory(new UpsertCategoryRequest { Id = "places", Name = "Places", SortOrder = 2 }));
+            Assert.True(service.UpsertTag(new UpsertTagRequest { Name = "Fresh", CategoryId = "places" }));
+            Assert.True(service.RenameTag(new RenameTagRequest { OldName = "Fresh", NewName = "Newer", NewCategoryId = "places" }));
+            var applied = service.ApplyAutoTags(new AutoTagApplyRequest
+            {
+                Assignments = [new AutoTagAssignment { TagName = "Auto", ItemPaths = ["/media/two.mp4"] }]
+            });
+            Assert.Equal(1, applied.AssignmentsAdded);
+            Assert.Equal(["/media/two.mp4"], applied.ChangedItemPaths);
+            var appliedRow = Assert.Single(applied.Applied);
+            Assert.Equal("Auto", appliedRow.TagName);
+            Assert.Equal(["/media/two.mp4"], appliedRow.ChangedItemPaths);
+
+            var model = service.GetTagEditorModel(new TagEditorModelRequest { ItemIds = ["/media/one.mp4", "missing"] });
+            Assert.Equal(builds, host.Session.DocumentBuilds);
+            var item = Assert.Single(model.Items, candidate => candidate.ItemId == "/media/one.mp4");
+            Assert.Equal(["Newer"], item.Tags);
+            Assert.Contains(model.Categories, category => category.Id == "places" && category.Name == "Places");
+            Assert.Contains(model.Tags, tag => tag.Name == "Newer" && tag.CategoryId == "places");
+            Assert.Contains(model.Tags, tag => tag.Name == "Old");
+            var missing = Assert.Single(model.Items, candidate => candidate.ItemId == "missing");
+            Assert.Empty(missing.Tags);
+
+            Assert.True(service.DeleteTag(new DeleteTagRequest { Name = "Newer" }));
+            Assert.True(service.DeleteCategory(new DeleteCategoryRequest { CategoryId = "places" }));
+            var afterDelete = service.GetTagEditorModel(new TagEditorModelRequest { ItemIds = ["item-1"] });
+            Assert.DoesNotContain(afterDelete.Tags, tag => tag.Name == "Newer");
+            Assert.DoesNotContain(afterDelete.Categories, category => category.Id == "places");
+            Assert.Empty(Assert.Single(afterDelete.Items).Tags);
+            Assert.Equal(builds, host.Session.DocumentBuilds);
+            _ = host.Session.BuildDocument();
+            Assert.Equal(builds + 1, host.Session.DocumentBuilds);
+        }
+        finally
+        {
+            if (Directory.Exists(appDataRoot))
+            {
+                Directory.Delete(appDataRoot, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public void RenameAndDeleteTag_ShouldPersistCatalogAndItemTags()
     {
         var appDataRoot = CreateTempAppDataRoot();
