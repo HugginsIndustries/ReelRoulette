@@ -20,7 +20,6 @@ public sealed class ServerStateService
         "api.random.filterState",
         "api.presets.match",
         "api.webRuntime.settings",
-        "api.library.projection",
         "api.sources.import",
         "api.duplicates",
         "api.autotag",

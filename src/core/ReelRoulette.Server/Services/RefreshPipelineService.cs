@@ -247,19 +247,6 @@ public sealed class RefreshPipelineService : BackgroundService
         return Path.Combine(_thumbnailDir, $"{itemId}.jpg");
     }
 
-    public void EnrichLibraryProjection(JsonObject projection)
-    {
-        if (projection == null)
-        {
-            return;
-        }
-
-        if (projection["items"] is JsonArray items)
-        {
-            EnrichListedItems(items);
-        }
-    }
-
     public void EnrichListedItems(JsonArray items)
     {
         var index = LoadThumbnailIndex();

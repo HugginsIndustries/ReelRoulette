@@ -89,31 +89,7 @@ Do not use this file for detailed architecture explanation or current capability
 
 ## Active Milestones
 
-Last milestone completed: M10i11
-
-### M10i12 - Desktop Full-Catalog Projection Removal
-
-- **Status**: ⏳ Planned
-- **Goal**: Stop desktop from downloading the full catalog at startup and on resync, and remove that endpoint once nothing calls it.
-- **Scope**:
-  - Depends on: auto-tag and duplicate scans.
-  - Desktop connect and resync do not call the full-catalog projection endpoint. WebUI already does not call it.
-  - Header video and photo counts come from library stats. Source names in the filter summary come from the sources API. Tag and category lists for the filter and tag editor come from the tag catalog, not from a full item download.
-  - Now-playing tags, favorite, blacklist, and playback stats come from the loaded tile or a single-item read. The loudness baseline is a server aggregate that preserves the current baseline, not a scan of a local item replica.
-  - Scoped auto-tag scan does not rebuild a path list from a local item replica.
-  - Remove the full-catalog projection endpoint once desktop has stopped calling it. Thumbnail layout fields stay on list query.
-  - Update the testing checklist and current-state docs.
-- **Acceptance criteria**:
-  - Desktop connect and resync do not download the full catalog. WebUI still does not.
-  - Header counts, source names, tag and category lists, now-playing tags, and the loudness baseline still match current behavior.
-  - The full-catalog projection endpoint is removed. List query still returns thumbnail layout fields.
-  - Docs and the testing checklist no longer describe that endpoint as a client read.
-- **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include a desktop test or check that connect and resync do not request the full catalog, tests that header stats, a single-item read, and the loudness baseline cover the readers that download replaced, and confirmation that the projection endpoint is gone while list query still returns thumbnail fields.
-  - Manual evidence must include desktop startup and a resync on a large library without a full-catalog download, with header counts, now-playing tags, and loudness normalization still working.
-  - Docs evidence must include current-state and checklist updates that drop the projection client read.
-- **Deferrals / Follow-ups**:
-  - Source folder import, refresh, and catalog export stay on their current paths until their own slices.
+Last milestone completed: M10i12
 
 ### M10i13 - Source Folder Import Row Updates
 
@@ -1279,6 +1255,30 @@ Last milestone completed: M10i11
 ## Completed Milestones
 
 Latest completions first:
+
+### M10i12 - Desktop Full-Catalog Projection Removal
+
+- **Status**: ✅ Complete
+- **Goal**: Stop desktop from downloading the full catalog at startup and on resync, and remove that endpoint once nothing calls it.
+- **Scope**:
+  - Depends on: auto-tag and duplicate scans.
+  - Desktop connect and resync do not call the full-catalog projection endpoint. WebUI already does not call it.
+  - Header video and photo counts come from library stats. Source names in the filter summary come from the sources API. Tag and category lists for the filter and tag editor come from the tag catalog, not from a full item download.
+  - Now-playing tags, favorite, blacklist, and playback stats come from the loaded tile or a single-item read. The loudness baseline is a server aggregate that preserves the current baseline, not a scan of a local item replica.
+  - Scoped auto-tag scan does not rebuild a path list from a local item replica.
+  - Remove the full-catalog projection endpoint once desktop has stopped calling it. Thumbnail layout fields stay on list query.
+  - Update the testing checklist and current-state docs.
+- **Acceptance criteria**:
+  - Desktop connect and resync do not download the full catalog. WebUI still does not.
+  - Header counts, source names, tag and category lists, now-playing tags, and the loudness baseline still match current behavior.
+  - The full-catalog projection endpoint is removed. List query still returns thumbnail layout fields.
+  - Docs and the testing checklist no longer describe that endpoint as a client read.
+- **Verification evidence**:
+  - `dotnet build ReelRoulette.sln` and `dotnet test ReelRoulette.sln` pass (Core.Tests 220, DesktopApp.Tests 115). The catalog test covers the 75th-percentile loudness baseline, including a video on a disabled source, and a single-item read by id and path that does not build the catalog document. Desktop tests lock connect and resync to library stats, sources, and the tag catalog, and lock the one-item read off the removed projection path. List-query thumbnail enrichment still has its own test. A playback event for a file that is not yet playing does not paint the current-file section; starting that file does. `npm run generate:contracts` regenerated the WebUI client from OpenAPI.
+  - Manual: desktop startup and a resync on a large library did not download the full catalog. Header counts, now-playing tags, and loudness normalization still matched. The current-file section updates when that file starts, including a library-grid play whose playback event arrives first.
+  - Current-state docs and the testing checklist no longer describe the projection endpoint as a client read. `CONTEXT.md`, `docs/api.md`, `docs/architecture.md`, `docs/domain-inventory.md`, `docs/checklists/testing-checklist.md`, and `CHANGELOG.md` [Unreleased].
+- **Deferrals / Follow-ups**:
+  - Source folder import, refresh, and catalog export stay on their current paths until their own slices.
 
 ### M10i11 - Auto-Tag and Duplicate Scans
 

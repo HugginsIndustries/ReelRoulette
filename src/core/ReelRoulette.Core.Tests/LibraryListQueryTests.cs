@@ -455,6 +455,70 @@ public sealed class LibraryListQueryTests
         }
     }
 
+    [Fact]
+    public void ReadListedItemAndBaseline_CoverHeaderReaders_WithoutBuildingTheCatalogDocument()
+    {
+        using var dir = new TempDirectory();
+        var session = Open(dir);
+        Assert.Equal(-18.0, session.ReadLibraryStats().Global.BaselineLoudnessLufs);
+
+        session.InsertSource("on", "/media", "On", true);
+        session.InsertSource("off", "/other", "Off", false);
+        session.UpsertCategory("people", "People", 1);
+        session.UpsertTag("Ann", "people");
+        var played = new DateTime(2024, 3, 2, 4, 5, 6, DateTimeKind.Utc);
+        Add(session, "quiet", "on", "quiet.mp4", "quiet.mp4", hasAudio: true, tags: ["Ann"]);
+        Add(session, "mid", "on", "mid.mp4", "mid.mp4", hasAudio: true);
+        Add(session, "loud", "on", "loud.mp4", "loud.mp4", hasAudio: true);
+        Add(session, "keep", "on", "keep.mp4", "keep.mp4", favorite: true, playCount: 4, lastPlayed: played, hasAudio: true, tags: ["Ann"]);
+        Add(session, "photo", "on", "photo.jpg", "photo.jpg", mediaType: 1, hasAudio: true);
+        Add(session, "silent", "on", "silent.mp4", "silent.mp4", hasAudio: false);
+        Add(session, "unknown", "on", "unknown.mp4", "unknown.mp4", hasAudio: true);
+        Add(session, "disabled", "off", "disabled.mp4", "disabled.mp4", hasAudio: true);
+        Assert.True(session.SetLoudness("quiet", true, -30.0, null, null));
+        Assert.True(session.SetLoudness("mid", true, -24.0, null, null));
+        Assert.True(session.SetLoudness("loud", true, -20.0, null, null));
+        Assert.True(session.SetLoudness("keep", true, -14.0, -1.25, null));
+        Assert.True(session.SetLoudness("photo", true, -10.0, null, null));
+        Assert.True(session.SetLoudness("silent", false, -8.0, null, null));
+        Assert.True(session.SetLoudness("disabled", true, -16.0, null, null));
+
+        var builds = session.DocumentBuilds;
+        var stats = session.ReadLibraryStats();
+        Assert.Equal(-16.0, stats.Global.BaselineLoudnessLufs);
+
+        var byId = session.ReadListedItem("KEEP");
+        Assert.NotNull(byId);
+        Assert.Equal("keep", byId!.Id);
+        Assert.Equal("/media/keep.mp4", byId.FullPath);
+        Assert.True(byId.IsFavorite);
+        Assert.False(byId.IsBlacklisted);
+        Assert.Equal(4, byId.PlayCount);
+        Assert.Equal(played, byId.LastPlayedUtc);
+        Assert.Equal(-14.0, byId.IntegratedLoudness);
+        Assert.Equal(["Ann"], byId.Tags);
+
+        var byPath = session.ReadListedItem("/MEDIA/keep.mp4");
+        Assert.Equal("keep", byPath!.Id);
+        Assert.Null(session.ReadListedItem("missing"));
+        Assert.Equal(builds, session.DocumentBuilds);
+
+        var host = LibraryCatalogHost.Open(dir.Path);
+        var hostBuilds = host.Session.DocumentBuilds;
+        var operations = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, dir.Path, host);
+        var item = operations.ReadLibraryItem("keep");
+        Assert.NotNull(item);
+        Assert.Equal("keep", item!["id"]!.GetValue<string>());
+        Assert.Equal("Ann", item["tags"]!.AsArray()[0]!.GetValue<string>());
+        Assert.True(item["isFavorite"]!.GetValue<bool>());
+        Assert.Equal(4, item["playCount"]!.GetValue<int>());
+        Assert.Null(operations.ReadLibraryItem("missing"));
+        Assert.Null(operations.ReadLibraryItem("  "));
+        var serviceStats = operations.GetLibraryStats();
+        Assert.Equal(-16.0, serviceStats.Global.BaselineLoudnessLufs);
+        Assert.Equal(hostBuilds, host.Session.DocumentBuilds);
+    }
+
     private static RefreshPipelineService CreateRefresh(string appData)
     {
         var settings = new CoreSettingsService(

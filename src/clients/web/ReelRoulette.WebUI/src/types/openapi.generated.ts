@@ -366,7 +366,7 @@ export interface paths {
          * @description Browse path for library filter, search, sort, and paging. Applies enabled sources, then a filename
          *     or relative-path substring search, then `filterState`, then sort. `searchBaselineCount` is the count
          *     after search and before `filterState`. `totalCount` is the pageable count after both. Missing files
-         *     stay in the result. `GET /api/library/projection` remains for current clients until they cut over.
+         *     stay in the result. Thumbnail layout fields are returned on this page.
          */
         post: operations["postLibraryQuery"];
         delete?: never;
@@ -375,21 +375,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/library/projection": {
+    "/api/library/item": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /**
-         * Get the full library catalog snapshot
-         * @description Full catalog document for current clients. Not the long-term browse API. New browse traffic uses
-         *     `POST /api/library/query`.
-         */
-        get: operations["getLibraryProjection"];
+        get?: never;
         put?: never;
-        post?: never;
+        /**
+         * Read one library item
+         * @description Returns one catalog item by id or full path. The body matches a list-query item, including tags,
+         *     favorite, blacklist, playback stats, duration, and loudness. Thumbnail layout fields stay on
+         *     `POST /api/library/query`. This read does not build the full catalog document.
+         */
+        post: operations["postLibraryItem"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1139,7 +1140,11 @@ export interface components {
              */
             searchBaselineCount: number;
         };
-        /** @description Library item entry in the projection snapshot. Thumbnail metadata is derived from the server thumbnail cache at serve time and is not stored in the catalog. */
+        LibraryItemReadRequest: {
+            /** @description Catalog item id or full path. */
+            id: string;
+        };
+        /** @description One library item. List query adds thumbnail layout fields at serve time. Those fields are not stored in the catalog and are not part of the single-item read. */
         LibraryProjectionItem: {
             id?: string;
             sourceId?: string;
@@ -1158,20 +1163,6 @@ export interface components {
              * @description Generated thumbnail height in pixels when available from the server thumbnail index.
              */
             thumbnailHeight?: number | null;
-        } & {
-            [key: string]: unknown;
-        };
-        LibraryProjectionResponse: {
-            sources?: {
-                [key: string]: unknown;
-            }[];
-            items?: components["schemas"]["LibraryProjectionItem"][];
-            categories?: {
-                [key: string]: unknown;
-            }[];
-            tags?: {
-                [key: string]: unknown;
-            }[];
         } & {
             [key: string]: unknown;
         };
@@ -2419,22 +2410,44 @@ export interface operations {
             };
         };
     };
-    getLibraryProjection: {
+    postLibraryItem: {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LibraryItemReadRequest"];
+            };
+        };
         responses: {
-            /** @description Library projection JSON */
+            /** @description The requested library item */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["LibraryProjectionResponse"];
+                    "application/json": components["schemas"]["LibraryProjectionItem"];
+                };
+            };
+            /** @description id is required */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Item was not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
         };

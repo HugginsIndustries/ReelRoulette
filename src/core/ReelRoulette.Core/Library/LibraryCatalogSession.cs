@@ -8,6 +8,7 @@ namespace ReelRoulette.Core.Library;
 public sealed class LibraryCatalogSession
 {
     private const int ItemStatePathChunk = 500;
+    private const double DefaultBaselineLoudnessLufs = -18.0;
     private const string PhotoExtensionsSql =
         "'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.tiff', '.tif', '.heic', '.heif', '.avif', '.ico', '.svg', '.raw', '.cr2', '.nef', '.orf', '.sr2'";
 
@@ -145,6 +146,55 @@ public sealed class LibraryCatalogSession
         }
 
         return items;
+    }
+
+    public LibraryCatalogItem? ReadListedItem(string identifier)
+    {
+        if (string.IsNullOrWhiteSpace(identifier))
+        {
+            return null;
+        }
+
+        using var connection = LibraryCatalogStore.OpenWrite(_databasePath);
+        LibraryCatalogItem? item;
+        using (var transaction = connection.BeginTransaction())
+        {
+            var id = ResolveItemId(connection, transaction, identifier);
+            if (id == null)
+            {
+                transaction.Rollback();
+                return null;
+            }
+
+            using var command = connection.CreateCommand();
+            command.Transaction = transaction;
+            command.CommandText = """
+                SELECT items.id, items.source_id, items.full_path, items.full_path_fold, items.relative_path, items.relative_path_fold,
+                       items.file_name, items.file_name_fold, items.duration_ticks, items.has_audio, items.integrated_loudness, items.peak_db,
+                       items.is_favorite, items.is_blacklisted, items.play_count, items.last_played_utc, items.media_type, items.fingerprint,
+                       items.fingerprint_algorithm, items.fingerprint_version, items.file_size_bytes, items.last_write_time_utc,
+                       items.fingerprint_last_utc, items.fingerprint_status, items.loudness_error
+                FROM items
+                WHERE items.id = $id
+                LIMIT 1;
+                """;
+            command.Parameters.AddWithValue("$id", id);
+            using (var reader = command.ExecuteReader())
+            {
+                item = reader.Read() ? ReadListedItem(reader) : null;
+            }
+
+            transaction.Rollback();
+        }
+
+        if (item == null)
+        {
+            return null;
+        }
+
+        var tagged = new List<LibraryCatalogItem> { item };
+        AttachTags(connection, tagged);
+        return tagged[0];
     }
 
     public int CountItems()
@@ -2290,31 +2340,81 @@ public sealed class LibraryCatalogSession
               COALESCE(SUM(CASE WHEN is_video = 1 AND has_audio IS NOT NULL AND has_audio = 0 THEN 1 ELSE 0 END), 0) AS videos_without_audio
             FROM flagged;
             """;
-        using var reader = command.ExecuteReader();
-        reader.Read();
-        var totalVideos = ReadCount(reader, 1);
-        var totalPhotos = ReadCount(reader, 2);
-        var totalMedia = ReadCount(reader, 0);
-        var uniquePlayedVideos = ReadCount(reader, 5);
-        var uniquePlayedPhotos = ReadCount(reader, 6);
-        var uniquePlayedMedia = ReadCount(reader, 7);
+        int totalVideos;
+        int totalPhotos;
+        int totalMedia;
+        int favorites;
+        int blacklisted;
+        int uniquePlayedVideos;
+        int uniquePlayedPhotos;
+        int uniquePlayedMedia;
+        int totalPlays;
+        int videosWithAudio;
+        int videosWithoutAudio;
+        using (var reader = command.ExecuteReader())
+        {
+            reader.Read();
+            totalVideos = ReadCount(reader, 1);
+            totalPhotos = ReadCount(reader, 2);
+            totalMedia = ReadCount(reader, 0);
+            favorites = ReadCount(reader, 3);
+            blacklisted = ReadCount(reader, 4);
+            uniquePlayedVideos = ReadCount(reader, 5);
+            uniquePlayedPhotos = ReadCount(reader, 6);
+            uniquePlayedMedia = ReadCount(reader, 7);
+            totalPlays = ReadCount(reader, 8);
+            videosWithAudio = ReadCount(reader, 9);
+            videosWithoutAudio = ReadCount(reader, 10);
+        }
+
         return new CatalogGlobalStats
         {
             TotalVideos = totalVideos,
             TotalPhotos = totalPhotos,
             TotalMedia = totalMedia,
-            Favorites = ReadCount(reader, 3),
-            Blacklisted = ReadCount(reader, 4),
+            Favorites = favorites,
+            Blacklisted = blacklisted,
             UniquePlayedVideos = uniquePlayedVideos,
             UniquePlayedPhotos = uniquePlayedPhotos,
             UniquePlayedMedia = uniquePlayedMedia,
             NeverPlayedVideos = Math.Max(0, totalVideos - uniquePlayedVideos),
             NeverPlayedPhotos = Math.Max(0, totalPhotos - uniquePlayedPhotos),
             NeverPlayedMedia = Math.Max(0, totalMedia - uniquePlayedMedia),
-            TotalPlays = ReadCount(reader, 8),
-            VideosWithAudio = ReadCount(reader, 9),
-            VideosWithoutAudio = ReadCount(reader, 10)
+            TotalPlays = totalPlays,
+            VideosWithAudio = videosWithAudio,
+            VideosWithoutAudio = videosWithoutAudio,
+            BaselineLoudnessLufs = ReadBaselineLoudness(connection)
         };
+    }
+
+    private static double ReadBaselineLoudness(SqliteConnection connection)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT integrated_loudness
+            FROM items
+            WHERE media_type = 0
+              AND has_audio = 1
+              AND integrated_loudness IS NOT NULL
+            ORDER BY integrated_loudness ASC;
+            """;
+        var values = new List<double>();
+        using (var reader = command.ExecuteReader())
+        {
+            while (reader.Read())
+            {
+                values.Add(reader.GetDouble(0));
+            }
+        }
+
+        if (values.Count == 0)
+        {
+            return DefaultBaselineLoudnessLufs;
+        }
+
+        var index = (int)Math.Ceiling(values.Count * 0.75d) - 1;
+        index = Math.Clamp(index, 0, values.Count - 1);
+        return values[index];
     }
 
     private static List<CatalogSourceStats> ReadSourceStats(SqliteConnection connection)
@@ -2494,6 +2594,7 @@ public sealed class CatalogGlobalStats
     public int TotalPlays { get; init; }
     public int VideosWithAudio { get; init; }
     public int VideosWithoutAudio { get; init; }
+    public double BaselineLoudnessLufs { get; init; } = -18.0;
 }
 
 public sealed class CatalogSourceStats

@@ -304,11 +304,20 @@ public static class ServerHostComposition
             return Results.Ok(response);
         });
 
-        app.MapGet("/api/library/projection", (LibraryOperationsService operations, RefreshPipelineService refresh) =>
+        app.MapPost("/api/library/item", (LibraryItemReadRequest? request, LibraryOperationsService operations) =>
         {
-            var projection = operations.GetLibraryProjection();
-            refresh.EnrichLibraryProjection(projection);
-            return Results.Json(projection);
+            if (request == null || string.IsNullOrWhiteSpace(request.Id))
+            {
+                return Results.BadRequest(new { error = "id is required" });
+            }
+
+            var item = operations.ReadLibraryItem(request.Id);
+            if (item == null)
+            {
+                return Results.NotFound(new { error = "item not found" });
+            }
+
+            return Results.Json(item);
         });
 
         app.MapPost("/api/library/query", (LibraryQueryRequest? request, LibraryOperationsService operations, RefreshPipelineService refresh) =>

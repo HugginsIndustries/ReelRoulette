@@ -190,21 +190,71 @@ public sealed class LibraryPanelBrowseTests
     }
 
     [Fact]
-    public void CurrentFileSource_UsesTheLoadedTileWhenTheSnapshotMisses()
+    public void CurrentFileSource_UsesTheLoadedTileBeforeASingleItemRead()
     {
-        Assert.Equal(LibraryCurrentFileSource.Snapshot, LibraryPanelBrowse.CurrentFileSource(snapshotHasItem: true, loadedHasItem: true));
-        Assert.Equal(LibraryCurrentFileSource.Snapshot, LibraryPanelBrowse.CurrentFileSource(snapshotHasItem: true, loadedHasItem: false));
-        Assert.Equal(LibraryCurrentFileSource.LoadedTile, LibraryPanelBrowse.CurrentFileSource(snapshotHasItem: false, loadedHasItem: true));
-        Assert.Equal(LibraryCurrentFileSource.None, LibraryPanelBrowse.CurrentFileSource(snapshotHasItem: false, loadedHasItem: false));
+        Assert.Equal(LibraryCurrentFileSource.LoadedTile, LibraryPanelBrowse.CurrentFileSource(loadedHasItem: true, singleItemHasItem: true));
+        Assert.Equal(LibraryCurrentFileSource.LoadedTile, LibraryPanelBrowse.CurrentFileSource(loadedHasItem: true, singleItemHasItem: false));
+        Assert.Equal(LibraryCurrentFileSource.SingleItem, LibraryPanelBrowse.CurrentFileSource(loadedHasItem: false, singleItemHasItem: true));
+        Assert.Equal(LibraryCurrentFileSource.None, LibraryPanelBrowse.CurrentFileSource(loadedHasItem: false, singleItemHasItem: false));
     }
 
     [Fact]
-    public void NeedsCurrentFileSnapshotSync_OnlyWhenNeitherCopyHasTheFile()
+    public void NeedsCurrentFileRead_OnlyWhenTheLoadedTileMisses()
     {
-        Assert.True(LibraryPanelBrowse.NeedsCurrentFileSnapshotSync(snapshotHasItem: false, loadedHasItem: false));
-        Assert.False(LibraryPanelBrowse.NeedsCurrentFileSnapshotSync(snapshotHasItem: false, loadedHasItem: true));
-        Assert.False(LibraryPanelBrowse.NeedsCurrentFileSnapshotSync(snapshotHasItem: true, loadedHasItem: false));
-        Assert.False(LibraryPanelBrowse.NeedsCurrentFileSnapshotSync(snapshotHasItem: true, loadedHasItem: true));
+        Assert.True(LibraryPanelBrowse.NeedsCurrentFileRead(loadedHasItem: false));
+        Assert.False(LibraryPanelBrowse.NeedsCurrentFileRead(loadedHasItem: true));
+    }
+
+    [Fact]
+    public void PlaybackStatsPaint_WaitsUntilThatFileIsAlreadyPlaying()
+    {
+        var earlier = new DateTime(2024, 1, 2, 3, 4, 5, DateTimeKind.Utc);
+        var showing = new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var early = LibraryPanelBrowse.PlaybackStatsPaint(
+            playbackIsCurrentFile: false,
+            itemLastPlayedBefore: earlier,
+            shownPreviousLastPlayedUtc: showing,
+            playbackPath: "/media/next.mp4");
+        Assert.False(early.PaintNow);
+        Assert.Equal(showing, early.ShownPreviousLastPlayedUtc);
+        Assert.Equal("/media/next.mp4", early.PendingPath);
+        Assert.Equal(earlier, early.PendingPreviousLastPlayedUtc);
+
+        var current = LibraryPanelBrowse.PlaybackStatsPaint(
+            playbackIsCurrentFile: true,
+            itemLastPlayedBefore: earlier,
+            shownPreviousLastPlayedUtc: showing,
+            playbackPath: "/media/next.mp4");
+        Assert.True(current.PaintNow);
+        Assert.Equal(earlier, current.ShownPreviousLastPlayedUtc);
+        Assert.Null(current.PendingPath);
+
+        var sameFile = LibraryPanelBrowse.PreviousLastPlayedOnStart(
+            "/media/next.mp4",
+            "/media/next.mp4",
+            earlier,
+            "/media/other.mp4",
+            showing);
+        Assert.Equal(earlier, sameFile.ShownPreviousLastPlayedUtc);
+        Assert.False(sameFile.ClearPending);
+
+        var matchingStart = LibraryPanelBrowse.PreviousLastPlayedOnStart(
+            "/media/next.mp4",
+            "/media/current.mp4",
+            showing,
+            "/MEDIA/next.mp4",
+            earlier);
+        Assert.Equal(earlier, matchingStart.ShownPreviousLastPlayedUtc);
+        Assert.True(matchingStart.ClearPending);
+
+        var otherStart = LibraryPanelBrowse.PreviousLastPlayedOnStart(
+            "/media/next.mp4",
+            "/media/current.mp4",
+            showing,
+            "/media/other.mp4",
+            earlier);
+        Assert.Null(otherStart.ShownPreviousLastPlayedUtc);
+        Assert.True(otherStart.ClearPending);
     }
 
     [Fact]

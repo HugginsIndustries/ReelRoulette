@@ -336,7 +336,7 @@ public sealed class RefreshPipelineServiceTests
     }
 
     [Fact]
-    public void EnrichLibraryProjection_ShouldAddThumbnailMetadataFromIndex()
+    public void EnrichListedItems_ShouldAddThumbnailMetadataFromIndex()
     {
         using var scope = new AppDataScope();
         var thumbsDir = Path.Combine(scope.RootPath, "thumbnails");
@@ -355,18 +355,13 @@ public sealed class RefreshPipelineServiceTests
             }.ToJsonString());
 
         var service = CreateService(new ServerStateService(), scope.RootPath);
-        var projection = new JsonObject
+        var items = new JsonArray
         {
-            ["items"] = new JsonArray
-            {
-                new JsonObject { ["id"] = "item-1", ["fileName"] = "a.mp4" },
-                new JsonObject { ["id"] = "item-2", ["fileName"] = "b.mp4" }
-            }
+            new JsonObject { ["id"] = "item-1", ["fileName"] = "a.mp4" },
+            new JsonObject { ["id"] = "item-2", ["fileName"] = "b.mp4" }
         };
 
-        service.EnrichLibraryProjection(projection);
-
-        var items = projection["items"]!.AsArray();
+        service.EnrichListedItems(items);
         var item1 = items[0]!.AsObject();
         Assert.True(item1["hasThumbnail"]!.GetValue<bool>());
         Assert.Equal(480, item1["thumbnailWidth"]!.GetValue<int>());

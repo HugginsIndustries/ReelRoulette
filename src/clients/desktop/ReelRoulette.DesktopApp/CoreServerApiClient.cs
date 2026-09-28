@@ -15,6 +15,11 @@ namespace ReelRoulette;
 
 public sealed class CoreServerApiClient
 {
+    public const string LibraryStatsPath = "/api/library/stats";
+    public const string LibrarySourcesPath = "/api/sources";
+    public const string LibraryTagCatalogPath = "/api/tag-editor/model";
+    public const string LibraryItemPath = "/api/library/item";
+
     private readonly HttpClient _httpClient;
     private readonly JsonSerializerOptions _serializerOptions = new(JsonSerializerDefaults.Web)
     {
@@ -114,7 +119,7 @@ public sealed class CoreServerApiClient
 
     public async Task<List<CoreSourceResponse>?> GetSourcesAsync(string baseUrl, CancellationToken cancellationToken = default)
     {
-        using var response = await _httpClient.GetAsync($"{baseUrl.TrimEnd('/')}/api/sources", cancellationToken).ConfigureAwait(false);
+        using var response = await _httpClient.GetAsync($"{baseUrl.TrimEnd('/')}{LibrarySourcesPath}", cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
         {
             return null;
@@ -124,9 +129,19 @@ public sealed class CoreServerApiClient
         return await JsonSerializer.DeserializeAsync<List<CoreSourceResponse>>(stream, _serializerOptions, cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task<JsonElement?> GetLibraryProjectionAsync(string baseUrl, CancellationToken cancellationToken = default)
+    public async Task<JsonElement?> GetLibraryItemAsync(string baseUrl, string id, CancellationToken cancellationToken = default)
     {
-        using var response = await _httpClient.GetAsync($"{baseUrl.TrimEnd('/')}/api/library/projection", cancellationToken).ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(id))
+        {
+            return null;
+        }
+
+        var body = new JsonObject
+        {
+            ["id"] = id
+        };
+        using var content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json");
+        using var response = await _httpClient.PostAsync($"{baseUrl.TrimEnd('/')}{LibraryItemPath}", content, cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
         {
             return null;
@@ -185,7 +200,7 @@ public sealed class CoreServerApiClient
 
     public async Task<CoreLibraryStatsResponse?> GetLibraryStatsAsync(string baseUrl, CancellationToken cancellationToken = default)
     {
-        using var response = await _httpClient.GetAsync($"{baseUrl.TrimEnd('/')}/api/library/stats", cancellationToken).ConfigureAwait(false);
+        using var response = await _httpClient.GetAsync($"{baseUrl.TrimEnd('/')}{LibraryStatsPath}", cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
         {
             return null;
@@ -344,7 +359,7 @@ public sealed class CoreServerApiClient
             ItemIds = itemIds
         };
         using var content = SerializeJson(request);
-        using var response = await _httpClient.PostAsync($"{baseUrl.TrimEnd('/')}/api/tag-editor/model", content, cancellationToken).ConfigureAwait(false);
+        using var response = await _httpClient.PostAsync($"{baseUrl.TrimEnd('/')}{LibraryTagCatalogPath}", content, cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
         {
             return null;
@@ -827,6 +842,7 @@ public sealed class CoreLibraryGlobalStatsResponse
     public int TotalPlays { get; set; }
     public int VideosWithAudio { get; set; }
     public int VideosWithoutAudio { get; set; }
+    public double BaselineLoudnessLufs { get; set; } = -18.0;
 }
 
 public sealed class CoreSourceStatsResponse

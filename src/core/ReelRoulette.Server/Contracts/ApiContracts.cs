@@ -50,6 +50,12 @@ public sealed class LibraryGlobalStatsResponse
     public int TotalPlays { get; set; }
     public int VideosWithAudio { get; set; }
     public int VideosWithoutAudio { get; set; }
+    public double BaselineLoudnessLufs { get; set; } = -18.0;
+}
+
+public sealed class LibraryItemReadRequest
+{
+    public string? Id { get; set; }
 }
 
 public sealed class SourceStatsResponse

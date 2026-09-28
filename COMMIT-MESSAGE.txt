@@ -19,8 +19,10 @@ Instructions:
 
 Commit Message:
 
-M10i11: Scan auto-tags and duplicates without the full catalog
+M10i12: Stop desktop from downloading the full catalog
 
-- Match auto-tag suggestions from catalog rows, with the same full-library, enabled-source, and explicit-path rules.
-- Group ready duplicate fingerprints, and keep pending, failed, and stale fingerprints out.
-- Delete non-kept duplicate files and catalog rows without loading the full catalog.
+- Load header counts, sources, and tags at connect without a full catalog download.
+- Read one item for now-playing when that file is not already on screen.
+- Take the loudness baseline from library stats.
+- Remove the full-catalog projection endpoint. Thumbnail layout stays on list query.
+- Update the current-file stats section when that file starts, not when an earlier playback event arrives.

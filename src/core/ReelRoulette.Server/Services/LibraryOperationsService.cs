@@ -143,12 +143,20 @@ public sealed class LibraryOperationsService
         }
     }
 
-    public JsonObject GetLibraryProjection()
+    public JsonObject? ReadLibraryItem(string? identifier)
     {
+        if (string.IsNullOrWhiteSpace(identifier))
+        {
+            return null;
+        }
+
+        LibraryCatalogItem? item;
         lock (_lock)
         {
-            return LoadLibraryRoot();
+            item = _catalog.Session.ReadListedItem(identifier);
         }
+
+        return item == null ? null : LibraryCatalogSession.ToItemJson(item);
     }
 
     public LibraryQueryOutcome QueryLibrary(LibraryQueryRequest? request)
@@ -229,7 +237,8 @@ public sealed class LibraryOperationsService
                     NeverPlayedMedia = stats.Global.NeverPlayedMedia,
                     TotalPlays = stats.Global.TotalPlays,
                     VideosWithAudio = stats.Global.VideosWithAudio,
-                    VideosWithoutAudio = stats.Global.VideosWithoutAudio
+                    VideosWithoutAudio = stats.Global.VideosWithoutAudio,
+                    BaselineLoudnessLufs = stats.Global.BaselineLoudnessLufs
                 },
                 Sources = stats.Sources
                     .Select(source => new SourceStatsResponse

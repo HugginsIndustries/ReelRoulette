@@ -32,8 +32,22 @@ public enum LibraryPanelBrowseRequest
 public enum LibraryCurrentFileSource
 {
     None,
-    Snapshot,
-    LoadedTile
+    LoadedTile,
+    SingleItem
+}
+
+public readonly record struct CurrentFileStatsPaint
+{
+    public bool PaintNow { get; init; }
+    public DateTime? ShownPreviousLastPlayedUtc { get; init; }
+    public string? PendingPath { get; init; }
+    public DateTime? PendingPreviousLastPlayedUtc { get; init; }
+}
+
+public readonly record struct CurrentFileStartStats
+{
+    public DateTime? ShownPreviousLastPlayedUtc { get; init; }
+    public bool ClearPending { get; init; }
 }
 
 /// <summary>
@@ -237,29 +251,88 @@ public static class LibraryPanelBrowse
     }
 
     /// <summary>
-    /// The snapshot item wins. A loaded tile supplies now-playing stats when the snapshot has no match.
+    /// A loaded tile wins. A single-item read supplies now-playing stats when that tile is not loaded.
     /// </summary>
-    public static LibraryCurrentFileSource CurrentFileSource(bool snapshotHasItem, bool loadedHasItem)
+    public static LibraryCurrentFileSource CurrentFileSource(bool loadedHasItem, bool singleItemHasItem)
     {
-        if (snapshotHasItem)
-        {
-            return LibraryCurrentFileSource.Snapshot;
-        }
-
         if (loadedHasItem)
         {
             return LibraryCurrentFileSource.LoadedTile;
+        }
+
+        if (singleItemHasItem)
+        {
+            return LibraryCurrentFileSource.SingleItem;
         }
 
         return LibraryCurrentFileSource.None;
     }
 
     /// <summary>
-    /// The current file is in neither copy, so the header has nothing local to read.
+    /// The current file is not in the loaded window, so now-playing reads that one item.
     /// </summary>
-    public static bool NeedsCurrentFileSnapshotSync(bool snapshotHasItem, bool loadedHasItem)
+    public static bool NeedsCurrentFileRead(bool loadedHasItem)
     {
-        return CurrentFileSource(snapshotHasItem, loadedHasItem) == LibraryCurrentFileSource.None;
+        return !loadedHasItem;
+    }
+
+    /// <summary>
+    /// A playback event paints the current-file section only when that file is already playing.
+    /// An earlier event keeps that file's pre-play last-played time until playback starts.
+    /// </summary>
+    public static CurrentFileStatsPaint PlaybackStatsPaint(
+        bool playbackIsCurrentFile,
+        DateTime? itemLastPlayedBefore,
+        DateTime? shownPreviousLastPlayedUtc,
+        string? playbackPath)
+    {
+        if (playbackIsCurrentFile)
+        {
+            return new CurrentFileStatsPaint
+            {
+                PaintNow = true,
+                ShownPreviousLastPlayedUtc = itemLastPlayedBefore,
+                PendingPath = null,
+                PendingPreviousLastPlayedUtc = null
+            };
+        }
+
+        return new CurrentFileStatsPaint
+        {
+            PaintNow = false,
+            ShownPreviousLastPlayedUtc = shownPreviousLastPlayedUtc,
+            PendingPath = playbackPath,
+            PendingPreviousLastPlayedUtc = itemLastPlayedBefore
+        };
+    }
+
+    /// <summary>
+    /// Starting a different file takes a matching pending last-played time, or clears the one on screen.
+    /// Starting the same file leaves the value a playback event already stored.
+    /// </summary>
+    public static CurrentFileStartStats PreviousLastPlayedOnStart(
+        string? newPath,
+        string? previousPath,
+        DateTime? shownPreviousLastPlayedUtc,
+        string? pendingPath,
+        DateTime? pendingPreviousLastPlayedUtc)
+    {
+        if (string.Equals(newPath, previousPath, StringComparison.OrdinalIgnoreCase))
+        {
+            return new CurrentFileStartStats
+            {
+                ShownPreviousLastPlayedUtc = shownPreviousLastPlayedUtc,
+                ClearPending = false
+            };
+        }
+
+        var matchesPending = !string.IsNullOrWhiteSpace(newPath) &&
+                             string.Equals(newPath, pendingPath, StringComparison.OrdinalIgnoreCase);
+        return new CurrentFileStartStats
+        {
+            ShownPreviousLastPlayedUtc = matchesPending ? pendingPreviousLastPlayedUtc : null,
+            ClearPending = true
+        };
     }
 
     private static bool IsPlaybackOrderSort(string? sortMode)
