@@ -19,10 +19,10 @@ Instructions:
 
 Commit Message:
 
-Docs: Plan JSON library retirement across two releases
+Docs: Cover every JSON-era library leftover in the retirement plan
 
-- Remove the one-shot JSON dump from later milestones. Operator catalog transfer rejects a `library.json` archive.
-- v0.13.0 still migrates and imports a JSON library. Refresh stays on that release, and its full-document write is refresh only.
-- Add catalog document removal as the last v0.13.0 milestone. Tag sync and startup stop using that document. The JSON importer stays.
-- v0.14.0 ignores `library.json`, deletes the importer, and creates an empty `library.db` with SQL.
-- A later v0.14.0 milestone copies `available_tags` into the tag table and drops it, then removes leftover JSON-era types.
+- v0.13.0 still migrates and imports a JSON library. Archive code stops writing that file, and the import confirmation stops calling it the live catalog.
+- Startup loads favorite and blacklist state without the catalog document. A following v0.13.0 milestone deletes leftovers that do not serve migration or zip import.
+- Catalog document removal also drops the empty legacy tag table and moves the catalog to schema version 2. JSON import ignores a flat tag list.
+- v0.14.0 deletes the importer, the JSON zip parser, the JSON-only source remap, and the deprecation strings.
+- After JSON format removal, product code and current-state docs no longer mention a JSON library. Historical notes stay.
