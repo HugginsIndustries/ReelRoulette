@@ -283,6 +283,7 @@ public static class LibraryCatalogStore
         using var connection = new SqliteConnection(ConnectionString(tempPath, readOnly: false));
         connection.Open();
         Execute(connection, "PRAGMA journal_mode=WAL;");
+        Execute(connection, "PRAGMA synchronous=NORMAL;");
 
         using var transaction = connection.BeginTransaction();
         Execute(connection, """
@@ -1159,6 +1160,7 @@ public static class LibraryCatalogStore
         connection.Open();
         connection.DefaultTimeout = 1;
         Execute(connection, "PRAGMA journal_mode=WAL;");
+        Execute(connection, "PRAGMA synchronous=NORMAL;");
         Execute(connection, "PRAGMA busy_timeout=1000;");
         return connection;
     }

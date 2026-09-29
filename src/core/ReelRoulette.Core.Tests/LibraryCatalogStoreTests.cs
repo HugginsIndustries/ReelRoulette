@@ -595,6 +595,18 @@ public sealed class LibraryCatalogStoreTests
     }
 
     [Fact]
+    public void OpenWrite_UsesWalWithSynchronousNormal()
+    {
+        using var dir = new TempDirectory();
+        using var connection = LibraryCatalogStore.OpenWrite(Path.Combine(dir.Path, "library.db"));
+        using var command = connection.CreateCommand();
+        command.CommandText = "PRAGMA journal_mode;";
+        Assert.Equal("wal", command.ExecuteScalar());
+        command.CommandText = "PRAGMA synchronous;";
+        Assert.Equal(1, Convert.ToInt32(command.ExecuteScalar(), System.Globalization.CultureInfo.InvariantCulture));
+    }
+
+    [Fact]
     public void TestConnectionString_DisablesPooling()
     {
         var writable = new SqliteConnectionStringBuilder(TestConnectionString("library.db", readOnly: false));

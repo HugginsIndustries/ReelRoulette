@@ -19,10 +19,6 @@ Instructions:
 
 Commit Message:
 
-Docs: Cover every JSON-era library leftover in the retirement plan
+Chore: Use synchronous=NORMAL for catalog writes
 
-- v0.13.0 still migrates and imports a JSON library. Archive code stops writing that file, and the import confirmation stops calling it the live catalog.
-- Startup loads favorite and blacklist state without the catalog document. A following v0.13.0 milestone deletes leftovers that do not serve migration or zip import.
-- Catalog document removal also drops the empty legacy tag table and moves the catalog to schema version 2. JSON import ignores a flat tag list.
-- v0.14.0 deletes the importer, the JSON zip parser, the JSON-only source remap, and the deprecation strings.
-- After JSON format removal, product code and current-state docs no longer mention a JSON library. Historical notes stay.
+- Catalog write connections use WAL with synchronous=NORMAL, so a commit does not wait for the WAL to reach disk.
