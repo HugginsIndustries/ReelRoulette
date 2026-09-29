@@ -11,6 +11,7 @@ Write **[Unreleased]** bullets at the same level as the released sections below.
 
 ### Changed
 
+- **Folder import:** Importing a media folder inserts new files and updates existing ones without loading the whole library. An existing file keeps its tags, favorite, blacklist, and playback stats. Files that are missing on disk stay until a refresh. Library browse can answer while the folder is still being scanned.
 - **Auto-tag and duplicate scans:** Auto-tag scan and duplicate scan read catalog rows and do not load the whole library. Full-library, enabled-source, and explicit-path scans stay the same. Duplicate groups include only ready fingerprints. Applying a duplicate choice still deletes the other files and catalog rows and leaves the kept item.
 - **Library stats and item state:** Library stats and an item-state read for specific files no longer load the whole library. An empty item-state request returns nothing. WebUI resync reloads the library list and no longer asks for item state with an empty path list.
 - **Random and direct play:** Random play uses the same filter as the library list, including enabled sources and the request's video or photo options, and does not reload the whole library after a favorite, playback, or tag change. Playing one item reads that item only. An empty match still returns no item.
@@ -31,6 +32,7 @@ Write **[Unreleased]** bullets at the same level as the released sections below.
 
 ### Fixed
 
+- **Desktop — folder import:** Importing a large folder no longer fails after 8 seconds. The desktop waits for the scan to finish, then shows how many files were imported or updated and starts refresh.
 - **Desktop — current file stats:** The current-file section updates when that file starts. A playback event that arrives first no longer leaves the previous file's stats on screen.
 - **WebUI — Firefox:** Reloading the page stays usable. The installable service worker proxies document loads only, so API calls and the event stream go straight to the server.
 - **Refresh shutdown:** Stopping the server cancels a library refresh that is still running. That stop is not recorded as a failure or a completed refresh, and a forced duration or loudness rescan stays pending.

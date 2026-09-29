@@ -1262,6 +1262,226 @@ public sealed class LibraryOperationsServiceTests
     }
 
     [Fact]
+    public void ImportSource_UpdatesRowsWithoutBuildingTheCatalogDocument()
+    {
+        var appDataRoot = CreateTempAppDataRoot();
+        var mediaParent = Path.Combine(Path.GetTempPath(), "reelroulette-import-src-" + Guid.NewGuid().ToString("N"));
+        var mediaRoot = Path.Combine(mediaParent, "Clips");
+        var keptOnDisk = Path.Combine(mediaRoot, "kept.mp4");
+        var keptStoredPath = Path.Combine(mediaRoot, "Kept.mp4");
+        var freshPath = Path.Combine(mediaRoot, "fresh.jpg");
+        var gonePath = Path.Combine(mediaRoot, "gone.mp4");
+        var playedAt = new DateTime(2024, 3, 4, 5, 6, 7, DateTimeKind.Utc);
+        try
+        {
+            Directory.CreateDirectory(mediaRoot);
+            File.WriteAllBytes(keptOnDisk, [0x00]);
+            File.WriteAllBytes(freshPath, [0x00]);
+            File.WriteAllText(Path.Combine(mediaRoot, "notes.txt"), "skip");
+            SeedCoreSettings(appDataRoot, enabled: true, minimumGapMinutes: 360, numberOfBackups: 8);
+            SeedLibrary(appDataRoot, new JsonObject
+            {
+                ["sources"] = new JsonArray
+                {
+                    new JsonObject
+                    {
+                        ["id"] = "src-clips",
+                        ["rootPath"] = mediaRoot + Path.DirectorySeparatorChar,
+                        ["displayName"] = "Clips",
+                        ["isEnabled"] = true
+                    }
+                },
+                ["items"] = new JsonArray
+                {
+                    new JsonObject
+                    {
+                        ["id"] = "kept-1",
+                        ["sourceId"] = "other-source",
+                        ["fullPath"] = keptStoredPath,
+                        ["relativePath"] = "old/kept.mp4",
+                        ["fileName"] = "Nope.mp4",
+                        ["mediaType"] = "Photo",
+                        ["isFavorite"] = true,
+                        ["isBlacklisted"] = false,
+                        ["playCount"] = 4,
+                        ["lastPlayedUtc"] = "2024-03-04T05:06:07Z",
+                        ["duration"] = "00:00:12",
+                        ["fingerprint"] = "abc123",
+                        ["fingerprintStatus"] = "Ready",
+                        ["tags"] = new JsonArray("Holiday", "Night")
+                    },
+                    new JsonObject
+                    {
+                        ["id"] = "gone-1",
+                        ["sourceId"] = "src-clips",
+                        ["fullPath"] = gonePath,
+                        ["fileName"] = "gone.mp4",
+                        ["playCount"] = 2,
+                        ["tags"] = new JsonArray("Keep")
+                    }
+                },
+                ["tags"] = new JsonArray(),
+                ["categories"] = new JsonArray()
+            });
+
+            var host = LibraryCatalogHost.Open(appDataRoot);
+            var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot, host);
+            var builds = host.Session.DocumentBuilds;
+            var revision = host.Session.Revision;
+
+            var response = service.ImportSource(new SourceImportRequest
+            {
+                RootPath = mediaRoot + Path.DirectorySeparatorChar,
+                DisplayName = "  "
+            });
+
+            Assert.True(response.Accepted);
+            Assert.Equal("src-clips", response.SourceId);
+            Assert.Equal(1, response.ImportedCount);
+            Assert.Equal(1, response.UpdatedCount);
+            Assert.Equal(revision + 1, host.Session.Revision);
+            Assert.Equal(builds, host.Session.DocumentBuilds);
+
+            var kept = host.Session.ReadListedItem("kept-1");
+            Assert.NotNull(kept);
+            Assert.Equal(keptStoredPath, kept!.FullPath);
+            Assert.Equal("src-clips", kept.SourceId);
+            Assert.Equal("kept.mp4", kept.RelativePath);
+            Assert.Equal("kept.mp4", kept.FileName);
+            Assert.Equal(0, kept.MediaType);
+            Assert.True(kept.IsFavorite);
+            Assert.False(kept.IsBlacklisted);
+            Assert.Equal(4, kept.PlayCount);
+            Assert.Equal(playedAt, kept.LastPlayedUtc);
+            Assert.Equal(TimeSpan.FromSeconds(12).Ticks, kept.DurationTicks);
+            Assert.Equal("abc123", kept.Fingerprint);
+            Assert.Equal(1, kept.FingerprintStatus);
+            Assert.Equal(["Holiday", "Night"], kept.Tags);
+
+            var gone = host.Session.ReadListedItem("gone-1");
+            Assert.NotNull(gone);
+            Assert.Equal(gonePath, gone!.FullPath);
+            Assert.Equal(2, gone.PlayCount);
+            Assert.Equal(["Keep"], gone.Tags);
+
+            var fresh = host.Session.ReadListedItem(freshPath);
+            Assert.NotNull(fresh);
+            Assert.NotEqual("kept-1", fresh!.Id);
+            Assert.NotEqual("gone-1", fresh.Id);
+            Assert.Equal("src-clips", fresh.SourceId);
+            Assert.Equal("fresh.jpg", fresh.FileName);
+            Assert.Equal("fresh.jpg", fresh.RelativePath);
+            Assert.Equal(1, fresh.MediaType);
+            Assert.False(fresh.IsFavorite);
+            Assert.False(fresh.IsBlacklisted);
+            Assert.Equal(0, fresh.PlayCount);
+            Assert.Null(fresh.LastPlayedUtc);
+            Assert.Empty(fresh.Tags);
+            Assert.Equal("SHA-256", fresh.FingerprintAlgorithm);
+            Assert.Equal(1, fresh.FingerprintVersion);
+            Assert.Equal(0, fresh.FingerprintStatus);
+            Assert.Null(host.Session.ReadListedItem(Path.Combine(mediaRoot, "notes.txt")));
+
+            var source = Assert.Single(service.GetLibraryStats().Sources);
+            Assert.Equal("src-clips", source.SourceId);
+            Assert.Equal(mediaRoot + Path.DirectorySeparatorChar, source.RootPath);
+            Assert.Equal("Clips", source.DisplayName);
+
+            var again = service.ImportSource(new SourceImportRequest
+            {
+                RootPath = mediaRoot,
+                DisplayName = "  "
+            });
+            Assert.True(again.Accepted);
+            Assert.Equal(0, again.ImportedCount);
+            Assert.Equal(2, again.UpdatedCount);
+            Assert.Equal(revision + 1, host.Session.Revision);
+            Assert.Equal(builds, host.Session.DocumentBuilds);
+            _ = host.Session.BuildDocument();
+            Assert.Equal(builds + 1, host.Session.DocumentBuilds);
+        }
+        finally
+        {
+            if (Directory.Exists(mediaParent))
+            {
+                Directory.Delete(mediaParent, recursive: true);
+            }
+
+            if (Directory.Exists(appDataRoot))
+            {
+                Directory.Delete(appDataRoot, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task ImportSource_EnumeratesWithoutHoldingTheCatalogLock()
+    {
+        var appDataRoot = CreateTempAppDataRoot();
+        var mediaParent = Path.Combine(Path.GetTempPath(), "reelroulette-import-src-" + Guid.NewGuid().ToString("N"));
+        var mediaRoot = Path.Combine(mediaParent, "Clips");
+        var entered = new ManualResetEventSlim(false);
+        var release = new ManualResetEventSlim(false);
+        Task<SourceImportResponse>? import = null;
+        try
+        {
+            Directory.CreateDirectory(mediaRoot);
+            SeedCoreSettings(appDataRoot, enabled: true, minimumGapMinutes: 360, numberOfBackups: 8);
+            SeedLibrary(appDataRoot, EmptyLibraryRoot());
+            var host = LibraryCatalogHost.Open(appDataRoot);
+            var builds = host.Session.DocumentBuilds;
+            var service = new LibraryOperationsService(
+                NullLogger<LibraryOperationsService>.Instance,
+                appDataRoot,
+                host,
+                _ =>
+                {
+                    entered.Set();
+                    release.Wait(TimeSpan.FromSeconds(5));
+                    return [];
+                });
+
+            import = Task.Run(() => service.ImportSource(new SourceImportRequest { RootPath = mediaRoot }));
+            Assert.True(entered.Wait(TimeSpan.FromSeconds(5)));
+            var browse = Task.Run(() => service.QueryLibrary(new LibraryQueryRequest()));
+            var browseFinished = await Task.WhenAny(browse, Task.Delay(TimeSpan.FromSeconds(2))) == browse;
+            release.Set();
+            Assert.True(browseFinished);
+            Assert.True((await browse).Accepted);
+            var imported = await import.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.True(imported.Accepted);
+            Assert.Equal(builds, host.Session.DocumentBuilds);
+        }
+        finally
+        {
+            release.Set();
+            if (import != null)
+            {
+                try
+                {
+                    await import.WaitAsync(TimeSpan.FromSeconds(5));
+                }
+                catch (Exception)
+                {
+                    // The assertion above reports an import failure.
+                }
+            }
+
+            entered.Dispose();
+            release.Dispose();
+            if (Directory.Exists(mediaParent))
+            {
+                Directory.Delete(mediaParent, recursive: true);
+            }
+
+            if (Directory.Exists(appDataRoot))
+            {
+                Directory.Delete(appDataRoot, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public void GetLibraryStats_EmptyDisplayNameWithTrailingSlashRoot_DerivesFolderNameWithoutPersisting()
     {
         var appDataRoot = CreateTempAppDataRoot();

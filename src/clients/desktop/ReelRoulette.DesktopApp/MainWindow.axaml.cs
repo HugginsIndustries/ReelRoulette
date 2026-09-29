@@ -8527,7 +8527,7 @@ namespace ReelRoulette
 
                     var rootPath = LibrarySourcePath.NormalizeRootPath(path);
                     var folderName = LibrarySourcePath.GetFolderDisplayName(rootPath);
-                    var response = await _coreServerApiClient.ImportSourceAsync(_coreServerBaseUrl, new CoreSourceImportRequest
+                    var response = await _coreServerLongRunningApiClient.ImportSourceAsync(_coreServerBaseUrl, new CoreSourceImportRequest
                     {
                         RootPath = rootPath,
                         DisplayName = folderName

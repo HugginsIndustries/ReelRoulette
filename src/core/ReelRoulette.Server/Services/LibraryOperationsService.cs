@@ -33,13 +33,15 @@ public sealed class LibraryOperationsService
     private readonly string _logPath;
     private readonly ILogger<LibraryOperationsService> _logger;
     private readonly LibraryCatalogHost _catalog;
+    private readonly Func<string, IReadOnlyList<string>> _enumerateFiles;
     private JsonObject? _editBaseline;
     private bool _loggedBackupUnavailable;
 
     public LibraryOperationsService(
         ILogger<LibraryOperationsService>? logger = null,
         string? appDataPathOverride = null,
-        LibraryCatalogHost? catalog = null)
+        LibraryCatalogHost? catalog = null,
+        Func<string, IReadOnlyList<string>>? enumerateMediaFiles = null)
     {
         _logger = logger ?? NullLogger<LibraryOperationsService>.Instance;
         var appData = appDataPathOverride ??
@@ -47,6 +49,7 @@ public sealed class LibraryOperationsService
         Directory.CreateDirectory(appData);
         _logPath = Path.Combine(appData, "last.log");
         _catalog = catalog ?? LibraryCatalogHost.Open(appData);
+        _enumerateFiles = enumerateMediaFiles ?? EnumerateAllFiles;
     }
 
     public SourceImportResponse ImportSource(SourceImportRequest request)
@@ -62,85 +65,38 @@ public sealed class LibraryOperationsService
             return new SourceImportResponse { Accepted = false, Message = $"Directory not found: {rootPath}" };
         }
 
+        var files = new List<CatalogSourceImportFile>();
+        foreach (var filePath in _enumerateFiles(rootPath))
+        {
+            if (!MediaPlayableExtensions.IsPlayableExtension(Path.GetExtension(filePath)))
+            {
+                continue;
+            }
+
+            files.Add(new CatalogSourceImportFile(
+                filePath,
+                GetRelativePath(rootPath, filePath),
+                Path.GetFileName(filePath),
+                ResolveMediaType(filePath)));
+        }
+
+        CatalogSourceImportResult imported;
         lock (_lock)
         {
-            var root = LoadLibraryRoot();
-            var sources = EnsureArray(root, "sources");
-            var items = EnsureArray(root, "items");
-
-            var source = FindSourceByRootPath(sources, rootPath);
-            if (source == null)
-            {
-                source = new JsonObject
-                {
-                    ["id"] = Guid.NewGuid().ToString(),
-                    ["rootPath"] = rootPath,
-                    ["displayName"] = LibrarySourcePath.ResolveDisplayName(request.DisplayName, rootPath),
-                    ["isEnabled"] = true
-                };
-                sources.Add(source);
-            }
-            else if (!string.IsNullOrWhiteSpace(request.DisplayName))
-            {
-                source["displayName"] = request.DisplayName!.Trim();
-            }
-
-            var sourceId = source["id"]?.GetValue<string>() ?? string.Empty;
-            var allMediaFiles = EnumerateMediaFiles(rootPath).ToList();
-            var byPath = items
-                .OfType<JsonObject>()
-                .Select(item => new
-                {
-                    Node = item,
-                    FullPath = item["fullPath"]?.GetValue<string>()?.Trim()
-                })
-                .Where(x => !string.IsNullOrWhiteSpace(x.FullPath))
-                .ToDictionary(x => x.FullPath!, x => x.Node, StringComparer.OrdinalIgnoreCase);
-
-            var importedCount = 0;
-            var updatedCount = 0;
-            foreach (var filePath in allMediaFiles)
-            {
-                if (byPath.TryGetValue(filePath, out var existing))
-                {
-                    existing["sourceId"] = sourceId;
-                    existing["relativePath"] = GetRelativePath(rootPath, filePath);
-                    existing["fileName"] = Path.GetFileName(filePath);
-                    existing["mediaType"] = ResolveMediaType(filePath);
-                    updatedCount++;
-                    continue;
-                }
-
-                var item = new JsonObject
-                {
-                    ["id"] = Guid.NewGuid().ToString(),
-                    ["sourceId"] = sourceId,
-                    ["fullPath"] = filePath,
-                    ["relativePath"] = GetRelativePath(rootPath, filePath),
-                    ["fileName"] = Path.GetFileName(filePath),
-                    ["mediaType"] = ResolveMediaType(filePath),
-                    ["isFavorite"] = false,
-                    ["isBlacklisted"] = false,
-                    ["playCount"] = 0,
-                    ["tags"] = new JsonArray(),
-                    ["fingerprintAlgorithm"] = "SHA-256",
-                    ["fingerprintVersion"] = 1,
-                    ["fingerprintStatus"] = "Pending"
-                };
-                items.Add(item);
-                importedCount++;
-            }
-
-            SaveLibraryRoot(root);
-            return new SourceImportResponse
-            {
-                Accepted = true,
-                ImportedCount = importedCount,
-                UpdatedCount = updatedCount,
-                SourceId = sourceId,
-                Message = "Import completed."
-            };
+            imported = _catalog.Session.ImportSourceFolder(rootPath, request.DisplayName, files);
         }
+
+        AppendServerLog(
+            "info",
+            $"Source import root={rootPath} imported={imported.ImportedCount} updated={imported.UpdatedCount}.");
+        return new SourceImportResponse
+        {
+            Accepted = true,
+            ImportedCount = imported.ImportedCount,
+            UpdatedCount = imported.UpdatedCount,
+            SourceId = imported.SourceId,
+            Message = "Import completed."
+        };
     }
 
     public JsonObject? ReadLibraryItem(string? identifier)
@@ -893,31 +849,11 @@ public sealed class LibraryOperationsService
         return created;
     }
 
-    private static JsonObject? FindSourceByRootPath(JsonArray sources, string rootPath)
-    {
-        return sources
-            .OfType<JsonObject>()
-            .FirstOrDefault(source => LibrarySourcePath.RootPathsEqual(source["rootPath"]?.GetValue<string>(), rootPath));
-    }
+    private static IReadOnlyList<string> EnumerateAllFiles(string rootPath) =>
+        Directory.GetFiles(rootPath, "*", SearchOption.AllDirectories);
 
-    private static IEnumerable<string> EnumerateMediaFiles(string rootPath)
-    {
-        var allFiles = Directory.GetFiles(rootPath, "*", SearchOption.AllDirectories);
-        foreach (var file in allFiles)
-        {
-            var extension = Path.GetExtension(file).ToLowerInvariant();
-            if (MediaPlayableExtensions.IsPlayableExtension(extension))
-            {
-                yield return file;
-            }
-        }
-    }
-
-    private static string ResolveMediaType(string filePath)
-    {
-        var extension = Path.GetExtension(filePath).ToLowerInvariant();
-        return MediaPlayableExtensions.IsVideoExtension(extension) ? "Video" : "Photo";
-    }
+    private static int ResolveMediaType(string filePath) =>
+        MediaPlayableExtensions.IsVideoExtension(Path.GetExtension(filePath)) ? 0 : 1;
 
     private static string GetRelativePath(string rootPath, string fullPath) =>
         ReelRoulette.Core.Storage.LibraryRelativePath.GetRelativePath(rootPath, fullPath);

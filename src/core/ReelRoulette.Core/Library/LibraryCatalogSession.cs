@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json.Nodes;
 using Microsoft.Data.Sqlite;
 using ReelRoulette.Core.Filtering;
+using ReelRoulette.Core.Storage;
 
 namespace ReelRoulette.Core.Library;
 
@@ -631,6 +632,88 @@ public sealed class LibraryCatalogSession
                 ("$file", fileName),
                 ("$fileFold", LibraryCatalogStore.Fold(fileName)),
                 ("$media", mediaType)) > 0);
+    }
+
+    public CatalogSourceImportResult ImportSourceFolder(string rootPath, string? displayName, IReadOnlyList<CatalogSourceImportFile> files)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(rootPath);
+        ArgumentNullException.ThrowIfNull(files);
+
+        var sourceId = string.Empty;
+        var imported = 0;
+        var updated = 0;
+        RunInTransaction(() =>
+        {
+            var source = FindSourceByRootPath(rootPath);
+            if (source == null)
+            {
+                sourceId = Guid.NewGuid().ToString();
+                if (!InsertSource(sourceId, rootPath, LibrarySourcePath.ResolveDisplayName(displayName, rootPath), true))
+                {
+                    throw new InvalidOperationException("Catalog import failed to insert a source.");
+                }
+            }
+            else
+            {
+                sourceId = source.Id;
+                var requestedName = string.IsNullOrWhiteSpace(displayName) ? null : displayName.Trim();
+                if (requestedName != null && !string.Equals(requestedName, source.DisplayName, StringComparison.Ordinal))
+                {
+                    SetSourceDisplayName(sourceId, requestedName);
+                }
+            }
+
+            foreach (var file in files)
+            {
+                if (string.IsNullOrWhiteSpace(file.FullPath))
+                {
+                    continue;
+                }
+
+                var existing = ReadItemIdentityByPath(file.FullPath);
+                if (existing == null)
+                {
+                    var fileName = string.IsNullOrWhiteSpace(file.FileName) ? Path.GetFileName(file.FullPath) : file.FileName;
+                    if (!InsertItem(new LibraryCatalogItem
+                    {
+                        Id = Guid.NewGuid().ToString(),
+                        SourceId = sourceId,
+                        FullPath = file.FullPath,
+                        RelativePath = file.RelativePath,
+                        FileName = fileName,
+                        MediaType = file.MediaType,
+                        FingerprintAlgorithm = "SHA-256",
+                        FingerprintVersion = 1,
+                        FingerprintStatus = 0
+                    }))
+                    {
+                        throw new InvalidOperationException("Catalog import failed to insert an item.");
+                    }
+
+                    imported++;
+                    continue;
+                }
+
+                updated++;
+                var nextFileName = string.IsNullOrWhiteSpace(file.FileName) ? Path.GetFileName(file.FullPath) : file.FileName;
+                if (!SourceImportIdentityDiffers(existing.Value, sourceId, file.RelativePath, nextFileName, file.MediaType))
+                {
+                    continue;
+                }
+
+                if (!UpdateItemIdentity(existing.Value.Id, sourceId, existing.Value.FullPath, file.RelativePath, nextFileName, file.MediaType))
+                {
+                    throw new InvalidOperationException("Catalog import failed to update an item.");
+                }
+            }
+        });
+
+        return new CatalogSourceImportResult
+        {
+            SourceId = sourceId,
+            ImportedCount = imported,
+            UpdatedCount = updated
+        };
     }
 
     public bool DeleteItem(string id)
@@ -1585,6 +1668,76 @@ public sealed class LibraryCatalogSession
             ("$name", name),
             ("$fold", fold)) > 0;
     }
+
+    private LibraryCatalogSource? FindSourceByRootPath(string rootPath)
+    {
+        var scope = _writeScope.Value ?? throw new InvalidOperationException("Source lookup requires a catalog transaction.");
+        using var command = scope.Connection.CreateCommand();
+        command.Transaction = scope.Transaction;
+        command.CommandText = "SELECT id, root_path, root_path_fold, display_name, is_enabled FROM sources ORDER BY position;";
+        using var reader = command.ExecuteReader();
+        while (reader.Read())
+        {
+            var source = new LibraryCatalogSource
+            {
+                Id = reader.GetString(0),
+                RootPath = reader.GetString(1),
+                RootPathFold = reader.GetString(2),
+                DisplayName = reader.IsDBNull(3) ? null : reader.GetString(3),
+                IsEnabled = reader.GetInt32(4) != 0
+            };
+            if (LibrarySourcePath.RootPathsEqual(source.RootPath, rootPath))
+            {
+                return source;
+            }
+        }
+
+        return null;
+    }
+
+    private SourceImportIdentity? ReadItemIdentityByPath(string fullPath)
+    {
+        var scope = _writeScope.Value ?? throw new InvalidOperationException("Item lookup requires a catalog transaction.");
+        using var command = scope.Connection.CreateCommand();
+        command.Transaction = scope.Transaction;
+        command.CommandText = """
+            SELECT id, source_id, full_path, relative_path, file_name, media_type
+            FROM items
+            WHERE full_path_fold = $fold
+            ORDER BY position
+            LIMIT 1;
+            """;
+        command.Parameters.AddWithValue("$fold", LibraryCatalogStore.Fold(fullPath.Trim()));
+        using var reader = command.ExecuteReader();
+        if (!reader.Read())
+        {
+            return null;
+        }
+
+        return new SourceImportIdentity(
+            reader.GetString(0),
+            reader.GetString(1),
+            reader.GetString(2),
+            reader.GetString(3),
+            reader.GetString(4),
+            reader.GetInt32(5));
+    }
+
+    private static bool SourceImportIdentityDiffers(SourceImportIdentity existing, string sourceId, string relativePath, string fileName, int mediaType)
+    {
+        return !string.Equals(existing.SourceId, sourceId, StringComparison.OrdinalIgnoreCase) ||
+               !string.Equals(existing.RelativePath, relativePath, StringComparison.Ordinal) ||
+               !string.Equals(existing.FileName, fileName, StringComparison.Ordinal) ||
+               existing.MediaType != mediaType;
+    }
+
+    private readonly record struct SourceImportIdentity(
+        string Id,
+        string SourceId,
+        string FullPath,
+        string RelativePath,
+        string FileName,
+        int MediaType);
 
     private static string? ResolveItemId(SqliteConnection connection, SqliteTransaction transaction, string identifier)
     {
@@ -2696,4 +2849,13 @@ public sealed class CatalogAutoTagApplyResult
     public int AssignmentsAdded { get; init; }
     public List<string> ChangedItemPaths { get; init; } = [];
     public List<CatalogAutoTagAppliedAssignment> Applied { get; init; } = [];
+}
+
+public readonly record struct CatalogSourceImportFile(string FullPath, string RelativePath, string FileName, int MediaType);
+
+public sealed class CatalogSourceImportResult
+{
+    public string SourceId { get; init; } = string.Empty;
+    public int ImportedCount { get; init; }
+    public int UpdatedCount { get; init; }
 }

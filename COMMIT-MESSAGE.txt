@@ -19,10 +19,9 @@ Instructions:
 
 Commit Message:
 
-Bugfix: Re-read an off-screen file and show its previous last played
+M10i13: Import a folder by updating catalog rows
 
-- Read a file that is not on screen again on play, refresh, resync, and when the runtime connects.
-- Keep that copy when the read fails. Keep a favorite, playback, or tag update for the file being read, and do not drop that read for an update to another file.
-- Send the last-played time from before this play on the playback event.
-- Show that time on the current file, including Never for a first play.
-- Leave a tile's play count and last-played time unchanged when a playback event omits them.
+- Walk the folder before taking the catalog lock, then insert and update rows in one transaction.
+- Keep id, tags, favorite, blacklist, and playback stats for an existing path. Leave missing files in place.
+- Do not load or diff the full catalog document.
+- Let the desktop wait for a long folder import instead of failing after 8 seconds.

@@ -89,32 +89,7 @@ Do not use this file for detailed architecture explanation or current capability
 
 ## Active Milestones
 
-Last milestone completed: M10i12
-
-### M10i13 - Source Folder Import Row Updates
-
-- **Status**: ⏳ Planned
-- **Goal**: Add or refresh a media folder with row inserts and updates, without holding the catalog lock across the disk walk or loading the full catalog document.
-- **Scope**:
-  - Depends on: desktop full-catalog projection removal.
-  - Enumerate the folder outside the catalog lock. Then insert new items and update existing ones in one transaction.
-  - Match existing items by path. Keep their id, tags, favorite, blacklist, and playback stats. New files get new rows. Report the same imported and updated counts as today.
-  - Do not remove items that are missing on disk. That stays with refresh.
-  - Do not build or diff the full catalog document.
-  - Update the testing checklist and current-state docs.
-- **Acceptance criteria**:
-  - Importing a folder persists new and updated items in SQLite and does not load or diff the full catalog document.
-  - The disk walk does not hold the catalog lock, so browse is not blocked for the whole scan.
-  - An existing item matched by path keeps its id, tags, favorite, blacklist, and playback stats.
-  - Items missing on disk are not removed by this import.
-  - Docs and the testing checklist describe folder import as a row update.
-- **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include tests that a new file is inserted, an existing path keeps id and tags and updates identity fields, missing files are not deleted, and the operation does not load the full catalog document.
-  - Manual evidence must include importing a large folder while browse still answers.
-  - Docs evidence must include current-state and checklist updates for folder import.
-- **Deferrals / Follow-ups**:
-  - Refresh stays on the full-document adapter until refresh column updates.
-  - Catalog export, import, and backups stay with the library catalog export and import cutover.
+Last milestone completed: M10i13
 
 ### M10i14 - Library Catalog Export and Import Cutover
 
@@ -1255,6 +1230,31 @@ Last milestone completed: M10i12
 ## Completed Milestones
 
 Latest completions first:
+
+### M10i13 - Source Folder Import Row Updates
+
+- **Status**: ✅ Complete
+- **Goal**: Add or refresh a media folder with row inserts and updates, without holding the catalog lock across the disk walk or loading the full catalog document.
+- **Scope**:
+  - Depends on: desktop full-catalog projection removal.
+  - Enumerate the folder outside the catalog lock. Then insert new items and update existing ones in one transaction.
+  - Match existing items by path. Keep their id, tags, favorite, blacklist, and playback stats. New files get new rows. Report the same imported and updated counts as today.
+  - Do not remove items that are missing on disk. That stays with refresh.
+  - Do not build or diff the full catalog document.
+  - Update the testing checklist and current-state docs.
+- **Acceptance criteria**:
+  - Importing a folder persists new and updated items in SQLite and does not load or diff the full catalog document.
+  - The disk walk does not hold the catalog lock, so browse is not blocked for the whole scan.
+  - An existing item matched by path keeps its id, tags, favorite, blacklist, and playback stats.
+  - Items missing on disk are not removed by this import.
+  - Docs and the testing checklist describe folder import as a row update.
+- **Verification evidence**:
+  - `dotnet build ReelRoulette.sln` and `dotnet test ReelRoulette.sln` pass (Core.Tests 222, DesktopApp.Tests 121). A new file is inserted. An existing path keeps its id, tags, favorite, blacklist, playback stats, fingerprint, and duration, and updates source, relative path, file name, and media type. A file missing on disk stays. The import does not build the catalog document, and a second unchanged import does not bump the revision. Browse returns while enumeration is still blocked.
+  - Manual: importing `/mnt/nas/multimedia/TV` inserted 902 files. Library browse kept answering during that scan, and a query after the import returned the new total.
+  - `CONTEXT.md`, `docs/api.md`, `docs/domain-inventory.md`, `docs/checklists/testing-checklist.md`, and `CHANGELOG.md` [Unreleased] describe folder import as a row update.
+- **Deferrals / Follow-ups**:
+  - Refresh stays on the full-document adapter until refresh column updates.
+  - Catalog export, import, and backups stay with the library catalog export and import cutover.
 
 ### M10i12 - Desktop Full-Catalog Projection Removal
 

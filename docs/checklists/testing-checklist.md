@@ -118,6 +118,8 @@ Use `pwsh ./tools/scripts/reset-checklist.ps1` to reset metadata/check states be
 - [x] `View -> Diagnostics` opens and shows `CoreClientId`/`CoreSessionId`.
 - [x] Import folder works (or fails with clear guidance).
 - [ ] Import folder names the source after the folder when the picker path has a trailing slash.
+- [ ] Importing a folder adds new files and updates existing ones. An existing file keeps its tags, favorite, blacklist, and playback stats. Files missing on disk stay until refresh.
+- [x] Importing a large folder still lets library browse answer during the scan.
 - [x] Manage Sources opens and source enable/disable persists.
 - [x] Thumbnails appear in the library panel after refresh thumbnail generation completes (no desktop restart required).
 - [x] Duplicate scan + apply flow works (if test data exists).
