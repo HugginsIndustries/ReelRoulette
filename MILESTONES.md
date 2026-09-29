@@ -119,7 +119,7 @@ Last milestone completed: M10i13
   - Presets, core settings, and desktop-settings remain on their current files unless a later slice moves them.
   - Running-server import, Operator export/import, and removal of the desktop Library Export / Import menus are deferred to Operator library catalog transfer. That work ships with the later account and Operator milestones, in the release after the SQLite store/query sequence.
   - Refresh stays on the full-document adapter until refresh column updates.
-  - Removing `library.json` zip import and the one-time startup migration from `library.json` is planned for v0.14.0 and above. This milestone deprecates that support and does not remove it.
+  - Removing `library.json` zip import and the one-time startup migration from `library.json` is deferred to removal of `library.json` library support. This milestone deprecates that support and does not remove it.
 
 ### M10i15 - Refresh Column Updates
 
@@ -133,7 +133,7 @@ Last milestone completed: M10i13
   - The thumbnail stage reads the rows it needs without building the full catalog document. It treats a stored thumbnail revision that still matches the item's fingerprint, size, and write time as current, the same way duration and loudness trust a stored result. It does not stat those source files again. Fingerprint still notices a size or write-time change and updates the fingerprint, which changes the revision.
   - Generate a thumbnail when the item is new, that stored revision differs, or the JPEG is missing. Remove the index entry and JPEG for an item the source stage removed.
   - Remove the thumbnail file-count and byte caps. Every item still in the library keeps its thumbnail. The stage does not delete JPEGs to get under a size or count limit, and it does not stat every JPEG to measure one.
-  - After this slice, live catalog mutations do not load or diff the full catalog document.
+  - Refresh does not load or diff the full catalog document. Tag catalog sync, item-tag sync, and server startup still do, until catalog document removal.
   - Update the testing checklist and current-state docs.
 - **Acceptance criteria**:
   - A refresh run persists source, fingerprint, duration, and loudness changes without loading or diffing a full catalog snapshot.
@@ -142,13 +142,116 @@ Last milestone completed: M10i13
   - The thumbnail stage does not build the full catalog document.
   - A refresh where every thumbnail revision still matches does not stat those source files. A new item, a changed revision, or a missing JPEG still generates. An item removed by source refresh loses its thumbnail index entry and JPEG.
   - There is no thumbnail file-count or byte cap. A refresh does not delete thumbnails for items still in the library, and it does not stat every JPEG to enforce a cap.
-  - Live catalog mutations no longer have a full-document write path.
+  - Refresh no longer has a full-document write path. Tag catalog sync and item-tag sync still do, until catalog document removal.
   - Docs and the testing checklist describe refresh as column updates, including thumbnail reuse without a full file walk and no file-count or byte cap.
 - **Verification evidence**:
   - Evidence placeholders maintained at planned state; completion evidence must include a test that a tag or favorite committed during a duration or fingerprint stage is still present afterward, and that source add/remove, fingerprint, duration, and loudness persist without a full-document load. Thumbnail evidence must show an all-matching revision pass that does not stat those sources, a generate for a new item, a changed revision, and a missing JPEG, removal of a deleted item's thumbnail, and no deletion of thumbnails for items still in the library.
   - Docs evidence must include current-state and checklist updates for refresh column updates, thumbnail reuse, and removal of the thumbnail caps.
 - **Deferrals / Follow-ups**:
-  - A one-shot JSON dump may still build a catalog document. It is not a live read or write path.
+  - Account and PIN tables stay with the account and PIN data model work.
+  - Tag catalog sync, item-tag sync, and the server startup read of the catalog document are the next milestone, still in v0.13.0.
+  - Removing `library.json` file recognition, the JSON-to-SQLite importer, and `available_tags` ships in v0.14.0.
+
+### M10i16 - Catalog Document Removal
+
+- **Status**: ⏳ Planned
+- **Goal**: Stop using the catalog document for live reads and writes in v0.13.0, while keeping JSON import and startup migration so an old library can still be migrated.
+- **Scope**:
+  - Depends on: refresh column updates.
+  - This is the last milestone in the v0.13.0 release. It does not depend on the refresh work itself. It follows that milestone so v0.13.0 ends here.
+  - Tag catalog sync and item-tag sync update catalog rows directly. They do not load or diff the full catalog document.
+  - Server startup loads sources, tags, and item tags with SQL. It does not build the catalog document.
+  - Remove the catalog document builder and the full-document save path.
+  - The JSON-to-SQLite importer stays. Startup still migrates a leftover `library.json` once. Import Library still accepts a `library.json` zip. An empty database may still be created through that importer. The `available_tags` table stays, because migration still fills it.
+  - Update the testing checklist and current-state docs.
+- **Acceptance criteria**:
+  - Tag catalog sync and item-tag sync persist without loading or diffing the full catalog document.
+  - Server startup does not build the catalog document.
+  - There is no catalog document builder and no full-document save path.
+  - A missing `library.db` still migrates `library.json`. Import Library still accepts a `library.json` zip.
+  - `available_tags` is still stored when a migrated library has that list.
+  - Docs and the testing checklist describe live catalog reads and writes as row operations, and still describe `library.json` import and startup migration.
+- **Verification evidence**:
+  - Evidence placeholders maintained at planned state; completion evidence must include tests that tag catalog sync and item-tag sync persist without a catalog document build, that server startup does not build that document, that a missing database still migrates `library.json`, and that a `library.json` zip still imports.
+  - Docs evidence must include current-state and checklist updates for row-based live reads and writes, with `library.json` import and startup migration still described.
+- **Deferrals / Follow-ups**:
+  - Removing `library.json` file recognition and the JSON-to-SQLite importer ships in v0.14.0.
+  - Dropping `available_tags` ships in v0.14.0, after that file recognition is gone.
+  - Desktop fields and unused types that only existed for the JSON library stay until that v0.14.0 cleanup.
+  - Account and PIN tables stay with the account and PIN data model work.
+
+### M10j1 - Remove library.json Library Support
+
+- **Status**: ⏳ Planned
+- **Goal**: Remove `library.json` as a library format in v0.14.0 so startup no longer migrates or recovers a catalog from JSON, import no longer accepts a `library.json` archive, and the JSON-to-SQLite importer is gone.
+- **Scope**:
+  - Depends on: catalog document removal.
+  - This milestone ships in v0.14.0. Catalog document removal is the last milestone in the v0.13.0 release.
+  - Startup does not look for `library.json` or `library.json.migrated`. Those files do not change open, refuse, or empty-catalog behavior. A missing `library.db` creates an empty catalog with SQL, not by parsing an empty document. A healthy `library.db` opens. A corrupt `library.db` is quarantined and startup refuses with the same result it uses when those files are absent. They are not read, not a restore path, and not deleted.
+  - Delete the JSON-to-SQLite importer. Tests build a catalog in `library.db`. They do not write `library.json` to create one.
+  - The `available_tags` table stays so a database produced by v0.13.0 still opens.
+  - Import has no `library.json` path. A zip with no `library.db` is not a catalog archive. Export and catalog backups stay on `library.db`.
+  - Update current-state docs and the testing checklist to say `library.json` library support is removed.
+- **Acceptance criteria**:
+  - Startup does not migrate `library.json` and does not rebuild a catalog from `library.json.migrated`.
+  - A missing `library.db` creates an empty healthy `library.db` whether or not `library.json` or `library.json.migrated` is present. Those files are left in place and are not read. The empty database is created with SQL.
+  - A healthy `library.db` opens. A corrupt `library.db` is quarantined and startup refuses the same way whether or not those JSON files are present, and it is not repaired from them.
+  - A database produced by v0.13.0 that already has `available_tags` still opens.
+  - There is no JSON-to-SQLite importer.
+  - A zip with no `library.db` is not a catalog archive, including a zip whose only catalog file is `library.json`. Import does not replace the live catalog.
+  - Docs and the testing checklist describe `library.json` library support as removed in v0.14.0.
+- **Verification evidence**:
+  - Evidence placeholders maintained at planned state; completion evidence must include tests that a missing database creates an empty database with SQL whether or not `library.json` or `library.json.migrated` is present, a healthy database opens with those files present, a corrupt database is refused the same way with or without them, a v0.13.0 database that has `available_tags` still opens, and a zip with no `library.db` is not imported.
+  - Docs evidence must include current-state and checklist updates that `library.json` library support is removed in v0.14.0.
+- **Deferrals / Follow-ups**:
+  - Dropping `available_tags` is the next milestone.
+  - Desktop fields and unused types that only existed for the JSON library follow that drop.
+  - Operator export and import stay with Operator library catalog transfer. That import also rejects a `library.json` archive.
+  - Account and PIN tables stay with the account and PIN data model work.
+
+### M10j2 - Drop the Legacy Available-Tag List
+
+- **Status**: ⏳ Planned
+- **Goal**: Make the tag table the only tag list in v0.14.0, including for a database that v0.13.0 migrated from `library.json`.
+- **Scope**:
+  - Depends on: removal of `library.json` library support.
+  - On open of a database that still has `available_tags`, copy names that exist only in that table into the tag table. Do not assume those names are already tags.
+  - Drop `available_tags` and the catalog flag that records whether that list was present. Bump `user_version`.
+  - A database created by this version does not create `available_tags`.
+  - Update current-state docs and the testing checklist.
+- **Acceptance criteria**:
+  - A name that exists only in `available_tags` is a tag afterward.
+  - A name that was already a tag is still one tag.
+  - `available_tags` is gone and `user_version` has increased.
+  - Opening a database that never had `available_tags` still succeeds.
+  - Docs and the testing checklist describe the tag table as the only tag list.
+- **Verification evidence**:
+  - Evidence placeholders maintained at planned state; completion evidence must include a test that a name only in `available_tags` becomes a tag, a name already in both stays one tag, the table is gone, `user_version` increased, and a database that never had the table still opens.
+  - Docs evidence must include current-state and checklist updates that the tag table is the only tag list.
+- **Deferrals / Follow-ups**:
+  - Desktop fields and unused types that only existed for the JSON library are the next milestone.
+  - Account and PIN tables stay with the account and PIN data model work.
+
+### M10j3 - Remove JSON-Era Library Leftovers
+
+- **Status**: ⏳ Planned
+- **Goal**: Remove unused types and desktop fields that only existed for the JSON library.
+- **Scope**:
+  - Depends on: dropping the legacy available-tag list.
+  - Remove the unused library-index file store, the verification-only in-memory tag mutator, the empty desktop tag-catalog sync method, and the server tag-sync methods that only throw.
+  - The desktop library model drops the legacy flat tag list and the fingerprint index. The filter dialog drops the branch that reads that flat list. The desktop no longer treats a full-catalog projection route as a live read.
+  - Comments and current-state docs no longer say the library is persisted to `library.json`.
+  - Presets, core settings, desktop settings, and the thumbnail index stay JSON. Do not rewrite historical audits.
+  - Update the testing checklist where those leftovers were described.
+- **Acceptance criteria**:
+  - Those unused types and the empty or throw-only sync methods are gone.
+  - The desktop library model has no legacy flat tag list and no fingerprint index. The filter dialog does not read a flat tag list. A full-catalog projection route is not treated as a live library read.
+  - Current-state docs do not describe `library.json` as a library store.
+  - Presets, core settings, desktop settings, and the thumbnail index are unchanged.
+- **Verification evidence**:
+  - Evidence placeholders maintained at planned state; completion evidence must include a build and tests after the unused types and desktop fields are removed, and a check that current-state docs no longer call `library.json` the library store.
+  - Historical audits are left as written.
+- **Deferrals / Follow-ups**:
   - Account and PIN tables stay with the account and PIN data model work.
 
 ### M10m - WebUI Source Management Alignment
@@ -408,22 +511,21 @@ Last milestone completed: M10i13
 - **Status**: ⏳ Planned
 - **Goal**: Let an admin export and import the library from Operator UI, with the server applying the catalog, so a server plus WebUI install does not need the desktop app.
 - **Scope**:
-  - Depends on: Operator source management.
+  - Depends on: Operator source management and removal of `library.json` library support.
   - Move the zip envelope from the library catalog export and import cutover onto server operations. The server writes the checkpoint while it has `library.db` open. `desktop-settings.json` in a zip is optional and unused when no desktop app is installed. The server still applies presets, core settings, and thumbnails.
-  - Import runs while the server is up. The server replaces its own database by the same finished-file rename, including legacy `library.json` zips. The previous database stays aside until the new file is in place and opens. A crash between those renames restores the previous file, or promotes the finished temporary file if that is the one that landed. JSON dump stays a separate action and is not a restore path.
-  - Add admin-only export, import, and JSON dump actions to Operator UI.
+  - Import runs while the server is up. The server replaces its own database by the same finished-file rename. The previous database stays aside until the new file is in place and opens. A crash between those renames restores the previous file, or promotes the finished temporary file if that is the one that landed. A `library.json` archive is rejected. That format is unsupported from v0.14.0 on. There is no JSON dump action.
+  - Add admin-only export and import actions to Operator UI.
   - Remove the desktop Library Export and Import menus.
 - **Acceptance criteria**:
   - An admin can export a zip whose catalog artifact is a server-produced SQLite checkpoint, and can import that zip while the server is running.
   - An interrupted running-server import leaves the previous catalog or the finished incoming file, and does not leave a partial database or an empty catalog.
-  - Import still accepts existing `library.json` zip archives and migrates them into the live SQLite catalog.
-  - JSON dump cannot be used as import input.
+  - Import rejects a `library.json` zip and does not migrate that archive into the live catalog.
   - A zip without `desktop-settings.json` still restores the catalog, presets, core settings, and thumbnails.
-  - User-level accounts cannot export, import, or dump the catalog.
+  - User-level accounts cannot export or import the catalog.
   - The desktop client no longer exposes Library Export or Import.
 - **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include server tests for checkpoint export, running-server `.db` import, legacy `library.json` zip import, interrupted replace recovery, JSON-dump rejection, and a zip with no desktop settings.
-  - Operator UI evidence must include admin-only export/import/dump rendering and error tests.
+  - Evidence placeholders maintained at planned state; completion evidence must include server tests for checkpoint export, running-server `.db` import, rejection of a `library.json` zip, interrupted replace recovery, and a zip with no desktop settings.
+  - Operator UI evidence must include admin-only export/import rendering and error tests.
   - Manual evidence must include a server-plus-WebUI export/import pass with no desktop app.
 - **Deferrals / Follow-ups**:
   - Removing the desktop Manage Sources dialog remains in the cross-client source access cutover.

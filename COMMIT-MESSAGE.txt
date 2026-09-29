@@ -19,9 +19,10 @@ Instructions:
 
 Commit Message:
 
-Docs: Milestone M10i14 now deprecates library.json and drops the catalog JSON dump
+Docs: Plan JSON library retirement across two releases
 
-- Revise library catalog export and import around a live SQLite database in the existing zip.
-- Keep `library.json` zip import for v0.13.0 and mark that library format deprecated.
-- Plan removal of `library.json` library support for v0.14.0, including zip import and one-time startup migration.
-- Do not add a JSON dump action.
+- Remove the one-shot JSON dump from later milestones. Operator catalog transfer rejects a `library.json` archive.
+- v0.13.0 still migrates and imports a JSON library. Refresh stays on that release, and its full-document write is refresh only.
+- Add catalog document removal as the last v0.13.0 milestone. Tag sync and startup stop using that document. The JSON importer stays.
+- v0.14.0 ignores `library.json`, deletes the importer, and creates an empty `library.db` with SQL.
+- A later v0.14.0 milestone copies `available_tags` into the tag table and drops it, then removes leftover JSON-era types.
