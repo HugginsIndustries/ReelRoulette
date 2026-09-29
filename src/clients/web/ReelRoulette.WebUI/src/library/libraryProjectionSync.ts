@@ -87,20 +87,21 @@ export function applyItemStateChanged(
 
 export function applyPlaybackRecorded(
   items: LibraryProjectionItem[],
-  payload: PlaybackRecordedPayload,
-  nowMs: number = Date.now()
+  payload: PlaybackRecordedPayload
 ): PlaybackPatchResult {
   const item = findProjectionItem(items, { path: payload.path });
   if (!item) {
     return { changed: false, item: null };
   }
 
-  const nextPlayCount =
-    typeof payload.playCount === "number" && Number.isFinite(payload.playCount)
-      ? Math.max(0, Math.trunc(payload.playCount))
-      : item.playCount + 1;
+  const hasPlayCount = typeof payload.playCount === "number" && Number.isFinite(payload.playCount);
   const parsedLastPlayed = parsePlaybackLastPlayedUtcMs(payload.lastPlayedUtc);
-  const nextLastPlayedUtcMs = parsedLastPlayed ?? nowMs;
+  if (!hasPlayCount && parsedLastPlayed == null) {
+    return { changed: false, item };
+  }
+
+  const nextPlayCount = hasPlayCount ? Math.max(0, Math.trunc(payload.playCount as number)) : item.playCount;
+  const nextLastPlayedUtcMs = parsedLastPlayed ?? item.lastPlayedUtcMs;
 
   if (item.playCount === nextPlayCount && item.lastPlayedUtcMs === nextLastPlayedUtcMs) {
     return { changed: false, item };

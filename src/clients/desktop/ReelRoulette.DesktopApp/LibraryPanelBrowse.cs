@@ -36,18 +36,33 @@ public enum LibraryCurrentFileSource
     SingleItem
 }
 
+public readonly record struct PlaybackPrevious
+{
+    public bool Specified { get; init; }
+    public DateTime? Utc { get; init; }
+}
+
 public readonly record struct CurrentFileStatsPaint
 {
     public bool PaintNow { get; init; }
+    public bool ShownPreviousKnown { get; init; }
     public DateTime? ShownPreviousLastPlayedUtc { get; init; }
     public string? PendingPath { get; init; }
+    public bool PendingPreviousKnown { get; init; }
     public DateTime? PendingPreviousLastPlayedUtc { get; init; }
 }
 
 public readonly record struct CurrentFileStartStats
 {
+    public bool ShownPreviousKnown { get; init; }
     public DateTime? ShownPreviousLastPlayedUtc { get; init; }
     public bool ClearPending { get; init; }
+}
+
+public readonly record struct CurrentFileLastPlayed
+{
+    public bool ShowNever { get; init; }
+    public DateTime? Utc { get; init; }
 }
 
 /// <summary>
@@ -269,30 +284,82 @@ public static class LibraryPanelBrowse
     }
 
     /// <summary>
-    /// The current file is not in the loaded window, so now-playing reads that one item.
+    /// A file that is not a loaded tile is read again. A cached copy of that file does not count.
     /// </summary>
-    public static bool NeedsCurrentFileRead(bool loadedHasItem)
+    public static bool NeedsCurrentFileRead(bool loadedHasItem, bool cachedItemMatches)
     {
+        _ = cachedItemMatches;
         return !loadedHasItem;
     }
 
     /// <summary>
+    /// A read that is no longer the latest is ignored. A failure keeps a matching cache. Not found clears it.
+    /// </summary>
+    public static bool ShouldApplyCurrentFileRead(bool readIsLatest, bool cacheMatchesPath, CurrentFileReadResult result)
+    {
+        if (!readIsLatest)
+        {
+            return false;
+        }
+
+        return result != CurrentFileReadResult.Failed || !cacheMatchesPath;
+    }
+
+    /// <summary>
+    /// A playback event for the current file reads it again when that file is not a loaded tile.
+    /// </summary>
+    public static bool ReadCurrentFileAfterPlayback(bool loadedHasItem, bool isCurrentFile)
+    {
+        return isCurrentFile && !loadedHasItem;
+    }
+
+    /// <summary>
+    /// An update cancels the in-flight read only when it is for that same file.
+    /// </summary>
+    public static bool InvalidateCurrentFileRead(string? inFlightPath, string? updatedPath)
+    {
+        return !string.IsNullOrWhiteSpace(inFlightPath)
+            && !string.IsNullOrWhiteSpace(updatedPath)
+            && string.Equals(inFlightPath, updatedPath, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
     /// A playback event paints the current-file section only when that file is already playing.
-    /// An earlier event keeps that file's pre-play last-played time until playback starts.
+    /// The event's previous last-played time, including null, is kept until that file starts.
+    /// A missing previous time leaves the time already on screen.
     /// </summary>
     public static CurrentFileStatsPaint PlaybackStatsPaint(
         bool playbackIsCurrentFile,
-        DateTime? itemLastPlayedBefore,
+        PlaybackPrevious previous,
+        bool shownPreviousKnown,
         DateTime? shownPreviousLastPlayedUtc,
+        string? pendingPath,
+        bool pendingPreviousKnown,
+        DateTime? pendingPreviousLastPlayedUtc,
         string? playbackPath)
     {
+        if (!previous.Specified)
+        {
+            return new CurrentFileStatsPaint
+            {
+                PaintNow = playbackIsCurrentFile,
+                ShownPreviousKnown = shownPreviousKnown,
+                ShownPreviousLastPlayedUtc = shownPreviousLastPlayedUtc,
+                PendingPath = pendingPath,
+                PendingPreviousKnown = pendingPreviousKnown,
+                PendingPreviousLastPlayedUtc = pendingPreviousLastPlayedUtc
+            };
+        }
+
         if (playbackIsCurrentFile)
         {
             return new CurrentFileStatsPaint
             {
                 PaintNow = true,
-                ShownPreviousLastPlayedUtc = itemLastPlayedBefore,
+                ShownPreviousKnown = true,
+                ShownPreviousLastPlayedUtc = previous.Utc,
                 PendingPath = null,
+                PendingPreviousKnown = false,
                 PendingPreviousLastPlayedUtc = null
             };
         }
@@ -300,27 +367,32 @@ public static class LibraryPanelBrowse
         return new CurrentFileStatsPaint
         {
             PaintNow = false,
+            ShownPreviousKnown = shownPreviousKnown,
             ShownPreviousLastPlayedUtc = shownPreviousLastPlayedUtc,
             PendingPath = playbackPath,
-            PendingPreviousLastPlayedUtc = itemLastPlayedBefore
+            PendingPreviousKnown = true,
+            PendingPreviousLastPlayedUtc = previous.Utc
         };
     }
 
     /// <summary>
-    /// Starting a different file takes a matching pending last-played time, or clears the one on screen.
+    /// Starting a different file takes a matching pending last-played time, including a known null.
     /// Starting the same file leaves the value a playback event already stored.
     /// </summary>
     public static CurrentFileStartStats PreviousLastPlayedOnStart(
         string? newPath,
         string? previousPath,
+        bool shownPreviousKnown,
         DateTime? shownPreviousLastPlayedUtc,
         string? pendingPath,
+        bool pendingPreviousKnown,
         DateTime? pendingPreviousLastPlayedUtc)
     {
         if (string.Equals(newPath, previousPath, StringComparison.OrdinalIgnoreCase))
         {
             return new CurrentFileStartStats
             {
+                ShownPreviousKnown = shownPreviousKnown,
                 ShownPreviousLastPlayedUtc = shownPreviousLastPlayedUtc,
                 ClearPending = false
             };
@@ -328,10 +400,45 @@ public static class LibraryPanelBrowse
 
         var matchesPending = !string.IsNullOrWhiteSpace(newPath) &&
                              string.Equals(newPath, pendingPath, StringComparison.OrdinalIgnoreCase);
+        if (matchesPending && pendingPreviousKnown)
+        {
+            return new CurrentFileStartStats
+            {
+                ShownPreviousKnown = true,
+                ShownPreviousLastPlayedUtc = pendingPreviousLastPlayedUtc,
+                ClearPending = true
+            };
+        }
+
         return new CurrentFileStartStats
         {
-            ShownPreviousLastPlayedUtc = matchesPending ? pendingPreviousLastPlayedUtc : null,
+            ShownPreviousKnown = false,
+            ShownPreviousLastPlayedUtc = null,
             ClearPending = true
+        };
+    }
+
+    /// <summary>
+    /// A known previous time wins, and a known null is Never. An unknown previous time uses the item.
+    /// </summary>
+    public static CurrentFileLastPlayed ChooseCurrentFileLastPlayed(
+        bool previousKnown,
+        DateTime? previousUtc,
+        DateTime? itemLastPlayedUtc)
+    {
+        if (previousKnown)
+        {
+            return new CurrentFileLastPlayed
+            {
+                ShowNever = previousUtc is null,
+                Utc = previousUtc
+            };
+        }
+
+        return new CurrentFileLastPlayed
+        {
+            ShowNever = itemLastPlayedUtc is null,
+            Utc = itemLastPlayedUtc
         };
     }
 

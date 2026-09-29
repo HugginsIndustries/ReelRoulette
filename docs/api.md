@@ -106,7 +106,7 @@ Reconnect/resync behavior:
 - If replay gap exceeds retention, server emits `resyncRequired`.
 - WebUI reloads the loaded library list and does not post an item-state read with an empty path list. Desktop still requests favorite and blacklist for a specific path via `POST /api/library-states`.
 - WebUI library overlay: `resyncRequired` reloads the loaded list-query window whether the overlay is shown or hidden. It does not post an empty item-state read. Favorite, blacklist, playback, and tag updates patch that window or reload it the same way.
-- `playbackRecorded` payload may include optional `playCount` and `lastPlayedUtc` (server contract); clients should tolerate these fields even when omitted from generated OpenAPI schemas.
+- `playbackRecorded` includes `playCount`, `lastPlayedUtc`, and `previousLastPlayedUtc`. `previousLastPlayedUtc` is the last-played time from before this play, and is null when the file had never been played. Clients copy `playCount` and `lastPlayedUtc` onto a loaded tile when those fields are present. Desktop shows `previousLastPlayedUtc` on the current file.
 
 ## Error and Simulation Semantics
 

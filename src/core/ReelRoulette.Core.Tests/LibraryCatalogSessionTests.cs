@@ -623,6 +623,10 @@ public sealed class LibraryCatalogSessionTests
         Assert.False(session.SetBlacklist("item-a", false));
         Assert.True(session.ReadItemState("item-a")!.IsFavorite);
 
+        var neverPlayed = session.RecordPlayback("item-a");
+        Assert.NotNull(neverPlayed);
+        Assert.Null(neverPlayed!.PreviousLastPlayedUtc);
+        Assert.Equal(1, neverPlayed.PlayCount);
         var beforePlay = DateTime.UtcNow;
         var firstPlay = session.RecordPlayback("item-b");
         var afterPlay = DateTime.UtcNow;
@@ -630,10 +634,12 @@ public sealed class LibraryCatalogSessionTests
         Assert.Equal("item-b", firstPlay!.Id);
         Assert.Equal("/clips/b.mp4", firstPlay.FullPath);
         Assert.Equal(5, firstPlay.PlayCount);
+        Assert.Equal(playedAt, firstPlay.PreviousLastPlayedUtc);
         Assert.NotNull(firstPlay.LastPlayedUtc);
         Assert.InRange(firstPlay.LastPlayedUtc!.Value, beforePlay.AddSeconds(-1), afterPlay.AddSeconds(1));
         var secondPlay = session.RecordPlayback("/clips/b.mp4");
         Assert.Equal(6, secondPlay!.PlayCount);
+        Assert.Equal(firstPlay.LastPlayedUtc, secondPlay.PreviousLastPlayedUtc);
         var saturated = session.RecordPlayback("ITEM-MAX");
         Assert.NotNull(saturated);
         Assert.Equal(int.MaxValue, saturated!.PlayCount);
@@ -654,7 +660,7 @@ public sealed class LibraryCatalogSessionTests
         Assert.NotNull(session.ReadItemState("item-time")!.LastPlayedUtc);
         Assert.Equal(0, session.ReadItemState("item-clean")!.PlayCount);
 
-        Assert.Equal(2, session.ClearPlaybackStats(null));
+        Assert.Equal(3, session.ClearPlaybackStats(null));
         Assert.Equal(0, session.ReadItemState("item-max")!.PlayCount);
         Assert.Null(session.ReadItemState("item-max")!.LastPlayedUtc);
         Assert.Equal(0, session.ReadItemState("item-time")!.PlayCount);

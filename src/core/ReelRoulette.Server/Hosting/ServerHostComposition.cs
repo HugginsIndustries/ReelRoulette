@@ -420,7 +420,8 @@ public static class ServerHostComposition
                 ClientId = body.ClientId,
                 SessionId = body.SessionId,
                 PlayCount = recorded.PlayCount,
-                LastPlayedUtc = recorded.LastPlayedUtc
+                LastPlayedUtc = recorded.LastPlayedUtc,
+                PreviousLastPlayedUtc = recorded.PreviousLastPlayedUtc
             });
             return Results.Ok(playResponse);
         });
@@ -513,7 +514,8 @@ public static class ServerHostComposition
                 ClientId = request.ClientId,
                 SessionId = request.SessionId,
                 PlayCount = recorded.PlayCount,
-                LastPlayedUtc = recorded.LastPlayedUtc
+                LastPlayedUtc = recorded.LastPlayedUtc,
+                PreviousLastPlayedUtc = recorded.PreviousLastPlayedUtc
             });
             return Results.Ok(new
             {

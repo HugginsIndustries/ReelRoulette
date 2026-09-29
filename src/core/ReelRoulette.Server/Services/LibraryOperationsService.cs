@@ -559,7 +559,8 @@ public sealed class LibraryOperationsService
             {
                 Found = true,
                 PlayCount = recorded.PlayCount,
-                LastPlayedUtc = recorded.LastPlayedUtc
+                LastPlayedUtc = recorded.LastPlayedUtc,
+                PreviousLastPlayedUtc = recorded.PreviousLastPlayedUtc
             };
         }
     }

@@ -19,10 +19,10 @@ Instructions:
 
 Commit Message:
 
-M10i12: Stop desktop from downloading the full catalog
+Bugfix: Re-read an off-screen file and show its previous last played
 
-- Load header counts, sources, and tags at connect without a full catalog download.
-- Read one item for now-playing when that file is not already on screen.
-- Take the loudness baseline from library stats.
-- Remove the full-catalog projection endpoint. Thumbnail layout stays on list query.
-- Update the current-file stats section when that file starts, not when an earlier playback event arrives.
+- Read a file that is not on screen again on play, refresh, resync, and when the runtime connects.
+- Keep that copy when the read fails. Keep a favorite, playback, or tag update for the file being read, and do not drop that read for an update to another file.
+- Send the last-played time from before this play on the playback event.
+- Show that time on the current file, including Never for a first play.
+- Leave a tile's play count and last-played time unchanged when a playback event omits them.

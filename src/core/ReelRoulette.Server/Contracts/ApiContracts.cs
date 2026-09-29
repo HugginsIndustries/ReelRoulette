@@ -152,6 +152,7 @@ public sealed class RecordPlaybackResult
     public bool Found { get; set; }
     public int PlayCount { get; set; }
     public DateTime? LastPlayedUtc { get; set; }
+    public DateTime? PreviousLastPlayedUtc { get; set; }
 }
 
 public sealed class LibraryStatesRequest
@@ -449,6 +450,7 @@ public sealed class PlaybackRecordedPayload
     public string? SessionId { get; set; }
     public int? PlayCount { get; set; }
     public DateTime? LastPlayedUtc { get; set; }
+    public DateTime? PreviousLastPlayedUtc { get; set; }
 }
 
 public sealed class ItemTagsChangedPayload

@@ -120,6 +120,7 @@ public sealed class LibraryOperationsServiceTests
 
             Assert.True(result.Found);
             Assert.Equal(3, result.PlayCount);
+            Assert.Null(result.PreviousLastPlayedUtc);
             Assert.NotNull(result.LastPlayedUtc);
             Assert.InRange(result.LastPlayedUtc!.Value, before.AddSeconds(-1), after.AddSeconds(1));
 

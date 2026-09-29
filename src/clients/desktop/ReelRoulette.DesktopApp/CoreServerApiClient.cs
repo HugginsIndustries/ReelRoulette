@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
@@ -12,6 +13,20 @@ using System.Threading;
 using System.Threading.Tasks;
 
 namespace ReelRoulette;
+
+public enum CurrentFileReadResult
+{
+    Found,
+    NotFound,
+    Failed
+}
+
+public readonly record struct LibraryItemRead(CurrentFileReadResult Result, JsonElement Item)
+{
+    public static LibraryItemRead NotFound { get; } = new(CurrentFileReadResult.NotFound, default);
+
+    public static LibraryItemRead Failed { get; } = new(CurrentFileReadResult.Failed, default);
+}
 
 public sealed class CoreServerApiClient
 {
@@ -129,11 +144,11 @@ public sealed class CoreServerApiClient
         return await JsonSerializer.DeserializeAsync<List<CoreSourceResponse>>(stream, _serializerOptions, cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task<JsonElement?> GetLibraryItemAsync(string baseUrl, string id, CancellationToken cancellationToken = default)
+    public async Task<LibraryItemRead> GetLibraryItemAsync(string baseUrl, string id, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(id))
         {
-            return null;
+            return LibraryItemRead.Failed;
         }
 
         var body = new JsonObject
@@ -142,13 +157,31 @@ public sealed class CoreServerApiClient
         };
         using var content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json");
         using var response = await _httpClient.PostAsync($"{baseUrl.TrimEnd('/')}{LibraryItemPath}", content, cancellationToken).ConfigureAwait(false);
-        if (!response.IsSuccessStatusCode)
+        if (response.StatusCode == HttpStatusCode.NotFound)
         {
-            return null;
+            return LibraryItemRead.NotFound;
         }
 
-        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-        return await JsonSerializer.DeserializeAsync<JsonElement>(stream, _serializerOptions, cancellationToken).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+        {
+            return LibraryItemRead.Failed;
+        }
+
+        try
+        {
+            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+            var item = await JsonSerializer.DeserializeAsync<JsonElement>(stream, _serializerOptions, cancellationToken).ConfigureAwait(false);
+            if (item.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null)
+            {
+                return LibraryItemRead.Failed;
+            }
+
+            return new LibraryItemRead(CurrentFileReadResult.Found, item);
+        }
+        catch (JsonException)
+        {
+            return LibraryItemRead.Failed;
+        }
     }
 
     public async Task<CoreLibraryQueryResponse?> QueryLibraryAsync(
@@ -1037,6 +1070,40 @@ public sealed class CoreItemStateChangedPayload
     public bool IsBlacklisted { get; set; }
 }
 
+public readonly record struct OptionalUtc(bool Specified, DateTime? Value);
+
+public sealed class OptionalUtcJsonConverter : JsonConverter<OptionalUtc>
+{
+    public override OptionalUtc Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        if (reader.TokenType == JsonTokenType.Null)
+        {
+            return new OptionalUtc(true, null);
+        }
+
+        if (!reader.TryGetDateTime(out var value))
+        {
+            throw new JsonException("previousLastPlayedUtc must be a date-time or null.");
+        }
+
+        var utc = value.Kind == DateTimeKind.Unspecified
+            ? DateTime.SpecifyKind(value, DateTimeKind.Utc)
+            : value.ToUniversalTime();
+        return new OptionalUtc(true, utc);
+    }
+
+    public override void Write(Utf8JsonWriter writer, OptionalUtc value, JsonSerializerOptions options)
+    {
+        if (!value.Specified || value.Value is null)
+        {
+            writer.WriteNullValue();
+            return;
+        }
+
+        writer.WriteStringValue(value.Value.Value.ToUniversalTime());
+    }
+}
+
 public sealed class CorePlaybackRecordedPayload
 {
     public string Path { get; set; } = string.Empty;
@@ -1044,6 +1111,9 @@ public sealed class CorePlaybackRecordedPayload
     public string? SessionId { get; set; }
     public int? PlayCount { get; set; }
     public DateTime? LastPlayedUtc { get; set; }
+
+    [JsonConverter(typeof(OptionalUtcJsonConverter))]
+    public OptionalUtc PreviousLastPlayedUtc { get; set; }
 }
 
 public sealed class CoreFilterPresetSnapshot

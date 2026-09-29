@@ -1,3 +1,4 @@
+using System.Text.Json;
 using ReelRoulette;
 using Xunit;
 
@@ -199,60 +200,155 @@ public sealed class LibraryPanelBrowseTests
     }
 
     [Fact]
-    public void NeedsCurrentFileRead_OnlyWhenTheLoadedTileMisses()
+    public void NeedsCurrentFileRead_ReadsAgainWhenTheFileIsNotALoadedTile()
     {
-        Assert.True(LibraryPanelBrowse.NeedsCurrentFileRead(loadedHasItem: false));
-        Assert.False(LibraryPanelBrowse.NeedsCurrentFileRead(loadedHasItem: true));
+        Assert.True(LibraryPanelBrowse.NeedsCurrentFileRead(loadedHasItem: false, cachedItemMatches: true));
+        Assert.True(LibraryPanelBrowse.NeedsCurrentFileRead(loadedHasItem: false, cachedItemMatches: false));
+        Assert.False(LibraryPanelBrowse.NeedsCurrentFileRead(loadedHasItem: true, cachedItemMatches: true));
+        Assert.False(LibraryPanelBrowse.NeedsCurrentFileRead(loadedHasItem: true, cachedItemMatches: false));
     }
 
     [Fact]
-    public void PlaybackStatsPaint_WaitsUntilThatFileIsAlreadyPlaying()
+    public void ShouldApplyCurrentFileRead_KeepsAMatchingCacheWhenTheReadFails()
+    {
+        Assert.False(LibraryPanelBrowse.ShouldApplyCurrentFileRead(readIsLatest: true, cacheMatchesPath: true, CurrentFileReadResult.Failed));
+        Assert.True(LibraryPanelBrowse.ShouldApplyCurrentFileRead(readIsLatest: true, cacheMatchesPath: false, CurrentFileReadResult.Failed));
+        Assert.True(LibraryPanelBrowse.ShouldApplyCurrentFileRead(readIsLatest: true, cacheMatchesPath: true, CurrentFileReadResult.NotFound));
+        Assert.True(LibraryPanelBrowse.ShouldApplyCurrentFileRead(readIsLatest: true, cacheMatchesPath: true, CurrentFileReadResult.Found));
+        Assert.False(LibraryPanelBrowse.ShouldApplyCurrentFileRead(readIsLatest: false, cacheMatchesPath: true, CurrentFileReadResult.Found));
+        Assert.False(LibraryPanelBrowse.ShouldApplyCurrentFileRead(readIsLatest: false, cacheMatchesPath: false, CurrentFileReadResult.NotFound));
+    }
+
+    [Fact]
+    public void ReadCurrentFileAfterPlayback_ReadsTheCurrentFileWhenItIsNotLoaded()
+    {
+        Assert.True(LibraryPanelBrowse.ReadCurrentFileAfterPlayback(loadedHasItem: false, isCurrentFile: true));
+        Assert.False(LibraryPanelBrowse.ReadCurrentFileAfterPlayback(loadedHasItem: true, isCurrentFile: true));
+        Assert.False(LibraryPanelBrowse.ReadCurrentFileAfterPlayback(loadedHasItem: false, isCurrentFile: false));
+    }
+
+    [Fact]
+    public void InvalidateCurrentFileRead_LeavesAReadOfADifferentFileInFlight()
+    {
+        Assert.False(LibraryPanelBrowse.InvalidateCurrentFileRead("/media/new.mp4", "/media/old.mp4"));
+        Assert.True(LibraryPanelBrowse.InvalidateCurrentFileRead("/media/new.mp4", "/media/new.mp4"));
+        Assert.False(LibraryPanelBrowse.InvalidateCurrentFileRead(null, "/media/old.mp4"));
+        Assert.False(LibraryPanelBrowse.InvalidateCurrentFileRead("/media/new.mp4", null));
+    }
+
+    [Fact]
+    public void PlaybackStatsPaint_KeepsThePreviousTimeUntilThatFileStarts()
     {
         var earlier = new DateTime(2024, 1, 2, 3, 4, 5, DateTimeKind.Utc);
         var showing = new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var specified = new PlaybackPrevious { Specified = true, Utc = earlier };
         var early = LibraryPanelBrowse.PlaybackStatsPaint(
             playbackIsCurrentFile: false,
-            itemLastPlayedBefore: earlier,
+            specified,
+            shownPreviousKnown: true,
             shownPreviousLastPlayedUtc: showing,
+            pendingPath: null,
+            pendingPreviousKnown: false,
+            pendingPreviousLastPlayedUtc: null,
             playbackPath: "/media/next.mp4");
         Assert.False(early.PaintNow);
+        Assert.True(early.ShownPreviousKnown);
         Assert.Equal(showing, early.ShownPreviousLastPlayedUtc);
         Assert.Equal("/media/next.mp4", early.PendingPath);
+        Assert.True(early.PendingPreviousKnown);
         Assert.Equal(earlier, early.PendingPreviousLastPlayedUtc);
+
+        var neverPlayed = LibraryPanelBrowse.PlaybackStatsPaint(
+            playbackIsCurrentFile: false,
+            new PlaybackPrevious { Specified = true, Utc = null },
+            shownPreviousKnown: true,
+            shownPreviousLastPlayedUtc: showing,
+            pendingPath: null,
+            pendingPreviousKnown: false,
+            pendingPreviousLastPlayedUtc: null,
+            playbackPath: "/media/next.mp4");
+        Assert.False(neverPlayed.PaintNow);
+        Assert.True(neverPlayed.PendingPreviousKnown);
+        Assert.Null(neverPlayed.PendingPreviousLastPlayedUtc);
 
         var current = LibraryPanelBrowse.PlaybackStatsPaint(
             playbackIsCurrentFile: true,
-            itemLastPlayedBefore: earlier,
+            specified,
+            shownPreviousKnown: true,
             shownPreviousLastPlayedUtc: showing,
+            pendingPath: "/media/next.mp4",
+            pendingPreviousKnown: true,
+            pendingPreviousLastPlayedUtc: earlier,
             playbackPath: "/media/next.mp4");
         Assert.True(current.PaintNow);
+        Assert.True(current.ShownPreviousKnown);
         Assert.Equal(earlier, current.ShownPreviousLastPlayedUtc);
         Assert.Null(current.PendingPath);
+        Assert.False(current.PendingPreviousKnown);
+
+        var missingPrevious = LibraryPanelBrowse.PlaybackStatsPaint(
+            playbackIsCurrentFile: false,
+            new PlaybackPrevious(),
+            shownPreviousKnown: true,
+            shownPreviousLastPlayedUtc: showing,
+            pendingPath: "/media/kept.mp4",
+            pendingPreviousKnown: true,
+            pendingPreviousLastPlayedUtc: earlier,
+            playbackPath: "/media/next.mp4");
+        Assert.False(missingPrevious.PaintNow);
+        Assert.Equal(showing, missingPrevious.ShownPreviousLastPlayedUtc);
+        Assert.Equal("/media/kept.mp4", missingPrevious.PendingPath);
+        Assert.Equal(earlier, missingPrevious.PendingPreviousLastPlayedUtc);
 
         var sameFile = LibraryPanelBrowse.PreviousLastPlayedOnStart(
             "/media/next.mp4",
             "/media/next.mp4",
-            earlier,
-            "/media/other.mp4",
-            showing);
+            shownPreviousKnown: true,
+            shownPreviousLastPlayedUtc: earlier,
+            pendingPath: "/media/other.mp4",
+            pendingPreviousKnown: true,
+            pendingPreviousLastPlayedUtc: showing);
+        Assert.True(sameFile.ShownPreviousKnown);
         Assert.Equal(earlier, sameFile.ShownPreviousLastPlayedUtc);
         Assert.False(sameFile.ClearPending);
 
         var matchingStart = LibraryPanelBrowse.PreviousLastPlayedOnStart(
             "/media/next.mp4",
             "/media/current.mp4",
-            showing,
-            "/MEDIA/next.mp4",
-            earlier);
+            shownPreviousKnown: true,
+            shownPreviousLastPlayedUtc: showing,
+            pendingPath: "/MEDIA/next.mp4",
+            pendingPreviousKnown: true,
+            pendingPreviousLastPlayedUtc: earlier);
+        Assert.True(matchingStart.ShownPreviousKnown);
         Assert.Equal(earlier, matchingStart.ShownPreviousLastPlayedUtc);
         Assert.True(matchingStart.ClearPending);
+
+        var matchingNever = LibraryPanelBrowse.PreviousLastPlayedOnStart(
+            "/media/next.mp4",
+            "/media/current.mp4",
+            shownPreviousKnown: true,
+            shownPreviousLastPlayedUtc: showing,
+            pendingPath: "/media/next.mp4",
+            pendingPreviousKnown: true,
+            pendingPreviousLastPlayedUtc: null);
+        Assert.True(matchingNever.ShownPreviousKnown);
+        Assert.Null(matchingNever.ShownPreviousLastPlayedUtc);
+        var neverChoice = LibraryPanelBrowse.ChooseCurrentFileLastPlayed(
+            matchingNever.ShownPreviousKnown,
+            matchingNever.ShownPreviousLastPlayedUtc,
+            earlier);
+        Assert.True(neverChoice.ShowNever);
 
         var otherStart = LibraryPanelBrowse.PreviousLastPlayedOnStart(
             "/media/next.mp4",
             "/media/current.mp4",
-            showing,
-            "/media/other.mp4",
-            earlier);
+            shownPreviousKnown: true,
+            shownPreviousLastPlayedUtc: showing,
+            pendingPath: "/media/other.mp4",
+            pendingPreviousKnown: true,
+            pendingPreviousLastPlayedUtc: earlier);
+        Assert.False(otherStart.ShownPreviousKnown);
         Assert.Null(otherStart.ShownPreviousLastPlayedUtc);
         Assert.True(otherStart.ClearPending);
     }
@@ -268,4 +364,36 @@ public sealed class LibraryPanelBrowseTests
             LibraryPanelBrowse.UnknownTagItem(hasTagFilter: true));
     }
 
+}
+
+public sealed class PlaybackPreviousJsonTests
+{
+    private static readonly JsonSerializerOptions Options = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
+
+    [Fact]
+    public void PreviousLastPlayed_NullIsKnown_AndMissingIsNot()
+    {
+        var knownNull = JsonSerializer.Deserialize<CorePlaybackRecordedPayload>(
+            """{"path":"/a.mp4","previousLastPlayedUtc":null}""",
+            Options);
+        Assert.NotNull(knownNull);
+        Assert.True(knownNull!.PreviousLastPlayedUtc.Specified);
+        Assert.Null(knownNull.PreviousLastPlayedUtc.Value);
+
+        var missing = JsonSerializer.Deserialize<CorePlaybackRecordedPayload>(
+            """{"path":"/a.mp4"}""",
+            Options);
+        Assert.NotNull(missing);
+        Assert.False(missing!.PreviousLastPlayedUtc.Specified);
+
+        var value = JsonSerializer.Deserialize<CorePlaybackRecordedPayload>(
+            """{"path":"/a.mp4","previousLastPlayedUtc":"2024-01-02T03:04:05Z"}""",
+            Options);
+        Assert.NotNull(value);
+        Assert.True(value!.PreviousLastPlayedUtc.Specified);
+        Assert.Equal(new DateTime(2024, 1, 2, 3, 4, 5, DateTimeKind.Utc), value.PreviousLastPlayedUtc.Value);
+    }
 }

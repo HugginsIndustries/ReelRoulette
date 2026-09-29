@@ -81,11 +81,11 @@ describe("libraryProjectionSync", () => {
     expect(items[0]?.lastPlayedUtcMs).toBe(Date.parse(lastPlayedUtc));
   });
 
-  it("applyPlaybackRecorded increments playCount and uses now when optional fields missing", () => {
-    const items = [item({ playCount: 2, lastPlayedUtcMs: null })];
-    const nowMs = 1_700_000_000_000;
-    applyPlaybackRecorded(items, { path: "/media/videos/clip.mp4" }, nowMs);
-    expect(items[0]?.playCount).toBe(3);
-    expect(items[0]?.lastPlayedUtcMs).toBe(nowMs);
+  it("applyPlaybackRecorded leaves playCount and lastPlayedUtc when those fields are missing", () => {
+    const items = [item({ playCount: 2, lastPlayedUtcMs: 1000 })];
+    const result = applyPlaybackRecorded(items, { path: "/media/videos/clip.mp4" });
+    expect(result.changed).toBe(false);
+    expect(items[0]?.playCount).toBe(2);
+    expect(items[0]?.lastPlayedUtcMs).toBe(1000);
   });
 });

@@ -744,6 +744,7 @@ public sealed class LibraryCatalogSession
                 nextPlayCount++;
             }
 
+            var previousLastPlayedUtc = current.LastPlayedUtc;
             var nowUtc = DateTime.UtcNow;
             var updated = LibraryCatalogStore.Execute(
                 connection,
@@ -764,7 +765,8 @@ public sealed class LibraryCatalogSession
                 IsFavorite = current.IsFavorite,
                 IsBlacklisted = current.IsBlacklisted,
                 PlayCount = nextPlayCount,
-                LastPlayedUtc = nowUtc
+                LastPlayedUtc = nowUtc,
+                PreviousLastPlayedUtc = previousLastPlayedUtc
             };
             return true;
         });
@@ -2620,6 +2622,7 @@ public sealed class CatalogItemState
     public bool IsBlacklisted { get; init; }
     public int PlayCount { get; init; }
     public DateTime? LastPlayedUtc { get; init; }
+    public DateTime? PreviousLastPlayedUtc { get; init; }
 }
 
 public sealed class CatalogPlaybackItem

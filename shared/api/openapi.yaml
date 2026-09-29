@@ -2259,6 +2259,21 @@ components:
         sessionId:
           type: string
           nullable: true
+        playCount:
+          type: integer
+          format: int32
+          nullable: true
+          description: Play count after this play.
+        lastPlayedUtc:
+          type: string
+          format: date-time
+          nullable: true
+          description: Last-played time after this play.
+        previousLastPlayedUtc:
+          type: string
+          format: date-time
+          nullable: true
+          description: Last-played time from before this play. Null when the file had never been played.
 
     ResyncRequiredPayload:
       type: object

@@ -90,10 +90,12 @@ namespace ReelRoulette
         private string? _currentVideoPath;
         private string? _currentPlaybackSource;
         private FromType _currentPlaybackSourceType = FromType.FromPath;
-        // Store the previous LastPlayedUtc for the current video (before current play) for display purposes.
+        // The last-played time from before this play. Known null means this file had never been played.
         // A playback event that arrives before that file starts keeps its value in the pending fields.
+        private bool _previousLastPlayedKnown;
         private DateTime? _previousLastPlayedUtc;
         private string? _pendingPreviousLastPlayedPath;
+        private bool _pendingPreviousLastPlayedKnown;
         private DateTime? _pendingPreviousLastPlayedUtc;
         private bool _isLoopEnabled = true;
         private bool _autoPlayNext = true;
@@ -221,7 +223,10 @@ namespace ReelRoulette
         // Sources, categories, and tags for filters and now-playing. The grid browses through the list query.
         private LibraryIndex? _libraryIndex;
         private LibraryItem? _currentFileItem;
+        private readonly object _currentFileReadGate = new();
         private int _currentFileItemRead;
+        private int _currentFileReadId;
+        private string? _currentFileReadPath;
         private bool _libraryStatsApplied;
         private double _serverBaselineLoudnessLufs = -18.0;
         private FilterState? _currentFilterState;
@@ -1417,7 +1422,7 @@ namespace ReelRoulette
             if (boundItem == null && cachedItem == null)
             {
                 if (IsCurrentVideoPath(fullPath) &&
-                    LibraryPanelBrowse.NeedsCurrentFileRead(loadedHasItem: false))
+                    LibraryPanelBrowse.NeedsCurrentFileRead(loadedHasItem: false, cachedItemMatches: false))
                 {
                     Log($"CoreEvents: Projection reads the current file {Path.GetFileName(fullPath)}.");
                     _ = SyncCurrentFileItemAsync();
@@ -1439,10 +1444,15 @@ namespace ReelRoulette
                     boundItem.IsBlacklisted = isBlacklisted;
                 }
 
-                if (cachedItem != null && (boundItem == null || !ReferenceEquals(boundItem.Item, cachedItem)))
+                if (cachedItem != null)
                 {
-                    cachedItem.IsFavorite = isFavorite;
-                    cachedItem.IsBlacklisted = isBlacklisted;
+                    if (boundItem == null || !ReferenceEquals(boundItem.Item, cachedItem))
+                    {
+                        cachedItem.IsFavorite = isFavorite;
+                        cachedItem.IsBlacklisted = isBlacklisted;
+                    }
+
+                    NoteCurrentFileItemProjected(cachedItem.FullPath);
                 }
 
                 var isCurrentItem = string.Equals(_currentVideoPath, fullPath, StringComparison.OrdinalIgnoreCase);
@@ -1624,12 +1634,6 @@ namespace ReelRoulette
                 return;
             }
 
-            var item = FindCurrentFileLibraryItem(path);
-            if (item != null)
-            {
-                _previousLastPlayedUtc = item.LastPlayedUtc;
-            }
-
             await SyncCurrentFileItemAsync();
             await RefreshGlobalStatsFromCoreAsync();
             Log("RecordPlayback: Completed");
@@ -1646,47 +1650,83 @@ namespace ReelRoulette
             var item = CurrentFileCacheMatches(playback.Path) ? _currentFileItem : null;
             if (item == null && loaded == null)
             {
-                if (IsCurrentVideoPath(playback.Path) &&
-                    LibraryPanelBrowse.NeedsCurrentFileRead(loadedHasItem: false))
-                {
-                    return false;
-                }
-
+                ApplyPlaybackPrevious(playback);
                 ApplyLibraryBrowseEvent(LibraryPanelBrowseEvent.Playback);
                 _ = RefreshGlobalStatsFromCoreAsync();
-                return true;
+                return !IsCurrentVideoPath(playback.Path);
             }
 
-            var playCount = Math.Max(0, playback.PlayCount ?? ((item?.PlayCount ?? loaded!.Item.PlayCount) + 1));
-            var lastPlayed = playback.LastPlayedUtc?.ToUniversalTime() ?? DateTime.UtcNow;
-            var previousLastPlayed = item != null ? item.LastPlayedUtc : loaded!.Item.LastPlayedUtc;
-            if (item != null)
+            var projectedCache = false;
+            if (playback.PlayCount is int playCount)
             {
-                item.PlayCount = playCount;
-                item.LastPlayedUtc = lastPlayed;
+                var nextPlayCount = Math.Max(0, playCount);
+                if (item != null)
+                {
+                    item.PlayCount = nextPlayCount;
+                    projectedCache = true;
+                }
+
+                if (loaded != null && !ReferenceEquals(loaded.Item, item))
+                {
+                    loaded.Item.PlayCount = nextPlayCount;
+                }
             }
 
-            if (loaded != null && !ReferenceEquals(loaded.Item, item))
+            if (playback.LastPlayedUtc is DateTime lastPlayed)
             {
-                loaded.Item.PlayCount = playCount;
-                loaded.Item.LastPlayedUtc = lastPlayed;
+                var nextLastPlayed = lastPlayed.ToUniversalTime();
+                if (item != null)
+                {
+                    item.LastPlayedUtc = nextLastPlayed;
+                    projectedCache = true;
+                }
+
+                if (loaded != null && !ReferenceEquals(loaded.Item, item))
+                {
+                    loaded.Item.LastPlayedUtc = nextLastPlayed;
+                }
             }
 
+            if (projectedCache)
+            {
+                NoteCurrentFileItemProjected(item!.FullPath);
+            }
+
+            ApplyPlaybackPrevious(playback);
+            _ = RefreshGlobalStatsFromCoreAsync();
+            ApplyLibraryBrowseEvent(LibraryPanelBrowseEvent.Playback);
+            if (LibraryPanelBrowse.ReadCurrentFileAfterPlayback(loaded != null, IsCurrentVideoPath(playback.Path)))
+            {
+                _ = SyncCurrentFileItemAsync();
+            }
+
+            return true;
+        }
+
+        private void ApplyPlaybackPrevious(CorePlaybackRecordedPayload playback)
+        {
             var paint = LibraryPanelBrowse.PlaybackStatsPaint(
                 IsCurrentVideoPath(playback.Path),
-                previousLastPlayed,
+                new PlaybackPrevious
+                {
+                    Specified = playback.PreviousLastPlayedUtc.Specified,
+                    Utc = playback.PreviousLastPlayedUtc.Value
+                },
+                _previousLastPlayedKnown,
                 _previousLastPlayedUtc,
+                _pendingPreviousLastPlayedPath,
+                _pendingPreviousLastPlayedKnown,
+                _pendingPreviousLastPlayedUtc,
                 playback.Path);
+            _previousLastPlayedKnown = paint.ShownPreviousKnown;
             _previousLastPlayedUtc = paint.ShownPreviousLastPlayedUtc;
             _pendingPreviousLastPlayedPath = paint.PendingPath;
+            _pendingPreviousLastPlayedKnown = paint.PendingPreviousKnown;
             _pendingPreviousLastPlayedUtc = paint.PendingPreviousLastPlayedUtc;
             if (paint.PaintNow)
             {
                 UpdateCurrentFileStatsUi();
             }
-            _ = RefreshGlobalStatsFromCoreAsync();
-            ApplyLibraryBrowseEvent(LibraryPanelBrowseEvent.Playback);
-            return true;
         }
 
         private void RecalculateGlobalStats()
@@ -1908,19 +1948,13 @@ namespace ReelRoulette
             }
 
             CurrentVideoPlayCount = playCount;
-            // Show the previous LastPlayedUtc (before current play) if available, otherwise current LastPlayedUtc, otherwise Never
-            if (_previousLastPlayedUtc.HasValue)
-            {
-                CurrentVideoLastPlayedDisplay = _previousLastPlayedUtc.Value.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
-            }
-            else if (lastPlayedUtc.HasValue)
-            {
-                CurrentVideoLastPlayedDisplay = lastPlayedUtc.Value.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
-            }
-            else
-            {
-                CurrentVideoLastPlayedDisplay = "Never";
-            }
+            var lastPlayed = LibraryPanelBrowse.ChooseCurrentFileLastPlayed(
+                _previousLastPlayedKnown,
+                _previousLastPlayedUtc,
+                lastPlayedUtc);
+            CurrentVideoLastPlayedDisplay = lastPlayed.ShowNever || lastPlayed.Utc is null
+                ? "Never"
+                : lastPlayed.Utc.Value.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
 
             CurrentVideoIsFavoriteDisplay = isFavorite ? "Yes" : "No";
             CurrentVideoIsBlacklistedDisplay = isBlacklisted ? "Yes" : "No";
@@ -2916,66 +2950,120 @@ namespace ReelRoulette
 
         private async Task EnsureCurrentFileItemAsync(string? fullPath)
         {
-            var read = Interlocked.Increment(ref _currentFileItemRead);
-            if (string.IsNullOrWhiteSpace(fullPath))
-            {
-                await Dispatcher.UIThread.InvokeAsync(() =>
-                {
-                    if (read == _currentFileItemRead)
-                    {
-                        _currentFileItem = null;
-                    }
-                });
-                return;
-            }
-
-            var loaded = await Dispatcher.UIThread.InvokeAsync(() => FindLoadedLibraryItem(fullPath)?.Item);
-            if (loaded != null)
-            {
-                return;
-            }
-
-            var cached = await Dispatcher.UIThread.InvokeAsync(() => CurrentFileCacheMatches(fullPath));
-            if (cached)
-            {
-                return;
-            }
-
-            if (!_isCoreApiReachable)
-            {
-                await Dispatcher.UIThread.InvokeAsync(() =>
-                {
-                    if (read == _currentFileItemRead)
-                    {
-                        _currentFileItem = null;
-                    }
-                });
-                return;
-            }
-
-            LibraryItem? item = null;
+            var read = BeginCurrentFileRead(fullPath);
             try
             {
-                var payload = await _coreServerApiClient.GetLibraryItemAsync(_coreServerBaseUrl, fullPath);
-                if (payload.HasValue)
+                if (string.IsNullOrWhiteSpace(fullPath))
                 {
-                    item = JsonSerializer.Deserialize<LibraryItem>(payload.Value.GetRawText(), CoreServerApiClient.LibraryItemJsonOptions);
+                    await Dispatcher.UIThread.InvokeAsync(() =>
+                    {
+                        if (IsCurrentFileReadLatest(read))
+                        {
+                            _currentFileItem = null;
+                        }
+                    });
+                    return;
                 }
-            }
-            catch (Exception ex)
-            {
-                Log($"EnsureCurrentFileItem: Failed to read {Path.GetFileName(fullPath)} ({ex.Message})");
-            }
 
-            await Dispatcher.UIThread.InvokeAsync(() =>
-            {
-                if (read != _currentFileItemRead)
+                var loaded = await Dispatcher.UIThread.InvokeAsync(() => FindLoadedLibraryItem(fullPath) != null);
+                var cached = await Dispatcher.UIThread.InvokeAsync(() => CurrentFileCacheMatches(fullPath));
+                if (!LibraryPanelBrowse.NeedsCurrentFileRead(loaded, cached))
                 {
                     return;
                 }
 
-                _currentFileItem = item;
-            });
+                if (!_isCoreApiReachable)
+                {
+                    await Dispatcher.UIThread.InvokeAsync(() =>
+                        FinishCurrentFileRead(read, fullPath, CurrentFileReadResult.Failed, item: null));
+                    return;
+                }
+
+                var result = CurrentFileReadResult.Failed;
+                LibraryItem? item = null;
+                try
+                {
+                    var payload = await _coreServerApiClient.GetLibraryItemAsync(_coreServerBaseUrl, fullPath);
+                    result = payload.Result;
+                    if (result == CurrentFileReadResult.Found)
+                    {
+                        item = JsonSerializer.Deserialize<LibraryItem>(payload.Item.GetRawText(), CoreServerApiClient.LibraryItemJsonOptions);
+                        if (item == null)
+                        {
+                            result = CurrentFileReadResult.Failed;
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Log($"EnsureCurrentFileItem: Failed to read {Path.GetFileName(fullPath)} ({ex.Message})");
+                    result = CurrentFileReadResult.Failed;
+                }
+
+                await Dispatcher.UIThread.InvokeAsync(() => FinishCurrentFileRead(read, fullPath, result, item));
+            }
+            finally
+            {
+                EndCurrentFileRead(read);
+            }
+        }
+
+        private int BeginCurrentFileRead(string? fullPath)
+        {
+            lock (_currentFileReadGate)
+            {
+                var read = ++_currentFileItemRead;
+                _currentFileReadId = read;
+                _currentFileReadPath = string.IsNullOrWhiteSpace(fullPath) ? null : fullPath;
+                return read;
+            }
+        }
+
+        private void EndCurrentFileRead(int read)
+        {
+            lock (_currentFileReadGate)
+            {
+                if (_currentFileReadId == read)
+                {
+                    _currentFileReadPath = null;
+                }
+            }
+        }
+
+        private bool IsCurrentFileReadLatest(int read)
+        {
+            lock (_currentFileReadGate)
+            {
+                return read == _currentFileItemRead;
+            }
+        }
+
+        private void FinishCurrentFileRead(int read, string fullPath, CurrentFileReadResult result, LibraryItem? item)
+        {
+            if (!LibraryPanelBrowse.ShouldApplyCurrentFileRead(IsCurrentFileReadLatest(read), CurrentFileCacheMatches(fullPath), result))
+            {
+                return;
+            }
+
+            _currentFileItem = result == CurrentFileReadResult.Found ? item : null;
+        }
+
+        private void NoteCurrentFileItemProjected(string? updatedPath)
+        {
+            lock (_currentFileReadGate)
+            {
+                if (_currentFileReadId != _currentFileItemRead)
+                {
+                    return;
+                }
+
+                if (!LibraryPanelBrowse.InvalidateCurrentFileRead(_currentFileReadPath, updatedPath))
+                {
+                    return;
+                }
+
+                _currentFileItemRead++;
+            }
         }
 
         private async Task SyncCurrentFileItemAsync()
@@ -4968,13 +5056,17 @@ namespace ReelRoulette
                 var started = LibraryPanelBrowse.PreviousLastPlayedOnStart(
                     statsPath,
                     previousPath,
+                    _previousLastPlayedKnown,
                     _previousLastPlayedUtc,
                     _pendingPreviousLastPlayedPath,
+                    _pendingPreviousLastPlayedKnown,
                     _pendingPreviousLastPlayedUtc);
+                _previousLastPlayedKnown = started.ShownPreviousKnown;
                 _previousLastPlayedUtc = started.ShownPreviousLastPlayedUtc;
                 if (started.ClearPending)
                 {
                     _pendingPreviousLastPlayedPath = null;
+                    _pendingPreviousLastPlayedKnown = false;
                     _pendingPreviousLastPlayedUtc = null;
                 }
 
@@ -6100,12 +6192,17 @@ namespace ReelRoulette
                     }
 
                     if (_currentFileItem != null &&
-                        !ReferenceEquals(_currentFileItem, loaded.Item) &&
-                        (string.Equals(_currentFileItem.Id, identifier, StringComparison.OrdinalIgnoreCase) ||
+                        (ReferenceEquals(_currentFileItem, loaded.Item) ||
+                         string.Equals(_currentFileItem.Id, identifier, StringComparison.OrdinalIgnoreCase) ||
                          string.Equals(_currentFileItem.FullPath, identifier, StringComparison.OrdinalIgnoreCase) ||
                          string.Equals(_currentFileItem.FullPath, loaded.FullPath, StringComparison.OrdinalIgnoreCase)))
                     {
-                        _currentFileItem.Tags = MergeItemTags(_currentFileItem.Tags, addTags, removeTags);
+                        if (!ReferenceEquals(_currentFileItem, loaded.Item))
+                        {
+                            _currentFileItem.Tags = MergeItemTags(_currentFileItem.Tags, addTags, removeTags);
+                        }
+
+                        NoteCurrentFileItemProjected(_currentFileItem.FullPath);
                     }
 
                     continue;
@@ -6114,13 +6211,14 @@ namespace ReelRoulette
                 if (CurrentFileCacheMatches(identifier))
                 {
                     _currentFileItem!.Tags = MergeItemTags(_currentFileItem.Tags, addTags, removeTags);
+                    NoteCurrentFileItemProjected(_currentFileItem.FullPath);
                     updatedCount++;
                     currentFileTileUpdated = true;
                     continue;
                 }
 
                 if ((IsCurrentVideoPath(identifier) || CurrentFileCacheMatches(identifier)) &&
-                    LibraryPanelBrowse.NeedsCurrentFileRead(loadedHasItem: false))
+                    LibraryPanelBrowse.NeedsCurrentFileRead(loadedHasItem: false, cachedItemMatches: false))
                 {
                     readCurrentFile = true;
                     continue;
@@ -6380,7 +6478,7 @@ namespace ReelRoulette
                             var connected = await ProbeCoreServerVersionAsync(updateStatus: false);
                             if (connected)
                             {
-                                var projectionSynced = await SyncLibrarySessionFromCoreAsync();
+                                var projectionSynced = await SyncLibrarySessionAndCurrentFileAsync();
                                 if (!projectionSynced)
                                 {
                                     SetStatusMessage(BuildCoreReconnectWaitingStatusText(), 0);
@@ -6442,7 +6540,7 @@ namespace ReelRoulette
             if (connected)
             {
                 EnsureCoreEventStreamStarted();
-                var projectionSynced = await SyncLibrarySessionFromCoreAsync();
+                var projectionSynced = await SyncLibrarySessionAndCurrentFileAsync();
                 if (!projectionSynced)
                 {
                     SetStatusMessage("Core runtime is connected but not ready. Waiting for reconnect...", 0);
@@ -6587,12 +6685,20 @@ namespace ReelRoulette
             }
         }
 
+        private async Task<bool> SyncLibrarySessionAndCurrentFileAsync()
+        {
+            if (!await SyncLibrarySessionFromCoreAsync())
+            {
+                return false;
+            }
+
+            await SyncCurrentFileItemAsync();
+            return true;
+        }
+
         private async Task RefreshCompletedLibraryAsync()
         {
-            if (await SyncLibrarySessionFromCoreAsync())
-            {
-                await SyncCurrentFileItemAsync();
-            }
+            await SyncLibrarySessionAndCurrentFileAsync();
         }
 
         private async Task SyncTagCatalogToCoreAsync()
@@ -6910,7 +7016,7 @@ namespace ReelRoulette
                     SetStatusMessage($"Core events resync requested ({reason}). Reloading projections...", 0);
                     if (_isCoreApiReachable)
                     {
-                        var projectionSynced = await SyncLibrarySessionFromCoreAsync();
+                        var projectionSynced = await SyncLibrarySessionAndCurrentFileAsync();
                         if (projectionSynced)
                         {
                             _ = SyncPresetsFromCoreAsync();

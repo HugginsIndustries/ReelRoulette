@@ -1242,6 +1242,21 @@ export interface components {
             path: string;
             clientId?: string | null;
             sessionId?: string | null;
+            /**
+             * Format: int32
+             * @description Play count after this play.
+             */
+            playCount?: number | null;
+            /**
+             * Format: date-time
+             * @description Last-played time after this play.
+             */
+            lastPlayedUtc?: string | null;
+            /**
+             * Format: date-time
+             * @description Last-played time from before this play. Null when the file had never been played.
+             */
+            previousLastPlayedUtc?: string | null;
         };
         ResyncRequiredPayload: {
             /** @example revisionGap */
