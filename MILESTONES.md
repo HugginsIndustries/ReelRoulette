@@ -94,31 +94,32 @@ Last milestone completed: M10i13
 ### M10i14 - Library Catalog Export and Import Cutover
 
 - **Status**: ⏳ Planned
-- **Goal**: Re-enable library export, import, and catalog backups around a live SQLite `.db` in the existing zip envelope, keep JSON dump as a separate non-restore action, and keep importing existing `library.json` zips.
+- **Goal**: Re-enable library export, import, and catalog backups around a live SQLite `.db` in the existing zip envelope, keep importing existing `library.json` zips through v0.13.0, and deprecate `library.json` library support with removal planned for v0.14.0.
 - **Scope**:
   - Depends on: source folder import row updates.
   - Re-enable desktop Library Export / Import and server catalog backups that were disabled after the SQLite store landed.
   - Keep the current migration zip envelope (settings, presets, optional thumbnails and backups). The server produces the catalog checkpoint while it has `library.db` open, and the desktop zip embeds that checkpoint. It is not a raw copy of an open WAL file and not leftover `library.json`.
-  - Import Library restores a new export by reading that `.db` from the zip and replacing the live SQLite catalog (plus current remap/skip for sources). Keep today's server-stopped acknowledgment, because the desktop replaces the database file. The replacement is written to a temporary file, checkpointed so it does not depend on a WAL sidecar, then published by rename. The previous `library.db` stays aside until the new file is in place and opens. A crash between those renames restores the previous file, or promotes the finished temporary file if that is the one that landed. Also accept existing migration zips that contain `library.json` and migrate them into the live SQLite catalog.
-  - Add a separate JSON dump action; JSON is not the default new export format, is not the live catalog, and is not an import or restore path.
+  - Import Library restores a new export by reading that `.db` from the zip and replacing the live SQLite catalog (plus current remap/skip for sources). Keep today's server-stopped acknowledgment, because the desktop replaces the database file. The replacement is written to a temporary file, checkpointed so it does not depend on a WAL sidecar, then published by rename. The previous `library.db` stays aside until the new file is in place and opens. A crash between those renames restores the previous file, or promotes the finished temporary file if that is the one that landed. Also accept existing migration zips that contain `library.json` and migrate them into the live SQLite catalog. A successful import of a `library.json` archive tells the user that format is deprecated and will not be accepted after v0.13.0.
+  - v0.13.0 deprecates `library.json` as a library format. It is not the live catalog, not the catalog artifact in a new export, and not a backup. There is no JSON dump action. Startup may still migrate a leftover `library.json` once when `library.db` is missing. v0.14.0 and above remove `library.json` library support, including that zip import and the one-time startup migration.
   - Server catalog backups use the same server-produced checkpoint, not leftover JSON.
-  - Update testing checklist and current-state docs for export, import, and catalog backups.
+  - Update testing checklist and current-state docs for export, import, catalog backups, and the v0.13.0 deprecation with removal planned for v0.14.0.
 - **Acceptance criteria**:
   - New catalog exports produce a zip whose catalog artifact is a usable SQLite database of the live library; Import Library can restore that export into the live catalog.
   - Import Library still requires the server-stopped acknowledgment before it replaces the live database.
   - An interrupted replace leaves the previous catalog or the finished incoming file, and does not leave a partial `library.db` or an empty catalog.
-  - Import still accepts existing `library.json` zip archives and migrates them into the live SQLite catalog.
-  - JSON dump is a separate explicit action and cannot be used as Import Library input.
+  - Import still accepts existing `library.json` zip archives, migrates them into the live SQLite catalog, does not leave a live `library.json`, and reports that this format is deprecated and will not be accepted after v0.13.0.
+  - There is no JSON dump action. A new export does not contain `library.json`.
   - Server catalog backups capture the live SQLite catalog.
-  - Docs and testing checklist describe `.db`-in-zip export and restore, JSON dump (not restore), and legacy zip import without treating `library.json` as the live store.
+  - Docs and testing checklist describe `.db`-in-zip export and restore, deprecated `library.json` zip import, and removal of `library.json` library support in v0.14.0, without treating `library.json` as the live store.
 - **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include export/import tests for `.db`-in-zip round-trip, JSON dump that is rejected as import, `library.json` zip import, live SQLite backups, and interrupted replace recovery.
-  - Docs evidence must include current-state and checklist updates for the new export, import, and backup paths.
+  - Evidence placeholders maintained at planned state; completion evidence must include export/import tests for `.db`-in-zip round-trip, `library.json` zip import that leaves no live `library.json`, live SQLite backups, and interrupted replace recovery.
+  - Docs evidence must include current-state and checklist updates for the new export, import, and backup paths, and for the v0.13.0 deprecation of `library.json` library support with removal planned for v0.14.0.
 - **Deferrals / Follow-ups**:
   - Account/PIN persistence in SQLite is deferred to the account and PIN data model work.
   - Presets, core settings, and desktop-settings remain on their current files unless a later slice moves them.
   - Running-server import, Operator export/import, and removal of the desktop Library Export / Import menus are deferred to Operator library catalog transfer. That work ships with the later account and Operator milestones, in the release after the SQLite store/query sequence.
   - Refresh stays on the full-document adapter until refresh column updates.
+  - Removing `library.json` zip import and the one-time startup migration from `library.json` is planned for v0.14.0 and above. This milestone deprecates that support and does not remove it.
 
 ### M10i15 - Refresh Column Updates
 

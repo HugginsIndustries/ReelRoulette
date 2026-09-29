@@ -19,9 +19,9 @@ Instructions:
 
 Commit Message:
 
-M10i13: Import a folder by updating catalog rows
+Docs: Milestone M10i14 now deprecates library.json and drops the catalog JSON dump
 
-- Walk the folder before taking the catalog lock, then insert and update rows in one transaction.
-- Keep id, tags, favorite, blacklist, and playback stats for an existing path. Leave missing files in place.
-- Do not load or diff the full catalog document.
-- Let the desktop wait for a long folder import instead of failing after 8 seconds.
+- Revise library catalog export and import around a live SQLite database in the existing zip.
+- Keep `library.json` zip import for v0.13.0 and mark that library format deprecated.
+- Plan removal of `library.json` library support for v0.14.0, including zip import and one-time startup migration.
+- Do not add a JSON dump action.
