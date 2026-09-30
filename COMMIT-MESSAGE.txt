@@ -19,9 +19,6 @@ Instructions:
 
 Commit Message:
 
-M10i16: Store presets and thumbnail metadata in the catalog
+Bugfix: Close a bad catalog before quarantining it
 
-- Open every catalog at schema version 2, migrating a schema 1 database in place and copying presets and thumbnail revision and dimensions.
-- Keep a schema 1 database a valid catalog until that migrating open, including on import.
-- Read and write presets from the catalog table, and keep core settings and desktop settings in JSON.
-- Save thumbnail revision, width, and height as each item finishes, and delete leftover JPEG files when the thumbnail stage completes.
+- Dispose the write connection when opening a file that is not a database, so Windows can rename it aside.

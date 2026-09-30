@@ -1639,12 +1639,20 @@ public static partial class LibraryCatalogStore
     internal static SqliteConnection OpenWrite(string databasePath)
     {
         var connection = new SqliteConnection(ConnectionString(databasePath, readOnly: false));
-        connection.Open();
-        connection.DefaultTimeout = 1;
-        Execute(connection, "PRAGMA journal_mode=WAL;");
-        Execute(connection, "PRAGMA synchronous=NORMAL;");
-        Execute(connection, "PRAGMA busy_timeout=1000;");
-        return connection;
+        try
+        {
+            connection.Open();
+            connection.DefaultTimeout = 1;
+            Execute(connection, "PRAGMA journal_mode=WAL;");
+            Execute(connection, "PRAGMA synchronous=NORMAL;");
+            Execute(connection, "PRAGMA busy_timeout=1000;");
+            return connection;
+        }
+        catch
+        {
+            connection.Dispose();
+            throw;
+        }
     }
 
     internal static int Execute(SqliteConnection connection, SqliteTransaction transaction, string sql, params (string Name, object Value)[] parameters)
