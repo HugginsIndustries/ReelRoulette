@@ -625,16 +625,39 @@ public sealed class RefreshPipelineService : BackgroundService
     internal async Task RunFingerprintStageAsync(CancellationToken cancellationToken)
     {
         var parallelism = Math.Clamp(_coreSettings.GetRefreshSettings().FingerprintScanMaxDegreeOfParallelism, 1, 16);
-        UpdateStage("fingerprintScan", 0, "Fingerprint scan starting...");
         var items = _catalog.Session.ReadRefreshItems();
-
+        var itemCount = items.Count;
         var workList = new List<CatalogRefreshItem>();
         var skipped = 0;
+        var checkedCount = 0;
+        var nextCheckStatusUtc = DateTimeOffset.MinValue;
+
+        void PublishCheckProgress(bool force)
+        {
+            var now = DateTimeOffset.UtcNow;
+            if (!force && now < nextCheckStatusUtc)
+            {
+                return;
+            }
+
+            var percent = itemCount == 0
+                ? 100
+                : Math.Clamp((int)Math.Round(checkedCount / (double)itemCount * 100.0), 0, 100);
+            UpdateStage(
+                "fingerprintScan",
+                percent,
+                $"Checking files {checkedCount}/{itemCount} ({workList.Count} to hash)");
+            nextCheckStatusUtc = now.AddMilliseconds(400);
+        }
+
+        PublishCheckProgress(force: true);
         foreach (var item in items)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (string.IsNullOrWhiteSpace(item.FullPath) || !File.Exists(item.FullPath))
             {
+                checkedCount++;
+                PublishCheckProgress(force: false);
                 continue;
             }
 
@@ -666,6 +689,8 @@ public sealed class RefreshPipelineService : BackgroundService
             {
                 skipped++;
                 PersistObservedFingerprint(item, size, write, haveStat, defaultsChanged);
+                checkedCount++;
+                PublishCheckProgress(force: false);
                 continue;
             }
 
@@ -676,7 +701,11 @@ public sealed class RefreshPipelineService : BackgroundService
             }
 
             workList.Add(item);
+            checkedCount++;
+            PublishCheckProgress(force: false);
         }
+
+        PublishCheckProgress(force: true);
 
         var total = workList.Count;
         if (total == 0)

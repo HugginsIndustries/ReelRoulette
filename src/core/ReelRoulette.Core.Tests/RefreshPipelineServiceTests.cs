@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Security.Cryptography;
 using System.Reflection;
+using ReelRoulette.Server.Contracts;
 using ReelRoulette.Server.Hosting;
 using ReelRoulette.Server.Services;
 using Xunit;
@@ -793,6 +794,54 @@ public sealed class RefreshPipelineServiceTests
         AssertStoredMediaColumns(added);
         Assert.Contains("1 removed", completed.Stages.Single(stage => stage.Stage == "sourceRefresh").Message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("1 added", completed.Stages.Single(stage => stage.Stage == "sourceRefresh").Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task FingerprintStage_PublishesCheckProgressBeforeHashing()
+    {
+        using var scope = new AppDataScope();
+        var mediaPath = Path.Combine(scope.RootPath, "ready.png");
+        await WriteTinyPngAsync(mediaPath);
+        await SeedLibraryAsync(scope.LibraryPath, new JsonObject
+        {
+            ["sources"] = new JsonArray(),
+            ["items"] = new JsonArray
+            {
+                new JsonObject
+                {
+                    ["id"] = "ready-1",
+                    ["mediaType"] = 1,
+                    ["fullPath"] = mediaPath,
+                    ["fingerprint"] = "abc",
+                    ["fingerprintStatus"] = 1
+                },
+                new JsonObject
+                {
+                    ["id"] = "missing-1",
+                    ["mediaType"] = 1,
+                    ["fullPath"] = Path.Combine(scope.RootPath, "missing.png"),
+                    ["fingerprintStatus"] = 0
+                }
+            }
+        });
+
+        var state = new ServerStateService();
+        var service = CreateService(state, scope.RootPath);
+        await service.RunFingerprintStageAsync(CancellationToken.None);
+
+        var stage = service.GetStatus().Stages.Single(item => item.Stage == "fingerprintScan");
+        Assert.Equal("Fingerprint scan complete (0 hashed, 0 failed, 1 skipped)", stage.Message);
+        Assert.Equal(100, stage.Percent);
+        Assert.True(stage.IsComplete);
+
+        var checking = state.GetReplayAfter(0).Events
+            .Select(evt => evt.Payload)
+            .OfType<RefreshStatusChangedPayload>()
+            .SelectMany(payload => payload.Snapshot.Stages)
+            .Where(item => item.Stage == "fingerprintScan" && item.Message.Contains("Checking files", StringComparison.Ordinal))
+            .ToList();
+        Assert.Contains(checking, item => item.Message == "Checking files 0/2 (0 to hash)" && item.Percent == 0);
+        Assert.Contains(checking, item => item.Message == "Checking files 2/2 (0 to hash)" && item.Percent == 100);
     }
 
     [Fact]
