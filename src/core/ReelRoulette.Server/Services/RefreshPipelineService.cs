@@ -6,6 +6,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using ReelRoulette.Core.Fingerprints;
+using ReelRoulette.Core.Library;
 using ReelRoulette.Server.Contracts;
 using SkiaSharp;
 
@@ -19,8 +20,6 @@ public sealed class RefreshPipelineService : BackgroundService
     };
 
     private const int ThumbnailMaxEdge = 480;
-    private const long ThumbnailCacheMaxBytes = 2L * 1024L * 1024L * 1024L;
-    private const int ThumbnailCacheMaxFiles = 100_000;
 
     private static SemaphoreSlim? _ffprobeSemaphore;
     private static readonly object FfprobeSemaphoreLock = new();
@@ -33,69 +32,15 @@ public sealed class RefreshPipelineService : BackgroundService
         @"(?:^|\s)(?:Peak|True peak):\s*(?<value>-?\d+(?:\.\d+)?)\s*dBFS\b",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
-    // Library JSON legacy fields may represent enums as either numbers or strings.
-    // Examples:
-    // - mediaType: 0/1 OR "Video"/"Photo"
-    // - fingerprintStatus: 0/1/2/3 OR "Pending"/"Ready"/"Failed"/"Stale"
-    private static int ResolveMediaType(JsonNode? node)
-    {
-        if (node is null)
-        {
-            return 0;
-        }
-
-        if (node is JsonValue value &&
-            value.TryGetValue<int>(out var intValue))
-        {
-            return intValue;
-        }
-
-        if (node is JsonValue value2 &&
-            value2.TryGetValue<string>(out var textValue))
-        {
-            var text = (textValue ?? string.Empty).Trim();
-            return text.Equals("Video", StringComparison.OrdinalIgnoreCase) ? 0 :
-                   text.Equals("Photo", StringComparison.OrdinalIgnoreCase) ? 1 :
-                   0;
-        }
-
-        return 0;
-    }
-
-    private static int ResolveFingerprintStatus(JsonNode? node)
-    {
-        if (node is null)
-        {
-            return 0;
-        }
-
-        if (node is JsonValue value &&
-            value.TryGetValue<int>(out var intValue))
-        {
-            return intValue;
-        }
-
-        if (node is JsonValue value2 &&
-            value2.TryGetValue<string>(out var textValue))
-        {
-            // Keep mapping aligned with desktop expectations and existing server logic checks (0/1).
-            var text = (textValue ?? string.Empty).Trim();
-            return text.Equals("Pending", StringComparison.OrdinalIgnoreCase) ? 0 :
-                   text.Equals("Ready", StringComparison.OrdinalIgnoreCase) ? 1 :
-                   text.Equals("Failed", StringComparison.OrdinalIgnoreCase) ? 2 :
-                   text.Equals("Stale", StringComparison.OrdinalIgnoreCase) ? 3 :
-                   0;
-        }
-
-        return 0;
-    }
 
     private readonly ServerStateService _state;
     private readonly ILogger<RefreshPipelineService> _logger;
     private readonly FileFingerprintService _fingerprintService = new();
     private readonly object _runLock = new();
     private readonly LibraryCatalogHost _catalog;
-    private JsonObject? _libraryBaseline;
+    private readonly object _catalogWriteLock = new();
+    private Task? _fingerprintWriteHold;
+    private readonly TaskCompletionSource _fingerprintWriteEntered = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly string _thumbnailDir;
     private readonly string _thumbnailIndexPath;
     private readonly CoreSettingsService _coreSettings;
@@ -242,6 +187,13 @@ public sealed class RefreshPipelineService : BackgroundService
 
     internal Task FfmpegCheckEntered => _ffmpegCheckEntered.Task;
 
+    internal void HoldNextFingerprintWrite(Task hold)
+    {
+        _fingerprintWriteHold = hold ?? throw new ArgumentNullException(nameof(hold));
+    }
+
+    internal Task FingerprintWriteEntered => _fingerprintWriteEntered.Task;
+
     public string GetThumbnailPath(string itemId)
     {
         return Path.Combine(_thumbnailDir, $"{itemId}.jpg");
@@ -324,6 +276,7 @@ public sealed class RefreshPipelineService : BackgroundService
 
     private async Task ExecuteReservedRunAsync(CancellationToken cancellationToken)
     {
+        using var deferredCatalogBackup = LibraryCatalogBackup.Defer(_catalog.Session.DatabasePath);
         try
         {
             await RunSourceRefreshAsync(cancellationToken);
@@ -393,12 +346,12 @@ public sealed class RefreshPipelineService : BackgroundService
         _nextAutoRunUtc = DateTimeOffset.UtcNow.AddMinutes(_coreSettings.GetRefreshSettings().AutoRefreshIntervalMinutes);
     }
 
-    private async Task RunSourceRefreshAsync(CancellationToken cancellationToken)
+    private Task RunSourceRefreshAsync(CancellationToken cancellationToken)
     {
         UpdateStage("sourceRefresh", 5, "Loading sources...");
-        var root = await LoadLibraryJsonAsync(cancellationToken);
-        var sources = root["sources"] as JsonArray ?? [];
-        var items = root["items"] as JsonArray ?? [];
+        var sources = _catalog.Session.ReadRefreshSources();
+        var items = _catalog.Session.ReadRefreshItems().ToList();
+        var defaultsChanged = new HashSet<CatalogRefreshItem>();
 
         int added = 0;
         int removed = 0;
@@ -407,48 +360,45 @@ public sealed class RefreshPipelineService : BackgroundService
         int moved = 0;
         int unresolvedQueued = 0;
 
-        var sourceNodes = sources.OfType<JsonObject>().Where(s => s != null).ToList();
-        for (int sourceIndex = 0; sourceIndex < sourceNodes.Count; sourceIndex++)
+        for (int sourceIndex = 0; sourceIndex < sources.Count; sourceIndex++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var source = sourceNodes[sourceIndex]!;
-            var sourceId = source["id"]?.GetValue<string>() ?? string.Empty;
-            var rootPath = source["rootPath"]?.GetValue<string>() ?? string.Empty;
-            var isEnabled = source["isEnabled"]?.GetValue<bool?>() ?? true;
-            if (string.IsNullOrWhiteSpace(sourceId) || string.IsNullOrWhiteSpace(rootPath) || !isEnabled || !Directory.Exists(rootPath))
+            var source = sources[sourceIndex];
+            var sourceId = source.Id;
+            var rootPath = source.RootPath;
+            if (string.IsNullOrWhiteSpace(sourceId) || string.IsNullOrWhiteSpace(rootPath) || !source.IsEnabled || !Directory.Exists(rootPath))
             {
                 continue;
             }
 
             var discovered = EnumerateMediaFiles(rootPath).ToHashSet(StringComparer.OrdinalIgnoreCase);
             var existingForSource = items
-                .OfType<JsonObject>()
-                .Where(i => string.Equals(i?["sourceId"]?.GetValue<string>(), sourceId, StringComparison.OrdinalIgnoreCase))
+                .Where(item => string.Equals(item.SourceId, sourceId, StringComparison.OrdinalIgnoreCase))
                 .ToList();
 
             var existingPaths = existingForSource
-                .Select(i => i["fullPath"]?.GetValue<string>() ?? string.Empty)
-                .Where(p => !string.IsNullOrWhiteSpace(p))
+                .Select(item => item.FullPath)
+                .Where(path => !string.IsNullOrWhiteSpace(path))
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
             var missingItems = existingForSource
-                .Where(i => !discovered.Contains(i["fullPath"]?.GetValue<string>() ?? string.Empty))
+                .Where(item => !discovered.Contains(item.FullPath))
                 .ToList();
             var newPaths = discovered
                 .Where(path => !existingPaths.Contains(path))
                 .ToList();
 
-            var progressBase = ((sourceIndex + 1) / (double)Math.Max(1, sourceNodes.Count)) * 100.0;
+            var progressBase = ((sourceIndex + 1) / (double)Math.Max(1, sources.Count)) * 100.0;
             UpdateStage("sourceRefresh",
                 Math.Clamp((int)Math.Round(progressBase * 0.2), 5, 100),
-                $"Source {sourceIndex + 1}/{sourceNodes.Count}: analyzing changes");
+                $"Source {sourceIndex + 1}/{sources.Count}: analyzing changes");
 
             if (missingItems.Count == 0 && newPaths.Count == 0)
             {
                 var pctNoChanges = Math.Clamp((int)Math.Round(progressBase), 10, 100);
                 UpdateStage("sourceRefresh",
                     pctNoChanges,
-                    $"Sources {sourceIndex + 1}/{sourceNodes.Count} (added {added}, removed {removed}, renamed {renamed}, moved {moved})");
+                    $"Sources {sourceIndex + 1}/{sources.Count} (added {added}, removed {removed}, renamed {renamed}, moved {moved})");
                 continue;
             }
 
@@ -458,8 +408,7 @@ public sealed class RefreshPipelineService : BackgroundService
             var newPathWrite = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
             foreach (var path in newPaths)
             {
-                var mediaType = MediaPlayableExtensions.IsVideoExtension(Path.GetExtension(path)) ? 0 : 1;
-                newPathMediaType[path] = mediaType;
+                newPathMediaType[path] = MediaPlayableExtensions.IsVideoExtension(Path.GetExtension(path)) ? 0 : 1;
                 newPathFileName[path] = Path.GetFileName(path);
                 try
                 {
@@ -479,13 +428,15 @@ public sealed class RefreshPipelineService : BackgroundService
             var candidateNewFingerprints = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             var consumedNewPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-            var missingReady = new List<JsonObject>();
+            var missingReady = new List<CatalogRefreshItem>();
             foreach (var missing in missingItems)
             {
-                EnsureIdentityAndFingerprintDefaults(missing!);
-                var fp = missing!["fingerprint"]?.GetValue<string>();
-                var fpStatus = ResolveFingerprintStatus(missing["fingerprintStatus"]);
-                if (!string.IsNullOrWhiteSpace(fp) && fpStatus == 1)
+                if (ApplyFingerprintDefaults(missing))
+                {
+                    defaultsChanged.Add(missing);
+                }
+
+                if (!string.IsNullOrWhiteSpace(missing.Fingerprint) && missing.FingerprintStatus == 1)
                 {
                     missingReady.Add(missing);
                 }
@@ -493,8 +444,6 @@ public sealed class RefreshPipelineService : BackgroundService
 
             foreach (var missing in missingReady)
             {
-                var missingMediaType = ResolveMediaType(missing["mediaType"]);
-                var missingSize = missing["fileSizeBytes"]?.GetValue<long?>();
                 foreach (var candidatePath in newPaths)
                 {
                     if (consumedNewPaths.Contains(candidatePath))
@@ -502,13 +451,13 @@ public sealed class RefreshPipelineService : BackgroundService
                         continue;
                     }
 
-                    if (!newPathMediaType.TryGetValue(candidatePath, out var candidateMediaType) || candidateMediaType != missingMediaType)
+                    if (!newPathMediaType.TryGetValue(candidatePath, out var candidateMediaType) || candidateMediaType != missing.MediaType)
                     {
                         continue;
                     }
 
-                    if (missingSize.HasValue &&
-                        (!newPathSize.TryGetValue(candidatePath, out var candidateSize) || candidateSize != missingSize.Value))
+                    if (missing.FileSizeBytes.HasValue &&
+                        (!newPathSize.TryGetValue(candidatePath, out var candidateSize) || candidateSize != missing.FileSizeBytes.Value))
                     {
                         continue;
                     }
@@ -536,28 +485,27 @@ public sealed class RefreshPipelineService : BackgroundService
                 if (fingerprintCount > 0 && (fingerprintProcessed % 25 == 0 || fingerprintProcessed == fingerprintCount))
                 {
                     var phasePct = 20 + (int)Math.Round((fingerprintProcessed / (double)fingerprintCount) * 50.0);
-                    var sourcePct = ((sourceIndex + phasePct / 100.0) / Math.Max(1, sourceNodes.Count)) * 100.0;
+                    var sourcePct = ((sourceIndex + phasePct / 100.0) / Math.Max(1, sources.Count)) * 100.0;
                     UpdateStage("sourceRefresh",
                         Math.Clamp((int)Math.Round(sourcePct), 10, 100),
-                        $"Source {sourceIndex + 1}/{sourceNodes.Count}: fingerprinting {fingerprintProcessed}/{fingerprintCount}");
+                        $"Source {sourceIndex + 1}/{sources.Count}: fingerprinting {fingerprintProcessed}/{fingerprintCount}");
                 }
             }
 
             var newPathsByFingerprint = candidateNewFingerprints
                 .GroupBy(kvp => kvp.Value, StringComparer.OrdinalIgnoreCase)
-                .ToDictionary(g => g.Key, g => g.Select(kvp => kvp.Key).ToList(), StringComparer.OrdinalIgnoreCase);
+                .ToDictionary(group => group.Key, group => group.Select(kvp => kvp.Key).ToList(), StringComparer.OrdinalIgnoreCase);
 
             foreach (var missing in missingReady)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var missingFingerprint = missing["fingerprint"]?.GetValue<string>();
-                if (string.IsNullOrWhiteSpace(missingFingerprint))
+                if (string.IsNullOrWhiteSpace(missing.Fingerprint))
                 {
                     continue;
                 }
 
                 string? matchPath = null;
-                if (newPathsByFingerprint.TryGetValue(missingFingerprint, out var fingerprintMatches))
+                if (newPathsByFingerprint.TryGetValue(missing.Fingerprint, out var fingerprintMatches))
                 {
                     foreach (var path in fingerprintMatches)
                     {
@@ -566,8 +514,7 @@ public sealed class RefreshPipelineService : BackgroundService
                             continue;
                         }
 
-                        var missingMediaType = missing["mediaType"]?.GetValue<int?>() ?? 0;
-                        if (!newPathMediaType.TryGetValue(path, out var mediaType) || mediaType != missingMediaType)
+                        if (!newPathMediaType.TryGetValue(path, out var mediaType) || mediaType != missing.MediaType)
                         {
                             continue;
                         }
@@ -579,37 +526,31 @@ public sealed class RefreshPipelineService : BackgroundService
 
                 if (string.IsNullOrWhiteSpace(matchPath))
                 {
-                    var missingMediaType = ResolveMediaType(missing["mediaType"]);
-                    var missingSize = missing["fileSizeBytes"]?.GetValue<long?>();
                     var hadCandidates = candidateNewPaths.Any(path =>
                         !consumedNewPaths.Contains(path) &&
-                        newPathMediaType.TryGetValue(path, out var mt) &&
-                        mt == missingMediaType &&
-                        (!missingSize.HasValue || (newPathSize.TryGetValue(path, out var sz) && sz == missingSize.Value)));
+                        newPathMediaType.TryGetValue(path, out var candidateMediaType) &&
+                        candidateMediaType == missing.MediaType &&
+                        (!missing.FileSizeBytes.HasValue || (newPathSize.TryGetValue(path, out var candidateSize) && candidateSize == missing.FileSizeBytes.Value)));
 
                     if (hadCandidates)
                     {
                         unresolvedQueued++;
-                        var missingPath = missing["fullPath"]?.GetValue<string>() ?? string.Empty;
-                        if (!string.IsNullOrWhiteSpace(missingPath))
+                        if (!string.IsNullOrWhiteSpace(missing.FullPath))
                         {
-                            unresolvedMissingPaths.Add(missingPath);
+                            unresolvedMissingPaths.Add(missing.FullPath);
                         }
                     }
+
                     continue;
                 }
 
-                var priorPath = missing["fullPath"]?.GetValue<string>() ?? string.Empty;
+                var priorPath = missing.FullPath;
                 var oldDir = Path.GetDirectoryName(priorPath) ?? string.Empty;
                 var newDir = Path.GetDirectoryName(matchPath) ?? string.Empty;
                 var oldName = Path.GetFileName(priorPath);
                 var newName = Path.GetFileName(matchPath);
-
-                missing["fullPath"] = matchPath;
-                missing["relativePath"] = GetRelativePath(rootPath, matchPath);
-                missing["fileName"] = newName;
-                missing["sourceId"] = sourceId;
-                UpdateFileMetadataCache(missing);
+                PersistMovedItem(missing, sourceId, rootPath, matchPath, defaultsChanged.Contains(missing));
+                defaultsChanged.Remove(missing);
 
                 if (!oldDir.Equals(newDir, StringComparison.OrdinalIgnoreCase))
                 {
@@ -636,110 +577,110 @@ public sealed class RefreshPipelineService : BackgroundService
                     continue;
                 }
 
-                var mediaType = newPathMediaType[path];
-                var newItem = new JsonObject
-                {
-                    ["id"] = Guid.NewGuid().ToString(),
-                    ["sourceId"] = sourceId,
-                    ["fullPath"] = path,
-                    ["relativePath"] = GetRelativePath(rootPath, path),
-                    ["fileName"] = newPathFileName[path],
-                    ["tags"] = new JsonArray(),
-                    ["mediaType"] = mediaType,
-                    ["isFavorite"] = false,
-                    ["isBlacklisted"] = false,
-                    ["playCount"] = 0,
-                    ["fingerprintAlgorithm"] = "SHA-256",
-                    ["fingerprintVersion"] = 1,
-                    ["fingerprintStatus"] = 0
-                };
-                UpdateFileMetadataCache(newItem);
-
-                if (candidateNewFingerprints.TryGetValue(path, out var fingerprint))
-                {
-                    newItem["fingerprint"] = fingerprint;
-                    newItem["fingerprintStatus"] = 1;
-                    if (newPathWrite.TryGetValue(path, out var writeUtc))
-                    {
-                        newItem["lastWriteTimeUtc"] = writeUtc;
-                    }
-                    if (newPathSize.TryGetValue(path, out var sizeBytes))
-                    {
-                        newItem["fileSizeBytes"] = sizeBytes;
-                    }
-                    newItem["fingerprintLastUtc"] = DateTime.UtcNow;
-                }
-
-                items.Add(newItem);
+                InsertDiscoveredItem(
+                    items,
+                    sourceId,
+                    rootPath,
+                    path,
+                    newPathFileName[path],
+                    newPathMediaType[path],
+                    newPathSize,
+                    newPathWrite,
+                    candidateNewFingerprints);
                 added++;
             }
 
-            foreach (var missing in missingItems)
+            foreach (var missing in missingItems.ToList())
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var missingPath = missing!["fullPath"]?.GetValue<string>() ?? string.Empty;
-                if (!string.IsNullOrWhiteSpace(missingPath) && File.Exists(missingPath))
+                if (!string.IsNullOrWhiteSpace(missing.FullPath) && File.Exists(missing.FullPath))
                 {
+                    PersistFingerprintDefaults(missing, defaultsChanged.Remove(missing));
                     continue;
                 }
 
-                if (!string.IsNullOrWhiteSpace(missingPath) && unresolvedMissingPaths.Contains(missingPath))
+                if (!string.IsNullOrWhiteSpace(missing.FullPath) && unresolvedMissingPaths.Contains(missing.FullPath))
                 {
+                    PersistFingerprintDefaults(missing, defaultsChanged.Remove(missing));
                     continue;
                 }
 
+                DeleteRefreshItem(missing);
                 items.Remove(missing);
+                defaultsChanged.Remove(missing);
                 removed++;
             }
 
-            var pct = Math.Clamp((int)Math.Round(((sourceIndex + 1) / (double)Math.Max(1, sourceNodes.Count)) * 100.0), 10, 100);
+            var pct = Math.Clamp((int)Math.Round(((sourceIndex + 1) / (double)Math.Max(1, sources.Count)) * 100.0), 10, 100);
             UpdateStage("sourceRefresh",
                 pct,
-                $"Sources {sourceIndex + 1}/{sourceNodes.Count} (added {added}, removed {removed}, renamed {renamed}, moved {moved}, unresolved {unresolvedQueued})");
+                $"Sources {sourceIndex + 1}/{sources.Count} (added {added}, removed {removed}, renamed {renamed}, moved {moved}, unresolved {unresolvedQueued})");
         }
 
-        root["items"] = items;
-        await SaveLibraryJsonAsync(root, cancellationToken);
         CompleteStage("sourceRefresh",
             $"Source refresh complete ({added} added, {removed} removed, {renamed} renamed, {moved} moved, {updated} updated, {unresolvedQueued} unresolved)");
+        return Task.CompletedTask;
     }
 
     internal async Task RunFingerprintStageAsync(CancellationToken cancellationToken)
     {
         var parallelism = Math.Clamp(_coreSettings.GetRefreshSettings().FingerprintScanMaxDegreeOfParallelism, 1, 16);
         UpdateStage("fingerprintScan", 0, "Fingerprint scan starting...");
-        var root = await LoadLibraryJsonAsync(cancellationToken);
-        var items = root["items"] as JsonArray ?? [];
-        var nodes = items.OfType<JsonObject>().Where(n => n != null).Cast<JsonObject>().ToList();
+        var items = _catalog.Session.ReadRefreshItems();
 
-        var workList = new List<JsonObject>();
+        var workList = new List<CatalogRefreshItem>();
         var skipped = 0;
-        foreach (var node in nodes)
+        foreach (var item in items)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var fullPath = node["fullPath"]?.GetValue<string>() ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(fullPath) || !File.Exists(fullPath))
+            if (string.IsNullOrWhiteSpace(item.FullPath) || !File.Exists(item.FullPath))
             {
                 continue;
             }
 
-            EnsureIdentityAndFingerprintDefaults(node);
-            UpdateFileMetadataCache(node);
+            var defaultsChanged = ApplyFingerprintDefaults(item);
+            long? size = item.FileSizeBytes;
+            DateTime? write = item.LastWriteTimeUtc;
+            var haveStat = false;
+            try
+            {
+                var info = new FileInfo(item.FullPath);
+                size = info.Length;
+                write = info.LastWriteTimeUtc;
+                haveStat = true;
+            }
+            catch
+            {
+                // Preserve prior metadata on read failures.
+            }
 
-            if (!NeedsFingerprintProcessing(node))
+            if (haveStat &&
+                !string.IsNullOrWhiteSpace(item.Fingerprint) &&
+                ((item.FileSizeBytes.HasValue && item.FileSizeBytes.Value != size) ||
+                 (item.LastWriteTimeUtc.HasValue && !SameUtc(item.LastWriteTimeUtc, write))))
+            {
+                item.FingerprintStatus = 3;
+            }
+
+            if (!NeedsFingerprintProcessing(item))
             {
                 skipped++;
+                PersistObservedFingerprint(item, size, write, haveStat, defaultsChanged);
                 continue;
             }
 
-            workList.Add(node);
+            if (haveStat)
+            {
+                item.FileSizeBytes = size;
+                item.LastWriteTimeUtc = write;
+            }
+
+            workList.Add(item);
         }
 
         var total = workList.Count;
         if (total == 0)
         {
-            root["items"] = items;
-            await SaveLibraryJsonAsync(root, cancellationToken);
             CompleteStage("fingerprintScan", $"Fingerprint scan complete (0 hashed, 0 failed, {skipped} skipped)");
             return;
         }
@@ -760,11 +701,11 @@ public sealed class RefreshPipelineService : BackgroundService
                     return;
                 }
 
-                var p = Volatile.Read(ref processed);
-                var r = Volatile.Read(ref ready);
-                var f = Volatile.Read(ref failed);
-                var pct = Math.Clamp((int)Math.Round((p / (double)Math.Max(1, total)) * 100.0), 0, 100);
-                UpdateStage("fingerprintScan", pct, $"Fingerprint scan ({p} hashed, {r} ready, {f} failed)");
+                var hashed = Volatile.Read(ref processed);
+                var readyCount = Volatile.Read(ref ready);
+                var failedCount = Volatile.Read(ref failed);
+                var pct = Math.Clamp((int)Math.Round((hashed / (double)Math.Max(1, total)) * 100.0), 0, 100);
+                UpdateStage("fingerprintScan", pct, $"Fingerprint scan ({hashed} hashed, {readyCount} ready, {failedCount} failed)");
                 nextStatusUtc = now.AddMilliseconds(400);
             }
         }
@@ -780,18 +721,13 @@ public sealed class RefreshPipelineService : BackgroundService
                     MaxDegreeOfParallelism = parallelism,
                     CancellationToken = cancellationToken
                 },
-                node =>
+                item =>
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    var path = node["fullPath"]?.GetValue<string>() ?? string.Empty;
+                    var path = item.FullPath;
                     if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
                     {
-                        lock (node)
-                        {
-                            node.Remove("fingerprint");
-                            node["fingerprintStatus"] = "Failed";
-                        }
-
+                        PersistHashedFingerprint(item, null, 2, item.FileSizeBytes, item.LastWriteTimeUtc, item.FingerprintLastUtc);
                         Interlocked.Increment(ref failed);
                         Interlocked.Increment(ref processed);
                         TryPublishFingerprintProgress(force: false);
@@ -819,26 +755,18 @@ public sealed class RefreshPipelineService : BackgroundService
                         }
                     }
 
-                    lock (node)
+                    if (winner != null &&
+                        string.IsNullOrWhiteSpace(winner.Error) &&
+                        !string.IsNullOrWhiteSpace(winner.Fingerprint) &&
+                        winner.IsStableRead)
                     {
-                        if (winner != null &&
-                            string.IsNullOrWhiteSpace(winner.Error) &&
-                            !string.IsNullOrWhiteSpace(winner.Fingerprint) &&
-                            winner.IsStableRead)
-                        {
-                            node["fingerprint"] = winner.Fingerprint;
-                            node["fingerprintStatus"] = "Ready";
-                            node["fingerprintLastUtc"] = DateTime.UtcNow;
-                            node["fileSizeBytes"] = winner.FileSizeBytes;
-                            node["lastWriteTimeUtc"] = winner.LastWriteTimeUtc;
-                            Interlocked.Increment(ref ready);
-                        }
-                        else
-                        {
-                            node.Remove("fingerprint");
-                            node["fingerprintStatus"] = "Failed";
-                            Interlocked.Increment(ref failed);
-                        }
+                        PersistHashedFingerprint(item, winner.Fingerprint, 1, winner.FileSizeBytes, winner.LastWriteTimeUtc, DateTime.UtcNow);
+                        Interlocked.Increment(ref ready);
+                    }
+                    else
+                    {
+                        PersistHashedFingerprint(item, null, 2, item.FileSizeBytes, item.LastWriteTimeUtc, item.FingerprintLastUtc);
+                        Interlocked.Increment(ref failed);
                     }
 
                     Interlocked.Increment(ref processed);
@@ -846,35 +774,31 @@ public sealed class RefreshPipelineService : BackgroundService
                 });
         }, cancellationToken);
 
-        root["items"] = items;
-        await SaveLibraryJsonAsync(root, cancellationToken);
-        var rFinal = Volatile.Read(ref ready);
-        var fFinal = Volatile.Read(ref failed);
+        var readyFinal = Volatile.Read(ref ready);
+        var failedFinal = Volatile.Read(ref failed);
         var skippedSuffix = skipped > 0 ? $", {skipped} skipped" : string.Empty;
-        CompleteStage("fingerprintScan", $"Fingerprint scan complete ({total} hashed, {rFinal} ready, {fFinal} failed{skippedSuffix})");
+        CompleteStage("fingerprintScan", $"Fingerprint scan complete ({total} hashed, {readyFinal} ready, {failedFinal} failed{skippedSuffix})");
     }
 
-    private static bool NeedsFingerprintProcessing(JsonObject item)
+    private static bool NeedsFingerprintProcessing(CatalogRefreshItem item)
     {
-        var fp = item["fingerprint"]?.GetValue<string>();
-        if (string.IsNullOrWhiteSpace(fp))
+        if (string.IsNullOrWhiteSpace(item.Fingerprint))
         {
             return true;
         }
 
         // Legacy rows may carry a fingerprint without fingerprintStatus; do not rehash unless status is explicit.
-        if (item["fingerprintStatus"] is null)
+        if (item.FingerprintStatus is null)
         {
             return false;
         }
 
-        var st = ResolveFingerprintStatus(item["fingerprintStatus"]);
-        if (st == 1)
+        if (item.FingerprintStatus == 1)
         {
             return false;
         }
 
-        return st is 0 or 2 or 3;
+        return item.FingerprintStatus is 0 or 2 or 3;
     }
 
     private async Task RunDurationStageWithOneShotAsync(CancellationToken cancellationToken)
@@ -897,50 +821,31 @@ public sealed class RefreshPipelineService : BackgroundService
 
     private async Task RunDurationStageAsync(CancellationToken cancellationToken, bool forceFullRescan)
     {
-        var root = await LoadLibraryJsonAsync(cancellationToken);
-        var items = root["items"] as JsonArray ?? [];
-        var videos = items
-            .OfType<JsonObject>()
-                .Where(i => ResolveMediaType(i?["mediaType"]) == 0)
-            .ToList();
-
-        var fileToNode = new Dictionary<string, JsonObject>(StringComparer.OrdinalIgnoreCase);
-        foreach (var node in videos)
-        {
-            var fullPath = node?["fullPath"]?.GetValue<string>() ?? string.Empty;
-            if (!string.IsNullOrWhiteSpace(fullPath) && !fileToNode.ContainsKey(fullPath))
-            {
-                fileToNode[fullPath] = node!;
-            }
-        }
-
-        var allFiles = fileToNode.Keys.ToArray();
+        var videos = DistinctRefreshItemsByPath(_catalog.Session.ReadRefreshItems().Where(item => item.MediaType == 0));
         var filesToScan = forceFullRescan
-            ? allFiles
-            : allFiles.Where(path => !HasValidDuration(fileToNode[path])).ToArray();
-        var alreadyCachedCount = forceFullRescan ? 0 : allFiles.Length - filesToScan.Length;
-        var total = allFiles.Length;
+            ? videos
+            : videos.Where(item => item.DurationTicks is not long ticks || ticks <= 0).ToList();
+        var alreadyCachedCount = forceFullRescan ? 0 : videos.Count - filesToScan.Count;
+        var total = videos.Count;
         var processed = alreadyCachedCount;
         var updated = 0;
         var processedLock = new object();
-        var updates = new Dictionary<string, TimeSpan>(StringComparer.OrdinalIgnoreCase);
-        var updatesLock = new object();
         var forcedSuffix = forceFullRescan ? " (forced full rescan)" : string.Empty;
 
-        if (filesToScan.Length == 0)
+        if (filesToScan.Count == 0)
         {
             CompleteStage("durationScan", $"Duration scan complete ({total} files, all cached){forcedSuffix}");
             return;
         }
 
-        var scanTasks = filesToScan.Select(async file =>
+        var scanTasks = filesToScan.Select(async item =>
         {
             if (cancellationToken.IsCancellationRequested)
             {
                 return;
             }
 
-            if (!File.Exists(file))
+            if (!File.Exists(item.FullPath))
             {
                 int skippedProcessed;
                 lock (processedLock)
@@ -953,12 +858,18 @@ public sealed class RefreshPipelineService : BackgroundService
                 return;
             }
 
-            var duration = await GetVideoDurationAsync(file, cancellationToken);
+            var duration = await GetVideoDurationAsync(item.FullPath, cancellationToken);
             if (duration.HasValue && duration.Value.TotalSeconds > 0)
             {
-                lock (updatesLock)
+                var prior = item.DurationTicks;
+                if (prior is not long existing || Math.Abs((TimeSpan.FromTicks(existing) - duration.Value).TotalSeconds) > 0.1)
                 {
-                    updates[file] = duration.Value;
+                    lock (_catalogWriteLock)
+                    {
+                        _catalog.Session.SetDuration(item.Id, duration.Value.Ticks);
+                    }
+
+                    Interlocked.Increment(ref updated);
                 }
             }
 
@@ -973,23 +884,7 @@ public sealed class RefreshPipelineService : BackgroundService
         });
 
         await Task.WhenAll(scanTasks);
-
-        foreach (var kvp in updates)
-        {
-            if (fileToNode.TryGetValue(kvp.Key, out var node))
-            {
-                var prior = ParseDuration(node["duration"]?.GetValue<string>());
-                if (!prior.HasValue || Math.Abs((prior.Value - kvp.Value).TotalSeconds) > 0.1)
-                {
-                    node["duration"] = kvp.Value.ToString("c", CultureInfo.InvariantCulture);
-                    updated++;
-                }
-            }
-        }
-
-        root["items"] = items;
-        await SaveLibraryJsonAsync(root, cancellationToken);
-        CompleteStage("durationScan", $"Duration scan complete ({total} files, {updated} updated){forcedSuffix}");
+        CompleteStage("durationScan", $"Duration scan complete ({total} files, {Volatile.Read(ref updated)} updated){forcedSuffix}");
     }
 
     private async Task RunLoudnessStageWithOneShotAsync(CancellationToken cancellationToken)
@@ -1019,74 +914,35 @@ public sealed class RefreshPipelineService : BackgroundService
             return;
         }
 
-        var root = await LoadLibraryJsonAsync(cancellationToken);
-        var items = root["items"] as JsonArray ?? [];
-        var videos = items
-            .OfType<JsonObject>()
-                .Where(i => ResolveMediaType(i?["mediaType"]) == 0)
-            .ToList();
-
-        var fileToNode = new Dictionary<string, JsonObject>(StringComparer.OrdinalIgnoreCase);
-        foreach (var node in videos)
-        {
-            var fullPath = node?["fullPath"]?.GetValue<string>() ?? string.Empty;
-            if (!string.IsNullOrWhiteSpace(fullPath) && !fileToNode.ContainsKey(fullPath))
-            {
-                fileToNode[fullPath] = node!;
-            }
-        }
-
-        var allFiles = fileToNode.Keys.ToArray();
+        var videos = DistinctRefreshItemsByPath(_catalog.Session.ReadRefreshItems().Where(item => item.MediaType == 0));
         var filesToScan = forceFullRescan
-            ? allFiles
-            : allFiles.Where(path =>
-            {
-                var node = fileToNode[path];
-                var hasAudio = node["hasAudio"]?.GetValue<bool?>();
-                var integrated = node["integratedLoudness"]?.GetValue<double?>();
-
-                // Scan when unknown audio state, when audio is known and loudness is missing,
-                // or when stale loudness is present on a known no-audio item.
-                if (!hasAudio.HasValue)
-                {
-                    return true;
-                }
-
-                if (hasAudio.Value)
-                {
-                    return !integrated.HasValue;
-                }
-
-                return integrated.HasValue;
-            }).ToArray();
-
-        var alreadyScannedCount = forceFullRescan ? 0 : allFiles.Length - filesToScan.Length;
-        var total = allFiles.Length;
+            ? videos
+            : videos.Where(NeedsLoudness).ToList();
+        var alreadyScannedCount = forceFullRescan ? 0 : videos.Count - filesToScan.Count;
+        var total = videos.Count;
         var processed = alreadyScannedCount;
         var noAudioCount = 0;
         var errorCount = 0;
+        var updated = 0;
         var processedLock = new object();
-        var updates = new Dictionary<string, FileLoudnessInfo>(StringComparer.OrdinalIgnoreCase);
-        var updatesLock = new object();
         var forcedSuffix = forceFullRescan ? " (forced full rescan)" : string.Empty;
 
-        if (filesToScan.Length == 0)
+        if (filesToScan.Count == 0)
         {
             CompleteStage("loudnessScan", $"Loudness scan complete ({total} files, all scanned){forcedSuffix}");
             return;
         }
 
-        // Publish baseline progress immediately so the UI reflects cached work before ffmpeg tasks complete.
         TryUpdateLoudnessProgress(processed, total, noAudioCount, errorCount, forceFullRescan);
 
-        var scanTasks = filesToScan.Select(async file =>
+        var scanTasks = filesToScan.Select(async item =>
         {
             if (cancellationToken.IsCancellationRequested)
             {
                 return;
             }
 
-            if (!File.Exists(file))
+            if (!File.Exists(item.FullPath))
             {
                 int skippedProcessed;
                 lock (processedLock)
@@ -1094,32 +950,29 @@ public sealed class RefreshPipelineService : BackgroundService
                     processed++;
                     skippedProcessed = processed;
                 }
-                TryUpdateLoudnessProgress(skippedProcessed, total, noAudioCount, errorCount, forceFullRescan);
+
+                TryUpdateLoudnessProgress(skippedProcessed, total, Volatile.Read(ref noAudioCount), Volatile.Read(ref errorCount), forceFullRescan);
                 return;
             }
 
-            var durationForLoudness = ParseDuration(fileToNode[file]["duration"]?.GetValue<string>());
-            var loudness = await AnalyzeLoudnessAsync(file, ffmpegPath, durationForLoudness, cancellationToken);
+            var durationForLoudness = item.DurationTicks is long ticks && ticks > 0
+                ? TimeSpan.FromSeconds(ticks / TimeSpan.TicksPerSecond)
+                : (TimeSpan?)null;
+            var loudness = await AnalyzeLoudnessAsync(item.FullPath, ffmpegPath, durationForLoudness, cancellationToken);
             if (loudness != null)
             {
-                lock (updatesLock)
+                if (TryPersistLoudness(item, loudness))
                 {
-                    updates[file] = loudness;
+                    Interlocked.Increment(ref updated);
                 }
 
                 if (loudness.IsError)
                 {
-                    lock (processedLock)
-                    {
-                        errorCount++;
-                    }
+                    Interlocked.Increment(ref errorCount);
                 }
                 else if (!loudness.HasAudio)
                 {
-                    lock (processedLock)
-                    {
-                        noAudioCount++;
-                    }
+                    Interlocked.Increment(ref noAudioCount);
                 }
             }
 
@@ -1138,107 +991,15 @@ public sealed class RefreshPipelineService : BackgroundService
         });
 
         await Task.WhenAll(scanTasks);
-
-        int updated = 0;
-        foreach (var kvp in updates)
-        {
-            if (!fileToNode.TryGetValue(kvp.Key, out var node))
-            {
-                continue;
-            }
-
-            var info = kvp.Value;
-            var nodeUpdated = false;
-
-            var currentHasAudio = node["hasAudio"]?.GetValue<bool?>();
-            if (currentHasAudio != info.HasAudio)
-            {
-                node["hasAudio"] = info.HasAudio;
-                nodeUpdated = true;
-            }
-
-            var currentIntegrated = node["integratedLoudness"]?.GetValue<double?>();
-            if (info.IsError)
-            {
-                if (currentIntegrated.HasValue)
-                {
-                    node["integratedLoudness"] = null;
-                    nodeUpdated = true;
-                }
-            }
-            else if (info.HasAudio && Math.Abs(info.MeanVolumeDb) > 0.0001)
-            {
-                if (!currentIntegrated.HasValue || Math.Abs(currentIntegrated.Value - info.MeanVolumeDb) > 0.1)
-                {
-                    node["integratedLoudness"] = info.MeanVolumeDb;
-                    nodeUpdated = true;
-                }
-            }
-            else if (!info.HasAudio && currentIntegrated.HasValue)
-            {
-                node["integratedLoudness"] = null;
-                nodeUpdated = true;
-            }
-
-            var currentPeak = node["peakDb"]?.GetValue<double?>();
-            if (info.IsError)
-            {
-                if (currentPeak.HasValue)
-                {
-                    node["peakDb"] = null;
-                    nodeUpdated = true;
-                }
-            }
-            else if (info.HasAudio && Math.Abs(info.PeakDb) > 0.0001)
-            {
-                if (!currentPeak.HasValue || Math.Abs(currentPeak.Value - info.PeakDb) > 0.1)
-                {
-                    node["peakDb"] = info.PeakDb;
-                    nodeUpdated = true;
-                }
-            }
-            else if (!info.HasAudio && currentPeak.HasValue)
-            {
-                node["peakDb"] = null;
-                nodeUpdated = true;
-            }
-
-            var currentLoudnessError = node["loudnessError"]?.GetValue<string>();
-            if (info.IsError)
-            {
-                var message = string.IsNullOrWhiteSpace(info.ErrorMessage)
-                    ? "Loudness analysis failed."
-                    : info.ErrorMessage;
-                if (!string.Equals(currentLoudnessError, message, StringComparison.Ordinal))
-                {
-                    node["loudnessError"] = message;
-                    nodeUpdated = true;
-                }
-            }
-            else if (!string.IsNullOrWhiteSpace(currentLoudnessError))
-            {
-                node["loudnessError"] = null;
-                nodeUpdated = true;
-            }
-
-            if (nodeUpdated)
-            {
-                updated++;
-            }
-        }
-
-        root["items"] = items;
-        await SaveLibraryJsonAsync(root, cancellationToken);
-        var noAudioText = noAudioCount > 0 ? $", {noAudioCount} without audio" : string.Empty;
-        var errorText = errorCount > 0 ? $", {errorCount} errors" : string.Empty;
-        CompleteStage("loudnessScan", $"Loudness scan complete ({total} files, {updated} updated{noAudioText}{errorText}){forcedSuffix}");
+        var noAudioText = Volatile.Read(ref noAudioCount) > 0 ? $", {Volatile.Read(ref noAudioCount)} without audio" : string.Empty;
+        var errorText = Volatile.Read(ref errorCount) > 0 ? $", {Volatile.Read(ref errorCount)} errors" : string.Empty;
+        CompleteStage("loudnessScan", $"Loudness scan complete ({total} files, {Volatile.Read(ref updated)} updated{noAudioText}{errorText}){forcedSuffix}");
     }
 
-    private async Task RunThumbnailStageAsync(CancellationToken cancellationToken)
+    internal async Task RunThumbnailStageAsync(CancellationToken cancellationToken)
     {
         Directory.CreateDirectory(_thumbnailDir);
-        var root = await LoadLibraryJsonAsync(cancellationToken);
-        var items = root["items"] as JsonArray ?? [];
+        var items = _catalog.Session.ReadRefreshItems();
         var index = LoadThumbnailIndex();
 
         var validItemIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -1258,57 +1019,41 @@ public sealed class RefreshPipelineService : BackgroundService
         for (int i = 0; i < items.Count; i++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (items[i] is not JsonObject item)
-            {
-                continue;
-            }
-
-            var itemId = item["id"]?.GetValue<string>();
+            var item = items[i];
+            var itemId = item.Id?.Trim();
             if (string.IsNullOrWhiteSpace(itemId))
             {
                 continue;
             }
 
             validItemIds.Add(itemId);
-            var fullPath = item["fullPath"]?.GetValue<string>() ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(fullPath) || !File.Exists(fullPath))
-            {
-                skippedMissing++;
-                TryUpdateThumbnailProgress(
-                    i + 1,
-                    total,
-                    generated,
-                    regenerated,
-                    reused,
-                    failed,
-                    skippedMissing,
-                    ref nextStatusUtc,
-                    force: i == items.Count - 1);
-                continue;
-            }
-
-            var sourceRevision = GetThumbnailSourceRevision(item, fullPath);
+            var fullPath = item.FullPath ?? string.Empty;
+            var storedRevision = StoredThumbnailRevision(item);
             var existingEntry = index.TryGetPropertyValue(itemId, out var existingNode)
                 ? ReadThumbnailIndexEntry(existingNode)
                 : new ThumbnailIndexEntry();
             var thumbPath = GetThumbnailPath(itemId);
             var hadThumbnailFile = File.Exists(thumbPath);
-            var needsRegeneration = !hadThumbnailFile || !string.Equals(existingEntry.Revision, sourceRevision, StringComparison.Ordinal);
-            if (!needsRegeneration)
+            var revisionMatches = storedRevision != null &&
+                                  string.Equals(existingEntry.Revision, storedRevision, StringComparison.Ordinal);
+            if (revisionMatches && hadThumbnailFile)
             {
                 reused++;
-                if (hadThumbnailFile && !existingEntry.HasDimensions &&
+                if (!existingEntry.HasDimensions &&
                     TryReadImageDimensions(thumbPath, out var width, out var height))
                 {
-                    WriteThumbnailIndexEntry(index, itemId, sourceRevision, width, height);
+                    WriteThumbnailIndexEntry(index, itemId, storedRevision!, width, height);
                     metadataUpdated++;
                 }
             }
+            else if (string.IsNullOrWhiteSpace(fullPath) || !File.Exists(fullPath))
+            {
+                skippedMissing++;
+            }
             else
             {
-                    var mediaType = ResolveMediaType(item["mediaType"]);
                 ThumbnailGenerationResult? generatedThumb;
-                if (mediaType == 0)
+                if (item.MediaType == 0)
                 {
                     if (!ffmpegChecked)
                     {
@@ -1327,7 +1072,7 @@ public sealed class RefreshPipelineService : BackgroundService
 
                 if (generatedThumb is not null)
                 {
-                    WriteThumbnailIndexEntry(index, itemId, sourceRevision, generatedThumb.Width, generatedThumb.Height);
+                    WriteThumbnailIndexEntry(index, itemId, storedRevision ?? string.Empty, generatedThumb.Width, generatedThumb.Height);
                     if (!hadThumbnailFile)
                     {
                         generated++;
@@ -1376,31 +1121,388 @@ public sealed class RefreshPipelineService : BackgroundService
             }
         }
 
-        var evicted = EnforceThumbnailCacheLimits(index);
         await File.WriteAllTextAsync(_thumbnailIndexPath, index.ToJsonString(JsonOptions), cancellationToken);
         CompleteStage("thumbnailGeneration",
-            $"Thumbnail generation complete ({generated} generated, {regenerated} regenerated, {reused} reused, {failed} failed, {metadataUpdated} metadata updated, {skippedMissing} missing source, {staleRemoved} stale removed, {evicted} evicted)");
+            $"Thumbnail generation complete ({generated} generated, {regenerated} regenerated, {reused} reused, {failed} failed, {metadataUpdated} metadata updated, {skippedMissing} missing source, {staleRemoved} stale removed)");
     }
 
-    private Task<JsonObject> LoadLibraryJsonAsync(CancellationToken cancellationToken)
+    private static List<CatalogRefreshItem> DistinctRefreshItemsByPath(IEnumerable<CatalogRefreshItem> items)
     {
-        cancellationToken.ThrowIfCancellationRequested();
-        var baseline = _catalog.LoadDocument();
-        _libraryBaseline = baseline;
-        return Task.FromResult(baseline.DeepClone() as JsonObject ?? new JsonObject());
-    }
-
-    private Task SaveLibraryJsonAsync(JsonObject root, CancellationToken cancellationToken)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        if (_libraryBaseline == null)
+        var list = new List<CatalogRefreshItem>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var item in items)
         {
-            throw new InvalidOperationException("Catalog edit has no baseline.");
+            if (!string.IsNullOrWhiteSpace(item.FullPath) && seen.Add(item.FullPath))
+            {
+                list.Add(item);
+            }
         }
 
-        _catalog.SaveChanges(_libraryBaseline, root);
-        _libraryBaseline = null;
-        return Task.CompletedTask;
+        return list;
+    }
+
+    private static bool ApplyFingerprintDefaults(CatalogRefreshItem item)
+    {
+        var changed = false;
+        if (string.IsNullOrWhiteSpace(item.FingerprintAlgorithm))
+        {
+            item.FingerprintAlgorithm = "SHA-256";
+            changed = true;
+        }
+
+        if (item.FingerprintVersion <= 0)
+        {
+            item.FingerprintVersion = 1;
+            changed = true;
+        }
+
+        if (string.IsNullOrWhiteSpace(item.Fingerprint) && item.FingerprintStatus != 0)
+        {
+            item.FingerprintStatus = 0;
+            changed = true;
+        }
+
+        return changed;
+    }
+
+    private void PersistMovedItem(CatalogRefreshItem item, string sourceId, string rootPath, string matchPath, bool defaultsChanged)
+    {
+        var relative = GetRelativePath(rootPath, matchPath);
+        var fileName = Path.GetFileName(matchPath);
+        long? size = item.FileSizeBytes;
+        DateTime? write = item.LastWriteTimeUtc;
+        var haveStat = false;
+        try
+        {
+            var info = new FileInfo(matchPath);
+            size = info.Length;
+            write = info.LastWriteTimeUtc;
+            haveStat = true;
+        }
+        catch
+        {
+            // best effort metadata read
+        }
+
+        var status = item.FingerprintStatus;
+        var markStale = haveStat &&
+                        !string.IsNullOrWhiteSpace(item.Fingerprint) &&
+                        ((item.FileSizeBytes.HasValue && item.FileSizeBytes.Value != size) ||
+                         (item.LastWriteTimeUtc.HasValue && !SameUtc(item.LastWriteTimeUtc, write)));
+        if (markStale)
+        {
+            status = 3;
+        }
+
+        lock (_catalogWriteLock)
+        {
+            _catalog.Session.UpdateItemIdentity(item.Id, sourceId, matchPath, relative, fileName, item.MediaType);
+            if (haveStat && item.FileSizeBytes != size)
+            {
+                _catalog.Session.SetFileSize(item.Id, size);
+            }
+
+            if (haveStat && !SameUtc(item.LastWriteTimeUtc, write))
+            {
+                _catalog.Session.SetLastWriteTime(item.Id, write);
+            }
+
+            if (markStale || defaultsChanged)
+            {
+                _catalog.Session.SetFingerprint(
+                    item.Id,
+                    item.Fingerprint,
+                    item.FingerprintAlgorithm,
+                    item.FingerprintVersion,
+                    status,
+                    item.FingerprintLastUtc);
+            }
+        }
+
+        item.SourceId = sourceId;
+        item.FullPath = matchPath;
+        item.RelativePath = relative;
+        item.FileName = fileName;
+        if (haveStat)
+        {
+            item.FileSizeBytes = size;
+            item.LastWriteTimeUtc = write;
+        }
+
+        item.FingerprintStatus = status;
+    }
+
+    private void InsertDiscoveredItem(
+        List<CatalogRefreshItem> items,
+        string sourceId,
+        string rootPath,
+        string path,
+        string fileName,
+        int mediaType,
+        Dictionary<string, long> sizes,
+        Dictionary<string, DateTime> writes,
+        Dictionary<string, string> fingerprints)
+    {
+        var id = Guid.NewGuid().ToString();
+        var relative = GetRelativePath(rootPath, path);
+        long? size = sizes.TryGetValue(path, out var knownSize) ? knownSize : null;
+        DateTime? write = writes.TryGetValue(path, out var knownWrite) ? knownWrite : null;
+        string? fingerprint = null;
+        var status = 0;
+        DateTime? fingerprintLast = null;
+        if (fingerprints.TryGetValue(path, out var hashed))
+        {
+            fingerprint = hashed;
+            status = 1;
+            fingerprintLast = DateTime.UtcNow;
+        }
+
+        lock (_catalogWriteLock)
+        {
+            _catalog.Session.InsertItem(new LibraryCatalogItem
+            {
+                Id = id,
+                SourceId = sourceId,
+                FullPath = path,
+                RelativePath = relative,
+                FileName = fileName,
+                MediaType = mediaType,
+                Fingerprint = fingerprint,
+                FingerprintAlgorithm = "SHA-256",
+                FingerprintVersion = 1,
+                FingerprintStatus = status,
+                FileSizeBytes = size,
+                LastWriteTimeUtc = write,
+                FingerprintLastUtc = fingerprintLast
+            });
+        }
+
+        items.Add(new CatalogRefreshItem
+        {
+            Id = id,
+            SourceId = sourceId,
+            FullPath = path,
+            RelativePath = relative,
+            FileName = fileName,
+            MediaType = mediaType,
+            Fingerprint = fingerprint,
+            FingerprintAlgorithm = "SHA-256",
+            FingerprintVersion = 1,
+            FingerprintStatus = status,
+            FileSizeBytes = size,
+            LastWriteTimeUtc = write,
+            FingerprintLastUtc = fingerprintLast
+        });
+    }
+
+    private void DeleteRefreshItem(CatalogRefreshItem item)
+    {
+        lock (_catalogWriteLock)
+        {
+            _catalog.Session.DeleteItem(item.Id);
+        }
+    }
+
+    private void PersistFingerprintDefaults(CatalogRefreshItem item, bool defaultsChanged)
+    {
+        if (!defaultsChanged)
+        {
+            return;
+        }
+
+        lock (_catalogWriteLock)
+        {
+            _catalog.Session.SetFingerprint(
+                item.Id,
+                item.Fingerprint,
+                item.FingerprintAlgorithm,
+                item.FingerprintVersion,
+                item.FingerprintStatus,
+                item.FingerprintLastUtc);
+        }
+    }
+
+    private void PersistObservedFingerprint(CatalogRefreshItem item, long? size, DateTime? write, bool haveStat, bool defaultsChanged)
+    {
+        var sizeChanged = haveStat && item.FileSizeBytes != size;
+        var writeChanged = haveStat && !SameUtc(item.LastWriteTimeUtc, write);
+        if (!defaultsChanged && !sizeChanged && !writeChanged)
+        {
+            return;
+        }
+
+        lock (_catalogWriteLock)
+        {
+            if (defaultsChanged)
+            {
+                _catalog.Session.SetFingerprint(
+                    item.Id,
+                    item.Fingerprint,
+                    item.FingerprintAlgorithm,
+                    item.FingerprintVersion,
+                    item.FingerprintStatus,
+                    item.FingerprintLastUtc);
+            }
+
+            if (sizeChanged)
+            {
+                _catalog.Session.SetFileSize(item.Id, size);
+            }
+
+            if (writeChanged)
+            {
+                _catalog.Session.SetLastWriteTime(item.Id, write);
+            }
+        }
+    }
+
+    private void PersistHashedFingerprint(
+        CatalogRefreshItem item,
+        string? fingerprint,
+        int status,
+        long? size,
+        DateTime? write,
+        DateTime? fingerprintLast)
+    {
+        WaitForNextFingerprintWriteHold();
+        var algorithm = string.IsNullOrWhiteSpace(item.FingerprintAlgorithm) ? "SHA-256" : item.FingerprintAlgorithm;
+        var version = item.FingerprintVersion <= 0 ? 1 : item.FingerprintVersion;
+        lock (_catalogWriteLock)
+        {
+            _catalog.Session.SetFingerprint(item.Id, fingerprint, algorithm, version, status, fingerprintLast);
+            _catalog.Session.SetFileSize(item.Id, size);
+            _catalog.Session.SetLastWriteTime(item.Id, write);
+        }
+    }
+
+    private void WaitForNextFingerprintWriteHold()
+    {
+        var hold = Interlocked.Exchange(ref _fingerprintWriteHold, null);
+        if (hold == null)
+        {
+            return;
+        }
+
+        _fingerprintWriteEntered.TrySetResult();
+        hold.GetAwaiter().GetResult();
+    }
+
+    private static bool NeedsLoudness(CatalogRefreshItem item)
+    {
+        if (!item.HasAudio.HasValue)
+        {
+            return true;
+        }
+
+        if (item.HasAudio.Value)
+        {
+            return !item.IntegratedLoudness.HasValue;
+        }
+
+        return item.IntegratedLoudness.HasValue;
+    }
+
+    private bool TryPersistLoudness(CatalogRefreshItem item, FileLoudnessInfo info)
+    {
+        var hasAudio = info.HasAudio;
+        var integrated = item.IntegratedLoudness;
+        var peak = item.PeakDb;
+        var error = item.LoudnessError;
+        var changed = item.HasAudio != hasAudio;
+
+        if (info.IsError)
+        {
+            if (integrated.HasValue)
+            {
+                integrated = null;
+                changed = true;
+            }
+        }
+        else if (info.HasAudio && Math.Abs(info.MeanVolumeDb) > 0.0001)
+        {
+            if (!integrated.HasValue || Math.Abs(integrated.Value - info.MeanVolumeDb) > 0.1)
+            {
+                integrated = info.MeanVolumeDb;
+                changed = true;
+            }
+        }
+        else if (!info.HasAudio && integrated.HasValue)
+        {
+            integrated = null;
+            changed = true;
+        }
+
+        if (info.IsError)
+        {
+            if (peak.HasValue)
+            {
+                peak = null;
+                changed = true;
+            }
+        }
+        else if (info.HasAudio && Math.Abs(info.PeakDb) > 0.0001)
+        {
+            if (!peak.HasValue || Math.Abs(peak.Value - info.PeakDb) > 0.1)
+            {
+                peak = info.PeakDb;
+                changed = true;
+            }
+        }
+        else if (!info.HasAudio && peak.HasValue)
+        {
+            peak = null;
+            changed = true;
+        }
+
+        if (info.IsError)
+        {
+            var message = string.IsNullOrWhiteSpace(info.ErrorMessage) ? "Loudness analysis failed." : info.ErrorMessage;
+            if (!string.Equals(error, message, StringComparison.Ordinal))
+            {
+                error = message;
+                changed = true;
+            }
+        }
+        else if (!string.IsNullOrWhiteSpace(error))
+        {
+            error = null;
+            changed = true;
+        }
+
+        if (!changed)
+        {
+            return false;
+        }
+
+        lock (_catalogWriteLock)
+        {
+            _catalog.Session.SetLoudness(item.Id, hasAudio, integrated, peak, error);
+        }
+
+        return true;
+    }
+
+    private static string? StoredThumbnailRevision(CatalogRefreshItem item)
+    {
+        if (item.FileSizeBytes is not long size || item.LastWriteTimeUtc is not DateTime write)
+        {
+            return null;
+        }
+
+        var utc = write.Kind == DateTimeKind.Utc ? write : write.ToUniversalTime();
+        return $"{item.Fingerprint ?? string.Empty}|{size}|{utc.ToString("O", CultureInfo.InvariantCulture)}";
+    }
+
+    private static bool SameUtc(DateTime? left, DateTime? right)
+    {
+        if (left is null || right is null)
+        {
+            return left is null && right is null;
+        }
+
+        var leftUtc = left.Value.Kind == DateTimeKind.Utc ? left.Value : left.Value.ToUniversalTime();
+        var rightUtc = right.Value.Kind == DateTimeKind.Utc ? right.Value : right.Value.ToUniversalTime();
+        return leftUtc.Ticks == rightUtc.Ticks;
     }
 
     private IEnumerable<string> EnumerateMediaFiles(string rootPath)
@@ -1419,60 +1521,6 @@ public sealed class RefreshPipelineService : BackgroundService
     private static string GetRelativePath(string rootPath, string fullPath) =>
         ReelRoulette.Core.Storage.LibraryRelativePath.GetRelativePath(rootPath, fullPath);
 
-    private static void EnsureIdentityAndFingerprintDefaults(JsonObject item)
-    {
-        if (string.IsNullOrWhiteSpace(item["id"]?.GetValue<string>()))
-        {
-            item["id"] = Guid.NewGuid().ToString();
-        }
-
-        if (string.IsNullOrWhiteSpace(item["fingerprintAlgorithm"]?.GetValue<string>()))
-        {
-            item["fingerprintAlgorithm"] = "SHA-256";
-        }
-
-        var version = item["fingerprintVersion"]?.GetValue<int?>() ?? 0;
-        if (version <= 0)
-        {
-            item["fingerprintVersion"] = 1;
-        }
-
-        var fp = item["fingerprint"]?.GetValue<string>();
-        if (string.IsNullOrWhiteSpace(fp))
-        {
-            item["fingerprintStatus"] = 0;
-        }
-    }
-
-    private static void UpdateFileMetadataCache(JsonObject item)
-    {
-        var fullPath = item["fullPath"]?.GetValue<string>();
-        if (string.IsNullOrWhiteSpace(fullPath) || !File.Exists(fullPath))
-        {
-            return;
-        }
-
-        try
-        {
-            var info = new FileInfo(fullPath);
-            var oldSize = item["fileSizeBytes"]?.GetValue<long?>();
-            var oldWrite = ReadUtc(item["lastWriteTimeUtc"]);
-            item["fileSizeBytes"] = info.Length;
-            item["lastWriteTimeUtc"] = info.LastWriteTimeUtc;
-
-            var hasFingerprint = !string.IsNullOrWhiteSpace(item["fingerprint"]?.GetValue<string>());
-            if (hasFingerprint &&
-                ((oldSize.HasValue && oldSize.Value != info.Length) ||
-                 (oldWrite.HasValue && oldWrite.Value != info.LastWriteTimeUtc)))
-            {
-                item["fingerprintStatus"] = 3;
-            }
-        }
-        catch
-        {
-            // Preserve prior metadata on read failures.
-        }
-    }
 
     private JsonObject LoadThumbnailIndex()
     {
@@ -1587,45 +1635,6 @@ public sealed class RefreshPipelineService : BackgroundService
         nextStatusUtc = now.AddMilliseconds(500);
     }
 
-    private static DateTime? ReadUtc(JsonNode? node)
-    {
-        if (node is null)
-        {
-            return null;
-        }
-
-        try
-        {
-            var value = node.GetValue<DateTime>();
-            return value.Kind == DateTimeKind.Utc ? value : value.ToUniversalTime();
-        }
-        catch
-        {
-            try
-            {
-                var text = node.GetValue<string>();
-                if (DateTime.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var parsed))
-                {
-                    return parsed.Kind == DateTimeKind.Utc ? parsed : parsed.ToUniversalTime();
-                }
-            }
-            catch
-            {
-                return null;
-            }
-
-            return null;
-        }
-    }
-
-    private static string GetThumbnailSourceRevision(JsonObject item, string fullPath)
-    {
-        var info = new FileInfo(fullPath);
-        var fingerprint = item["fingerprint"]?.GetValue<string>() ?? string.Empty;
-        var writeUtc = ReadUtc(item["lastWriteTimeUtc"]) ?? info.LastWriteTimeUtc;
-        var size = item["fileSizeBytes"]?.GetValue<long?>() ?? info.Length;
-        return $"{fingerprint}|{size}|{writeUtc:O}";
-    }
 
     private async Task<ThumbnailGenerationResult?> TryGenerateVideoThumbnailAsync(string sourcePath, string thumbPath, string ffmpegPath, CancellationToken cancellationToken)
     {
@@ -1851,52 +1860,6 @@ public sealed class RefreshPipelineService : BackgroundService
         }, cancellationToken);
     }
 
-    private int EnforceThumbnailCacheLimits(JsonObject index)
-    {
-        var entries = new List<(string ItemId, string Path, long SizeBytes, DateTime LastWriteUtc)>();
-        foreach (var pair in index.ToList())
-        {
-            var thumbPath = GetThumbnailPath(pair.Key);
-            if (!File.Exists(thumbPath))
-            {
-                index.Remove(pair.Key);
-                continue;
-            }
-
-            var info = new FileInfo(thumbPath);
-            entries.Add((pair.Key, thumbPath, info.Length, info.LastWriteTimeUtc));
-        }
-
-        long totalBytes = entries.Sum(e => e.SizeBytes);
-        if (entries.Count <= ThumbnailCacheMaxFiles && totalBytes <= ThumbnailCacheMaxBytes)
-        {
-            return 0;
-        }
-
-        var evicted = 0;
-        foreach (var entry in entries.OrderBy(e => e.LastWriteUtc))
-        {
-            if (entries.Count - evicted <= ThumbnailCacheMaxFiles && totalBytes <= ThumbnailCacheMaxBytes)
-            {
-                break;
-            }
-
-            try
-            {
-                File.Delete(entry.Path);
-            }
-            catch
-            {
-                continue;
-            }
-
-            totalBytes -= entry.SizeBytes;
-            index.Remove(entry.ItemId);
-            evicted++;
-        }
-
-        return evicted;
-    }
 
     private RefreshStageProgress NewStage(string stage)
     {
@@ -1975,24 +1938,6 @@ public sealed class RefreshPipelineService : BackgroundService
         };
     }
 
-    private static bool HasValidDuration(JsonObject node)
-    {
-        var durationText = node["duration"]?.GetValue<string>();
-        var duration = ParseDuration(durationText);
-        return duration.HasValue && duration.Value.TotalSeconds > 0;
-    }
-
-    private static TimeSpan? ParseDuration(string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return null;
-        }
-
-        return TimeSpan.TryParse(value, CultureInfo.InvariantCulture, out var duration)
-            ? duration
-            : null;
-    }
 
     private void TryUpdateDurationProgress(int processed, int total, bool forceFullRescan)
     {

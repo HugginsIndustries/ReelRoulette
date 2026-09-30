@@ -452,6 +452,70 @@ public sealed class LibraryCatalogSession
         return rows.Select(row => row.Item).ToList();
     }
 
+    public IReadOnlyList<CatalogRefreshSource> ReadRefreshSources()
+    {
+        using var connection = LibraryCatalogStore.OpenWrite(_databasePath);
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT id, root_path, is_enabled FROM sources ORDER BY position;";
+        using var reader = command.ExecuteReader();
+        var sources = new List<CatalogRefreshSource>();
+        while (reader.Read())
+        {
+            sources.Add(new CatalogRefreshSource
+            {
+                Id = reader.GetString(0),
+                RootPath = reader.GetString(1),
+                IsEnabled = reader.GetInt32(2) != 0
+            });
+        }
+
+        return sources;
+    }
+
+    public IReadOnlyList<CatalogRefreshItem> ReadRefreshItems()
+    {
+        using var connection = LibraryCatalogStore.OpenWrite(_databasePath);
+        using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT id, source_id, full_path, relative_path, file_name, media_type,
+                   duration_ticks, has_audio, integrated_loudness, peak_db,
+                   fingerprint, fingerprint_algorithm, fingerprint_version,
+                   file_size_bytes, last_write_time_utc, fingerprint_last_utc,
+                   fingerprint_status, loudness_error
+            FROM items
+            ORDER BY position;
+            """;
+        using var reader = command.ExecuteReader();
+        var items = new List<CatalogRefreshItem>();
+        while (reader.Read())
+        {
+            var fingerprint = reader.IsDBNull(10) ? null : reader.GetString(10).Trim();
+            items.Add(new CatalogRefreshItem
+            {
+                Id = reader.GetString(0),
+                SourceId = reader.GetString(1),
+                FullPath = reader.GetString(2),
+                RelativePath = reader.GetString(3),
+                FileName = reader.GetString(4),
+                MediaType = reader.GetInt32(5),
+                DurationTicks = reader.IsDBNull(6) ? null : reader.GetInt64(6),
+                HasAudio = reader.IsDBNull(7) ? null : reader.GetInt32(7) != 0,
+                IntegratedLoudness = reader.IsDBNull(8) ? null : reader.GetDouble(8),
+                PeakDb = reader.IsDBNull(9) ? null : reader.GetDouble(9),
+                Fingerprint = string.IsNullOrEmpty(fingerprint) ? null : fingerprint,
+                FingerprintAlgorithm = reader.IsDBNull(11) ? string.Empty : reader.GetString(11),
+                FingerprintVersion = reader.IsDBNull(12) ? 0 : reader.GetInt32(12),
+                FileSizeBytes = reader.IsDBNull(13) ? null : reader.GetInt64(13),
+                LastWriteTimeUtc = LibraryCatalogStore.ReadUtc(reader, 14),
+                FingerprintLastUtc = LibraryCatalogStore.ReadUtc(reader, 15),
+                FingerprintStatus = reader.IsDBNull(16) ? null : reader.GetInt32(16),
+                LoudnessError = reader.IsDBNull(17) ? null : reader.GetString(17)
+            });
+        }
+
+        return items;
+    }
+
     public static JsonObject ToItemJson(LibraryCatalogItem item) => ToItem(item);
 
     public void RunInTransaction(Action work)
@@ -2869,6 +2933,35 @@ public sealed class CatalogStoredItem
 {
     public string Id { get; init; } = string.Empty;
     public string FullPath { get; init; } = string.Empty;
+}
+
+public sealed class CatalogRefreshSource
+{
+    public string Id { get; init; } = string.Empty;
+    public string RootPath { get; init; } = string.Empty;
+    public bool IsEnabled { get; init; }
+}
+
+public sealed class CatalogRefreshItem
+{
+    public string Id { get; set; } = string.Empty;
+    public string SourceId { get; set; } = string.Empty;
+    public string FullPath { get; set; } = string.Empty;
+    public string RelativePath { get; set; } = string.Empty;
+    public string FileName { get; set; } = string.Empty;
+    public int MediaType { get; set; }
+    public long? DurationTicks { get; set; }
+    public bool? HasAudio { get; set; }
+    public double? IntegratedLoudness { get; set; }
+    public double? PeakDb { get; set; }
+    public string? Fingerprint { get; set; }
+    public string FingerprintAlgorithm { get; set; } = string.Empty;
+    public int FingerprintVersion { get; set; } = 1;
+    public long? FileSizeBytes { get; set; }
+    public DateTime? LastWriteTimeUtc { get; set; }
+    public DateTime? FingerprintLastUtc { get; set; }
+    public int? FingerprintStatus { get; set; }
+    public string? LoudnessError { get; set; }
 }
 
 public sealed class CatalogAutoTagAssignment

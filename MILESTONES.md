@@ -89,38 +89,7 @@ Do not use this file for detailed architecture explanation or current capability
 
 ## Active Milestones
 
-Last milestone completed: M10i14
-
-### M10i15 - Refresh Column Updates
-
-- **Status**: ⏳ Planned
-- **Goal**: Make each refresh stage write only its own columns as work completes, so a long stage no longer diffs a full catalog snapshot, and so unchanged thumbnails are not revisited file by file.
-- **Scope**:
-  - Depends on: library catalog export and import cutover.
-  - Source refresh, fingerprint, duration, and loudness write the columns that stage owns as work completes. They do not load a snapshot at the start and diff it back at the end.
-  - A tag, favorite, blacklist, or playback change that commits during a stage is still present when the stage finishes. The stage does not write those columns.
-  - Source refresh still adds, removes, renames, and updates item identity. Missing files are still removed here, not by folder import.
-  - The thumbnail stage reads the rows it needs without building the full catalog document. It treats a stored thumbnail revision that still matches the item's fingerprint, size, and write time as current, the same way duration and loudness trust a stored result. It does not stat those source files again. Fingerprint still notices a size or write-time change and updates the fingerprint, which changes the revision.
-  - Generate a thumbnail when the item is new, that stored revision differs, or the JPEG is missing. Remove the index entry and JPEG for an item the source stage removed.
-  - Remove the thumbnail file-count and byte caps. Every item still in the library keeps its thumbnail. The stage does not delete JPEGs to get under a size or count limit, and it does not stat every JPEG to measure one.
-  - Refresh does not load or diff the full catalog document. Tag catalog sync, item-tag sync, and server startup still do, until catalog document removal.
-  - Update the testing checklist and current-state docs.
-- **Acceptance criteria**:
-  - A refresh run persists source, fingerprint, duration, and loudness changes without loading or diffing a full catalog snapshot.
-  - A tag, favorite, or playback change committed during a stage is still present after that stage writes.
-  - Source refresh still adds, removes, and renames items. Folder import still does not remove missing files.
-  - The thumbnail stage does not build the full catalog document.
-  - A refresh where every thumbnail revision still matches does not stat those source files. A new item, a changed revision, or a missing JPEG still generates. An item removed by source refresh loses its thumbnail index entry and JPEG.
-  - There is no thumbnail file-count or byte cap. A refresh does not delete thumbnails for items still in the library, and it does not stat every JPEG to enforce a cap.
-  - Refresh no longer has a full-document write path. Tag catalog sync and item-tag sync still do, until catalog document removal.
-  - Docs and the testing checklist describe refresh as column updates, including thumbnail reuse without a full file walk and no file-count or byte cap.
-- **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include a test that a tag or favorite committed during a duration or fingerprint stage is still present afterward, and that source add/remove, fingerprint, duration, and loudness persist without a full-document load. Thumbnail evidence must show an all-matching revision pass that does not stat those sources, a generate for a new item, a changed revision, and a missing JPEG, removal of a deleted item's thumbnail, and no deletion of thumbnails for items still in the library.
-  - Docs evidence must include current-state and checklist updates for refresh column updates, thumbnail reuse, and removal of the thumbnail caps.
-- **Deferrals / Follow-ups**:
-  - Account and PIN tables stay with the account and PIN data model work.
-  - Tag catalog sync, item-tag sync, and the server startup read of the catalog document are the next milestone, still in v0.13.0.
-  - Removing `library.json` file recognition and the JSON-to-SQLite importer ships in v0.14.0.
+Last milestone completed: M10i15
 
 ### M10i16 - Catalog Document Removal
 
@@ -1310,6 +1279,39 @@ Last milestone completed: M10i14
 ## Completed Milestones
 
 Latest completions first:
+
+### M10i15 - Refresh Column Updates
+
+- **Status**: ✅ Complete
+- **Goal**: Make each refresh stage write only its own columns as work completes, so a long stage no longer diffs a full catalog snapshot, and so unchanged thumbnails are not revisited file by file.
+- **Scope**:
+  - Depends on: library catalog export and import cutover.
+  - Source refresh, fingerprint, duration, and loudness write the columns that stage owns as work completes. They do not load a snapshot at the start and diff it back at the end.
+  - A tag, favorite, blacklist, or playback change that commits during a stage is still present when the stage finishes. The stage does not write those columns.
+  - Source refresh still adds, removes, renames, and updates item identity. Missing files are still removed here, not by folder import.
+  - The thumbnail stage reads the rows it needs without building the full catalog document. It treats a stored thumbnail revision that still matches the item's fingerprint, size, and write time as current, the same way duration and loudness trust a stored result. It does not stat those source files again. Fingerprint still notices a size or write-time change and updates the fingerprint, which changes the revision.
+  - Generate a thumbnail when the item is new, that stored revision differs, or the JPEG is missing. Remove the index entry and JPEG for an item the source stage removed.
+  - Remove the thumbnail file-count and byte caps. Every item still in the library keeps its thumbnail. The stage does not delete JPEGs to get under a size or count limit, and it does not stat every JPEG to measure one.
+  - Refresh does not load or diff the full catalog document. Tag catalog sync, item-tag sync, and server startup still do, until catalog document removal.
+  - Update the testing checklist and current-state docs.
+- **Acceptance criteria**:
+  - A refresh run persists source, fingerprint, duration, and loudness changes without loading or diffing a full catalog snapshot.
+  - A tag, favorite, or playback change committed during a stage is still present after that stage writes.
+  - Source refresh still adds, removes, and renames items. Folder import still does not remove missing files.
+  - The thumbnail stage does not build the full catalog document.
+  - A refresh where every thumbnail revision still matches does not stat those source files. A new item, a changed revision, or a missing JPEG still generates. An item removed by source refresh loses its thumbnail index entry and JPEG.
+  - There is no thumbnail file-count or byte cap. A refresh does not delete thumbnails for items still in the library, and it does not stat every JPEG to enforce a cap.
+  - Refresh no longer has a full-document write path. Tag catalog sync and item-tag sync still do, until catalog document removal.
+  - Docs and the testing checklist describe refresh as column updates, including thumbnail reuse without a full file walk and no file-count or byte cap.
+- **Verification evidence**:
+  - `dotnet build ReelRoulette.sln` — 0 warnings, 0 errors. `dotnet test ReelRoulette.sln` — pass (Core.Tests 246, DesktopApp.Tests 115).
+  - `dotnet test src/core/ReelRoulette.Core.Tests/ReelRoulette.Core.Tests.csproj --filter FullyQualifiedName~RefreshPipelineServiceTests` — 26 passed. `Refresh_PersistsStageColumnsWithoutBuildingTheCatalogDocument` adds and removes a source file and stores fingerprint, duration, and loudness with `DocumentBuilds` unchanged. `FingerprintStage_PreservesFavoriteAndTagCommittedDuringTheWrite` keeps a favorite and tag committed during the fingerprint write. `ThumbnailStage_ReusesMatchingRevisionWithoutTheSourceFile` reuses a matching revision when the source file is absent. `ThumbnailStage_GeneratesWhenJpegIsMissing` generates a missing JPEG. `ThumbnailStage_RemovesDeletedItemThumbnail_AndKeepsLibraryThumbnails` removes a deleted item's thumbnail and keeps one for an item still in the library, with no eviction count. Existing thumbnail tests still regenerate on a changed revision and generate for a new item. `SourceRefresh_ShouldReconcileMovedFile_ByFingerprintWithoutAddRemove` still renames by fingerprint. `ImportSource_UpdatesRowsWithoutBuildingTheCatalogDocument` still leaves a missing file in place.
+  - `LibraryOperationsServiceTests`: `DeferredCatalogWrites_CheckpointTheLatestRowsAfterRelease` keeps the startup backup unchanged while catalog writes are deferred, then checkpoints the latest play count after release. `RecordPlayback_WhenBackupGapIsShortened_CreatesACheckpoint` applies a shorter gap on the next save. `RecordPlayback_WhenANewerBackupCannotBeOpened_UsesTheHealthyBackupAge` still checkpoints when the newest healthy backup is outside the gap and a newer file cannot be opened.
+  - `CONTEXT.md`, `docs/api.md`, `docs/architecture.md`, `docs/domain-inventory.md`, and `docs/checklists/testing-checklist.md` describe refresh column updates, thumbnail reuse without a source walk, and no thumbnail file-count or byte cap.
+- **Deferrals / Follow-ups**:
+  - Account and PIN tables stay with the account and PIN data model work.
+  - Tag catalog sync, item-tag sync, and the server startup read of the catalog document are the next milestone, still in v0.13.0.
+  - Removing `library.json` file recognition and the JSON-to-SQLite importer ships in v0.14.0.
 
 ### M10i14 - Library Catalog Export and Import Cutover
 

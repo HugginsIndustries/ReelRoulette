@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Security.Cryptography;
@@ -720,6 +722,345 @@ public sealed class RefreshPipelineServiceTests
         Assert.Equal(ComputeSha256(mediaPath), fp, StringComparer.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public async Task Refresh_PersistsStageColumnsWithoutBuildingTheCatalogDocument()
+    {
+        using var scope = new AppDataScope();
+        var sourceDir = Path.Combine(scope.RootPath, "media");
+        Directory.CreateDirectory(sourceDir);
+        var keptPath = Path.Combine(sourceDir, "kept.mp4");
+        var addedPath = Path.Combine(sourceDir, "added.mp4");
+        var missingPath = Path.Combine(sourceDir, "missing.mp4");
+        await GenerateTinyVideoAsync(keptPath);
+        await GenerateTinyVideoAsync(addedPath);
+
+        await SeedLibraryAsync(scope.LibraryPath, new JsonObject
+        {
+            ["sources"] = new JsonArray
+            {
+                new JsonObject
+                {
+                    ["id"] = "src-media",
+                    ["rootPath"] = sourceDir,
+                    ["isEnabled"] = true
+                }
+            },
+            ["items"] = new JsonArray
+            {
+                new JsonObject
+                {
+                    ["id"] = "kept-1",
+                    ["sourceId"] = "src-media",
+                    ["fullPath"] = keptPath,
+                    ["relativePath"] = "kept.mp4",
+                    ["fileName"] = "kept.mp4",
+                    ["mediaType"] = 0,
+                    ["isFavorite"] = true,
+                    ["fingerprintStatus"] = 0,
+                    ["tags"] = new JsonArray("Keep")
+                },
+                new JsonObject
+                {
+                    ["id"] = "missing-1",
+                    ["sourceId"] = "src-media",
+                    ["fullPath"] = missingPath,
+                    ["relativePath"] = "missing.mp4",
+                    ["fileName"] = "missing.mp4",
+                    ["mediaType"] = 0
+                }
+            },
+            ["tags"] = new JsonArray(),
+            ["categories"] = new JsonArray()
+        });
+
+        var host = LibraryCatalogHost.Open(scope.RootPath);
+        var builds = host.Session.DocumentBuilds;
+        var service = CreateService(new ServerStateService(), scope.RootPath, host);
+        Assert.True(service.TryStartManual().Accepted);
+        var completed = await WaitForCompletionAsync(service, TimeSpan.FromSeconds(90));
+        Assert.Null(completed.LastError);
+        Assert.Equal(builds, host.Session.DocumentBuilds);
+
+        var root = host.Session.BuildDocument();
+        var items = Assert.IsType<JsonArray>(root["items"]).OfType<JsonObject>().ToList();
+        Assert.Equal(2, items.Count);
+        Assert.DoesNotContain(items, item => item["id"]?.GetValue<string>() == "missing-1");
+        var kept = Assert.Single(items, item => item["id"]?.GetValue<string>() == "kept-1");
+        var added = Assert.Single(items, item => item["fullPath"]?.GetValue<string>() == addedPath);
+        Assert.True(kept["isFavorite"]?.GetValue<bool>());
+        Assert.Contains(kept["tags"]!.AsArray().Select(tag => tag!.GetValue<string>()), tag => tag == "Keep");
+        AssertStoredMediaColumns(kept);
+        AssertStoredMediaColumns(added);
+        Assert.Contains("1 removed", completed.Stages.Single(stage => stage.Stage == "sourceRefresh").Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("1 added", completed.Stages.Single(stage => stage.Stage == "sourceRefresh").Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task FingerprintStage_PreservesFavoriteAndTagCommittedDuringTheWrite()
+    {
+        using var scope = new AppDataScope();
+        var mediaPath = Path.Combine(scope.RootPath, "hold.png");
+        await WriteTinyPngAsync(mediaPath);
+        await SeedLibraryAsync(scope.LibraryPath, new JsonObject
+        {
+            ["sources"] = new JsonArray(),
+            ["items"] = new JsonArray
+            {
+                new JsonObject
+                {
+                    ["id"] = "hold-1",
+                    ["mediaType"] = 1,
+                    ["fullPath"] = mediaPath,
+                    ["fingerprintStatus"] = 0
+                }
+            }
+        });
+
+        var host = LibraryCatalogHost.Open(scope.RootPath);
+        var builds = host.Session.DocumentBuilds;
+        var service = CreateService(new ServerStateService(), scope.RootPath, host);
+        var hold = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        service.HoldNextFingerprintWrite(hold.Task);
+        Assert.True(service.TryStartManual().Accepted);
+        await service.FingerprintWriteEntered.WaitAsync(TimeSpan.FromSeconds(15));
+        Assert.True(host.Session.SetFavorite("hold-1", true));
+        Assert.True(host.Session.AddItemTags("hold-1", ["Night"]));
+        hold.TrySetResult();
+
+        await WaitForCompletionAsync(service, TimeSpan.FromSeconds(20));
+        Assert.Equal(builds, host.Session.DocumentBuilds);
+        var state = host.Session.ReadItemState("hold-1");
+        Assert.NotNull(state);
+        Assert.True(state!.IsFavorite);
+        var item = Assert.Single(host.Session.BuildDocument()["items"]!.AsArray().OfType<JsonObject>());
+        Assert.Equal(1, item["fingerprintStatus"]?.GetValue<int>());
+        Assert.False(string.IsNullOrWhiteSpace(item["fingerprint"]?.GetValue<string>()));
+        Assert.Contains(item["tags"]!.AsArray().Select(tag => tag!.GetValue<string>()), tag => tag == "Night");
+    }
+
+    [Fact]
+    public async Task ThumbnailStage_ReusesMatchingRevisionWithoutTheSourceFile()
+    {
+        using var scope = new AppDataScope();
+        var missingSource = Path.Combine(scope.RootPath, "gone.png");
+        await SeedLibraryAsync(scope.LibraryPath, new JsonObject
+        {
+            ["sources"] = new JsonArray(),
+            ["items"] = new JsonArray
+            {
+                new JsonObject
+                {
+                    ["id"] = "thumb-match",
+                    ["mediaType"] = 1,
+                    ["fullPath"] = missingSource,
+                    ["fingerprint"] = "fp-match",
+                    ["fileSizeBytes"] = 42,
+                    ["lastWriteTimeUtc"] = "2024-05-06T07:08:09.0000000Z"
+                }
+            }
+        });
+
+        var host = LibraryCatalogHost.Open(scope.RootPath);
+        var stored = Assert.Single(host.Session.ReadRefreshItems());
+        Assert.NotNull(stored.FileSizeBytes);
+        Assert.NotNull(stored.LastWriteTimeUtc);
+        var revision = $"{stored.Fingerprint}|{stored.FileSizeBytes}|{stored.LastWriteTimeUtc.Value.ToString("O", CultureInfo.InvariantCulture)}";
+        var service = CreateService(new ServerStateService(), scope.RootPath, host);
+        var thumbPath = service.GetThumbnailPath("thumb-match");
+        Directory.CreateDirectory(Path.GetDirectoryName(thumbPath)!);
+        await File.WriteAllBytesAsync(thumbPath, TinyPngBytes);
+        await File.WriteAllTextAsync(
+            Path.Combine(scope.RootPath, "thumbnails", "index.json"),
+            new JsonObject
+            {
+                ["thumb-match"] = new JsonObject
+                {
+                    ["revision"] = revision,
+                    ["width"] = 1,
+                    ["height"] = 1
+                }
+            }.ToJsonString());
+        var before = File.GetLastWriteTimeUtc(thumbPath);
+        var builds = host.Session.DocumentBuilds;
+        await service.RunThumbnailStageAsync(CancellationToken.None);
+
+        Assert.Equal(builds, host.Session.DocumentBuilds);
+        Assert.False(File.Exists(missingSource));
+        Assert.Equal(before, File.GetLastWriteTimeUtc(thumbPath));
+        var stage = service.GetStatus().Stages.Single(item => item.Stage == "thumbnailGeneration");
+        Assert.Contains("1 reused", stage.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("0 missing source", stage.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ThumbnailStage_GeneratesWhenJpegIsMissing()
+    {
+        using var scope = new AppDataScope();
+        var mediaPath = Path.Combine(scope.RootPath, "thumb-missing-jpeg.png");
+        await WriteTinyPngAsync(mediaPath);
+        await SeedLibraryAsync(scope.LibraryPath, new JsonObject
+        {
+            ["sources"] = new JsonArray(),
+            ["items"] = new JsonArray
+            {
+                new JsonObject
+                {
+                    ["id"] = "thumb-missing-jpeg",
+                    ["mediaType"] = 1,
+                    ["fullPath"] = mediaPath,
+                    ["fingerprint"] = "fp-jpeg",
+                    ["fileSizeBytes"] = 42,
+                    ["lastWriteTimeUtc"] = "2024-05-06T07:08:09.0000000Z"
+                }
+            }
+        });
+
+        var host = LibraryCatalogHost.Open(scope.RootPath);
+        var stored = Assert.Single(host.Session.ReadRefreshItems());
+        var revision = $"{stored.Fingerprint}|{stored.FileSizeBytes}|{stored.LastWriteTimeUtc!.Value.ToString("O", CultureInfo.InvariantCulture)}";
+        var service = CreateService(new ServerStateService(), scope.RootPath, host);
+        Directory.CreateDirectory(Path.Combine(scope.RootPath, "thumbnails"));
+        await File.WriteAllTextAsync(
+            Path.Combine(scope.RootPath, "thumbnails", "index.json"),
+            new JsonObject
+            {
+                ["thumb-missing-jpeg"] = new JsonObject
+                {
+                    ["revision"] = revision,
+                    ["width"] = 1,
+                    ["height"] = 1
+                }
+            }.ToJsonString());
+        var builds = host.Session.DocumentBuilds;
+        await service.RunThumbnailStageAsync(CancellationToken.None);
+
+        Assert.Equal(builds, host.Session.DocumentBuilds);
+        Assert.True(File.Exists(service.GetThumbnailPath("thumb-missing-jpeg")));
+        var stage = service.GetStatus().Stages.Single(item => item.Stage == "thumbnailGeneration");
+        Assert.Contains("1 generated", stage.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ThumbnailStage_RemovesDeletedItemThumbnail_AndKeepsLibraryThumbnails()
+    {
+        using var scope = new AppDataScope();
+        var sourceDir = Path.Combine(scope.RootPath, "thumbs");
+        Directory.CreateDirectory(sourceDir);
+        var keptPath = Path.Combine(sourceDir, "kept.png");
+        var missingPath = Path.Combine(sourceDir, "missing.png");
+        await WriteTinyPngAsync(keptPath);
+        await SeedLibraryAsync(scope.LibraryPath, new JsonObject
+        {
+            ["sources"] = new JsonArray
+            {
+                new JsonObject
+                {
+                    ["id"] = "src-thumbs",
+                    ["rootPath"] = sourceDir,
+                    ["isEnabled"] = true
+                }
+            },
+            ["items"] = new JsonArray
+            {
+                new JsonObject
+                {
+                    ["id"] = "kept-thumb",
+                    ["sourceId"] = "src-thumbs",
+                    ["fullPath"] = keptPath,
+                    ["relativePath"] = "kept.png",
+                    ["fileName"] = "kept.png",
+                    ["mediaType"] = 1,
+                    ["fingerprint"] = "fp-kept",
+                    ["fingerprintStatus"] = 1
+                },
+                new JsonObject
+                {
+                    ["id"] = "gone-thumb",
+                    ["sourceId"] = "src-thumbs",
+                    ["fullPath"] = missingPath,
+                    ["relativePath"] = "missing.png",
+                    ["fileName"] = "missing.png",
+                    ["mediaType"] = 1
+                }
+            }
+        });
+
+        var host = LibraryCatalogHost.Open(scope.RootPath);
+        var service = CreateService(new ServerStateService(), scope.RootPath, host);
+        var keptThumb = service.GetThumbnailPath("kept-thumb");
+        var goneThumb = service.GetThumbnailPath("gone-thumb");
+        Directory.CreateDirectory(Path.GetDirectoryName(keptThumb)!);
+        await File.WriteAllBytesAsync(keptThumb, TinyPngBytes);
+        await File.WriteAllBytesAsync(goneThumb, TinyPngBytes);
+        await File.WriteAllTextAsync(
+            Path.Combine(scope.RootPath, "thumbnails", "index.json"),
+            new JsonObject
+            {
+                ["kept-thumb"] = new JsonObject { ["revision"] = "fp-kept|1|2020-01-01T00:00:00.0000000Z", ["width"] = 1, ["height"] = 1 },
+                ["gone-thumb"] = new JsonObject { ["revision"] = "old", ["width"] = 1, ["height"] = 1 }
+            }.ToJsonString());
+        var builds = host.Session.DocumentBuilds;
+        Assert.True(service.TryStartManual().Accepted);
+        var completed = await WaitForCompletionAsync(service, TimeSpan.FromSeconds(30));
+
+        Assert.Equal(builds, host.Session.DocumentBuilds);
+        Assert.Null(completed.LastError);
+        var items = host.Session.BuildDocument()["items"]!.AsArray().OfType<JsonObject>().ToList();
+        Assert.Single(items);
+        Assert.Equal("kept-thumb", items[0]["id"]?.GetValue<string>());
+        Assert.True(File.Exists(keptThumb));
+        Assert.False(File.Exists(goneThumb));
+        var index = JsonNode.Parse(await File.ReadAllTextAsync(Path.Combine(scope.RootPath, "thumbnails", "index.json")))!.AsObject();
+        Assert.False(index.ContainsKey("gone-thumb"));
+        Assert.True(index.ContainsKey("kept-thumb"));
+        var stage = completed.Stages.Single(item => item.Stage == "thumbnailGeneration");
+        Assert.DoesNotContain("evicted", stage.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static void AssertStoredMediaColumns(JsonObject item)
+    {
+        Assert.Equal(1, item["fingerprintStatus"]?.GetValue<int>());
+        Assert.False(string.IsNullOrWhiteSpace(item["fingerprint"]?.GetValue<string>()));
+        Assert.False(string.IsNullOrWhiteSpace(item["duration"]?.GetValue<string>()));
+        Assert.NotEqual("00:00:00", item["duration"]?.GetValue<string>());
+        var hasAudio = item["hasAudio"]?.GetValue<bool?>();
+        var loudnessError = item["loudnessError"]?.GetValue<string>();
+        Assert.True(hasAudio == true || !string.IsNullOrWhiteSpace(loudnessError));
+    }
+
+    private static async Task GenerateTinyVideoAsync(string path)
+    {
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = "ffmpeg",
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true
+        };
+        startInfo.ArgumentList.Add("-y");
+        startInfo.ArgumentList.Add("-f");
+        startInfo.ArgumentList.Add("lavfi");
+        startInfo.ArgumentList.Add("-i");
+        startInfo.ArgumentList.Add("color=c=black:s=16x16:d=1");
+        startInfo.ArgumentList.Add("-f");
+        startInfo.ArgumentList.Add("lavfi");
+        startInfo.ArgumentList.Add("-i");
+        startInfo.ArgumentList.Add("anullsrc=r=8000:cl=mono");
+        startInfo.ArgumentList.Add("-shortest");
+        startInfo.ArgumentList.Add("-t");
+        startInfo.ArgumentList.Add("1");
+        startInfo.ArgumentList.Add(path);
+        using var process = Process.Start(startInfo);
+        Assert.NotNull(process);
+        var stderr = process!.StandardError.ReadToEndAsync();
+        var stdout = process.StandardOutput.ReadToEndAsync();
+        await process.WaitForExitAsync();
+        await stdout;
+        var error = await stderr;
+        Assert.True(process.ExitCode == 0, error);
+    }
+
     private static async Task RunCancelledOneShotAsync(RefreshPipelineService service, string methodName)
     {
         var method = typeof(RefreshPipelineService).GetMethod(methodName, BindingFlags.NonPublic | BindingFlags.Instance);
@@ -737,7 +1078,7 @@ public sealed class RefreshPipelineServiceTests
         Assert.True(settings.ForceRescanLoudness);
     }
 
-    private static RefreshPipelineService CreateService(ServerStateService state, string appDataPathOverride)
+    private static RefreshPipelineService CreateService(ServerStateService state, string appDataPathOverride, LibraryCatalogHost? catalog = null)
     {
         var logger = new Microsoft.Extensions.Logging.Abstractions.NullLogger<RefreshPipelineService>();
         var settingsLogger = new Microsoft.Extensions.Logging.Abstractions.NullLogger<CoreSettingsService>();
@@ -747,7 +1088,7 @@ public sealed class RefreshPipelineServiceTests
             AutoRefreshIntervalMinutes = 15
         };
         var coreSettings = new CoreSettingsService(settingsLogger, options, appDataPathOverride);
-        return new RefreshPipelineService(state, logger, coreSettings, appDataPathOverride);
+        return new RefreshPipelineService(state, logger, coreSettings, appDataPathOverride, catalog);
     }
 
     private static ParsedLoudnessResult? InvokeParseLoudness(string output, int exitCode)

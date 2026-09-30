@@ -129,8 +129,8 @@ Operator UI is an operational surface and does not own domain logic.
 
 - Refresh orchestration and scheduling are core/server-owned.
 - Refresh state is exposed through API and SSE projection updates.
-- The refresh pipeline includes a `fingerprintScan` stage (server-side full-file SHA-256 for items that need hashing) before duration/loudness/thumbnail work; parallelism is configurable via core refresh settings.
-- Thumbnail generation is pipeline-owned and retrieval is API-served.
+- The refresh pipeline includes a `fingerprintScan` stage (server-side full-file SHA-256 for items that need hashing) before duration/loudness/thumbnail work; parallelism is configurable via core refresh settings. Each stage writes the columns it owns as that file finishes and does not load the full catalog document. A catalog backup for that refresh is taken after the refresh finishes and still follows the backup gap. A shorter backup gap applies on the next catalog save.
+- Thumbnail generation is pipeline-owned and retrieval is API-served. A thumbnail whose stored revision still matches the item's fingerprint, size, and write time is reused without walking that source file. Refresh does not delete thumbnails to stay under a file-count or byte cap.
 - Clients render status and results; they do not own processing authority.
 
 ## Logging and Diagnostics

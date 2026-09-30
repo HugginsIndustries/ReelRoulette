@@ -19,12 +19,10 @@ Instructions:
 
 Commit Message:
 
-M10i14: Restore library export, import, and catalog backups on SQLite
+M10i15: Write refresh stages as catalog column updates
 
-- Export saves a server checkpoint as library.db, and import replaces that catalog after the server-stopped acknowledgment.
-- Presets, settings, thumbnails, and backups are not part of the transfer. A library.json archive is not imported.
-- Server catalog backups write the same checkpoint on the existing backup schedule.
-- A failed import puts the previous catalog back until the new database is in place, and leaves a folder that had no catalog without one.
-- An unmigrated library.json with sources or items, or a library.db that cannot be opened, asks for overwrite confirmation. A successful import renames that json file aside.
-- Remap rejects a file that would land outside the destination folder.
-- Catalog backups copy after the save returns. A failed copy is discarded, and a backup that cannot be opened is left in place.
+- Source, fingerprint, duration, and loudness persist their own columns as each file finishes, without loading the full catalog.
+- A favorite, tag, or playback change committed during a stage stays after that stage writes.
+- Shutting down mid-refresh keeps catalog updates that stage has already written.
+- Thumbnail reuse trusts the stored revision and does not stat unchanged sources. There is no thumbnail file-count or byte cap.
+- A refresh's catalog backup is taken after that refresh finishes and still follows the backup gap. A shorter gap applies on the next catalog save.

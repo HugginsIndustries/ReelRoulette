@@ -1147,6 +1147,186 @@ public sealed class LibraryOperationsServiceTests
     }
 
     [Fact]
+    public void RecordPlayback_WhenBackupGapIsShortened_CreatesACheckpoint()
+    {
+        var appDataRoot = CreateTempAppDataRoot();
+        try
+        {
+            SeedCoreSettings(appDataRoot, enabled: true, minimumGapMinutes: 360, numberOfBackups: 8);
+            SeedLibrary(appDataRoot, new JsonObject
+            {
+                ["sources"] = new JsonArray(),
+                ["items"] = new JsonArray
+                {
+                    new JsonObject
+                    {
+                        ["id"] = "item-1",
+                        ["fullPath"] = @"C:\media\movie.mp4",
+                        ["playCount"] = 1
+                    }
+                },
+                ["tags"] = new JsonArray(),
+                ["categories"] = new JsonArray()
+            });
+
+            var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot);
+            var backupDir = Path.Combine(appDataRoot, "backups");
+            foreach (var existing in Directory.GetFiles(backupDir, "library.db.backup.*"))
+            {
+                SetBackupTimestampUtc(existing, DateTime.UtcNow.AddMinutes(-90));
+            }
+
+            _ = service.RecordPlayback(@"C:\media\movie.mp4");
+            LibraryCatalogBackup.WaitForPending();
+            Assert.Single(ListCatalogBackupFiles(backupDir));
+
+            SeedCoreSettings(appDataRoot, enabled: true, minimumGapMinutes: 60, numberOfBackups: 8);
+            _ = service.RecordPlayback(@"C:\media\movie.mp4");
+            LibraryCatalogBackup.WaitForPending();
+            var checkpoint = ListCatalogBackupFiles(backupDir)
+                .OrderBy(File.GetLastWriteTimeUtc)
+                .Last();
+            var copy = ReelRoulette.Core.Library.LibraryCatalogStore.Read(checkpoint);
+            Assert.Equal(3, Assert.Single(copy.Items).PlayCount);
+        }
+        finally
+        {
+            LibraryCatalogBackup.WaitForPending();
+            if (Directory.Exists(appDataRoot))
+            {
+                Directory.Delete(appDataRoot, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void DeferredCatalogWrites_CheckpointTheLatestRowsAfterRelease()
+    {
+        var appDataRoot = CreateTempAppDataRoot();
+        try
+        {
+            SeedCoreSettings(appDataRoot, enabled: true, minimumGapMinutes: 60, numberOfBackups: 8);
+            SeedLibrary(appDataRoot, new JsonObject
+            {
+                ["sources"] = new JsonArray(),
+                ["items"] = new JsonArray
+                {
+                    new JsonObject
+                    {
+                        ["id"] = "item-1",
+                        ["fullPath"] = @"C:\media\movie.mp4",
+                        ["playCount"] = 1
+                    }
+                },
+                ["tags"] = new JsonArray(),
+                ["categories"] = new JsonArray()
+            });
+
+            var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot);
+            var backupDir = Path.Combine(appDataRoot, "backups");
+            foreach (var existing in Directory.GetFiles(backupDir, "library.db.backup.*"))
+            {
+                SetBackupTimestampUtc(existing, DateTime.UtcNow.AddHours(-3));
+            }
+
+            var databasePath = Path.Combine(appDataRoot, "library.db");
+            using (LibraryCatalogBackup.Defer(databasePath))
+            {
+                _ = service.RecordPlayback(@"C:\media\movie.mp4");
+                LibraryCatalogBackup.WaitForPending();
+                _ = service.RecordPlayback(@"C:\media\movie.mp4");
+                LibraryCatalogBackup.WaitForPending();
+                var during = ListCatalogBackupFiles(backupDir)
+                    .OrderBy(File.GetLastWriteTimeUtc)
+                    .Last();
+                var duringCopy = ReelRoulette.Core.Library.LibraryCatalogStore.Read(during);
+                Assert.Equal(1, Assert.Single(duringCopy.Items).PlayCount);
+            }
+
+            LibraryCatalogBackup.WaitForPending();
+            var checkpoint = ListCatalogBackupFiles(backupDir)
+                .OrderBy(File.GetLastWriteTimeUtc)
+                .Last();
+            var copy = ReelRoulette.Core.Library.LibraryCatalogStore.Read(checkpoint);
+            Assert.Equal(3, Assert.Single(copy.Items).PlayCount);
+        }
+        finally
+        {
+            LibraryCatalogBackup.WaitForPending();
+            if (Directory.Exists(appDataRoot))
+            {
+                Directory.Delete(appDataRoot, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void RecordPlayback_WhenANewerBackupCannotBeOpened_UsesTheHealthyBackupAge()
+    {
+        var appDataRoot = CreateTempAppDataRoot();
+        string? blocked = null;
+        try
+        {
+            SeedCoreSettings(appDataRoot, enabled: true, minimumGapMinutes: 60, numberOfBackups: 8);
+            SeedLibrary(appDataRoot, new JsonObject
+            {
+                ["sources"] = new JsonArray(),
+                ["items"] = new JsonArray
+                {
+                    new JsonObject
+                    {
+                        ["id"] = "item-1",
+                        ["fullPath"] = @"C:\media\movie.mp4",
+                        ["playCount"] = 1
+                    }
+                },
+                ["tags"] = new JsonArray(),
+                ["categories"] = new JsonArray()
+            });
+
+            var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot);
+            var backupDir = Path.Combine(appDataRoot, "backups");
+            foreach (var existing in ListCatalogBackupFiles(backupDir))
+            {
+                SetBackupTimestampUtc(existing, DateTime.UtcNow.AddHours(-3));
+            }
+
+            if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
+            {
+                return;
+            }
+
+            blocked = Path.Combine(backupDir, "library.db.backup.blocked");
+            File.WriteAllText(blocked, "not a database");
+            SetBackupTimestampUtc(blocked, DateTime.UtcNow);
+            File.SetUnixFileMode(blocked, UnixFileMode.None);
+
+            _ = service.RecordPlayback(@"C:\media\movie.mp4");
+            LibraryCatalogBackup.WaitForPending();
+            Assert.True(File.Exists(blocked));
+            var checkpoint = ListCatalogBackupFiles(backupDir)
+                .Where(path => !string.Equals(path, blocked, StringComparison.Ordinal))
+                .OrderBy(File.GetLastWriteTimeUtc)
+                .Last();
+            var copy = ReelRoulette.Core.Library.LibraryCatalogStore.Read(checkpoint);
+            Assert.Equal(2, Assert.Single(copy.Items).PlayCount);
+        }
+        finally
+        {
+            if (blocked != null && File.Exists(blocked) && (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS()))
+            {
+                File.SetUnixFileMode(blocked, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+            }
+
+            LibraryCatalogBackup.WaitForPending();
+            if (Directory.Exists(appDataRoot))
+            {
+                Directory.Delete(appDataRoot, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public void TryCreate_IgnoresAnUnhealthyBackupFile()
     {
         var appDataRoot = CreateTempAppDataRoot();
@@ -2201,6 +2381,15 @@ public sealed class LibraryOperationsServiceTests
   }
 }
 """);
+    }
+
+    private static string[] ListCatalogBackupFiles(string backupDir)
+    {
+        return Directory.GetFiles(backupDir, "library.db.backup.*")
+            .Where(path => !path.EndsWith("-wal", StringComparison.Ordinal) &&
+                           !path.EndsWith("-shm", StringComparison.Ordinal) &&
+                           !path.EndsWith("-journal", StringComparison.Ordinal))
+            .ToArray();
     }
 
     private static void SetBackupTimestampUtc(string path, DateTime timestampUtc)
