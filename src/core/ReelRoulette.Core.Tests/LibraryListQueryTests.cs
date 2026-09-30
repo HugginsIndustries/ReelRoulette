@@ -503,7 +503,7 @@ public sealed class LibraryListQueryTests
         Assert.Null(session.ReadListedItem("missing"));
         Assert.Equal(builds, session.DocumentBuilds);
 
-        var host = LibraryCatalogHost.Open(dir.Path);
+        var host = LibraryCatalogHost.Open(dir.Path, Path.Combine(dir.Path, "thumbnails"));
         var hostBuilds = host.Session.DocumentBuilds;
         var operations = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, dir.Path, host);
         var item = operations.ReadLibraryItem("keep");
@@ -534,7 +534,7 @@ public sealed class LibraryListQueryTests
 
     private static LibraryCatalogSession Open(TempDirectory dir)
     {
-        return LibraryCatalogStore.Open(dir.Path).Session!;
+        return CatalogOpen.Open(dir.Path).Session!;
     }
 
     private static void Add(

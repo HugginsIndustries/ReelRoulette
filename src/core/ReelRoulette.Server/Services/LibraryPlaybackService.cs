@@ -26,7 +26,7 @@ public sealed class LibraryPlaybackService
         var roamingAppData = appDataPathOverride ??
                              Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ReelRoulette");
         Directory.CreateDirectory(roamingAppData);
-        _catalog = catalog ?? LibraryCatalogHost.Open(roamingAppData);
+        _catalog = catalog ?? LibraryCatalogHost.Open(roamingAppData, LibraryCatalogHost.LocalThumbnailDirectory(appDataPathOverride));
     }
 
     public IReadOnlyList<PresetResponse> GetPresets(IReadOnlyList<FilterPresetSnapshot> presets)

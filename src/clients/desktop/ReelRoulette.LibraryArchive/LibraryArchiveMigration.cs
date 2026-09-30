@@ -4,8 +4,9 @@ using ReelRoulette.Core.Library;
 namespace ReelRoulette.LibraryArchive;
 
 /// <summary>
-/// Desktop library export/import. A transfer is one <c>library.db</c> checkpoint. Presets, settings,
-/// thumbnails, and backups stay in their own files.
+/// Desktop library export/import. A transfer is one <c>library.db</c> checkpoint. Presets and
+/// thumbnail revision, width, and height travel with that database. Settings, backups, and JPEG
+/// files stay where they are.
 /// </summary>
 public static class LibraryArchiveMigration
 {

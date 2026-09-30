@@ -44,7 +44,6 @@ public sealed class ServerStateService
     private readonly object _tagLock = new();
     private readonly object _sourceLock = new();
     private readonly ILogger<ServerStateService> _logger;
-    private readonly string _presetsPath;
     private readonly LibraryCatalogHost? _catalog;
     private long _revision;
     private readonly Dictionary<string, ItemStateRecord> _itemStates = new(StringComparer.OrdinalIgnoreCase);
@@ -71,14 +70,13 @@ public sealed class ServerStateService
         var roamingAppData = appDataPathOverride ??
                              Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ReelRoulette");
         Directory.CreateDirectory(roamingAppData);
-        _presetsPath = Path.Combine(roamingAppData, "presets.json");
         if (catalog != null)
         {
             _catalog = catalog;
         }
         else if (!string.IsNullOrWhiteSpace(appDataPathOverride))
         {
-            _catalog = LibraryCatalogHost.Open(roamingAppData);
+            _catalog = LibraryCatalogHost.Open(roamingAppData, LibraryCatalogHost.LocalThumbnailDirectory(appDataPathOverride));
         }
         else
         {
@@ -498,6 +496,19 @@ public sealed class ServerStateService
         return envelope;
     }
 
+    private static JsonElement ParsePresetFilter(string json)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(string.IsNullOrWhiteSpace(json) ? "{}" : json);
+            return document.RootElement.Clone();
+        }
+        catch (JsonException)
+        {
+            return JsonSerializer.SerializeToElement(new { }, JsonOptions);
+        }
+    }
+
     private static List<FilterPresetSnapshot> ClonePresetCatalog(IEnumerable<FilterPresetSnapshot> source)
     {
         return source
@@ -628,6 +639,11 @@ public sealed class ServerStateService
 
     private void PersistPresetCatalog()
     {
+        if (_catalog == null)
+        {
+            return;
+        }
+
         try
         {
             IReadOnlyList<FilterPresetSnapshot> snapshot;
@@ -636,12 +652,15 @@ public sealed class ServerStateService
                 snapshot = ClonePresetCatalog(_presetCatalog);
             }
 
-            var serialized = JsonSerializer.Serialize(snapshot, JsonOptions);
-            File.WriteAllText(_presetsPath, serialized);
+            _catalog.Session.ReplacePresets(snapshot.Select(preset => new ReelRoulette.Core.Library.LibraryCatalogPreset
+            {
+                Name = preset.Name,
+                FilterStateJson = preset.FilterState.ValueKind == JsonValueKind.Undefined ? "{}" : preset.FilterState.GetRawText()
+            }).ToList());
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to persist preset catalog to '{Path}'.", _presetsPath);
+            _logger.LogWarning(ex, "Failed to persist preset catalog.");
         }
     }
 
@@ -649,10 +668,15 @@ public sealed class ServerStateService
     {
         try
         {
-            if (File.Exists(_presetsPath))
+            if (_catalog != null)
             {
-                var rawPresets = File.ReadAllText(_presetsPath);
-                var parsedPresets = JsonSerializer.Deserialize<List<FilterPresetSnapshot>>(rawPresets, JsonOptions) ?? [];
+                var parsedPresets = _catalog.Session.ReadPresets()
+                    .Select(preset => new FilterPresetSnapshot
+                    {
+                        Name = preset.Name,
+                        FilterState = ParsePresetFilter(preset.FilterStateJson)
+                    })
+                    .ToList();
                 lock (_filterSessionLock)
                 {
                     _presetCatalog = ClonePresetCatalog(parsedPresets);
@@ -661,7 +685,7 @@ public sealed class ServerStateService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to bootstrap preset catalog from '{PresetsPath}'.", _presetsPath);
+            _logger.LogWarning(ex, "Failed to bootstrap preset catalog.");
         }
 
         try

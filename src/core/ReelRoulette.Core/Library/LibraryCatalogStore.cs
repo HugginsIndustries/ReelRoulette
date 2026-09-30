@@ -19,6 +19,10 @@ public sealed class LibraryCatalogOpenOptions
     public Action? BeforePublish { get; init; }
 
     public Action<string>? DirectorySync { get; init; }
+
+    public string? ThumbnailDirectory { get; init; }
+
+    public Action? AfterSideFileCopy { get; init; }
 }
 
 public sealed class LibraryCatalogReplaceOptions
@@ -47,6 +51,7 @@ public sealed class LibraryCatalogOpenResult
     public string? Message { get; init; }
     public LibraryCatalogSnapshot? Catalog { get; init; }
     public LibraryCatalogSession? Session { get; init; }
+    public bool MigratedSchema { get; init; }
 }
 
 public sealed class LibraryCatalogSnapshot
@@ -55,8 +60,6 @@ public sealed class LibraryCatalogSnapshot
     public IReadOnlyList<LibraryCatalogItem> Items { get; init; } = [];
     public IReadOnlyList<LibraryCatalogCategory> Categories { get; init; } = [];
     public IReadOnlyList<LibraryCatalogTag> Tags { get; init; } = [];
-    public bool AvailableTagsPresent { get; init; }
-    public IReadOnlyList<string> AvailableTags { get; init; } = [];
 }
 
 public sealed class LibraryCatalogSource
@@ -109,17 +112,34 @@ public sealed class LibraryCatalogItem
     public DateTime? FingerprintLastUtc { get; init; }
     public int? FingerprintStatus { get; init; }
     public string? LoudnessError { get; init; }
+    public string? ThumbnailRevision { get; init; }
+    public int? ThumbnailWidth { get; init; }
+    public int? ThumbnailHeight { get; init; }
     public IReadOnlyList<string> Tags { get; init; } = [];
 }
 
-public static class LibraryCatalogStore
+public sealed class LibraryCatalogPreset
 {
-    public const int SchemaVersion = 1;
+    public string Name { get; init; } = string.Empty;
+    public string FilterStateJson { get; init; } = "{}";
+}
+
+public static partial class LibraryCatalogStore
+{
+    public const int SchemaVersion = 2;
+    public const int PreviousSchemaVersion = 1;
     public const string DatabaseFileName = "library.db";
     public const string IncomingFileName = "library.db.incoming";
     public const string PreviousFileName = "library.db.previous";
     public const string LibraryFileName = "library.json";
     public const string MigratedLibraryFileName = "library.json.migrated";
+    public const string PresetsFileName = "presets.json";
+    public const string MigratedPresetsFileName = "presets.json.migrated";
+    public const string ThumbnailIndexFileName = "index.json";
+    public const string MigratedThumbnailIndexFileName = "index.json.migrated";
+    public const string SideFilesCopiedKey = "side_files_copied";
+    public const string ThumbnailDirectoryRequiredMessage =
+        "A thumbnail directory is required to create a catalog.";
 
     public const string RefusedMessage =
         "The live database was refused.";
@@ -143,7 +163,7 @@ public static class LibraryCatalogStore
     internal const string UncategorizedCategoryId = "uncategorized";
     internal const string UncategorizedCategoryName = "Uncategorized";
 
-    private static readonly string[] RequiredTables =
+    private static readonly string[] Schema1Tables =
     [
         "sources",
         "items",
@@ -152,6 +172,25 @@ public static class LibraryCatalogStore
         "item_tags",
         "available_tags",
         "catalog_meta"
+    ];
+
+    private static readonly string[] Schema2Tables =
+    [
+        "sources",
+        "items",
+        "categories",
+        "tags",
+        "item_tags",
+        "presets",
+        "catalog_meta"
+    ];
+
+    private static readonly string[] Schema2ItemColumns =
+    [
+        "loudness_error",
+        "thumbnail_revision",
+        "thumbnail_width",
+        "thumbnail_height"
     ];
 
     public static LibraryCatalogOpenResult Open(string directory, LibraryCatalogOpenOptions? options = null)
@@ -168,9 +207,11 @@ public static class LibraryCatalogStore
         {
             try
             {
+                var migration = TryMigrateSchema(directory, databasePath, options);
                 if (IsHealthy(databasePath))
                 {
-                    return Opened(databasePath);
+                    FinishSideFileCopy(directory, databasePath, options, migration != SchemaMigration.None);
+                    return Opened(databasePath, migration == SchemaMigration.Schema1);
                 }
             }
             catch (SqliteException ex) when (ex.SqliteErrorCode is SqliteNotADatabase or SqliteCorrupt)
@@ -187,9 +228,15 @@ public static class LibraryCatalogStore
             return Refused(File.Exists(migratedPath) ? RefusedMessageWithSnapshot : RefusedMessage);
         }
 
+        if (string.IsNullOrWhiteSpace(options?.ThumbnailDirectory))
+        {
+            throw new InvalidOperationException(ThumbnailDirectoryRequiredMessage);
+        }
+
         if (File.Exists(libraryPath))
         {
             Migrate(directory, libraryPath, databasePath, options);
+            FinishSideFileCopy(directory, databasePath, options, copiedThisOpen: true);
             return Opened(databasePath);
         }
 
@@ -198,7 +245,8 @@ public static class LibraryCatalogStore
             return Refused(RefusedMessageWithSnapshot);
         }
 
-        CreateEmpty(directory, databasePath);
+        CreateEmpty(directory, databasePath, options.ThumbnailDirectory);
+        FinishSideFileCopy(directory, databasePath, options, copiedThisOpen: true);
         return Opened(databasePath);
     }
 
@@ -336,7 +384,7 @@ public static class LibraryCatalogStore
         RecoverReplace(directory);
         var incoming = Path.Combine(directory, IncomingFileName);
         DeleteSidecars(incoming);
-        WriteDatabase(incoming, root);
+        WriteDatabase(incoming, root, catalogDirectory: null, thumbnailDirectory: null, copySideFiles: false);
         if (!IsHealthyFile(incoming))
         {
             DeleteSidecars(incoming);
@@ -622,13 +670,14 @@ public static class LibraryCatalogStore
         return ReadSnapshot(connection);
     }
 
-    private static LibraryCatalogOpenResult Opened(string databasePath)
+    private static LibraryCatalogOpenResult Opened(string databasePath, bool migratedSchema = false)
     {
         return new LibraryCatalogOpenResult
         {
             Status = LibraryCatalogOpenStatus.Opened,
             Catalog = Read(databasePath),
-            Session = new LibraryCatalogSession(databasePath)
+            Session = new LibraryCatalogSession(databasePath),
+            MigratedSchema = migratedSchema
         };
     }
 
@@ -641,14 +690,14 @@ public static class LibraryCatalogStore
         };
     }
 
-    private static void CreateEmpty(string directory, string databasePath)
+    private static void CreateEmpty(string directory, string databasePath, string thumbnailDirectory)
     {
         var tempPath = Path.Combine(directory, MigratingFileName);
         DeleteSidecars(tempPath);
         var published = false;
         try
         {
-            WriteDatabase(tempPath, new JsonObject());
+            WriteDatabase(tempPath, new JsonObject(), directory, thumbnailDirectory, copySideFiles: true);
             SyncFile(tempPath);
             PublishDatabase(tempPath, databasePath);
             published = true;
@@ -679,7 +728,7 @@ public static class LibraryCatalogStore
         {
             var root = JsonNode.Parse(File.ReadAllText(libraryPath)) as JsonObject
                 ?? throw new InvalidDataException("library.json is not an object.");
-            WriteDatabase(tempPath, root);
+            WriteDatabase(tempPath, root, directory, options?.ThumbnailDirectory, copySideFiles: true);
             SyncFile(tempPath);
             options?.BeforePublish?.Invoke();
             if (File.Exists(migratedPath))
@@ -701,13 +750,17 @@ public static class LibraryCatalogStore
         }
     }
 
-    private static void WriteDatabase(string tempPath, JsonObject root)
+    private static void WriteDatabase(
+        string tempPath,
+        JsonObject root,
+        string? catalogDirectory,
+        string? thumbnailDirectory,
+        bool copySideFiles)
     {
         var sources = ReadSources(root);
         var categories = ReadCategories(root);
         var tags = ReadTags(root);
         var items = ReadItems(root);
-        var availableTags = ReadAvailableTags(root);
 
         var seenIds = new HashSet<string>(StringComparer.Ordinal);
         foreach (var item in items)
@@ -759,7 +812,10 @@ public static class LibraryCatalogStore
                 last_write_time_utc INTEGER NULL,
                 fingerprint_last_utc INTEGER NULL,
                 fingerprint_status INTEGER NULL,
-                loudness_error TEXT NULL
+                loudness_error TEXT NULL,
+                thumbnail_revision TEXT NULL,
+                thumbnail_width INTEGER NULL,
+                thumbnail_height INTEGER NULL
             );
             CREATE TABLE categories (
                 id TEXT PRIMARY KEY,
@@ -780,10 +836,11 @@ public static class LibraryCatalogStore
                 name_fold TEXT NOT NULL,
                 PRIMARY KEY (item_id, position)
             );
-            CREATE TABLE available_tags (
+            CREATE TABLE presets (
                 position INTEGER PRIMARY KEY,
                 name TEXT NOT NULL,
-                name_fold TEXT NOT NULL
+                name_fold TEXT NOT NULL,
+                filter_state TEXT NOT NULL
             );
             CREATE TABLE catalog_meta (
                 key TEXT PRIMARY KEY,
@@ -796,22 +853,20 @@ public static class LibraryCatalogStore
             CREATE INDEX idx_tags_name_fold ON tags(name_fold);
             CREATE INDEX idx_item_tags_item_id ON item_tags(item_id);
             CREATE INDEX idx_item_tags_name_fold ON item_tags(name_fold);
-            CREATE INDEX idx_available_tags_name_fold ON available_tags(name_fold);
             """);
 
         InsertSources(connection, sources);
         InsertCategories(connection, categories);
         InsertTags(connection, tags);
         InsertItems(connection, items);
-        InsertAvailableTags(connection, availableTags);
-        Execute(
-            connection,
-            "INSERT INTO catalog_meta (key, value) VALUES ('available_tags_present', $present);",
-            ("$present", availableTags.Present ? "1" : "0"));
-        Execute(connection, "INSERT INTO catalog_meta (key, value) VALUES ('revision', '0');");
-        transaction.Commit();
+        Execute(connection, transaction, "INSERT INTO catalog_meta (key, value) VALUES ('revision', '0');");
+        if (copySideFiles)
+        {
+            CopySideFiles(connection, transaction, catalogDirectory!, thumbnailDirectory!);
+        }
 
-        Execute(connection, $"PRAGMA user_version = {SchemaVersion};");
+        Execute(connection, transaction, $"PRAGMA user_version = {SchemaVersion};");
+        transaction.Commit();
         Execute(connection, "PRAGMA wal_checkpoint(TRUNCATE);");
         connection.Close();
         DeleteIfExists(tempPath + "-wal");
@@ -868,50 +923,42 @@ public static class LibraryCatalogStore
     private static bool HasRequiredCatalogSchema(SqliteConnection connection)
     {
         var version = ExecuteScalarInt(connection, "PRAGMA user_version;");
-        if (version != SchemaVersion)
+        if (version == PreviousSchemaVersion)
         {
-            return false;
+            return HasTables(connection, Schema1Tables) && HasItemColumn(connection, "loudness_error");
         }
 
-        using var command = connection.CreateCommand();
-        command.CommandText = "SELECT name FROM sqlite_master WHERE type = 'table';";
-        using var reader = command.ExecuteReader();
-        var names = new HashSet<string>(StringComparer.Ordinal);
-        while (reader.Read())
+        if (version == SchemaVersion)
         {
-            names.Add(reader.GetString(0));
-        }
-
-        if (!RequiredTables.All(names.Contains))
-        {
-            return false;
-        }
-
-        using var columns = connection.CreateCommand();
-        columns.CommandText = "SELECT name FROM pragma_table_info('items');";
-        using var columnReader = columns.ExecuteReader();
-        while (columnReader.Read())
-        {
-            if (string.Equals(columnReader.GetString(0), "loudness_error", StringComparison.Ordinal))
-            {
-                return true;
-            }
+            return HasStrictSchema2(connection);
         }
 
         return false;
     }
 
+    private static bool HasStrictSchema2(SqliteConnection connection)
+    {
+        if (ExecuteScalarInt(connection, "PRAGMA user_version;") != SchemaVersion)
+        {
+            return false;
+        }
+
+        if (!HasTables(connection, Schema2Tables) || HasTables(connection, ["available_tags"]))
+        {
+            return false;
+        }
+
+        return Schema2ItemColumns.All(column => HasItemColumn(connection, column));
+    }
+
     private static LibraryCatalogSnapshot ReadSnapshot(SqliteConnection connection)
     {
-        var availablePresent = ExecuteScalarString(connection, "SELECT value FROM catalog_meta WHERE key = 'available_tags_present';") == "1";
         return new LibraryCatalogSnapshot
         {
             Sources = ReadSourceRows(connection),
             Items = ReadItemRows(connection),
             Categories = ReadCategoryRows(connection),
-            Tags = ReadTagRows(connection),
-            AvailableTagsPresent = availablePresent,
-            AvailableTags = availablePresent ? ReadAvailableTagRows(connection) : []
+            Tags = ReadTagRows(connection)
         };
     }
 
@@ -974,20 +1021,6 @@ public static class LibraryCatalogStore
         return rows;
     }
 
-    private static List<string> ReadAvailableTagRows(SqliteConnection connection)
-    {
-        using var command = connection.CreateCommand();
-        command.CommandText = "SELECT name FROM available_tags ORDER BY position;";
-        using var reader = command.ExecuteReader();
-        var rows = new List<string>();
-        while (reader.Read())
-        {
-            rows.Add(reader.GetString(0));
-        }
-
-        return rows;
-    }
-
     private static List<LibraryCatalogItem> ReadItemRows(SqliteConnection connection)
     {
         var tagsByItem = new Dictionary<string, List<string>>(StringComparer.Ordinal);
@@ -1008,8 +1041,20 @@ public static class LibraryCatalogStore
             }
         }
 
+        var includeThumbnails = HasItemColumn(connection, "thumbnail_revision");
         using var command = connection.CreateCommand();
-        command.CommandText = """
+        command.CommandText = includeThumbnails
+            ? """
+            SELECT id, source_id, full_path, full_path_fold, relative_path, relative_path_fold,
+                   file_name, file_name_fold, duration_ticks, has_audio, integrated_loudness, peak_db,
+                   is_favorite, is_blacklisted, play_count, last_played_utc, media_type, fingerprint,
+                   fingerprint_algorithm, fingerprint_version, file_size_bytes, last_write_time_utc,
+                   fingerprint_last_utc, fingerprint_status, loudness_error,
+                   thumbnail_revision, thumbnail_width, thumbnail_height
+            FROM items
+            ORDER BY position;
+            """
+            : """
             SELECT id, source_id, full_path, full_path_fold, relative_path, relative_path_fold,
                    file_name, file_name_fold, duration_ticks, has_audio, integrated_loudness, peak_db,
                    is_favorite, is_blacklisted, play_count, last_played_utc, media_type, fingerprint,
@@ -1050,6 +1095,9 @@ public static class LibraryCatalogStore
                 FingerprintLastUtc = ReadUtc(reader, 22),
                 FingerprintStatus = reader.IsDBNull(23) ? null : reader.GetInt32(23),
                 LoudnessError = reader.IsDBNull(24) ? null : reader.GetString(24),
+                ThumbnailRevision = includeThumbnails && !reader.IsDBNull(25) ? reader.GetString(25) : null,
+                ThumbnailWidth = includeThumbnails && !reader.IsDBNull(26) ? reader.GetInt32(26) : null,
+                ThumbnailHeight = includeThumbnails && !reader.IsDBNull(27) ? reader.GetInt32(27) : null,
                 Tags = tagsByItem.TryGetValue(id, out var names) ? names : []
             });
         }
@@ -1177,28 +1225,6 @@ public static class LibraryCatalogStore
         }
     }
 
-    private static void InsertAvailableTags(SqliteConnection connection, AvailableTagsRow availableTags)
-    {
-        if (!availableTags.Present)
-        {
-            return;
-        }
-
-        for (var i = 0; i < availableTags.Names.Count; i++)
-        {
-            var name = availableTags.Names[i];
-            Execute(
-                connection,
-                """
-                INSERT INTO available_tags (position, name, name_fold)
-                VALUES ($position, $name, $fold);
-                """,
-                ("$position", i),
-                ("$name", name),
-                ("$fold", Fold(name)));
-        }
-    }
-
     private static List<SourceRow> ReadSources(JsonObject root)
     {
         var rows = new List<SourceRow>();
@@ -1288,25 +1314,6 @@ public static class LibraryCatalogStore
         }
 
         return rows;
-    }
-
-    private static AvailableTagsRow ReadAvailableTags(JsonObject root)
-    {
-        if (!root.ContainsKey("availableTags") || root["availableTags"] is null)
-        {
-            return new AvailableTagsRow(false, []);
-        }
-
-        if (root["availableTags"] is not JsonArray tags)
-        {
-            return new AvailableTagsRow(true, []);
-        }
-
-        var names = tags
-            .Select(GetNodeString)
-            .Where(name => !string.IsNullOrWhiteSpace(name))
-            .ToList();
-        return new AvailableTagsRow(true, names);
     }
 
     private static List<ItemRow> ReadItems(JsonObject root)
@@ -1919,7 +1926,6 @@ public static class LibraryCatalogStore
     private sealed record SourceRow(string Id, string RootPath, string? DisplayName, bool IsEnabled);
     private sealed record CategoryRow(string Id, string Name, int SortOrder);
     private sealed record TagRow(string Name, string CategoryId);
-    private sealed record AvailableTagsRow(bool Present, IReadOnlyList<string> Names);
     private sealed record ItemRow(
         string Id,
         string SourceId,

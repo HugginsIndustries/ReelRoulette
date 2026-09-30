@@ -23,18 +23,18 @@ public sealed class LibraryCatalogSessionTests
             }
             """);
 
-        var opened = LibraryCatalogStore.Open(dir.Path);
+        var opened = CatalogOpen.Open(dir.Path);
 
         var item = Assert.Single(opened.Catalog!.Items);
         Assert.Equal("no audio stream", item.LoudnessError);
-        Assert.Equal("1", ReadUserVersion(dir.Path));
+        Assert.Equal("2", ReadUserVersion(dir.Path));
     }
 
     [Fact]
     public void FavoriteAndDurationUpdates_OnTwoConnections_BothRemain()
     {
         using var dir = new TempDirectory();
-        var opened = LibraryCatalogStore.Open(dir.Path);
+        var opened = CatalogOpen.Open(dir.Path);
         var first = opened.Session!;
         Assert.True(first.InsertItem(new LibraryCatalogItem
         {
@@ -58,7 +58,7 @@ public sealed class LibraryCatalogSessionTests
     public void TagUpdate_SurvivesLaterSourceEnabledUpdate()
     {
         using var dir = new TempDirectory();
-        var session = LibraryCatalogStore.Open(dir.Path).Session!;
+        var session = CatalogOpen.Open(dir.Path).Session!;
         Assert.True(session.InsertSource("source-1", "/clips", "Clips", false));
         Assert.True(session.InsertItem(new LibraryCatalogItem
         {
@@ -75,14 +75,13 @@ public sealed class LibraryCatalogSessionTests
         var catalog = LibraryCatalogStore.Read(session.DatabasePath);
         Assert.Equal(["Café"], Assert.Single(catalog.Items).Tags);
         Assert.True(Assert.Single(catalog.Sources).IsEnabled);
-        Assert.False(catalog.AvailableTagsPresent);
     }
 
     [Fact]
     public void BuildDocument_UsesIntegerEnumsAndHourDuration_OmitsThumbnailsAndFingerprintIndex()
     {
         using var dir = new TempDirectory();
-        var session = LibraryCatalogStore.Open(dir.Path).Session!;
+        var session = CatalogOpen.Open(dir.Path).Session!;
         Assert.True(session.InsertItem(new LibraryCatalogItem
         {
             Id = "item-1",
@@ -113,7 +112,7 @@ public sealed class LibraryCatalogSessionTests
     public void InsertItem_TrimsAndDedupesTags_SoLaterRemoveMatches()
     {
         using var dir = new TempDirectory();
-        var session = LibraryCatalogStore.Open(dir.Path).Session!;
+        var session = CatalogOpen.Open(dir.Path).Session!;
         Assert.True(session.InsertItem(new LibraryCatalogItem
         {
             Id = "item-1",
@@ -132,7 +131,7 @@ public sealed class LibraryCatalogSessionTests
     public void RenameTag_OntoExistingName_MergesCatalogAndItemTags()
     {
         using var dir = new TempDirectory();
-        var session = LibraryCatalogStore.Open(dir.Path).Session!;
+        var session = CatalogOpen.Open(dir.Path).Session!;
         Assert.True(session.UpsertTag("foo", "alpha"));
         Assert.True(session.UpsertTag("bar", "beta"));
         Assert.True(session.InsertItem(new LibraryCatalogItem
@@ -173,7 +172,7 @@ public sealed class LibraryCatalogSessionTests
     public void RenameTag_OntoEarlierName_KeepsEarlierCategory()
     {
         using var dir = new TempDirectory();
-        var session = LibraryCatalogStore.Open(dir.Path).Session!;
+        var session = CatalogOpen.Open(dir.Path).Session!;
         Assert.True(session.UpsertTag("bar", "beta"));
         Assert.True(session.UpsertTag("foo", "alpha"));
 
@@ -188,7 +187,7 @@ public sealed class LibraryCatalogSessionTests
     public void RenameTag_UncategorizedLosesToRealCategory_InEitherOrder()
     {
         using var dir = new TempDirectory();
-        var session = LibraryCatalogStore.Open(dir.Path).Session!;
+        var session = CatalogOpen.Open(dir.Path).Session!;
         Assert.True(session.UpsertTag("foo", null));
         Assert.True(session.UpsertTag("bar", "beta"));
 
@@ -198,7 +197,7 @@ public sealed class LibraryCatalogSessionTests
         Assert.Equal("beta", tag.CategoryId);
 
         using var other = new TempDirectory();
-        var later = LibraryCatalogStore.Open(other.Path).Session!;
+        var later = CatalogOpen.Open(other.Path).Session!;
         Assert.True(later.UpsertTag("bar", null));
         Assert.True(later.UpsertTag("foo", "alpha"));
 
@@ -212,7 +211,7 @@ public sealed class LibraryCatalogSessionTests
     public void AddItemTags_CreatesMissingCatalogTag_AndLeavesExistingCategoryAndSpelling()
     {
         using var dir = new TempDirectory();
-        var session = LibraryCatalogStore.Open(dir.Path).Session!;
+        var session = CatalogOpen.Open(dir.Path).Session!;
         Assert.True(session.UpsertTag("Café", "beta"));
         Assert.True(session.InsertItem(new LibraryCatalogItem
         {
@@ -230,14 +229,13 @@ public sealed class LibraryCatalogSessionTests
         Assert.Equal("beta", existing.CategoryId);
         var created = Assert.Single(catalog.Tags, tag => tag.Name == "New");
         Assert.Equal("uncategorized", created.CategoryId);
-        Assert.False(catalog.AvailableTagsPresent);
     }
 
     [Fact]
     public void AddItemTags_WhenItemAlreadyHasTag_FillsMissingCatalogRow()
     {
         using var dir = new TempDirectory();
-        var session = LibraryCatalogStore.Open(dir.Path).Session!;
+        var session = CatalogOpen.Open(dir.Path).Session!;
         Assert.True(session.InsertItem(new LibraryCatalogItem
         {
             Id = "item-1",
@@ -261,7 +259,7 @@ public sealed class LibraryCatalogSessionTests
     public void AddItemTags_MissingItem_CreatesNothing()
     {
         using var dir = new TempDirectory();
-        var session = LibraryCatalogStore.Open(dir.Path).Session!;
+        var session = CatalogOpen.Open(dir.Path).Session!;
 
         Assert.False(session.AddItemTags("missing", ["Café"]));
 
@@ -275,7 +273,7 @@ public sealed class LibraryCatalogSessionTests
     public void UpsertTag_BlankCategory_KeepsExistingSpellingAndRevision()
     {
         using var dir = new TempDirectory();
-        var session = LibraryCatalogStore.Open(dir.Path).Session!;
+        var session = CatalogOpen.Open(dir.Path).Session!;
         Assert.True(session.UpsertTag("Foo", "beta"));
         var revision = session.Revision;
 
@@ -291,7 +289,7 @@ public sealed class LibraryCatalogSessionTests
     public void UpsertTag_SameCategory_DifferentSpelling_ChangesNothing()
     {
         using var dir = new TempDirectory();
-        var session = LibraryCatalogStore.Open(dir.Path).Session!;
+        var session = CatalogOpen.Open(dir.Path).Session!;
         Assert.True(session.UpsertTag("Foo", "beta"));
         var revision = session.Revision;
 
@@ -307,7 +305,7 @@ public sealed class LibraryCatalogSessionTests
     public void UpsertTag_DifferentCategory_UpdatesCategoryOnly()
     {
         using var dir = new TempDirectory();
-        var session = LibraryCatalogStore.Open(dir.Path).Session!;
+        var session = CatalogOpen.Open(dir.Path).Session!;
         Assert.True(session.UpsertTag("Foo", "beta"));
 
         Assert.True(session.UpsertTag("foo", "alpha"));
@@ -321,7 +319,7 @@ public sealed class LibraryCatalogSessionTests
     public void UpsertTag_BlankCategory_KeepsExistingCategoryAndLeavesRevision()
     {
         using var dir = new TempDirectory();
-        var session = LibraryCatalogStore.Open(dir.Path).Session!;
+        var session = CatalogOpen.Open(dir.Path).Session!;
         Assert.True(session.UpsertTag("foo", "beta"));
         var revision = session.Revision;
 
@@ -337,7 +335,7 @@ public sealed class LibraryCatalogSessionTests
     public void UpsertTag_BlankCategory_OnNewTag_StoresUncategorized()
     {
         using var dir = new TempDirectory();
-        var session = LibraryCatalogStore.Open(dir.Path).Session!;
+        var session = CatalogOpen.Open(dir.Path).Session!;
 
         Assert.True(session.UpsertTag("foo", "  "));
 
@@ -349,7 +347,7 @@ public sealed class LibraryCatalogSessionTests
     public void ReplaceTagCatalog_DuplicateNames_KeepEarlierCategoryUnlessUncategorized()
     {
         using var dir = new TempDirectory();
-        var session = LibraryCatalogStore.Open(dir.Path).Session!;
+        var session = CatalogOpen.Open(dir.Path).Session!;
 
         Assert.True(session.ReplaceTagCatalog(
             [],
@@ -378,7 +376,7 @@ public sealed class LibraryCatalogSessionTests
     public void InsertItem_MissingFingerprintVersion_StoresOne()
     {
         using var dir = new TempDirectory();
-        var session = LibraryCatalogStore.Open(dir.Path).Session!;
+        var session = CatalogOpen.Open(dir.Path).Session!;
 
         Assert.True(session.InsertItem(new LibraryCatalogItem
         {
@@ -396,7 +394,7 @@ public sealed class LibraryCatalogSessionTests
     public void InsertItem_StoresLocalTimestampsAsUtc()
     {
         using var dir = new TempDirectory();
-        var session = LibraryCatalogStore.Open(dir.Path).Session!;
+        var session = CatalogOpen.Open(dir.Path).Session!;
         var local = new DateTime(2024, 6, 15, 12, 0, 0, DateTimeKind.Local);
         var expected = local.ToUniversalTime().Ticks;
 
@@ -420,7 +418,7 @@ public sealed class LibraryCatalogSessionTests
     public void Revision_IncrementsOnlyWhenATransactionCommits()
     {
         using var dir = new TempDirectory();
-        var session = LibraryCatalogStore.Open(dir.Path).Session!;
+        var session = CatalogOpen.Open(dir.Path).Session!;
         Assert.Equal(0, session.Revision);
 
         _ = session.BuildDocument();
@@ -447,7 +445,7 @@ public sealed class LibraryCatalogSessionTests
     public void TagEdits_PersistByIdOrPath_WithoutBuildingTheCatalogDocument()
     {
         using var dir = new TempDirectory();
-        var session = LibraryCatalogStore.Open(dir.Path).Session!;
+        var session = CatalogOpen.Open(dir.Path).Session!;
         Assert.True(session.InsertItem(new LibraryCatalogItem
         {
             Id = "item-1",
@@ -488,7 +486,7 @@ public sealed class LibraryCatalogSessionTests
     public void RenameAndDelete_ReturnTheItemIdsThatHadTheTag_WithoutBuildingTheCatalogDocument()
     {
         using var dir = new TempDirectory();
-        var session = LibraryCatalogStore.Open(dir.Path).Session!;
+        var session = CatalogOpen.Open(dir.Path).Session!;
         Assert.True(session.UpsertTag("Night", null));
         Assert.True(session.UpsertTag("Day", null));
         Assert.True(session.InsertItem(new LibraryCatalogItem
@@ -526,7 +524,7 @@ public sealed class LibraryCatalogSessionTests
     public void ApplyAutoTagAssignments_ReportsChangedPathsPerTag()
     {
         using var dir = new TempDirectory();
-        var session = LibraryCatalogStore.Open(dir.Path).Session!;
+        var session = CatalogOpen.Open(dir.Path).Session!;
         Assert.True(session.InsertItem(new LibraryCatalogItem
         {
             Id = "item-1",
@@ -559,7 +557,7 @@ public sealed class LibraryCatalogSessionTests
     public void FavoriteBlacklistAndPlayback_PersistByIdOrPath_WithoutBuildingTheCatalogDocument()
     {
         using var dir = new TempDirectory();
-        var session = LibraryCatalogStore.Open(dir.Path).Session!;
+        var session = CatalogOpen.Open(dir.Path).Session!;
         var playedAt = new DateTime(2024, 1, 2, 3, 4, 5, DateTimeKind.Utc);
         Assert.True(session.InsertItem(new LibraryCatalogItem
         {

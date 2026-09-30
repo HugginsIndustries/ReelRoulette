@@ -68,7 +68,7 @@ public sealed class LibraryCatalogStoreTests
             }
             """);
 
-        var opened = LibraryCatalogStore.Open(dir.Path);
+        var opened = CatalogOpen.Open(dir.Path);
 
         Assert.Equal(LibraryCatalogOpenStatus.Opened, opened.Status);
         Assert.False(File.Exists(jsonPath));
@@ -96,9 +96,7 @@ public sealed class LibraryCatalogStoreTests
         Assert.Equal("café", tag.NameFold);
         Assert.Equal("cat-1", tag.CategoryId);
         Assert.NotEqual("cafe", tag.NameFold);
-
-        Assert.True(catalog.AvailableTagsPresent);
-        Assert.Equal(["Legacy", "Café"], catalog.AvailableTags);
+        Assert.DoesNotContain(catalog.Tags, item => item.Name == "Legacy");
 
         Assert.Equal(2, catalog.Items.Count);
         var photo = catalog.Items[0];
@@ -133,7 +131,8 @@ public sealed class LibraryCatalogStoreTests
         Assert.DoesNotContain("index-only-marker", databaseText, StringComparison.Ordinal);
         Assert.DoesNotContain("NOCASE", ReadSchema(dir.Path), StringComparison.OrdinalIgnoreCase);
         Assert.Equal("wal", ReadPragma(dir.Path, "journal_mode"));
-        Assert.Equal("1", ReadPragma(dir.Path, "user_version"));
+        Assert.Equal("2", ReadPragma(dir.Path, "user_version"));
+        Assert.DoesNotContain("available_tags", ReadSchema(dir.Path), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -153,11 +152,11 @@ public sealed class LibraryCatalogStoreTests
             }
             """);
 
-        var opened = LibraryCatalogStore.Open(dir.Path);
+        var opened = CatalogOpen.Open(dir.Path);
 
         var item = Assert.Single(opened.Catalog!.Items);
         Assert.Equal(TimeSpan.Parse("00:00:12.5000000").Ticks, item.DurationTicks);
-        Assert.False(opened.Catalog.AvailableTagsPresent);
+        Assert.DoesNotContain("available_tags", ReadSchema(dir.Path), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -169,7 +168,7 @@ public sealed class LibraryCatalogStoreTests
         var original = File.ReadAllBytes(jsonPath);
 
         var ex = Assert.Throws<InvalidOperationException>(() =>
-            LibraryCatalogStore.Open(dir.Path, new LibraryCatalogOpenOptions
+            CatalogOpen.Open(dir.Path, new LibraryCatalogOpenOptions
             {
                 BeforePublish = () => throw new InvalidOperationException("crash before publish")
             }));
@@ -189,7 +188,7 @@ public sealed class LibraryCatalogStoreTests
         var original = File.ReadAllBytes(jsonPath);
 
         var ex = Assert.Throws<IOException>(() =>
-            LibraryCatalogStore.Open(dir.Path, new LibraryCatalogOpenOptions
+            CatalogOpen.Open(dir.Path, new LibraryCatalogOpenOptions
             {
                 DirectorySync = _ => throw new IOException("directory sync failed")
             }));
@@ -207,7 +206,7 @@ public sealed class LibraryCatalogStoreTests
         File.WriteAllText(Path.Combine(dir.Path, "library.json"), """
             { "items": [ { "id": "from-json", "fullPath": "/real.mp4", "fileName": "real.mp4", "playCount": 3 } ] }
             """);
-        var first = LibraryCatalogStore.Open(dir.Path);
+        var first = CatalogOpen.Open(dir.Path);
         Assert.Equal("from-json", Assert.Single(first.Catalog!.Items).Id);
 
         File.WriteAllText(Path.Combine(dir.Path, "library.json"), "{ not json");
@@ -215,7 +214,7 @@ public sealed class LibraryCatalogStoreTests
             { "items": [ { "id": "from-migrated", "fullPath": "/other.mp4", "fileName": "other.mp4", "playCount": 9 } ] }
             """);
 
-        var second = LibraryCatalogStore.Open(dir.Path);
+        var second = CatalogOpen.Open(dir.Path);
 
         Assert.Equal(LibraryCatalogOpenStatus.Opened, second.Status);
         var item = Assert.Single(second.Catalog!.Items);
@@ -234,7 +233,7 @@ public sealed class LibraryCatalogStoreTests
         var original = File.ReadAllBytes(jsonPath);
         File.WriteAllText(Path.Combine(dir.Path, "library.db"), "not a database");
 
-        var refused = LibraryCatalogStore.Open(dir.Path);
+        var refused = CatalogOpen.Open(dir.Path);
 
         Assert.Equal(LibraryCatalogOpenStatus.Refused, refused.Status);
         Assert.Equal(LibraryCatalogStore.RefusedMessageJsonPreserved, refused.Message);
@@ -243,7 +242,7 @@ public sealed class LibraryCatalogStoreTests
         Assert.False(File.Exists(Path.Combine(dir.Path, "library.db")));
         Assert.True(File.Exists(Path.Combine(dir.Path, "library.db.refused")));
 
-        var migrated = LibraryCatalogStore.Open(dir.Path);
+        var migrated = CatalogOpen.Open(dir.Path);
 
         Assert.Equal(LibraryCatalogOpenStatus.Opened, migrated.Status);
         Assert.Equal("kept", Assert.Single(migrated.Catalog!.Items).Id);
@@ -263,7 +262,7 @@ public sealed class LibraryCatalogStoreTests
         var jsonBytes = File.ReadAllBytes(jsonPath);
         var migratedBytes = File.ReadAllBytes(migratedPath);
 
-        var ex = Assert.Throws<InvalidOperationException>(() => LibraryCatalogStore.Open(dir.Path));
+        var ex = Assert.Throws<InvalidOperationException>(() => CatalogOpen.Open(dir.Path));
 
         Assert.Equal(LibraryCatalogStore.SnapshotAlreadyExistsMessage, ex.Message);
         Assert.Equal(jsonBytes, File.ReadAllBytes(jsonPath));
@@ -280,7 +279,7 @@ public sealed class LibraryCatalogStoreTests
         File.WriteAllText(migratedPath, """{ "items": [ { "id": "snapshot", "fullPath": "/snap.mp4" } ] }""");
         CreateEmptyDatabase(Path.Combine(dir.Path, "library.db"));
 
-        var refused = LibraryCatalogStore.Open(dir.Path);
+        var refused = CatalogOpen.Open(dir.Path);
 
         Assert.Equal(LibraryCatalogOpenStatus.Refused, refused.Status);
         Assert.Equal(LibraryCatalogStore.RefusedMessageWithSnapshot, refused.Message);
@@ -302,12 +301,12 @@ public sealed class LibraryCatalogStoreTests
             """);
         var original = File.ReadAllBytes(jsonPath);
 
-        var opened = LibraryCatalogStore.Open(dir.Path);
+        var opened = CatalogOpen.Open(dir.Path);
         Assert.Equal(LibraryCatalogOpenStatus.Opened, opened.Status);
         File.WriteAllBytes(jsonPath, original);
         CorruptPagesAfterHeader(Path.Combine(dir.Path, "library.db"));
 
-        var refused = LibraryCatalogStore.Open(dir.Path);
+        var refused = CatalogOpen.Open(dir.Path);
 
         Assert.Equal(LibraryCatalogOpenStatus.Refused, refused.Status);
         Assert.Equal(LibraryCatalogStore.RefusedMessageJsonPreserved, refused.Message);
@@ -323,7 +322,7 @@ public sealed class LibraryCatalogStoreTests
         using var dir = new TempDirectory();
         File.WriteAllText(Path.Combine(dir.Path, "library.db"), "not a database");
 
-        var refused = LibraryCatalogStore.Open(dir.Path);
+        var refused = CatalogOpen.Open(dir.Path);
 
         Assert.Equal(LibraryCatalogOpenStatus.Refused, refused.Status);
         Assert.Equal(LibraryCatalogStore.RefusedMessage, refused.Message);
@@ -341,7 +340,7 @@ public sealed class LibraryCatalogStoreTests
         var migratedPath = Path.Combine(dir.Path, "library.json.migrated");
         File.WriteAllText(migratedPath, """{ "items": [ { "id": "snapshot", "fullPath": "/snap.mp4" } ] }""");
 
-        var refused = LibraryCatalogStore.Open(dir.Path);
+        var refused = CatalogOpen.Open(dir.Path);
 
         Assert.Equal(LibraryCatalogOpenStatus.Refused, refused.Status);
         Assert.Equal(LibraryCatalogStore.RefusedMessageWithSnapshot, refused.Message);
@@ -381,15 +380,15 @@ public sealed class LibraryCatalogStoreTests
     {
         using var dir = new TempDirectory();
 
-        var result = LibraryCatalogStore.Open(dir.Path);
+        var result = CatalogOpen.Open(dir.Path);
 
         Assert.Equal(LibraryCatalogOpenStatus.Opened, result.Status);
         Assert.NotNull(result.Session);
         Assert.Empty(result.Catalog!.Sources);
         Assert.Empty(result.Catalog.Items);
-        Assert.False(result.Catalog.AvailableTagsPresent);
         Assert.Equal(0, result.Session.Revision);
-        Assert.Equal("1", ReadPragma(dir.Path, "user_version"));
+        Assert.Equal("2", ReadPragma(dir.Path, "user_version"));
+        Assert.DoesNotContain("available_tags", ReadSchema(dir.Path), StringComparison.Ordinal);
         Assert.Contains("loudness_error", ReadSchema(dir.Path), StringComparison.Ordinal);
         Assert.False(File.Exists(Path.Combine(dir.Path, "library.json")));
     }
@@ -420,7 +419,7 @@ public sealed class LibraryCatalogStoreTests
             }
             """);
 
-        var opened = LibraryCatalogStore.Open(dir.Path);
+        var opened = CatalogOpen.Open(dir.Path);
 
         Assert.Null(opened.Catalog!.Items[0].FingerprintStatus);
         Assert.Equal(0, opened.Catalog.Items[1].FingerprintStatus);
@@ -444,7 +443,7 @@ public sealed class LibraryCatalogStoreTests
             }
             """);
 
-        var opened = LibraryCatalogStore.Open(dir.Path);
+        var opened = CatalogOpen.Open(dir.Path);
 
         var category = Assert.Single(opened.Catalog!.Categories);
         Assert.Equal("uncategorized", category.Id);
@@ -468,7 +467,7 @@ public sealed class LibraryCatalogStoreTests
             }
             """);
 
-        var opened = LibraryCatalogStore.Open(dir.Path);
+        var opened = CatalogOpen.Open(dir.Path);
 
         var source = Assert.Single(opened.Catalog!.Sources);
         Assert.Equal("kept", source.Id);
@@ -492,7 +491,7 @@ public sealed class LibraryCatalogStoreTests
             }
             """);
 
-        var opened = LibraryCatalogStore.Open(dir.Path);
+        var opened = CatalogOpen.Open(dir.Path);
 
         Assert.Equal(2, opened.Catalog!.Categories.Count);
         Assert.Equal("cat-1", opened.Catalog.Categories[0].Id);
@@ -519,7 +518,7 @@ public sealed class LibraryCatalogStoreTests
             }
             """);
 
-        var opened = LibraryCatalogStore.Open(dir.Path);
+        var opened = CatalogOpen.Open(dir.Path);
 
         var item = Assert.Single(opened.Catalog!.Items);
         Assert.Equal("kept", item.Id);
@@ -551,7 +550,7 @@ public sealed class LibraryCatalogStoreTests
         var started = System.Diagnostics.Stopwatch.StartNew();
         try
         {
-            ex = Assert.Throws<SqliteException>(() => LibraryCatalogStore.Open(dir.Path));
+            ex = Assert.Throws<SqliteException>(() => CatalogOpen.Open(dir.Path));
         }
         finally
         {
@@ -580,7 +579,7 @@ public sealed class LibraryCatalogStoreTests
             }
             """);
 
-        var opened = LibraryCatalogStore.Open(dir.Path);
+        var opened = CatalogOpen.Open(dir.Path);
 
         var category = Assert.Single(opened.Catalog!.Categories);
         Assert.Equal("uncategorized", category.Id);
@@ -683,7 +682,7 @@ public sealed class LibraryCatalogStoreTests
         File.WriteAllText(Path.Combine(dir.Path, "library.json"), """
             { "items": [ { "id": "item-1", "fullPath": "/clips/a.mp4", "fileName": "a.mp4" } ] }
             """);
-        var opened = LibraryCatalogStore.Open(dir.Path);
+        var opened = CatalogOpen.Open(dir.Path);
         Assert.True(opened.Session!.SetFavorite("item-1", true));
 
         var checkpoint = Path.Combine(dir.Path, "checkpoint.db");
@@ -702,7 +701,7 @@ public sealed class LibraryCatalogStoreTests
         File.WriteAllText(Path.Combine(dir.Path, "library.json"), """
             { "items": [ { "id": "kept", "fullPath": "/clips/kept.mp4", "fileName": "kept.mp4" } ] }
             """);
-        var opened = LibraryCatalogStore.Open(dir.Path);
+        var opened = CatalogOpen.Open(dir.Path);
         Assert.NotNull(opened.Session);
         File.Delete(Path.Combine(dir.Path, "library.json.migrated"));
 
@@ -724,7 +723,7 @@ public sealed class LibraryCatalogStoreTests
         Assert.True(File.Exists(Path.Combine(dir.Path, "library.db.previous")));
         Assert.True(File.Exists(Path.Combine(dir.Path, "library.db.incoming")));
 
-        var recovered = LibraryCatalogStore.Open(dir.Path);
+        var recovered = CatalogOpen.Open(dir.Path);
         Assert.Equal("kept", Assert.Single(recovered.Catalog!.Items).Id);
         Assert.False(File.Exists(Path.Combine(dir.Path, "library.db.incoming")));
         Assert.False(File.Exists(Path.Combine(dir.Path, "library.db.previous")));
@@ -737,7 +736,7 @@ public sealed class LibraryCatalogStoreTests
         File.WriteAllText(Path.Combine(dir.Path, "library.json"), """
             { "items": [ { "id": "old", "fullPath": "/clips/old.mp4", "fileName": "old.mp4" } ] }
             """);
-        _ = LibraryCatalogStore.Open(dir.Path);
+        _ = CatalogOpen.Open(dir.Path);
         File.Delete(Path.Combine(dir.Path, "library.json.migrated"));
 
         LibraryCatalogStore.PrepareIncomingFromJson(dir.Path, new System.Text.Json.Nodes.JsonObject
@@ -755,7 +754,7 @@ public sealed class LibraryCatalogStoreTests
         LibraryCatalogStore.PublishIncoming(dir.Path, new LibraryCatalogReplaceOptions { StopAfterPublishingIncoming = true });
         Assert.True(File.Exists(Path.Combine(dir.Path, "library.db.previous")));
 
-        var recovered = LibraryCatalogStore.Open(dir.Path);
+        var recovered = CatalogOpen.Open(dir.Path);
         Assert.Equal("landed", Assert.Single(recovered.Catalog!.Items).Id);
         Assert.False(File.Exists(Path.Combine(dir.Path, "library.db.previous")));
         Assert.False(File.Exists(Path.Combine(dir.Path, "library.json")));
@@ -771,10 +770,10 @@ public sealed class LibraryCatalogStoreTests
             File.WriteAllText(Path.Combine(source.Path, "library.json"), """
                 { "items": [ { "id": "promoted", "fullPath": "/clips/a.mp4", "fileName": "a.mp4" } ] }
                 """);
-            var opened = LibraryCatalogStore.Open(source.Path);
+            var opened = CatalogOpen.Open(source.Path);
             LibraryCatalogStore.WriteCheckpoint(opened.Session!.DatabasePath, Path.Combine(dir.Path, "library.db.incoming"));
 
-            var recovered = LibraryCatalogStore.Open(dir.Path);
+            var recovered = CatalogOpen.Open(dir.Path);
             Assert.Equal("promoted", Assert.Single(recovered.Catalog!.Items).Id);
             Assert.False(File.Exists(Path.Combine(dir.Path, "library.db.incoming")));
         }
@@ -791,10 +790,10 @@ public sealed class LibraryCatalogStoreTests
         File.WriteAllText(Path.Combine(dir.Path, "library.json"), """
             { "items": [ { "id": "kept", "fullPath": "/clips/a.mp4", "fileName": "a.mp4" } ] }
             """);
-        _ = LibraryCatalogStore.Open(dir.Path);
+        _ = CatalogOpen.Open(dir.Path);
         File.WriteAllText(Path.Combine(dir.Path, "library.db.incoming"), "partial");
 
-        var recovered = LibraryCatalogStore.Open(dir.Path);
+        var recovered = CatalogOpen.Open(dir.Path);
         Assert.Equal("kept", Assert.Single(recovered.Catalog!.Items).Id);
         Assert.False(File.Exists(Path.Combine(dir.Path, "library.db.incoming")));
     }
@@ -809,11 +808,11 @@ public sealed class LibraryCatalogStoreTests
             File.WriteAllText(Path.Combine(source.Path, "library.json"), """
                 { "items": [ { "id": "previous", "fullPath": "/clips/a.mp4", "fileName": "a.mp4" } ] }
                 """);
-            var opened = LibraryCatalogStore.Open(source.Path);
+            var opened = CatalogOpen.Open(source.Path);
             LibraryCatalogStore.WriteCheckpoint(opened.Session!.DatabasePath, Path.Combine(dir.Path, "library.db.previous"));
             File.WriteAllText(Path.Combine(dir.Path, "library.db"), "partial");
 
-            var recovered = LibraryCatalogStore.Open(dir.Path);
+            var recovered = CatalogOpen.Open(dir.Path);
             Assert.Equal("previous", Assert.Single(recovered.Catalog!.Items).Id);
             Assert.True(File.Exists(Path.Combine(dir.Path, "library.db")));
             Assert.False(File.Exists(Path.Combine(dir.Path, "library.db.previous")));
@@ -834,7 +833,7 @@ public sealed class LibraryCatalogStoreTests
               "items": [ { "id": "i1", "sourceId": "s1", "fullPath": "/media/movies-extra/a.mp4", "relativePath": "../movies-extra/a.mp4", "fileName": "a.mp4" } ]
             }
             """);
-        var opened = LibraryCatalogStore.Open(dir.Path);
+        var opened = CatalogOpen.Open(dir.Path);
         var result = LibraryCatalogStore.RemapSources(
             opened.Session!.DatabasePath,
             new Dictionary<string, string>(StringComparer.Ordinal) { ["/media/movies"] = "/media/movies" },
@@ -862,7 +861,7 @@ public sealed class LibraryCatalogStoreTests
         File.WriteAllText(Path.Combine(dir.Path, "library.json"), """
             { "items": [ { "id": "item-1", "fullPath": "/clips/a.mp4", "fileName": "a.mp4" } ] }
             """);
-        var opened = LibraryCatalogStore.Open(dir.Path);
+        var opened = CatalogOpen.Open(dir.Path);
         var destination = Path.Combine(dir.Path, "checkpoint.db");
         var created = false;
         var ex = Assert.Throws<IOException>(() => LibraryCatalogStore.WriteCheckpoint(

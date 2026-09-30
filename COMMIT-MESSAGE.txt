@@ -19,7 +19,9 @@ Instructions:
 
 Commit Message:
 
-Docs: Plan catalog schema version 2
+M10i16: Store presets and thumbnail metadata in the catalog
 
-- Add a milestone that drops the legacy available-tags list, stores presets, and stores thumbnail revision and dimensions in one schema migration.
-- Renumber catalog document removal and JSON-era leftovers to follow that migration.
+- Open every catalog at schema version 2, migrating a schema 1 database in place and copying presets and thumbnail revision and dimensions.
+- Keep a schema 1 database a valid catalog until that migrating open, including on import.
+- Read and write presets from the catalog table, and keep core settings and desktop settings in JSON.
+- Save thumbnail revision, width, and height as each item finishes, and delete leftover JPEG files when the thumbnail stage completes.

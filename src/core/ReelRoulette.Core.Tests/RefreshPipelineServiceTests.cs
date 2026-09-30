@@ -288,7 +288,7 @@ public sealed class RefreshPipelineServiceTests
         var firstWrite = File.GetLastWriteTimeUtc(thumbPath);
 
         await Task.Delay(20);
-        var catalog = ReelRoulette.Core.Library.LibraryCatalogStore.Open(scope.RootPath);
+        var catalog = CatalogOpen.Open(scope.RootPath);
         Assert.True(catalog.Session!.SetFingerprint("thumb-1", "fp-b", "SHA-256", 1, 1, DateTime.UtcNow));
 
         Assert.True(service.TryStartManual().Accepted);
@@ -339,7 +339,7 @@ public sealed class RefreshPipelineServiceTests
     }
 
     [Fact]
-    public void EnrichListedItems_ShouldAddThumbnailMetadataFromIndex()
+    public void EnrichListedItems_UsesRowDimensionsAndJpegExistence()
     {
         using var scope = new AppDataScope();
         var thumbsDir = Path.Combine(scope.RootPath, "thumbnails");
@@ -351,17 +351,23 @@ public sealed class RefreshPipelineServiceTests
             {
                 ["item-1"] = new JsonObject
                 {
-                    ["width"] = 480,
-                    ["height"] = 270,
-                    ["revision"] = "abc"
+                    ["width"] = 1,
+                    ["height"] = 1,
+                    ["revision"] = "from-index"
                 }
             }.ToJsonString());
 
         var service = CreateService(new ServerStateService(), scope.RootPath);
         var items = new JsonArray
         {
-            new JsonObject { ["id"] = "item-1", ["fileName"] = "a.mp4" },
-            new JsonObject { ["id"] = "item-2", ["fileName"] = "b.mp4" }
+            new JsonObject
+            {
+                ["id"] = "item-1",
+                ["fileName"] = "a.mp4",
+                ["thumbnailWidth"] = 480,
+                ["thumbnailHeight"] = 270
+            },
+            new JsonObject { ["id"] = "item-2", ["fileName"] = "b.mp4", ["thumbnailWidth"] = 0, ["thumbnailHeight"] = 0 }
         };
 
         service.EnrichListedItems(items);
@@ -397,16 +403,16 @@ public sealed class RefreshPipelineServiceTests
             }
         });
 
-        var service = CreateService(new ServerStateService(), scope.RootPath);
+        var host = LibraryCatalogHost.Open(scope.RootPath, Path.Combine(scope.RootPath, "thumbnails"));
+        var service = CreateService(new ServerStateService(), scope.RootPath, host);
         Assert.True(service.TryStartManual().Accepted);
         await WaitForCompletionAsync(service, TimeSpan.FromSeconds(10));
 
-        var indexPath = Path.Combine(scope.RootPath, "thumbnails", "index.json");
-        var indexRoot = await LoadLibraryAsync(indexPath);
-        var entry = Assert.IsType<JsonObject>(indexRoot["thumb-meta-1"]);
-        Assert.Equal("fp-meta-a", entry["revision"]?.GetValue<string>()?.Split('|')[0]);
-        Assert.True((entry["width"]?.GetValue<int?>() ?? 0) > 0);
-        Assert.True((entry["height"]?.GetValue<int?>() ?? 0) > 0);
+        var stored = Assert.Single(host.Session.ReadRefreshItems());
+        Assert.StartsWith("fp-meta-a|", stored.ThumbnailRevision, StringComparison.Ordinal);
+        Assert.True(stored.ThumbnailWidth is > 0);
+        Assert.True(stored.ThumbnailHeight is > 0);
+        Assert.False(File.Exists(Path.Combine(scope.RootPath, "thumbnails", "index.json")));
     }
 
     [Fact]
@@ -430,25 +436,23 @@ public sealed class RefreshPipelineServiceTests
             }
         });
 
-        var service = CreateService(new ServerStateService(), scope.RootPath);
+        var host = LibraryCatalogHost.Open(scope.RootPath, Path.Combine(scope.RootPath, "thumbnails"));
+        var service = CreateService(new ServerStateService(), scope.RootPath, host);
         Assert.True(service.TryStartManual().Accepted);
         await WaitForCompletionAsync(service, TimeSpan.FromSeconds(10));
 
-        var indexPath = Path.Combine(scope.RootPath, "thumbnails", "index.json");
-        await SeedLibraryAsync(indexPath, new JsonObject
-        {
-            ["thumb-legacy-1"] = "fp-legacy-a"
-        });
+        var stored = Assert.Single(host.Session.ReadRefreshItems());
+        Assert.True(host.Session.SetThumbnail(stored.Id, stored.ThumbnailRevision, null, null));
 
         Assert.True(service.TryStartManual().Accepted);
         var completed = await WaitForCompletionAsync(service, TimeSpan.FromSeconds(10));
         var stage = completed.Stages.Single(s => s.Stage == "thumbnailGeneration");
         Assert.Contains("metadata updated", stage.Message, StringComparison.OrdinalIgnoreCase);
 
-        var indexRoot = await LoadLibraryAsync(indexPath);
-        var entry = Assert.IsType<JsonObject>(indexRoot["thumb-legacy-1"]);
-        Assert.True((entry["width"]?.GetValue<int?>() ?? 0) > 0);
-        Assert.True((entry["height"]?.GetValue<int?>() ?? 0) > 0);
+        var filled = Assert.Single(host.Session.ReadRefreshItems());
+        Assert.Equal(stored.ThumbnailRevision, filled.ThumbnailRevision);
+        Assert.True(filled.ThumbnailWidth is > 0);
+        Assert.True(filled.ThumbnailHeight is > 0);
     }
 
     [Fact]
@@ -774,7 +778,7 @@ public sealed class RefreshPipelineServiceTests
             ["categories"] = new JsonArray()
         });
 
-        var host = LibraryCatalogHost.Open(scope.RootPath);
+        var host = LibraryCatalogHost.Open(scope.RootPath, Path.Combine(scope.RootPath, "thumbnails"));
         var builds = host.Session.DocumentBuilds;
         var service = CreateService(new ServerStateService(), scope.RootPath, host);
         Assert.True(service.TryStartManual().Accepted);
@@ -865,7 +869,7 @@ public sealed class RefreshPipelineServiceTests
             }
         });
 
-        var host = LibraryCatalogHost.Open(scope.RootPath);
+        var host = LibraryCatalogHost.Open(scope.RootPath, Path.Combine(scope.RootPath, "thumbnails"));
         var builds = host.Session.DocumentBuilds;
         var service = CreateService(new ServerStateService(), scope.RootPath, host);
         var hold = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -909,7 +913,7 @@ public sealed class RefreshPipelineServiceTests
             }
         });
 
-        var host = LibraryCatalogHost.Open(scope.RootPath);
+        var host = LibraryCatalogHost.Open(scope.RootPath, Path.Combine(scope.RootPath, "thumbnails"));
         var stored = Assert.Single(host.Session.ReadRefreshItems());
         Assert.NotNull(stored.FileSizeBytes);
         Assert.NotNull(stored.LastWriteTimeUtc);
@@ -918,17 +922,7 @@ public sealed class RefreshPipelineServiceTests
         var thumbPath = service.GetThumbnailPath("thumb-match");
         Directory.CreateDirectory(Path.GetDirectoryName(thumbPath)!);
         await File.WriteAllBytesAsync(thumbPath, TinyPngBytes);
-        await File.WriteAllTextAsync(
-            Path.Combine(scope.RootPath, "thumbnails", "index.json"),
-            new JsonObject
-            {
-                ["thumb-match"] = new JsonObject
-                {
-                    ["revision"] = revision,
-                    ["width"] = 1,
-                    ["height"] = 1
-                }
-            }.ToJsonString());
+        Assert.True(host.Session.SetThumbnail("thumb-match", revision, 1, 1));
         var before = File.GetLastWriteTimeUtc(thumbPath);
         var builds = host.Session.DocumentBuilds;
         await service.RunThumbnailStageAsync(CancellationToken.None);
@@ -964,22 +958,12 @@ public sealed class RefreshPipelineServiceTests
             }
         });
 
-        var host = LibraryCatalogHost.Open(scope.RootPath);
+        var host = LibraryCatalogHost.Open(scope.RootPath, Path.Combine(scope.RootPath, "thumbnails"));
         var stored = Assert.Single(host.Session.ReadRefreshItems());
         var revision = $"{stored.Fingerprint}|{stored.FileSizeBytes}|{stored.LastWriteTimeUtc!.Value.ToString("O", CultureInfo.InvariantCulture)}";
         var service = CreateService(new ServerStateService(), scope.RootPath, host);
         Directory.CreateDirectory(Path.Combine(scope.RootPath, "thumbnails"));
-        await File.WriteAllTextAsync(
-            Path.Combine(scope.RootPath, "thumbnails", "index.json"),
-            new JsonObject
-            {
-                ["thumb-missing-jpeg"] = new JsonObject
-                {
-                    ["revision"] = revision,
-                    ["width"] = 1,
-                    ["height"] = 1
-                }
-            }.ToJsonString());
+        Assert.True(host.Session.SetThumbnail("thumb-missing-jpeg", revision, 1, 1));
         var builds = host.Session.DocumentBuilds;
         await service.RunThumbnailStageAsync(CancellationToken.None);
 
@@ -1034,15 +1018,18 @@ public sealed class RefreshPipelineServiceTests
             }
         });
 
-        var host = LibraryCatalogHost.Open(scope.RootPath);
+        var host = LibraryCatalogHost.Open(scope.RootPath, Path.Combine(scope.RootPath, "thumbnails"));
         var service = CreateService(new ServerStateService(), scope.RootPath, host);
         var keptThumb = service.GetThumbnailPath("kept-thumb");
         var goneThumb = service.GetThumbnailPath("gone-thumb");
         Directory.CreateDirectory(Path.GetDirectoryName(keptThumb)!);
         await File.WriteAllBytesAsync(keptThumb, TinyPngBytes);
         await File.WriteAllBytesAsync(goneThumb, TinyPngBytes);
+        var orphanThumb = service.GetThumbnailPath("never-indexed");
+        await File.WriteAllBytesAsync(orphanThumb, TinyPngBytes);
+        var indexPath = Path.Combine(scope.RootPath, "thumbnails", "index.json");
         await File.WriteAllTextAsync(
-            Path.Combine(scope.RootPath, "thumbnails", "index.json"),
+            indexPath,
             new JsonObject
             {
                 ["kept-thumb"] = new JsonObject { ["revision"] = "fp-kept|1|2020-01-01T00:00:00.0000000Z", ["width"] = 1, ["height"] = 1 },
@@ -1059,11 +1046,113 @@ public sealed class RefreshPipelineServiceTests
         Assert.Equal("kept-thumb", items[0]["id"]?.GetValue<string>());
         Assert.True(File.Exists(keptThumb));
         Assert.False(File.Exists(goneThumb));
-        var index = JsonNode.Parse(await File.ReadAllTextAsync(Path.Combine(scope.RootPath, "thumbnails", "index.json")))!.AsObject();
-        Assert.False(index.ContainsKey("gone-thumb"));
+        Assert.False(File.Exists(orphanThumb));
+        Assert.True(File.Exists(indexPath));
+        var index = JsonNode.Parse(await File.ReadAllTextAsync(indexPath))!.AsObject();
+        Assert.True(index.ContainsKey("gone-thumb"));
         Assert.True(index.ContainsKey("kept-thumb"));
         var stage = completed.Stages.Single(item => item.Stage == "thumbnailGeneration");
         Assert.DoesNotContain("evicted", stage.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ThumbnailStage_PreservesFavoriteTagBlacklistAndPlaybackDuringTheWrite()
+    {
+        using var scope = new AppDataScope();
+        var firstPath = Path.Combine(scope.RootPath, "hold-a.png");
+        var secondPath = Path.Combine(scope.RootPath, "hold-b.png");
+        await WriteTinyPngAsync(firstPath);
+        await WriteTinyPngAsync(secondPath);
+        await SeedLibraryAsync(scope.LibraryPath, new JsonObject
+        {
+            ["sources"] = new JsonArray(),
+            ["items"] = new JsonArray
+            {
+                new JsonObject { ["id"] = "hold-a", ["mediaType"] = 1, ["fullPath"] = firstPath },
+                new JsonObject { ["id"] = "hold-b", ["mediaType"] = 1, ["fullPath"] = secondPath }
+            }
+        });
+
+        var host = LibraryCatalogHost.Open(scope.RootPath, Path.Combine(scope.RootPath, "thumbnails"));
+        var service = CreateService(new ServerStateService(), scope.RootPath, host);
+        var hold = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        service.HoldNextThumbnailWrite(hold.Task);
+        var run = service.RunThumbnailStageAsync(CancellationToken.None);
+        await service.ThumbnailWriteEntered.WaitAsync(TimeSpan.FromSeconds(15));
+        Assert.True(host.Session.SetFavorite("hold-a", true));
+        Assert.True(host.Session.AddItemTags("hold-a", ["Night"]));
+        Assert.True(host.Session.SetPlayback("hold-a", 3, new DateTime(2024, 5, 6, 7, 8, 9, DateTimeKind.Utc)));
+        Assert.True(host.Session.SetBlacklist("hold-b", true));
+        hold.TrySetResult();
+        await run.WaitAsync(TimeSpan.FromSeconds(15));
+
+        var first = host.Session.ReadItemState("hold-a");
+        Assert.NotNull(first);
+        Assert.True(first!.IsFavorite);
+        Assert.False(first.IsBlacklisted);
+        Assert.Equal(3, first.PlayCount);
+        var document = host.Session.BuildDocument()["items"]!.AsArray().OfType<JsonObject>().ToList();
+        var holdA = Assert.Single(document, item => item["id"]!.GetValue<string>() == "hold-a");
+        Assert.Contains(holdA["tags"]!.AsArray().Select(tag => tag!.GetValue<string>()), tag => tag == "Night");
+        var second = host.Session.ReadItemState("hold-b");
+        Assert.NotNull(second);
+        Assert.True(second!.IsBlacklisted);
+        Assert.All(host.Session.ReadRefreshItems(), item => Assert.True(item.ThumbnailWidth is > 0));
+    }
+
+    [Fact]
+    public async Task ThumbnailStage_CancelKeepsColumnsAlreadyWritten_AndLeavesRemainingCleanup()
+    {
+        using var scope = new AppDataScope();
+        var firstPath = Path.Combine(scope.RootPath, "cancel-a.png");
+        var secondPath = Path.Combine(scope.RootPath, "cancel-b.png");
+        await WriteTinyPngAsync(firstPath);
+        await WriteTinyPngAsync(secondPath);
+        await SeedLibraryAsync(scope.LibraryPath, new JsonObject
+        {
+            ["sources"] = new JsonArray(),
+            ["items"] = new JsonArray
+            {
+                new JsonObject { ["id"] = "cancel-a", ["mediaType"] = 1, ["fullPath"] = firstPath },
+                new JsonObject { ["id"] = "cancel-b", ["mediaType"] = 1, ["fullPath"] = secondPath }
+            }
+        });
+
+        var host = LibraryCatalogHost.Open(scope.RootPath, Path.Combine(scope.RootPath, "thumbnails"));
+        var service = CreateService(new ServerStateService(), scope.RootPath, host);
+        var orphan = service.GetThumbnailPath("orphan-cancel");
+        Directory.CreateDirectory(Path.GetDirectoryName(orphan)!);
+        await File.WriteAllBytesAsync(orphan, TinyPngBytes);
+        var afterWrite = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        service.HoldAfterNextThumbnailWrite(afterWrite.Task);
+        using var writeCancel = new CancellationTokenSource();
+        var writeRun = service.RunThumbnailStageAsync(writeCancel.Token);
+        await service.ThumbnailAfterWriteEntered.WaitAsync(TimeSpan.FromSeconds(15));
+        writeCancel.Cancel();
+        afterWrite.TrySetResult();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => writeRun);
+
+        var written = host.Session.ReadRefreshItems().Single(item => item.ThumbnailWidth is > 0);
+        Assert.Equal("cancel-a", written.Id);
+        var pending = host.Session.ReadRefreshItems().Single(item => item.Id == "cancel-b");
+        Assert.Null(pending.ThumbnailWidth);
+        Assert.True(File.Exists(orphan));
+
+        var cleanupHold = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        service.HoldNextThumbnailCleanup(cleanupHold.Task);
+        using var cleanupCancel = new CancellationTokenSource();
+        var cleanupRun = service.RunThumbnailStageAsync(cleanupCancel.Token);
+        await service.ThumbnailCleanupEntered.WaitAsync(TimeSpan.FromSeconds(15));
+        var cleanupStage = service.GetStatus().Stages.Single(item => item.Stage == "thumbnailGeneration");
+        Assert.Contains("Thumbnail cleanup", cleanupStage.Message, StringComparison.Ordinal);
+        Assert.True(File.Exists(orphan));
+        cleanupCancel.Cancel();
+        cleanupHold.TrySetResult();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => cleanupRun);
+        Assert.True(File.Exists(orphan));
+
+        await service.RunThumbnailStageAsync(CancellationToken.None);
+        Assert.False(File.Exists(orphan));
     }
 
     private static void AssertStoredMediaColumns(JsonObject item)
@@ -1221,7 +1310,7 @@ public sealed class RefreshPipelineServiceTests
         if (string.Equals(Path.GetFileName(path), "library.json", StringComparison.OrdinalIgnoreCase))
         {
             var directory = Path.GetDirectoryName(path)!;
-            var opened = ReelRoulette.Core.Library.LibraryCatalogStore.Open(directory);
+            var opened = CatalogOpen.Open(directory);
             Assert.NotNull(opened.Session);
             return opened.Session!.BuildDocument();
         }

@@ -47,7 +47,7 @@ public sealed class LibraryOperationsService
                       Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ReelRoulette");
         Directory.CreateDirectory(appData);
         _logPath = Path.Combine(appData, "last.log");
-        _catalog = catalog ?? LibraryCatalogHost.Open(appData);
+        _catalog = catalog ?? LibraryCatalogHost.Open(appData, LibraryCatalogHost.LocalThumbnailDirectory(appDataPathOverride));
         _enumerateFiles = enumerateMediaFiles ?? EnumerateAllFiles;
         LibraryCatalogBackup.Attach(_catalog.Session, appData, _logger);
     }
@@ -171,7 +171,14 @@ public sealed class LibraryOperationsService
         var items = new JsonArray();
         foreach (var item in page.Items)
         {
-            items.Add(LibraryCatalogSession.ToItemJson(item));
+            var node = LibraryCatalogSession.ToItemJson(item);
+            if (item.ThumbnailWidth is > 0 && item.ThumbnailHeight is > 0)
+            {
+                node["thumbnailWidth"] = item.ThumbnailWidth.Value;
+                node["thumbnailHeight"] = item.ThumbnailHeight.Value;
+            }
+
+            items.Add(node);
         }
 
         AppendServerLog(

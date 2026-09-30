@@ -89,45 +89,7 @@ Do not use this file for detailed architecture explanation or current capability
 
 ## Active Milestones
 
-Last milestone completed: M10i15
-
-### M10i16 - Catalog Schema Version 2
-
-- **Status**: ⏳ Planned
-- **Goal**: Move presets and thumbnail metadata into the catalog, drop the legacy available-tags list, and open every database at schema version 2 in one migration.
-- **Scope**:
-  - Depends on: refresh column updates.
-  - This ships in v0.13.0, before catalog document removal. JSON-era leftovers that do not serve migration still end that release.
-  - One migration runs before the health check. A schema 1 database is migrated in place. A corrupt database is still quarantined and startup still refuses it. The health check does not treat schema 1 as corrupt.
-  - The schema version is the integer already stored in SQLite `PRAGMA user_version`. The code constant stays `SchemaVersion`. There is no second version key in `catalog_meta`. After this milestone the version is 2.
-  - Opening a schema 1 database drops `available_tags` and the `available_tags_present` flag, adds a presets table, and adds thumbnail revision, width, and height on `items`. Existing rows in `tags` stay as they are. `generatedUtc` is not stored.
-  - That same open copies `presets.json` and the thumbnail index into the catalog. The thumbnail index lives in the local cache directory, not beside `library.db`, and the migration is given that directory. The schema version is set only after the schema change and that copy have committed, in the same transaction as a flag that the copy finished. `presets.json` and `index.json` are then renamed to `presets.json.migrated` and `index.json.migrated`. A crash after the commit and before those renames does not copy them again; the next open only finishes the rename.
-  - A missing `presets.json` or thumbnail index leaves presets or thumbnail columns empty. A file that cannot be parsed does the same and does not quarantine the catalog.
-  - A new database, including an empty one and one created by migrating `library.json`, is created at schema version 2. It does not create `available_tags` or `available_tags_present`, and it does not create schema 1 and then migrate. That `library.json` migration also copies `presets.json` and the thumbnail index. The importer ignores `availableTags`. A name that appears only in that list is not stored.
-  - The catalog document builder omits `availableTags` and does not query the dropped table. Removing that builder stays with catalog document removal.
-  - Preset reads and writes use the catalog table. Tag rename and delete still update presets. `core-settings.json` and `desktop-settings.json` stay JSON.
-  - Thumbnail revision, width, and height are read from the item row. The stored revision is the revision the JPEG was built for, and the thumbnail stage still reuses a JPEG when that revision matches the item fingerprint, size, and write time. The thumbnail stage writes that item's revision, width, and height as the item finishes, including a dimension fill when the revision already matches. It does not hold those columns until the stage ends. A favorite, tag, blacklist, or playback change that commits during the stage stays. A cancel leaves thumbnail columns already written. Browse no longer reads `index.json`. `hasThumbnail` is still whether that item's JPEG exists. The JPEG files stay in the local thumbnail directory. `generatedUtc` is not written.
-  - At the end of the thumbnail stage, JPEG cleanup lists the thumbnail directory. A `{itemId}.jpg` whose id is not in the catalog is deleted, including files that were never listed in `index.json` and files left from a catalog this run did not remove item by item. `index.json` and `index.json.migrated` are left in place. The server reports progress as it deletes them. Opening the catalog does not scan the thumbnail directory. A cancel before that cleanup finishes leaves the remaining files for the next thumbnail stage that completes. An item removed by source refresh still loses its thumbnail metadata and JPEG.
-  - Export, import, and catalog backup copy the whole database, so presets and thumbnail revision and dimensions travel with `library.db`. JPEG files do not. Import replaces the destination preset list. Local JPEGs for item ids that are not in the imported catalog stay until the next thumbnail stage completes. Docs and instructions recommend a refresh after import so those thumbnails are generated and the previous JPEG files are removed.
-  - Update the testing checklist and current-state docs.
-- **Acceptance criteria**:
-  - A schema 1 database opens at schema version 2 with `available_tags` and `available_tags_present` gone, with presets loaded from `presets.json`, and with thumbnail revision, width, and height loaded from the thumbnail index. Existing tags are unchanged. `generatedUtc` is not stored.
-  - A crash after that commit and before the side files are renamed does not import them a second time.
-  - A missing or unreadable `presets.json` or thumbnail index does not refuse the database. Presets or thumbnail columns stay empty.
-  - A new database, including an empty one and one migrated from `library.json`, is schema version 2, has no `available_tags` table, and includes presets and thumbnail metadata from those side files when they are present. A name that appears only in `availableTags` is not stored. The rest of that library still migrates.
-  - A corrupt database is still quarantined.
-  - The catalog document builder does not read `available_tags`.
-  - Preset save, tag rename, and tag delete persist in the catalog table. Core settings and desktop settings stay in their JSON files.
-  - Browse thumbnail dimensions come from the item row. The thumbnail stage persists that item's revision, width, and height as the item finishes, including a dimension fill when the revision already matches. A favorite, tag, blacklist, or playback change committed during the stage is still present afterward. A cancel keeps thumbnail columns already written. At the end of the thumbnail stage, a JPEG whose item id is not in the catalog is deleted, including after import replaces the catalog, and the server reports progress during that cleanup. Opening the catalog does not delete those files. A cancel before that cleanup finishes leaves them for the next thumbnail stage that completes. JPEG files are not part of export or import.
-  - Export and import include presets. Import replaces the destination preset list.
-  - Docs and the testing checklist describe schema version 2, presets and thumbnail metadata in the catalog, local JPEG files, a refresh after import to generate thumbnails and remove JPEGs that are not in the imported catalog, and core settings remaining in `core-settings.json`.
-- **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include tests that a schema 1 database opens at schema version 2 with `available_tags` and `available_tags_present` gone, existing tags unchanged, presets and thumbnail revision, width, and height copied, and `generatedUtc` absent; that a crash between commit and rename does not copy the side files again; that a missing or unreadable side file does not refuse the database; that a new database and a `library.json` migration are created at schema version 2 without `available_tags` and without storing a name that appears only in `availableTags`; that a corrupt database is still quarantined; that the document builder does not read `available_tags`; that preset save, tag rename, and tag delete persist in the catalog; that the thumbnail stage persists revision, width, and height as each item finishes, including a matching-revision dimension fill, while a favorite, tag, blacklist, or playback change committed during the stage remains and a cancel keeps columns already written; and that a JPEG whose item id is not in the catalog is deleted at the end of the thumbnail stage, with progress reported during that cleanup, while opening the catalog does not delete it and JPEG files stay out of the checkpoint.
-  - Docs evidence must include current-state and checklist updates for schema version 2, presets and thumbnail metadata in the catalog, local JPEG files, a refresh after import, and core settings remaining in `core-settings.json`.
-- **Deferrals / Follow-ups**:
-  - Catalog document removal follows this milestone and still removes the document builder.
-  - Removing `library.json` file recognition and the JSON-to-SQLite importer ships in v0.14.0. That removal does not remove the schema 1 migration. After that removal, a missing database does not read `presets.json` or the thumbnail index.
-  - Account and PIN tables stay with the account and PIN data model work. They extend the schema version rather than replacing this catalog schema.
+Last milestone completed: M10i16
 
 ### M10i17 - Catalog Document Removal
 
@@ -493,7 +455,7 @@ Last milestone completed: M10i15
 - **Goal**: Let an admin export and import the library from Operator UI, with the server applying the catalog, so a server plus WebUI install does not need the desktop app.
 - **Scope**:
   - Depends on: Operator source management and removal of `library.json` library support.
-  - Move the `library.db` checkpoint transfer onto server operations. The server writes the checkpoint while it has `library.db` open. Presets, settings, thumbnails, and backups are not part of the transfer.
+  - Move the `library.db` checkpoint transfer onto server operations. The server writes the checkpoint while it has `library.db` open. Settings and backups are not part of the transfer. Presets and thumbnail revision and dimensions travel with `library.db`. JPEG files stay in the local thumbnail directory.
   - Import runs while the server is up. The server replaces its own database by the same finished-file rename. The previous database stays aside until the new file is in place and opens. A crash between those renames restores the previous file, or promotes the finished temporary file if that is the one that landed. A file that is not a library database is rejected. There is no JSON dump action.
   - Add admin-only export and import actions to Operator UI.
   - Remove the desktop Library Export and Import menus.
@@ -501,7 +463,7 @@ Last milestone completed: M10i15
   - An admin can export a server-produced SQLite checkpoint, and can import that `library.db` while the server is running.
   - An interrupted running-server import leaves the previous catalog or the finished incoming file, and does not leave a partial database or an empty catalog.
   - Import rejects a file that is not a library database and does not replace the live catalog.
-  - Import replaces the catalog only. Presets, settings, thumbnails, and backups stay where they are.
+  - Import replaces the catalog, including presets and thumbnail revision and dimensions. Settings and backups stay where they are. JPEG files stay in the local thumbnail directory.
   - User-level accounts cannot export or import the catalog.
   - The desktop client no longer exposes Library Export or Import.
 - **Verification evidence**:
@@ -1314,6 +1276,49 @@ Last milestone completed: M10i15
 ## Completed Milestones
 
 Latest completions first:
+
+### M10i16 - Catalog Schema Version 2
+
+- **Status**: ✅ Complete
+- **Goal**: Move presets and thumbnail metadata into the catalog, drop the legacy available-tags list, and open every database at schema version 2 in one migration.
+- **Scope**:
+  - Depends on: refresh column updates.
+  - This ships in v0.13.0, before catalog document removal. JSON-era leftovers that do not serve migration still end that release.
+  - One migration runs before the health check. A schema 1 database is migrated in place. A corrupt database is still quarantined and startup still refuses it. The health check does not treat schema 1 as corrupt.
+  - The schema version is the integer already stored in SQLite `PRAGMA user_version`. The code constant stays `SchemaVersion`. There is no second version key in `catalog_meta`. After this milestone the version is 2.
+  - Opening a schema 1 database drops `available_tags` and the `available_tags_present` flag, adds a presets table, and adds thumbnail revision, width, and height on `items`. Existing rows in `tags` stay as they are. `generatedUtc` is not stored.
+  - That same open copies `presets.json` and the thumbnail index into the catalog. The thumbnail index lives in the local cache directory, not beside `library.db`, and the migration is given that directory. The schema version is set only after the schema change and that copy have committed, in the same transaction as a flag that the copy finished. `presets.json` and `index.json` are then renamed to `presets.json.migrated` and `index.json.migrated`. A crash after the commit and before those renames does not copy them again; the next open only finishes the rename.
+  - A missing `presets.json` or thumbnail index leaves presets or thumbnail columns empty. A file that cannot be parsed does the same and does not quarantine the catalog.
+  - A new database, including an empty one and one created by migrating `library.json`, is created at schema version 2. It does not create `available_tags` or `available_tags_present`, and it does not create schema 1 and then migrate. That `library.json` migration also copies `presets.json` and the thumbnail index. The importer ignores `availableTags`. A name that appears only in that list is not stored.
+  - The catalog document builder omits `availableTags` and does not query the dropped table. Removing that builder stays with catalog document removal.
+  - Preset reads and writes use the catalog table. Tag rename and delete still update presets. `core-settings.json` and `desktop-settings.json` stay JSON.
+  - Thumbnail revision, width, and height are read from the item row. The stored revision is the revision the JPEG was built for, and the thumbnail stage still reuses a JPEG when that revision matches the item fingerprint, size, and write time. The thumbnail stage writes that item's revision, width, and height as the item finishes, including a dimension fill when the revision already matches. It does not hold those columns until the stage ends. A favorite, tag, blacklist, or playback change that commits during the stage stays. A cancel leaves thumbnail columns already written. Browse no longer reads `index.json`. `hasThumbnail` is still whether that item's JPEG exists. The JPEG files stay in the local thumbnail directory. `generatedUtc` is not written.
+  - At the end of the thumbnail stage, JPEG cleanup lists the thumbnail directory. A `{itemId}.jpg` whose id is not in the catalog is deleted, including files that were never listed in `index.json` and files left from a catalog this run did not remove item by item. `index.json` and `index.json.migrated` are left in place. The server reports progress as it deletes them. Opening the catalog does not scan the thumbnail directory. A cancel before that cleanup finishes leaves the remaining files for the next thumbnail stage that completes. An item removed by source refresh still loses its thumbnail metadata and JPEG.
+  - Export, import, and catalog backup copy the whole database, so presets and thumbnail revision and dimensions travel with `library.db`. JPEG files do not. Import replaces the destination preset list. Local JPEGs for item ids that are not in the imported catalog stay until the next thumbnail stage completes. Docs and instructions recommend a refresh after import so those thumbnails are generated and the previous JPEG files are removed.
+  - Update the testing checklist and current-state docs.
+- **Acceptance criteria**:
+  - A schema 1 database opens at schema version 2 with `available_tags` and `available_tags_present` gone, with presets loaded from `presets.json`, and with thumbnail revision, width, and height loaded from the thumbnail index. Existing tags are unchanged. `generatedUtc` is not stored.
+  - A crash after that commit and before the side files are renamed does not import them a second time.
+  - A missing or unreadable `presets.json` or thumbnail index does not refuse the database. Presets or thumbnail columns stay empty.
+  - A new database, including an empty one and one migrated from `library.json`, is schema version 2, has no `available_tags` table, and includes presets and thumbnail metadata from those side files when they are present. A name that appears only in `availableTags` is not stored. The rest of that library still migrates.
+  - A corrupt database is still quarantined.
+  - The catalog document builder does not read `available_tags`.
+  - Preset save, tag rename, and tag delete persist in the catalog table. Core settings and desktop settings stay in their JSON files.
+  - Browse thumbnail dimensions come from the item row. The thumbnail stage persists that item's revision, width, and height as the item finishes, including a dimension fill when the revision already matches. A favorite, tag, blacklist, or playback change committed during the stage is still present afterward. A cancel keeps thumbnail columns already written. At the end of the thumbnail stage, a JPEG whose item id is not in the catalog is deleted, including after import replaces the catalog, and the server reports progress during that cleanup. Opening the catalog does not delete those files. A cancel before that cleanup finishes leaves them for the next thumbnail stage that completes. JPEG files are not part of export or import.
+  - Export and import include presets. Import replaces the destination preset list.
+  - Docs and the testing checklist describe schema version 2, presets and thumbnail metadata in the catalog, local JPEG files, a refresh after import to generate thumbnails and remove JPEGs that are not in the imported catalog, and core settings remaining in `core-settings.json`.
+- **Verification evidence**:
+  - `dotnet build ReelRoulette.sln` — 0 warnings, 0 errors. `dotnet test ReelRoulette.sln` — pass (Core.Tests 256, DesktopApp.Tests 115).
+  - `LibraryCatalogSchema2Tests`: `Open_Schema1_MigratesPresetsAndThumbnailMetadata` opens a schema 1 database at schema version 2, drops `available_tags` and `available_tags_present`, keeps the existing tag, copies the preset and thumbnail revision, width, and height, stores a non-positive width as null, stores no `generatedUtc` column, renames the side files, and builds a document with no `availableTags`. `Open_CrashAfterSideFileCopy_DoesNotCopyAgain` keeps the first copy when the side files change before the rename finishes. `Open_MissingOrUnreadableSideFiles_DoesNotRefuse` opens with empty presets and thumbnail columns. `Open_WithoutThumbnailDirectory_LeavesSchema1` leaves schema 1 in place. `PublishIncoming_LeavesSchema1_UntilTheNextOpen` publishes a schema 1 export still at version 1, and the next open migrates it. `Open_DoesNotDeleteThumbnailFiles` leaves an orphan JPEG. `WriteCheckpoint_IncludesPresetsAndThumbnailColumns_AndNotJpegBytes` copies the preset and thumbnail columns and not the JPEG bytes.
+  - `LibraryCatalogStoreTests`: `Open_MigratesLibraryJson_IncludingStringEnumsNumericDurationAndAvailableTags` creates schema version 2 with no `available_tags` table and does not store a name that appears only in `availableTags`. `Open_EmptyDirectory_CreatesEmptyDatabase` creates schema version 2 with no `available_tags` table. `Open_CorruptRowPage_QuarantinesAndLeavesLibraryJson` still quarantines a corrupt database.
+  - `LibraryCatalogSessionTests.BuildDocument_UsesIntegerEnumsAndHourDuration_OmitsThumbnailsAndFingerprintIndex` builds a document with no `availableTags`.
+  - `ServerStateRegressionTests.RenameTagInPresetCatalogOnly_ShouldRenameSelectedAndExcludedTags` reloads a renamed preset from the catalog, deletes that tag from the preset, writes `core-settings.json`, and does not write `presets.json` or `desktop-settings.json`.
+  - `RefreshPipelineServiceTests`: `EnrichListedItems_UsesRowDimensionsAndJpegExistence` uses row dimensions and JPEG existence. `ThumbnailStage_ShouldWriteIndexMetadataObject` and `ThumbnailStage_ShouldBackfillLegacyStringIndexEntry` persist revision, width, and height as the item finishes, including a dimension fill. `ThumbnailStage_PreservesFavoriteTagBlacklistAndPlaybackDuringTheWrite` keeps a favorite, tag, blacklist, and playback change committed during the write. `ThumbnailStage_CancelKeepsColumnsAlreadyWritten_AndLeavesRemainingCleanup` keeps columns already written, reports thumbnail cleanup progress, and leaves a remaining JPEG when cleanup is cancelled. `ThumbnailStage_RemovesDeletedItemThumbnail_AndKeepsLibraryThumbnails` deletes a JPEG whose item is not in the catalog, including one never listed in `index.json`, and leaves `index.json` in place.
+  - `CONTEXT.md`, `docs/architecture.md`, `docs/api.md`, `docs/domain-inventory.md`, `docs/dev-setup.md`, `docs/feature-migration.md`, and `docs/checklists/testing-checklist.md` describe schema version 2, presets and thumbnail metadata in the catalog, local JPEG files, a refresh after import, and core settings remaining in `core-settings.json`.
+- **Deferrals / Follow-ups**:
+  - Catalog document removal follows this milestone and still removes the document builder.
+  - Removing `library.json` file recognition and the JSON-to-SQLite importer ships in v0.14.0. That removal does not remove the schema 1 migration. After that removal, a missing database does not read `presets.json` or the thumbnail index.
+  - Account and PIN tables stay with the account and PIN data model work. They extend the schema version rather than replacing this catalog schema.
 
 ### M10i15 - Refresh Column Updates
 

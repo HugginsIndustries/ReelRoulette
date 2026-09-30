@@ -1,4 +1,5 @@
 using ReelRoulette.Server.Contracts;
+using ReelRoulette.Server.Hosting;
 using ReelRoulette.Server.Services;
 using Xunit;
 
@@ -219,6 +220,22 @@ public sealed class ServerStateRegressionTests
             var raw = preset.FilterState.GetRawText();
             Assert.Contains("TagB", raw, StringComparison.Ordinal);
             Assert.DoesNotContain("TagA", raw, StringComparison.Ordinal);
+            Assert.False(File.Exists(Path.Combine(appDataPath, "presets.json")));
+            Assert.False(File.Exists(Path.Combine(appDataPath, "desktop-settings.json")));
+
+            var reloaded = new ServerStateService(appDataPathOverride: appDataPath);
+            var reloadedPreset = Assert.Single(reloaded.GetPresetCatalogSnapshot());
+            Assert.Contains("TagB", reloadedPreset.FilterState.GetRawText(), StringComparison.Ordinal);
+            Assert.True(reloaded.RemoveTagFromPresetCatalogOnly("TagB"));
+            var afterDelete = new ServerStateService(appDataPathOverride: appDataPath);
+            Assert.DoesNotContain("TagB", Assert.Single(afterDelete.GetPresetCatalogSnapshot()).FilterState.GetRawText(), StringComparison.Ordinal);
+
+            var coreSettings = new CoreSettingsService(
+                Microsoft.Extensions.Logging.Abstractions.NullLogger<CoreSettingsService>.Instance,
+                new ServerRuntimeOptions(),
+                appDataPath);
+            coreSettings.UpdateRefreshSettings(new RefreshSettingsSnapshot { AutoRefreshEnabled = false, AutoRefreshIntervalMinutes = 15 });
+            Assert.True(File.Exists(Path.Combine(appDataPath, "core-settings.json")));
         }
         finally
         {

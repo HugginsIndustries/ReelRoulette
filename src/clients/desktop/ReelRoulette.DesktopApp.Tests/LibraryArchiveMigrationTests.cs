@@ -76,7 +76,7 @@ public sealed class LibraryArchiveMigrationTests
             File.WriteAllText(Path.Combine(source, "library.json"), """
                 {"sources":[{"id":"s1","rootPath":"/from","displayName":"x","isEnabled":true}],"items":[{"id":"clip","sourceId":"s1","fullPath":"/from/clip.mp4","relativePath":"nested/../clip.mp4","fileName":"clip.mp4"}]}
                 """);
-            var opened = ReelRoulette.Core.Library.LibraryCatalogStore.Open(source);
+            var opened = OpenCatalog(source);
             var checkpoint = Path.Combine(temp, "checkpoint.db");
             ReelRoulette.Core.Library.LibraryCatalogStore.WriteCheckpoint(opened.Session!.DatabasePath, checkpoint);
 
@@ -94,7 +94,7 @@ public sealed class LibraryArchiveMigrationTests
             Assert.True(result.Accepted, result.Message);
             Assert.False(File.Exists(Path.Combine(dest, "library.db.previous")));
             Assert.False(File.Exists(Path.Combine(dest, "library.db.incoming")));
-            var imported = ReelRoulette.Core.Library.LibraryCatalogStore.Open(dest);
+            var imported = OpenCatalog(dest);
             var item = Assert.Single(imported.Catalog!.Items);
             Assert.Equal("clip", item.Id);
             Assert.EndsWith($"{Path.DirectorySeparatorChar}clip.mp4", item.FullPath, StringComparison.Ordinal);
@@ -126,7 +126,7 @@ public sealed class LibraryArchiveMigrationTests
 
             var result = LibraryArchiveMigration.ImportDatabase(checkpoint, remap, skipped, force: true, dest);
             Assert.True(result.Accepted, result.Message);
-            var imported = ReelRoulette.Core.Library.LibraryCatalogStore.Open(dest);
+            var imported = OpenCatalog(dest);
             Assert.Equal("clip", Assert.Single(imported.Catalog!.Items).Id);
         }
         finally
@@ -175,7 +175,7 @@ public sealed class LibraryArchiveMigrationTests
         try
         {
             File.WriteAllText(Path.Combine(dest, "library.json"), """{"items":[{"id":"kept","fullPath":"/clips/kept.mp4","fileName":"kept.mp4"}]}""");
-            Assert.NotNull(ReelRoulette.Core.Library.LibraryCatalogStore.Open(dest).Session);
+            Assert.NotNull(OpenCatalog(dest).Session);
             var migrated = Path.Combine(dest, "library.json.migrated");
             if (File.Exists(migrated))
             {
@@ -202,7 +202,7 @@ public sealed class LibraryArchiveMigrationTests
 
             Assert.True(result.Accepted);
             Assert.Contains(LibraryArchiveMigration.ImportAlreadyInPlaceMessage, result.Message, StringComparison.Ordinal);
-            var imported = ReelRoulette.Core.Library.LibraryCatalogStore.Open(dest);
+            var imported = OpenCatalog(dest);
             Assert.Equal("clip", Assert.Single(imported.Catalog!.Items).Id);
         }
         finally
@@ -217,9 +217,17 @@ public sealed class LibraryArchiveMigrationTests
         File.WriteAllText(Path.Combine(sourceDirectory, "library.json"), """
             {"sources":[{"id":"s1","rootPath":"/from","displayName":"x","isEnabled":true}],"items":[{"id":"clip","sourceId":"s1","fullPath":"/from/clip.mp4","relativePath":"clip.mp4","fileName":"clip.mp4"}]}
             """);
-        var opened = ReelRoulette.Core.Library.LibraryCatalogStore.Open(sourceDirectory);
+        var opened = OpenCatalog(sourceDirectory);
         var checkpoint = Path.Combine(temp, "checkpoint.db");
         ReelRoulette.Core.Library.LibraryCatalogStore.WriteCheckpoint(opened.Session!.DatabasePath, checkpoint);
         return checkpoint;
+    }
+
+    private static ReelRoulette.Core.Library.LibraryCatalogOpenResult OpenCatalog(string directory)
+    {
+        return ReelRoulette.Core.Library.LibraryCatalogStore.Open(directory, new ReelRoulette.Core.Library.LibraryCatalogOpenOptions
+        {
+            ThumbnailDirectory = Path.Combine(directory, "thumbnails")
+        });
     }
 }

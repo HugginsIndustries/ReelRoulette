@@ -18,11 +18,15 @@ public static class ServerHostComposition
         services.AddSingleton(sp =>
         {
             var appDataRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ReelRoulette");
-            var host = LibraryCatalogHost.Open(appDataRoot);
+            var host = LibraryCatalogHost.Open(appDataRoot, LibraryCatalogHost.LocalThumbnailDirectory());
             var logger = sp.GetRequiredService<ILogger<LibraryCatalogHost>>();
             logger.LogInformation(
                 "Opened library catalog {DatabasePath}.",
                 host.Session.DatabasePath);
+            if (host.MigratedSchema)
+            {
+                logger.LogInformation("Migrated library catalog to schema version {SchemaVersion}.", ReelRoulette.Core.Library.LibraryCatalogStore.SchemaVersion);
+            }
             LibraryCatalogBackup.Attach(host.Session, appDataRoot, logger);
             return host;
         });

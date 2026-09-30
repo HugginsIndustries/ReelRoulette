@@ -52,11 +52,6 @@ public sealed class LibraryCatalogSession
             ["categories"] = new JsonArray(catalog.Categories.Select(ToCategory).ToArray()),
             ["tags"] = new JsonArray(catalog.Tags.Select(ToTag).ToArray())
         };
-        if (catalog.AvailableTagsPresent)
-        {
-            root["availableTags"] = new JsonArray(catalog.AvailableTags.Select(name => (JsonNode)name).ToArray());
-        }
-
         return root;
     }
 
@@ -87,7 +82,8 @@ public sealed class LibraryCatalogSession
                    items.file_name, items.file_name_fold, items.duration_ticks, items.has_audio, items.integrated_loudness, items.peak_db,
                    items.is_favorite, items.is_blacklisted, items.play_count, items.last_played_utc, items.media_type, items.fingerprint,
                    items.fingerprint_algorithm, items.fingerprint_version, items.file_size_bytes, items.last_write_time_utc,
-                   items.fingerprint_last_utc, items.fingerprint_status, items.loudness_error
+                   items.fingerprint_last_utc, items.fingerprint_status, items.loudness_error,
+                   items.thumbnail_revision, items.thumbnail_width, items.thumbnail_height
             {LibraryCatalogListSql.FromClause}
             {pageWhere}
             {orderBy}
@@ -134,7 +130,8 @@ public sealed class LibraryCatalogSession
                    items.file_name, items.file_name_fold, items.duration_ticks, items.has_audio, items.integrated_loudness, items.peak_db,
                    items.is_favorite, items.is_blacklisted, items.play_count, items.last_played_utc, items.media_type, items.fingerprint,
                    items.fingerprint_algorithm, items.fingerprint_version, items.file_size_bytes, items.last_write_time_utc,
-                   items.fingerprint_last_utc, items.fingerprint_status, items.loudness_error
+                   items.fingerprint_last_utc, items.fingerprint_status, items.loudness_error,
+                   items.thumbnail_revision, items.thumbnail_width, items.thumbnail_height
             {LibraryCatalogListSql.FromClause}
             {where};
             """;
@@ -176,7 +173,8 @@ public sealed class LibraryCatalogSession
                        items.file_name, items.file_name_fold, items.duration_ticks, items.has_audio, items.integrated_loudness, items.peak_db,
                        items.is_favorite, items.is_blacklisted, items.play_count, items.last_played_utc, items.media_type, items.fingerprint,
                        items.fingerprint_algorithm, items.fingerprint_version, items.file_size_bytes, items.last_write_time_utc,
-                       items.fingerprint_last_utc, items.fingerprint_status, items.loudness_error
+                       items.fingerprint_last_utc, items.fingerprint_status, items.loudness_error,
+                       items.thumbnail_revision, items.thumbnail_width, items.thumbnail_height
                 FROM items
                 WHERE items.id = $id
                 LIMIT 1;
@@ -481,7 +479,8 @@ public sealed class LibraryCatalogSession
                    duration_ticks, has_audio, integrated_loudness, peak_db,
                    fingerprint, fingerprint_algorithm, fingerprint_version,
                    file_size_bytes, last_write_time_utc, fingerprint_last_utc,
-                   fingerprint_status, loudness_error
+                   fingerprint_status, loudness_error,
+                   thumbnail_revision, thumbnail_width, thumbnail_height
             FROM items
             ORDER BY position;
             """;
@@ -509,11 +508,83 @@ public sealed class LibraryCatalogSession
                 LastWriteTimeUtc = LibraryCatalogStore.ReadUtc(reader, 14),
                 FingerprintLastUtc = LibraryCatalogStore.ReadUtc(reader, 15),
                 FingerprintStatus = reader.IsDBNull(16) ? null : reader.GetInt32(16),
-                LoudnessError = reader.IsDBNull(17) ? null : reader.GetString(17)
+                LoudnessError = reader.IsDBNull(17) ? null : reader.GetString(17),
+                ThumbnailRevision = reader.IsDBNull(18) ? null : reader.GetString(18),
+                ThumbnailWidth = reader.IsDBNull(19) ? null : reader.GetInt32(19),
+                ThumbnailHeight = reader.IsDBNull(20) ? null : reader.GetInt32(20)
             });
         }
 
         return items;
+    }
+
+    public IReadOnlyList<LibraryCatalogPreset> ReadPresets()
+    {
+        using var connection = LibraryCatalogStore.OpenWrite(_databasePath);
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT name, filter_state FROM presets ORDER BY position;";
+        using var reader = command.ExecuteReader();
+        var presets = new List<LibraryCatalogPreset>();
+        while (reader.Read())
+        {
+            presets.Add(new LibraryCatalogPreset
+            {
+                Name = reader.GetString(0),
+                FilterStateJson = reader.GetString(1)
+            });
+        }
+
+        return presets;
+    }
+
+    public void ReplacePresets(IReadOnlyList<LibraryCatalogPreset> presets)
+    {
+        ArgumentNullException.ThrowIfNull(presets);
+        Commit((connection, transaction) =>
+        {
+            LibraryCatalogStore.Execute(connection, transaction, "DELETE FROM presets;");
+            for (var i = 0; i < presets.Count; i++)
+            {
+                var preset = presets[i];
+                LibraryCatalogStore.Execute(
+                    connection,
+                    transaction,
+                    """
+                    INSERT INTO presets (position, name, name_fold, filter_state)
+                    VALUES ($position, $name, $fold, $filter);
+                    """,
+                    ("$position", i),
+                    ("$name", preset.Name),
+                    ("$fold", LibraryCatalogStore.Fold(preset.Name)),
+                    ("$filter", string.IsNullOrWhiteSpace(preset.FilterStateJson) ? "{}" : preset.FilterStateJson));
+            }
+
+            return true;
+        });
+    }
+
+    public bool SetThumbnail(string itemId, string? revision, int? width, int? height)
+    {
+        if (string.IsNullOrWhiteSpace(itemId))
+        {
+            return false;
+        }
+
+        return Commit((connection, transaction) =>
+            LibraryCatalogStore.Execute(
+                connection,
+                transaction,
+                """
+                UPDATE items
+                SET thumbnail_revision = $revision,
+                    thumbnail_width = $width,
+                    thumbnail_height = $height
+                WHERE id = $id;
+                """,
+                ("$id", itemId),
+                ("$revision", (object?)revision ?? DBNull.Value),
+                ("$width", width is > 0 ? width.Value : DBNull.Value),
+                ("$height", height is > 0 ? height.Value : DBNull.Value)) > 0);
     }
 
     public static JsonObject ToItemJson(LibraryCatalogItem item) => ToItem(item);
@@ -2372,7 +2443,10 @@ public sealed class LibraryCatalogSession
             LastWriteTimeUtc = LibraryCatalogStore.ReadUtc(reader, 21),
             FingerprintLastUtc = LibraryCatalogStore.ReadUtc(reader, 22),
             FingerprintStatus = reader.IsDBNull(23) ? null : reader.GetInt32(23),
-            LoudnessError = reader.IsDBNull(24) ? null : reader.GetString(24)
+            LoudnessError = reader.IsDBNull(24) ? null : reader.GetString(24),
+            ThumbnailRevision = reader.IsDBNull(25) ? null : reader.GetString(25),
+            ThumbnailWidth = reader.IsDBNull(26) ? null : reader.GetInt32(26),
+            ThumbnailHeight = reader.IsDBNull(27) ? null : reader.GetInt32(27)
         };
     }
 
@@ -2962,6 +3036,9 @@ public sealed class CatalogRefreshItem
     public DateTime? FingerprintLastUtc { get; set; }
     public int? FingerprintStatus { get; set; }
     public string? LoudnessError { get; set; }
+    public string? ThumbnailRevision { get; set; }
+    public int? ThumbnailWidth { get; set; }
+    public int? ThumbnailHeight { get; set; }
 }
 
 public sealed class CatalogAutoTagAssignment

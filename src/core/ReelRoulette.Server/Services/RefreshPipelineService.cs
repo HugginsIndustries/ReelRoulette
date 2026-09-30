@@ -41,8 +41,13 @@ public sealed class RefreshPipelineService : BackgroundService
     private readonly object _catalogWriteLock = new();
     private Task? _fingerprintWriteHold;
     private readonly TaskCompletionSource _fingerprintWriteEntered = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private Task? _thumbnailWriteHold;
+    private readonly TaskCompletionSource _thumbnailWriteEntered = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private Task? _thumbnailAfterWriteHold;
+    private readonly TaskCompletionSource _thumbnailAfterWriteEntered = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private Task? _thumbnailCleanupHold;
+    private readonly TaskCompletionSource _thumbnailCleanupEntered = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly string _thumbnailDir;
-    private readonly string _thumbnailIndexPath;
     private readonly CoreSettingsService _coreSettings;
     private RefreshStatusSnapshot _status = new();
     private DateTimeOffset _nextAutoRunUtc;
@@ -64,13 +69,12 @@ public sealed class RefreshPipelineService : BackgroundService
         var roamingAppData = appDataPathOverride ??
                              Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ReelRoulette");
         Directory.CreateDirectory(roamingAppData);
-        _catalog = catalog ?? LibraryCatalogHost.Open(roamingAppData);
+        _catalog = catalog ?? LibraryCatalogHost.Open(roamingAppData, LibraryCatalogHost.LocalThumbnailDirectory(appDataPathOverride));
 
         var localAppData = appDataPathOverride ??
                            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ReelRoulette");
         Directory.CreateDirectory(localAppData);
         _thumbnailDir = Path.Combine(localAppData, "thumbnails");
-        _thumbnailIndexPath = Path.Combine(_thumbnailDir, "index.json");
         var refreshSettings = _coreSettings.GetRefreshSettings();
         _nextAutoRunUtc = DateTimeOffset.UtcNow.AddMinutes(refreshSettings.AutoRefreshIntervalMinutes);
     }
@@ -194,6 +198,27 @@ public sealed class RefreshPipelineService : BackgroundService
 
     internal Task FingerprintWriteEntered => _fingerprintWriteEntered.Task;
 
+    internal void HoldNextThumbnailWrite(Task hold)
+    {
+        _thumbnailWriteHold = hold ?? throw new ArgumentNullException(nameof(hold));
+    }
+
+    internal Task ThumbnailWriteEntered => _thumbnailWriteEntered.Task;
+
+    internal void HoldAfterNextThumbnailWrite(Task hold)
+    {
+        _thumbnailAfterWriteHold = hold ?? throw new ArgumentNullException(nameof(hold));
+    }
+
+    internal Task ThumbnailAfterWriteEntered => _thumbnailAfterWriteEntered.Task;
+
+    internal void HoldNextThumbnailCleanup(Task hold)
+    {
+        _thumbnailCleanupHold = hold ?? throw new ArgumentNullException(nameof(hold));
+    }
+
+    internal Task ThumbnailCleanupEntered => _thumbnailCleanupEntered.Task;
+
     public string GetThumbnailPath(string itemId)
     {
         return Path.Combine(_thumbnailDir, $"{itemId}.jpg");
@@ -201,7 +226,6 @@ public sealed class RefreshPipelineService : BackgroundService
 
     public void EnrichListedItems(JsonArray items)
     {
-        var index = LoadThumbnailIndex();
         foreach (var node in items)
         {
             if (node is not JsonObject item)
@@ -218,23 +242,8 @@ public sealed class RefreshPipelineService : BackgroundService
                 continue;
             }
 
-            var hasThumbnail = File.Exists(GetThumbnailPath(itemId));
-            item["hasThumbnail"] = hasThumbnail;
-            if (index.TryGetPropertyValue(itemId, out var indexNode))
-            {
-                var entry = ReadThumbnailIndexEntry(indexNode);
-                if (entry.HasDimensions)
-                {
-                    item["thumbnailWidth"] = entry.Width;
-                    item["thumbnailHeight"] = entry.Height;
-                }
-                else
-                {
-                    item.Remove("thumbnailWidth");
-                    item.Remove("thumbnailHeight");
-                }
-            }
-            else
+            item["hasThumbnail"] = File.Exists(GetThumbnailPath(itemId));
+            if (!PositiveThumbnailDimension(item["thumbnailWidth"]) || !PositiveThumbnailDimension(item["thumbnailHeight"]))
             {
                 item.Remove("thumbnailWidth");
                 item.Remove("thumbnailHeight");
@@ -1029,9 +1038,7 @@ public sealed class RefreshPipelineService : BackgroundService
     {
         Directory.CreateDirectory(_thumbnailDir);
         var items = _catalog.Session.ReadRefreshItems();
-        var index = LoadThumbnailIndex();
-
-        var validItemIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var catalogIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         int generated = 0;
         int regenerated = 0;
         int reused = 0;
@@ -1055,23 +1062,24 @@ public sealed class RefreshPipelineService : BackgroundService
                 continue;
             }
 
-            validItemIds.Add(itemId);
+            catalogIds.Add(itemId);
             var fullPath = item.FullPath ?? string.Empty;
-            var storedRevision = StoredThumbnailRevision(item);
-            var existingEntry = index.TryGetPropertyValue(itemId, out var existingNode)
-                ? ReadThumbnailIndexEntry(existingNode)
-                : new ThumbnailIndexEntry();
+            var computedRevision = StoredThumbnailRevision(item);
+            var storedRevision = string.IsNullOrEmpty(item.ThumbnailRevision) ? null : item.ThumbnailRevision;
+            var hasDimensions = item.ThumbnailWidth is > 0 && item.ThumbnailHeight is > 0;
             var thumbPath = GetThumbnailPath(itemId);
             var hadThumbnailFile = File.Exists(thumbPath);
-            var revisionMatches = storedRevision != null &&
-                                  string.Equals(existingEntry.Revision, storedRevision, StringComparison.Ordinal);
+            var revisionMatches = computedRevision != null &&
+                                  string.Equals(storedRevision, computedRevision, StringComparison.Ordinal);
             if (revisionMatches && hadThumbnailFile)
             {
                 reused++;
-                if (!existingEntry.HasDimensions &&
-                    TryReadImageDimensions(thumbPath, out var width, out var height))
+                if (!hasDimensions &&
+                    TryReadImageDimensions(thumbPath, out var width, out var height) &&
+                    width > 0 &&
+                    height > 0)
                 {
-                    WriteThumbnailIndexEntry(index, itemId, storedRevision!, width, height);
+                    PersistThumbnail(item, storedRevision, width, height);
                     metadataUpdated++;
                 }
             }
@@ -1101,7 +1109,7 @@ public sealed class RefreshPipelineService : BackgroundService
 
                 if (generatedThumb is not null)
                 {
-                    WriteThumbnailIndexEntry(index, itemId, storedRevision ?? string.Empty, generatedThumb.Width, generatedThumb.Height);
+                    PersistThumbnail(item, computedRevision, generatedThumb.Width, generatedThumb.Height);
                     if (!hadThumbnailFile)
                     {
                         generated++;
@@ -1129,30 +1137,91 @@ public sealed class RefreshPipelineService : BackgroundService
                 force: i == items.Count - 1);
         }
 
-        foreach (var prop in index.ToList())
+        staleRemoved = RemoveThumbnailsOutsideCatalog(catalogIds, cancellationToken);
+        CompleteStage("thumbnailGeneration",
+            $"Thumbnail generation complete ({generated} generated, {regenerated} regenerated, {reused} reused, {failed} failed, {metadataUpdated} metadata updated, {skippedMissing} missing source, {staleRemoved} stale removed)");
+    }
+
+    private void PersistThumbnail(CatalogRefreshItem item, string? revision, int width, int height)
+    {
+        var pending = Interlocked.Exchange(ref _thumbnailWriteHold, null);
+        if (pending != null)
         {
-            if (!validItemIds.Contains(prop.Key))
+            _thumbnailWriteEntered.TrySetResult();
+            pending.GetAwaiter().GetResult();
+        }
+
+        var storedWidth = width > 0 ? width : (int?)null;
+        var storedHeight = height > 0 ? height : (int?)null;
+        var storedRevision = string.IsNullOrEmpty(revision) ? null : revision;
+        lock (_catalogWriteLock)
+        {
+            _catalog.Session.SetThumbnail(item.Id, storedRevision, storedWidth, storedHeight);
+        }
+
+        item.ThumbnailRevision = storedRevision;
+        item.ThumbnailWidth = storedWidth;
+        item.ThumbnailHeight = storedHeight;
+
+        var after = Interlocked.Exchange(ref _thumbnailAfterWriteHold, null);
+        if (after != null)
+        {
+            _thumbnailAfterWriteEntered.TrySetResult();
+            after.GetAwaiter().GetResult();
+        }
+    }
+
+    private int RemoveThumbnailsOutsideCatalog(HashSet<string> catalogIds, CancellationToken cancellationToken)
+    {
+        if (!Directory.Exists(_thumbnailDir))
+        {
+            return 0;
+        }
+
+        var files = Directory.EnumerateFiles(_thumbnailDir, "*.jpg").ToList();
+        var removed = 0;
+        for (var i = 0; i < files.Count; i++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var file = files[i];
+            var itemId = Path.GetFileNameWithoutExtension(file);
+            if (catalogIds.Contains(itemId))
             {
-                index.Remove(prop.Key);
-                var staleThumbPath = GetThumbnailPath(prop.Key);
-                if (File.Exists(staleThumbPath))
-                {
-                    try
-                    {
-                        File.Delete(staleThumbPath);
-                        staleRemoved++;
-                    }
-                    catch
-                    {
-                        // best effort stale cleanup
-                    }
-                }
+                continue;
+            }
+
+            var percent = (int)Math.Round(((i + 1) / (double)files.Count) * 100.0);
+            UpdateStage("thumbnailGeneration", percent, $"Thumbnail cleanup {i + 1}/{files.Count}");
+            var hold = Interlocked.Exchange(ref _thumbnailCleanupHold, null);
+            if (hold != null)
+            {
+                _thumbnailCleanupEntered.TrySetResult();
+                hold.GetAwaiter().GetResult();
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                File.Delete(file);
+                removed++;
+            }
+            catch
+            {
+                // best effort stale cleanup
             }
         }
 
-        await File.WriteAllTextAsync(_thumbnailIndexPath, index.ToJsonString(JsonOptions), cancellationToken);
-        CompleteStage("thumbnailGeneration",
-            $"Thumbnail generation complete ({generated} generated, {regenerated} regenerated, {reused} reused, {failed} failed, {metadataUpdated} metadata updated, {skippedMissing} missing source, {staleRemoved} stale removed)");
+        return removed;
+    }
+
+    private static bool PositiveThumbnailDimension(JsonNode? node)
+    {
+        if (node is not JsonValue value)
+        {
+            return false;
+        }
+
+        return value.TryGetValue<int>(out var number) && number > 0;
     }
 
     private static List<CatalogRefreshItem> DistinctRefreshItemsByPath(IEnumerable<CatalogRefreshItem> items)
@@ -1551,72 +1620,9 @@ public sealed class RefreshPipelineService : BackgroundService
         ReelRoulette.Core.Storage.LibraryRelativePath.GetRelativePath(rootPath, fullPath);
 
 
-    private JsonObject LoadThumbnailIndex()
-    {
-        try
-        {
-            if (!File.Exists(_thumbnailIndexPath))
-            {
-                return new JsonObject();
-            }
-
-            return JsonNode.Parse(File.ReadAllText(_thumbnailIndexPath)) as JsonObject ?? new JsonObject();
-        }
-        catch
-        {
-            return new JsonObject();
-        }
-    }
-
     private static string BuildThumbnailProgressMessage(int processed, int total, int generated, int regenerated, int reused, int failed, int skippedMissing)
     {
         return $"Thumbnails {processed}/{total} (new {generated}, regen {regenerated}, reused {reused}, failed {failed}, missing {skippedMissing})";
-    }
-
-    private static ThumbnailIndexEntry ReadThumbnailIndexEntry(JsonNode? node)
-    {
-        if (node is null)
-        {
-            return new ThumbnailIndexEntry();
-        }
-
-        if (node is JsonValue)
-        {
-            try
-            {
-                return new ThumbnailIndexEntry
-                {
-                    Revision = node.GetValue<string>()
-                };
-            }
-            catch
-            {
-                return new ThumbnailIndexEntry();
-            }
-        }
-
-        if (node is JsonObject obj)
-        {
-            return new ThumbnailIndexEntry
-            {
-                Revision = obj["revision"]?.GetValue<string>() ?? string.Empty,
-                Width = obj["width"]?.GetValue<int?>() ?? 0,
-                Height = obj["height"]?.GetValue<int?>() ?? 0
-            };
-        }
-
-        return new ThumbnailIndexEntry();
-    }
-
-    private static void WriteThumbnailIndexEntry(JsonObject index, string itemId, string revision, int width, int height)
-    {
-        index[itemId] = new JsonObject
-        {
-            ["revision"] = revision,
-            ["width"] = width,
-            ["height"] = height,
-            ["generatedUtc"] = DateTimeOffset.UtcNow
-        };
     }
 
     private static bool TryReadImageDimensions(string path, out int width, out int height)
@@ -2571,14 +2577,6 @@ public sealed class RefreshPipelineService : BackgroundService
         public double PeakDb { get; init; }
         public bool IsError { get; init; }
         public string? ErrorMessage { get; init; }
-    }
-
-    private sealed class ThumbnailIndexEntry
-    {
-        public string Revision { get; init; } = string.Empty;
-        public int Width { get; init; }
-        public int Height { get; init; }
-        public bool HasDimensions => Width > 0 && Height > 0;
     }
 
     private sealed class ThumbnailGenerationResult

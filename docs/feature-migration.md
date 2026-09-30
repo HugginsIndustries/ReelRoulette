@@ -186,7 +186,7 @@ All settings are core-owned and synced via API (`/api/refresh/settings`, `/api/b
 
 **Desktop location:** `LibraryImportRemapDialog.axaml` / `LibraryImportRemapDialog.axaml.cs`, `LibraryOverwriteConfirmDialog.axaml` / `LibraryOverwriteConfirmDialog.axaml.cs`; backed by `src/clients/desktop/ReelRoulette.LibraryArchive/LibraryArchiveMigration.cs`
 
-`Library → Export Library…` asks for a destination, then downloads a server checkpoint into that `library.db` file. `Import Library…` replaces the live catalog after the server-stopped acknowledgment. Presets, settings, thumbnails, and backups are not part of the transfer. A folder that still has only `library.json` with sources or items asks for overwrite confirmation, and a successful import renames that file aside. A `library.json` archive is not imported. Operator export and import remain the later transfer surface.
+`Library → Export Library…` asks for a destination, then downloads a server checkpoint into that `library.db` file. `Import Library…` replaces the live catalog after the server-stopped acknowledgment, including presets and thumbnail revision and dimensions. Settings and backups stay where they are. JPEG files stay in the local thumbnail directory until the next thumbnail stage completes. Run a refresh after import so those thumbnails are generated and JPEG files that are not in the imported catalog are removed. A folder that still has only `library.json` with sources or items asks for overwrite confirmation, and a successful import renames that file aside. A `library.json` archive is not imported. Operator export and import remain the later transfer surface.
 
 **Target surface:** Operator UI
 
