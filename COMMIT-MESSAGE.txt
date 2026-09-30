@@ -19,7 +19,7 @@ Instructions:
 
 Commit Message:
 
-Feature: Show fingerprint check progress
+Docs: Plan catalog schema version 2
 
-- The fingerprint stage counts files as it checks them, and that count fills the progress percent.
-- Hashing then starts its own percent. The finished summary is unchanged.
+- Add a milestone that drops the legacy available-tags list, stores presets, and stores thumbnail revision and dimensions in one schema migration.
+- Renumber catalog document removal and JSON-era leftovers to follow that migration.

@@ -91,19 +91,56 @@ Do not use this file for detailed architecture explanation or current capability
 
 Last milestone completed: M10i15
 
-### M10i16 - Catalog Document Removal
+### M10i16 - Catalog Schema Version 2
+
+- **Status**: ⏳ Planned
+- **Goal**: Move presets and thumbnail metadata into the catalog, drop the legacy available-tags list, and open every database at schema version 2 in one migration.
+- **Scope**:
+  - Depends on: refresh column updates.
+  - This ships in v0.13.0, before catalog document removal. JSON-era leftovers that do not serve migration still end that release.
+  - One migration runs before the health check. A schema 1 database is migrated in place. A corrupt database is still quarantined and startup still refuses it. The health check does not treat schema 1 as corrupt.
+  - The schema version is the integer already stored in SQLite `PRAGMA user_version`. The code constant stays `SchemaVersion`. There is no second version key in `catalog_meta`. After this milestone the version is 2.
+  - Opening a schema 1 database drops `available_tags` and the `available_tags_present` flag, adds a presets table, and adds thumbnail revision, width, and height on `items`. Existing rows in `tags` stay as they are. `generatedUtc` is not stored.
+  - That same open copies `presets.json` and the thumbnail index into the catalog. The thumbnail index lives in the local cache directory, not beside `library.db`, and the migration is given that directory. The schema version is set only after the schema change and that copy have committed, in the same transaction as a flag that the copy finished. `presets.json` and `index.json` are then renamed to `presets.json.migrated` and `index.json.migrated`. A crash after the commit and before those renames does not copy them again; the next open only finishes the rename.
+  - A missing `presets.json` or thumbnail index leaves presets or thumbnail columns empty. A file that cannot be parsed does the same and does not quarantine the catalog.
+  - A new database, including an empty one and one created by migrating `library.json`, is created at schema version 2. It does not create `available_tags` or `available_tags_present`, and it does not create schema 1 and then migrate. That `library.json` migration also copies `presets.json` and the thumbnail index. The importer ignores `availableTags`. A name that appears only in that list is not stored.
+  - The catalog document builder omits `availableTags` and does not query the dropped table. Removing that builder stays with catalog document removal.
+  - Preset reads and writes use the catalog table. Tag rename and delete still update presets. `core-settings.json` and `desktop-settings.json` stay JSON.
+  - Thumbnail revision, width, and height are read from the item row. The stored revision is the revision the JPEG was built for, and the thumbnail stage still reuses a JPEG when that revision matches the item fingerprint, size, and write time. The thumbnail stage writes that item's revision, width, and height as the item finishes, including a dimension fill when the revision already matches. It does not hold those columns until the stage ends. A favorite, tag, blacklist, or playback change that commits during the stage stays. A cancel leaves thumbnail columns already written. Browse no longer reads `index.json`. `hasThumbnail` is still whether that item's JPEG exists. The JPEG files stay in the local thumbnail directory. `generatedUtc` is not written.
+  - At the end of the thumbnail stage, JPEG cleanup lists the thumbnail directory. A `{itemId}.jpg` whose id is not in the catalog is deleted, including files that were never listed in `index.json` and files left from a catalog this run did not remove item by item. `index.json` and `index.json.migrated` are left in place. The server reports progress as it deletes them. Opening the catalog does not scan the thumbnail directory. A cancel before that cleanup finishes leaves the remaining files for the next thumbnail stage that completes. An item removed by source refresh still loses its thumbnail metadata and JPEG.
+  - Export, import, and catalog backup copy the whole database, so presets and thumbnail revision and dimensions travel with `library.db`. JPEG files do not. Import replaces the destination preset list. Local JPEGs for item ids that are not in the imported catalog stay until the next thumbnail stage completes. Docs and instructions recommend a refresh after import so those thumbnails are generated and the previous JPEG files are removed.
+  - Update the testing checklist and current-state docs.
+- **Acceptance criteria**:
+  - A schema 1 database opens at schema version 2 with `available_tags` and `available_tags_present` gone, with presets loaded from `presets.json`, and with thumbnail revision, width, and height loaded from the thumbnail index. Existing tags are unchanged. `generatedUtc` is not stored.
+  - A crash after that commit and before the side files are renamed does not import them a second time.
+  - A missing or unreadable `presets.json` or thumbnail index does not refuse the database. Presets or thumbnail columns stay empty.
+  - A new database, including an empty one and one migrated from `library.json`, is schema version 2, has no `available_tags` table, and includes presets and thumbnail metadata from those side files when they are present. A name that appears only in `availableTags` is not stored. The rest of that library still migrates.
+  - A corrupt database is still quarantined.
+  - The catalog document builder does not read `available_tags`.
+  - Preset save, tag rename, and tag delete persist in the catalog table. Core settings and desktop settings stay in their JSON files.
+  - Browse thumbnail dimensions come from the item row. The thumbnail stage persists that item's revision, width, and height as the item finishes, including a dimension fill when the revision already matches. A favorite, tag, blacklist, or playback change committed during the stage is still present afterward. A cancel keeps thumbnail columns already written. At the end of the thumbnail stage, a JPEG whose item id is not in the catalog is deleted, including after import replaces the catalog, and the server reports progress during that cleanup. Opening the catalog does not delete those files. A cancel before that cleanup finishes leaves them for the next thumbnail stage that completes. JPEG files are not part of export or import.
+  - Export and import include presets. Import replaces the destination preset list.
+  - Docs and the testing checklist describe schema version 2, presets and thumbnail metadata in the catalog, local JPEG files, a refresh after import to generate thumbnails and remove JPEGs that are not in the imported catalog, and core settings remaining in `core-settings.json`.
+- **Verification evidence**:
+  - Evidence placeholders maintained at planned state; completion evidence must include tests that a schema 1 database opens at schema version 2 with `available_tags` and `available_tags_present` gone, existing tags unchanged, presets and thumbnail revision, width, and height copied, and `generatedUtc` absent; that a crash between commit and rename does not copy the side files again; that a missing or unreadable side file does not refuse the database; that a new database and a `library.json` migration are created at schema version 2 without `available_tags` and without storing a name that appears only in `availableTags`; that a corrupt database is still quarantined; that the document builder does not read `available_tags`; that preset save, tag rename, and tag delete persist in the catalog; that the thumbnail stage persists revision, width, and height as each item finishes, including a matching-revision dimension fill, while a favorite, tag, blacklist, or playback change committed during the stage remains and a cancel keeps columns already written; and that a JPEG whose item id is not in the catalog is deleted at the end of the thumbnail stage, with progress reported during that cleanup, while opening the catalog does not delete it and JPEG files stay out of the checkpoint.
+  - Docs evidence must include current-state and checklist updates for schema version 2, presets and thumbnail metadata in the catalog, local JPEG files, a refresh after import, and core settings remaining in `core-settings.json`.
+- **Deferrals / Follow-ups**:
+  - Catalog document removal follows this milestone and still removes the document builder.
+  - Removing `library.json` file recognition and the JSON-to-SQLite importer ships in v0.14.0. That removal does not remove the schema 1 migration. After that removal, a missing database does not read `presets.json` or the thumbnail index.
+  - Account and PIN tables stay with the account and PIN data model work. They extend the schema version rather than replacing this catalog schema.
+
+### M10i17 - Catalog Document Removal
 
 - **Status**: ⏳ Planned
 - **Goal**: Stop using the catalog document for live reads and writes in v0.13.0, while keeping startup migration of a leftover `library.json` so an old library can still be migrated.
 - **Scope**:
-  - Depends on: refresh column updates.
-  - It does not depend on the refresh work itself. JSON-era leftovers that do not serve migration follow this milestone and end the v0.13.0 release.
+  - Depends on: catalog schema version 2.
+  - JSON-era leftovers that do not serve migration follow this milestone and end the v0.13.0 release.
   - Tag catalog sync and item-tag sync update catalog rows directly. They do not load or diff the full catalog document.
   - Server startup loads sources, tags, item tags, and favorite and blacklist item state with SQL. It does not build the catalog document.
   - The library reload after import uses that same SQL load, or that reload is removed. It does not build the catalog document.
   - Remove the catalog document builder and the full-document save path.
-  - The JSON-to-SQLite importer stays for startup migration. Startup still migrates a leftover `library.json` once. Import Library does not accept a `library.json` archive. An empty database may still be created through that importer.
-  - Opening a version 1 database drops `available_tags` and the `available_tags_present` flag, then sets `user_version` to 2. Existing rows in `tags` stay as they are. A new database, including one created by migrating `library.json`, is created at version 2 and does not create that table or flag. The importer ignores `availableTags`. A name that appears only in that list is not stored.
+  - The JSON-to-SQLite importer stays for startup migration of a leftover `library.json`, including the preset and thumbnail-index copy from catalog schema version 2. Startup still migrates a leftover `library.json` once. Import Library does not accept a `library.json` archive. An empty database may still be created through that importer.
   - Update the testing checklist and current-state docs.
 - **Acceptance criteria**:
   - Tag catalog sync and item-tag sync persist without loading or diffing the full catalog document.
@@ -111,26 +148,23 @@ Last milestone completed: M10i15
   - Library reload does not build the catalog document.
   - There is no catalog document builder and no full-document save path.
   - A missing `library.db` still migrates `library.json`. Import Library does not accept a `library.json` archive.
-  - A version 1 database opens at `user_version` 2 with `available_tags` and `available_tags_present` gone. Existing tags are unchanged.
-  - A new database is `user_version` 2 and has no `available_tags` table.
-  - A `library.json` import ignores `availableTags`. A name that appears only in that list is not stored. The rest of that library still migrates.
   - Docs and the testing checklist describe live catalog reads and writes as row operations, describe the tag table as the only tag list, and still describe startup migration of a leftover `library.json`.
 - **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include tests that tag catalog sync and item-tag sync persist without a catalog document build, that server startup loads favorite and blacklist item state without building that document, that library reload does not build it, that a missing database still migrates `library.json`, that a version 1 database opens at version 2 with `available_tags` and `available_tags_present` gone and existing tags unchanged, and that startup migration of `library.json` does not store a name that appears only in `availableTags`.
+  - Evidence placeholders maintained at planned state; completion evidence must include tests that tag catalog sync and item-tag sync persist without a catalog document build, that server startup loads favorite and blacklist item state without building that document, that library reload does not build it, and that a missing database still migrates `library.json`.
   - Docs evidence must include current-state and checklist updates for row-based live reads and writes, for the tag table as the only tag list, and for startup migration of a leftover `library.json` still described.
 - **Deferrals / Follow-ups**:
   - Removing `library.json` file recognition and the JSON-to-SQLite importer ships in v0.14.0.
   - Unused JSON-era types, desktop fields, and comments that do not serve startup migration are the next milestone, still in v0.13.0.
   - Account and PIN tables stay with the account and PIN data model work.
 
-### M10i17 - JSON-Era Leftovers That Do Not Serve Migration
+### M10i18 - JSON-Era Leftovers That Do Not Serve Migration
 
 - **Status**: ⏳ Planned
 - **Goal**: Remove JSON-era library code that does not read `library.json`, while v0.13.0 still migrates a leftover `library.json`. Import does not accept a `library.json` archive.
 - **Scope**:
   - Depends on: catalog document removal.
   - This is the last milestone in the v0.13.0 release. It does not depend on the document work itself. It follows that milestone so v0.13.0 ends here.
-  - Remove the unused library-index file store. Settings JSON storage stays.
+  - Remove the unused library-index file store. Settings JSON storage stays for core settings and desktop settings. Presets and thumbnail metadata are already in the catalog.
   - Remove the verification-only in-memory tag mutator and the verification check that only exists to call it. The rest of that verification stays.
   - Remove the empty desktop tag-catalog sync method.
   - Remove every server state method whose body only throws because mutation authority moved. Live routes stay on library operations.
@@ -139,7 +173,7 @@ Last milestone completed: M10i15
   - Comments that are not describing startup migration no longer mention `library.json`. Current-state docs that describe that migration still do.
   - Update the testing checklist where those leftovers were described.
 - **Acceptance criteria**:
-  - The unused library-index file store, the verification-only tag mutator, the empty desktop tag-catalog sync method, and the throw-only server state methods are gone. Settings JSON storage is unchanged.
+  - The unused library-index file store, the verification-only tag mutator, the empty desktop tag-catalog sync method, and the throw-only server state methods are gone. Core settings and desktop settings JSON storage is unchanged.
   - The desktop library model has no legacy flat tag list and no fingerprint index. The filter dialog does not read a flat tag list.
   - A full-catalog projection route is not treated as a live library read.
   - Comments that are not about startup migration do not mention `library.json`.
@@ -161,19 +195,20 @@ Last milestone completed: M10i15
   - This milestone ships in v0.14.0. Those leftovers are the last milestone in the v0.13.0 release.
   - Startup does not look for `library.json` or `library.json.migrated`. Those files do not change open, refuse, or empty-catalog behavior. A missing `library.db` creates an empty catalog with SQL, not by parsing an empty document. A healthy `library.db` opens. A corrupt `library.db` is quarantined and startup refuses with the same result it uses when those files are absent. They are not read, not a restore path, and not deleted. Startup and user-facing strings do not mention either file.
   - Delete the JSON-to-SQLite importer. Tests build a catalog in `library.db`. They do not write `library.json` to create one.
+  - Deleting that importer does not remove the schema 1 to schema 2 migration. A schema 1 database still migrates on open. A missing database is created empty at schema version 2 and does not read `presets.json` or the thumbnail index.
   - Import already has no `library.json` path and no zip. A file that is not a library database is rejected. A `.db` import still remaps sources. Export and catalog backups stay on `library.db`.
   - Update current-state docs and the testing checklist to say `library.json` library support is removed.
 - **Acceptance criteria**:
   - Startup does not migrate `library.json` and does not rebuild a catalog from `library.json.migrated`.
   - A missing `library.db` creates an empty healthy `library.db` whether or not `library.json` or `library.json.migrated` is present. Those files are left in place and are not read. The empty database is created with SQL.
   - A healthy `library.db` opens. A corrupt `library.db` is quarantined and startup refuses the same way whether or not those JSON files are present, and it is not repaired from them.
-  - There is no JSON-to-SQLite importer.
+  - There is no JSON-to-SQLite importer. A schema 1 database still migrates to schema version 2 on open. A missing database does not read `presets.json` or the thumbnail index.
   - There is no `library.json` import path and no deprecation message for that format. A `.db` import still remaps sources.
   - A file that is not a library database is not imported, including a file that used to be a `library.json` archive. Import does not replace the live catalog.
   - Startup messages and user-facing copy do not mention `library.json` or `library.json.migrated`.
   - Docs and the testing checklist describe `library.json` library support as removed in v0.14.0.
 - **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include tests that a missing database creates an empty database with SQL whether or not `library.json` or `library.json.migrated` is present, a healthy database opens with those files present, a corrupt database is refused the same way with or without them, a file that is not a library database is not imported, and a `.db` import still remaps sources.
+  - Evidence placeholders maintained at planned state; completion evidence must include tests that a missing database creates an empty database with SQL whether or not `library.json` or `library.json.migrated` is present and does not read `presets.json` or the thumbnail index, a schema 1 database still migrates to schema version 2 on open, a healthy database opens with those JSON files present, a corrupt database is refused the same way with or without them, a file that is not a library database is not imported, and a `.db` import still remaps sources.
   - Docs evidence must include current-state and checklist updates that `library.json` library support is removed in v0.14.0.
 - **Deferrals / Follow-ups**:
   - Scrubbing every remaining `library.json` mention from product code, comments, user-facing copy, tests, and current-state docs is the next milestone.
@@ -187,12 +222,12 @@ Last milestone completed: M10i15
 - **Scope**:
   - Depends on: removal of `library.json` library support.
   - Product code, comments, user-facing copy, tests, and current-state docs do not mention `library.json`, `library.json.migrated`, or a legacy flat tag list.
-  - Presets, core settings, desktop settings, and the thumbnail index stay JSON.
+  - Core settings and desktop settings stay JSON. Presets and thumbnail revision, width, and height stay in the catalog. JPEG files stay in the local thumbnail directory.
   - Do not rewrite released changelog sections, completed milestone entries, `docs/full-audit.md`, `docs/velopack-migration-audit.md`, or `docs/migration-cleanup.md`. The unreleased changelog may record that the format was removed.
   - Update the testing checklist so it does not mention those names.
 - **Acceptance criteria**:
   - Product code, comments, user-facing copy, tests, and current-state docs do not mention `library.json`, `library.json.migrated`, or a legacy flat tag list.
-  - Presets, core settings, desktop settings, and the thumbnail index are unchanged.
+  - Core settings and desktop settings stay JSON. Presets and thumbnail metadata stay in the catalog. JPEG files stay local.
   - Released changelog sections, completed milestone entries, and the historical audit and migration notes named above are left as written.
 - **Verification evidence**:
   - Evidence placeholders maintained at planned state; completion evidence must include a search of product code, comments, user-facing copy, tests, and current-state docs that finds none of those names, plus a build and tests after the scrub.
