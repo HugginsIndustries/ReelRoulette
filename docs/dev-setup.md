@@ -127,7 +127,7 @@ Per-user data uses .NET `Environment.SpecialFolder` mappings:
 - **Linux** (XDG): config / roaming (`ApplicationData`) → `~/.config/ReelRoulette/` (includes `library.db`). Local cache (`LocalApplicationData`) → `~/.local/share/ReelRoulette/` (thumbnails in `thumbnails/`).
 - **Windows**: config / roaming (`ApplicationData`) → `%APPDATA%/ReelRoulette/`. Local cache (`LocalApplicationData`) → `%LOCALAPPDATA%/ReelRoulette/` (thumbnails in `thumbnails/`).
 
-The server opens `library.db` in that roaming directory at startup. A missing database is migrated from `library.json`, which is then renamed to `library.json.migrated`. A refused database stops the process. Leftover `library.json` is not the live catalog.
+The server opens `library.db` in that roaming directory at startup. A missing database is migrated from `library.json`, which is then renamed to `library.json.migrated`. A refused database stops the process. Leftover `library.json` is not the live catalog. Desktop export saves a checkpoint of `library.db`. Import replaces that database while the server is stopped. A `library.json` archive is not an import. Startup still migrates a leftover `library.json` when `library.db` is missing. Server catalog backups are `library.db.backup.*` files in `backups/`.
 
 ## Velopack packaging and release
 

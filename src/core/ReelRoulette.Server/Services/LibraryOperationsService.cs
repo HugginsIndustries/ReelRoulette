@@ -35,7 +35,6 @@ public sealed class LibraryOperationsService
     private readonly LibraryCatalogHost _catalog;
     private readonly Func<string, IReadOnlyList<string>> _enumerateFiles;
     private JsonObject? _editBaseline;
-    private bool _loggedBackupUnavailable;
 
     public LibraryOperationsService(
         ILogger<LibraryOperationsService>? logger = null,
@@ -50,6 +49,21 @@ public sealed class LibraryOperationsService
         _logPath = Path.Combine(appData, "last.log");
         _catalog = catalog ?? LibraryCatalogHost.Open(appData);
         _enumerateFiles = enumerateMediaFiles ?? EnumerateAllFiles;
+        LibraryCatalogBackup.Attach(_catalog.Session, appData, _logger);
+    }
+
+    public void WriteCatalogCheckpoint(string destinationPath)
+    {
+        try
+        {
+            LibraryCatalogStore.WriteCheckpoint(_catalog.Session.DatabasePath, destinationPath);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Catalog checkpoint failed.");
+            AppendServerLog("error", "Catalog checkpoint failed: " + ex.Message);
+            throw;
+        }
     }
 
     public SourceImportResponse ImportSource(SourceImportRequest request)
@@ -830,11 +844,6 @@ public sealed class LibraryOperationsService
 
         _catalog.SaveChanges(_editBaseline, root);
         _editBaseline = null;
-        if (!_loggedBackupUnavailable)
-        {
-            _loggedBackupUnavailable = true;
-            _logger.LogInformation("Catalog JSON backups are unavailable. The live catalog is {DatabasePath}.", _catalog.Session.DatabasePath);
-        }
     }
 
     private static JsonArray EnsureArray(JsonObject root, string propertyName)

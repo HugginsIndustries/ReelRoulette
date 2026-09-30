@@ -25,6 +25,8 @@ public sealed class LibraryCatalogSession
 
     public string DatabasePath => _databasePath;
 
+    public Action? AfterSuccessfulWrite { get; set; }
+
     public int DocumentBuilds => _documentBuilds;
 
     public long Revision
@@ -461,37 +463,46 @@ public sealed class LibraryCatalogSession
             return;
         }
 
-        using var connection = LibraryCatalogStore.OpenWrite(_databasePath);
-        using var transaction = connection.BeginTransaction();
-        var scope = new WriteScope(connection, transaction);
-        _writeScope.Value = scope;
-        try
+        var committed = false;
+        using (var connection = LibraryCatalogStore.OpenWrite(_databasePath))
+        using (var transaction = connection.BeginTransaction())
         {
-            work();
-            if (!scope.Changed)
+            var scope = new WriteScope(connection, transaction);
+            _writeScope.Value = scope;
+            try
+            {
+                work();
+                if (!scope.Changed)
+                {
+                    transaction.Rollback();
+                    return;
+                }
+
+                LibraryCatalogStore.Execute(
+                    connection,
+                    transaction,
+                    """
+                    UPDATE catalog_meta
+                    SET value = CAST((CAST(value AS INTEGER) + 1) AS TEXT)
+                    WHERE key = 'revision';
+                    """);
+                transaction.Commit();
+                committed = true;
+            }
+            catch
             {
                 transaction.Rollback();
-                return;
+                throw;
             }
+            finally
+            {
+                _writeScope.Value = null;
+            }
+        }
 
-            LibraryCatalogStore.Execute(
-                connection,
-                transaction,
-                """
-                UPDATE catalog_meta
-                SET value = CAST((CAST(value AS INTEGER) + 1) AS TEXT)
-                WHERE key = 'revision';
-                """);
-            transaction.Commit();
-        }
-        catch
+        if (committed)
         {
-            transaction.Rollback();
-            throw;
-        }
-        finally
-        {
-            _writeScope.Value = null;
+            NotifySuccessfulWrite();
         }
     }
 
@@ -1863,24 +1874,52 @@ public sealed class LibraryCatalogSession
             return true;
         }
 
-        using var connection = LibraryCatalogStore.OpenWrite(_databasePath);
-        using var transaction = connection.BeginTransaction();
-        if (!mutate(connection, transaction))
+        var committed = false;
+        using (var connection = LibraryCatalogStore.OpenWrite(_databasePath))
+        using (var transaction = connection.BeginTransaction())
         {
-            transaction.Rollback();
-            return false;
+            if (!mutate(connection, transaction))
+            {
+                transaction.Rollback();
+                return false;
+            }
+
+            LibraryCatalogStore.Execute(
+                connection,
+                transaction,
+                """
+                UPDATE catalog_meta
+                SET value = CAST((CAST(value AS INTEGER) + 1) AS TEXT)
+                WHERE key = 'revision';
+                """);
+            transaction.Commit();
+            committed = true;
         }
 
-        LibraryCatalogStore.Execute(
-            connection,
-            transaction,
-            """
-            UPDATE catalog_meta
-            SET value = CAST((CAST(value AS INTEGER) + 1) AS TEXT)
-            WHERE key = 'revision';
-            """);
-        transaction.Commit();
+        if (committed)
+        {
+            NotifySuccessfulWrite();
+        }
+
         return true;
+    }
+
+    private void NotifySuccessfulWrite()
+    {
+        var callback = AfterSuccessfulWrite;
+        if (callback == null)
+        {
+            return;
+        }
+
+        try
+        {
+            callback();
+        }
+        catch (Exception)
+        {
+            // A catalog commit stays in place when a follow-up such as a backup fails.
+        }
     }
 
     private sealed class WriteScope

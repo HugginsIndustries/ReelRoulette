@@ -19,9 +19,11 @@ public static class ServerHostComposition
         {
             var appDataRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ReelRoulette");
             var host = LibraryCatalogHost.Open(appDataRoot);
-            sp.GetRequiredService<ILogger<LibraryCatalogHost>>().LogInformation(
+            var logger = sp.GetRequiredService<ILogger<LibraryCatalogHost>>();
+            logger.LogInformation(
                 "Opened library catalog {DatabasePath}.",
                 host.Session.DatabasePath);
+            LibraryCatalogBackup.Attach(host.Session, appDataRoot, logger);
             return host;
         });
         services.AddSingleton(sp =>
@@ -339,6 +341,26 @@ public static class ServerHostComposition
         app.MapGet("/api/library/stats", (LibraryOperationsService operations) =>
         {
             return Results.Ok(operations.GetLibraryStats());
+        });
+
+        app.MapGet("/api/library/catalog-checkpoint", (LibraryOperationsService operations) =>
+        {
+            var temp = Path.Combine(Path.GetTempPath(), "rr-checkpoint-" + Guid.NewGuid().ToString("N") + ".db");
+            try
+            {
+                operations.WriteCatalogCheckpoint(temp);
+                var stream = new FileStream(temp, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, FileOptions.DeleteOnClose);
+                return Results.Stream(stream, "application/octet-stream", "library.db");
+            }
+            catch (Exception ex)
+            {
+                if (File.Exists(temp))
+                {
+                    File.Delete(temp);
+                }
+
+                return Results.Problem(ex.Message);
+            }
         });
 
         app.MapPost("/api/sources/{sourceId}/enabled", (string sourceId, UpdateSourceEnabledRequest request, ServerStateService state) =>

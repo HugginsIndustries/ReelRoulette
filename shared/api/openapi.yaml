@@ -676,6 +676,24 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/library/catalog-checkpoint:
+    get:
+      summary: Download a standalone catalog checkpoint
+      description: |
+        Returns a SQLite database of the live catalog, produced while `library.db` is open.
+        The file does not depend on a WAL sidecar. Desktop library export saves this response as `library.db`.
+      operationId: getLibraryCatalogCheckpoint
+      responses:
+        "200":
+          description: Standalone SQLite catalog
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "500":
+          description: The checkpoint could not be written
+
   /api/sources/{sourceId}/enabled:
     post:
       summary: Update global enabled state for a source

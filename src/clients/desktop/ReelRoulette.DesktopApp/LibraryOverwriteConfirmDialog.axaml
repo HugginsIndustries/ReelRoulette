@@ -7,9 +7,9 @@
         WindowStartupLocation="CenterOwner"
         CanResize="False">
     <Grid RowDefinitions="*,Auto" Margin="16">
-        <TextBlock Grid.Row="0"
-                   TextWrapping="Wrap"
-                   Text="This server already has library data. Importing will replace library.json, presets, core settings, and optional thumbnail/backup data on the server. Continue?"/>
+        <TextBlock x:Name="ConfirmationTextBlock"
+                   Grid.Row="0"
+                   TextWrapping="Wrap"/>
         <StackPanel Grid.Row="1"
                     Orientation="Horizontal"
                     HorizontalAlignment="Right"

@@ -120,6 +120,34 @@ public static class LibraryRelativePath
         return rel;
     }
 
+    public static string CombineRootAndRelative(string newRoot, string relativePath)
+    {
+        var root = (newRoot ?? string.Empty).Trim();
+        if (string.IsNullOrEmpty(root))
+        {
+            throw new ArgumentException("New root path is empty.", nameof(newRoot));
+        }
+
+        var rel = NormalizeRelativeForDestinationRoot(relativePath);
+        if (string.IsNullOrEmpty(rel))
+        {
+            throw new ArgumentException("Relative path is empty.", nameof(relativePath));
+        }
+
+        var combined = Path.GetFullPath(Path.Combine(root, rel));
+        var rootFull = Path.GetFullPath(root);
+        var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        var boundary = rootFull.EndsWith(Path.DirectorySeparatorChar) || rootFull.EndsWith(Path.AltDirectorySeparatorChar)
+            ? rootFull
+            : rootFull + Path.DirectorySeparatorChar;
+        if (!combined.StartsWith(boundary, comparison))
+        {
+            throw new ArgumentException("Resolved path escapes the destination root.");
+        }
+
+        return combined;
+    }
+
     /// <summary>
     /// When <paramref name="storedRelativePath"/> has a spurious leading <c>..</c>, recomputes the segment from
     /// <paramref name="oldRoot"/> and <paramref name="oldFullPath"/> using cross-platform segment logic so Windows exports

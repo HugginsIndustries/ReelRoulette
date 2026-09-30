@@ -676,6 +676,212 @@ public sealed class LibraryCatalogStoreTests
         connection.Open();
     }
 
+    [Fact]
+    public void WriteCheckpoint_IncludesCommittedRows_WithoutAWalSidecar()
+    {
+        using var dir = new TempDirectory();
+        File.WriteAllText(Path.Combine(dir.Path, "library.json"), """
+            { "items": [ { "id": "item-1", "fullPath": "/clips/a.mp4", "fileName": "a.mp4" } ] }
+            """);
+        var opened = LibraryCatalogStore.Open(dir.Path);
+        Assert.True(opened.Session!.SetFavorite("item-1", true));
+
+        var checkpoint = Path.Combine(dir.Path, "checkpoint.db");
+        LibraryCatalogStore.WriteCheckpoint(opened.Session.DatabasePath, checkpoint);
+
+        Assert.False(File.Exists(checkpoint + "-wal"));
+        Assert.False(File.Exists(checkpoint + "-shm"));
+        var copy = LibraryCatalogStore.Read(checkpoint);
+        Assert.True(Assert.Single(copy.Items).IsFavorite);
+    }
+
+    [Fact]
+    public void Open_AfterInterruptedReplace_RestoresPreviousCatalog()
+    {
+        using var dir = new TempDirectory();
+        File.WriteAllText(Path.Combine(dir.Path, "library.json"), """
+            { "items": [ { "id": "kept", "fullPath": "/clips/kept.mp4", "fileName": "kept.mp4" } ] }
+            """);
+        var opened = LibraryCatalogStore.Open(dir.Path);
+        Assert.NotNull(opened.Session);
+        File.Delete(Path.Combine(dir.Path, "library.json.migrated"));
+
+        LibraryCatalogStore.PrepareIncomingFromJson(dir.Path, new System.Text.Json.Nodes.JsonObject
+        {
+            ["items"] = new System.Text.Json.Nodes.JsonArray
+            {
+                new System.Text.Json.Nodes.JsonObject
+                {
+                    ["id"] = "incoming",
+                    ["fullPath"] = "/clips/new.mp4",
+                    ["fileName"] = "new.mp4"
+                }
+            }
+        });
+        LibraryCatalogStore.PublishIncoming(dir.Path, new LibraryCatalogReplaceOptions { StopAfterMovingPrevious = true });
+
+        Assert.False(File.Exists(Path.Combine(dir.Path, "library.db")));
+        Assert.True(File.Exists(Path.Combine(dir.Path, "library.db.previous")));
+        Assert.True(File.Exists(Path.Combine(dir.Path, "library.db.incoming")));
+
+        var recovered = LibraryCatalogStore.Open(dir.Path);
+        Assert.Equal("kept", Assert.Single(recovered.Catalog!.Items).Id);
+        Assert.False(File.Exists(Path.Combine(dir.Path, "library.db.incoming")));
+        Assert.False(File.Exists(Path.Combine(dir.Path, "library.db.previous")));
+    }
+
+    [Fact]
+    public void Open_AfterPublishedIncoming_KeepsTheNewCatalog()
+    {
+        using var dir = new TempDirectory();
+        File.WriteAllText(Path.Combine(dir.Path, "library.json"), """
+            { "items": [ { "id": "old", "fullPath": "/clips/old.mp4", "fileName": "old.mp4" } ] }
+            """);
+        _ = LibraryCatalogStore.Open(dir.Path);
+        File.Delete(Path.Combine(dir.Path, "library.json.migrated"));
+
+        LibraryCatalogStore.PrepareIncomingFromJson(dir.Path, new System.Text.Json.Nodes.JsonObject
+        {
+            ["items"] = new System.Text.Json.Nodes.JsonArray
+            {
+                new System.Text.Json.Nodes.JsonObject
+                {
+                    ["id"] = "landed",
+                    ["fullPath"] = "/clips/new.mp4",
+                    ["fileName"] = "new.mp4"
+                }
+            }
+        });
+        LibraryCatalogStore.PublishIncoming(dir.Path, new LibraryCatalogReplaceOptions { StopAfterPublishingIncoming = true });
+        Assert.True(File.Exists(Path.Combine(dir.Path, "library.db.previous")));
+
+        var recovered = LibraryCatalogStore.Open(dir.Path);
+        Assert.Equal("landed", Assert.Single(recovered.Catalog!.Items).Id);
+        Assert.False(File.Exists(Path.Combine(dir.Path, "library.db.previous")));
+        Assert.False(File.Exists(Path.Combine(dir.Path, "library.json")));
+    }
+
+    [Fact]
+    public void Open_PromotesFinishedIncoming_WhenNoPreviousCatalogExists()
+    {
+        using var dir = new TempDirectory();
+        var source = new TempDirectory();
+        try
+        {
+            File.WriteAllText(Path.Combine(source.Path, "library.json"), """
+                { "items": [ { "id": "promoted", "fullPath": "/clips/a.mp4", "fileName": "a.mp4" } ] }
+                """);
+            var opened = LibraryCatalogStore.Open(source.Path);
+            LibraryCatalogStore.WriteCheckpoint(opened.Session!.DatabasePath, Path.Combine(dir.Path, "library.db.incoming"));
+
+            var recovered = LibraryCatalogStore.Open(dir.Path);
+            Assert.Equal("promoted", Assert.Single(recovered.Catalog!.Items).Id);
+            Assert.False(File.Exists(Path.Combine(dir.Path, "library.db.incoming")));
+        }
+        finally
+        {
+            source.Dispose();
+        }
+    }
+
+    [Fact]
+    public void Open_IgnoresPartialIncoming_AndKeepsAHealthyCatalog()
+    {
+        using var dir = new TempDirectory();
+        File.WriteAllText(Path.Combine(dir.Path, "library.json"), """
+            { "items": [ { "id": "kept", "fullPath": "/clips/a.mp4", "fileName": "a.mp4" } ] }
+            """);
+        _ = LibraryCatalogStore.Open(dir.Path);
+        File.WriteAllText(Path.Combine(dir.Path, "library.db.incoming"), "partial");
+
+        var recovered = LibraryCatalogStore.Open(dir.Path);
+        Assert.Equal("kept", Assert.Single(recovered.Catalog!.Items).Id);
+        Assert.False(File.Exists(Path.Combine(dir.Path, "library.db.incoming")));
+    }
+
+    [Fact]
+    public void Open_RestoresPrevious_WhenLiveDatabaseIsUnusable()
+    {
+        using var dir = new TempDirectory();
+        var source = new TempDirectory();
+        try
+        {
+            File.WriteAllText(Path.Combine(source.Path, "library.json"), """
+                { "items": [ { "id": "previous", "fullPath": "/clips/a.mp4", "fileName": "a.mp4" } ] }
+                """);
+            var opened = LibraryCatalogStore.Open(source.Path);
+            LibraryCatalogStore.WriteCheckpoint(opened.Session!.DatabasePath, Path.Combine(dir.Path, "library.db.previous"));
+            File.WriteAllText(Path.Combine(dir.Path, "library.db"), "partial");
+
+            var recovered = LibraryCatalogStore.Open(dir.Path);
+            Assert.Equal("previous", Assert.Single(recovered.Catalog!.Items).Id);
+            Assert.True(File.Exists(Path.Combine(dir.Path, "library.db")));
+            Assert.False(File.Exists(Path.Combine(dir.Path, "library.db.previous")));
+        }
+        finally
+        {
+            source.Dispose();
+        }
+    }
+
+    [Fact]
+    public void RemapSources_RejectsItemThatResolvesBesideTheDestinationRoot()
+    {
+        using var dir = new TempDirectory();
+        File.WriteAllText(Path.Combine(dir.Path, "library.json"), """
+            {
+              "sources": [ { "id": "s1", "rootPath": "/media/movies", "displayName": "Movies", "isEnabled": true } ],
+              "items": [ { "id": "i1", "sourceId": "s1", "fullPath": "/media/movies-extra/a.mp4", "relativePath": "../movies-extra/a.mp4", "fileName": "a.mp4" } ]
+            }
+            """);
+        var opened = LibraryCatalogStore.Open(dir.Path);
+        var result = LibraryCatalogStore.RemapSources(
+            opened.Session!.DatabasePath,
+            new Dictionary<string, string>(StringComparer.Ordinal) { ["/media/movies"] = "/media/movies" },
+            new HashSet<string>(StringComparer.Ordinal));
+
+        Assert.False(result.Success);
+        Assert.Contains("escapes the destination root", result.ErrorMessage, StringComparison.Ordinal);
+        var stored = LibraryCatalogStore.Read(opened.Session.DatabasePath);
+        Assert.Equal("/media/movies-extra/a.mp4", Assert.Single(stored.Items).FullPath);
+    }
+
+    [Fact]
+    public void InspectCatalogFile_RejectsAFileThatIsNotADatabase()
+    {
+        using var dir = new TempDirectory();
+        var path = Path.Combine(dir.Path, "library.db.backup.partial");
+        File.WriteAllText(path, "not a database");
+        Assert.Equal(LibraryCatalogStore.CatalogFileInspection.NotADatabase, LibraryCatalogStore.InspectCatalogFile(path));
+    }
+
+    [Fact]
+    public void WriteCheckpoint_DeletesDestinationWhenTheCopyFails()
+    {
+        using var dir = new TempDirectory();
+        File.WriteAllText(Path.Combine(dir.Path, "library.json"), """
+            { "items": [ { "id": "item-1", "fullPath": "/clips/a.mp4", "fileName": "a.mp4" } ] }
+            """);
+        var opened = LibraryCatalogStore.Open(dir.Path);
+        var destination = Path.Combine(dir.Path, "checkpoint.db");
+        var created = false;
+        var ex = Assert.Throws<IOException>(() => LibraryCatalogStore.WriteCheckpoint(
+            opened.Session!.DatabasePath,
+            destination,
+            () =>
+            {
+                created = File.Exists(destination);
+                throw new IOException("disk full");
+            }));
+        Assert.Contains("disk full", ex.Message, StringComparison.Ordinal);
+
+        Assert.True(created);
+        Assert.False(File.Exists(destination));
+        Assert.False(File.Exists(destination + "-wal"));
+        Assert.False(File.Exists(destination + "-shm"));
+        Assert.False(File.Exists(destination + "-journal"));
+    }
+
     private sealed class TempDirectory : IDisposable
     {
         public TempDirectory()

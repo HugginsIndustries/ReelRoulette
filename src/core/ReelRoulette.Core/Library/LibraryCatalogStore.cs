@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Data.Sqlite;
+using ReelRoulette.Core.Storage;
 
 namespace ReelRoulette.Core.Library;
 
@@ -18,6 +19,26 @@ public sealed class LibraryCatalogOpenOptions
     public Action? BeforePublish { get; init; }
 
     public Action<string>? DirectorySync { get; init; }
+}
+
+public sealed class LibraryCatalogReplaceOptions
+{
+    public bool StopAfterMovingPrevious { get; init; }
+
+    public bool StopAfterPublishingIncoming { get; init; }
+
+    public bool RetainPrevious { get; init; }
+}
+
+public readonly struct LibraryCatalogRemapResult
+{
+    public bool Success { get; init; }
+    public string? ErrorMessage { get; init; }
+
+    public static LibraryCatalogRemapResult Ok() => new() { Success = true };
+
+    public static LibraryCatalogRemapResult Fail(string message) =>
+        new() { Success = false, ErrorMessage = message };
 }
 
 public sealed class LibraryCatalogOpenResult
@@ -95,6 +116,8 @@ public static class LibraryCatalogStore
 {
     public const int SchemaVersion = 1;
     public const string DatabaseFileName = "library.db";
+    public const string IncomingFileName = "library.db.incoming";
+    public const string PreviousFileName = "library.db.previous";
     public const string LibraryFileName = "library.json";
     public const string MigratedLibraryFileName = "library.json.migrated";
 
@@ -135,6 +158,7 @@ public static class LibraryCatalogStore
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(directory);
         Directory.CreateDirectory(directory);
+        RecoverReplace(directory);
 
         var databasePath = Path.Combine(directory, DatabaseFileName);
         var libraryPath = Path.Combine(directory, LibraryFileName);
@@ -176,6 +200,420 @@ public static class LibraryCatalogStore
 
         CreateEmpty(directory, databasePath);
         return Opened(databasePath);
+    }
+
+    public static void WriteCheckpoint(string sourceDatabasePath, string destinationPath, Action? afterCopyStarted = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(sourceDatabasePath);
+        ArgumentException.ThrowIfNullOrWhiteSpace(destinationPath);
+        var destinationDirectory = Path.GetDirectoryName(destinationPath);
+        if (!string.IsNullOrEmpty(destinationDirectory))
+        {
+            Directory.CreateDirectory(destinationDirectory);
+        }
+
+        DeleteSidecars(destinationPath);
+        try
+        {
+            using (var source = new SqliteConnection(ConnectionString(sourceDatabasePath, readOnly: false)))
+            using (var destination = new SqliteConnection(ConnectionString(destinationPath, readOnly: false)))
+            {
+                source.Open();
+                source.DefaultTimeout = 5;
+                Execute(source, "PRAGMA busy_timeout=5000;");
+                destination.Open();
+                afterCopyStarted?.Invoke();
+                source.BackupDatabase(destination);
+            }
+
+            CheckpointStandalone(destinationPath);
+            if (!IsHealthyFile(destinationPath))
+            {
+                throw new InvalidDataException("Catalog checkpoint is not a usable database.");
+            }
+        }
+        catch
+        {
+            DeleteSidecars(destinationPath);
+            throw;
+        }
+    }
+
+    public static bool IsUsableDatabase(string databasePath)
+    {
+        return IsHealthyFile(databasePath);
+    }
+
+    public static IReadOnlyList<string> ReadSourceRootPaths(string databasePath)
+    {
+        using var connection = OpenReadOnly(databasePath);
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT root_path FROM sources ORDER BY position;";
+        var roots = new HashSet<string>(StringComparer.Ordinal);
+        using var reader = command.ExecuteReader();
+        while (reader.Read())
+        {
+            if (reader.IsDBNull(0))
+            {
+                continue;
+            }
+
+            var root = reader.GetString(0).Trim();
+            if (!string.IsNullOrEmpty(root))
+            {
+                roots.Add(root);
+            }
+        }
+
+        var list = roots.ToList();
+        list.Sort(StringComparer.Ordinal);
+        return list;
+    }
+
+    public enum DatabaseContentRead
+    {
+        HasContent,
+        Empty,
+        Unreadable
+    }
+
+    public static DatabaseContentRead ReadDatabaseContent(string databasePath)
+    {
+        if (string.IsNullOrWhiteSpace(databasePath) || !File.Exists(databasePath))
+        {
+            return DatabaseContentRead.Unreadable;
+        }
+
+        if (InspectCatalogFile(databasePath) != CatalogFileInspection.Usable)
+        {
+            return DatabaseContentRead.Unreadable;
+        }
+
+        try
+        {
+            using var connection = OpenReadOnly(databasePath);
+            connection.DefaultTimeout = 1;
+            var sources = ExecuteScalarInt(connection, "SELECT COUNT(*) FROM sources;");
+            var items = ExecuteScalarInt(connection, "SELECT COUNT(*) FROM items;");
+            return sources > 0 || items > 0 ? DatabaseContentRead.HasContent : DatabaseContentRead.Empty;
+        }
+        catch (Exception ex) when (ex is SqliteException or IOException or InvalidDataException)
+        {
+            return DatabaseContentRead.Unreadable;
+        }
+    }
+
+    public static bool DatabaseHasContent(string databasePath)
+    {
+        return ReadDatabaseContent(databasePath) == DatabaseContentRead.HasContent;
+    }
+
+    public static void PrepareIncomingFromFile(string directory, string checkpointPath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(directory);
+        ArgumentException.ThrowIfNullOrWhiteSpace(checkpointPath);
+        Directory.CreateDirectory(directory);
+        RecoverReplace(directory);
+        var incoming = Path.Combine(directory, IncomingFileName);
+        DeleteSidecars(incoming);
+        File.Copy(checkpointPath, incoming, overwrite: true);
+        CheckpointStandalone(incoming);
+        if (!IsHealthyFile(incoming))
+        {
+            DeleteSidecars(incoming);
+            throw new InvalidDataException("Incoming catalog is not a usable database.");
+        }
+
+        SyncFile(incoming);
+        SyncDirectory(directory, options: null);
+    }
+
+    public static void PrepareIncomingFromJson(string directory, JsonObject root)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(directory);
+        ArgumentNullException.ThrowIfNull(root);
+        Directory.CreateDirectory(directory);
+        RecoverReplace(directory);
+        var incoming = Path.Combine(directory, IncomingFileName);
+        DeleteSidecars(incoming);
+        WriteDatabase(incoming, root);
+        if (!IsHealthyFile(incoming))
+        {
+            DeleteSidecars(incoming);
+            throw new InvalidDataException("Incoming catalog is not a usable database.");
+        }
+    }
+
+    public static void DiscardIncoming(string directory)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(directory);
+        DeleteSidecars(Path.Combine(directory, IncomingFileName));
+    }
+
+    public static void DiscardPrevious(string directory)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(directory);
+        DeleteSidecars(Path.Combine(directory, PreviousFileName));
+        if (Directory.Exists(directory))
+        {
+            SyncDirectory(directory, options: null);
+        }
+    }
+
+    public static bool RecoverAndHasLiveDatabase(string directory)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(directory);
+        if (!Directory.Exists(directory))
+        {
+            return false;
+        }
+
+        RecoverReplace(directory);
+        var live = Path.Combine(directory, DatabaseFileName);
+        return File.Exists(live) || Sidecars(live).Any(File.Exists);
+    }
+
+    public static bool RestorePrevious(string directory)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(directory);
+        var previous = Path.Combine(directory, PreviousFileName);
+        if (!File.Exists(previous) && !Sidecars(previous).Any(File.Exists))
+        {
+            return false;
+        }
+
+        RestorePreviousOverLive(directory);
+        if (Directory.Exists(directory))
+        {
+            SyncDirectory(directory, options: null);
+        }
+
+        return true;
+    }
+
+    public static void DeleteLiveDatabase(string directory)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(directory);
+        DeleteSidecars(Path.Combine(directory, DatabaseFileName));
+        if (Directory.Exists(directory))
+        {
+            SyncDirectory(directory, options: null);
+        }
+    }
+
+    public static void PublishIncoming(string directory, LibraryCatalogReplaceOptions? options = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(directory);
+        Directory.CreateDirectory(directory);
+        var live = Path.Combine(directory, DatabaseFileName);
+        var incoming = Path.Combine(directory, IncomingFileName);
+        var previous = Path.Combine(directory, PreviousFileName);
+        if (!IsHealthyFile(incoming))
+        {
+            throw new InvalidDataException("Incoming catalog is not a usable database.");
+        }
+
+        CheckpointStandalone(incoming);
+        if (File.Exists(previous) || Sidecars(previous).Any(File.Exists))
+        {
+            throw new IOException("A previous catalog file is still aside.");
+        }
+
+        if (File.Exists(live) || Sidecars(live).Any(File.Exists))
+        {
+            MoveDatabase(live, previous);
+        }
+
+        if (options?.StopAfterMovingPrevious == true)
+        {
+            return;
+        }
+
+        try
+        {
+            MoveDatabase(incoming, live);
+            SyncDirectory(directory, options: null);
+        }
+        catch
+        {
+            RestorePreviousOverLive(directory);
+            throw;
+        }
+
+        if (!IsHealthyFile(live))
+        {
+            RestorePreviousOverLive(directory);
+            throw new InvalidDataException("Published catalog is not a usable database.");
+        }
+
+        if (options?.StopAfterPublishingIncoming == true || options?.RetainPrevious == true)
+        {
+            return;
+        }
+
+        DeleteSidecars(previous);
+        SyncDirectory(directory, options: null);
+    }
+
+    public static LibraryCatalogRemapResult RemapSources(
+        string databasePath,
+        IReadOnlyDictionary<string, string> remapByOldRoot,
+        IReadOnlySet<string> skippedRoots)
+    {
+        var remap = new Dictionary<string, string>(remapByOldRoot, StringComparer.Ordinal);
+        var skipped = new HashSet<string>(skippedRoots, StringComparer.Ordinal);
+        using (var connection = OpenWrite(databasePath))
+        using (var transaction = connection.BeginTransaction())
+        {
+
+        var sources = new List<(string Id, string Root)>();
+        using (var command = connection.CreateCommand())
+        {
+            command.Transaction = transaction;
+            command.CommandText = "SELECT id, root_path FROM sources;";
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                sources.Add((reader.IsDBNull(0) ? string.Empty : reader.GetString(0), reader.IsDBNull(1) ? string.Empty : reader.GetString(1)));
+            }
+        }
+
+        var sourceIdToOldRoot = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var skippedIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var newRoots = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (id, rootRaw) in sources)
+        {
+            var sourceId = id.Trim();
+            var oldRoot = rootRaw.Trim();
+            if (string.IsNullOrWhiteSpace(sourceId) || string.IsNullOrWhiteSpace(oldRoot))
+            {
+                continue;
+            }
+
+            sourceIdToOldRoot[sourceId] = oldRoot;
+            if (skipped.Contains(oldRoot))
+            {
+                skippedIds.Add(sourceId);
+                continue;
+            }
+
+            if (remap.TryGetValue(oldRoot, out var newRoot) && !string.IsNullOrWhiteSpace(newRoot))
+            {
+                newRoots[sourceId] = newRoot.Trim();
+                continue;
+            }
+
+            return LibraryCatalogRemapResult.Fail(
+                $"Source root path is neither skipped nor remapped: '{oldRoot}' (source id '{sourceId}').");
+        }
+
+        var items = new List<(string Id, string SourceId, string Relative, string Full)>();
+        using (var command = connection.CreateCommand())
+        {
+            command.Transaction = transaction;
+            command.CommandText = "SELECT id, source_id, relative_path, full_path FROM items;";
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                items.Add((
+                    reader.IsDBNull(0) ? string.Empty : reader.GetString(0),
+                    reader.IsDBNull(1) ? string.Empty : reader.GetString(1),
+                    reader.IsDBNull(2) ? string.Empty : reader.GetString(2),
+                    reader.IsDBNull(3) ? string.Empty : reader.GetString(3)));
+            }
+        }
+
+        var itemUpdates = new List<(string Id, string Full, string Relative)>();
+        foreach (var (id, sourceIdRaw, relativeRaw, fullRaw) in items)
+        {
+            var sourceId = sourceIdRaw.Trim();
+            if (string.IsNullOrWhiteSpace(sourceId))
+            {
+                continue;
+            }
+
+            if (!sourceIdToOldRoot.ContainsKey(sourceId))
+            {
+                return LibraryCatalogRemapResult.Fail($"Item references unknown sourceId '{sourceId}'.");
+            }
+
+            if (skippedIds.Contains(sourceId))
+            {
+                continue;
+            }
+
+            if (!newRoots.TryGetValue(sourceId, out var newRoot))
+            {
+                continue;
+            }
+
+            if (!sourceIdToOldRoot.TryGetValue(sourceId, out var oldRoot))
+            {
+                return LibraryCatalogRemapResult.Fail($"Item references sourceId '{sourceId}' without a root path.");
+            }
+
+            var relativePath = relativeRaw.Trim();
+            if (string.IsNullOrWhiteSpace(relativePath))
+            {
+                return LibraryCatalogRemapResult.Fail($"Item for remapped source '{sourceId}' is missing relativePath.");
+            }
+
+            var effectiveRelative = relativePath;
+            if (LibraryRelativePath.TryGetLegacyRepairRelativePath(relativePath, oldRoot, fullRaw.Trim(), out var repaired))
+            {
+                effectiveRelative = repaired;
+            }
+
+            string fullPath;
+            try
+            {
+                fullPath = LibraryRelativePath.CombineRootAndRelative(newRoot, effectiveRelative);
+            }
+            catch (ArgumentException ex)
+            {
+                return LibraryCatalogRemapResult.Fail(ex.Message);
+            }
+
+            itemUpdates.Add((id, fullPath, effectiveRelative));
+        }
+
+        foreach (var (id, newRoot) in newRoots)
+        {
+            Execute(
+                connection,
+                transaction,
+                """
+                UPDATE sources
+                SET root_path = $root, root_path_fold = $fold
+                WHERE id = $id;
+                """,
+                ("$root", newRoot),
+                ("$fold", Fold(newRoot)),
+                ("$id", id));
+        }
+
+        foreach (var (id, fullPath, relativePath) in itemUpdates)
+        {
+            Execute(
+                connection,
+                transaction,
+                """
+                UPDATE items
+                SET full_path = $full, full_path_fold = $fullFold, relative_path = $relative, relative_path_fold = $relativeFold
+                WHERE id = $id;
+                """,
+                ("$full", fullPath),
+                ("$fullFold", Fold(fullPath)),
+                ("$relative", relativePath),
+                ("$relativeFold", Fold(relativePath)),
+                ("$id", id));
+        }
+
+            transaction.Commit();
+        }
+
+        CheckpointStandalone(databasePath);
+        return LibraryCatalogRemapResult.Ok();
     }
 
     public static LibraryCatalogSnapshot Read(string databasePath)
@@ -387,43 +825,80 @@ public static class LibraryCatalogStore
             using var connection = OpenReadOnly(databasePath);
             // This provider treats a timeout of 0 as wait-forever. One second is its shortest finite busy wait.
             connection.DefaultTimeout = 1;
-            var version = ExecuteScalarInt(connection, "PRAGMA user_version;");
-            if (version != SchemaVersion)
-            {
-                return false;
-            }
-
-            using var command = connection.CreateCommand();
-            command.CommandText = "SELECT name FROM sqlite_master WHERE type = 'table';";
-            using var reader = command.ExecuteReader();
-            var names = new HashSet<string>(StringComparer.Ordinal);
-            while (reader.Read())
-            {
-                names.Add(reader.GetString(0));
-            }
-
-            if (!RequiredTables.All(names.Contains))
-            {
-                return false;
-            }
-
-            using var columns = connection.CreateCommand();
-            columns.CommandText = "SELECT name FROM pragma_table_info('items');";
-            using var columnReader = columns.ExecuteReader();
-            while (columnReader.Read())
-            {
-                if (string.Equals(columnReader.GetString(0), "loudness_error", StringComparison.Ordinal))
-                {
-                    return true;
-                }
-            }
-
-            return false;
+            return HasRequiredCatalogSchema(connection);
         }
         catch (SqliteException ex) when (ex.SqliteErrorCode is SqliteNotADatabase or SqliteCorrupt)
         {
             return false;
         }
+    }
+
+    public enum CatalogFileInspection
+    {
+        Usable,
+        NotADatabase,
+        Unavailable
+    }
+
+    public static CatalogFileInspection InspectCatalogFile(string databasePath)
+    {
+        if (!File.Exists(databasePath))
+        {
+            return CatalogFileInspection.Unavailable;
+        }
+
+        try
+        {
+            using var connection = OpenReadOnly(databasePath);
+            connection.DefaultTimeout = 1;
+            return HasRequiredCatalogSchema(connection)
+                ? CatalogFileInspection.Usable
+                : CatalogFileInspection.NotADatabase;
+        }
+        catch (SqliteException ex) when (ex.SqliteErrorCode == SqliteNotADatabase)
+        {
+            return CatalogFileInspection.NotADatabase;
+        }
+        catch (Exception ex) when (ex is SqliteException or IOException or InvalidDataException or UnauthorizedAccessException)
+        {
+            return CatalogFileInspection.Unavailable;
+        }
+    }
+
+    private static bool HasRequiredCatalogSchema(SqliteConnection connection)
+    {
+        var version = ExecuteScalarInt(connection, "PRAGMA user_version;");
+        if (version != SchemaVersion)
+        {
+            return false;
+        }
+
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT name FROM sqlite_master WHERE type = 'table';";
+        using var reader = command.ExecuteReader();
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        while (reader.Read())
+        {
+            names.Add(reader.GetString(0));
+        }
+
+        if (!RequiredTables.All(names.Contains))
+        {
+            return false;
+        }
+
+        using var columns = connection.CreateCommand();
+        columns.CommandText = "SELECT name FROM pragma_table_info('items');";
+        using var columnReader = columns.ExecuteReader();
+        while (columnReader.Read())
+        {
+            if (string.Equals(columnReader.GetString(0), "loudness_error", StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static LibraryCatalogSnapshot ReadSnapshot(SqliteConnection connection)
@@ -1210,6 +1685,106 @@ public static class LibraryCatalogStore
         using var command = connection.CreateCommand();
         command.CommandText = sql;
         return command.ExecuteScalar() as string ?? string.Empty;
+    }
+
+    private static void RecoverReplace(string directory)
+    {
+        var live = Path.Combine(directory, DatabaseFileName);
+        var incoming = Path.Combine(directory, IncomingFileName);
+        var previous = Path.Combine(directory, PreviousFileName);
+        if (IsHealthyFile(live))
+        {
+            DeleteSidecars(incoming);
+            DeleteSidecars(previous);
+            return;
+        }
+
+        if (IsHealthyFile(previous))
+        {
+            DeleteSidecars(live);
+            MoveDatabase(previous, live);
+            DeleteSidecars(incoming);
+            SyncDirectory(directory, options: null);
+            return;
+        }
+
+        if (!File.Exists(live) && IsHealthyFile(incoming))
+        {
+            MoveDatabase(incoming, live);
+            SyncDirectory(directory, options: null);
+            return;
+        }
+
+        DeleteSidecars(incoming);
+    }
+
+    private static bool IsHealthyFile(string databasePath)
+    {
+        if (!File.Exists(databasePath))
+        {
+            return false;
+        }
+
+        try
+        {
+            return IsHealthy(databasePath);
+        }
+        catch (Exception ex) when (ex is SqliteException or IOException or InvalidDataException)
+        {
+            return false;
+        }
+    }
+
+    private static void CheckpointStandalone(string databasePath)
+    {
+        using (var connection = new SqliteConnection(ConnectionString(databasePath, readOnly: false)))
+        {
+            connection.Open();
+            connection.DefaultTimeout = 5;
+            Execute(connection, "PRAGMA busy_timeout=5000;");
+            Execute(connection, "PRAGMA wal_checkpoint(TRUNCATE);");
+            Execute(connection, "PRAGMA journal_mode=DELETE;");
+        }
+
+        DeleteIfExists(databasePath + "-wal");
+        DeleteIfExists(databasePath + "-shm");
+        DeleteIfExists(databasePath + "-journal");
+        SyncFile(databasePath);
+    }
+
+    private static void RestorePreviousOverLive(string directory)
+    {
+        var live = Path.Combine(directory, DatabaseFileName);
+        var previous = Path.Combine(directory, PreviousFileName);
+        if (!File.Exists(previous) && !Sidecars(previous).Any(File.Exists))
+        {
+            return;
+        }
+
+        DeleteSidecars(live);
+        MoveDatabase(previous, live);
+    }
+
+    private static void MoveDatabase(string source, string destination)
+    {
+        if (File.Exists(destination) || Sidecars(destination).Any(File.Exists))
+        {
+            throw new IOException($"Cannot move '{source}' onto '{destination}'.");
+        }
+
+        if (File.Exists(source))
+        {
+            File.Move(source, destination);
+        }
+
+        foreach (var suffix in new[] { "-wal", "-shm", "-journal" })
+        {
+            var from = source + suffix;
+            if (File.Exists(from))
+            {
+                File.Move(from, destination + suffix);
+            }
+        }
     }
 
     private static void Quarantine(string databasePath)

@@ -146,6 +146,31 @@ public sealed class LibraryRelativePathTests
         Assert.Equal("a/b/c", n.Replace('\\', '/'));
     }
 
+    [Fact]
+    public void CombineRootAndRelative_RejectsSiblingWhoseNameExtendsTheRoot()
+    {
+        var ex = Assert.Throws<ArgumentException>(() =>
+            LibraryRelativePath.CombineRootAndRelative("/media/movies", "../movies-extra/a.mp4"));
+        Assert.Contains("escapes the destination root", ex.Message, StringComparison.Ordinal);
+
+        var inside = LibraryRelativePath.CombineRootAndRelative("/media/movies", "a.mp4");
+        Assert.Equal(Path.GetFullPath(Path.Combine("/media/movies", "a.mp4")), inside);
+    }
+
+    [Fact]
+    public void CombineRootAndRelative_RejectsParentSegmentThatDoesNotStartThePath()
+    {
+        Assert.Throws<ArgumentException>(() =>
+            LibraryRelativePath.CombineRootAndRelative("/media/movies", "nested/../../movies-extra/a.mp4"));
+    }
+
+    [Fact]
+    public void CombineRootAndRelative_AllowsParentSegmentThatStaysInsideTheRoot()
+    {
+        var combined = LibraryRelativePath.CombineRootAndRelative("/media/movies", "nested/../clip.mp4");
+        Assert.Equal(Path.GetFullPath(Path.Combine("/media/movies", "clip.mp4")), combined);
+    }
+
     private static void TryDeleteDir(string path)
     {
         try

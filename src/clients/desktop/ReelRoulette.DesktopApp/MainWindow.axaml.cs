@@ -8553,22 +8553,151 @@ namespace ReelRoulette
         private async void ExportLibraryMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
             Log("UI ACTION: Export Library clicked");
-            await ShowCatalogTransferUnavailableAsync();
+            if (!await EnsureCoreRuntimeAvailableAsync())
+            {
+                await ShowLibraryTransferMessageAsync("Export Library", "The server must be running so it can write a catalog snapshot.");
+                return;
+            }
+
+            var save = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+            {
+                Title = "Export Library",
+                SuggestedFileName = "library.db",
+                DefaultExtension = "db",
+                FileTypeChoices =
+                [
+                    new FilePickerFileType("Library database") { Patterns = ["*.db"] }
+                ]
+            });
+            if (save == null)
+            {
+                return;
+            }
+
+            var checkpointPath = Path.Combine(Path.GetTempPath(), "rr-export-" + Guid.NewGuid().ToString("N") + ".db");
+            try
+            {
+                await _coreServerLongRunningApiClient.DownloadCatalogCheckpointAsync(_coreServerBaseUrl, checkpointPath);
+                await using (var input = File.OpenRead(checkpointPath))
+                await using (var output = await save.OpenWriteAsync())
+                {
+                    await input.CopyToAsync(output);
+                }
+
+                Log("UI ACTION: Export Library completed");
+                await ShowLibraryTransferMessageAsync("Export Library", "Export completed.");
+            }
+            catch (Exception ex)
+            {
+                Log($"Export Library failed: {ex.Message}");
+                await ShowLibraryTransferMessageAsync("Export Library", "Export failed: " + ex.Message);
+            }
+            finally
+            {
+                DeleteDatabaseTemp(checkpointPath);
+            }
         }
 
         private async void ImportLibraryMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
             Log("UI ACTION: Import Library clicked");
-            await ShowCatalogTransferUnavailableAsync();
+            var picked = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+            {
+                Title = "Import Library",
+                AllowMultiple = false,
+                FileTypeFilter =
+                [
+                    new FilePickerFileType("Library database") { Patterns = ["*.db"] }
+                ]
+            });
+            if (picked.Count == 0 || picked[0] == null)
+            {
+                return;
+            }
+
+            var databasePath = Path.Combine(Path.GetTempPath(), "rr-import-" + Guid.NewGuid().ToString("N") + ".db");
+            try
+            {
+                await using (var input = await picked[0].OpenReadAsync())
+                await using (var output = new FileStream(databasePath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                {
+                    await input.CopyToAsync(output);
+                }
+
+                if (!LibraryArchiveMigration.TryReadSourceRootPaths(databasePath, out var roots, out var readError))
+                {
+                    await ShowLibraryTransferMessageAsync("Import Library", readError ?? "The file is not a library database.");
+                    return;
+                }
+
+                var remapDialog = new LibraryImportRemapDialog(roots);
+                if (await remapDialog.ShowDialog<bool>(this) != true || string.IsNullOrWhiteSpace(remapDialog.PlanJson))
+                {
+                    return;
+                }
+
+                var plan = JsonSerializer.Deserialize<LibraryImportRemapDialog.LibraryImportPlanPayload>(
+                    remapDialog.PlanJson,
+                    new JsonSerializerOptions(JsonSerializerDefaults.Web) { PropertyNameCaseInsensitive = true });
+                if (plan == null)
+                {
+                    await ShowLibraryTransferMessageAsync("Import Library", "Could not read the folder mapping.");
+                    return;
+                }
+
+                var remap = new Dictionary<string, string>(plan.Remap, StringComparer.Ordinal);
+                var skipped = new HashSet<string>(plan.SkippedRoots, StringComparer.Ordinal);
+                var result = LibraryArchiveMigration.ImportDatabase(databasePath, remap, skipped, force: false);
+                if (result.NeedsForceConfirmation)
+                {
+                    var confirm = new LibraryOverwriteConfirmDialog();
+                    if (await confirm.ShowDialog<bool>(this) != true)
+                    {
+                        return;
+                    }
+
+                    result = LibraryArchiveMigration.ImportDatabase(databasePath, remap, skipped, force: true);
+                }
+
+                Log($"UI ACTION: Import Library accepted={result.Accepted}");
+                await ShowLibraryTransferMessageAsync("Import Library", result.Message ?? (result.Accepted ? "Import completed." : "Import failed."));
+            }
+            catch (Exception ex)
+            {
+                Log($"Import Library failed: {ex.Message}");
+                await ShowLibraryTransferMessageAsync("Import Library", "Import failed: " + ex.Message);
+            }
+            finally
+            {
+                DeleteDatabaseTemp(databasePath);
+            }
         }
 
-        private async Task ShowCatalogTransferUnavailableAsync()
+        private static void DeleteDatabaseTemp(string path)
+        {
+            foreach (var suffix in new[] { string.Empty, "-wal", "-shm", "-journal" })
+            {
+                var candidate = path + suffix;
+                if (File.Exists(candidate))
+                {
+                    try
+                    {
+                        File.Delete(candidate);
+                    }
+                    catch (IOException)
+                    {
+                    }
+                }
+            }
+        }
+
+        private async Task ShowLibraryTransferMessageAsync(string title, string message)
         {
             var dialog = new Window
             {
-                Title = "Library transfer unavailable",
-                Width = 460,
-                Height = 180,
+                Title = title,
+                Width = 480,
+                Height = 200,
                 WindowStartupLocation = WindowStartupLocation.CenterOwner,
                 Content = new StackPanel
                 {
@@ -8578,7 +8707,7 @@ namespace ReelRoulette
                     {
                         new TextBlock
                         {
-                            Text = "Library export, import, and catalog backups are unavailable. The live catalog is the SQLite database, and a JSON snapshot is not a backup or restore path.",
+                            Text = message,
                             TextWrapping = Avalonia.Media.TextWrapping.Wrap
                         },
                         new Button

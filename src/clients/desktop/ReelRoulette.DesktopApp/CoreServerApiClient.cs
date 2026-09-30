@@ -34,6 +34,7 @@ public sealed class CoreServerApiClient
     public const string LibrarySourcesPath = "/api/sources";
     public const string LibraryTagCatalogPath = "/api/tag-editor/model";
     public const string LibraryItemPath = "/api/library/item";
+    public const string LibraryCatalogCheckpointPath = "/api/library/catalog-checkpoint";
 
     private readonly HttpClient _httpClient;
     private readonly JsonSerializerOptions _serializerOptions = new(JsonSerializerDefaults.Web)
@@ -56,6 +57,18 @@ public sealed class CoreServerApiClient
 
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
         return await JsonSerializer.DeserializeAsync<CoreVersionResponse>(stream, _serializerOptions, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task DownloadCatalogCheckpointAsync(string baseUrl, string destinationPath, CancellationToken cancellationToken = default)
+    {
+        using var response = await _httpClient.GetAsync(
+            $"{baseUrl.TrimEnd('/')}{LibraryCatalogCheckpointPath}",
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken).ConfigureAwait(false);
+        response.EnsureSuccessStatusCode();
+        await using var input = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        await using var output = new FileStream(destinationPath, FileMode.Create, FileAccess.Write, FileShare.None);
+        await input.CopyToAsync(output, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<CoreRandomResponse?> RequestRandomAsync(string baseUrl, CoreRandomRequest request, CancellationToken cancellationToken = default)

@@ -10,4 +10,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\..\core\ReelRoulette.Core\ReelRoulette.Core.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="ReelRoulette.DesktopApp.Tests" />
+  </ItemGroup>
 </Project>

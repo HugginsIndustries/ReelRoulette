@@ -184,9 +184,9 @@ All settings are core-owned and synced via API (`/api/refresh/settings`, `/api/b
 
 ### 3.15 Library Archive Import/Export
 
-**Desktop location:** `LibraryImportRemapDialog.axaml` / `LibraryImportRemapDialog.axaml.cs`, `LibraryExportOptionsDialog.axaml` / `LibraryExportOptionsDialog.axaml.cs`, `LibraryOverwriteConfirmDialog.axaml` / `LibraryOverwriteConfirmDialog.axaml.cs`; backed by `src/clients/desktop/ReelRoulette.LibraryArchive/LibraryArchiveMigration.cs`
+**Desktop location:** `LibraryImportRemapDialog.axaml` / `LibraryImportRemapDialog.axaml.cs`, `LibraryOverwriteConfirmDialog.axaml` / `LibraryOverwriteConfirmDialog.axaml.cs`; backed by `src/clients/desktop/ReelRoulette.LibraryArchive/LibraryArchiveMigration.cs`
 
-`Library → Export Library…` and `Library → Import Library…` show that library export, import, and catalog backups are unavailable. They do not write or read a zip. The dialogs and `LibraryArchiveMigration` remain in the tree for the later catalog-transfer work.
+`Library → Export Library…` asks for a destination, then downloads a server checkpoint into that `library.db` file. `Import Library…` replaces the live catalog after the server-stopped acknowledgment. Presets, settings, thumbnails, and backups are not part of the transfer. A folder that still has only `library.json` with sources or items asks for overwrite confirmation, and a successful import renames that file aside. A `library.json` archive is not imported. Operator export and import remain the later transfer surface.
 
 **Target surface:** Operator UI
 

@@ -88,6 +88,7 @@ public sealed class PlayItemOrchestrationTests : IDisposable
 
     public void Dispose()
     {
+        LibraryCatalogBackup.WaitForPending();
         if (Directory.Exists(_appData))
         {
             Directory.Delete(_appData, recursive: true);

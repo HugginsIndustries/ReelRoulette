@@ -397,6 +397,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/library/catalog-checkpoint": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download a standalone catalog checkpoint
+         * @description Returns a SQLite database of the live catalog, produced while `library.db` is open.
+         *     The file does not depend on a WAL sidecar. Desktop library export saves this response as `library.db`.
+         */
+        get: operations["getLibraryCatalogCheckpoint"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sources/{sourceId}/enabled": {
         parameters: {
             query?: never;
@@ -2464,6 +2485,33 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
+            };
+        };
+    };
+    getLibraryCatalogCheckpoint: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Standalone SQLite catalog */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            /** @description The checkpoint could not be written */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

@@ -89,40 +89,7 @@ Do not use this file for detailed architecture explanation or current capability
 
 ## Active Milestones
 
-Last milestone completed: M10i13
-
-### M10i14 - Library Catalog Export and Import Cutover
-
-- **Status**: ⏳ Planned
-- **Goal**: Re-enable library export, import, and catalog backups around a live SQLite `.db` in the existing zip envelope, keep importing existing `library.json` zips through v0.13.0, and deprecate `library.json` library support with removal planned for v0.14.0.
-- **Scope**:
-  - Depends on: source folder import row updates.
-  - Re-enable desktop Library Export / Import and server catalog backups that were disabled after the SQLite store landed.
-  - Keep the current migration zip envelope (settings, presets, optional thumbnails and backups). The server produces the catalog checkpoint while it has `library.db` open, and the desktop zip embeds that checkpoint. It is not a raw copy of an open WAL file and not leftover `library.json`.
-  - Import Library restores a new export by reading that `.db` from the zip and replacing the live SQLite catalog (plus current remap/skip for sources). Keep today's server-stopped acknowledgment, because the desktop replaces the database file. The replacement is written to a temporary file, checkpointed so it does not depend on a WAL sidecar, then published by rename. The previous `library.db` stays aside until the new file is in place and opens. A crash between those renames restores the previous file, or promotes the finished temporary file if that is the one that landed. Also accept existing migration zips that contain `library.json` and migrate them into the live SQLite catalog. A successful import of a `library.json` archive tells the user that format is deprecated and will not be accepted after v0.13.0.
-  - Replace archive code that exports or imports by reading or writing `library.json` on disk. The only JSON catalog read is that deprecated zip entry, passed through the existing JSON-to-SQLite importer. That import does not write `library.json` into the roaming directory. Source remap for that zip may use the JSON document. Source remap for a `.db` import is separate and updates the database.
-  - The import confirmation names the live SQLite catalog, presets, core settings, and optional thumbnails and backups. It does not say the import replaces `library.json`. The deprecation sentence stays on a successful `library.json` zip import.
-  - v0.13.0 deprecates `library.json` as a library format. It is not the live catalog, not the catalog artifact in a new export, and not a backup. There is no JSON dump action. Startup may still migrate a leftover `library.json` once when `library.db` is missing. v0.14.0 and above remove `library.json` library support, including that zip import and the one-time startup migration.
-  - Server catalog backups use the same server-produced checkpoint, not leftover JSON.
-  - Update testing checklist and current-state docs for export, import, catalog backups, and the v0.13.0 deprecation with removal planned for v0.14.0.
-- **Acceptance criteria**:
-  - New catalog exports produce a zip whose catalog artifact is a usable SQLite database of the live library; Import Library can restore that export into the live catalog.
-  - Import Library still requires the server-stopped acknowledgment before it replaces the live database.
-  - An interrupted replace leaves the previous catalog or the finished incoming file, and does not leave a partial `library.db` or an empty catalog.
-  - Import still accepts existing `library.json` zip archives, migrates them into the live SQLite catalog through the JSON-to-SQLite importer, does not leave a live `library.json`, and reports that this format is deprecated and will not be accepted after v0.13.0.
-  - Export does not read `library.json` from disk. There is no JSON dump action. A new export does not contain `library.json`.
-  - The import confirmation does not describe `library.json` as the catalog being replaced. The deprecation sentence is shown only after a successful `library.json` zip import.
-  - Server catalog backups capture the live SQLite catalog.
-  - Docs and testing checklist describe `.db`-in-zip export and restore, deprecated `library.json` zip import, and removal of `library.json` library support in v0.14.0, without treating `library.json` as the live store.
-- **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include export/import tests for `.db`-in-zip round-trip, `library.json` zip import that leaves no live `library.json`, live SQLite backups, and interrupted replace recovery.
-  - Docs evidence must include current-state and checklist updates for the new export, import, and backup paths, and for the v0.13.0 deprecation of `library.json` library support with removal planned for v0.14.0.
-- **Deferrals / Follow-ups**:
-  - Account/PIN persistence in SQLite is deferred to the account and PIN data model work.
-  - Presets, core settings, and desktop-settings remain on their current files unless a later slice moves them.
-  - Running-server import, Operator export/import, and removal of the desktop Library Export / Import menus are deferred to Operator library catalog transfer. That work ships with the later account and Operator milestones, in the release after the SQLite store/query sequence.
-  - Refresh stays on the full-document adapter until refresh column updates.
-  - Removing `library.json` zip import and the one-time startup migration from `library.json` is deferred to removal of `library.json` library support. This milestone deprecates that support and does not remove it.
+Last milestone completed: M10i14
 
 ### M10i15 - Refresh Column Updates
 
@@ -158,7 +125,7 @@ Last milestone completed: M10i13
 ### M10i16 - Catalog Document Removal
 
 - **Status**: ⏳ Planned
-- **Goal**: Stop using the catalog document for live reads and writes in v0.13.0, while keeping JSON import and startup migration so an old library can still be migrated.
+- **Goal**: Stop using the catalog document for live reads and writes in v0.13.0, while keeping startup migration of a leftover `library.json` so an old library can still be migrated.
 - **Scope**:
   - Depends on: refresh column updates.
   - It does not depend on the refresh work itself. JSON-era leftovers that do not serve migration follow this milestone and end the v0.13.0 release.
@@ -166,31 +133,31 @@ Last milestone completed: M10i13
   - Server startup loads sources, tags, item tags, and favorite and blacklist item state with SQL. It does not build the catalog document.
   - The library reload after import uses that same SQL load, or that reload is removed. It does not build the catalog document.
   - Remove the catalog document builder and the full-document save path.
-  - The JSON-to-SQLite importer stays. Startup still migrates a leftover `library.json` once. Import Library still accepts a `library.json` zip. An empty database may still be created through that importer.
-  - Opening a version 1 database drops `available_tags` and the `available_tags_present` flag, then sets `user_version` to 2. Existing rows in `tags` stay as they are. A new database, including one created by importing `library.json`, is created at version 2 and does not create that table or flag. The importer ignores `availableTags`. A name that appears only in that list is not stored.
+  - The JSON-to-SQLite importer stays for startup migration. Startup still migrates a leftover `library.json` once. Import Library does not accept a `library.json` archive. An empty database may still be created through that importer.
+  - Opening a version 1 database drops `available_tags` and the `available_tags_present` flag, then sets `user_version` to 2. Existing rows in `tags` stay as they are. A new database, including one created by migrating `library.json`, is created at version 2 and does not create that table or flag. The importer ignores `availableTags`. A name that appears only in that list is not stored.
   - Update the testing checklist and current-state docs.
 - **Acceptance criteria**:
   - Tag catalog sync and item-tag sync persist without loading or diffing the full catalog document.
   - Server startup loads favorite and blacklist item state without building the catalog document.
   - Library reload does not build the catalog document.
   - There is no catalog document builder and no full-document save path.
-  - A missing `library.db` still migrates `library.json`. Import Library still accepts a `library.json` zip.
+  - A missing `library.db` still migrates `library.json`. Import Library does not accept a `library.json` archive.
   - A version 1 database opens at `user_version` 2 with `available_tags` and `available_tags_present` gone. Existing tags are unchanged.
   - A new database is `user_version` 2 and has no `available_tags` table.
   - A `library.json` import ignores `availableTags`. A name that appears only in that list is not stored. The rest of that library still migrates.
-  - Docs and the testing checklist describe live catalog reads and writes as row operations, describe the tag table as the only tag list, and still describe `library.json` import and startup migration.
+  - Docs and the testing checklist describe live catalog reads and writes as row operations, describe the tag table as the only tag list, and still describe startup migration of a leftover `library.json`.
 - **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include tests that tag catalog sync and item-tag sync persist without a catalog document build, that server startup loads favorite and blacklist item state without building that document, that library reload does not build it, that a missing database still migrates `library.json`, that a `library.json` zip still imports, that a version 1 database opens at version 2 with `available_tags` and `available_tags_present` gone and existing tags unchanged, and that a `library.json` import does not store a name that appears only in `availableTags`.
-  - Docs evidence must include current-state and checklist updates for row-based live reads and writes, for the tag table as the only tag list, and for `library.json` import and startup migration still described.
+  - Evidence placeholders maintained at planned state; completion evidence must include tests that tag catalog sync and item-tag sync persist without a catalog document build, that server startup loads favorite and blacklist item state without building that document, that library reload does not build it, that a missing database still migrates `library.json`, that a version 1 database opens at version 2 with `available_tags` and `available_tags_present` gone and existing tags unchanged, and that startup migration of `library.json` does not store a name that appears only in `availableTags`.
+  - Docs evidence must include current-state and checklist updates for row-based live reads and writes, for the tag table as the only tag list, and for startup migration of a leftover `library.json` still described.
 - **Deferrals / Follow-ups**:
   - Removing `library.json` file recognition and the JSON-to-SQLite importer ships in v0.14.0.
-  - Unused JSON-era types, desktop fields, and comments that do not serve startup migration or `library.json` zip import are the next milestone, still in v0.13.0.
+  - Unused JSON-era types, desktop fields, and comments that do not serve startup migration are the next milestone, still in v0.13.0.
   - Account and PIN tables stay with the account and PIN data model work.
 
 ### M10i17 - JSON-Era Leftovers That Do Not Serve Migration
 
 - **Status**: ⏳ Planned
-- **Goal**: Remove JSON-era library code that does not read `library.json` and does not import a `library.json` zip, while v0.13.0 still migrates and imports that format.
+- **Goal**: Remove JSON-era library code that does not read `library.json`, while v0.13.0 still migrates a leftover `library.json`. Import does not accept a `library.json` archive.
 - **Scope**:
   - Depends on: catalog document removal.
   - This is the last milestone in the v0.13.0 release. It does not depend on the document work itself. It follows that milestone so v0.13.0 ends here.
@@ -200,48 +167,48 @@ Last milestone completed: M10i13
   - Remove every server state method whose body only throws because mutation authority moved. Live routes stay on library operations.
   - Remove the desktop check that treats a full-catalog projection route as a live read, and the test that expects that route to count as one. That route is already gone.
   - The desktop library model drops the legacy flat tag list and the fingerprint index. The filter dialog drops the branch that reads that flat list, and the collection that only that branch fills.
-  - Comments that are not describing startup migration or `library.json` zip import no longer mention `library.json`. Current-state docs and the import deprecation message still do.
+  - Comments that are not describing startup migration no longer mention `library.json`. Current-state docs that describe that migration still do.
   - Update the testing checklist where those leftovers were described.
 - **Acceptance criteria**:
   - The unused library-index file store, the verification-only tag mutator, the empty desktop tag-catalog sync method, and the throw-only server state methods are gone. Settings JSON storage is unchanged.
   - The desktop library model has no legacy flat tag list and no fingerprint index. The filter dialog does not read a flat tag list.
   - A full-catalog projection route is not treated as a live library read.
-  - Comments that are not about startup migration or `library.json` zip import do not mention `library.json`.
-  - Startup still migrates a leftover `library.json`. Import Library still accepts a `library.json` zip.
+  - Comments that are not about startup migration do not mention `library.json`.
+  - Startup still migrates a leftover `library.json`. Import Library does not accept a `library.json` archive.
 - **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include a build and tests after those types, methods, desktop fields, and comments are removed, and a test that startup still migrates `library.json` and that a `library.json` zip still imports.
-  - Docs evidence must include checklist updates where those leftovers were described. Current-state docs still describe `library.json` import and startup migration.
+  - Evidence placeholders maintained at planned state; completion evidence must include a build and tests after those types, methods, desktop fields, and comments are removed, and a test that startup still migrates `library.json`.
+  - Docs evidence must include checklist updates where those leftovers were described. Current-state docs still describe startup migration of a leftover `library.json`.
 - **Deferrals / Follow-ups**:
-  - Removing `library.json` file recognition, the JSON-to-SQLite importer, and `library.json` zip import ships in v0.14.0.
+  - Removing `library.json` file recognition and the JSON-to-SQLite importer ships in v0.14.0.
   - Scrubbing every remaining `library.json` mention from product code, comments, user-facing copy, tests, and current-state docs follows that format removal.
   - Account and PIN tables stay with the account and PIN data model work.
 
 ### M10j1 - Remove library.json Library Support
 
 - **Status**: ⏳ Planned
-- **Goal**: Remove `library.json` as a library format in v0.14.0 so startup no longer migrates or recovers a catalog from JSON, import no longer accepts a `library.json` archive, and the JSON-to-SQLite importer is gone.
+- **Goal**: Remove `library.json` as a library format in v0.14.0 so startup no longer migrates or recovers a catalog from JSON, and the JSON-to-SQLite importer is gone. Import already does not accept a `library.json` archive.
 - **Scope**:
   - Depends on: JSON-era leftovers that do not serve migration.
   - This milestone ships in v0.14.0. Those leftovers are the last milestone in the v0.13.0 release.
   - Startup does not look for `library.json` or `library.json.migrated`. Those files do not change open, refuse, or empty-catalog behavior. A missing `library.db` creates an empty catalog with SQL, not by parsing an empty document. A healthy `library.db` opens. A corrupt `library.db` is quarantined and startup refuses with the same result it uses when those files are absent. They are not read, not a restore path, and not deleted. Startup and user-facing strings do not mention either file.
   - Delete the JSON-to-SQLite importer. Tests build a catalog in `library.db`. They do not write `library.json` to create one.
-  - Import has no `library.json` path. Delete the zip entry parser for that file, the JSON-document source remap used only for that zip, and the deprecation message. A zip with no `library.db` is not a catalog archive. A `.db` import still remaps sources. Export and catalog backups stay on `library.db`.
+  - Import already has no `library.json` path and no zip. A file that is not a library database is rejected. A `.db` import still remaps sources. Export and catalog backups stay on `library.db`.
   - Update current-state docs and the testing checklist to say `library.json` library support is removed.
 - **Acceptance criteria**:
   - Startup does not migrate `library.json` and does not rebuild a catalog from `library.json.migrated`.
   - A missing `library.db` creates an empty healthy `library.db` whether or not `library.json` or `library.json.migrated` is present. Those files are left in place and are not read. The empty database is created with SQL.
   - A healthy `library.db` opens. A corrupt `library.db` is quarantined and startup refuses the same way whether or not those JSON files are present, and it is not repaired from them.
   - There is no JSON-to-SQLite importer.
-  - There is no `library.json` zip entry parser, no JSON-document source remap used only for that zip, and no deprecation message for that format. A `.db` import still remaps sources.
-  - A zip with no `library.db` is not a catalog archive, including a zip whose only catalog file is `library.json`. Import does not replace the live catalog.
+  - There is no `library.json` import path and no deprecation message for that format. A `.db` import still remaps sources.
+  - A file that is not a library database is not imported, including a file that used to be a `library.json` archive. Import does not replace the live catalog.
   - Startup messages and user-facing copy do not mention `library.json` or `library.json.migrated`.
   - Docs and the testing checklist describe `library.json` library support as removed in v0.14.0.
 - **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include tests that a missing database creates an empty database with SQL whether or not `library.json` or `library.json.migrated` is present, a healthy database opens with those files present, a corrupt database is refused the same way with or without them, a zip with no `library.db` is not imported, and a `.db` import still remaps sources.
+  - Evidence placeholders maintained at planned state; completion evidence must include tests that a missing database creates an empty database with SQL whether or not `library.json` or `library.json.migrated` is present, a healthy database opens with those files present, a corrupt database is refused the same way with or without them, a file that is not a library database is not imported, and a `.db` import still remaps sources.
   - Docs evidence must include current-state and checklist updates that `library.json` library support is removed in v0.14.0.
 - **Deferrals / Follow-ups**:
   - Scrubbing every remaining `library.json` mention from product code, comments, user-facing copy, tests, and current-state docs is the next milestone.
-  - Operator export and import stay with Operator library catalog transfer. That import also rejects a `library.json` archive.
+  - Operator export and import stay with Operator library catalog transfer. That transfer is a `library.db` checkpoint.
   - Account and PIN tables stay with the account and PIN data model work.
 
 ### M10j2 - Scrub library.json From the Product
@@ -522,19 +489,19 @@ Last milestone completed: M10i13
 - **Goal**: Let an admin export and import the library from Operator UI, with the server applying the catalog, so a server plus WebUI install does not need the desktop app.
 - **Scope**:
   - Depends on: Operator source management and removal of `library.json` library support.
-  - Move the zip envelope from the library catalog export and import cutover onto server operations. The server writes the checkpoint while it has `library.db` open. `desktop-settings.json` in a zip is optional and unused when no desktop app is installed. The server still applies presets, core settings, and thumbnails.
-  - Import runs while the server is up. The server replaces its own database by the same finished-file rename. The previous database stays aside until the new file is in place and opens. A crash between those renames restores the previous file, or promotes the finished temporary file if that is the one that landed. A `library.json` archive is rejected. That format is unsupported from v0.14.0 on. There is no JSON dump action.
+  - Move the `library.db` checkpoint transfer onto server operations. The server writes the checkpoint while it has `library.db` open. Presets, settings, thumbnails, and backups are not part of the transfer.
+  - Import runs while the server is up. The server replaces its own database by the same finished-file rename. The previous database stays aside until the new file is in place and opens. A crash between those renames restores the previous file, or promotes the finished temporary file if that is the one that landed. A file that is not a library database is rejected. There is no JSON dump action.
   - Add admin-only export and import actions to Operator UI.
   - Remove the desktop Library Export and Import menus.
 - **Acceptance criteria**:
-  - An admin can export a zip whose catalog artifact is a server-produced SQLite checkpoint, and can import that zip while the server is running.
+  - An admin can export a server-produced SQLite checkpoint, and can import that `library.db` while the server is running.
   - An interrupted running-server import leaves the previous catalog or the finished incoming file, and does not leave a partial database or an empty catalog.
-  - Import rejects a `library.json` zip and does not migrate that archive into the live catalog.
-  - A zip without `desktop-settings.json` still restores the catalog, presets, core settings, and thumbnails.
+  - Import rejects a file that is not a library database and does not replace the live catalog.
+  - Import replaces the catalog only. Presets, settings, thumbnails, and backups stay where they are.
   - User-level accounts cannot export or import the catalog.
   - The desktop client no longer exposes Library Export or Import.
 - **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include server tests for checkpoint export, running-server `.db` import, rejection of a `library.json` zip, interrupted replace recovery, and a zip with no desktop settings.
+  - Evidence placeholders maintained at planned state; completion evidence must include server tests for checkpoint export, running-server `.db` import, rejection of a file that is not a library database, and interrupted replace recovery.
   - Operator UI evidence must include admin-only export/import rendering and error tests.
   - Manual evidence must include a server-plus-WebUI export/import pass with no desktop app.
 - **Deferrals / Follow-ups**:
@@ -1343,6 +1310,41 @@ Last milestone completed: M10i13
 ## Completed Milestones
 
 Latest completions first:
+
+### M10i14 - Library Catalog Export and Import Cutover
+
+- **Status**: ✅ Complete
+- **Goal**: Re-enable library export, import, and catalog backups as a live SQLite `library.db` checkpoint, and deprecate `library.json` library files with removal of startup migration planned for v0.14.0.
+- **Scope**:
+  - Depends on: source folder import row updates.
+  - Re-enable desktop Library Export / Import and server catalog backups that were disabled after the SQLite store landed.
+  - Export and import move only `library.db`. The server produces the checkpoint while it has that file open. The desktop asks for a destination, then saves that checkpoint. It is not a zip, not a raw copy of an open WAL file, and not leftover `library.json`. Presets, settings, thumbnails, and backups stay in their own files.
+  - Import Library restores that checkpoint by replacing the live SQLite catalog, with remap/skip for sources. Keep the server-stopped acknowledgment, because the desktop replaces the database file. The replacement is written to a temporary file, checkpointed so it does not depend on a WAL sidecar, then published by rename. The previous `library.db` stays aside until the new file is in place and opens. A crash between those renames restores the previous file, or promotes the finished temporary file if that is the one that landed. A file that is not a library database is rejected. A `library.json` archive is not imported.
+  - The import confirmation names the library catalog. It does not say the import replaces presets, settings, thumbnails, backups, or `library.json`. An existing `library.db` counts as library data unless a successful read shows it has no sources and no items. A folder that still has only `library.json` with sources or items asks for the same confirmation, and a successful import renames that file aside.
+  - v0.13.0 deprecates `library.json` as a library format. It is not the live catalog, not an export, and not a backup. There is no JSON dump action. Startup may still migrate a leftover `library.json` once when `library.db` is missing. v0.14.0 removes that startup migration and the JSON-to-SQLite importer.
+  - Server catalog backups use the same server-produced checkpoint, not leftover JSON. The copy runs after the save returns. A failed copy is discarded. A backup that cannot be opened is left in place.
+  - Update testing checklist and current-state docs for database-file export and import, catalog backups, and the v0.13.0 deprecation with removal of startup migration planned for v0.14.0.
+- **Acceptance criteria**:
+  - Export saves a usable SQLite checkpoint of the live library. Import Library can restore that file into the live catalog and remap source folders.
+  - Import Library still requires the server-stopped acknowledgment before it replaces the live database.
+  - An interrupted replace leaves the previous catalog or the finished incoming file, and does not leave a partial `library.db` or an empty catalog.
+  - Import rejects a file that is not a library database, including a `library.json` archive, and does not replace the live catalog.
+  - Export does not read `library.json` from disk. There is no JSON dump action. Presets, settings, thumbnails, and backups are not part of the transfer.
+  - The import confirmation names the library catalog. An unreadable `library.db`, or a leftover `library.json` that still has sources or items, asks before replace. A successful import renames that `library.json` aside.
+  - Server catalog backups capture the live SQLite catalog.
+  - Docs and the testing checklist describe `library.db` export and restore, deprecated `library.json` library files, and removal of that startup migration in v0.14.0, without treating `library.json` as the live store.
+- **Verification evidence**:
+  - `dotnet test ReelRoulette.sln` — pass (Core.Tests 238, DesktopApp.Tests 115).
+  - `LibraryCatalogStoreTests`: a checkpoint includes a committed favorite and has no WAL sidecar. An interrupted replace restores the previous catalog. A published incoming file is kept and the previous file is removed on the next open. A finished incoming file is promoted when no previous catalog exists. A partial incoming file does not replace a healthy catalog. An unusable live file is restored from the previous catalog. A failed checkpoint copy deletes its destination. A file that is not a database is not a usable catalog.
+  - `LibraryArchiveMigrationTests`: import restores a remapped source and item path, including a `..` segment that stays inside the chosen folder. A file that is not a library database is rejected and does not create `library.db`. An unreadable `library.db` asks for confirmation and is not replaced until that confirmation. A leftover `library.json` with items asks for confirmation, and a successful import renames it to `library.json.migrated`. A failure while discarding the previous catalog leaves the imported database in place. The overwrite confirmation names the library catalog.
+  - `LibraryOperationsServiceTests`: opening the service writes a `library.db.backup.*` checkpoint and does not write `library.json.backup.*`. When the backup gap has elapsed, playback writes a checkpoint of the updated play count and does not trim leftover JSON backups. A recent SQLite backup skips another create. Leftover `library.json.backup.*` files stay in place. A backup that is not a database is removed. A backup that cannot be opened is left in place.
+  - Current-state docs and the testing checklist describe `library.db` export and restore, deprecated `library.json` library files with startup-migration removal planned for v0.14.0, and SQLite catalog backups.
+- **Deferrals / Follow-ups**:
+  - Account/PIN persistence in SQLite is deferred to the account and PIN data model work.
+  - Presets, core settings, and desktop-settings remain on their current files.
+  - Running-server import, Operator export/import, and removal of the desktop Library Export / Import menus are deferred to Operator library catalog transfer. That transfer is a `library.db` checkpoint. It ships with the later account and Operator milestones, in the release after the SQLite store/query sequence.
+  - Refresh stays on the full-document adapter until refresh column updates.
+  - Removing the one-time startup migration from `library.json`, and the JSON-to-SQLite importer, is deferred to removal of `library.json` library support. This milestone deprecates that file and does not remove the startup migration.
 
 ### M10i13 - Source Folder Import Row Updates
 
