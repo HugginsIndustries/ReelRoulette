@@ -20,10 +20,8 @@ Keep this file short and enforceable. For details, use `CONTEXT.md`, `MILESTONES
 
 ## Commit + Docs Discipline
 
-- Assume nothing is committed until the user explicitly confirms a commit occurred.
-- If no commit yet: update existing `COMMIT-MESSAGE.txt` and `CHANGELOG.md` entries in place (final state only).
+- Determine commit state from git rather than assuming. Before editing `COMMIT-MESSAGE.txt` or the `[Unreleased]` changelog, run `git status` and `git log -1`: if `COMMIT-MESSAGE.txt` has no uncommitted changes and its current entry matches the HEAD commit message, that entry is committed, so start a new entry. Otherwise, update the uncommitted entry in place (final state only). If the result is ambiguous, ask.
 - Keep existing entry style in `COMMIT-MESSAGE.txt` unless user asks to replace it.
-- After a user-confirmed commit: start a new `COMMIT-MESSAGE.txt` entry and new changelog entry.
 - Keep milestone/docs synchronized with final state:
   - `MILESTONES.md` = roadmap/tracking/evidence
   - `CONTEXT.md` = current implemented capabilities
