@@ -20,6 +20,9 @@ obj/
 # Cursor
 .cursor/*
 
+# Claude
+.claude/*
+
 # Local .NET CLI/XDG scratch (dev-only)
 .dotnet/
 .xdg-data/
