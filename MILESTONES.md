@@ -89,34 +89,7 @@ Do not use this file for detailed architecture explanation or current capability
 
 ## Active Milestones
 
-Last milestone completed: M10i18
-
-### M10i19 - Drop the Unread Server Tag and Item Cache
-
-- **Status**: ⏳ Planned
-- **Goal**: Stop loading a server-side tag and item cache that no live route reads, while v0.13.0 still migrates a leftover `library.json`.
-- **Scope**:
-  - Depends on: JSON-era leftovers that do not serve migration.
-  - This ships in v0.13.0. Removing the client-authority sync routes follows this milestone and is the last milestone in that release.
-  - Remove the server startup bootstrap of categories, tags, item tags, favorites, and blacklist.
-  - Remove the readers that serve only that cache, and the private helpers that exist only to fill or read it.
-  - The source list, source enable/disable, and the preset cache stay. `GET /api/sources` still reads the startup source list.
-  - The startup test still checks sources loaded from SQL. It no longer reads categories, tags, item tags, favorites, or blacklist from server state.
-- **Acceptance criteria**:
-  - Server startup does not load categories, tags, item tags, favorites, or blacklist into server state.
-  - The readers and private helpers that served only that cache are gone.
-  - The source list, source enable/disable, and the preset cache stay. `GET /api/sources` still reads the startup source list.
-  - No API route, control-plane endpoint, Operator UI path, tray path, or SSE event builder reads the removed state.
-  - The startup test still checks sources loaded from SQL.
-  - Startup still migrates a leftover `library.json`.
-- **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include a build and tests, a search showing no API route, control-plane endpoint, Operator UI path, tray path, or SSE event builder reads the removed state, and the startup test still checking sources loaded from SQL.
-  - Completion evidence must include a test that startup still migrates `library.json`.
-- **Deferrals / Follow-ups**:
-  - Removing the client-authority sync routes is the next milestone and ends the v0.13.0 release.
-  - Source import does not refresh the in-memory source list that `GET /api/sources` reads. That list stays filled at startup.
-  - The JSON reader, the side-file copy, the import check and retire-aside for a leftover `library.json`, refuse strings, and the tests that seed through `library.json` stay until removal of `library.json` library support.
-  - Account and PIN tables stay with the account and PIN data model work.
+Last milestone completed: M10i19
 
 ### M10i20 - Remove Client-Authority Sync Routes
 
@@ -147,6 +120,7 @@ Last milestone completed: M10i18
   - Removing `library.json` file recognition and the JSON-to-SQLite importer, including `PrepareIncomingFromJson`, ships in v0.14.0. The import check and retire-aside for a leftover `library.json` stay until that removal.
   - Scrubbing every remaining `library.json` mention from product code, comments, user-facing copy, tests, and current-state docs follows that format removal.
   - Account and PIN tables stay with the account and PIN data model work.
+  - Candidate to bring in, since it is also a contract change: remove `tagMatchMode` from the filter contract. Filtering no longer reads it. No visible desktop or WebUI control sets it on its own: the desktop sets it only from hidden legacy radio buttons and reads it for the main-window filter summary to say "all" or "any", and the WebUI mirrors the global match selector into it. Preset matching compares it, so two saved presets that differ only in `tagMatchMode` would start matching once it is removed.
 
 ### M10j1 - Remove library.json Library Support
 
@@ -1296,6 +1270,44 @@ Last milestone completed: M10i18
 ## Completed Milestones
 
 Latest completions first:
+
+### M10i19 - Drop the Unread Server Tag and Item Cache
+
+- **Status**: ✅ Complete
+- **Goal**: Stop loading a server-side tag and item cache that no live route reads, while v0.13.0 still migrates a leftover `library.json`.
+- **Scope**:
+  - Depends on: JSON-era leftovers that do not serve migration.
+  - This ships in v0.13.0. Removing the client-authority sync routes follows this milestone and is the last milestone in that release.
+  - Remove the server startup bootstrap of categories, tags, item tags, favorites, and blacklist.
+  - Remove the readers that serve only that cache, and the private helpers that exist only to fill or read it. This includes the test-only server state readers `GetTagEditorModel`, `GetTagsSnapshot`, `GetTagCategoriesSnapshot`, and `GetLibraryStates`, and the uncalled `CreateTagCatalogPayload`.
+  - The source list, source enable/disable, and the preset cache stay. `GET /api/sources` still reads the startup source list.
+  - The startup test still checks sources loaded from SQL. It no longer reads categories, tags, item tags, favorites, or blacklist from server state.
+  - Added during planning: remove the server list query's no-categories tag path, which no catalog the app writes can reach. This removes that branch, the category-count check before it in both the list query and random eligibility, and `Query_LegacyTagAnd_WhenCatalogHasNoCategories`, which seeded that shape with `DELETE FROM categories`.
+  - Evidence for that removal covers every catalog the app can produce: tag include and exclude, global and per-category AND/OR, and Uncategorized tags, on both the list query and random eligibility, since they share the filter.
+  - A hand-edited catalog with no categories then groups selected tags by the category id stored on each tag row, the same as any other catalog. Per-category and global modes apply. A selected tag that is not in the tag table forms its own group. `tagMatchMode` no longer applies. Selected tags in one group with no per-category mode match with AND, where that catalog previously honored `tagMatchMode = Or`.
+- **Acceptance criteria**:
+  - Server startup does not load categories, tags, item tags, favorites, or blacklist into server state.
+  - The readers and private helpers that served only that cache are gone.
+  - The source list, source enable/disable, and the preset cache stay. `GET /api/sources` still reads the startup source list.
+  - No API route, control-plane endpoint, Operator UI path, tray path, or SSE event builder reads the removed state.
+  - The startup test still checks sources loaded from SQL.
+  - Startup still migrates a leftover `library.json`.
+  - The list query and random eligibility have no no-categories tag path and no category-count check. A test shows every catalog write path the app uses leaves Uncategorized in place.
+  - Tag include and exclude, global and per-category AND/OR, Uncategorized tags, and a tag that is not in the tag table give the same results on the list query and random eligibility, and those results match the expected items.
+- **Verification evidence**:
+  - `dotnet build ReelRoulette.sln` (0 errors, 0 warnings) and `dotnet test ReelRoulette.sln` passed: 118 desktop tests and 267 core tests. `dotnet run --project ./src/core/ReelRoulette.Core.SystemChecks/ReelRoulette.Core.SystemChecks.csproj -- --verbose` passed and exited 0.
+  - `ServerStateService` keeps sources, presets, and event publish and replay. Its startup reads only sources, through `LibraryCatalogSession.ReadStartupSources`. `ReadStartupState`, `CatalogStartupState`, and `CatalogStartupItem` are gone. A search of `src/` for the removed readers, fields, and `hasCategories` finds only `LibraryOperationsService` methods of the same name, which the routes and SSE builders in `ServerHostComposition` already call. The build shows nothing else references the removed members.
+  - `Startup_LoadsSourcesFromTheCatalog` seeds `library.json`, checks that startup migrated it to `library.db` and `library.json.migrated`, and checks the source loaded from SQL. `Open_MigratesLibraryJson_IncludingStringEnumsNumericDurationAndAvailableTags` still covers that migration.
+  - `EveryCatalogWritePath_KeepsUncategorized` checks a new catalog, tag catalog sync with and without categories, tag catalog replace with nothing, and that deleting Uncategorized is refused. `Open_MissingUncategorizedCategory_IsAppended` covers migration. Removing the Uncategorized append from sync normalization made the test fail. Removing the Uncategorized delete refusal also made it fail. Both changes were reverted.
+  - `TagFilter_ListQueryAndRandomEligibilityAgree_ForEveryTagShape` asserts the same expected items from `QueryList` and `QueryEligible` for include, exclude, include with exclude, global AND with mixed per-category modes, global OR with mixed per-category modes, Uncategorized tags with and without a per-category OR, a tag that is not in the tag table under global AND and OR, and `tagMatchMode = Or` leaving the result unchanged. Inverting the per-category OR check made it fail. Swapping the global joiner also made it fail. Both changes were reverted.
+  - `CONTEXT.md`, `docs/domain-inventory.md`, and the testing checklist say server startup loads sources from catalog rows.
+- **Deferrals / Follow-ups**:
+  - Removing the client-authority sync routes is the next milestone and ends the v0.13.0 release.
+  - Source import does not refresh the in-memory source list that `GET /api/sources` reads. That list stays filled at startup.
+  - The JSON reader, the side-file copy, the import check and retire-aside for a leftover `library.json`, refuse strings, and the tests that seed through `library.json` stay until removal of `library.json` library support.
+  - Account and PIN tables stay with the account and PIN data model work.
+  - Candidate for the sync-route removal milestone, since both are contract changes: `tagMatchMode` is still in the filter contract. The server parses it, and preset matching compares it. Filtering no longer reads it. No visible desktop or WebUI control sets it on its own. The desktop filter dialog sets it only from hidden legacy radio buttons. The desktop main-window filter summary reads it to say "all" or "any". The WebUI sets it to mirror the global match selector. Desktop presets keep the default AND while WebUI presets with global OR store OR. So two saved presets that differ only in `tagMatchMode` do not match today, and would start matching once the field is removed.
+  - Found while testing: `LibraryCatalogSession.ReplaceTagCatalog` has no production caller. Only tests call it.
 
 ### M10i18 - JSON-Era Leftovers That Do Not Serve Migration
 

@@ -19,10 +19,9 @@ Instructions:
 
 Commit Message:
 
-Bugfix: Sort tag names the same way on server, desktop, and WebUI
+M10i19: Drop the unread server tag and item cache and the no-categories tag path
 
-- Add one tag-name comparison in Core and mirror it in the WebUI: lower-case, then compare by character code, with an exact comparison when names differ only in case. `_` now sorts before letters everywhere.
-- Use it for the server tag editor model, auto-tag scan, and catalog normalize, and for the tag editor, filter Tags tab, and auto-tag results on both clients and the desktop current-file tags.
-- Break category ties on equal sort order by name on both clients, since stored sort orders can repeat.
-- Lock parity with a shared ordered fixture under shared/fixtures that the xUnit and Vitest suites both sort against.
-- Document the ordering rule for the tag editor model in docs/api.md.
+- Server startup loads only sources and presets. The categories, tags, item tags, favorites, and blacklist cache that no route read is gone, along with its test-only readers and the Core startup reader that filled it.
+- Remove the list query's no-categories tag path and its category-count check from browse and random eligibility. Every catalog the app writes keeps Uncategorized, so results do not change.
+- Add tests that every catalog write path keeps Uncategorized, and that the list query and random eligibility agree on include, exclude, global and per-category AND/OR, Uncategorized, and out-of-catalog tags.
+- Record `tagMatchMode` removal as a candidate for the sync-route removal milestone, and sync current-state docs and the testing checklist.

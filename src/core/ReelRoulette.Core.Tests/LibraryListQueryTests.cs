@@ -318,33 +318,101 @@ public sealed class LibraryListQueryTests
     }
 
     [Fact]
-    public void Query_LegacyTagAnd_WhenCatalogHasNoCategories()
+    public void TagFilter_ListQueryAndRandomEligibilityAgree_ForEveryTagShape()
     {
         using var dir = new TempDirectory();
         var session = Open(dir);
         session.InsertSource("on", "/media", "On", true);
-        Add(session, "both", "on", "both.mp4", "both.mp4", tags: ["Red", "Blue"]);
-        Add(session, "red", "on", "red.mp4", "red.mp4", tags: ["Red"]);
-        using (var connection = LibraryCatalogStore.OpenWrite(session.DatabasePath))
-        using (var command = connection.CreateCommand())
-        {
-            command.CommandText = "DELETE FROM categories;";
-            command.ExecuteNonQuery();
-        }
+        session.UpsertCategory("people", "People", 1);
+        session.UpsertCategory("place", "Place", 2);
+        session.UpsertTag("Ann", "people");
+        session.UpsertTag("Bob", "people");
+        session.UpsertTag("Home", "place");
+        session.UpsertTag("Misc", null);
+        session.UpsertTag("Spare", null);
+        Add(session, "ann-home", "on", "ann-home.mp4", "ann-home.mp4", tags: ["Ann", "Home"]);
+        Add(session, "ann-bob", "on", "ann-bob.mp4", "ann-bob.mp4", tags: ["Ann", "Bob"]);
+        Add(session, "bob-home", "on", "bob-home.mp4", "bob-home.mp4", tags: ["Bob", "Home"]);
+        Add(session, "ann", "on", "ann.mp4", "ann.mp4", tags: ["Ann"]);
+        Add(session, "misc", "on", "misc.mp4", "misc.mp4", tags: ["Misc"]);
+        Add(session, "spare-ann", "on", "spare-ann.mp4", "spare-ann.mp4", tags: ["Spare", "Ann"]);
+        Add(session, "misc-spare", "on", "misc-spare.mp4", "misc-spare.mp4", tags: ["Misc", "Spare"]);
+        Add(session, "loose-ann", "on", "loose-ann.mp4", "loose-ann.mp4", tags: ["Loose", "Ann"]);
+        Add(session, "plain", "on", "plain.mp4", "plain.mp4");
 
-        var page = session.QueryList(new LibraryListRequest
-        {
-            Filter = new FilterStateModel
+        AssertBoth(session, new FilterStateModel { SelectedTags = ["home"] }, "ann-home", "bob-home");
+        AssertBoth(
+            session,
+            new FilterStateModel { ExcludedTags = ["bob"] },
+            "ann", "ann-home", "loose-ann", "misc", "misc-spare", "plain", "spare-ann");
+        AssertBoth(
+            session,
+            new FilterStateModel { SelectedTags = ["Ann"], ExcludedTags = ["Home"] },
+            "ann", "ann-bob", "loose-ann", "spare-ann");
+        AssertBoth(
+            session,
+            new FilterStateModel
             {
-                ExcludeBlacklisted = false,
-                SelectedTags = ["red", "blue"],
-                TagMatchMode = TagMatchModeValue.And
+                SelectedTags = ["Ann", "Bob", "Home"],
+                GlobalMatchMode = true,
+                CategoryLocalMatchModes = new Dictionary<string, TagMatchModeValue>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["people"] = TagMatchModeValue.Or,
+                    ["place"] = TagMatchModeValue.And
+                }
             },
-            Limit = 10
-        });
+            "ann-home", "bob-home");
+        AssertBoth(
+            session,
+            new FilterStateModel
+            {
+                SelectedTags = ["Ann", "Bob", "Home"],
+                GlobalMatchMode = false,
+                CategoryLocalMatchModes = new Dictionary<string, TagMatchModeValue>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["people"] = TagMatchModeValue.And,
+                    ["place"] = TagMatchModeValue.Or
+                }
+            },
+            "ann-bob", "ann-home", "bob-home");
 
-        Assert.Equal("both", Assert.Single(page.Items).Id);
-        Assert.Equal(["Blue", "Red"], page.Items[0].Tags.OrderBy(tag => tag, StringComparer.Ordinal).ToArray());
+        // Uncategorized tags form one group keyed by the Uncategorized id.
+        AssertBoth(session, new FilterStateModel { SelectedTags = ["Misc", "Spare"] }, "misc-spare");
+        AssertBoth(
+            session,
+            new FilterStateModel
+            {
+                SelectedTags = ["Misc", "Spare", "Ann"],
+                GlobalMatchMode = true,
+                CategoryLocalMatchModes = new Dictionary<string, TagMatchModeValue>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["uncategorized"] = TagMatchModeValue.Or
+                }
+            },
+            "spare-ann");
+
+        // An item tag that is not in the tag table forms its own group.
+        AssertBoth(
+            session,
+            new FilterStateModel { SelectedTags = ["Loose", "Ann"], GlobalMatchMode = false },
+            "ann", "ann-bob", "ann-home", "loose-ann", "spare-ann");
+        AssertBoth(session, new FilterStateModel { SelectedTags = ["Loose", "Ann"], GlobalMatchMode = true }, "loose-ann");
+
+        // tagMatchMode does not change a filter; the global and per-category modes decide.
+        AssertBoth(
+            session,
+            new FilterStateModel { SelectedTags = ["Ann", "Bob"], TagMatchMode = TagMatchModeValue.Or },
+            "ann-bob");
+
+        static void AssertBoth(LibraryCatalogSession session, FilterStateModel filter, params string[] expected)
+        {
+            var listed = session.QueryList(new LibraryListRequest { Filter = filter, Limit = 50 })
+                .Items.Select(item => item.Id).OrderBy(id => id, StringComparer.Ordinal).ToArray();
+            var eligible = session.QueryEligible(filter)
+                .Select(item => item.Id).OrderBy(id => id, StringComparer.Ordinal).ToArray();
+            Assert.Equal(expected, listed);
+            Assert.Equal(expected, eligible);
+        }
     }
 
     [Fact]

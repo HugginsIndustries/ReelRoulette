@@ -34,25 +34,17 @@ public sealed class ServerStateService
         "control.testing.suite"
     ];
 
-    private const string UncategorizedCategoryId = "uncategorized";
-    private const string UncategorizedCategoryName = "Uncategorized";
     private readonly object _revisionLock = new();
     private readonly object _subscribersLock = new();
     private readonly object _historyLock = new();
-    private readonly object _itemStatesLock = new();
     private readonly object _filterSessionLock = new();
-    private readonly object _tagLock = new();
     private readonly object _sourceLock = new();
     private readonly ILogger<ServerStateService> _logger;
     private readonly LibraryCatalogHost? _catalog;
     private long _revision;
-    private readonly Dictionary<string, ItemStateRecord> _itemStates = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<Channel<ServerEventEnvelope>> _subscribers = new();
     private readonly Queue<ServerEventEnvelope> _eventHistory = new();
     private const int EventHistoryCapacity = 256;
-    private readonly Dictionary<string, HashSet<string>> _itemTags = new(StringComparer.OrdinalIgnoreCase);
-    private readonly List<TagCategorySnapshot> _tagCategories = [];
-    private readonly List<TagSnapshot> _tags = [];
     private List<FilterPresetSnapshot> _presetCatalog = [];
     private readonly List<SourceRecord> _sources = [];
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
@@ -127,36 +119,6 @@ public sealed class ServerStateService
         }
     }
 
-    public IReadOnlyList<LibraryStateResponse> GetLibraryStates(LibraryStatesRequest? request)
-    {
-        var requestedPaths = request?.Paths?
-            .Where(path => !string.IsNullOrWhiteSpace(path))
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-        List<ItemStateRecord> items;
-        lock (_itemStatesLock)
-        {
-            items = _itemStates.Values.ToList();
-        }
-
-        if (requestedPaths is { Count: > 0 })
-        {
-            items = items.Where(record => requestedPaths.Contains(record.Payload.Path)).ToList();
-        }
-
-        return items
-            .OrderBy(record => record.Payload.Path, StringComparer.OrdinalIgnoreCase)
-            .Select(record => new LibraryStateResponse
-            {
-                ItemId = record.Payload.ItemId,
-                Path = record.Payload.Path,
-                IsFavorite = record.Payload.IsFavorite,
-                IsBlacklisted = record.Payload.IsBlacklisted,
-                Revision = record.Revision
-            })
-            .ToList();
-    }
-
     public IReadOnlyList<FilterPresetSnapshot> GetPresetCatalogSnapshot()
     {
         lock (_filterSessionLock)
@@ -218,30 +180,6 @@ public sealed class ServerStateService
         }
     }
 
-    public IReadOnlyList<TagCategorySnapshot> GetTagCategoriesSnapshot()
-    {
-        lock (_tagLock)
-        {
-            EnsureUncategorizedCategoryLocked();
-            return _tagCategories
-                .Select(CloneCategory)
-                .OrderBy(category => category.SortOrder)
-                .ThenBy(category => category.Name, StringComparer.OrdinalIgnoreCase)
-                .ToList();
-        }
-    }
-
-    public IReadOnlyList<TagSnapshot> GetTagsSnapshot()
-    {
-        lock (_tagLock)
-        {
-            return _tags
-                .Select(CloneTag)
-                .OrderBy(tag => tag.Name, StringComparer.OrdinalIgnoreCase)
-                .ToList();
-        }
-    }
-
     public bool TrySetSourceEnabled(string sourceId, bool isEnabled, out SourceResponse? source)
     {
         source = null;
@@ -284,40 +222,6 @@ public sealed class ServerStateService
 
         source = ApiContractMapper.MapSource(updated.Id, updated.RootPath, updated.DisplayName, updated.IsEnabled);
         return true;
-    }
-
-    public TagEditorModelResponse GetTagEditorModel(TagEditorModelRequest? request)
-    {
-        var itemIds = request?.ItemIds?
-            .Where(id => !string.IsNullOrWhiteSpace(id))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList() ?? [];
-
-        lock (_tagLock)
-        {
-            EnsureUncategorizedCategoryLocked();
-            var items = itemIds
-                .Select(id => new ItemTagsSnapshot
-                {
-                    ItemId = id,
-                    Tags = GetOrCreateItemTags(id).OrderBy(t => t, StringComparer.OrdinalIgnoreCase).ToList()
-                })
-                .ToList();
-
-            return new TagEditorModelResponse
-            {
-                Categories = _tagCategories
-                    .OrderBy(c => c.SortOrder)
-                    .ThenBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
-                    .Select(CloneCategory)
-                    .ToList(),
-                Tags = _tags
-                    .OrderBy(t => t.Name, StringComparer.OrdinalIgnoreCase)
-                    .Select(CloneTag)
-                    .ToList(),
-                Items = items
-            };
-        }
     }
 
     public ChannelReader<ServerEventEnvelope> Subscribe(CancellationToken cancellationToken)
@@ -363,31 +267,6 @@ public sealed class ServerStateService
     public ServerEventEnvelope PublishExternal(string eventType, object payload)
     {
         return Publish(eventType, payload);
-    }
-
-    private ItemStateRecord GetOrCreateItemState(string path)
-    {
-        lock (_itemStatesLock)
-        {
-            if (_itemStates.TryGetValue(path, out var existing))
-            {
-                return existing;
-            }
-
-            var created = new ItemStateRecord
-            {
-                Payload = new ItemStateChangedPayload
-                {
-                    ItemId = path,
-                    Path = path,
-                    IsFavorite = false,
-                    IsBlacklisted = false
-                },
-                Revision = 0
-            };
-            _itemStates[path] = created;
-            return created;
-        }
     }
 
     public ServerEventEnvelope CreateEnvelope(string eventType, object payload)
@@ -640,12 +519,11 @@ public sealed class ServerStateService
                 return;
             }
 
-            var loaded = _catalog.Session.ReadStartupState();
-
+            var loaded = _catalog.Session.ReadStartupSources();
             lock (_sourceLock)
             {
                 _sources.Clear();
-                foreach (var source in loaded.Sources)
+                foreach (var source in loaded)
                 {
                     var id = source.Id.Trim();
                     var rootPath = source.RootPath.Trim();
@@ -663,186 +541,11 @@ public sealed class ServerStateService
                     });
                 }
             }
-
-            lock (_tagLock)
-            {
-                _tagCategories.Clear();
-                _tags.Clear();
-                foreach (var category in loaded.Categories)
-                {
-                    var name = category.Name.Trim();
-                    if (string.IsNullOrWhiteSpace(name))
-                    {
-                        continue;
-                    }
-
-                    var id = NormalizeCategoryId(category.Id);
-                    if (_tagCategories.Any(existing => string.Equals(existing.Id, id, StringComparison.OrdinalIgnoreCase)))
-                    {
-                        continue;
-                    }
-
-                    _tagCategories.Add(new TagCategorySnapshot
-                    {
-                        Id = id,
-                        Name = name,
-                        SortOrder = category.SortOrder
-                    });
-                }
-
-                foreach (var tag in loaded.Tags)
-                {
-                    var name = tag.Name.Trim();
-                    if (string.IsNullOrWhiteSpace(name))
-                    {
-                        continue;
-                    }
-
-                    _tags.RemoveAll(existing => string.Equals(existing.Name, name, StringComparison.OrdinalIgnoreCase));
-                    _tags.Add(new TagSnapshot
-                    {
-                        Name = name,
-                        CategoryId = NormalizeCategoryId(tag.CategoryId)
-                    });
-                }
-
-                EnsureUncategorizedCategoryLocked();
-            }
-
-            lock (_itemStatesLock)
-            lock (_tagLock)
-            {
-                foreach (var item in loaded.Items)
-                {
-                    var path = item.FullPath.Trim();
-                    if (string.IsNullOrWhiteSpace(path))
-                    {
-                        continue;
-                    }
-
-                    _itemStates[path] = new ItemStateRecord
-                    {
-                        Payload = new ItemStateChangedPayload
-                        {
-                            ItemId = path,
-                            Path = path,
-                            IsFavorite = item.IsFavorite,
-                            IsBlacklisted = item.IsBlacklisted
-                        },
-                        Revision = 0
-                    };
-                    _itemTags[path] = item.Tags
-                        .Select(tag => tag.Trim())
-                        .Where(tag => !string.IsNullOrWhiteSpace(tag))
-                        .ToHashSet(StringComparer.OrdinalIgnoreCase);
-                }
-            }
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to bootstrap server state from '{Path}'.", _catalog?.Session.DatabasePath);
         }
-    }
-
-    private HashSet<string> GetOrCreateItemTags(string itemId)
-    {
-        if (_itemTags.TryGetValue(itemId, out var existing))
-        {
-            return existing;
-        }
-
-        var created = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        _itemTags[itemId] = created;
-        return created;
-    }
-
-    private string ResolveCategoryIdForTag(string tagName)
-    {
-        var existing = _tags.FirstOrDefault(t => string.Equals(t.Name, tagName, StringComparison.OrdinalIgnoreCase));
-        return string.IsNullOrWhiteSpace(existing?.CategoryId)
-            ? UncategorizedCategoryId
-            : NormalizeCategoryId(existing.CategoryId);
-    }
-
-    private void EnsureTagExists(string tagName, string categoryId, bool keepExistingCategory = false)
-    {
-        var normalizedCategoryId = NormalizeCategoryId(categoryId);
-        EnsureUncategorizedCategoryLocked();
-        var existing = _tags.FirstOrDefault(t => string.Equals(t.Name, tagName, StringComparison.OrdinalIgnoreCase));
-        if (existing == null)
-        {
-            _tags.Add(new TagSnapshot
-            {
-                Name = tagName,
-                CategoryId = normalizedCategoryId
-            });
-            return;
-        }
-
-        if (keepExistingCategory)
-        {
-            return;
-        }
-
-        existing.CategoryId = normalizedCategoryId;
-    }
-
-    private static string NormalizeCategoryId(string? categoryId)
-    {
-        return string.IsNullOrWhiteSpace(categoryId)
-            ? UncategorizedCategoryId
-            : categoryId.Trim();
-    }
-
-    private void EnsureUncategorizedCategoryLocked()
-    {
-        var existing = _tagCategories.FirstOrDefault(c => string.Equals(c.Id, UncategorizedCategoryId, StringComparison.OrdinalIgnoreCase));
-        if (existing == null)
-        {
-            _tagCategories.Add(new TagCategorySnapshot
-            {
-                Id = UncategorizedCategoryId,
-                Name = UncategorizedCategoryName,
-                SortOrder = int.MaxValue
-            });
-            return;
-        }
-
-        existing.Id = UncategorizedCategoryId;
-        existing.Name = UncategorizedCategoryName;
-        existing.SortOrder = int.MaxValue;
-    }
-
-    private TagCatalogChangedPayload CreateTagCatalogPayload(string reason)
-    {
-        lock (_tagLock)
-        {
-            return new TagCatalogChangedPayload
-            {
-                Reason = reason,
-                Categories = _tagCategories.Select(CloneCategory).ToList(),
-                Tags = _tags.Select(CloneTag).ToList()
-            };
-        }
-    }
-
-    private static TagCategorySnapshot CloneCategory(TagCategorySnapshot source)
-    {
-        return new TagCategorySnapshot
-        {
-            Id = source.Id,
-            Name = source.Name,
-            SortOrder = source.SortOrder
-        };
-    }
-
-    private static TagSnapshot CloneTag(TagSnapshot source)
-    {
-        return new TagSnapshot
-        {
-            Name = source.Name,
-            CategoryId = source.CategoryId
-        };
     }
 
     private void PersistSourceEnabled(string sourceId, bool isEnabled)
@@ -860,12 +563,6 @@ public sealed class ServerStateService
         {
             _logger.LogWarning(ex, "Failed to persist source enabled state to '{Path}'.", _catalog?.Session.DatabasePath);
         }
-    }
-
-    private sealed class ItemStateRecord
-    {
-        public ItemStateChangedPayload Payload { get; init; } = new();
-        public long Revision { get; set; }
     }
 
     private sealed class SourceRecord

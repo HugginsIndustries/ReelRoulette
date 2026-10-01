@@ -44,18 +44,17 @@ public sealed class LibraryCatalogSession
         using var connection = LibraryCatalogStore.OpenWrite(_databasePath);
         LibraryCatalogListSql.RegisterCollation(connection);
 
-        var hasCategories = LibraryCatalogStore.ExecuteScalarInt(connection, "SELECT COUNT(*) FROM categories;") > 0;
-        var catalogTags = hasCategories ? ReadCatalogTags(connection) : [];
+        var catalogTags = ReadCatalogTags(connection);
         var searchArgs = new LibraryCatalogListSql.SqlArgs();
-        var searchWhere = LibraryCatalogListSql.BuildWhere(request, includeFilter: false, hasCategories, catalogTags, searchArgs);
+        var searchWhere = LibraryCatalogListSql.BuildWhere(request, includeFilter: false, catalogTags, searchArgs);
         var searchBaselineCount = ScalarCount(connection, searchWhere, searchArgs);
 
         var filterArgs = new LibraryCatalogListSql.SqlArgs();
-        var filterWhere = LibraryCatalogListSql.BuildWhere(request, includeFilter: true, hasCategories, catalogTags, filterArgs);
+        var filterWhere = LibraryCatalogListSql.BuildWhere(request, includeFilter: true, catalogTags, filterArgs);
         var totalCount = ScalarCount(connection, filterWhere, filterArgs);
 
         var pageArgs = new LibraryCatalogListSql.SqlArgs();
-        var pageWhere = LibraryCatalogListSql.BuildWhere(request, includeFilter: true, hasCategories, catalogTags, pageArgs);
+        var pageWhere = LibraryCatalogListSql.BuildWhere(request, includeFilter: true, catalogTags, pageArgs);
         var orderBy = LibraryCatalogListSql.BuildOrderBy(request);
         var limit = pageArgs.Add(request.Limit);
         var offset = pageArgs.Add(request.Offset);
@@ -98,10 +97,9 @@ public sealed class LibraryCatalogSession
         LibraryCatalogListSql.RegisterCollation(connection);
 
         var request = new LibraryListRequest { Filter = filter };
-        var hasCategories = LibraryCatalogStore.ExecuteScalarInt(connection, "SELECT COUNT(*) FROM categories;") > 0;
-        var catalogTags = hasCategories ? ReadCatalogTags(connection) : [];
+        var catalogTags = ReadCatalogTags(connection);
         var args = new LibraryCatalogListSql.SqlArgs();
-        var where = LibraryCatalogListSql.BuildWhere(request, includeFilter: true, hasCategories, catalogTags, args);
+        var where = LibraryCatalogListSql.BuildWhere(request, includeFilter: true, catalogTags, args);
         if (requiredMediaType.HasValue)
         {
             where += " AND items.media_type = " + ((int)requiredMediaType.Value).ToString(CultureInfo.InvariantCulture);
@@ -453,102 +451,25 @@ public sealed class LibraryCatalogSession
         return sources;
     }
 
-    public CatalogStartupState ReadStartupState()
+    public IReadOnlyList<LibraryCatalogSource> ReadStartupSources()
     {
         using var connection = LibraryCatalogStore.OpenWrite(_databasePath);
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT id, root_path, display_name, is_enabled FROM sources ORDER BY position;";
+        using var reader = command.ExecuteReader();
         var sources = new List<LibraryCatalogSource>();
-        using (var command = connection.CreateCommand())
+        while (reader.Read())
         {
-            command.CommandText = "SELECT id, root_path, display_name, is_enabled FROM sources ORDER BY position;";
-            using var reader = command.ExecuteReader();
-            while (reader.Read())
+            sources.Add(new LibraryCatalogSource
             {
-                sources.Add(new LibraryCatalogSource
-                {
-                    Id = reader.GetString(0),
-                    RootPath = reader.GetString(1),
-                    DisplayName = reader.IsDBNull(2) ? null : reader.GetString(2).Trim(),
-                    IsEnabled = reader.GetInt32(3) != 0
-                });
-            }
+                Id = reader.GetString(0),
+                RootPath = reader.GetString(1),
+                DisplayName = reader.IsDBNull(2) ? null : reader.GetString(2).Trim(),
+                IsEnabled = reader.GetInt32(3) != 0
+            });
         }
 
-        var categories = new List<LibraryCatalogCategory>();
-        using (var command = connection.CreateCommand())
-        {
-            command.CommandText = "SELECT id, name, sort_order FROM categories ORDER BY position;";
-            using var reader = command.ExecuteReader();
-            while (reader.Read())
-            {
-                categories.Add(new LibraryCatalogCategory
-                {
-                    Id = reader.GetString(0),
-                    Name = reader.GetString(1),
-                    SortOrder = reader.GetInt32(2)
-                });
-            }
-        }
-
-        var tags = new List<LibraryCatalogTag>();
-        using (var command = connection.CreateCommand())
-        {
-            command.CommandText = "SELECT name, name_fold, category_id FROM tags ORDER BY position;";
-            using var reader = command.ExecuteReader();
-            while (reader.Read())
-            {
-                tags.Add(new LibraryCatalogTag
-                {
-                    Name = reader.GetString(0),
-                    NameFold = reader.GetString(1),
-                    CategoryId = reader.GetString(2)
-                });
-            }
-        }
-
-        var items = new List<CatalogStartupItem>();
-        var itemsByPath = new Dictionary<string, CatalogStartupItem>(StringComparer.Ordinal);
-        using (var command = connection.CreateCommand())
-        {
-            command.CommandText = "SELECT full_path, is_favorite, is_blacklisted FROM items ORDER BY position;";
-            using var reader = command.ExecuteReader();
-            while (reader.Read())
-            {
-                var item = new CatalogStartupItem
-                {
-                    FullPath = reader.GetString(0),
-                    IsFavorite = reader.GetInt64(1) != 0,
-                    IsBlacklisted = reader.GetInt64(2) != 0
-                };
-                items.Add(item);
-                itemsByPath[item.FullPath] = item;
-            }
-        }
-
-        using (var command = connection.CreateCommand())
-        {
-            command.CommandText = """
-                SELECT items.full_path, item_tags.name
-                FROM item_tags
-                INNER JOIN items ON items.id = item_tags.item_id
-                ORDER BY items.position, item_tags.position;
-                """;
-            using var reader = command.ExecuteReader();
-            while (reader.Read())
-            {
-                if (itemsByPath.TryGetValue(reader.GetString(0), out var item))
-                {
-                    item.Tags.Add(reader.GetString(1));
-                }
-            }
-        }
-
-        return new CatalogStartupState
-        {
-            Sources = sources,
-            Categories = categories,
-            Tags = tags,
-            Items = items
-        };
+        return sources;
     }
 
     public IReadOnlyList<CatalogRefreshItem> ReadRefreshItems()
@@ -3354,18 +3275,3 @@ public sealed class CatalogItemTagAssignment
     public IReadOnlyList<string> Tags { get; init; } = [];
 }
 
-public sealed class CatalogStartupItem
-{
-    public string FullPath { get; init; } = string.Empty;
-    public bool IsFavorite { get; init; }
-    public bool IsBlacklisted { get; init; }
-    public List<string> Tags { get; } = [];
-}
-
-public sealed class CatalogStartupState
-{
-    public List<LibraryCatalogSource> Sources { get; init; } = [];
-    public List<LibraryCatalogCategory> Categories { get; init; } = [];
-    public List<LibraryCatalogTag> Tags { get; init; } = [];
-    public List<CatalogStartupItem> Items { get; init; } = [];
-}

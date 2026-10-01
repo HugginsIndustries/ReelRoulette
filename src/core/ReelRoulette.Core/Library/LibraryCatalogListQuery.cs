@@ -51,7 +51,6 @@ internal static class LibraryCatalogListSql
     public static string BuildWhere(
         LibraryListRequest request,
         bool includeFilter,
-        bool hasCategories,
         IReadOnlyList<LibraryCatalogTag> catalogTags,
         SqlArgs args)
     {
@@ -59,7 +58,7 @@ internal static class LibraryCatalogListSql
         AppendSearch(where, request.Search, args);
         if (includeFilter && request.Filter != null)
         {
-            AppendFilter(where, request.Filter, hasCategories, catalogTags, args);
+            AppendFilter(where, request.Filter, catalogTags, args);
         }
 
         return where.ToString();
@@ -97,7 +96,6 @@ internal static class LibraryCatalogListSql
     private static void AppendFilter(
         StringBuilder where,
         FilterStateModel filter,
-        bool hasCategories,
         IReadOnlyList<LibraryCatalogTag> catalogTags,
         SqlArgs args)
     {
@@ -165,7 +163,7 @@ internal static class LibraryCatalogListSql
             where.Append(CultureInfo.InvariantCulture, $" AND (items.media_type = {PhotoMediaType} OR items.integrated_loudness IS NOT NULL)");
         }
 
-        AppendSelectedTags(where, filter, hasCategories, catalogTags, args);
+        AppendSelectedTags(where, filter, catalogTags, args);
         AppendExcludedTags(where, filter, args);
 
         if (filter.MediaTypeFilter == MediaTypeFilterValue.VideosOnly)
@@ -181,20 +179,12 @@ internal static class LibraryCatalogListSql
     private static void AppendSelectedTags(
         StringBuilder where,
         FilterStateModel filter,
-        bool hasCategories,
         IReadOnlyList<LibraryCatalogTag> catalogTags,
         SqlArgs args)
     {
         var selected = filter.SelectedTags.Where(tag => !string.IsNullOrWhiteSpace(tag)).ToList();
         if (selected.Count == 0)
         {
-            return;
-        }
-
-        if (!hasCategories)
-        {
-            where.Append(" AND ");
-            where.Append(CombineTagExists(selected, filter.TagMatchMode == TagMatchModeValue.Or, args));
             return;
         }
 

@@ -2451,7 +2451,7 @@ public sealed class LibraryOperationsServiceTests
     }
 
     [Fact]
-    public void Startup_LoadsSourcesCategoriesItemTagsFavoriteAndBlacklist()
+    public void Startup_LoadsSourcesFromTheCatalog()
     {
         var appDataRoot = CreateTempAppDataRoot();
         try
@@ -2471,22 +2471,7 @@ public sealed class LibraryOperationsServiceTests
                         ["fileName"] = "fav.mp4",
                         ["isFavorite"] = true,
                         ["tags"] = new JsonArray("Night")
-                    },
-                    new JsonObject
-                    {
-                        ["id"] = "block-1",
-                        ["fullPath"] = "/media/block.mp4",
-                        ["fileName"] = "block.mp4",
-                        ["isBlacklisted"] = true
                     }
-                },
-                ["tags"] = new JsonArray
-                {
-                    new JsonObject { ["name"] = "Night", ["categoryId"] = "people" }
-                },
-                ["categories"] = new JsonArray
-                {
-                    new JsonObject { ["id"] = "people", ["name"] = "People", ["sortOrder"] = 1 }
                 }
             });
 
@@ -2496,28 +2481,51 @@ public sealed class LibraryOperationsServiceTests
             Assert.Equal("/media", source.RootPath);
             Assert.Equal("Clips", source.DisplayName);
             Assert.True(source.IsEnabled);
-
-            var categories = state.GetTagCategoriesSnapshot();
-            Assert.Contains(categories, category => category.Id == "people" && category.Name == "People" && category.SortOrder == 1);
-            Assert.Contains(categories, category => category.Id == "uncategorized" && category.Name == "Uncategorized");
-            Assert.Equal("Night", Assert.Single(state.GetTagsSnapshot()).Name);
-
-            var states = state.GetLibraryStates(null);
-            var favorite = Assert.Single(states, item => item.Path == "/media/fav.mp4");
-            Assert.Equal("/media/fav.mp4", favorite.ItemId);
-            Assert.True(favorite.IsFavorite);
-            Assert.False(favorite.IsBlacklisted);
-            var blacklisted = Assert.Single(states, item => item.Path == "/media/block.mp4");
-            Assert.Equal("/media/block.mp4", blacklisted.ItemId);
-            Assert.True(blacklisted.IsBlacklisted);
-            Assert.False(blacklisted.IsFavorite);
-
-            var model = state.GetTagEditorModel(new TagEditorModelRequest { ItemIds = ["/media/fav.mp4"] });
-            Assert.Equal(["Night"], Assert.Single(model.Items).Tags);
+            Assert.True(File.Exists(Path.Combine(appDataRoot, "library.db")));
+            Assert.True(File.Exists(Path.Combine(appDataRoot, "library.json.migrated")));
         }
         finally
         {
             Cleanup(appDataRoot);
+        }
+    }
+
+    [Fact]
+    public void EveryCatalogWritePath_KeepsUncategorized()
+    {
+        var appDataRoot = CreateTempAppDataRoot();
+        try
+        {
+            var (host, service) = OpenOperations(appDataRoot);
+            AssertHasUncategorized(host);
+
+            Assert.True(service.SyncTagCatalog(new SyncTagCatalogRequest
+            {
+                Categories = [new TagCategorySnapshot { Id = "people", Name = "People", SortOrder = 1 }],
+                Tags = [new TagSnapshot { Name = "Ann", CategoryId = "people" }]
+            }));
+            AssertHasUncategorized(host);
+
+            service.SyncTagCatalog(new SyncTagCatalogRequest { Categories = [], Tags = [] });
+            AssertHasUncategorized(host);
+
+            host.Session.ReplaceTagCatalog([], []);
+            AssertHasUncategorized(host);
+
+            Assert.False(service.DeleteCategory(new DeleteCategoryRequest { CategoryId = "uncategorized" }));
+            Assert.False(service.DeleteCategory(new DeleteCategoryRequest { CategoryId = "UNCATEGORIZED", NewCategoryId = "people" }));
+            AssertHasUncategorized(host);
+        }
+        finally
+        {
+            Cleanup(appDataRoot);
+        }
+
+        static void AssertHasUncategorized(LibraryCatalogHost host)
+        {
+            Assert.Contains(
+                LibraryCatalogStore.Read(host.Session.DatabasePath).Categories,
+                category => category.Id == "uncategorized");
         }
     }
 

@@ -29,7 +29,7 @@ Use `pwsh ./tools/scripts/reset-checklist.ps1` to reset metadata/check states be
 ## Server Baseline + Tray
 
 - [ ] `POST /api/library/query` returns a page with `totalCount` and `searchBaselineCount`, keeps missing files, and returns thumbnail layout fields for that page. `POST /api/library/item` returns one item by id or path, without thumbnail fields, and returns 404 when the item is missing.
-- [ ] Tag catalog sync, item-tag sync, and server startup use catalog rows. The tag table is the catalog's tag list. An item can still hold a tag name that is not in that table. A missing `library.db` still migrates a leftover `library.json` once.
+- [ ] Tag catalog sync and item-tag sync use catalog rows, and server startup loads sources from them. The tag table is the catalog's tag list. An item can still hold a tag name that is not in that table. A missing `library.db` still migrates a leftover `library.json` once.
 - [x] `ReelRoulette.ServerApp` starts without fatal startup errors.
 - [x] `/health` and WebUI static assets respond correctly.
 - [x] Server launches with no command prompt window on Windows.
