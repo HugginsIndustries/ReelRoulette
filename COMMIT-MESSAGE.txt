@@ -19,9 +19,9 @@ Instructions:
 
 Commit Message:
 
-Docs: Consolidate the [Unreleased] changelog for v0.13.0
+Chore: Cut the v0.13.0 release
 
-- Rewrite the [Unreleased] Changed bullets to the changelog style note: one user-visible outcome per bullet, related library work combined, implementation detail dropped. Clauses that differ from v0.12.0 stay.
-- Record the passing Windows CI run in the client-authority sync routes removal evidence.
-- Add a backlog item for the desktop filter dialog keeping Update Preset enabled after the active preset is deleted.
-- Correct the refresh comment about a fingerprint with no status, which no release writes.
+- Set the release version to 0.13.0 across .version, OpenAPI, project versions, contract fixtures, and doc examples.
+- Move the [Unreleased] changelog into [0.13.0] — SQLite Migration (2026-10-01) and start a fresh [Unreleased] with empty subsections.
+- Draft the v0.13.0 — Moving Day release notes, leading with the automatic one-time library migration and noting that the next release removes the old library format.
+- Add a backlog item for a server data folder override so verification scripts and tests stop resolving the real data and thumbnail folders on Windows and Linux.

@@ -20,6 +20,58 @@ Use this document for public GitHub releases. Rules:
 
 ---
 
+## ReelRoulette v0.13.0 — Moving Day
+
+Your library just moved into a new home, and you don't have to lift a thing.
+
+v0.13.0 rebuilds how ReelRoulette stores your library from the ground up. Big libraries feel faster almost everywhere, refresh stops throwing away your work, and moving your library between machines is down to one file.
+
+## What's New
+
+**One-time, automatic conversion.** ReelRoulette now keeps your library in a new format built for big collections. The first time you start v0.13.0, it converts your existing library automatically: favorites, tags, play history, sources, and presets all come along. It happens once, and there's nothing to click.
+
+**Big libraries, way less waiting.** Importing a folder, scanning for duplicates or auto-tags, stats, random play, and every favorite, blacklist, or tag change now touch only what they need instead of the whole library. Browsing keeps responding while a big folder import runs, and a large import on desktop no longer gives up partway through.
+
+**Browsing that keeps up.** The desktop grid and the WebUI library both load a page at a time as you scroll, so desktop starts faster and huge libraries open right away. Favoriting, tagging, or playing something updates the tiles in place without jumping you back to the top. The WebUI library remembers where you were when you close and reopen it.
+
+**Refresh that keeps your work.** Every refresh stage saves as it finishes. Favorites, tags, and plays you change during a long refresh stick, and stopping the server keeps whatever refresh had already done. Thumbnails that still match their file get reused instead of rebuilt, and refresh no longer deletes thumbnails to stay under a limit.
+
+**Move your library with one file.** Export saves a copy of your library to any folder you pick. Import swaps it in, lets you point sources at new folders, and puts your old library back if anything goes wrong. Backups keep running on the same schedule.
+
+## Also in This Release
+
+- The tag editor closes the moment you hit Save and shows your new tags right away. If the save fails, your previous tags come back.
+- Renaming or deleting a tag also updates the filter you're using, including a saved preset.
+- The preset list is clearer: **None** sticks when you pick it, and a filter that doesn't match anything saved shows a star (like `YouTube*` or `None*`). Desktop remembers your choice across restarts.
+- OR tag filters read "any" on desktop, and presets with the same filter now match in both apps, including presets saved before this release.
+- Tags and categories show up in the same order on desktop and in the WebUI.
+- Reloading the WebUI in Firefox no longer leaves it stuck.
+- The current-file panel on desktop updates as soon as a file starts, instead of briefly showing the last file's stats.
+- Stopping the server mid-refresh ends cleanly instead of counting as a failure.
+
+## What's Coming
+
+- Accounts and a PIN, so one server can serve more than one person.
+- Control over who can see which sources.
+- Playback that remembers where you were and holds up better from start to finish.
+- An Android client, built on the same API foundation everything else already uses.
+- Continued UI polish across desktop, web, and Operator.
+
+## Verification
+
+Full build, test, and WebUI verify passed.
+<!-- TODO: manual validation -->
+
+## Notes
+
+- **Start v0.13.0 once before you upgrade further.** The next release drops the old library format and won't convert it anymore. If you're on v0.12.0 or earlier, start v0.13.0 at least once so your library gets converted, then keep upgrading.
+- **Your old library file stays put.** The conversion keeps your previous library file, renamed, next to the new one, so nothing is lost if you need it.
+- **Old exports won't import.** Exports made with v0.12.0 or earlier can't be imported into v0.13.0. To move a library from an older version, upgrade that machine to v0.13.0 first and export again.
+- **Refresh after an import.** Importing a library doesn't bring thumbnails along. Run a refresh afterward to rebuild them.
+- **Windows portable ZIP is gone.** Windows installs through `Setup.exe` only.
+
+---
+
 ## ReelRoulette v0.12.0 — Stay Current
 
 Install it once. Keep it current. Pick a reel from the grid — on the desktop or in the browser.

@@ -11,6 +11,20 @@ Write **[Unreleased]** bullets at the same level as the released sections below.
 
 ### Changed
 
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+
+---
+
+## [0.13.0] — Moving Day (2026-10-01)
+
+### Changed
+
 - **Library catalog on SQLite:** The server keeps the library in `library.db` instead of `library.json`, and migrates a leftover `library.json` once on first start. Presets and thumbnail details live in the catalog. Settings stay in `core-settings.json`. Backups save copies of `library.db` on the same schedule, and a refresh takes its backup after it finishes.
 - **Faster library actions on large libraries:** Folder import, auto-tag and duplicate scans, library stats, random and direct play, and favorite, blacklist, playback, and tag changes work with only the parts of the library they need instead of loading all of it. Library browse keeps responding while a folder is being imported.
 - **Library refresh:** Each refresh stage saves its work when it finishes, so favorite, tag, and playback changes made during a long refresh are kept, and stopping the server keeps the work already done. Thumbnails that still match their file are reused, and refresh no longer deletes thumbnails to stay under a count or size limit.
@@ -39,8 +53,6 @@ Write **[Unreleased]** bullets at the same level as the released sections below.
 - **Desktop — current file stats:** The current-file section updates when that file starts. A playback event that arrives first no longer leaves the previous file's stats on screen.
 - **WebUI — Firefox:** Reloading the page stays usable. The installable service worker proxies document loads only, so API calls and the event stream go straight to the server.
 - **Refresh shutdown:** Stopping the server cancels a library refresh that is still running. That stop is not recorded as a failure or a completed refresh, and a forced duration or loudness rescan stays pending.
-
-### Security
 
 ---
 
