@@ -19,13 +19,9 @@ Instructions:
 
 Commit Message:
 
-M10i20: Remove the client-authority sync routes and tagMatchMode
+Docs: Consolidate the [Unreleased] changelog for v0.13.0
 
-- Remove `POST /api/tag-editor/sync-catalog` and `POST /api/tag-editor/sync-item-tags` with their OpenAPI request schemas, regenerated WebUI types, desktop client methods, server operations and session methods, and tests. The `v0.12.0` check found no desktop or WebUI release that posted to them.
-- Remove `tagMatchMode` from the server, Core, desktop, and WebUI filter models, the hidden desktop radio buttons, and the WebUI mirror of the global mode. Preset matching on the server, desktop, and WebUI ignores it in saved preset text, so desktop and WebUI presets with the same OR filter match.
-- The desktop filter summary says "all" or "any" from the global match mode instead of always "all".
-- Reopening the desktop filter dialog on a starred preset enables Update Preset. Update uses the same comparison as the `Preset:` heading instead of a flag that only control changes set.
-- Preset matching on the server, desktop, and WebUI treats an unset global match mode as AND, so switching it away and back clears the `*` and the pending Apply, and presets saved with it unset match across apps. The desktop and WebUI filter dialogs compare Apply with their opening filter the same way, and the desktop compares its preset list by name, order, and that same filter comparison instead of raw JSON.
-- Desktop tests use a temporary settings folder and no server log relay, and drive the real filter dialog with `Avalonia.Headless`.
-- Remove `ReplaceTagCatalog` and the desktop `SameFilterSnapshot`, which had no production caller.
-- Add tests for saved presets and desktop settings that still carry `tagMatchMode` and for the summary, and sync the changelog, current-state docs, testing checklist, and milestone.
+- Rewrite the [Unreleased] Changed bullets to the changelog style note: one user-visible outcome per bullet, related library work combined, implementation detail dropped. Clauses that differ from v0.12.0 stay.
+- Record the passing Windows CI run in the client-authority sync routes removal evidence.
+- Add a backlog item for the desktop filter dialog keeping Update Preset enabled after the active preset is deleted.
+- Correct the refresh comment about a fingerprint with no status, which no release writes.

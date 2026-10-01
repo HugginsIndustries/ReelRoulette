@@ -825,7 +825,7 @@ public sealed class RefreshPipelineService : BackgroundService
             return true;
         }
 
-        // Legacy rows may carry a fingerprint without fingerprintStatus; do not rehash unless status is explicit.
+        // The app always writes a status with a fingerprint; if one is missing, do not rehash unless status is explicit.
         if (item.FingerprintStatus is null)
         {
             return false;

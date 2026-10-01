@@ -1234,6 +1234,24 @@ Last milestone completed: M10i20
 - **Deferrals / Follow-ups**:
   - None yet.
 
+### P11 - Desktop Filter Dialog Update Preset After Preset Delete
+
+- **Status**: ⏳ Planned
+- **Goal**: Deleting the active preset in the desktop filter dialog disables **Update Preset**.
+- **Scope**:
+  - In the desktop filter dialog, **Update Preset** can stay enabled after the active preset is deleted from the preset list, although no saved preset is left to update.
+  - Found during review of the client-authority sync routes removal. The behavior existed before that work.
+  - Likely cause, not confirmed: `DeletePresetButton_Click` clears the active preset name and refreshes the heading and pending state, but does not raise the `CanUpdatePreset` change notification.
+  - The WebUI filter dialog has no Update Preset gate, so it is out of scope.
+- **Acceptance criteria**:
+  - After deleting the active preset while the heading shows a starred preset, **Update Preset** is disabled and the heading shows **None** or `None*`.
+  - Deleting a preset that is not active leaves **Update Preset** as it was.
+  - A headless desktop filter dialog test covers deleting the active starred preset and fails without the fix.
+- **Verification evidence**:
+  - Completion evidence must include the failing test before the fix and passing after it.
+- **Deferrals / Follow-ups**:
+  - None yet.
+
 ---
 
 ## Completed Milestones
@@ -1283,6 +1301,7 @@ Latest completions first:
   - `v0.12.0` tag check: `git grep` at `v0.12.0` finds `/api/tag-editor/sync` only in the desktop `SyncTagCatalogAsync` and `SyncItemTagsAsync` definitions, which nothing calls, and in generated WebUI types. No v0.12.0 desktop or WebUI code posts to either route. The version gate does let a v0.12.0 client connect: v0.12.0 and this release both report API version `1`, minimum compatible `0`, and supported `["1","0"]`, and the WebUI's required capabilities are still offered. Removal proceeds because no client posted to either route.
   - `tagMatchMode` at `v0.12.0`: both clients send it. The v0.12.0 desktop and WebUI filter with it only in their client-side legacy tag filter for a catalog with no categories, which a catalog the app writes cannot reach. The v0.12.0 desktop filter summary also reads it, and the v0.12.0 WebUI derives it from `globalMatchMode`. The server reads named fields from the `filterState` JSON, so an extra field is ignored. A v0.12.0 client that reads a preset without the field falls back to AND.
   - `dotnet build ReelRoulette.sln` (0 errors, 0 warnings) and `dotnet test ReelRoulette.sln` passed: 137 desktop tests and 265 core tests. `dotnet run --project src/core/ReelRoulette.Core.SystemChecks -- --verbose` passed and exited 0.
+  - CI run 36847737031 (`ci.yml`, push to `main` at `1b4c82e`) completed with success, including the `build-test-windows` job.
   - `npm run generate:contracts` removed only lines from `openapi.generated.ts`. `npm run verify` in `src/clients/web/ReelRoulette.WebUI` passed: contracts up to date, typecheck, 133 tests, build, and build output check.
   - The route and session removals leave no reference in `src/` to the routes, `SyncTagCatalog`, `SyncItemTags`, `ApplySyncedTagCatalog`, `CatalogItemTagAssignment`, `ReplaceTagCatalog`, or the private helpers only they called. `EveryCatalogWritePath_KeepsUncategorized` keeps the new-catalog, category upsert, and Uncategorized delete-refusal checks. Its sync and replace steps went with those paths, which were the only writers that cleared the category table. WebUI tag save still posts `apply-item-tags` (`tagSave.ts`, `app.js`, `tagSave.test.ts`).
   - `TryMatchPreset_IgnoresTagMatchModeInSavedPresetText` (server), `SavedPresetTextWithTagMatchMode_MatchesTheSameFilter` (desktop), and the WebUI `filterStateModel` test match saved preset text that carries `tagMatchMode`. Putting the projection comparison back made all three server cases fail. Putting the field back on the desktop `FilterState` made both desktop cases fail. Keeping the field in the WebUI parser and serializer made the WebUI test fail. Each change was reverted.
