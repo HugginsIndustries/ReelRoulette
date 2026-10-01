@@ -19,6 +19,9 @@ Instructions:
 
 Commit Message:
 
-Bugfix: Make the case-only source remap test pass on Windows
+Docs: Plan the rest of the v0.13.0 JSON-era cleanup
 
-- The fixture roots live under the test directory, so the remapped clip path is the one the test asserts.
+- v0.13.0 keeps the one-time library.json startup migration and removes the other JSON-era leftovers.
+- The leftovers milestone also drops the unused item-tag sync stub, the desktop item list, the local filter builder, and the unused grid-view setting.
+- The unread server tag and item cache comes out next. Removing the client-authority sync routes is the last v0.13.0 milestone, after a v0.12.0 compatibility check.
+- Removing library.json support in v0.14.0 follows that milestone and deletes PrepareIncomingFromJson with the importer.

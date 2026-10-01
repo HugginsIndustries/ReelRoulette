@@ -97,26 +97,90 @@ Last milestone completed: M10i17
 - **Goal**: Remove JSON-era library code that does not read `library.json`, while v0.13.0 still migrates a leftover `library.json`. Import does not accept a `library.json` archive.
 - **Scope**:
   - Depends on: catalog document removal.
-  - This is the last milestone in the v0.13.0 release. It does not depend on the document work itself. It follows that milestone so v0.13.0 ends here.
+  - This follows catalog document removal. It does not depend on the document work itself. Dropping the unread server tag and item cache follows this milestone. Removing the client-authority sync routes is the last milestone in the v0.13.0 release.
   - Remove the unused library-index file store. Settings JSON storage stays for core settings and desktop settings. Presets and thumbnail metadata are already in the catalog.
-  - Remove the verification-only in-memory tag mutator and the verification check that only exists to call it. The rest of that verification stays.
-  - Remove the empty desktop tag-catalog sync method.
+  - Remove the verification-only in-memory tag mutator and the verification check that only exists to call it. Remove `FilterSetBuilder` and the verification check that only exists to call it. The rest of that verification stays.
+  - Remove the empty desktop tag-catalog sync method and the empty desktop item-tag sync method `SyncRequestedItemTagsToCore`.
   - Remove every server state method whose body only throws because mutation authority moved. Live routes stay on library operations.
   - Remove the desktop check that treats a full-catalog projection route as a live read, and the test that expects that route to count as one. That route is already gone.
-  - The desktop library model drops the legacy flat tag list and the fingerprint index. The filter dialog drops the branch that reads that flat list, and the collection that only that branch fills.
+  - The desktop library model drops the legacy flat tag list, the fingerprint index, and `LibraryIndex.Items`. Sources, categories, and tags on that model stay. The filter dialog drops the branch that reads that flat list, and the collection that only that branch fills.
+  - Remove the unused desktop setting `LibraryGridViewEnabled`.
   - Comments that are not describing startup migration no longer mention `library.json`. Current-state docs that describe that migration still do.
-  - Update the testing checklist where those leftovers were described.
+  - Update the testing checklist line that says the filter dialog Tags tab shows per-category collapse toggles and the legacy flat tag model renders correctly. Update the checklist where the other leftovers were described.
+  - Fix the `CONTEXT.md` repository map sentence that calls `ReelRoulette.LibraryArchive` zip export/import helpers. That project imports and exports a `library.db` checkpoint.
 - **Acceptance criteria**:
-  - The unused library-index file store, the verification-only tag mutator, the empty desktop tag-catalog sync method, and the throw-only server state methods are gone. Core settings and desktop settings JSON storage is unchanged.
-  - The desktop library model has no legacy flat tag list and no fingerprint index. The filter dialog does not read a flat tag list.
+  - The unused library-index file store, the verification-only tag mutator, `FilterSetBuilder` and its verification check, the empty desktop tag-catalog sync method, `SyncRequestedItemTagsToCore`, and the throw-only server state methods are gone. Core settings and desktop settings JSON storage is unchanged. The rest of that verification stays.
+  - The desktop library model has no legacy flat tag list, no fingerprint index, and no item list. Sources, categories, and tags on that model stay. The filter dialog does not read a flat tag list.
+  - `LibraryGridViewEnabled` is gone. An existing desktop settings file containing `libraryGridViewEnabled` still loads.
   - A full-catalog projection route is not treated as a live library read.
   - Comments that are not about startup migration do not mention `library.json`.
+  - The testing checklist no longer says the legacy flat tag model renders correctly. `CONTEXT.md` does not call `ReelRoulette.LibraryArchive` zip export/import helpers.
   - Startup still migrates a leftover `library.json`. Import Library does not accept a `library.json` archive.
 - **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include a build and tests after those types, methods, desktop fields, and comments are removed, and a test that startup still migrates `library.json`.
-  - Docs evidence must include checklist updates where those leftovers were described. Current-state docs still describe startup migration of a leftover `library.json`.
+  - Evidence placeholders maintained at planned state; completion evidence must include a build and tests after those types, methods, desktop fields, and comments are removed, a test that a desktop settings file containing `libraryGridViewEnabled` still loads, and a test that startup still migrates `library.json`.
+  - Docs evidence must include the checklist update for the legacy flat tag model line, the other checklist updates where those leftovers were described, and the `CONTEXT.md` repository map correction for `ReelRoulette.LibraryArchive`. Current-state docs still describe startup migration of a leftover `library.json`.
 - **Deferrals / Follow-ups**:
+  - Dropping the unread server tag and item cache is the next milestone, still in v0.13.0.
+  - Removing the client-authority sync routes ends the v0.13.0 release.
   - Removing `library.json` file recognition and the JSON-to-SQLite importer ships in v0.14.0.
+  - Scrubbing every remaining `library.json` mention from product code, comments, user-facing copy, tests, and current-state docs follows that format removal.
+  - Renaming `LibraryProjectionItem` and the WebUI `libraryProjection*` modules is not planned.
+  - Account and PIN tables stay with the account and PIN data model work.
+
+### M10i19 - Drop the Unread Server Tag and Item Cache
+
+- **Status**: ⏳ Planned
+- **Goal**: Stop loading a server-side tag and item cache that no live route reads, while v0.13.0 still migrates a leftover `library.json`.
+- **Scope**:
+  - Depends on: JSON-era leftovers that do not serve migration.
+  - This ships in v0.13.0. Removing the client-authority sync routes follows this milestone and is the last milestone in that release.
+  - Remove the server startup bootstrap of categories, tags, item tags, favorites, and blacklist.
+  - Remove the readers that serve only that cache, and the private helpers that exist only to fill or read it.
+  - The source list, source enable/disable, and the preset cache stay. `GET /api/sources` still reads the startup source list.
+  - The startup test still checks sources loaded from SQL. It no longer reads categories, tags, item tags, favorites, or blacklist from server state.
+- **Acceptance criteria**:
+  - Server startup does not load categories, tags, item tags, favorites, or blacklist into server state.
+  - The readers and private helpers that served only that cache are gone.
+  - The source list, source enable/disable, and the preset cache stay. `GET /api/sources` still reads the startup source list.
+  - No API route, control-plane endpoint, Operator UI path, tray path, or SSE event builder reads the removed state.
+  - The startup test still checks sources loaded from SQL.
+  - Startup still migrates a leftover `library.json`.
+- **Verification evidence**:
+  - Evidence placeholders maintained at planned state; completion evidence must include a build and tests, a search showing no API route, control-plane endpoint, Operator UI path, tray path, or SSE event builder reads the removed state, and the startup test still checking sources loaded from SQL.
+  - Completion evidence must include a test that startup still migrates `library.json`.
+- **Deferrals / Follow-ups**:
+  - Removing the client-authority sync routes is the next milestone and ends the v0.13.0 release.
+  - Source import does not refresh the in-memory source list that `GET /api/sources` reads. That list stays filled at startup.
+  - The JSON reader, the side-file copy, the import check and retire-aside for a leftover `library.json`, refuse strings, and the tests that seed through `library.json` stay until removal of `library.json` library support.
+  - Account and PIN tables stay with the account and PIN data model work.
+
+### M10i20 - Remove Client-Authority Sync Routes
+
+- **Status**: ⏳ Planned
+- **Goal**: Remove the unused client-authority tag sync routes so v0.13.0 no longer offers a client-held catalog sync, after checking whether a v0.12.0 client still needs them.
+- **Scope**:
+  - Depends on: dropping the unread server tag and item cache.
+  - This is the last milestone in the v0.13.0 release.
+  - Before removal, check at the `v0.12.0` tag whether a v0.12.0 desktop or WebUI posted to `POST /api/tag-editor/sync-catalog` or `POST /api/tag-editor/sync-item-tags`, and whether the version/capability gate lets a v0.12.0 client connect to a v0.13.0 server. If both are true, stop. This milestone is a compatibility decision to bring back, and the routes stay until that decision.
+  - Remove `POST /api/tag-editor/sync-catalog` and `POST /api/tag-editor/sync-item-tags`.
+  - Remove their OpenAPI request schemas and the generated WebUI types for those routes. The shared tag snapshot schemas stay.
+  - Remove the desktop client methods and request types for those routes.
+  - Remove the server operations methods and session methods that exist for those routes, and the tests that call them.
+  - WebUI tag save still goes through apply-item-tags after the regenerated types.
+  - Current-state docs and the testing checklist no longer describe these routes. Completed milestone entries stay as written.
+- **Acceptance criteria**:
+  - The `v0.12.0` tag check is recorded. Removal proceeds when a v0.12.0 desktop or WebUI did not post to either route, or when the version/capability gate does not let a v0.12.0 client connect to a v0.13.0 server.
+  - When both are true, the routes stay and this milestone stops for a compatibility decision.
+  - `POST /api/tag-editor/sync-catalog` and `POST /api/tag-editor/sync-item-tags` are gone, along with their OpenAPI request schemas, generated WebUI types, desktop client methods and request types, server operations methods, session methods, and tests.
+  - The shared tag snapshot schemas stay.
+  - WebUI tag save still goes through apply-item-tags after the regenerated types.
+  - Current-state docs and the testing checklist do not describe these routes.
+  - Startup still migrates a leftover `library.json`.
+- **Verification evidence**:
+  - Evidence placeholders maintained at planned state; completion evidence must include the `v0.12.0` tag check, a build and tests after the routes and generated types are removed, and WebUI tag save still going through apply-item-tags.
+  - Docs evidence must include current-state docs and checklist updates that no longer describe these routes. Completed milestone entries stay as written.
+- **Deferrals / Follow-ups**:
+  - Removing `library.json` file recognition and the JSON-to-SQLite importer, including `PrepareIncomingFromJson`, ships in v0.14.0. The import check and retire-aside for a leftover `library.json` stay until that removal.
   - Scrubbing every remaining `library.json` mention from product code, comments, user-facing copy, tests, and current-state docs follows that format removal.
   - Account and PIN tables stay with the account and PIN data model work.
 
@@ -125,10 +189,10 @@ Last milestone completed: M10i17
 - **Status**: ⏳ Planned
 - **Goal**: Remove `library.json` as a library format in v0.14.0 so startup no longer migrates or recovers a catalog from JSON, and the JSON-to-SQLite importer is gone. Import already does not accept a `library.json` archive.
 - **Scope**:
-  - Depends on: JSON-era leftovers that do not serve migration.
-  - This milestone ships in v0.14.0. Those leftovers are the last milestone in the v0.13.0 release.
+  - Depends on: removal of the client-authority sync routes.
+  - This milestone ships in v0.14.0. Removing those routes is the last milestone in the v0.13.0 release.
   - Startup does not look for `library.json` or `library.json.migrated`. Those files do not change open, refuse, or empty-catalog behavior. A missing `library.db` creates an empty catalog with SQL, not by parsing an empty document. A healthy `library.db` opens. A corrupt `library.db` is quarantined and startup refuses with the same result it uses when those files are absent. They are not read, not a restore path, and not deleted. Startup and user-facing strings do not mention either file.
-  - Delete the JSON-to-SQLite importer. Tests build a catalog in `library.db`. They do not write `library.json` to create one.
+  - Delete the JSON-to-SQLite importer, including `PrepareIncomingFromJson`. Tests build a catalog in `library.db`. They do not write `library.json` to create one.
   - Deleting that importer does not remove the schema 1 to schema 2 migration. A schema 1 database still migrates on open. A missing database is created empty at schema version 2 and does not read `presets.json` or the thumbnail index.
   - Import already has no `library.json` path and no zip. A file that is not a library database is rejected. A `.db` import still remaps sources. Export and catalog backups stay on `library.db`.
   - Update current-state docs and the testing checklist to say `library.json` library support is removed.
@@ -136,7 +200,7 @@ Last milestone completed: M10i17
   - Startup does not migrate `library.json` and does not rebuild a catalog from `library.json.migrated`.
   - A missing `library.db` creates an empty healthy `library.db` whether or not `library.json` or `library.json.migrated` is present. Those files are left in place and are not read. The empty database is created with SQL.
   - A healthy `library.db` opens. A corrupt `library.db` is quarantined and startup refuses the same way whether or not those JSON files are present, and it is not repaired from them.
-  - There is no JSON-to-SQLite importer. A schema 1 database still migrates to schema version 2 on open. A missing database does not read `presets.json` or the thumbnail index.
+  - There is no JSON-to-SQLite importer and no `PrepareIncomingFromJson`. A schema 1 database still migrates to schema version 2 on open. A missing database does not read `presets.json` or the thumbnail index.
   - There is no `library.json` import path and no deprecation message for that format. A `.db` import still remaps sources.
   - A file that is not a library database is not imported, including a file that used to be a `library.json` archive. Import does not replace the live catalog.
   - Startup messages and user-facing copy do not mention `library.json` or `library.json.migrated`.
