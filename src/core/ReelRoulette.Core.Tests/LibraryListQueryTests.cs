@@ -249,7 +249,6 @@ public sealed class LibraryListQueryTests
     {
         using var dir = new TempDirectory();
         var session = Open(dir);
-        var builds = session.DocumentBuilds;
         session.InsertSource("on", "/media", "On", true);
         session.InsertSource("off", "/other", "Off", false);
         session.UpsertCategory("people", "People", 1);
@@ -291,7 +290,6 @@ public sealed class LibraryListQueryTests
 
         var eligiblePhotos = session.QueryEligible(filter, MediaTypeValue.Photo);
         Assert.Equal("photo", Assert.Single(eligiblePhotos).Id);
-        Assert.Equal(builds, session.DocumentBuilds);
     }
 
     [Fact]
@@ -304,7 +302,6 @@ public sealed class LibraryListQueryTests
         Add(session, "keep", "on", "keep.mp4", "keep.mp4", duration: TimeSpan.FromSeconds(12));
         Add(session, "hidden", "off", "hidden.mp4", "hidden.mp4");
         Add(session, "ghost", "ghost", "ghost.mp4", "ghost.mp4");
-        var builds = session.DocumentBuilds;
 
         var byId = session.ReadPlaybackItem("KEEP");
         Assert.NotNull(byId);
@@ -318,7 +315,6 @@ public sealed class LibraryListQueryTests
         Assert.False(session.ReadPlaybackItem("hidden")!.IsSourceEnabled);
         Assert.True(session.ReadPlaybackItem("ghost")!.IsSourceEnabled);
         Assert.Null(session.ReadPlaybackItem("missing"));
-        Assert.Equal(builds, session.DocumentBuilds);
     }
 
     [Fact]
@@ -483,7 +479,6 @@ public sealed class LibraryListQueryTests
         Assert.True(session.SetLoudness("silent", false, -8.0, null, null));
         Assert.True(session.SetLoudness("disabled", true, -16.0, null, null));
 
-        var builds = session.DocumentBuilds;
         var stats = session.ReadLibraryStats();
         Assert.Equal(-16.0, stats.Global.BaselineLoudnessLufs);
 
@@ -501,10 +496,8 @@ public sealed class LibraryListQueryTests
         var byPath = session.ReadListedItem("/MEDIA/keep.mp4");
         Assert.Equal("keep", byPath!.Id);
         Assert.Null(session.ReadListedItem("missing"));
-        Assert.Equal(builds, session.DocumentBuilds);
 
         var host = LibraryCatalogHost.Open(dir.Path, Path.Combine(dir.Path, "thumbnails"));
-        var hostBuilds = host.Session.DocumentBuilds;
         var operations = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, dir.Path, host);
         var item = operations.ReadLibraryItem("keep");
         Assert.NotNull(item);
@@ -516,7 +509,6 @@ public sealed class LibraryListQueryTests
         Assert.Null(operations.ReadLibraryItem("  "));
         var serviceStats = operations.GetLibraryStats();
         Assert.Equal(-16.0, serviceStats.Global.BaselineLoudnessLufs);
-        Assert.Equal(hostBuilds, host.Session.DocumentBuilds);
     }
 
     private static RefreshPipelineService CreateRefresh(string appData)

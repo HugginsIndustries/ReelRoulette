@@ -855,6 +855,40 @@ public sealed class LibraryCatalogStoreTests
     }
 
     [Fact]
+    public void InspectCatalogFile_RejectsALibraryJsonDocument()
+    {
+        using var dir = new TempDirectory();
+        var path = Path.Combine(dir.Path, "library.json");
+        File.WriteAllText(path, """{"sources":[{"id":"s1","rootPath":"/from"}],"items":[{"id":"clip","fullPath":"/from/clip.mp4"}]}""");
+        Assert.Equal(LibraryCatalogStore.CatalogFileInspection.NotADatabase, LibraryCatalogStore.InspectCatalogFile(path));
+        Assert.Equal(LibraryCatalogStore.DatabaseContentRead.Unreadable, LibraryCatalogStore.ReadDatabaseContent(path));
+    }
+
+    [Fact]
+    public void RemapSources_StoresACaseOnlyRootChange()
+    {
+        using var dir = new TempDirectory();
+        File.WriteAllText(Path.Combine(dir.Path, "library.json"), """
+            {
+              "sources": [ { "id": "src-1", "rootPath": "/Media", "isEnabled": true } ],
+              "items": [ { "id": "item-1", "sourceId": "src-1", "fullPath": "/Media/clip.mp4", "relativePath": "clip.mp4", "fileName": "clip.mp4" } ]
+            }
+            """);
+        var opened = CatalogOpen.Open(dir.Path);
+        var result = LibraryCatalogStore.RemapSources(
+            opened.Session!.DatabasePath,
+            new Dictionary<string, string> { ["/Media"] = "/media" },
+            new HashSet<string>());
+
+        Assert.True(result.Success);
+        var stored = LibraryCatalogStore.Read(opened.Session.DatabasePath);
+        Assert.Equal("/media", Assert.Single(stored.Sources).RootPath);
+        var item = Assert.Single(stored.Items);
+        Assert.Equal("/media/clip.mp4", item.FullPath);
+        Assert.Equal("clip.mp4", item.RelativePath);
+    }
+
+    [Fact]
     public void WriteCheckpoint_DeletesDestinationWhenTheCopyFails()
     {
         using var dir = new TempDirectory();

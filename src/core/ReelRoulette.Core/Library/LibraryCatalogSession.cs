@@ -15,7 +15,6 @@ public sealed class LibraryCatalogSession
 
     private readonly string _databasePath;
     private readonly AsyncLocal<WriteScope?> _writeScope = new();
-    private int _documentBuilds;
 
     public LibraryCatalogSession(string databasePath)
     {
@@ -27,8 +26,6 @@ public sealed class LibraryCatalogSession
 
     public Action? AfterSuccessfulWrite { get; set; }
 
-    public int DocumentBuilds => _documentBuilds;
-
     public long Revision
     {
         get
@@ -39,20 +36,6 @@ public sealed class LibraryCatalogSession
             var value = command.ExecuteScalar() as string;
             return long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var revision) ? revision : 0;
         }
-    }
-
-    public JsonObject BuildDocument()
-    {
-        Interlocked.Increment(ref _documentBuilds);
-        var catalog = LibraryCatalogStore.Read(_databasePath);
-        var root = new JsonObject
-        {
-            ["sources"] = new JsonArray(catalog.Sources.Select(ToSource).ToArray()),
-            ["items"] = new JsonArray(catalog.Items.Select(ToItem).ToArray()),
-            ["categories"] = new JsonArray(catalog.Categories.Select(ToCategory).ToArray()),
-            ["tags"] = new JsonArray(catalog.Tags.Select(ToTag).ToArray())
-        };
-        return root;
     }
 
     public LibraryListResult QueryList(LibraryListRequest request)
@@ -468,6 +451,104 @@ public sealed class LibraryCatalogSession
         }
 
         return sources;
+    }
+
+    public CatalogStartupState ReadStartupState()
+    {
+        using var connection = LibraryCatalogStore.OpenWrite(_databasePath);
+        var sources = new List<LibraryCatalogSource>();
+        using (var command = connection.CreateCommand())
+        {
+            command.CommandText = "SELECT id, root_path, display_name, is_enabled FROM sources ORDER BY position;";
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                sources.Add(new LibraryCatalogSource
+                {
+                    Id = reader.GetString(0),
+                    RootPath = reader.GetString(1),
+                    DisplayName = reader.IsDBNull(2) ? null : reader.GetString(2).Trim(),
+                    IsEnabled = reader.GetInt32(3) != 0
+                });
+            }
+        }
+
+        var categories = new List<LibraryCatalogCategory>();
+        using (var command = connection.CreateCommand())
+        {
+            command.CommandText = "SELECT id, name, sort_order FROM categories ORDER BY position;";
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                categories.Add(new LibraryCatalogCategory
+                {
+                    Id = reader.GetString(0),
+                    Name = reader.GetString(1),
+                    SortOrder = reader.GetInt32(2)
+                });
+            }
+        }
+
+        var tags = new List<LibraryCatalogTag>();
+        using (var command = connection.CreateCommand())
+        {
+            command.CommandText = "SELECT name, name_fold, category_id FROM tags ORDER BY position;";
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                tags.Add(new LibraryCatalogTag
+                {
+                    Name = reader.GetString(0),
+                    NameFold = reader.GetString(1),
+                    CategoryId = reader.GetString(2)
+                });
+            }
+        }
+
+        var items = new List<CatalogStartupItem>();
+        var itemsByPath = new Dictionary<string, CatalogStartupItem>(StringComparer.Ordinal);
+        using (var command = connection.CreateCommand())
+        {
+            command.CommandText = "SELECT full_path, is_favorite, is_blacklisted FROM items ORDER BY position;";
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                var item = new CatalogStartupItem
+                {
+                    FullPath = reader.GetString(0),
+                    IsFavorite = reader.GetInt64(1) != 0,
+                    IsBlacklisted = reader.GetInt64(2) != 0
+                };
+                items.Add(item);
+                itemsByPath[item.FullPath] = item;
+            }
+        }
+
+        using (var command = connection.CreateCommand())
+        {
+            command.CommandText = """
+                SELECT items.full_path, item_tags.name
+                FROM item_tags
+                INNER JOIN items ON items.id = item_tags.item_id
+                ORDER BY items.position, item_tags.position;
+                """;
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                if (itemsByPath.TryGetValue(reader.GetString(0), out var item))
+                {
+                    item.Tags.Add(reader.GetString(1));
+                }
+            }
+        }
+
+        return new CatalogStartupState
+        {
+            Sources = sources,
+            Categories = categories,
+            Tags = tags,
+            Items = items
+        };
     }
 
     public IReadOnlyList<CatalogRefreshItem> ReadRefreshItems()
@@ -1507,6 +1588,98 @@ public sealed class LibraryCatalogSession
         });
     }
 
+    public bool ApplySyncedTagCatalog(IReadOnlyList<LibraryCatalogCategory> categories, IReadOnlyList<LibraryCatalogTag> tags)
+    {
+        ArgumentNullException.ThrowIfNull(categories);
+        ArgumentNullException.ThrowIfNull(tags);
+        return Commit((connection, transaction) =>
+        {
+            var currentCategories = ReadCategoryList(connection, transaction);
+            var currentTags = ReadTagList(connection, transaction);
+            if (SyncedTagCatalogMatches(currentCategories, currentTags, categories, tags))
+            {
+                return false;
+            }
+
+            var desiredFolds = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var tag in tags)
+            {
+                desiredFolds.Add(LibraryCatalogStore.Fold(tag.Name));
+            }
+
+            var removedFolds = new List<string>();
+            foreach (var tag in currentTags)
+            {
+                if (!desiredFolds.Contains(tag.NameFold))
+                {
+                    removedFolds.Add(tag.NameFold);
+                }
+            }
+
+            LibraryCatalogStore.Execute(connection, transaction, "DELETE FROM categories;");
+            LibraryCatalogStore.Execute(connection, transaction, "DELETE FROM tags;");
+            for (var index = 0; index < categories.Count; index++)
+            {
+                var category = categories[index];
+                LibraryCatalogStore.Execute(
+                    connection,
+                    transaction,
+                    "INSERT INTO categories (id, position, name, sort_order) VALUES ($id, $position, $name, $sort);",
+                    ("$id", category.Id),
+                    ("$position", index),
+                    ("$name", category.Name),
+                    ("$sort", category.SortOrder));
+            }
+
+            for (var index = 0; index < tags.Count; index++)
+            {
+                var tag = tags[index];
+                LibraryCatalogStore.Execute(
+                    connection,
+                    transaction,
+                    "INSERT INTO tags (position, name, name_fold, category_id) VALUES ($position, $name, $fold, $category);",
+                    ("$position", index),
+                    ("$name", tag.Name),
+                    ("$fold", LibraryCatalogStore.Fold(tag.Name)),
+                    ("$category", tag.CategoryId));
+            }
+
+            foreach (var tag in tags)
+            {
+                var fold = LibraryCatalogStore.Fold(tag.Name);
+                LibraryCatalogStore.Execute(
+                    connection,
+                    transaction,
+                    "UPDATE item_tags SET name = $name WHERE name_fold = $fold AND name != $name;",
+                    ("$name", tag.Name),
+                    ("$fold", fold));
+                LibraryCatalogStore.Execute(
+                    connection,
+                    transaction,
+                    """
+                    DELETE FROM item_tags
+                    WHERE name_fold = $fold
+                      AND position > (
+                        SELECT MIN(keep.position)
+                        FROM item_tags AS keep
+                        WHERE keep.item_id = item_tags.item_id AND keep.name_fold = item_tags.name_fold);
+                    """,
+                    ("$fold", fold));
+            }
+
+            foreach (var fold in removedFolds.Distinct(StringComparer.Ordinal))
+            {
+                LibraryCatalogStore.Execute(
+                    connection,
+                    transaction,
+                    "DELETE FROM item_tags WHERE name_fold = $fold;",
+                    ("$fold", fold));
+            }
+
+            return true;
+        });
+    }
+
     public bool AddItemTags(string itemId, IReadOnlyList<string> tags)
     {
         var names = DistinctTagNames(tags);
@@ -1592,6 +1765,45 @@ public sealed class LibraryCatalogSession
             WriteItemTags(connection, transaction, itemId, names);
             return true;
         });
+    }
+
+    public bool SyncItemTags(IReadOnlyList<CatalogItemTagAssignment> items)
+    {
+        ArgumentNullException.ThrowIfNull(items);
+        var matched = false;
+        RunInTransaction(() =>
+        {
+            var scope = _writeScope.Value ?? throw new InvalidOperationException("Item tag sync requires a catalog transaction.");
+            foreach (var item in items)
+            {
+                if (string.IsNullOrWhiteSpace(item.ItemId))
+                {
+                    continue;
+                }
+
+                var id = ResolveItemId(scope.Connection, scope.Transaction, item.ItemId);
+                if (id == null)
+                {
+                    continue;
+                }
+
+                matched = true;
+                var desired = DistinctTagNames(item.Tags);
+                var current = ReadItemTagsInStoredOrder(scope.Connection, scope.Transaction, id);
+                if (current.SequenceEqual(desired, StringComparer.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                Commit((connection, transaction) =>
+                {
+                    LibraryCatalogStore.Execute(connection, transaction, "DELETE FROM item_tags WHERE item_id = $item;", ("$item", id));
+                    WriteItemTags(connection, transaction, id, desired);
+                    return true;
+                });
+            }
+        });
+        return matched;
     }
 
     public CatalogTagEditorRead ReadTagEditor(IReadOnlyList<string>? identifiers)
@@ -1989,6 +2201,108 @@ public sealed class LibraryCatalogSession
 
         tags.Sort(StringComparer.OrdinalIgnoreCase);
         return tags;
+    }
+
+    private static List<string> ReadItemTagsInStoredOrder(SqliteConnection connection, SqliteTransaction transaction, string itemId)
+    {
+        using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = "SELECT name FROM item_tags WHERE item_id = $item ORDER BY position;";
+        command.Parameters.AddWithValue("$item", itemId);
+        using var reader = command.ExecuteReader();
+        var tags = new List<string>();
+        while (reader.Read())
+        {
+            tags.Add(reader.GetString(0));
+        }
+
+        return tags;
+    }
+
+    private static List<LibraryCatalogCategory> ReadCategoryList(SqliteConnection connection, SqliteTransaction transaction)
+    {
+        using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = "SELECT id, name, sort_order FROM categories ORDER BY position;";
+        using var reader = command.ExecuteReader();
+        var categories = new List<LibraryCatalogCategory>();
+        while (reader.Read())
+        {
+            categories.Add(new LibraryCatalogCategory
+            {
+                Id = reader.GetString(0),
+                Name = reader.GetString(1),
+                SortOrder = reader.GetInt32(2)
+            });
+        }
+
+        return categories;
+    }
+
+    private static List<LibraryCatalogTag> ReadTagList(SqliteConnection connection, SqliteTransaction transaction)
+    {
+        using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = "SELECT name, name_fold, category_id FROM tags ORDER BY position;";
+        using var reader = command.ExecuteReader();
+        var tags = new List<LibraryCatalogTag>();
+        while (reader.Read())
+        {
+            tags.Add(new LibraryCatalogTag
+            {
+                Name = reader.GetString(0),
+                NameFold = reader.GetString(1),
+                CategoryId = reader.GetString(2)
+            });
+        }
+
+        return tags;
+    }
+
+    private static bool SyncedTagCatalogMatches(
+        IReadOnlyList<LibraryCatalogCategory> currentCategories,
+        IReadOnlyList<LibraryCatalogTag> currentTags,
+        IReadOnlyList<LibraryCatalogCategory> categories,
+        IReadOnlyList<LibraryCatalogTag> tags)
+    {
+        if (currentCategories.Count != categories.Count || currentTags.Count != tags.Count)
+        {
+            return false;
+        }
+
+        var categoriesById = new Dictionary<string, LibraryCatalogCategory>(StringComparer.OrdinalIgnoreCase);
+        foreach (var category in currentCategories)
+        {
+            categoriesById[category.Id] = category;
+        }
+
+        foreach (var category in categories)
+        {
+            if (!categoriesById.TryGetValue(category.Id, out var stored) ||
+                !string.Equals(stored.Name, category.Name, StringComparison.Ordinal) ||
+                stored.SortOrder != category.SortOrder)
+            {
+                return false;
+            }
+        }
+
+        var tagsByFold = new Dictionary<string, LibraryCatalogTag>(StringComparer.Ordinal);
+        foreach (var tag in currentTags)
+        {
+            tagsByFold[tag.NameFold] = tag;
+        }
+
+        foreach (var tag in tags)
+        {
+            if (!tagsByFold.TryGetValue(LibraryCatalogStore.Fold(tag.Name), out var stored) ||
+                !string.Equals(stored.Name, tag.Name, StringComparison.Ordinal) ||
+                !string.Equals(stored.CategoryId, tag.CategoryId, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private bool Commit(Func<SqliteConnection, SqliteTransaction, bool> mutate)
@@ -2527,22 +2841,6 @@ public sealed class LibraryCatalogSession
         };
     }
 
-    private static JsonObject ToSource(LibraryCatalogSource source)
-    {
-        var node = new JsonObject
-        {
-            ["id"] = source.Id,
-            ["rootPath"] = source.RootPath,
-            ["isEnabled"] = source.IsEnabled
-        };
-        if (source.DisplayName != null)
-        {
-            node["displayName"] = source.DisplayName;
-        }
-
-        return node;
-    }
-
     private static JsonObject ToItem(LibraryCatalogItem item)
     {
         var node = new JsonObject
@@ -2616,25 +2914,6 @@ public sealed class LibraryCatalogSession
         }
 
         return node;
-    }
-
-    private static JsonObject ToCategory(LibraryCatalogCategory category)
-    {
-        return new JsonObject
-        {
-            ["id"] = category.Id,
-            ["name"] = category.Name,
-            ["sortOrder"] = category.SortOrder
-        };
-    }
-
-    private static JsonObject ToTag(LibraryCatalogTag tag)
-    {
-        return new JsonObject
-        {
-            ["name"] = tag.Name,
-            ["categoryId"] = tag.CategoryId
-        };
     }
 
     internal static string FormatDuration(long ticks)
@@ -3067,4 +3346,26 @@ public sealed class CatalogSourceImportResult
     public string SourceId { get; init; } = string.Empty;
     public int ImportedCount { get; init; }
     public int UpdatedCount { get; init; }
+}
+
+public sealed class CatalogItemTagAssignment
+{
+    public string ItemId { get; init; } = string.Empty;
+    public IReadOnlyList<string> Tags { get; init; } = [];
+}
+
+public sealed class CatalogStartupItem
+{
+    public string FullPath { get; init; } = string.Empty;
+    public bool IsFavorite { get; init; }
+    public bool IsBlacklisted { get; init; }
+    public List<string> Tags { get; } = [];
+}
+
+public sealed class CatalogStartupState
+{
+    public List<LibraryCatalogSource> Sources { get; init; } = [];
+    public List<LibraryCatalogCategory> Categories { get; init; } = [];
+    public List<LibraryCatalogTag> Tags { get; init; } = [];
+    public List<CatalogStartupItem> Items { get; init; } = [];
 }

@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Security.Cryptography;
 using System.Reflection;
+using ReelRoulette.Core.Library;
 using ReelRoulette.Server.Contracts;
 using ReelRoulette.Server.Hosting;
 using ReelRoulette.Server.Services;
@@ -203,13 +204,11 @@ public sealed class RefreshPipelineServiceTests
         Assert.True(service.TryStartManual().Accepted);
         var final = await WaitForCompletionAsync(service, TimeSpan.FromSeconds(30));
 
-        var root = await LoadLibraryAsync(scope.LibraryPath);
-        var items = Assert.IsType<JsonArray>(root["items"]);
-        var itemList = items.OfType<JsonObject>().ToList();
+        var itemList = LoadCatalog(scope.LibraryPath).Items;
         var kept = Assert.Single(itemList);
-        Assert.Equal("item-existing", kept["id"]?.GetValue<string>());
-        Assert.Equal(existingPath, kept["fullPath"]?.GetValue<string>());
-        Assert.DoesNotContain(itemList, item => string.Equals(item["id"]?.GetValue<string>(), "item-missing", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal("item-existing", kept.Id);
+        Assert.Equal(existingPath, kept.FullPath);
+        Assert.DoesNotContain(itemList, item => string.Equals(item.Id, "item-missing", StringComparison.OrdinalIgnoreCase));
 
         var sourceStage = final.Stages.Single(s => s.Stage == "sourceRefresh");
         Assert.Contains("1 removed", sourceStage.Message, StringComparison.OrdinalIgnoreCase);
@@ -246,15 +245,14 @@ public sealed class RefreshPipelineServiceTests
         Assert.True(service.TryStartManual().Accepted);
         await WaitForCompletionAsync(service, TimeSpan.FromSeconds(10));
 
-        var root = await LoadLibraryAsync(scope.LibraryPath);
-        var items = Assert.IsType<JsonArray>(root["items"]);
-        var hasLoudness = items.OfType<JsonObject>().Single(i => i?["id"]?.GetValue<string>() == "has-loudness");
-        var needsLoudness = items.OfType<JsonObject>().Single(i => i?["id"]?.GetValue<string>() == "needs-loudness");
+        var items = LoadCatalog(scope.LibraryPath).Items;
+        var hasLoudness = items.Single(i => i.Id == "has-loudness");
+        var needsLoudness = items.Single(i => i.Id == "needs-loudness");
 
-        Assert.Equal(-14.2, hasLoudness!["integratedLoudness"]!.GetValue<double>());
-        Assert.Equal(-0.5, hasLoudness["peakDb"]!.GetValue<double>());
-        Assert.Null(needsLoudness!["integratedLoudness"]);
-        Assert.Null(needsLoudness["peakDb"]);
+        Assert.Equal(-14.2, hasLoudness.IntegratedLoudness);
+        Assert.Equal(-0.5, hasLoudness.PeakDb);
+        Assert.Null(needsLoudness.IntegratedLoudness);
+        Assert.Null(needsLoudness.PeakDb);
     }
 
     [Fact]
@@ -539,13 +537,11 @@ public sealed class RefreshPipelineServiceTests
         Assert.True(service.TryStartManual().Accepted);
         await WaitForCompletionAsync(service, TimeSpan.FromSeconds(20));
 
-        var root = await LoadLibraryAsync(scope.LibraryPath);
-        var items = Assert.IsType<JsonArray>(root["items"]);
-        var item = Assert.Single(items.OfType<JsonObject>());
-        Assert.True(item?["hasAudio"]?.GetValue<bool>());
-        Assert.Null(item?["integratedLoudness"]);
-        Assert.Null(item?["peakDb"]);
-        Assert.False(string.IsNullOrWhiteSpace(item?["loudnessError"]?.GetValue<string>()));
+        var item = Assert.Single(LoadCatalog(scope.LibraryPath).Items);
+        Assert.True(item.HasAudio);
+        Assert.Null(item.IntegratedLoudness);
+        Assert.Null(item.PeakDb);
+        Assert.False(string.IsNullOrWhiteSpace(item.LoudnessError));
     }
 
     [Fact]
@@ -632,12 +628,9 @@ public sealed class RefreshPipelineServiceTests
         Assert.True(service.TryStartManual().Accepted);
         var final = await WaitForCompletionAsync(service, TimeSpan.FromSeconds(30));
 
-        var root = await LoadLibraryAsync(scope.LibraryPath);
-        var items = Assert.IsType<JsonArray>(root["items"]);
-        var itemList = items.OfType<JsonObject>().ToList();
-        var only = Assert.Single(itemList);
-        Assert.Equal("item-1", only["id"]?.GetValue<string>());
-        Assert.Equal(newPath, only["fullPath"]?.GetValue<string>());
+        var only = Assert.Single(LoadCatalog(scope.LibraryPath).Items);
+        Assert.Equal("item-1", only.Id);
+        Assert.Equal(newPath, only.FullPath);
 
         var sourceStage = final.Stages.Single(s => s.Stage == "sourceRefresh");
         Assert.Contains("0 added", sourceStage.Message, StringComparison.OrdinalIgnoreCase);
@@ -717,14 +710,10 @@ public sealed class RefreshPipelineServiceTests
         var service = CreateService(new ServerStateService(), scope.RootPath);
         await service.RunFingerprintStageAsync(CancellationToken.None);
 
-        var root = await LoadLibraryAsync(scope.LibraryPath);
-        var items = root["items"] as JsonArray;
-        Assert.NotNull(items);
-        var item = Assert.Single(items!.OfType<JsonObject>());
-        Assert.Equal(1, item["fingerprintStatus"]?.GetValue<int>());
-        var fp = item["fingerprint"]?.GetValue<string>();
-        Assert.False(string.IsNullOrWhiteSpace(fp));
-        Assert.Equal(ComputeSha256(mediaPath), fp, StringComparer.OrdinalIgnoreCase);
+        var item = Assert.Single(LoadCatalog(scope.LibraryPath).Items);
+        Assert.Equal(1, item.FingerprintStatus);
+        Assert.False(string.IsNullOrWhiteSpace(item.Fingerprint));
+        Assert.Equal(ComputeSha256(mediaPath), item.Fingerprint, StringComparer.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -779,21 +768,18 @@ public sealed class RefreshPipelineServiceTests
         });
 
         var host = LibraryCatalogHost.Open(scope.RootPath, Path.Combine(scope.RootPath, "thumbnails"));
-        var builds = host.Session.DocumentBuilds;
         var service = CreateService(new ServerStateService(), scope.RootPath, host);
         Assert.True(service.TryStartManual().Accepted);
         var completed = await WaitForCompletionAsync(service, TimeSpan.FromSeconds(90));
         Assert.Null(completed.LastError);
-        Assert.Equal(builds, host.Session.DocumentBuilds);
 
-        var root = host.Session.BuildDocument();
-        var items = Assert.IsType<JsonArray>(root["items"]).OfType<JsonObject>().ToList();
+        var items = LibraryCatalogStore.Read(host.Session.DatabasePath).Items;
         Assert.Equal(2, items.Count);
-        Assert.DoesNotContain(items, item => item["id"]?.GetValue<string>() == "missing-1");
-        var kept = Assert.Single(items, item => item["id"]?.GetValue<string>() == "kept-1");
-        var added = Assert.Single(items, item => item["fullPath"]?.GetValue<string>() == addedPath);
-        Assert.True(kept["isFavorite"]?.GetValue<bool>());
-        Assert.Contains(kept["tags"]!.AsArray().Select(tag => tag!.GetValue<string>()), tag => tag == "Keep");
+        Assert.DoesNotContain(items, item => item.Id == "missing-1");
+        var kept = Assert.Single(items, item => item.Id == "kept-1");
+        var added = Assert.Single(items, item => item.FullPath == addedPath);
+        Assert.True(kept.IsFavorite);
+        Assert.Contains("Keep", kept.Tags);
         AssertStoredMediaColumns(kept);
         AssertStoredMediaColumns(added);
         Assert.Contains("1 removed", completed.Stages.Single(stage => stage.Stage == "sourceRefresh").Message, StringComparison.OrdinalIgnoreCase);
@@ -870,7 +856,6 @@ public sealed class RefreshPipelineServiceTests
         });
 
         var host = LibraryCatalogHost.Open(scope.RootPath, Path.Combine(scope.RootPath, "thumbnails"));
-        var builds = host.Session.DocumentBuilds;
         var service = CreateService(new ServerStateService(), scope.RootPath, host);
         var hold = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         service.HoldNextFingerprintWrite(hold.Task);
@@ -881,14 +866,13 @@ public sealed class RefreshPipelineServiceTests
         hold.TrySetResult();
 
         await WaitForCompletionAsync(service, TimeSpan.FromSeconds(20));
-        Assert.Equal(builds, host.Session.DocumentBuilds);
         var state = host.Session.ReadItemState("hold-1");
         Assert.NotNull(state);
         Assert.True(state!.IsFavorite);
-        var item = Assert.Single(host.Session.BuildDocument()["items"]!.AsArray().OfType<JsonObject>());
-        Assert.Equal(1, item["fingerprintStatus"]?.GetValue<int>());
-        Assert.False(string.IsNullOrWhiteSpace(item["fingerprint"]?.GetValue<string>()));
-        Assert.Contains(item["tags"]!.AsArray().Select(tag => tag!.GetValue<string>()), tag => tag == "Night");
+        var item = Assert.Single(LibraryCatalogStore.Read(host.Session.DatabasePath).Items);
+        Assert.Equal(1, item.FingerprintStatus);
+        Assert.False(string.IsNullOrWhiteSpace(item.Fingerprint));
+        Assert.Contains("Night", item.Tags);
     }
 
     [Fact]
@@ -924,10 +908,8 @@ public sealed class RefreshPipelineServiceTests
         await File.WriteAllBytesAsync(thumbPath, TinyPngBytes);
         Assert.True(host.Session.SetThumbnail("thumb-match", revision, 1, 1));
         var before = File.GetLastWriteTimeUtc(thumbPath);
-        var builds = host.Session.DocumentBuilds;
         await service.RunThumbnailStageAsync(CancellationToken.None);
 
-        Assert.Equal(builds, host.Session.DocumentBuilds);
         Assert.False(File.Exists(missingSource));
         Assert.Equal(before, File.GetLastWriteTimeUtc(thumbPath));
         var stage = service.GetStatus().Stages.Single(item => item.Stage == "thumbnailGeneration");
@@ -964,10 +946,8 @@ public sealed class RefreshPipelineServiceTests
         var service = CreateService(new ServerStateService(), scope.RootPath, host);
         Directory.CreateDirectory(Path.Combine(scope.RootPath, "thumbnails"));
         Assert.True(host.Session.SetThumbnail("thumb-missing-jpeg", revision, 1, 1));
-        var builds = host.Session.DocumentBuilds;
         await service.RunThumbnailStageAsync(CancellationToken.None);
 
-        Assert.Equal(builds, host.Session.DocumentBuilds);
         Assert.True(File.Exists(service.GetThumbnailPath("thumb-missing-jpeg")));
         var stage = service.GetStatus().Stages.Single(item => item.Stage == "thumbnailGeneration");
         Assert.Contains("1 generated", stage.Message, StringComparison.OrdinalIgnoreCase);
@@ -1035,15 +1015,12 @@ public sealed class RefreshPipelineServiceTests
                 ["kept-thumb"] = new JsonObject { ["revision"] = "fp-kept|1|2020-01-01T00:00:00.0000000Z", ["width"] = 1, ["height"] = 1 },
                 ["gone-thumb"] = new JsonObject { ["revision"] = "old", ["width"] = 1, ["height"] = 1 }
             }.ToJsonString());
-        var builds = host.Session.DocumentBuilds;
         Assert.True(service.TryStartManual().Accepted);
         var completed = await WaitForCompletionAsync(service, TimeSpan.FromSeconds(30));
 
-        Assert.Equal(builds, host.Session.DocumentBuilds);
         Assert.Null(completed.LastError);
-        var items = host.Session.BuildDocument()["items"]!.AsArray().OfType<JsonObject>().ToList();
-        Assert.Single(items);
-        Assert.Equal("kept-thumb", items[0]["id"]?.GetValue<string>());
+        var items = LibraryCatalogStore.Read(host.Session.DatabasePath).Items;
+        Assert.Equal("kept-thumb", Assert.Single(items).Id);
         Assert.True(File.Exists(keptThumb));
         Assert.False(File.Exists(goneThumb));
         Assert.False(File.Exists(orphanThumb));
@@ -1091,9 +1068,8 @@ public sealed class RefreshPipelineServiceTests
         Assert.True(first!.IsFavorite);
         Assert.False(first.IsBlacklisted);
         Assert.Equal(3, first.PlayCount);
-        var document = host.Session.BuildDocument()["items"]!.AsArray().OfType<JsonObject>().ToList();
-        var holdA = Assert.Single(document, item => item["id"]!.GetValue<string>() == "hold-a");
-        Assert.Contains(holdA["tags"]!.AsArray().Select(tag => tag!.GetValue<string>()), tag => tag == "Night");
+        var holdA = Assert.Single(LibraryCatalogStore.Read(host.Session.DatabasePath).Items, item => item.Id == "hold-a");
+        Assert.Contains("Night", holdA.Tags);
         var second = host.Session.ReadItemState("hold-b");
         Assert.NotNull(second);
         Assert.True(second!.IsBlacklisted);
@@ -1155,15 +1131,12 @@ public sealed class RefreshPipelineServiceTests
         Assert.False(File.Exists(orphan));
     }
 
-    private static void AssertStoredMediaColumns(JsonObject item)
+    private static void AssertStoredMediaColumns(LibraryCatalogItem item)
     {
-        Assert.Equal(1, item["fingerprintStatus"]?.GetValue<int>());
-        Assert.False(string.IsNullOrWhiteSpace(item["fingerprint"]?.GetValue<string>()));
-        Assert.False(string.IsNullOrWhiteSpace(item["duration"]?.GetValue<string>()));
-        Assert.NotEqual("00:00:00", item["duration"]?.GetValue<string>());
-        var hasAudio = item["hasAudio"]?.GetValue<bool?>();
-        var loudnessError = item["loudnessError"]?.GetValue<string>();
-        Assert.True(hasAudio == true || !string.IsNullOrWhiteSpace(loudnessError));
+        Assert.Equal(1, item.FingerprintStatus);
+        Assert.False(string.IsNullOrWhiteSpace(item.Fingerprint));
+        Assert.True(item.DurationTicks is > 0);
+        Assert.True(item.HasAudio == true || !string.IsNullOrWhiteSpace(item.LoudnessError));
     }
 
     private static async Task GenerateTinyVideoAsync(string path)
@@ -1305,18 +1278,12 @@ public sealed class RefreshPipelineServiceTests
         await File.WriteAllTextAsync(path, root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
     }
 
-    private static async Task<JsonObject> LoadLibraryAsync(string path)
+    private static LibraryCatalogSnapshot LoadCatalog(string libraryJsonPath)
     {
-        if (string.Equals(Path.GetFileName(path), "library.json", StringComparison.OrdinalIgnoreCase))
-        {
-            var directory = Path.GetDirectoryName(path)!;
-            var opened = CatalogOpen.Open(directory);
-            Assert.NotNull(opened.Session);
-            return opened.Session!.BuildDocument();
-        }
-
-        await using var stream = File.OpenRead(path);
-        return (await JsonNode.ParseAsync(stream) as JsonObject) ?? new JsonObject();
+        var directory = Path.GetDirectoryName(libraryJsonPath)!;
+        var opened = CatalogOpen.Open(directory);
+        Assert.NotNull(opened.Session);
+        return LibraryCatalogStore.Read(opened.Session.DatabasePath);
     }
 
     private static string ComputeSha256(string path)

@@ -695,35 +695,27 @@ public sealed class ServerStateService
                 return;
             }
 
-            var root = _catalog.Session.BuildDocument();
-            if (root == null)
-            {
-                return;
-            }
+            var loaded = _catalog.Session.ReadStartupState();
 
             lock (_sourceLock)
             {
                 _sources.Clear();
-                var sources = root["sources"] as JsonArray;
-                if (sources != null)
+                foreach (var source in loaded.Sources)
                 {
-                    foreach (var node in sources.OfType<JsonObject>())
+                    var id = source.Id.Trim();
+                    var rootPath = source.RootPath.Trim();
+                    if (string.IsNullOrWhiteSpace(id) || string.IsNullOrWhiteSpace(rootPath))
                     {
-                        var id = node["id"]?.GetValue<string>()?.Trim();
-                        var rootPath = node["rootPath"]?.GetValue<string>()?.Trim();
-                        if (string.IsNullOrWhiteSpace(id) || string.IsNullOrWhiteSpace(rootPath))
-                        {
-                            continue;
-                        }
-
-                        _sources.Add(new SourceRecord
-                        {
-                            Id = id,
-                            RootPath = rootPath,
-                            DisplayName = node["displayName"]?.GetValue<string>()?.Trim(),
-                            IsEnabled = node["isEnabled"]?.GetValue<bool?>() ?? true
-                        });
+                        continue;
                     }
+
+                    _sources.Add(new SourceRecord
+                    {
+                        Id = id,
+                        RootPath = rootPath,
+                        DisplayName = string.IsNullOrWhiteSpace(source.DisplayName) ? null : source.DisplayName.Trim(),
+                        IsEnabled = source.IsEnabled
+                    });
                 }
             }
 
@@ -731,52 +723,42 @@ public sealed class ServerStateService
             {
                 _tagCategories.Clear();
                 _tags.Clear();
-
-                var categories = root["categories"] as JsonArray;
-                if (categories != null)
+                foreach (var category in loaded.Categories)
                 {
-                    foreach (var node in categories.OfType<JsonObject>())
+                    var name = category.Name.Trim();
+                    if (string.IsNullOrWhiteSpace(name))
                     {
-                        var id = NormalizeCategoryId(node["id"]?.GetValue<string>());
-                        var name = node["name"]?.GetValue<string>()?.Trim();
-                        if (string.IsNullOrWhiteSpace(name))
-                        {
-                            continue;
-                        }
-
-                        if (_tagCategories.Any(category => string.Equals(category.Id, id, StringComparison.OrdinalIgnoreCase)))
-                        {
-                            continue;
-                        }
-
-                        _tagCategories.Add(new TagCategorySnapshot
-                        {
-                            Id = id,
-                            Name = name,
-                            SortOrder = node["sortOrder"]?.GetValue<int?>() ?? _tagCategories.Count
-                        });
+                        continue;
                     }
+
+                    var id = NormalizeCategoryId(category.Id);
+                    if (_tagCategories.Any(existing => string.Equals(existing.Id, id, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        continue;
+                    }
+
+                    _tagCategories.Add(new TagCategorySnapshot
+                    {
+                        Id = id,
+                        Name = name,
+                        SortOrder = category.SortOrder
+                    });
                 }
 
-                var tags = root["tags"] as JsonArray;
-                if (tags != null)
+                foreach (var tag in loaded.Tags)
                 {
-                    foreach (var node in tags.OfType<JsonObject>())
+                    var name = tag.Name.Trim();
+                    if (string.IsNullOrWhiteSpace(name))
                     {
-                        var name = node["name"]?.GetValue<string>()?.Trim();
-                        if (string.IsNullOrWhiteSpace(name))
-                        {
-                            continue;
-                        }
-
-                        var categoryId = NormalizeCategoryId(node["categoryId"]?.GetValue<string>());
-                        _tags.RemoveAll(tag => string.Equals(tag.Name, name, StringComparison.OrdinalIgnoreCase));
-                        _tags.Add(new TagSnapshot
-                        {
-                            Name = name,
-                            CategoryId = categoryId
-                        });
+                        continue;
                     }
+
+                    _tags.RemoveAll(existing => string.Equals(existing.Name, name, StringComparison.OrdinalIgnoreCase));
+                    _tags.Add(new TagSnapshot
+                    {
+                        Name = name,
+                        CategoryId = NormalizeCategoryId(tag.CategoryId)
+                    });
                 }
 
                 EnsureUncategorizedCategoryLocked();
@@ -785,39 +767,28 @@ public sealed class ServerStateService
             lock (_itemStatesLock)
             lock (_tagLock)
             {
-                var items = root["items"] as JsonArray;
-                if (items == null)
+                foreach (var item in loaded.Items)
                 {
-                    return;
-                }
-
-                foreach (var node in items.OfType<JsonObject>())
-                {
-                    var path = node["fullPath"]?.GetValue<string>()?.Trim();
+                    var path = item.FullPath.Trim();
                     if (string.IsNullOrWhiteSpace(path))
                     {
                         continue;
                     }
 
-                    var isFavorite = node["isFavorite"]?.GetValue<bool?>() ?? false;
-                    var isBlacklisted = node["isBlacklisted"]?.GetValue<bool?>() ?? false;
                     _itemStates[path] = new ItemStateRecord
                     {
                         Payload = new ItemStateChangedPayload
                         {
                             ItemId = path,
                             Path = path,
-                            IsFavorite = isFavorite,
-                            IsBlacklisted = isBlacklisted
+                            IsFavorite = item.IsFavorite,
+                            IsBlacklisted = item.IsBlacklisted
                         },
                         Revision = 0
                     };
-
-                    var itemTags = node["tags"] as JsonArray;
-                    _itemTags[path] = (itemTags ?? new JsonArray())
-                        .Select(tag => tag?.GetValue<string>()?.Trim())
+                    _itemTags[path] = item.Tags
+                        .Select(tag => tag.Trim())
                         .Where(tag => !string.IsNullOrWhiteSpace(tag))
-                        .Select(tag => tag!)
                         .ToHashSet(StringComparer.OrdinalIgnoreCase);
                 }
             }
@@ -826,37 +797,6 @@ public sealed class ServerStateService
         {
             _logger.LogWarning(ex, "Failed to bootstrap server state from '{Path}'.", _catalog?.Session.DatabasePath);
         }
-    }
-
-    /// <summary>
-    /// Clears in-memory library/preset projection and reloads from disk (for example after library migration import).
-    /// </summary>
-    public void ReloadLibraryAndPresetsFromDisk()
-    {
-        lock (_filterSessionLock)
-        {
-            _presetCatalog = [];
-        }
-
-        lock (_sourceLock)
-        {
-            _sources.Clear();
-        }
-
-        lock (_tagLock)
-        {
-            _tagCategories.Clear();
-            _tags.Clear();
-        }
-
-        lock (_itemStatesLock)
-        lock (_tagLock)
-        {
-            _itemStates.Clear();
-            _itemTags.Clear();
-        }
-
-        BootstrapFromDisk();
     }
 
     private HashSet<string> GetOrCreateItemTags(string itemId)

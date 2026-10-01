@@ -64,6 +64,44 @@ public sealed class LibraryArchiveMigrationTests
     }
 
     [Fact]
+    public void Import_RejectsALibraryJsonDocument_AndLeavesTheLiveCatalog()
+    {
+        var temp = Path.Combine(Path.GetTempPath(), "rr-json-archive-" + Guid.NewGuid().ToString("N"));
+        var dest = Path.Combine(temp, "dest");
+        var source = Path.Combine(temp, "incoming.json");
+        Directory.CreateDirectory(dest);
+        try
+        {
+            File.WriteAllText(Path.Combine(dest, "library.json"), """
+                {"items":[{"id":"item-1","fullPath":"/clips/a.mp4","fileName":"a.mp4"}]}
+                """);
+            var opened = OpenCatalog(dest);
+            Assert.Equal("item-1", Assert.Single(opened.Catalog!.Items).Id);
+            File.WriteAllText(source, """
+                {"sources":[{"id":"s1","rootPath":"/from"}],"items":[{"id":"clip","fullPath":"/from/clip.mp4"}]}
+                """);
+
+            Assert.False(LibraryArchiveMigration.TryReadSourceRootPaths(source, out _, out var error));
+            Assert.Contains("not a library database", error, StringComparison.Ordinal);
+            var result = LibraryArchiveMigration.ImportDatabase(
+                source,
+                new Dictionary<string, string>(StringComparer.Ordinal),
+                new HashSet<string>(StringComparer.Ordinal),
+                force: true,
+                dest);
+            Assert.False(result.Accepted);
+            Assert.Contains("not a library database", result.Message, StringComparison.Ordinal);
+
+            var after = OpenCatalog(dest);
+            Assert.Equal("item-1", Assert.Single(after.Catalog!.Items).Id);
+        }
+        finally
+        {
+            Directory.Delete(temp, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Import_RoundTrip_RemapsPaths_AndAllowsAParentSegmentInsideTheFolder()
     {
         var temp = Path.Combine(Path.GetTempPath(), "rr-import-db-" + Guid.NewGuid().ToString("N"));

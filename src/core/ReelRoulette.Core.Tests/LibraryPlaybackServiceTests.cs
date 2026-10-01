@@ -585,7 +585,6 @@ public sealed class LibraryPlaybackServiceTests : IDisposable
             NullLogger<LibraryOperationsService>.Instance,
             _tempDir,
             host);
-        var builds = host.Session.DocumentBuilds;
         var request = new RandomRequest
         {
             FilterState = ParseJson("{}"),
@@ -597,7 +596,6 @@ public sealed class LibraryPlaybackServiceTests : IDisposable
         Assert.Equal(StatusCodes.Status200OK, statusCode);
         Assert.Null(error);
         Assert.Equal(mediaPath, first!.Id);
-        Assert.Equal(builds, host.Session.DocumentBuilds);
 
         Assert.NotNull(operations.SetFavorite(mediaPath, true));
         Assert.True(operations.RecordPlayback(mediaPath).Found);
@@ -608,7 +606,6 @@ public sealed class LibraryPlaybackServiceTests : IDisposable
         }));
         Assert.True(playback.TrySelectRandom(request, [], out var second, out _, out _));
         Assert.Equal(mediaPath, second!.Id);
-        Assert.Equal(builds, host.Session.DocumentBuilds);
 
         Assert.True(playback.TryPlayItem("kept", false, out var played, out var playStatus, out var playError, out var code));
         Assert.Equal(StatusCodes.Status200OK, playStatus);
@@ -619,7 +616,6 @@ public sealed class LibraryPlaybackServiceTests : IDisposable
         Assert.Equal(mediaPath, byId);
         Assert.True(playback.TryResolveMediaPath(mediaPath, out var byPath));
         Assert.Equal(mediaPath, byPath);
-        Assert.Equal(builds, host.Session.DocumentBuilds);
     }
 
     [Fact]
@@ -674,7 +670,6 @@ public sealed class LibraryPlaybackServiceTests : IDisposable
             Filter = new ReelRoulette.Core.Filtering.FilterStateModel(),
             Limit = 20
         }).Items.Select(item => item.FullPath).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var builds = host.Session.DocumentBuilds;
         var lightWins = 0;
         for (var i = 0; i < 40; i++)
         {
@@ -694,7 +689,6 @@ public sealed class LibraryPlaybackServiceTests : IDisposable
         }
 
         Assert.True(lightWins >= 35, $"Expected the never-played item to win at least 35 of 40 weighted draws, got {lightWins}.");
-        Assert.Equal(builds, host.Session.DocumentBuilds);
     }
 
     [Fact]

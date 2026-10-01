@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging.Abstractions;
+using ReelRoulette.Core.Library;
 using ReelRoulette.Server.Contracts;
 using ReelRoulette.Server.Services;
 using Xunit;
@@ -127,10 +128,9 @@ public sealed class LibraryOperationsServiceTests
             Assert.NotNull(result.LastPlayedUtc);
             Assert.InRange(result.LastPlayedUtc!.Value, before.AddSeconds(-1), after.AddSeconds(1));
 
-            var root = LoadLibrary(appDataRoot);
-            var item = Assert.Single((root["items"] as JsonArray)!.OfType<JsonObject>());
-            Assert.Equal(3, item["playCount"]?.GetValue<int>());
-            Assert.NotNull(item["lastPlayedUtc"]);
+            var item = Assert.Single(LoadLibrary(appDataRoot).Items);
+            Assert.Equal(3, item.PlayCount);
+            Assert.NotNull(item.LastPlayedUtc);
         }
         finally
         {
@@ -205,10 +205,9 @@ public sealed class LibraryOperationsServiceTests
             Assert.True(updated!.IsFavorite);
             Assert.False(updated.IsBlacklisted);
 
-            var root = LoadLibrary(appDataRoot);
-            var item = Assert.Single((root["items"] as JsonArray)!.OfType<JsonObject>());
-            Assert.True(item["isFavorite"]!.GetValue<bool>());
-            Assert.False(item["isBlacklisted"]!.GetValue<bool>());
+            var item = Assert.Single(LoadLibrary(appDataRoot).Items);
+            Assert.True(item.IsFavorite);
+            Assert.False(item.IsBlacklisted);
         }
         finally
         {
@@ -261,7 +260,6 @@ public sealed class LibraryOperationsServiceTests
 
             var host = LibraryCatalogHost.Open(appDataRoot, Path.Combine(appDataRoot, "thumbnails"));
             var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot, host);
-            var builds = host.Session.DocumentBuilds;
             var revision = host.Session.Revision;
 
             var favorited = service.SetFavorite(@"C:\MEDIA\MOVIE.MP4", isFavorite: true);
@@ -313,9 +311,6 @@ public sealed class LibraryOperationsServiceTests
             var none = service.ClearPlaybackStats(new ClearPlaybackStatsRequest { ItemPaths = [] });
             Assert.Equal(0, none.ClearedCount);
             Assert.Equal(revisionAfterClear, host.Session.Revision);
-            Assert.Equal(builds, host.Session.DocumentBuilds);
-            _ = host.Session.BuildDocument();
-            Assert.Equal(builds + 1, host.Session.DocumentBuilds);
         }
         finally
         {
@@ -365,13 +360,11 @@ public sealed class LibraryOperationsServiceTests
             });
 
             Assert.True(changed);
-            var root = LoadLibrary(appDataRoot);
-            var items = (root["items"] as JsonArray)!.OfType<JsonObject>().ToList();
+            var items = LoadLibrary(appDataRoot).Items;
             Assert.All(items, item =>
             {
-                var tags = (item["tags"] as JsonArray)!.Select(tag => tag!.GetValue<string>()).ToList();
-                Assert.DoesNotContain("old", tags, StringComparer.OrdinalIgnoreCase);
-                Assert.Contains("newTag", tags, StringComparer.OrdinalIgnoreCase);
+                Assert.DoesNotContain("old", item.Tags, StringComparer.OrdinalIgnoreCase);
+                Assert.Contains("newTag", item.Tags, StringComparer.OrdinalIgnoreCase);
             });
         }
         finally
@@ -424,15 +417,13 @@ public sealed class LibraryOperationsServiceTests
 
             Assert.True(changed);
             var root = LoadLibrary(appDataRoot);
-            var tagCatalog = (root["tags"] as JsonArray)!.OfType<JsonObject>().ToList();
-            var tagA = Assert.Single(tagCatalog, tag =>
-                string.Equals(tag["name"]?.GetValue<string>(), "TagA", StringComparison.OrdinalIgnoreCase));
-            Assert.Equal("cat-1", tagA["categoryId"]?.GetValue<string>());
+            var tagA = Assert.Single(root.Tags, tag =>
+                string.Equals(tag.Name, "TagA", StringComparison.OrdinalIgnoreCase));
+            Assert.Equal("cat-1", tagA.CategoryId);
 
-            var item = Assert.Single((root["items"] as JsonArray)!.OfType<JsonObject>());
-            var itemTags = (item["tags"] as JsonArray)!.Select(tag => tag!.GetValue<string>()).ToList();
-            Assert.Single(itemTags);
-            Assert.Equal("TagA", itemTags[0]);
+            var item = Assert.Single(root.Items);
+            var itemTag = Assert.Single(item.Tags);
+            Assert.Equal("TagA", itemTag);
         }
         finally
         {
@@ -585,7 +576,6 @@ public sealed class LibraryOperationsServiceTests
 
             var host = LibraryCatalogHost.Open(appDataRoot, Path.Combine(appDataRoot, "thumbnails"));
             var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot, host);
-            var builds = host.Session.DocumentBuilds;
 
             var changed = service.ApplyItemTags(new ApplyItemTagsRequest
             {
@@ -609,7 +599,6 @@ public sealed class LibraryOperationsServiceTests
             Assert.Equal(["/media/two.mp4"], appliedRow.ChangedItemPaths);
 
             var model = service.GetTagEditorModel(new TagEditorModelRequest { ItemIds = ["/media/one.mp4", "missing"] });
-            Assert.Equal(builds, host.Session.DocumentBuilds);
             var item = Assert.Single(model.Items, candidate => candidate.ItemId == "/media/one.mp4");
             Assert.Equal(["Newer"], item.Tags);
             Assert.Contains(model.Categories, category => category.Id == "places" && category.Name == "Places");
@@ -624,9 +613,6 @@ public sealed class LibraryOperationsServiceTests
             Assert.DoesNotContain(afterDelete.Tags, tag => tag.Name == "Newer");
             Assert.DoesNotContain(afterDelete.Categories, category => category.Id == "places");
             Assert.Empty(Assert.Single(afterDelete.Items).Tags);
-            Assert.Equal(builds, host.Session.DocumentBuilds);
-            _ = host.Session.BuildDocument();
-            Assert.Equal(builds + 1, host.Session.DocumentBuilds);
         }
         finally
         {
@@ -679,16 +665,12 @@ public sealed class LibraryOperationsServiceTests
             }));
 
             var root = LoadLibrary(appDataRoot);
-            var tagsCatalog = (root["tags"] as JsonArray)!.OfType<JsonObject>()
-                .Select(tag => tag["name"]!.GetValue<string>())
-                .ToList();
-            Assert.DoesNotContain("TagA", tagsCatalog, StringComparer.OrdinalIgnoreCase);
-            Assert.DoesNotContain("TagB", tagsCatalog, StringComparer.OrdinalIgnoreCase);
+            Assert.DoesNotContain(root.Tags, tag => string.Equals(tag.Name, "TagA", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(root.Tags, tag => string.Equals(tag.Name, "TagB", StringComparison.OrdinalIgnoreCase));
 
-            var item = Assert.Single((root["items"] as JsonArray)!.OfType<JsonObject>());
-            var itemTags = (item["tags"] as JsonArray)!.Select(tag => tag!.GetValue<string>()).ToList();
-            Assert.DoesNotContain("TagA", itemTags, StringComparer.OrdinalIgnoreCase);
-            Assert.DoesNotContain("TagB", itemTags, StringComparer.OrdinalIgnoreCase);
+            var item = Assert.Single(root.Items);
+            Assert.DoesNotContain("TagA", item.Tags, StringComparer.OrdinalIgnoreCase);
+            Assert.DoesNotContain("TagB", item.Tags, StringComparer.OrdinalIgnoreCase);
         }
         finally
         {
@@ -769,7 +751,6 @@ public sealed class LibraryOperationsServiceTests
 
             var host = LibraryCatalogHost.Open(appDataRoot, Path.Combine(appDataRoot, "thumbnails"));
             var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot, host);
-            var builds = host.Session.DocumentBuilds;
             var stats = service.GetLibraryStats();
 
             Assert.Equal(2, stats.Global.TotalVideos);
@@ -795,9 +776,6 @@ public sealed class LibraryOperationsServiceTests
             Assert.Equal(1, sourceA.VideosWithoutAudio);
             Assert.Equal(300, sourceA.TotalDurationSeconds);
             Assert.Equal(150, sourceA.AverageDurationSeconds);
-            Assert.Equal(builds, host.Session.DocumentBuilds);
-            _ = host.Session.BuildDocument();
-            Assert.Equal(builds + 1, host.Session.DocumentBuilds);
         }
         finally
         {
@@ -851,7 +829,6 @@ public sealed class LibraryOperationsServiceTests
 
             var host = LibraryCatalogHost.Open(appDataRoot, Path.Combine(appDataRoot, "thumbnails"));
             var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot, host);
-            var builds = host.Session.DocumentBuilds;
             var stats = service.GetLibraryStats();
 
             Assert.Equal(1, stats.Global.TotalVideos);
@@ -863,7 +840,6 @@ public sealed class LibraryOperationsServiceTests
             Assert.Equal(1, sourceA.TotalVideos);
             Assert.Equal(1, sourceA.TotalPhotos);
             Assert.Equal(2, sourceA.TotalMedia);
-            Assert.Equal(builds, host.Session.DocumentBuilds);
         }
         finally
         {
@@ -929,7 +905,6 @@ public sealed class LibraryOperationsServiceTests
 
             var host = LibraryCatalogHost.Open(appDataRoot, Path.Combine(appDataRoot, "thumbnails"));
             var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot, host);
-            var builds = host.Session.DocumentBuilds;
             var stats = service.GetLibraryStats();
 
             Assert.Equal(2, stats.Global.TotalVideos);
@@ -971,9 +946,6 @@ public sealed class LibraryOperationsServiceTests
                 ordered.Select(item => item.Path).ToArray());
             Assert.DoesNotContain(ordered, item => item.ItemId == "photo-odd");
 
-            Assert.Equal(builds, host.Session.DocumentBuilds);
-            _ = host.Session.BuildDocument();
-            Assert.Equal(builds + 1, host.Session.DocumentBuilds);
         }
         finally
         {
@@ -1482,7 +1454,6 @@ public sealed class LibraryOperationsServiceTests
 
             var host = LibraryCatalogHost.Open(appDataRoot, Path.Combine(appDataRoot, "thumbnails"));
             var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot, host);
-            var builds = host.Session.DocumentBuilds;
             var skipped = service.ApplyDuplicateSelection(new ReelRoulette.Server.Contracts.DuplicateApplyRequest
             {
                 Selections =
@@ -1516,12 +1487,9 @@ public sealed class LibraryOperationsServiceTests
             Assert.Equal("File not found", failure.Reason);
             Assert.False(File.Exists(removePath));
             Assert.True(File.Exists(keepPath));
-            Assert.Equal(builds, host.Session.DocumentBuilds);
 
-            var root = LoadLibrary(appDataRoot);
-            var items = (root["items"] as JsonArray)!.OfType<JsonObject>().ToList();
-            Assert.Equal(["keep-1", "missing-1"], items.Select(item => item["id"]!.GetValue<string>()).ToArray());
-            var kept = items[0];
+            var items = LoadLibrary(appDataRoot).Items;
+            Assert.Equal(["keep-1", "missing-1"], items.Select(item => item.Id).ToArray());
 
             var states = service.GetLibraryStates(new ReelRoulette.Server.Contracts.LibraryStatesRequest
             {
@@ -1562,10 +1530,9 @@ public sealed class LibraryOperationsServiceTests
             });
 
             Assert.True(response.Accepted);
-            var sources = (LoadLibrary(appDataRoot)["sources"] as JsonArray)!.OfType<JsonObject>().ToList();
-            var source = Assert.Single(sources);
-            Assert.Equal(mediaRoot, source["rootPath"]?.GetValue<string>());
-            Assert.Equal("YouTube", source["displayName"]?.GetValue<string>());
+            var source = Assert.Single(LoadLibrary(appDataRoot).Sources);
+            Assert.Equal(mediaRoot, source.RootPath);
+            Assert.Equal("YouTube", source.DisplayName);
         }
         finally
         {
@@ -1606,8 +1573,7 @@ public sealed class LibraryOperationsServiceTests
             Assert.True(first.Accepted);
             Assert.True(second.Accepted);
             Assert.Equal(first.SourceId, second.SourceId);
-            var sources = (LoadLibrary(appDataRoot)["sources"] as JsonArray)!.OfType<JsonObject>().ToList();
-            Assert.Single(sources);
+            Assert.Single(LoadLibrary(appDataRoot).Sources);
         }
         finally
         {
@@ -1688,7 +1654,6 @@ public sealed class LibraryOperationsServiceTests
 
             var host = LibraryCatalogHost.Open(appDataRoot, Path.Combine(appDataRoot, "thumbnails"));
             var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot, host);
-            var builds = host.Session.DocumentBuilds;
             var revision = host.Session.Revision;
 
             var response = service.ImportSource(new SourceImportRequest
@@ -1702,7 +1667,6 @@ public sealed class LibraryOperationsServiceTests
             Assert.Equal(1, response.ImportedCount);
             Assert.Equal(1, response.UpdatedCount);
             Assert.Equal(revision + 1, host.Session.Revision);
-            Assert.Equal(builds, host.Session.DocumentBuilds);
 
             var kept = host.Session.ReadListedItem("kept-1");
             Assert.NotNull(kept);
@@ -1758,9 +1722,6 @@ public sealed class LibraryOperationsServiceTests
             Assert.Equal(0, again.ImportedCount);
             Assert.Equal(2, again.UpdatedCount);
             Assert.Equal(revision + 1, host.Session.Revision);
-            Assert.Equal(builds, host.Session.DocumentBuilds);
-            _ = host.Session.BuildDocument();
-            Assert.Equal(builds + 1, host.Session.DocumentBuilds);
         }
         finally
         {
@@ -1791,7 +1752,6 @@ public sealed class LibraryOperationsServiceTests
             SeedCoreSettings(appDataRoot, enabled: true, minimumGapMinutes: 360, numberOfBackups: 8);
             SeedLibrary(appDataRoot, EmptyLibraryRoot());
             var host = LibraryCatalogHost.Open(appDataRoot, Path.Combine(appDataRoot, "thumbnails"));
-            var builds = host.Session.DocumentBuilds;
             var service = new LibraryOperationsService(
                 NullLogger<LibraryOperationsService>.Instance,
                 appDataRoot,
@@ -1812,7 +1772,6 @@ public sealed class LibraryOperationsServiceTests
             Assert.True((await browse).Accepted);
             var imported = await import.WaitAsync(TimeSpan.FromSeconds(5));
             Assert.True(imported.Accepted);
-            Assert.Equal(builds, host.Session.DocumentBuilds);
         }
         finally
         {
@@ -1870,16 +1829,14 @@ public sealed class LibraryOperationsServiceTests
 
             var host = LibraryCatalogHost.Open(appDataRoot, Path.Combine(appDataRoot, "thumbnails"));
             var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot, host);
-            var builds = host.Session.DocumentBuilds;
             var stats = service.GetLibraryStats();
             var source = Assert.Single(stats.Sources);
             Assert.Equal("YouTube", source.DisplayName);
             Assert.Equal(storedRoot, source.RootPath);
-            Assert.Equal(builds, host.Session.DocumentBuilds);
 
-            var stored = Assert.Single((LoadLibrary(appDataRoot)["sources"] as JsonArray)!.OfType<JsonObject>());
-            Assert.Null(stored["displayName"]);
-            Assert.Equal(storedRoot, stored["rootPath"]?.GetValue<string>());
+            var stored = Assert.Single(LoadLibrary(appDataRoot).Sources);
+            Assert.Null(stored.DisplayName);
+            Assert.Equal(storedRoot, stored.RootPath);
         }
         finally
         {
@@ -1953,7 +1910,6 @@ public sealed class LibraryOperationsServiceTests
 
             var host = LibraryCatalogHost.Open(appDataRoot, Path.Combine(appDataRoot, "thumbnails"));
             var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot, host);
-            var builds = host.Session.DocumentBuilds;
             var enabledOnly = service.ScanAutoTags(new AutoTagScanRequest { ScanFullLibrary = false, ItemIds = [] });
             var enabledFiles = Assert.Single(enabledOnly.Rows).Files;
             Assert.Equal(
@@ -1988,7 +1944,6 @@ public sealed class LibraryOperationsServiceTests
                     "/media/missing/Holiday-c.mp4"
                 ],
                 fullPaths);
-            Assert.Equal(builds, host.Session.DocumentBuilds);
         }
         finally
         {
@@ -2031,10 +1986,8 @@ public sealed class LibraryOperationsServiceTests
 
             var host = LibraryCatalogHost.Open(appDataRoot, Path.Combine(appDataRoot, "thumbnails"));
             var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot, host);
-            var builds = host.Session.DocumentBuilds;
             var response = service.ScanAutoTags(new AutoTagScanRequest { ScanFullLibrary = false, ItemIds = [] });
             Assert.Empty(response.Rows);
-            Assert.Equal(builds, host.Session.DocumentBuilds);
         }
         finally
         {
@@ -2075,7 +2028,6 @@ public sealed class LibraryOperationsServiceTests
 
             var host = LibraryCatalogHost.Open(appDataRoot, Path.Combine(appDataRoot, "thumbnails"));
             var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot, host);
-            var builds = host.Session.DocumentBuilds;
             var response = service.ScanDuplicates(new DuplicateScanRequest());
 
             Assert.Equal(1, response.ExcludedPending);
@@ -2087,7 +2039,6 @@ public sealed class LibraryOperationsServiceTests
             Assert.True(ready.IsFavorite);
             Assert.Equal(4, ready.PlayCount);
             Assert.Equal(2, ready.TagCount);
-            Assert.Equal(builds, host.Session.DocumentBuilds);
         }
         finally
         {
@@ -2127,7 +2078,6 @@ public sealed class LibraryOperationsServiceTests
 
             var host = LibraryCatalogHost.Open(appDataRoot, Path.Combine(appDataRoot, "thumbnails"));
             var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot, host);
-            var builds = host.Session.DocumentBuilds;
 
             var current = service.ScanDuplicates(new DuplicateScanRequest { Scope = "CurrentSource", SourceId = "SRC-ON" });
             var currentGroup = Assert.Single(current.Groups);
@@ -2145,7 +2095,6 @@ public sealed class LibraryOperationsServiceTests
             Assert.Equal(2, all.Groups.Count);
             Assert.Equal(1, all.ExcludedPending);
             Assert.Equal(1, all.ExcludedStale);
-            Assert.Equal(builds, host.Session.DocumentBuilds);
         }
         finally
         {
@@ -2186,7 +2135,145 @@ public sealed class LibraryOperationsServiceTests
     }
 
     [Fact]
-    public void SaveChanges_KeepsTagApplyWhenDurationIsCommittedFromAnEarlierSnapshot()
+    public void SyncTagCatalog_TrimsNames_SkipsBlanks_AndKeepsTheEarlierCategoryUnlessItIsUncategorized()
+    {
+        var appDataRoot = CreateTempAppDataRoot();
+        try
+        {
+            var (host, service) = OpenOperations(appDataRoot);
+            Assert.True(service.SyncTagCatalog(new SyncTagCatalogRequest
+            {
+                Categories =
+                [
+                    new TagCategorySnapshot { Id = " people ", Name = "  People  ", SortOrder = 2 },
+                    new TagCategorySnapshot { Id = " ", Name = "   ", SortOrder = 0 },
+                    new TagCategorySnapshot { Name = "Places", SortOrder = 3 }
+                ],
+                Tags =
+                [
+                    new TagSnapshot { Name = "  ", CategoryId = "people" },
+                    new TagSnapshot { Name = "  Night  ", CategoryId = "people" },
+                    new TagSnapshot { Name = "night", CategoryId = "places" },
+                    new TagSnapshot { Name = "Dawn", CategoryId = "uncategorized" },
+                    new TagSnapshot { Name = "dAWN", CategoryId = "places" }
+                ]
+            }));
+
+            var stored = LibraryCatalogStore.Read(host.Session.DatabasePath);
+            var people = Assert.Single(stored.Categories, category => category.Id == "people");
+            Assert.Equal("People", people.Name);
+            Assert.Equal(2, people.SortOrder);
+            var night = Assert.Single(stored.Tags, tag => string.Equals(tag.Name, "Night", StringComparison.OrdinalIgnoreCase));
+            Assert.Equal("Night", night.Name);
+            Assert.Equal("people", night.CategoryId);
+            var dawn = Assert.Single(stored.Tags, tag => string.Equals(tag.Name, "Dawn", StringComparison.OrdinalIgnoreCase));
+            Assert.Equal("dAWN", dawn.Name);
+            Assert.Equal("places", dawn.CategoryId);
+        }
+        finally
+        {
+            Cleanup(appDataRoot);
+        }
+    }
+
+    [Fact]
+    public void SyncTagCatalog_LastWinsOnADuplicateCategoryId_AndStoresTagsInNameOrder()
+    {
+        var appDataRoot = CreateTempAppDataRoot();
+        try
+        {
+            var (host, service) = OpenOperations(appDataRoot);
+            Assert.True(service.SyncTagCatalog(new SyncTagCatalogRequest
+            {
+                Categories =
+                [
+                    new TagCategorySnapshot { Id = "people", Name = "First", SortOrder = 1 },
+                    new TagCategorySnapshot { Id = "PEOPLE", Name = "Second", SortOrder = 9 }
+                ],
+                Tags =
+                [
+                    new TagSnapshot { Name = "Zebra", CategoryId = "people" },
+                    new TagSnapshot { Name = "apple", CategoryId = "people" },
+                    new TagSnapshot { Name = "Middle", CategoryId = "people" }
+                ]
+            }));
+
+            var stored = LibraryCatalogStore.Read(host.Session.DatabasePath);
+            var people = stored.Categories[0];
+            Assert.Equal("PEOPLE", people.Id);
+            Assert.Equal("Second", people.Name);
+            Assert.Equal(9, people.SortOrder);
+            Assert.Equal(["apple", "Middle", "Zebra"], stored.Tags.Select(tag => tag.Name).ToArray());
+        }
+        finally
+        {
+            Cleanup(appDataRoot);
+        }
+    }
+
+    [Fact]
+    public void SyncTagCatalog_ForcesUncategorizedInPlaceOrAppendsIt()
+    {
+        var appDataRoot = CreateTempAppDataRoot();
+        try
+        {
+            var (host, service) = OpenOperations(appDataRoot);
+            Assert.True(service.SyncTagCatalog(new SyncTagCatalogRequest
+            {
+                Categories = [new TagCategorySnapshot { Id = "UNCATEGORIZED", Name = "Other", SortOrder = 1 }],
+                Tags = [new TagSnapshot { Name = "Loose", CategoryId = "other" }]
+            }));
+
+            var forced = LibraryCatalogStore.Read(host.Session.DatabasePath).Categories;
+            var inPlace = Assert.Single(forced);
+            Assert.Equal("uncategorized", inPlace.Id);
+            Assert.Equal("Uncategorized", inPlace.Name);
+            Assert.Equal(int.MaxValue, inPlace.SortOrder);
+
+            Assert.True(service.SyncTagCatalog(new SyncTagCatalogRequest
+            {
+                Categories = [new TagCategorySnapshot { Id = "people", Name = "People", SortOrder = 1 }],
+                Tags = [new TagSnapshot { Name = "Loose", CategoryId = "people" }]
+            }));
+
+            var appended = LibraryCatalogStore.Read(host.Session.DatabasePath).Categories;
+            Assert.Equal("people", appended[0].Id);
+            Assert.Equal("uncategorized", appended[1].Id);
+            Assert.Equal("Uncategorized", appended[1].Name);
+            Assert.Equal(int.MaxValue, appended[1].SortOrder);
+        }
+        finally
+        {
+            Cleanup(appDataRoot);
+        }
+    }
+
+    [Fact]
+    public void SyncTagCatalog_DoesNotBumpRevisionWhenTheCatalogAlreadyMatches()
+    {
+        var appDataRoot = CreateTempAppDataRoot();
+        try
+        {
+            var (host, service) = OpenOperations(appDataRoot);
+            var request = new SyncTagCatalogRequest
+            {
+                Categories = [new TagCategorySnapshot { Id = "people", Name = "People", SortOrder = 1 }],
+                Tags = [new TagSnapshot { Name = "Night", CategoryId = "people" }]
+            };
+            Assert.True(service.SyncTagCatalog(request));
+            var revision = host.Session.Revision;
+            request.Tags.Reverse();
+            Assert.True(service.SyncTagCatalog(request));
+            Assert.Equal(revision, host.Session.Revision);
+        }
+        finally
+        {
+            Cleanup(appDataRoot);
+        }
+    }
+
+    [Fact]
+    public void SyncTagCatalog_DropsItemAssignmentsForARemovedCatalogTag_AndKeepsATagThatWasNeverInTheTable()
     {
         var appDataRoot = CreateTempAppDataRoot();
         try
@@ -2201,87 +2288,35 @@ public sealed class LibraryOperationsServiceTests
                         ["id"] = "item-1",
                         ["fullPath"] = "/media/clip.mp4",
                         ["fileName"] = "clip.mp4",
-                        ["tags"] = new JsonArray()
+                        ["tags"] = new JsonArray("Listed")
                     }
                 },
-                ["tags"] = new JsonArray(),
-                ["categories"] = new JsonArray()
-            });
-
-            var host = LibraryCatalogHost.Open(appDataRoot, Path.Combine(appDataRoot, "thumbnails"));
-            var baseline = host.LoadDocument();
-            var edited = baseline.DeepClone()!.AsObject();
-            var item = edited["items"]!.AsArray().OfType<JsonObject>().Single();
-            item["duration"] = "00:01:30";
-
-            Assert.True(host.Session.AddItemTags("item-1", ["Holiday"]));
-            host.SaveChanges(baseline, edited);
-
-            var stored = host.LoadDocument();
-            var storedItem = stored["items"]!.AsArray().OfType<JsonObject>().Single();
-            Assert.Equal("00:01:30", storedItem["duration"]?.GetValue<string>());
-            Assert.Equal("Holiday", storedItem["tags"]!.AsArray().Single()!.GetValue<string>());
-        }
-        finally
-        {
-            LibraryCatalogBackup.WaitForPending();
-            if (Directory.Exists(appDataRoot))
-            {
-                Directory.Delete(appDataRoot, recursive: true);
-            }
-        }
-    }
-
-    [Fact]
-    public void SaveChanges_PersistsCaseOnlyPathRename()
-    {
-        var appDataRoot = CreateTempAppDataRoot();
-        try
-        {
-            SeedLibrary(appDataRoot, new JsonObject
-            {
-                ["sources"] = new JsonArray(),
-                ["items"] = new JsonArray
+                ["tags"] = new JsonArray
                 {
-                    new JsonObject
-                    {
-                        ["id"] = "item-1",
-                        ["fullPath"] = "/media/Clip.mp4",
-                        ["relativePath"] = "Clip.mp4",
-                        ["fileName"] = "Clip.mp4"
-                    }
+                    new JsonObject { ["name"] = "Listed", ["categoryId"] = "uncategorized" }
                 },
-                ["tags"] = new JsonArray(),
                 ["categories"] = new JsonArray()
             });
+            var (host, service) = OpenOperations(appDataRoot);
+            Assert.True(host.Session.ReplaceItemTags("item-1", ["Listed", "OnlyOnItem"]));
+            Assert.True(service.SyncTagCatalog(new SyncTagCatalogRequest
+            {
+                Categories = [new TagCategorySnapshot { Id = "people", Name = "People", SortOrder = 1 }],
+                Tags = [new TagSnapshot { Name = "Kept", CategoryId = "people" }]
+            }));
 
-            var host = LibraryCatalogHost.Open(appDataRoot, Path.Combine(appDataRoot, "thumbnails"));
-            var baseline = host.LoadDocument();
-            var edited = baseline.DeepClone()!.AsObject();
-            var item = edited["items"]!.AsArray().OfType<JsonObject>().Single();
-            item["fullPath"] = "/media/clip.mp4";
-            item["relativePath"] = "clip.mp4";
-            item["fileName"] = "clip.mp4";
-            host.SaveChanges(baseline, edited);
-
-            var stored = host.LoadDocument();
-            var storedItem = stored["items"]!.AsArray().OfType<JsonObject>().Single();
-            Assert.Equal("/media/clip.mp4", storedItem["fullPath"]?.GetValue<string>());
-            Assert.Equal("clip.mp4", storedItem["relativePath"]?.GetValue<string>());
-            Assert.Equal("clip.mp4", storedItem["fileName"]?.GetValue<string>());
+            var stored = LibraryCatalogStore.Read(host.Session.DatabasePath);
+            Assert.Equal(["Kept"], stored.Tags.Select(tag => tag.Name).ToArray());
+            Assert.Equal(["OnlyOnItem"], Assert.Single(stored.Items).Tags);
         }
         finally
         {
-            LibraryCatalogBackup.WaitForPending();
-            if (Directory.Exists(appDataRoot))
-            {
-                Directory.Delete(appDataRoot, recursive: true);
-            }
+            Cleanup(appDataRoot);
         }
     }
 
     [Fact]
-    public void SaveChanges_RollsBackEarlierEditsWhenALaterUpdateFails()
+    public void SyncTagCatalog_UpdatesItemTagSpellingWhenTheFoldedNameStays()
     {
         var appDataRoot = CreateTempAppDataRoot();
         try
@@ -2295,46 +2330,210 @@ public sealed class LibraryOperationsServiceTests
                     {
                         ["id"] = "item-1",
                         ["fullPath"] = "/media/clip.mp4",
-                        ["fileName"] = "clip.mp4"
+                        ["fileName"] = "clip.mp4",
+                        ["tags"] = new JsonArray("Night")
                     }
                 },
-                ["tags"] = new JsonArray(),
-                ["categories"] = new JsonArray
+                ["tags"] = new JsonArray
                 {
-                    new JsonObject
-                    {
-                        ["id"] = "people",
-                        ["name"] = "People",
-                        ["sortOrder"] = 1
-                    }
-                }
+                    new JsonObject { ["name"] = "Night", ["categoryId"] = "uncategorized" }
+                },
+                ["categories"] = new JsonArray()
             });
+            var (host, service) = OpenOperations(appDataRoot);
+            Assert.True(service.SyncTagCatalog(new SyncTagCatalogRequest
+            {
+                Categories = [],
+                Tags = [new TagSnapshot { Name = "NIGHT", CategoryId = "uncategorized" }]
+            }));
 
-            var host = LibraryCatalogHost.Open(appDataRoot, Path.Combine(appDataRoot, "thumbnails"));
-            var revision = host.Session.Revision;
-            var baseline = host.LoadDocument();
-            var edited = baseline.DeepClone()!.AsObject();
-            var category = edited["categories"]!.AsArray().OfType<JsonObject>()
-                .Single(node => node["id"]?.GetValue<string>() == "people");
-            category["name"] = "Cast";
-            baseline["items"] = new JsonArray();
-
-            Assert.ThrowsAny<Exception>(() => host.SaveChanges(baseline, edited));
-
-            var stored = host.LoadDocument();
-            var storedCategory = stored["categories"]!.AsArray().OfType<JsonObject>()
-                .Single(node => node["id"]?.GetValue<string>() == "people");
-            Assert.Equal("People", storedCategory["name"]?.GetValue<string>());
-            Assert.Single(stored["items"]!.AsArray());
-            Assert.Equal(revision, host.Session.Revision);
+            var stored = LibraryCatalogStore.Read(host.Session.DatabasePath);
+            Assert.Equal("NIGHT", Assert.Single(stored.Tags).Name);
+            Assert.Equal(["NIGHT"], Assert.Single(stored.Items).Tags);
         }
         finally
         {
-            LibraryCatalogBackup.WaitForPending();
-            if (Directory.Exists(appDataRoot))
+            Cleanup(appDataRoot);
+        }
+    }
+
+    [Fact]
+    public void SyncTagCatalog_LeavesOneItemTagWhenTheItemAlreadyHoldsBothSpellings()
+    {
+        var appDataRoot = CreateTempAppDataRoot();
+        try
+        {
+            SeedLibrary(appDataRoot, new JsonObject
             {
-                Directory.Delete(appDataRoot, recursive: true);
-            }
+                ["sources"] = new JsonArray(),
+                ["items"] = new JsonArray
+                {
+                    new JsonObject
+                    {
+                        ["id"] = "item-1",
+                        ["fullPath"] = "/media/clip.mp4",
+                        ["fileName"] = "clip.mp4",
+                        ["tags"] = new JsonArray("Night", "NIGHT")
+                    }
+                },
+                ["tags"] = new JsonArray
+                {
+                    new JsonObject { ["name"] = "Night", ["categoryId"] = "uncategorized" }
+                },
+                ["categories"] = new JsonArray()
+            });
+            var (host, service) = OpenOperations(appDataRoot);
+            Assert.Equal(["Night", "NIGHT"], Assert.Single(LibraryCatalogStore.Read(host.Session.DatabasePath).Items).Tags);
+            Assert.True(service.SyncTagCatalog(new SyncTagCatalogRequest
+            {
+                Categories = [],
+                Tags = [new TagSnapshot { Name = "NIGHT", CategoryId = "uncategorized" }]
+            }));
+
+            Assert.Equal(["NIGHT"], Assert.Single(LibraryCatalogStore.Read(host.Session.DatabasePath).Items).Tags);
+        }
+        finally
+        {
+            Cleanup(appDataRoot);
+        }
+    }
+
+    [Fact]
+    public void SyncItemTags_MatchesIdOrPath_TrimsAndDedupes_AndLeavesRevisionWhenTheStoredTagsAlreadyMatch()
+    {
+        var appDataRoot = CreateTempAppDataRoot();
+        try
+        {
+            SeedLibrary(appDataRoot, new JsonObject
+            {
+                ["sources"] = new JsonArray(),
+                ["items"] = new JsonArray
+                {
+                    new JsonObject { ["id"] = "item-1", ["fullPath"] = "/media/one.mp4", ["fileName"] = "one.mp4" },
+                    new JsonObject { ["id"] = "item-2", ["fullPath"] = "/media/two.mp4", ["fileName"] = "two.mp4" }
+                },
+                ["tags"] = new JsonArray(),
+                ["categories"] = new JsonArray()
+            });
+            var (host, service) = OpenOperations(appDataRoot);
+            var revision = host.Session.Revision;
+            Assert.False(service.SyncItemTags(new SyncItemTagsRequest
+            {
+                Items = [new ItemTagsSnapshot { ItemId = " ", Tags = ["Night"] }, new ItemTagsSnapshot { ItemId = "missing", Tags = ["Night"] }]
+            }));
+            Assert.Equal(revision, host.Session.Revision);
+
+            Assert.True(service.SyncItemTags(new SyncItemTagsRequest
+            {
+                Items =
+                [
+                    new ItemTagsSnapshot { ItemId = "item-1", Tags = ["  Zebra  ", "zebra", "apple"] },
+                    new ItemTagsSnapshot { ItemId = "/media/two.mp4", Tags = [] }
+                ]
+            }));
+            var stored = LibraryCatalogStore.Read(host.Session.DatabasePath);
+            Assert.Equal(["Zebra", "apple"], stored.Items.Single(item => item.Id == "item-1").Tags);
+            Assert.Empty(stored.Items.Single(item => item.Id == "item-2").Tags);
+            Assert.Empty(stored.Tags);
+
+            var matchedRevision = host.Session.Revision;
+            Assert.True(service.SyncItemTags(new SyncItemTagsRequest
+            {
+                Items = [new ItemTagsSnapshot { ItemId = "ITEM-1", Tags = ["zebra", "APPLE"] }]
+            }));
+            Assert.Equal(matchedRevision, host.Session.Revision);
+            Assert.Equal(["Zebra", "apple"], LibraryCatalogStore.Read(host.Session.DatabasePath).Items.Single(item => item.Id == "item-1").Tags);
+        }
+        finally
+        {
+            Cleanup(appDataRoot);
+        }
+    }
+
+    [Fact]
+    public void Startup_LoadsSourcesCategoriesItemTagsFavoriteAndBlacklist()
+    {
+        var appDataRoot = CreateTempAppDataRoot();
+        try
+        {
+            SeedLibrary(appDataRoot, new JsonObject
+            {
+                ["sources"] = new JsonArray
+                {
+                    new JsonObject { ["id"] = "src-1", ["rootPath"] = "/media", ["displayName"] = "Clips", ["isEnabled"] = true }
+                },
+                ["items"] = new JsonArray
+                {
+                    new JsonObject
+                    {
+                        ["id"] = "fav-1",
+                        ["fullPath"] = "/media/fav.mp4",
+                        ["fileName"] = "fav.mp4",
+                        ["isFavorite"] = true,
+                        ["tags"] = new JsonArray("Night")
+                    },
+                    new JsonObject
+                    {
+                        ["id"] = "block-1",
+                        ["fullPath"] = "/media/block.mp4",
+                        ["fileName"] = "block.mp4",
+                        ["isBlacklisted"] = true
+                    }
+                },
+                ["tags"] = new JsonArray
+                {
+                    new JsonObject { ["name"] = "Night", ["categoryId"] = "people" }
+                },
+                ["categories"] = new JsonArray
+                {
+                    new JsonObject { ["id"] = "people", ["name"] = "People", ["sortOrder"] = 1 }
+                }
+            });
+
+            var state = new ServerStateService(appDataPathOverride: appDataRoot);
+            var source = Assert.Single(state.GetSourcesSnapshot());
+            Assert.Equal("src-1", source.Id);
+            Assert.Equal("/media", source.RootPath);
+            Assert.Equal("Clips", source.DisplayName);
+            Assert.True(source.IsEnabled);
+
+            var categories = state.GetTagCategoriesSnapshot();
+            Assert.Contains(categories, category => category.Id == "people" && category.Name == "People" && category.SortOrder == 1);
+            Assert.Contains(categories, category => category.Id == "uncategorized" && category.Name == "Uncategorized");
+            Assert.Equal("Night", Assert.Single(state.GetTagsSnapshot()).Name);
+
+            var states = state.GetLibraryStates(null);
+            var favorite = Assert.Single(states, item => item.Path == "/media/fav.mp4");
+            Assert.Equal("/media/fav.mp4", favorite.ItemId);
+            Assert.True(favorite.IsFavorite);
+            Assert.False(favorite.IsBlacklisted);
+            var blacklisted = Assert.Single(states, item => item.Path == "/media/block.mp4");
+            Assert.Equal("/media/block.mp4", blacklisted.ItemId);
+            Assert.True(blacklisted.IsBlacklisted);
+            Assert.False(blacklisted.IsFavorite);
+
+            var model = state.GetTagEditorModel(new TagEditorModelRequest { ItemIds = ["/media/fav.mp4"] });
+            Assert.Equal(["Night"], Assert.Single(model.Items).Tags);
+        }
+        finally
+        {
+            Cleanup(appDataRoot);
+        }
+    }
+
+    private static (LibraryCatalogHost Host, LibraryOperationsService Service) OpenOperations(string appDataRoot)
+    {
+        var host = LibraryCatalogHost.Open(appDataRoot, Path.Combine(appDataRoot, "thumbnails"));
+        var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot, host);
+        return (host, service);
+    }
+
+    private static void Cleanup(string appDataRoot)
+    {
+        LibraryCatalogBackup.WaitForPending();
+        if (Directory.Exists(appDataRoot))
+        {
+            Directory.Delete(appDataRoot, recursive: true);
         }
     }
 
@@ -2362,11 +2561,11 @@ public sealed class LibraryOperationsServiceTests
         File.WriteAllText(libraryPath, root.ToJsonString());
     }
 
-    private static JsonObject LoadLibrary(string appDataRoot)
+    private static LibraryCatalogSnapshot LoadLibrary(string appDataRoot)
     {
         var opened = CatalogOpen.Open(appDataRoot);
         Assert.NotNull(opened.Session);
-        return opened.Session.BuildDocument();
+        return LibraryCatalogStore.Read(opened.Session.DatabasePath);
     }
 
     private static void SeedCoreSettings(string appDataRoot, bool enabled, int minimumGapMinutes, int numberOfBackups)

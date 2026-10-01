@@ -19,6 +19,9 @@ Instructions:
 
 Commit Message:
 
-Bugfix: Close a bad catalog before quarantining it
+M10i17: Stop using the catalog document for live reads and writes
 
-- Dispose the write connection when opening a file that is not a database, so Windows can rename it aside.
+- Tag catalog sync, item-tag sync, and server startup read and write catalog rows.
+- Remove the catalog document builder, the full-document save, and the unused library reload.
+- Startup still migrates a leftover library.json, and Import Library still rejects that archive.
+- The tag table remains the catalog's tag list. A catalog spelling change updates item assignments that share that folded name.

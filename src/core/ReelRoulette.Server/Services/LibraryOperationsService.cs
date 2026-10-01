@@ -34,7 +34,6 @@ public sealed class LibraryOperationsService
     private readonly ILogger<LibraryOperationsService> _logger;
     private readonly LibraryCatalogHost _catalog;
     private readonly Func<string, IReadOnlyList<string>> _enumerateFiles;
-    private JsonObject? _editBaseline;
 
     public LibraryOperationsService(
         ILogger<LibraryOperationsService>? logger = null,
@@ -437,34 +436,7 @@ public sealed class LibraryOperationsService
     {
         lock (_lock)
         {
-            var root = LoadLibraryRoot();
-            var categories = new JsonArray();
-            foreach (var category in request.Categories.Where(category => !string.IsNullOrWhiteSpace(category.Name)))
-            {
-                categories.Add(new JsonObject
-                {
-                    ["id"] = NormalizeCategoryId(category.Id),
-                    ["name"] = category.Name.Trim(),
-                    ["sortOrder"] = category.SortOrder
-                });
-            }
-
-            var tags = new JsonArray();
-            foreach (var tag in request.Tags.Where(tag => !string.IsNullOrWhiteSpace(tag.Name)))
-            {
-                tags.Add(new JsonObject
-                {
-                    ["name"] = tag.Name.Trim(),
-                    ["categoryId"] = NormalizeCategoryId(tag.CategoryId)
-                });
-            }
-
-            _ = NormalizeTagCatalog(tags);
-
-            EnsureUncategorizedCategory(categories.OfType<JsonObject>().ToList());
-            root["categories"] = categories;
-            root["tags"] = tags;
-            SaveLibraryRoot(root);
+            _catalog.Session.ApplySyncedTagCatalog(NormalizeSyncedCategories(request.Categories), NormalizeSyncedTags(request.Tags));
             return true;
         }
     }
@@ -473,36 +445,13 @@ public sealed class LibraryOperationsService
     {
         lock (_lock)
         {
-            var root = LoadLibraryRoot();
-            var items = EnsureArray(root, "items").OfType<JsonObject>().ToList();
-            var changed = false;
-            foreach (var snapshot in request.Items.Where(item => !string.IsNullOrWhiteSpace(item.ItemId)))
-            {
-                var item = items.FirstOrDefault(candidate =>
-                    string.Equals(GetNodeString(candidate["id"]), snapshot.ItemId, StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(GetNodeString(candidate["fullPath"]), snapshot.ItemId, StringComparison.OrdinalIgnoreCase));
-                if (item == null)
+            return _catalog.Session.SyncItemTags(request.Items
+                .Select(item => new ReelRoulette.Core.Library.CatalogItemTagAssignment
                 {
-                    continue;
-                }
-
-                var itemTags = new JsonArray();
-                foreach (var tag in snapshot.Tags.Where(tag => !string.IsNullOrWhiteSpace(tag)).Distinct(StringComparer.OrdinalIgnoreCase))
-                {
-                    itemTags.Add(tag.Trim());
-                }
-
-                item["tags"] = itemTags;
-                changed = true;
-            }
-
-            if (!changed)
-            {
-                return false;
-            }
-
-            SaveLibraryRoot(root);
-            return true;
+                    ItemId = item.ItemId,
+                    Tags = item.Tags
+                })
+                .ToList());
         }
     }
 
@@ -835,36 +784,6 @@ public sealed class LibraryOperationsService
         }
     }
 
-    private JsonObject LoadLibraryRoot()
-    {
-        var baseline = _catalog.LoadDocument();
-        _editBaseline = baseline;
-        return baseline.DeepClone() as JsonObject ?? new JsonObject();
-    }
-
-    private void SaveLibraryRoot(JsonObject root)
-    {
-        if (_editBaseline == null)
-        {
-            throw new InvalidOperationException("Catalog edit has no baseline.");
-        }
-
-        _catalog.SaveChanges(_editBaseline, root);
-        _editBaseline = null;
-    }
-
-    private static JsonArray EnsureArray(JsonObject root, string propertyName)
-    {
-        if (root[propertyName] is JsonArray existing)
-        {
-            return existing;
-        }
-
-        var created = new JsonArray();
-        root[propertyName] = created;
-        return created;
-    }
-
     private static IReadOnlyList<string> EnumerateAllFiles(string rootPath) =>
         Directory.GetFiles(rootPath, "*", SearchOption.AllDirectories);
 
@@ -909,57 +828,6 @@ public sealed class LibraryOperationsService
 
     private static bool ItemHasTag(CatalogAutoTagScanItem item, string tagName) =>
         item.Tags.Any(tag => string.Equals(tag, tagName, StringComparison.OrdinalIgnoreCase));
-
-    private static string GetNodeString(JsonNode? node)
-    {
-        if (node is null)
-        {
-            return string.Empty;
-        }
-
-        try
-        {
-            return node.GetValue<string>()?.Trim() ?? string.Empty;
-        }
-        catch
-        {
-            var raw = node.ToJsonString().Trim();
-            if (raw.Length >= 2 && raw[0] == '"' && raw[^1] == '"')
-            {
-                raw = raw[1..^1];
-            }
-
-            return raw;
-        }
-    }
-
-    private static bool GetNodeBool(JsonNode? node, bool defaultValue)
-    {
-        if (node is null)
-        {
-            return defaultValue;
-        }
-
-        try
-        {
-            return node.GetValue<bool>();
-        }
-        catch
-        {
-            var text = GetNodeString(node);
-            if (bool.TryParse(text, out var parsed))
-            {
-                return parsed;
-            }
-
-            if (int.TryParse(text, out var numeric))
-            {
-                return numeric != 0;
-            }
-
-            return defaultValue;
-        }
-    }
 
     private LibraryStateResponse? UpdateItemFlag(string identifier, Action update)
     {
@@ -1031,93 +899,82 @@ public sealed class LibraryOperationsService
         });
     }
 
-    private static void EnsureUncategorizedCategory(List<JsonObject> categories)
+    private static List<LibraryCatalogCategory> NormalizeSyncedCategories(IReadOnlyList<TagCategorySnapshot> categories)
     {
-        var existing = categories.FirstOrDefault(category =>
-            string.Equals(GetNodeString(category["id"]), UncategorizedCategoryId, StringComparison.OrdinalIgnoreCase));
-        if (existing != null)
+        var ordered = new List<LibraryCatalogCategory>();
+        var indexById = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var category in categories)
         {
-            existing["id"] = UncategorizedCategoryId;
-            existing["name"] = UncategorizedCategoryName;
-            existing["sortOrder"] = int.MaxValue;
-            return;
+            if (string.IsNullOrWhiteSpace(category.Name))
+            {
+                continue;
+            }
+
+            var id = NormalizeCategoryId(category.Id);
+            var row = new LibraryCatalogCategory
+            {
+                Id = id,
+                Name = category.Name.Trim(),
+                SortOrder = category.SortOrder
+            };
+            if (indexById.TryGetValue(id, out var index))
+            {
+                ordered[index] = row;
+                continue;
+            }
+
+            indexById[id] = ordered.Count;
+            ordered.Add(row);
         }
 
-        categories.Add(new JsonObject
+        var uncategorized = new LibraryCatalogCategory
         {
-            ["id"] = UncategorizedCategoryId,
-            ["name"] = UncategorizedCategoryName,
-            ["sortOrder"] = int.MaxValue
-        });
+            Id = UncategorizedCategoryId,
+            Name = UncategorizedCategoryName,
+            SortOrder = int.MaxValue
+        };
+        if (indexById.TryGetValue(UncategorizedCategoryId, out var uncategorizedIndex))
+        {
+            ordered[uncategorizedIndex] = uncategorized;
+        }
+        else
+        {
+            ordered.Add(uncategorized);
+        }
+
+        return ordered;
     }
 
-    private static bool NormalizeTagCatalog(JsonArray tags)
+    private static List<LibraryCatalogTag> NormalizeSyncedTags(IReadOnlyList<TagSnapshot> tags)
     {
-        var before = tags
-            .OfType<JsonObject>()
-            .Select(tag => (Name: GetNodeString(tag["name"]), CategoryId: NormalizeCategoryId(GetNodeString(tag["categoryId"]))))
-            .OrderBy(entry => entry.Name, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(entry => entry.CategoryId, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-        var canonicalByName = new Dictionary<string, JsonObject>(StringComparer.OrdinalIgnoreCase);
-        foreach (var tag in tags.OfType<JsonObject>())
+        var kept = new List<LibraryCatalogTag>();
+        var indexByName = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var tag in tags)
         {
-            var name = GetNodeString(tag["name"]);
-            if (string.IsNullOrWhiteSpace(name))
+            if (string.IsNullOrWhiteSpace(tag.Name))
             {
                 continue;
             }
 
-            var categoryId = NormalizeCategoryId(GetNodeString(tag["categoryId"]));
-            var candidate = new JsonObject
+            var name = tag.Name.Trim();
+            var categoryId = NormalizeCategoryId(tag.CategoryId);
+            if (!indexByName.TryGetValue(name, out var index))
             {
-                ["name"] = name,
-                ["categoryId"] = categoryId
-            };
-
-            if (!canonicalByName.TryGetValue(name, out var existing))
-            {
-                canonicalByName[name] = candidate;
+                indexByName[name] = kept.Count;
+                kept.Add(new LibraryCatalogTag { Name = name, CategoryId = categoryId });
                 continue;
             }
 
-            var existingCategoryId = NormalizeCategoryId(GetNodeString(existing["categoryId"]));
-            var existingUncategorized = string.Equals(existingCategoryId, UncategorizedCategoryId, StringComparison.OrdinalIgnoreCase);
+            var existingUncategorized = string.Equals(kept[index].CategoryId, UncategorizedCategoryId, StringComparison.OrdinalIgnoreCase);
             var candidateUncategorized = string.Equals(categoryId, UncategorizedCategoryId, StringComparison.OrdinalIgnoreCase);
             if (existingUncategorized && !candidateUncategorized)
             {
-                canonicalByName[name] = candidate;
+                kept[index] = new LibraryCatalogTag { Name = name, CategoryId = categoryId };
             }
         }
 
-        tags.Clear();
-        foreach (var entry in canonicalByName.OrderBy(entry => entry.Key, StringComparer.OrdinalIgnoreCase))
-        {
-            tags.Add(entry.Value);
-        }
-
-        var after = tags
-            .OfType<JsonObject>()
-            .Select(tag => (Name: GetNodeString(tag["name"]), CategoryId: NormalizeCategoryId(GetNodeString(tag["categoryId"]))))
-            .OrderBy(entry => entry.Name, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(entry => entry.CategoryId, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-        if (before.Count != after.Count)
-        {
-            return true;
-        }
-
-        for (var i = 0; i < before.Count; i++)
-        {
-            if (!string.Equals(before[i].Name, after[i].Name, StringComparison.OrdinalIgnoreCase) ||
-                !string.Equals(before[i].CategoryId, after[i].CategoryId, StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-        }
-
-        return false;
+        kept.Sort((left, right) => StringComparer.OrdinalIgnoreCase.Compare(left.Name, right.Name));
+        return kept;
     }
 
 }

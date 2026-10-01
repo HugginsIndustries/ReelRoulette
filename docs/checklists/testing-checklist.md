@@ -29,6 +29,7 @@ Use `pwsh ./tools/scripts/reset-checklist.ps1` to reset metadata/check states be
 ## Server Baseline + Tray
 
 - [ ] `POST /api/library/query` returns a page with `totalCount` and `searchBaselineCount`, keeps missing files, and returns thumbnail layout fields for that page. `POST /api/library/item` returns one item by id or path, without thumbnail fields, and returns 404 when the item is missing.
+- [ ] Tag catalog sync, item-tag sync, and server startup use catalog rows. The tag table is the catalog's tag list. An item can still hold a tag name that is not in that table. A missing `library.db` still migrates a leftover `library.json` once.
 - [x] `ReelRoulette.ServerApp` starts without fatal startup errors.
 - [x] `/health` and WebUI static assets respond correctly.
 - [x] Server launches with no command prompt window on Windows.
@@ -135,7 +136,7 @@ Use `pwsh ./tools/scripts/reset-checklist.ps1` to reset metadata/check states be
 - [x] Filter dialog Tags tab shows per-category collapse toggles and legacy flat tag model renders correctly.
 - [x] Clear playback stats flow works with confirmation.
 - [ ] `Library → Export Library…` with the server running asks for a destination, then saves a `library.db` checkpoint. It does not write a zip.
-- [ ] `Library → Import Library…` requires the server-stopped acknowledgment. The overwrite confirmation names the library catalog. Restoring an export replaces the live catalog, including presets and thumbnail revision and dimensions. Settings and backups stay where they are. JPEG files stay until the next thumbnail stage completes. Run a refresh after import so those thumbnails are generated and JPEG files that are not in the imported catalog are removed. A folder that still has only `library.json` with sources or items asks for the same overwrite confirmation, and that file is not left as `library.json` afterward. A `library.db` that cannot be opened asks too. A file that is not a library database is rejected.
+- [ ] `Library → Import Library…` requires the server-stopped acknowledgment. The overwrite confirmation names the library catalog. Restoring an export replaces the live catalog, including presets and thumbnail revision and dimensions. Settings and backups stay where they are. JPEG files stay until the next thumbnail stage completes. Run a refresh after import so those thumbnails are generated and JPEG files that are not in the imported catalog are removed. A folder that still has only `library.json` with sources or items asks for the same overwrite confirmation, and that file is not left as `library.json` afterward. A `library.db` that cannot be opened asks too. A file that is not a library database is rejected, including a `library.json` document, and the existing catalog stays.
 - [ ] With server backups enabled, a catalog change returns without waiting for the copy, then writes `library.db.backup.*` in the backups folder after the backup gap. Leftover `library.json.backup.*` files are left in place.
 
 ## Cross-Client Parity + Sync

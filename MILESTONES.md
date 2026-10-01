@@ -89,37 +89,7 @@ Do not use this file for detailed architecture explanation or current capability
 
 ## Active Milestones
 
-Last milestone completed: M10i16
-
-### M10i17 - Catalog Document Removal
-
-- **Status**: ⏳ Planned
-- **Goal**: Stop using the catalog document for live reads and writes in v0.13.0, while keeping startup migration of a leftover `library.json` so an old library can still be migrated.
-- **Scope**:
-  - Depends on: catalog schema version 2.
-  - JSON-era leftovers that do not serve migration follow this milestone and end the v0.13.0 release.
-  - Tag catalog sync and item-tag sync update catalog rows directly. They do not load or diff the full catalog document.
-  - Server startup loads sources, tags, item tags, and favorite and blacklist item state with SQL. It does not build the catalog document.
-  - The library reload after import uses that same SQL load, or that reload is removed. It does not build the catalog document.
-  - Remove the catalog document builder and the full-document save path.
-  - The JSON-to-SQLite importer stays for startup migration of a leftover `library.json`, including the preset and thumbnail-index copy from catalog schema version 2. Startup still migrates a leftover `library.json` once. Import Library does not accept a `library.json` archive. An empty database may still be created through that importer.
-  - Update the testing checklist and current-state docs.
-- **Acceptance criteria**:
-  - Tag catalog sync and item-tag sync persist without loading or diffing the full catalog document.
-  - Server startup loads favorite and blacklist item state without building the catalog document.
-  - Library reload does not build the catalog document.
-  - There is no catalog document builder and no full-document save path.
-  - A missing `library.db` still migrates `library.json`. Import Library does not accept a `library.json` archive.
-  - Docs and the testing checklist describe live catalog reads and writes as row operations, describe the tag table as the only tag list, and still describe startup migration of a leftover `library.json`.
-- **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include tests that tag catalog sync and item-tag sync persist without a catalog document build, that server startup loads favorite and blacklist item state without building that document, that library reload does not build it, and that a missing database still migrates `library.json`.
-  - Docs evidence must include current-state and checklist updates for row-based live reads and writes, for the tag table as the only tag list, and for startup migration of a leftover `library.json` still described.
-- **Deferrals / Follow-ups**:
-  - Removing `library.json` file recognition and the JSON-to-SQLite importer ships in v0.14.0.
-  - Unused JSON-era types, desktop fields, and comments that do not serve startup migration are the next milestone, still in v0.13.0.
-  - Account and PIN tables stay with the account and PIN data model work.
-  - An item can still hold a tag name that is not in the tag table. The tag table is the catalog's tag list. That does not require every name stored on an item to be in that list.
-  - Source import does not refresh the in-memory source list that `GET /api/sources` reads. That list is filled at startup. This is pre-existing and is not fixed here.
+Last milestone completed: M10i17
 
 ### M10i18 - JSON-Era Leftovers That Do Not Serve Migration
 
@@ -1273,11 +1243,64 @@ Last milestone completed: M10i16
   - Long-duration media processing is resumable/retry-safe and operationally observable.
   - Recognition/identity features remain explicitly out of scope unless separately approved.
 
+### P10 - Ordinal Path Identity on Linux
+
+- **Status**: ⏳ Planned
+- **Goal**: On Linux, treat paths that differ only by case as different paths in folder import and in refresh, and keep the ignore-case path compare on Windows.
+- **Scope**:
+  - Folder import and refresh use ordinal path identity on Linux. Windows keeps the ignore-case compare.
+  - A case-only rename on Linux rewrites the stored full path, relative path, and file name together. Two files that differ only by case stay two items.
+  - Source roots have the same case problem: `/Media` and `/media` can be different directories on Linux and are still compared ignoring case.
+  - This needs a Windows VM pass before the compare changes. Windows enumeration casing was not measured. An ordinal compare there may treat an operating-system casing difference as a removed file plus a new file.
+- **Acceptance criteria**:
+  - On Linux, importing a case-only rename of an existing file stores the new full path, relative path, and file name, and that full path exists.
+  - On Linux, refresh of that rename reports the rename and stores the discovered path. Two files in one folder that differ only by case both remain in the catalog.
+  - On Windows, a casing difference between the stored path and the enumerated path does not remove the item or add a second one.
+  - Source-root casing is decided in the same change, including two directories that differ only by case on Linux.
+- **Verification evidence**:
+  - Measured on Linux before this backlog item, for both v0.12.0 import and the current import: after `Clip.mp4` is renamed to `clip.mp4`, the stored full path stays `Clip.mp4` while the relative path and file name become `clip.mp4`. Refresh then reports 0 added, 0 removed, 0 renamed, and 0 moved. The thumbnail stage reports 1 missing source. An ignore-case set of a folder that contains both `clip.mp4` and `Clip.mp4` keeps one path; an ordinal set keeps both.
+  - Completion evidence must include those Linux cases after the fix, plus a Windows VM pass for the ignore-case compare.
+- **Deferrals / Follow-ups**:
+  - None yet.
+
 ---
 
 ## Completed Milestones
 
 Latest completions first:
+
+### M10i17 - Catalog Document Removal
+
+- **Status**: ✅ Complete
+- **Goal**: Stop using the catalog document for live reads and writes in v0.13.0, while keeping startup migration of a leftover `library.json` so an old library can still be migrated.
+- **Scope**:
+  - Depends on: catalog schema version 2.
+  - JSON-era leftovers that do not serve migration follow this milestone and end the v0.13.0 release.
+  - Tag catalog sync and item-tag sync update catalog rows directly. They do not load or diff the full catalog document.
+  - Server startup loads sources, tags, item tags, and favorite and blacklist item state with SQL. It does not build the catalog document.
+  - The library reload after import uses that same SQL load, or that reload is removed. It does not build the catalog document.
+  - Remove the catalog document builder and the full-document save path.
+  - The JSON-to-SQLite importer stays for startup migration of a leftover `library.json`, including the preset and thumbnail-index copy from catalog schema version 2. Startup still migrates a leftover `library.json` once. Import Library does not accept a `library.json` archive. An empty database may still be created through that importer.
+  - Update the testing checklist and current-state docs.
+- **Acceptance criteria**:
+  - Tag catalog sync and item-tag sync persist without loading or diffing the full catalog document.
+  - Server startup loads favorite and blacklist item state without building the catalog document.
+  - Library reload does not build the catalog document.
+  - There is no catalog document builder and no full-document save path.
+  - A missing `library.db` still migrates `library.json`. Import Library does not accept a `library.json` archive.
+  - Docs and the testing checklist describe live catalog reads and writes as row operations, describe the tag table as the only tag list, and still describe startup migration of a leftover `library.json`.
+- **Verification evidence**:
+  - `dotnet build ReelRoulette.sln` and `dotnet test ReelRoulette.sln` passed. `dotnet run --project src/core/ReelRoulette.Core.SystemChecks -- --verbose` passed.
+  - Tests cover tag catalog sync and item-tag sync as row writes: trimmed names, blank names skipped, the earlier category kept unless it is Uncategorized, Uncategorized forced, last-wins on a duplicate category id, tags stored in name order, no revision bump when the stored rows already match, a removed catalog tag losing its item assignments, an item tag that was never in the tag table staying, a catalog spelling change from `Night` to `NIGHT` updating the item assignment, and an item that already holds both spellings keeping one row. Item-tag sync matches catalog id or full path, returns false when none match, and does not bump revision when the stored tags already match. Server startup loads sources, categories including Uncategorized, item tags, favorite, and blacklist from SQL, and the in-memory item id is the file path. The catalog document builder and the full-document save path are removed, and the unused library reload is removed. `Open_MigratesLibraryJson_IncludingStringEnumsNumericDurationAndAvailableTags` still migrates a leftover `library.json`. A file whose body is a `library.json` object is rejected by the catalog file check and by Import Library, and the live catalog stays.
+  - `CONTEXT.md`, `docs/api.md`, `docs/domain-inventory.md`, and `docs/checklists/testing-checklist.md` describe live catalog reads and writes as row operations, describe the tag table as the catalog's tag list, and still describe startup migration of a leftover `library.json`. The `[Unreleased]` library-catalog changelog bullet includes the same outcome.
+- **Deferrals / Follow-ups**:
+  - Removing `library.json` file recognition and the JSON-to-SQLite importer ships in v0.14.0.
+  - Unused JSON-era types, desktop fields, and comments that do not serve startup migration are the next milestone, still in v0.13.0.
+  - Account and PIN tables stay with the account and PIN data model work.
+  - An item can still hold a tag name that is not in the tag table. The tag table is the catalog's tag list. That does not require every name stored on an item to be in that list.
+  - Source import does not refresh the in-memory source list that `GET /api/sources` reads. That list is filled at startup. This is pre-existing and is not fixed here.
+  - Ordinal path identity on Linux is recorded in the backlog item of that name. This milestone does not change path casing.
+  - Removing `POST /api/tag-editor/sync-catalog` and `POST /api/tag-editor/sync-item-tags` needs its own contract decision. Those routes stay.
 
 ### M10i16 - Catalog Schema Version 2
 

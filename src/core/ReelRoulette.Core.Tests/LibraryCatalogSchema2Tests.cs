@@ -53,8 +53,6 @@ public sealed class LibraryCatalogSchema2Tests
         Assert.True(File.Exists(Path.Combine(dir.Path, "presets.json.migrated")));
         Assert.False(File.Exists(Path.Combine(thumbs, "index.json")));
         Assert.True(File.Exists(Path.Combine(thumbs, "index.json.migrated")));
-        var document = opened.Session.BuildDocument();
-        Assert.Null(document["availableTags"]);
     }
 
     [Fact]

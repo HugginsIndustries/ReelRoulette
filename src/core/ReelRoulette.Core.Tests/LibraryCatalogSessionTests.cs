@@ -78,7 +78,7 @@ public sealed class LibraryCatalogSessionTests
     }
 
     [Fact]
-    public void BuildDocument_UsesIntegerEnumsAndHourDuration_OmitsThumbnailsAndFingerprintIndex()
+    public void ToItemJson_UsesIntegerEnumsAndHourDuration_OmitsThumbnails()
     {
         using var dir = new TempDirectory();
         var session = CatalogOpen.Open(dir.Path).Session!;
@@ -93,9 +93,9 @@ public sealed class LibraryCatalogSessionTests
             LoudnessError = "decode failed"
         }));
 
-        var document = session.BuildDocument();
-        var json = document.ToJsonString();
-        var item = Assert.IsType<JsonObject>(Assert.IsType<JsonArray>(document["items"])[0]);
+        var stored = Assert.Single(LibraryCatalogStore.Read(session.DatabasePath).Items);
+        var item = LibraryCatalogSession.ToItemJson(stored);
+        var json = item.ToJsonString();
 
         Assert.Equal(1, item["mediaType"]!.GetValue<int>());
         Assert.Equal(2, item["fingerprintStatus"]!.GetValue<int>());
@@ -104,8 +104,6 @@ public sealed class LibraryCatalogSessionTests
         Assert.DoesNotContain("thumbnailWidth", json, StringComparison.Ordinal);
         Assert.DoesNotContain("thumbnailHeight", json, StringComparison.Ordinal);
         Assert.DoesNotContain("hasThumbnail", json, StringComparison.Ordinal);
-        Assert.DoesNotContain("fingerprintIndex", json, StringComparison.Ordinal);
-        Assert.Null(document["availableTags"]);
     }
 
     [Fact]
@@ -387,7 +385,7 @@ public sealed class LibraryCatalogSessionTests
 
         var item = Assert.Single(LibraryCatalogStore.Read(session.DatabasePath).Items);
         Assert.Equal(1, item.FingerprintVersion);
-        Assert.Equal(1, session.BuildDocument()["items"]![0]!["fingerprintVersion"]!.GetValue<int>());
+        Assert.Equal(1, LibraryCatalogSession.ToItemJson(item)["fingerprintVersion"]!.GetValue<int>());
     }
 
     [Fact]
@@ -421,7 +419,6 @@ public sealed class LibraryCatalogSessionTests
         var session = CatalogOpen.Open(dir.Path).Session!;
         Assert.Equal(0, session.Revision);
 
-        _ = session.BuildDocument();
         Assert.False(session.SetFavorite("missing", true));
         Assert.Equal(0, session.Revision);
 
@@ -433,7 +430,6 @@ public sealed class LibraryCatalogSessionTests
         }));
         Assert.Equal(1, session.Revision);
 
-        _ = session.BuildDocument();
         Assert.Equal(1, session.Revision);
 
         Assert.True(session.SetLoudness("item-1", false, null, null, "no audio stream"));
@@ -460,7 +456,6 @@ public sealed class LibraryCatalogSessionTests
         }));
         Assert.True(session.UpsertCategory("people", "People", 1));
         Assert.True(session.UpsertTag("Old", "people"));
-        var builds = session.DocumentBuilds;
 
         Assert.True(session.ApplyItemTagEdits(["item-1", "/clips/two.mp4"], ["New"], ["Old"], out var catalogChanged));
         Assert.True(catalogChanged);
@@ -474,12 +469,8 @@ public sealed class LibraryCatalogSessionTests
 
         Assert.Equal(1, applied.AssignmentsAdded);
         Assert.Equal(["/clips/one.mp4"], applied.ChangedItemPaths);
-        Assert.Equal(builds, session.DocumentBuilds);
         var model = session.ReadTagEditor(["/clips/one.mp4"]);
         Assert.Equal(["Auto"], Assert.Single(model.Items).Tags);
-        Assert.Equal(builds, session.DocumentBuilds);
-        _ = session.BuildDocument();
-        Assert.Equal(builds + 1, session.DocumentBuilds);
     }
 
     [Fact]
@@ -503,21 +494,16 @@ public sealed class LibraryCatalogSessionTests
             FileName = "other.mp4",
             Tags = ["Day"]
         }));
-        var builds = session.DocumentBuilds;
 
         Assert.True(session.RenameTag("Night", "Late", null, out var renamed));
         Assert.Equal(["kept"], renamed);
         Assert.False(session.RenameTag("Missing", "Nope", null, out var missingRename));
         Assert.Empty(missingRename);
-        Assert.Equal(builds, session.DocumentBuilds);
 
         Assert.True(session.DeleteTag("Late", out var deleted));
         Assert.Equal(["kept"], deleted);
         Assert.False(session.DeleteTag("Missing", out var missingDelete));
         Assert.Empty(missingDelete);
-        Assert.Equal(builds, session.DocumentBuilds);
-        _ = session.BuildDocument();
-        Assert.Equal(builds + 1, session.DocumentBuilds);
     }
 
     [Fact]
@@ -595,7 +581,6 @@ public sealed class LibraryCatalogSessionTests
             FullPath = "/clips/clean.mp4",
             FileName = "clean.mp4"
         }));
-        var builds = session.DocumentBuilds;
         var revision = session.Revision;
 
         Assert.True(session.SetFavorite("/CLIPS/A.MP4", true));
@@ -669,9 +654,32 @@ public sealed class LibraryCatalogSessionTests
         var revisionAfterClear = session.Revision;
         Assert.Equal(0, session.ClearPlaybackStats([]));
         Assert.Equal(revisionAfterClear, session.Revision);
-        Assert.Equal(builds, session.DocumentBuilds);
-        _ = session.BuildDocument();
-        Assert.Equal(builds + 1, session.DocumentBuilds);
+    }
+
+    [Fact]
+    public void ImportSource_CurrentBehavior_KeepsTheStoredFullPathWhenOnlyTheRelativePathAndFileNameChangeCase()
+    {
+        using var dir = new TempDirectory();
+        var session = CatalogOpen.Open(dir.Path).Session!;
+        Assert.True(session.InsertSource("src-1", "/Media", "Media", true));
+        Assert.True(session.InsertItem(new LibraryCatalogItem
+        {
+            Id = "item-1",
+            SourceId = "src-1",
+            FullPath = "/Media/Clip.mp4",
+            RelativePath = "Clip.mp4",
+            FileName = "Clip.mp4"
+        }));
+
+        session.ImportSourceFolder(
+            "/media",
+            null,
+            [new CatalogSourceImportFile("/media/clip.mp4", "clip.mp4", "clip.mp4", 0)]);
+
+        var item = Assert.Single(LibraryCatalogStore.Read(session.DatabasePath).Items);
+        Assert.Equal("/Media/Clip.mp4", item.FullPath);
+        Assert.Equal("clip.mp4", item.RelativePath);
+        Assert.Equal("clip.mp4", item.FileName);
     }
 
     private static string ReadUserVersion(string directory)
