@@ -398,11 +398,13 @@ public sealed class LibraryListQueryTests
             "ann", "ann-bob", "ann-home", "loose-ann", "spare-ann");
         AssertBoth(session, new FilterStateModel { SelectedTags = ["Loose", "Ann"], GlobalMatchMode = true }, "loose-ann");
 
-        // tagMatchMode does not change a filter; the global and per-category modes decide.
-        AssertBoth(
-            session,
-            new FilterStateModel { SelectedTags = ["Ann", "Bob"], TagMatchMode = TagMatchModeValue.Or },
-            "ann-bob");
+        // A tagMatchMode an older client still sends does not change a filter; the global and per-category modes decide.
+        foreach (var tagMatchMode in new[] { "1", "\"Or\"" })
+        {
+            using var sent = JsonDocument.Parse($$"""{"selectedTags":["Ann","Bob"],"tagMatchMode":{{tagMatchMode}}}""");
+            Assert.True(LibraryListFilterParser.TryParse(sent.RootElement, out var parsed, out var error), error);
+            AssertBoth(session, parsed!, "ann-bob");
+        }
 
         static void AssertBoth(LibraryCatalogSession session, FilterStateModel filter, params string[] expected)
         {

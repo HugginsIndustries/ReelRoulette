@@ -29,7 +29,7 @@ Use `pwsh ./tools/scripts/reset-checklist.ps1` to reset metadata/check states be
 ## Server Baseline + Tray
 
 - [ ] `POST /api/library/query` returns a page with `totalCount` and `searchBaselineCount`, keeps missing files, and returns thumbnail layout fields for that page. `POST /api/library/item` returns one item by id or path, without thumbnail fields, and returns 404 when the item is missing.
-- [ ] Tag catalog sync and item-tag sync use catalog rows, and server startup loads sources from them. The tag table is the catalog's tag list. An item can still hold a tag name that is not in that table. A missing `library.db` still migrates a leftover `library.json` once.
+- [ ] Server startup loads sources from catalog rows. The tag table is the catalog's tag list. An item can still hold a tag name that is not in that table. A missing `library.db` still migrates a leftover `library.json` once.
 - [x] `ReelRoulette.ServerApp` starts without fatal startup errors.
 - [x] `/health` and WebUI static assets respond correctly.
 - [x] Server launches with no command prompt window on Windows.
@@ -215,6 +215,10 @@ Use `pwsh ./tools/scripts/reset-checklist.ps1` to reset metadata/check states be
 - [ ] WebUI in Firefox reloads and stays connected, including several reloads in a row. An installed home-screen app still opens.
 - [ ] Library stats still show the same global and per-source totals. An item-state read for a path returns that item, and an empty path list returns nothing. WebUI resync does not request item state with an empty path list.
 - [ ] Auto-tag scan and duplicate scan read catalog rows and do not load the full library. Full-library scan still scans every item and ignores a path list. A scan with full library off and no path list still scans enabled sources only. An explicit path list still matches those files. Duplicate groups include only ready fingerprints. Pending, failed, and stale fingerprints stay out. Applying a duplicate choice deletes the other files and catalog rows and leaves the kept item. A missing file is reported and that row stays.
+- [ ] With tags included and **Category Combination** set to OR, the desktop main-window filter summary says `(any)`. With AND it says `(all)`.
+- [ ] In the desktop filter dialog, changing only **Category Combination** on a saved preset shows `Preset: Name*` and enables **Update Preset**. Switching it back clears the `*`, disables **Update Preset**, and leaves **Apply** disabled, including on a preset saved before this release. Applying a change, then reopening the dialog still shows the `*` with **Update Preset** enabled, and **Apply** stays disabled until something changes.
+- [ ] In the WebUI filter dialog, opened on a desktop preset saved before this release, switching **Category Combination** to OR and back clears the **Apply** `*`. In the desktop filter dialog, updating a preset to OR and then back to AND leaves **Apply** without a `*`.
+- [ ] A WebUI preset saved with **Category Combination** set to OR is selected on the desktop when the desktop filter is the same, and a desktop preset with an OR filter is selected in the WebUI the same way, including presets saved before this release.
 
 ## Optional Release Flow
 

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using ReelRoulette;
 using Xunit;
 
@@ -17,7 +18,6 @@ public sealed class LibraryPresetSelectionTests
         Assert.False(selected.OnlyKnownLoudness);
         Assert.Equal(AudioFilterMode.PlayAll, selected.AudioFilter);
         Assert.Equal(MediaTypeFilter.All, selected.MediaTypeFilter);
-        Assert.Equal(TagMatchMode.And, selected.TagMatchMode);
         Assert.Null(selected.GlobalMatchMode);
         Assert.Null(selected.CategoryLocalMatchModes);
         Assert.Null(selected.MinDuration);
@@ -121,19 +121,6 @@ public sealed class LibraryPresetSelectionTests
     }
 
     [Fact]
-    public void SameFilterSnapshot_RejectsAFilterThatChanged()
-    {
-        var original = Youtube().FilterState;
-        var snapshot = LibraryPresetSelection.FilterSnapshot(original);
-        var copy = LibraryPresetSelection.CopyFilter(original);
-        copy.OnlyNeverPlayed = true;
-
-        Assert.True(LibraryPresetSelection.SameFilterSnapshot(snapshot, LibraryPresetSelection.CopyFilter(original)));
-        Assert.False(LibraryPresetSelection.SameFilterSnapshot(snapshot, copy));
-        Assert.True(LibraryPresetSelection.SameFilterSnapshot(LibraryPresetSelection.FilterSnapshot(null), new FilterState()));
-    }
-
-    [Fact]
     public void DialogNone_StaysOnAPresetTheFilterStillEquals()
     {
         var presets = new[] { Youtube() };
@@ -163,6 +150,60 @@ public sealed class LibraryPresetSelectionTests
         Assert.Null(anchor.BaseName);
         Assert.Equal("Preset: None*", LibraryPresetSelection.Heading(anchor));
         Assert.Equal("None*", LibraryPresetSelection.BuildRows(anchor, presets)[0].Label);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(0)]
+    public void SavedPresetTextWithTagMatchMode_MatchesTheSameFilter(int tagMatchMode)
+    {
+        // Saved presets written before tagMatchMode left the filter still carry it.
+        var stored = JsonSerializer.Deserialize<FilterState>(
+            $$"""{"selectedTags":["Ann","Bob"],"globalMatchMode":false,"tagMatchMode":{{tagMatchMode}},"favoritesOnly":true}""")!;
+        var preset = new FilterPreset { Name = "Any person", FilterState = stored };
+        var current = new FilterState { SelectedTags = ["Ann", "Bob"], GlobalMatchMode = false, FavoritesOnly = true };
+
+        Assert.DoesNotContain("tagMatchMode", LibraryPresetSelection.FilterSnapshot(stored));
+        Assert.True(LibraryPresetSelection.FiltersEqual(current, stored));
+        var anchor = LibraryPresetSelection.Resolve(current, [preset], null);
+        Assert.False(anchor.Starred);
+        Assert.Equal("Any person", anchor.Label);
+    }
+
+    [Fact]
+    public void UnsetGlobalMode_EqualsAnExplicitAnd_ButNotOr()
+    {
+        var unset = new FilterState { SelectedTags = ["Ann", "Bob"] };
+        var and = new FilterState { SelectedTags = ["Ann", "Bob"], GlobalMatchMode = true };
+        var or = new FilterState { SelectedTags = ["Ann", "Bob"], GlobalMatchMode = false };
+
+        Assert.True(LibraryPresetSelection.FiltersEqual(unset, and));
+        Assert.True(LibraryPresetSelection.FiltersEqual(and, unset));
+        Assert.False(LibraryPresetSelection.FiltersEqual(unset, or));
+        Assert.True(LibraryPresetSelection.FiltersEqual(new FilterState { GlobalMatchMode = true }, new FilterState()));
+
+        var anchor = LibraryPresetSelection.Resolve(and, [new FilterPreset { Name = "Saved unset", FilterState = unset }], null);
+        Assert.False(anchor.Starred);
+        Assert.Equal("Saved unset", anchor.Label);
+        Assert.Null(unset.GlobalMatchMode);
+    }
+
+    [Fact]
+    public void PresetsEqual_ComparesNamesAndOrderExactly_AndFiltersWithFiltersEqual()
+    {
+        static List<FilterPreset> Rows(bool? globalMatchMode, params string[] names) =>
+            names.Select(name => new FilterPreset
+            {
+                Name = name,
+                FilterState = new FilterState { SelectedTags = ["Ann"], GlobalMatchMode = globalMatchMode }
+            }).ToList();
+
+        Assert.True(LibraryPresetSelection.PresetsEqual(Rows(null, "A", "B"), Rows(true, "A", "B")));
+        Assert.False(LibraryPresetSelection.PresetsEqual(Rows(null, "A", "B"), Rows(false, "A", "B")));
+        Assert.False(LibraryPresetSelection.PresetsEqual(Rows(true, "A", "B"), Rows(true, "B", "A")));
+        Assert.False(LibraryPresetSelection.PresetsEqual(Rows(true, "A"), Rows(true, "a")));
+        Assert.False(LibraryPresetSelection.PresetsEqual(Rows(true, "A"), Rows(true, "A", "B")));
+        Assert.True(LibraryPresetSelection.PresetsEqual([], []));
     }
 
     private static FilterPreset Youtube()

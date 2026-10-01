@@ -433,29 +433,6 @@ public sealed class LibraryOperationsService
         }
     }
 
-    public bool SyncTagCatalog(SyncTagCatalogRequest request)
-    {
-        lock (_lock)
-        {
-            _catalog.Session.ApplySyncedTagCatalog(NormalizeSyncedCategories(request.Categories), NormalizeSyncedTags(request.Tags));
-            return true;
-        }
-    }
-
-    public bool SyncItemTags(SyncItemTagsRequest request)
-    {
-        lock (_lock)
-        {
-            return _catalog.Session.SyncItemTags(request.Items
-                .Select(item => new ReelRoulette.Core.Library.CatalogItemTagAssignment
-                {
-                    ItemId = item.ItemId,
-                    Tags = item.Tags
-                })
-                .ToList());
-        }
-    }
-
     public ClearPlaybackStatsResponse ClearPlaybackStats(ClearPlaybackStatsRequest request)
     {
         lock (_lock)
@@ -899,83 +876,4 @@ public sealed class LibraryOperationsService
             SortOrder = int.MaxValue
         });
     }
-
-    private static List<LibraryCatalogCategory> NormalizeSyncedCategories(IReadOnlyList<TagCategorySnapshot> categories)
-    {
-        var ordered = new List<LibraryCatalogCategory>();
-        var indexById = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-        foreach (var category in categories)
-        {
-            if (string.IsNullOrWhiteSpace(category.Name))
-            {
-                continue;
-            }
-
-            var id = NormalizeCategoryId(category.Id);
-            var row = new LibraryCatalogCategory
-            {
-                Id = id,
-                Name = category.Name.Trim(),
-                SortOrder = category.SortOrder
-            };
-            if (indexById.TryGetValue(id, out var index))
-            {
-                ordered[index] = row;
-                continue;
-            }
-
-            indexById[id] = ordered.Count;
-            ordered.Add(row);
-        }
-
-        var uncategorized = new LibraryCatalogCategory
-        {
-            Id = UncategorizedCategoryId,
-            Name = UncategorizedCategoryName,
-            SortOrder = int.MaxValue
-        };
-        if (indexById.TryGetValue(UncategorizedCategoryId, out var uncategorizedIndex))
-        {
-            ordered[uncategorizedIndex] = uncategorized;
-        }
-        else
-        {
-            ordered.Add(uncategorized);
-        }
-
-        return ordered;
-    }
-
-    private static List<LibraryCatalogTag> NormalizeSyncedTags(IReadOnlyList<TagSnapshot> tags)
-    {
-        var kept = new List<LibraryCatalogTag>();
-        var indexByName = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-        foreach (var tag in tags)
-        {
-            if (string.IsNullOrWhiteSpace(tag.Name))
-            {
-                continue;
-            }
-
-            var name = tag.Name.Trim();
-            var categoryId = NormalizeCategoryId(tag.CategoryId);
-            if (!indexByName.TryGetValue(name, out var index))
-            {
-                indexByName[name] = kept.Count;
-                kept.Add(new LibraryCatalogTag { Name = name, CategoryId = categoryId });
-                continue;
-            }
-
-            var existingUncategorized = string.Equals(kept[index].CategoryId, UncategorizedCategoryId, StringComparison.OrdinalIgnoreCase);
-            var candidateUncategorized = string.Equals(categoryId, UncategorizedCategoryId, StringComparison.OrdinalIgnoreCase);
-            if (existingUncategorized && !candidateUncategorized)
-            {
-                kept[index] = new LibraryCatalogTag { Name = name, CategoryId = categoryId };
-            }
-        }
-
-        kept.Sort((left, right) => TagNameComparer.Instance.Compare(left.Name, right.Name));
-        return kept;
-    }
-
 }

@@ -793,49 +793,6 @@ public static class ServerHostComposition
             });
         });
 
-        app.MapPost("/api/tag-editor/sync-catalog", (SyncTagCatalogRequest request, ServerStateService state, LibraryOperationsService operations) =>
-        {
-            var accepted = operations.SyncTagCatalog(request);
-            var model = operations.GetTagEditorModel(new TagEditorModelRequest());
-            var envelope = state.PublishExternal("tagCatalogChanged", new TagCatalogChangedPayload
-            {
-                Reason = "syncCatalog",
-                Categories = model.Categories,
-                Tags = model.Tags
-            });
-            return Results.Ok(new
-            {
-                accepted,
-                revision = envelope.Revision,
-                categories = model.Categories,
-                tags = model.Tags
-            });
-        });
-
-        app.MapPost("/api/tag-editor/sync-item-tags", (SyncItemTagsRequest request, ServerStateService state, LibraryOperationsService operations) =>
-        {
-            var accepted = operations.SyncItemTags(request);
-            if (!accepted)
-            {
-                return Results.Json(new { error = "sync item tags rejected or produced no changes" }, statusCode: StatusCodes.Status409Conflict);
-            }
-
-            var envelope = state.PublishExternal("itemTagsChanged", new ItemTagsChangedPayload
-            {
-                ItemIds = request.Items.Select(item => item.ItemId).Where(itemId => !string.IsNullOrWhiteSpace(itemId)).ToList(),
-                AddedTags = [],
-                RemovedTags = []
-            });
-            var model = operations.GetTagEditorModel(new TagEditorModelRequest());
-            return Results.Ok(new
-            {
-                accepted = true,
-                revision = envelope.Revision,
-                categories = model.Categories,
-                tags = model.Tags
-            });
-        });
-
         app.MapPost("/api/refresh/start", (RefreshStartRequest? request, RefreshPipelineService refresh) =>
         {
             var response = refresh.TryStartManual();

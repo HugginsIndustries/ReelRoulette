@@ -104,7 +104,7 @@ public sealed class ServerStateRegressionTests
         var service = new ServerStateService();
         var payload = new TagCatalogChangedPayload
         {
-            Reason = "syncCatalog",
+            Reason = "upsertTag",
             Categories = [new TagCategorySnapshot { Id = "uncategorized", Name = "Uncategorized", SortOrder = int.MaxValue }],
             Tags = [new TagSnapshot { Name = "TagA", CategoryId = "uncategorized" }]
         };
@@ -114,7 +114,7 @@ public sealed class ServerStateRegressionTests
         var envelope = Assert.Single(replay.Events);
         Assert.Equal("tagCatalogChanged", envelope.EventType);
         var replayPayload = Assert.IsType<TagCatalogChangedPayload>(envelope.Payload);
-        Assert.Equal("syncCatalog", replayPayload.Reason);
+        Assert.Equal("upsertTag", replayPayload.Reason);
         Assert.Contains(replayPayload.Tags, tag => string.Equals(tag.Name, "TagA", StringComparison.OrdinalIgnoreCase));
     }
 

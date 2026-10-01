@@ -6,6 +6,7 @@ import {
   cloneFilterState,
   createDefaultFilterState,
   dialogPresetBase,
+  filterDialogHasPendingChanges,
   filterStateFromApiObject,
   filterStatesEqualForPresetMatch,
   formatDurationForDisplay,
@@ -426,7 +427,7 @@ export function startApp(config) {
   let filterWorking = createDefaultFilterState();
   let filterSources = [];
   let filterTagModel = null;
-  let filterDialogOriginalJson = "";
+  let filterDialogOriginal = createDefaultFilterState();
   let filterPresetCatalogDirty = false;
   let filterActiveTab = "general";
   /** Preset name selected inside the filter dialog only (header combobox uses `state.activePresetName` after Apply). */
@@ -502,8 +503,7 @@ export function startApp(config) {
   }
 
   function updateFilterApplyButtonPending() {
-    const now = JSON.stringify(serializeFilterStateForApi(filterWorking));
-    const dirty = now !== filterDialogOriginalJson || filterPresetCatalogDirty;
+    const dirty = filterDialogHasPendingChanges(filterWorking, filterDialogOriginal, filterPresetCatalogDirty);
     filterApplyBtn.classList.toggle("has-pending", dirty);
     filterApplyBtn.textContent = dirty ? "Apply*" : "Apply";
     setFilterDialogHeading();
@@ -887,7 +887,6 @@ export function startApp(config) {
     if (gm) {
       gm.addEventListener("change", () => {
         filterWorking.globalMatchMode = gm.value === "and";
-        filterWorking.tagMatchMode = filterWorking.globalMatchMode ? TAG_MATCH_MODE.And : TAG_MATCH_MODE.Or;
         updateFilterApplyButtonPending();
       });
     }
@@ -1180,7 +1179,7 @@ export function startApp(config) {
     filterWorking = cloneFilterState(state.appliedFilterState);
     filterDialogActiveName = state.activePresetName;
     filterDialogHoldNone = headerExplicitNone;
-    filterDialogOriginalJson = JSON.stringify(serializeFilterStateForApi(filterWorking));
+    filterDialogOriginal = cloneFilterState(filterWorking);
     filterPresetCatalogDirty = false;
     filterDialogCollapsedCategories = loadFilterDialogCollapsedCategories();
     state.filterDialogOpen = true;
@@ -1472,7 +1471,7 @@ export function startApp(config) {
       : dialogPresetBase(filterWorking, filterWorkingPresets, filterDialogActiveName);
     filterDialogActiveName = state.activePresetName;
     state.appliedFilterState = cloneFilterState(filterWorking);
-    filterDialogOriginalJson = JSON.stringify(serializeFilterStateForApi(filterWorking));
+    filterDialogOriginal = cloneFilterState(filterWorking);
     await loadPresets();
     closeFilterDialog();
     setStatus("Filters applied.");
@@ -1484,7 +1483,7 @@ export function startApp(config) {
     filterDialogActiveName = null;
     filterWorkingPresets = mapApiPresetsToWorkingRows(state.presets);
     filterPresetCatalogDirty = false;
-    filterDialogOriginalJson = JSON.stringify(serializeFilterStateForApi(filterWorking));
+    filterDialogOriginal = cloneFilterState(filterWorking);
     renderAllFilterPanels();
     setFilterDialogHeading();
     const sel = filterPanelPresets.querySelector("#filter-dialog-preset-select");
@@ -3220,7 +3219,7 @@ export function startApp(config) {
       filterWorking = cloneFilterState(state.appliedFilterState);
       filterDialogHoldNone = headerExplicitNone;
       filterDialogActiveName = state.activePresetName;
-      filterDialogOriginalJson = JSON.stringify(serializeFilterStateForApi(filterWorking));
+      filterDialogOriginal = cloneFilterState(filterWorking);
       renderAllFilterPanels();
       setFilterDialogHeading();
       updateFilterApplyButtonPending();

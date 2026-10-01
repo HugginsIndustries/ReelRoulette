@@ -11,6 +11,15 @@ public static class ClientLogRelay
     private static readonly HttpClient HttpClient = new();
     private static readonly object Lock = new();
     private static string _baseUrl = "http://localhost:45123";
+    private static volatile bool _disabled;
+
+    /// <summary>
+    /// Test-only: drop log lines without any network call, so tests never post to a running server.
+    /// </summary>
+    internal static void DisableForTests()
+    {
+        _disabled = true;
+    }
 
     public static void SetBaseUrl(string? baseUrl)
     {
@@ -27,7 +36,7 @@ public static class ClientLogRelay
 
     public static void Log(string source, string message, string level = "info")
     {
-        if (string.IsNullOrWhiteSpace(message))
+        if (_disabled || string.IsNullOrWhiteSpace(message))
         {
             return;
         }

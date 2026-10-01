@@ -1184,46 +1184,6 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
-  /api/tag-editor/sync-catalog:
-    post:
-      summary: Replace server tag catalog snapshot from client source-of-truth
-      operationId: postTagEditorSyncCatalog
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/SyncTagCatalogRequest"
-      responses:
-        "200":
-          description: Catalog synchronized
-        "400":
-          description: Invalid request
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-
-  /api/tag-editor/sync-item-tags:
-    post:
-      summary: Hydrate item-tag snapshots for requested items
-      operationId: postTagEditorSyncItemTags
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/SyncItemTagsRequest"
-      responses:
-        "200":
-          description: Item tags synchronized
-        "400":
-          description: Invalid request
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-
   /api/refresh/start:
     post:
       summary: Start unified refresh run
@@ -2482,28 +2442,6 @@ components:
         newCategoryId:
           type: string
           nullable: true
-
-    SyncTagCatalogRequest:
-      type: object
-      required: [categories, tags]
-      properties:
-        categories:
-          type: array
-          items:
-            $ref: "#/components/schemas/TagCategorySnapshot"
-        tags:
-          type: array
-          items:
-            $ref: "#/components/schemas/TagSnapshot"
-
-    SyncItemTagsRequest:
-      type: object
-      required: [items]
-      properties:
-        items:
-          type: array
-          items:
-            $ref: "#/components/schemas/ItemTagsSnapshot"
 
     RefreshStartRequest:
       type: object

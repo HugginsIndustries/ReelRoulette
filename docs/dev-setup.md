@@ -82,6 +82,7 @@ Desktop behavior notes:
 
 - `dotnet build ReelRoulette.sln`
 - `dotnet test ReelRoulette.sln`
+- Desktop tests use a temporary settings folder, removed when the run ends, and do not send log lines to a server, so they leave your desktop settings and a running server alone. Filter dialog tests run the real dialog headlessly with `Avalonia.Headless`.
 
 ### WebUI verification
 

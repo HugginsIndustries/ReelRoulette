@@ -6,6 +6,7 @@ import {
   filterStateFromApiObject,
   buildHeaderPresetOptions,
   dialogPresetBase,
+  filterDialogHasPendingChanges,
   filterStateForHeaderPresetSelection,
   filterStatesEqualForPresetMatch,
   headerPresetListAfterPick,
@@ -101,6 +102,47 @@ describe("filterStateModel", () => {
     expect(filterStatesEqualForPresetMatch(a, b)).toBe(true);
     b.favoritesOnly = true;
     expect(filterStatesEqualForPresetMatch(a, b)).toBe(false);
+  });
+
+  it("treats an unset global mode as AND, so a desktop preset saved with null matches an explicit AND but not OR", () => {
+    const desktopPreset = filterStateFromApiObject(JSON.parse('{"selectedTags":["Ann","Bob"],"globalMatchMode":null}'));
+    const and = { ...createDefaultFilterState(), selectedTags: ["Ann", "Bob"], globalMatchMode: true };
+    const or = { ...and, globalMatchMode: false };
+
+    expect(desktopPreset.globalMatchMode).toBeNull();
+    expect(filterStatesEqualForPresetMatch(desktopPreset, and)).toBe(true);
+    expect(filterStatesEqualForPresetMatch(and, desktopPreset)).toBe(true);
+    expect(filterStatesEqualForPresetMatch(desktopPreset, or)).toBe(false);
+    expect(resolvePresetAnchor(and, [{ name: "Desktop", filterState: desktopPreset }], null).label).toBe("Desktop");
+    expect(desktopPreset.globalMatchMode).toBeNull();
+  });
+
+  it("ignores tagMatchMode in saved preset text, so desktop and WebUI presets with the same filter match", () => {
+    const webPreset = filterStateFromApiObject(
+      JSON.parse('{"selectedTags":["Ann","Bob"],"globalMatchMode":false,"tagMatchMode":1}')
+    );
+    const desktopPreset = filterStateFromApiObject(
+      JSON.parse('{"selectedTags":["Ann","Bob"],"globalMatchMode":false,"tagMatchMode":0}')
+    );
+    const current = { ...createDefaultFilterState(), selectedTags: ["Ann", "Bob"], globalMatchMode: false };
+
+    expect(serializeFilterStateForApi(webPreset)).not.toHaveProperty("tagMatchMode");
+    expect(filterStatesEqualForPresetMatch(webPreset, desktopPreset)).toBe(true);
+    expect(filterStatesEqualForPresetMatch(current, webPreset)).toBe(true);
+    expect(resolvePresetAnchor(current, [{ name: "Web OR", filterState: webPreset }], null).label).toBe("Web OR");
+  });
+
+  it("filter dialog Apply is not pending after switching the global mode away and back from an unset opening filter", () => {
+    const original = filterStateFromApiObject(JSON.parse('{"selectedTags":["Ann","Bob"],"globalMatchMode":null}'));
+    const working = cloneFilterState(original);
+
+    expect(filterDialogHasPendingChanges(working, original, false)).toBe(false);
+    working.globalMatchMode = false;
+    expect(filterDialogHasPendingChanges(working, original, false)).toBe(true);
+    working.globalMatchMode = true;
+    expect(filterDialogHasPendingChanges(working, original, false)).toBe(false);
+    expect(filterDialogHasPendingChanges(working, original, true)).toBe(true);
+    expect(original.globalMatchMode).toBeNull();
   });
 
   it("presetsToPostBody wraps filterState", () => {

@@ -459,20 +459,6 @@ public sealed class CoreServerApiClient
         return response.IsSuccessStatusCode;
     }
 
-    public async Task<bool> SyncTagCatalogAsync(string baseUrl, CoreSyncTagCatalogRequest request, CancellationToken cancellationToken = default)
-    {
-        using var content = SerializeJson(request);
-        using var response = await _httpClient.PostAsync($"{baseUrl.TrimEnd('/')}/api/tag-editor/sync-catalog", content, cancellationToken).ConfigureAwait(false);
-        return response.IsSuccessStatusCode;
-    }
-
-    public async Task<bool> SyncItemTagsAsync(string baseUrl, CoreSyncItemTagsRequest request, CancellationToken cancellationToken = default)
-    {
-        using var content = SerializeJson(request);
-        using var response = await _httpClient.PostAsync($"{baseUrl.TrimEnd('/')}/api/tag-editor/sync-item-tags", content, cancellationToken).ConfigureAwait(false);
-        return response.IsSuccessStatusCode;
-    }
-
     public async Task<CoreRefreshStartResponse?> StartRefreshAsync(string baseUrl, CancellationToken cancellationToken = default)
     {
         using var content = SerializeJson(new CoreRefreshStartRequest { Trigger = "manual" });
@@ -1213,17 +1199,6 @@ public sealed class CoreSourceStateChangedPayload
 {
     public string SourceId { get; set; } = string.Empty;
     public bool IsEnabled { get; set; }
-}
-
-public sealed class CoreSyncTagCatalogRequest
-{
-    public List<CoreTagCategorySnapshot> Categories { get; set; } = [];
-    public List<CoreTagSnapshot> Tags { get; set; } = [];
-}
-
-public sealed class CoreSyncItemTagsRequest
-{
-    public List<CoreItemTagsSnapshot> Items { get; set; } = [];
 }
 
 public sealed class CoreRefreshStartRequest

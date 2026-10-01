@@ -46,12 +46,6 @@ internal static class LibraryListFilterParser
             model.MediaTypeFilter = media;
         }
 
-        if (Enum.TryParse<TagMatchModeValue>(Token(element, "tagMatchMode"), ignoreCase: true, out var tags) ||
-            TryEnumNumber(Token(element, "tagMatchMode"), out tags))
-        {
-            model.TagMatchMode = tags;
-        }
-
         model.SelectedTags.AddRange(Strings(element, "selectedTags"));
         model.ExcludedTags.AddRange(Strings(element, "excludedTags"));
         model.IncludedSourceIds.AddRange(Strings(element, "includedSourceIds"));

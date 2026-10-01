@@ -416,7 +416,6 @@ public sealed class LibraryPlaybackService
             OnlyKnownLoudness = TryGetBool(filterState, "onlyKnownLoudness", defaultValue: false),
             AudioFilter = NormalizeAudioFilterToken(TryGetToken(filterState, "audioFilter")),
             MediaTypeFilter = NormalizeMediaTypeFilterToken(TryGetToken(filterState, "mediaTypeFilter")),
-            TagMatchMode = NormalizeTagMatchModeToken(TryGetToken(filterState, "tagMatchMode")),
             GlobalMatchMode = TryGetNullableBool(filterState, "globalMatchMode"),
             MinDurationSeconds = TryGetDurationSeconds(filterState, "minDuration"),
             MaxDurationSeconds = TryGetDurationSeconds(filterState, "maxDuration")
@@ -643,7 +642,6 @@ public sealed class LibraryPlaybackService
         public bool OnlyKnownLoudness { get; set; }
         public string? AudioFilter { get; set; }
         public string? MediaTypeFilter { get; set; }
-        public string? TagMatchMode { get; set; }
         public bool? GlobalMatchMode { get; set; }
         public double? MinDurationSeconds { get; set; }
         public double? MaxDurationSeconds { get; set; }
@@ -674,11 +672,6 @@ public sealed class LibraryPlaybackService
             if (Enum.TryParse<MediaTypeFilterValue>(MediaTypeFilter, ignoreCase: true, out var mediaTypeFilter))
             {
                 model.MediaTypeFilter = mediaTypeFilter;
-            }
-
-            if (Enum.TryParse<TagMatchModeValue>(TagMatchMode, ignoreCase: true, out var tagMatchMode))
-            {
-                model.TagMatchMode = tagMatchMode;
             }
 
             model.SelectedTags.AddRange(SelectedTags.Where(v => !string.IsNullOrWhiteSpace(v)));
@@ -719,8 +712,7 @@ public sealed class LibraryPlaybackService
                 OnlyKnownLoudness != other.OnlyKnownLoudness ||
                 !string.Equals(AudioFilter ?? string.Empty, other.AudioFilter ?? string.Empty, StringComparison.OrdinalIgnoreCase) ||
                 !string.Equals(MediaTypeFilter ?? string.Empty, other.MediaTypeFilter ?? string.Empty, StringComparison.OrdinalIgnoreCase) ||
-                !string.Equals(TagMatchMode ?? string.Empty, other.TagMatchMode ?? string.Empty, StringComparison.OrdinalIgnoreCase) ||
-                GlobalMatchMode != other.GlobalMatchMode ||
+                (GlobalMatchMode ?? true) != (other.GlobalMatchMode ?? true) ||
                 !NullableDoubleEquals(MinDurationSeconds, other.MinDurationSeconds) ||
                 !NullableDoubleEquals(MaxDurationSeconds, other.MaxDurationSeconds))
             {

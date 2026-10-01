@@ -32,8 +32,8 @@ namespace ReelRoulette
         private PixelPoint? _savedPosition; // Store position to set after window opens
         private FilterState? _originalPresetState = null; // Store original preset state when loaded
         private bool _isInitializing = false; // Flag to suppress SelectionChanged during initialization
-        private readonly string _initialFilterStateJson;
-        private readonly string _initialPresetsJson;
+        private readonly FilterState _initialFilterState;
+        private readonly List<FilterPreset> _initialPresets;
         private readonly string? _initialActivePresetName;
         private bool _hasPendingChanges;
         private bool _holdNone;
@@ -77,8 +77,10 @@ namespace ReelRoulette
             
             _activePresetName = activePresetName;
             _holdNone = holdNone;
-            _initialFilterStateJson = SerializeFilterState(_filterState);
-            _initialPresetsJson = SerializePresets(_presets);
+            _initialFilterState = LibraryPresetSelection.CopyFilter(_filterState);
+            _initialPresets = _presets
+                .Select(preset => new FilterPreset { Name = preset.Name, FilterState = LibraryPresetSelection.CopyFilter(preset.FilterState) })
+                .ToList();
             _initialActivePresetName = _activePresetName;
             
             // Load saved dialog bounds
@@ -167,20 +169,19 @@ namespace ReelRoulette
         /// <summary>
         /// Header text. Preset: None, None*, or a preset name with a star while the working filter differs.
         /// </summary>
-        public string HeaderText
-        {
-            get
-            {
-                var holdNone = _holdNone && LibraryPresetSelection.FiltersEqual(_filterState, new FilterState());
-                var anchor = LibraryPresetSelection.Resolve(_filterState, _presets, _activePresetName, holdNone);
-                return LibraryPresetSelection.Heading(anchor);
-            }
-        }
+        public string HeaderText => LibraryPresetSelection.Heading(CurrentAnchor());
 
         /// <summary>
-        /// Returns true if a preset is selected and has been modified, enabling the Update Preset button.
+        /// True while the heading shows a starred preset, enabling the Update Preset button.
+        /// Uses the same comparison as the heading, including when the dialog opens on a filter that already differs.
         /// </summary>
-        public bool CanUpdatePreset => !string.IsNullOrEmpty(_activePresetName) && _presetModified;
+        public bool CanUpdatePreset => LibraryPresetSelection.CanUpdate(CurrentAnchor());
+
+        private LibraryPresetSelection.PresetAnchor CurrentAnchor()
+        {
+            var holdNone = _holdNone && LibraryPresetSelection.FiltersEqual(_filterState, new FilterState());
+            return LibraryPresetSelection.Resolve(_filterState, _presets, _activePresetName, holdNone);
+        }
 
         public bool HasPendingChanges => _hasPendingChanges;
 
@@ -446,36 +447,6 @@ namespace ReelRoulette
         public bool HasTags => CategoryViewModels.Count > 0;
         public bool HasNoTags => !HasTags;
 
-        public bool TagMatchAnd
-        {
-            get => _filterState.TagMatchMode == TagMatchMode.And;
-            set
-            {
-                if (value)
-                {
-                    _filterState.TagMatchMode = TagMatchMode.And;
-                    OnPropertyChanged();
-                    OnPropertyChanged(nameof(TagMatchOr));
-                    MarkPresetModified();
-                }
-            }
-        }
-
-        public bool TagMatchOr
-        {
-            get => _filterState.TagMatchMode == TagMatchMode.Or;
-            set
-            {
-                if (value)
-                {
-                    _filterState.TagMatchMode = TagMatchMode.Or;
-                    OnPropertyChanged();
-                    OnPropertyChanged(nameof(TagMatchAnd));
-                    MarkPresetModified();
-                }
-            }
-        }
-
         /// <summary>
         /// Marks the current preset as modified and updates the header text.
         /// </summary>
@@ -503,20 +474,10 @@ namespace ReelRoulette
             RefreshPendingState();
         }
 
-        private static string SerializeFilterState(FilterState filterState)
-        {
-            return JsonSerializer.Serialize(filterState ?? new FilterState());
-        }
-
-        private static string SerializePresets(List<FilterPreset> presets)
-        {
-            return JsonSerializer.Serialize(presets ?? new List<FilterPreset>());
-        }
-
         private void RefreshPendingState()
         {
-            var hasFilterChanges = SerializeFilterState(_filterState) != _initialFilterStateJson;
-            var hasPresetChanges = SerializePresets(_presets) != _initialPresetsJson;
+            var hasFilterChanges = !LibraryPresetSelection.FiltersEqual(_filterState, _initialFilterState);
+            var hasPresetChanges = !LibraryPresetSelection.PresetsEqual(_presets, _initialPresets);
             var hasActivePresetChanges = !string.Equals(_activePresetName, _initialActivePresetName, StringComparison.Ordinal);
             var next = hasFilterChanges || hasPresetChanges || hasActivePresetChanges;
             if (_hasPendingChanges != next)
@@ -558,14 +519,12 @@ namespace ReelRoulette
                 return;
             }
 
-            var currentJson = JsonSerializer.Serialize(_filterState);
-            
             // Check if current state matches any preset
             foreach (var preset in _presets)
             {
                 var presetJson = JsonSerializer.Serialize(preset.FilterState);
                 
-                if (currentJson == presetJson)
+                if (LibraryPresetSelection.FiltersEqual(_filterState, preset.FilterState))
                 {
                     // Found a match
                     if (preset.Name == _activePresetName)
@@ -1070,8 +1029,6 @@ namespace ReelRoulette
             OnPropertyChanged(nameof(MaxDurationText));
             OnPropertyChanged(nameof(NoMinDuration));
             OnPropertyChanged(nameof(NoMaxDuration));
-            OnPropertyChanged(nameof(TagMatchAnd));
-            OnPropertyChanged(nameof(TagMatchOr));
             
             // Update active preset name BEFORE calling UpdateTagSelectionState
             // to prevent spurious preset modifications
@@ -1338,7 +1295,6 @@ namespace ReelRoulette
             MediaTypeAll = true;
             _filterState.SelectedTags.Clear();
             _filterState.ExcludedTags.Clear();
-            TagMatchAnd = true;
 
             if (_holdNone && LibraryPresetSelection.FiltersEqual(_filterState, new FilterState()))
             {
@@ -1380,7 +1336,6 @@ namespace ReelRoulette
             _originalFilterState.MediaTypeFilter = _filterState.MediaTypeFilter;
             _originalFilterState.MinDuration = _filterState.MinDuration;
             _originalFilterState.MaxDuration = _filterState.MaxDuration;
-            _originalFilterState.TagMatchMode = _filterState.TagMatchMode;
             _originalFilterState.GlobalMatchMode = _filterState.GlobalMatchMode;
             
             // Copy tag lists
@@ -1405,17 +1360,10 @@ namespace ReelRoulette
             // if they match a different preset, switch to it; otherwise clear if they differ
             if (!string.IsNullOrEmpty(_activePresetName) && _originalPresetState != null)
             {
-                var currentJson = JsonSerializer.Serialize(_filterState);
-                var originalJson = JsonSerializer.Serialize(_originalPresetState);
-                
-                if (currentJson != originalJson)
+                if (!LibraryPresetSelection.FiltersEqual(_filterState, _originalPresetState))
                 {
                     // Filters differ from active preset - check if they match a different preset
-                    var matchedPreset = _presets.FirstOrDefault(p => 
-                    {
-                        var presetJson = JsonSerializer.Serialize(p.FilterState);
-                        return presetJson == currentJson;
-                    });
+                    var matchedPreset = _presets.FirstOrDefault(p => LibraryPresetSelection.FiltersEqual(_filterState, p.FilterState));
                     
                     if (matchedPreset != null)
                     {
@@ -1428,17 +1376,12 @@ namespace ReelRoulette
                         _activePresetName = null;
                     }
                 }
-                // If currentJson == originalJson, filters match active preset - keep it (no change needed)
+                // Filters match the active preset - keep it (no change needed)
             }
             else if (string.IsNullOrEmpty(_activePresetName))
             {
                 // No active preset - check if filters match any preset and auto-select it
-                var currentJson = JsonSerializer.Serialize(_filterState);
-                var matchedPreset = _presets.FirstOrDefault(p => 
-                {
-                    var presetJson = JsonSerializer.Serialize(p.FilterState);
-                    return presetJson == currentJson;
-                });
+                var matchedPreset = _presets.FirstOrDefault(p => LibraryPresetSelection.FiltersEqual(_filterState, p.FilterState));
                 
                 if (matchedPreset != null)
                 {

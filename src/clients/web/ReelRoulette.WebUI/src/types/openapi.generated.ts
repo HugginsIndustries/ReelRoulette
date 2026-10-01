@@ -719,40 +719,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/tag-editor/sync-catalog": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Replace server tag catalog snapshot from client source-of-truth */
-        post: operations["postTagEditorSyncCatalog"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/tag-editor/sync-item-tags": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Hydrate item-tag snapshots for requested items */
-        post: operations["postTagEditorSyncItemTags"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/refresh/start": {
         parameters: {
             query?: never;
@@ -1354,13 +1320,6 @@ export interface components {
         DeleteCategoryRequest: {
             categoryId: string;
             newCategoryId?: string | null;
-        };
-        SyncTagCatalogRequest: {
-            categories: components["schemas"]["TagCategorySnapshot"][];
-            tags: components["schemas"]["TagSnapshot"][];
-        };
-        SyncItemTagsRequest: {
-            items: components["schemas"]["ItemTagsSnapshot"][];
         };
         RefreshStartRequest: {
             trigger?: string;
@@ -3143,68 +3102,6 @@ export interface operations {
         };
         responses: {
             /** @description Category deleted */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Invalid request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    postTagEditorSyncCatalog: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SyncTagCatalogRequest"];
-            };
-        };
-        responses: {
-            /** @description Catalog synchronized */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Invalid request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    postTagEditorSyncItemTags: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SyncItemTagsRequest"];
-            };
-        };
-        responses: {
-            /** @description Item tags synchronized */
             200: {
                 headers: {
                     [name: string]: unknown;

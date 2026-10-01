@@ -1853,10 +1853,10 @@ namespace ReelRoulette
                 }
             }
             // Tag inclusion filters
-            if (_currentFilterState.SelectedTags != null && _currentFilterState.SelectedTags.Count > 0)
+            var includedTags = FilterSummaryFormat.IncludedTags(_currentFilterState);
+            if (includedTags != null)
             {
-                var matchMode = _currentFilterState.TagMatchMode == TagMatchMode.And ? "all" : "any";
-                filterParts.Add($"{_currentFilterState.SelectedTags.Count} tag(s) included ({matchMode})");
+                filterParts.Add(includedTags);
             }
             
             // Tag exclusion filters

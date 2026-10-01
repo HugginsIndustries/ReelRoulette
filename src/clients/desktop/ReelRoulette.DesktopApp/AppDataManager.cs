@@ -12,6 +12,16 @@ namespace ReelRoulette
             ClientLogRelay.Log("desktop-appdata", message);
         }
 
+        /// <summary>
+        /// Test-only: use this directory instead of the per-user application data folder.
+        /// On Windows that folder is resolved through the shell, so changing APPDATA does not redirect it.
+        /// </summary>
+        internal static void UseDirectoryForTests(string directory)
+        {
+            Directory.CreateDirectory(directory);
+            _appDataDirectory = directory;
+        }
+
         public static string AppDataDirectory
         {
             get

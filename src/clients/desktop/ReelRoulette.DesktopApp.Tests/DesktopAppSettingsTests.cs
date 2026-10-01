@@ -111,6 +111,43 @@ public sealed class DesktopAppSettingsTests : IDisposable
         Assert.Equal(3, reload.NumberOfBackups);
     }
 
+    [Theory]
+    [InlineData("tagMatchMode")]
+    [InlineData("TagMatchMode")]
+    public void LoadSettingsWithSavedFilterTagMatchMode_KeepsTheFilterAndOtherSettings(string retiredKey)
+    {
+        File.WriteAllText(_settingsPath, $$"""
+{
+  "DevChannelEnabled": true,
+  "FilterState": {
+    "favoritesOnly": true,
+    "excludeBlacklisted": false,
+    "audioFilter": 1,
+    "selectedTags": ["Ann", "Bob"],
+    "excludedTags": ["Spoiler"],
+    "{{retiredKey}}": 1,
+    "categoryLocalMatchModes": { "people": 1 },
+    "globalMatchMode": false,
+    "includedSourceIds": ["source-1"]
+  },
+  "ActivePresetName": "Any person"
+}
+""");
+
+        var reload = CreateStorage().Load();
+        Assert.True(reload.DevChannelEnabled);
+        Assert.Equal("Any person", reload.ActivePresetName);
+        var filter = Assert.IsType<FilterState>(reload.FilterState);
+        Assert.True(filter.FavoritesOnly);
+        Assert.False(filter.ExcludeBlacklisted);
+        Assert.Equal(AudioFilterMode.WithAudioOnly, filter.AudioFilter);
+        Assert.Equal(["Ann", "Bob"], filter.SelectedTags);
+        Assert.Equal(["Spoiler"], filter.ExcludedTags);
+        Assert.Equal(TagMatchMode.Or, Assert.Contains("people", filter.CategoryLocalMatchModes!));
+        Assert.False(filter.GlobalMatchMode);
+        Assert.Equal(["source-1"], filter.IncludedSourceIds);
+    }
+
     private SettingsStorageService<DesktopAppSettings> CreateStorage()
     {
         return new SettingsStorageService<DesktopAppSettings>(new JsonFileStorageOptions<DesktopAppSettings>

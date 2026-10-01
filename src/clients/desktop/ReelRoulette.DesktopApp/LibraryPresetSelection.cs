@@ -39,9 +39,34 @@ public static class LibraryPresetSelection
         return JsonSerializer.Deserialize<FilterState>(json) ?? new FilterState();
     }
 
+    /// <summary>
+    /// Preset comparison. An unset global match mode means AND, so it equals an explicit AND.
+    /// </summary>
     public static bool FiltersEqual(FilterState? left, FilterState? right)
     {
-        return FilterSnapshot(left) == FilterSnapshot(right);
+        return ComparableSnapshot(left) == ComparableSnapshot(right);
+    }
+
+    /// <summary>
+    /// Preset list comparison: the same names in the same order, and each preset's filter compared with <see cref="FiltersEqual"/>.
+    /// </summary>
+    public static bool PresetsEqual(IReadOnlyList<FilterPreset> left, IReadOnlyList<FilterPreset> right)
+    {
+        if (left.Count != right.Count)
+        {
+            return false;
+        }
+
+        for (var index = 0; index < left.Count; index++)
+        {
+            if (!string.Equals(left[index].Name, right[index].Name, StringComparison.Ordinal) ||
+                !FiltersEqual(left[index].FilterState, right[index].FilterState))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     public static string FilterSnapshot(FilterState? filter)
@@ -49,14 +74,16 @@ public static class LibraryPresetSelection
         return JsonSerializer.Serialize(filter ?? new FilterState());
     }
 
-    public static bool SameFilterSnapshot(string? snapshot, FilterState? current)
-    {
-        return string.Equals(snapshot, FilterSnapshot(current), StringComparison.Ordinal);
-    }
-
     public static FilterState CopyFilter(FilterState? filter)
     {
         return JsonSerializer.Deserialize<FilterState>(FilterSnapshot(filter)) ?? new FilterState();
+    }
+
+    private static string ComparableSnapshot(FilterState? filter)
+    {
+        var copy = CopyFilter(filter);
+        copy.GlobalMatchMode ??= true;
+        return FilterSnapshot(copy);
     }
 
     /// <summary>
@@ -140,6 +167,14 @@ public static class LibraryPresetSelection
     public static string SelectedTag(PresetAnchor anchor)
     {
         return anchor.Starred ? StarredTag : (anchor.BaseName ?? NoneLabel);
+    }
+
+    /// <summary>
+    /// A starred row on a saved preset can update that preset.
+    /// </summary>
+    public static bool CanUpdate(PresetAnchor anchor)
+    {
+        return anchor.Starred && !string.IsNullOrEmpty(anchor.BaseName);
     }
 
     public static string Heading(PresetAnchor anchor)

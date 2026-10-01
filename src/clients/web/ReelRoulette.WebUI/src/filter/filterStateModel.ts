@@ -19,8 +19,6 @@ export interface FilterState {
   onlyKnownLoudness: boolean;
   audioFilter: AudioFilterMode;
   mediaTypeFilter: MediaTypeFilter;
-  /** Legacy: parallel to per-category modes; desktop keeps hidden UI default AND */
-  tagMatchMode: TagMatchMode;
   /** true = AND across categories, false = OR; null/absent treated as AND on server via Core */
   globalMatchMode: boolean | null;
   categoryLocalMatchModes: Record<string, TagMatchMode> | null;
@@ -40,7 +38,6 @@ export function createDefaultFilterState(): FilterState {
     onlyKnownLoudness: false,
     audioFilter: AUDIO_FILTER.PlayAll,
     mediaTypeFilter: MEDIA_TYPE_FILTER.All,
-    tagMatchMode: TAG_MATCH_MODE.And,
     globalMatchMode: true,
     categoryLocalMatchModes: null,
     selectedTags: [],
@@ -332,7 +329,6 @@ export function serializeFilterStateForApi(state: FilterState): Record<string, u
     onlyKnownLoudness: state.onlyKnownLoudness,
     audioFilter: state.audioFilter,
     mediaTypeFilter: state.mediaTypeFilter,
-    tagMatchMode: state.tagMatchMode,
     globalMatchMode: state.globalMatchMode,
     selectedTags: [...state.selectedTags],
     excludedTags: [...state.excludedTags],
@@ -413,7 +409,6 @@ export function filterStateFromApiObject(raw: unknown): FilterState {
 
   base.audioFilter = readEnumInt(o.audioFilter, base.audioFilter) as AudioFilterMode;
   base.mediaTypeFilter = readEnumInt(o.mediaTypeFilter, base.mediaTypeFilter) as MediaTypeFilter;
-  base.tagMatchMode = readEnumInt(o.tagMatchMode, base.tagMatchMode) as TagMatchMode;
 
   if (typeof o.globalMatchMode === "boolean") {
     base.globalMatchMode = o.globalMatchMode;
@@ -445,11 +440,20 @@ export function filterStateFromApiObject(raw: unknown): FilterState {
   return base;
 }
 
-/** Stable comparison for preset auto-select (mirrors desktop string compare of serialized JSON). */
+/** Preset comparison. An unset global match mode means AND, so it equals an explicit AND. */
 export function filterStatesEqualForPresetMatch(a: FilterState, b: FilterState): boolean {
-  const sa = JSON.stringify(serializeFilterStateForApi(a));
-  const sb = JSON.stringify(serializeFilterStateForApi(b));
+  const sa = JSON.stringify(serializeFilterStateForApi({ ...a, globalMatchMode: a.globalMatchMode ?? true }));
+  const sb = JSON.stringify(serializeFilterStateForApi({ ...b, globalMatchMode: b.globalMatchMode ?? true }));
   return sa === sb;
+}
+
+/** Filter dialog Apply pending: the working filter differs from the one the dialog opened with, or a preset changed. */
+export function filterDialogHasPendingChanges(
+  working: FilterState,
+  original: FilterState,
+  presetCatalogDirty: boolean
+): boolean {
+  return !filterStatesEqualForPresetMatch(working, original) || presetCatalogDirty;
 }
 
 export interface PresetRow {

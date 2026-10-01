@@ -251,17 +251,6 @@ public sealed class DeleteCategoryRequest
     public string? NewCategoryId { get; set; }
 }
 
-public sealed class SyncTagCatalogRequest
-{
-    public List<TagCategorySnapshot> Categories { get; set; } = [];
-    public List<TagSnapshot> Tags { get; set; } = [];
-}
-
-public sealed class SyncItemTagsRequest
-{
-    public List<ItemTagsSnapshot> Items { get; set; } = [];
-}
-
 public sealed class RefreshStartRequest
 {
     public string Trigger { get; set; } = "manual";

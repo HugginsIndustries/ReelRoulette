@@ -148,6 +148,46 @@ public sealed class LibraryPlaybackServiceTests : IDisposable
         Assert.Equal("Favorites", response.PresetName);
     }
 
+    [Theory]
+    [InlineData("{\"selectedTags\":[\"Ann\",\"Bob\"],\"globalMatchMode\":false,\"tagMatchMode\":1}", "{\"selectedTags\":[\"Ann\",\"Bob\"],\"globalMatchMode\":false}")]
+    [InlineData("{\"selectedTags\":[\"Ann\",\"Bob\"],\"globalMatchMode\":false}", "{\"selectedTags\":[\"Ann\",\"Bob\"],\"globalMatchMode\":false,\"tagMatchMode\":\"Or\"}")]
+    [InlineData("{\"selectedTags\":[\"Ann\",\"Bob\"],\"globalMatchMode\":false,\"tagMatchMode\":0}", "{\"selectedTags\":[\"Ann\",\"Bob\"],\"globalMatchMode\":false,\"tagMatchMode\":1}")]
+    public void TryMatchPreset_IgnoresTagMatchModeInSavedPresetText(string storedPreset, string requested)
+    {
+        AssertPresetMatch(storedPreset, requested, expected: true);
+    }
+
+    [Theory]
+    [InlineData("{\"selectedTags\":[\"Ann\",\"Bob\"]}", "{\"selectedTags\":[\"Ann\",\"Bob\"],\"globalMatchMode\":true}", true)]
+    [InlineData("{\"selectedTags\":[\"Ann\",\"Bob\"],\"globalMatchMode\":null}", "{\"selectedTags\":[\"Ann\",\"Bob\"],\"globalMatchMode\":true}", true)]
+    [InlineData("{\"selectedTags\":[\"Ann\",\"Bob\"],\"globalMatchMode\":true}", "{\"selectedTags\":[\"Ann\",\"Bob\"]}", true)]
+    [InlineData("{\"selectedTags\":[\"Ann\",\"Bob\"]}", "{\"selectedTags\":[\"Ann\",\"Bob\"],\"globalMatchMode\":false}", false)]
+    public void TryMatchPreset_TreatsAnUnsetGlobalModeAsAnd(string storedPreset, string requested, bool expected)
+    {
+        AssertPresetMatch(storedPreset, requested, expected);
+    }
+
+    private void AssertPresetMatch(string storedPreset, string requested, bool expected)
+    {
+        Directory.CreateDirectory(_tempDir);
+        var service = CreateService();
+        IReadOnlyList<FilterPresetSnapshot> presets =
+        [
+            new FilterPresetSnapshot { Name = "Any person", FilterState = ParseJson(storedPreset) }
+        ];
+
+        var ok = service.TryMatchPreset(
+            new PresetMatchRequest { FilterState = ParseJson(requested) },
+            presets,
+            out var response,
+            out _,
+            out var error);
+
+        Assert.True(ok, error);
+        Assert.Equal(expected, response.Matched);
+        Assert.Equal(expected ? "Any person" : null, response.PresetName);
+    }
+
     [Fact]
     public void TrySelectRandom_ShouldHonorMediaTypeFilterVideosOnly()
     {

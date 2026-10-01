@@ -36,7 +36,6 @@ public sealed class FilterStateModel
     public TimeSpan? MaxDuration { get; set; }
     public List<string> SelectedTags { get; set; } = new();
     public List<string> ExcludedTags { get; set; } = new();
-    public TagMatchModeValue TagMatchMode { get; set; } = TagMatchModeValue.And;
     public Dictionary<string, TagMatchModeValue>? CategoryLocalMatchModes { get; set; }
     public bool? GlobalMatchMode { get; set; }
     public bool OnlyKnownDuration { get; set; }

@@ -154,23 +154,6 @@
             <TabItem Header="Tags">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel Spacing="16" Margin="12">
-                        <!-- Legacy Match Mode (hidden, kept for old presets) -->
-                        <StackPanel Spacing="8" IsVisible="False">
-                            <StackPanel Orientation="Horizontal" 
-                                        Spacing="8">
-                                <TextBlock Text="Match mode:" 
-                                           VerticalAlignment="Center"/>
-                                <RadioButton x:Name="TagMatchAndRadio"
-                                             Content="All selected (AND)"
-                                             GroupName="TagMatch"
-                                             IsChecked="{Binding TagMatchAnd}"/>
-                                <RadioButton x:Name="TagMatchOrRadio"
-                                             Content="Any selected (OR)"
-                                             GroupName="TagMatch"
-                                             IsChecked="{Binding TagMatchOr}"/>
-                            </StackPanel>
-                        </StackPanel>
-
                         <!-- Global Match Mode -->
                         <StackPanel Spacing="8">
                             <TextBlock Text="Category Combination" 

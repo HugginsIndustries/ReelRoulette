@@ -89,38 +89,7 @@ Do not use this file for detailed architecture explanation or current capability
 
 ## Active Milestones
 
-Last milestone completed: M10i19
-
-### M10i20 - Remove Client-Authority Sync Routes
-
-- **Status**: ⏳ Planned
-- **Goal**: Remove the unused client-authority tag sync routes so v0.13.0 no longer offers a client-held catalog sync, after checking whether a v0.12.0 client still needs them.
-- **Scope**:
-  - Depends on: dropping the unread server tag and item cache.
-  - This is the last milestone in the v0.13.0 release.
-  - Before removal, check at the `v0.12.0` tag whether a v0.12.0 desktop or WebUI posted to `POST /api/tag-editor/sync-catalog` or `POST /api/tag-editor/sync-item-tags`, and whether the version/capability gate lets a v0.12.0 client connect to a v0.13.0 server. If both are true, stop. This milestone is a compatibility decision to bring back, and the routes stay until that decision.
-  - Remove `POST /api/tag-editor/sync-catalog` and `POST /api/tag-editor/sync-item-tags`.
-  - Remove their OpenAPI request schemas and the generated WebUI types for those routes. The shared tag snapshot schemas stay.
-  - Remove the desktop client methods and request types for those routes.
-  - Remove the server operations methods and session methods that exist for those routes, and the tests that call them.
-  - WebUI tag save still goes through apply-item-tags after the regenerated types.
-  - Current-state docs and the testing checklist no longer describe these routes. Completed milestone entries stay as written.
-- **Acceptance criteria**:
-  - The `v0.12.0` tag check is recorded. Removal proceeds when a v0.12.0 desktop or WebUI did not post to either route, or when the version/capability gate does not let a v0.12.0 client connect to a v0.13.0 server.
-  - When both are true, the routes stay and this milestone stops for a compatibility decision.
-  - `POST /api/tag-editor/sync-catalog` and `POST /api/tag-editor/sync-item-tags` are gone, along with their OpenAPI request schemas, generated WebUI types, desktop client methods and request types, server operations methods, session methods, and tests.
-  - The shared tag snapshot schemas stay.
-  - WebUI tag save still goes through apply-item-tags after the regenerated types.
-  - Current-state docs and the testing checklist do not describe these routes.
-  - Startup still migrates a leftover `library.json`.
-- **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include the `v0.12.0` tag check, a build and tests after the routes and generated types are removed, and WebUI tag save still going through apply-item-tags.
-  - Docs evidence must include current-state docs and checklist updates that no longer describe these routes. Completed milestone entries stay as written.
-- **Deferrals / Follow-ups**:
-  - Removing `library.json` file recognition and the JSON-to-SQLite importer, including `PrepareIncomingFromJson`, ships in v0.14.0. The import check and retire-aside for a leftover `library.json` stay until that removal.
-  - Scrubbing every remaining `library.json` mention from product code, comments, user-facing copy, tests, and current-state docs follows that format removal.
-  - Account and PIN tables stay with the account and PIN data model work.
-  - Candidate to bring in, since it is also a contract change: remove `tagMatchMode` from the filter contract. Filtering no longer reads it. No visible desktop or WebUI control sets it on its own: the desktop sets it only from hidden legacy radio buttons and reads it for the main-window filter summary to say "all" or "any", and the WebUI mirrors the global match selector into it. Preset matching compares it, so two saved presets that differ only in `tagMatchMode` would start matching once it is removed.
+Last milestone completed: M10i20
 
 ### M10j1 - Remove library.json Library Support
 
@@ -1270,6 +1239,67 @@ Last milestone completed: M10i19
 ## Completed Milestones
 
 Latest completions first:
+
+### M10i20 - Remove Client-Authority Sync Routes
+
+- **Status**: ✅ Complete
+- **Goal**: Remove the unused client-authority tag sync routes and the unused `tagMatchMode` filter field so v0.13.0 no longer offers a client-held catalog sync, after checking whether a v0.12.0 client still needs either.
+- **Scope**:
+  - Depends on: dropping the unread server tag and item cache.
+  - This is the last milestone in the v0.13.0 release.
+  - Before removal, check at the `v0.12.0` tag whether a v0.12.0 desktop or WebUI posted to `POST /api/tag-editor/sync-catalog` or `POST /api/tag-editor/sync-item-tags`, and whether the version/capability gate lets a v0.12.0 client connect to a v0.13.0 server. If both are true, stop. This milestone is a compatibility decision to bring back, and the routes stay until that decision.
+  - Remove `POST /api/tag-editor/sync-catalog` and `POST /api/tag-editor/sync-item-tags`.
+  - Remove their OpenAPI request schemas and the generated WebUI types for those routes. The shared tag snapshot schemas stay.
+  - Remove the desktop client methods and request types for those routes.
+  - Remove the server operations methods and session methods that exist for those routes, and the tests that call them.
+  - WebUI tag save still goes through apply-item-tags after the regenerated types.
+  - Current-state docs and the testing checklist no longer describe these routes. Completed milestone entries stay as written.
+  - Added during planning: remove `tagMatchMode` from the filter contract. The same `v0.12.0` check covers it, since removing a filter field can affect a v0.12.0 client the same way removing a route can. OpenAPI types `filterState` as a free-form object and never named the field, so the OpenAPI document and generated WebUI types do not change for it. Remove it from the server and Core filter models, the server filter parser and preset-match projection, the desktop `FilterState`, the hidden legacy radio buttons in the desktop filter dialog, the WebUI filter state, and the WebUI code that copies the global match selector into it.
+  - Added during planning: the desktop main-window filter summary says "all" or "any" for included tags from the global match mode, not `tagMatchMode`. It used to say "all" for both global AND and global OR.
+  - Added during planning: preset matching ignores `tagMatchMode` in saved filter text on the server, the desktop, and the WebUI, so a desktop preset and a WebUI preset with the same filter match. Saved presets are not rewritten.
+  - Added during planning: remove `LibraryCatalogSession.ReplaceTagCatalog`, which had no production caller.
+  - Added during manual verification: the desktop filter dialog enables **Update Preset** from the same comparison as its `Preset:` heading, including the global match mode. It used to depend on a flag that only a control change set, so reopening the dialog on a starred preset showed the `*` with Update disabled. Apply still compares with the filter the dialog opened with. The WebUI filter dialog has no Update Preset gate, so that part does not change there.
+  - Added during manual verification: preset matching on the server, the desktop, and the WebUI treats an unset global match mode as AND, the same as filtering does. Switching the global mode away and back then clears the `*`, and a preset saved with the mode unset matches the same filter with an explicit AND in either app. The desktop filter dialog's own preset checks, including on Apply, use the same desktop comparison, and its Apply button compares the working filter with the filter it opened with the same way, so a toggle away and back leaves Apply disabled. Saved presets are not rewritten. This predates this milestone.
+  - Added during review: the WebUI filter dialog's **Apply** `*` compares the working filter with the filter it opened with through the same preset comparison, so a toggle away and back from an unset global mode clears it, as on the desktop. The desktop dialog's pending check compares its preset list by name and order and each preset's filter with `FiltersEqual`, so updating a preset to a filter that means the same as before leaves Apply disabled. The desktop filter dialog has no raw JSON filter comparison left. `LibraryPresetSelection.SameFilterSnapshot`, a raw JSON filter comparison that only its own test called, is removed with that test.
+  - Added during manual verification: desktop tests use a test-only settings directory and turn off the server log relay, so they do not touch the developer's settings or a running server on Linux or Windows. Filter dialog tests drive the real dialog with `Avalonia.Headless` in the desktop test project only.
+- **Acceptance criteria**:
+  - The `v0.12.0` tag check is recorded. Removal proceeds when a v0.12.0 desktop or WebUI did not post to either route, or when the version/capability gate does not let a v0.12.0 client connect to a v0.13.0 server.
+  - When both are true, the routes stay and this milestone stops for a compatibility decision.
+  - `POST /api/tag-editor/sync-catalog` and `POST /api/tag-editor/sync-item-tags` are gone, along with their OpenAPI request schemas, generated WebUI types, desktop client methods and request types, server operations methods, session methods, and tests.
+  - The shared tag snapshot schemas stay.
+  - WebUI tag save still goes through apply-item-tags after the regenerated types.
+  - Current-state docs and the testing checklist do not describe these routes.
+  - Startup still migrates a leftover `library.json`.
+  - `tagMatchMode` is not in the server, Core, desktop, or WebUI filter models, the desktop filter dialog, or the WebUI filter code. A filter or saved preset that still carries it is accepted and gives the same result as one without it.
+  - The desktop filter summary says "any" with global OR and "all" with global AND or an unset global mode. A test covers each.
+  - Saved preset text that still carries `tagMatchMode` matches the same filter without it, and a different `tagMatchMode`, on the server, the desktop, and the WebUI. A test covers each.
+  - A desktop settings file whose saved filter still carries `tagMatchMode` loads and keeps its other values.
+  - `ReplaceTagCatalog` is gone.
+  - In the desktop filter dialog, **Update Preset** is enabled exactly when the heading shows a starred preset, both after a change in the dialog and when the dialog opens on a starred preset. A headless dialog test covers both and fails with the previous flag.
+  - Desktop tests resolve settings and backups under a temporary test directory on Linux and Windows, and send no log lines to a server.
+  - A preset saved with the global mode unset matches the same filter with an explicit AND, and not with OR, on the server, the desktop, and the WebUI. In the desktop filter dialog, switching the global mode away and back clears the `*`, disables Update, and leaves Apply disabled. A test at each site fails without the normalization.
+  - In the WebUI filter dialog, switching the global mode away and back from an unset opening filter clears the Apply `*`. In the desktop filter dialog, updating a preset saved unset to OR and then back to an explicit AND leaves Apply disabled. A test covers each and fails with the previous raw comparison.
+- **Verification evidence**:
+  - `v0.12.0` tag check: `git grep` at `v0.12.0` finds `/api/tag-editor/sync` only in the desktop `SyncTagCatalogAsync` and `SyncItemTagsAsync` definitions, which nothing calls, and in generated WebUI types. No v0.12.0 desktop or WebUI code posts to either route. The version gate does let a v0.12.0 client connect: v0.12.0 and this release both report API version `1`, minimum compatible `0`, and supported `["1","0"]`, and the WebUI's required capabilities are still offered. Removal proceeds because no client posted to either route.
+  - `tagMatchMode` at `v0.12.0`: both clients send it. The v0.12.0 desktop and WebUI filter with it only in their client-side legacy tag filter for a catalog with no categories, which a catalog the app writes cannot reach. The v0.12.0 desktop filter summary also reads it, and the v0.12.0 WebUI derives it from `globalMatchMode`. The server reads named fields from the `filterState` JSON, so an extra field is ignored. A v0.12.0 client that reads a preset without the field falls back to AND.
+  - `dotnet build ReelRoulette.sln` (0 errors, 0 warnings) and `dotnet test ReelRoulette.sln` passed: 137 desktop tests and 265 core tests. `dotnet run --project src/core/ReelRoulette.Core.SystemChecks -- --verbose` passed and exited 0.
+  - `npm run generate:contracts` removed only lines from `openapi.generated.ts`. `npm run verify` in `src/clients/web/ReelRoulette.WebUI` passed: contracts up to date, typecheck, 133 tests, build, and build output check.
+  - The route and session removals leave no reference in `src/` to the routes, `SyncTagCatalog`, `SyncItemTags`, `ApplySyncedTagCatalog`, `CatalogItemTagAssignment`, `ReplaceTagCatalog`, or the private helpers only they called. `EveryCatalogWritePath_KeepsUncategorized` keeps the new-catalog, category upsert, and Uncategorized delete-refusal checks. Its sync and replace steps went with those paths, which were the only writers that cleared the category table. WebUI tag save still posts `apply-item-tags` (`tagSave.ts`, `app.js`, `tagSave.test.ts`).
+  - `TryMatchPreset_IgnoresTagMatchModeInSavedPresetText` (server), `SavedPresetTextWithTagMatchMode_MatchesTheSameFilter` (desktop), and the WebUI `filterStateModel` test match saved preset text that carries `tagMatchMode`. Putting the projection comparison back made all three server cases fail. Putting the field back on the desktop `FilterState` made both desktop cases fail. Keeping the field in the WebUI parser and serializer made the WebUI test fail. Each change was reverted.
+  - `FilterSummaryFormatTests` covers global AND, OR, and unset. Making the summary always say "all", which is what reading the default `tagMatchMode` produced, made the OR case fail. That change was reverted.
+  - `LoadSettingsWithSavedFilterTagMatchMode_KeepsTheFilterAndOtherSettings` loads a desktop settings file whose saved filter carries `tagMatchMode` or `TagMatchMode` and checks the other filter values and settings. Making `FilterState` refuse unknown fields made both cases fail. That change was reverted.
+  - `TagFilter_ListQueryAndRandomEligibilityAgree_ForEveryTagShape` parses a filter that carries `tagMatchMode` as `1` and `"Or"` and gets the same AND result on the list query and random eligibility.
+  - Desktop filter dialog Update Preset: a headless harness against a `git archive` of HEAD and against the working tree gave the same results, so this predates the milestone. In both, changing only the global mode in the dialog starred the heading and enabled Update. Reopening on a filter that differed from its preset, whether by the global mode or a tag, showed `Preset: P*` with Update disabled. `FilterDialogPresetUpdateTests` covers reopen after a global-only change in both directions, reopen after a tag change, an in-dialog global change and back, reopen then matching again (with the `CanUpdatePreset` change notification), and opening on the saved preset. Putting `CanUpdatePreset` back on the flag made all four reopen cases fail. Those tests read the dialog's properties and run with a headless Fluent theme.
+  - Unset global mode: `TryMatchPreset_TreatsAnUnsetGlobalModeAsAnd` (server, missing and `null` stored modes against explicit AND, and unset against OR), `UnsetGlobalMode_EqualsAnExplicitAnd_ButNotOr` (desktop `FiltersEqual` and `Resolve`), `TogglingTheGlobalModeAwayAndBack_OnAPresetSavedUnset_ClearsTheStarAndUpdate` (headless desktop dialog), and the WebUI `filterStateModel` test for a desktop preset saved with `null`. Restoring the raw nullable comparison on the server made its three matching cases fail. Removing the desktop normalization made both desktop tests fail. Restoring the raw WebUI comparison made the WebUI test fail. Each change was reverted. The desktop dialog's `CheckAndSelectMatchingPreset` and Apply path now call `FiltersEqual` instead of comparing raw JSON. `TogglingTheGlobalModeAwayAndBack_FromAnUnsetOpeningFilter_LeavesApplyDisabled` (headless dialog) failed against the raw JSON pending check with `Apply*` after switching back, and passes now that the pending check compares with the opening filter through `FiltersEqual`.
+  - Review fixes: the WebUI `filterStateModel` test for the Apply `*` after a toggle away and back from an unset opening filter failed with the helper written as the previous raw `JSON.stringify` comparison, and passes through `filterStatesEqualForPresetMatch`. `UpdatingAPresetSavedUnset_BackToAnExplicitAnd_LeavesApplyDisabled` (headless desktop dialog) failed against the raw preset-list JSON check with `Apply*` after the second update, and passes with `PresetsEqual`, which `PresetsEqual_ComparesNamesAndOrderExactly_AndFiltersWithFiltersEqual` covers. In `app.js`, the four sites that set the dialog's opening filter are the ones that set it before; the only other assignment to the working filter is loading a preset inside the dialog, which is meant to count as a change from the opening filter. After removing `SameFilterSnapshot` and its test, a repository search outside build output finds no reference to it.
+  - Desktop test isolation: `AppDataManager` resolves the folder with `Environment.GetFolderPath(SpecialFolder.ApplicationData)`, which on Windows comes from the shell's Roaming AppData folder and ignores `APPDATA`, so a test-only `AppDataManager.UseDirectoryForTests` override is set from a module initializer instead of an environment variable. Settings, backups, and filter dialog bounds all resolve through that directory. `ClientLogRelay.DisableForTests` returns before any network call. `TestIsolationTests` asserts the settings and backup paths are under the test directory. Removing the override made it fail. A full desktop test run left the real `~/.config/ReelRoulette` listing unchanged.
+  - `docs/api.md`, `CONTEXT.md`, `docs/domain-inventory.md`, and the testing checklist no longer describe the sync routes. `docs/api.md` says `filterState` has no `tagMatchMode` and preset match ignores it. The checklist has release items for the desktop summary and cross-client preset matching.
+- **Deferrals / Follow-ups**:
+  - Removing `library.json` file recognition and the JSON-to-SQLite importer, including `PrepareIncomingFromJson`, ships in v0.14.0. The import check and retire-aside for a leftover `library.json` stay until that removal.
+  - Scrubbing every remaining `library.json` mention from product code, comments, user-facing copy, tests, and current-state docs follows that format removal.
+  - Account and PIN tables stay with the account and PIN data model work.
+  - Found while implementing: `FilterStateProjection.ToModel()` in the server preset-match code has no caller.
+  - Found while implementing: the desktop server-preset parser returns the default filter when a saved filter cannot be parsed, without logging it.
 
 ### M10i19 - Drop the Unread Server Tag and Item Cache
 

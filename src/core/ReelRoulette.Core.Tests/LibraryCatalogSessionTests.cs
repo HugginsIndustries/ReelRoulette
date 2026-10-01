@@ -342,35 +342,6 @@ public sealed class LibraryCatalogSessionTests
     }
 
     [Fact]
-    public void ReplaceTagCatalog_DuplicateNames_KeepEarlierCategoryUnlessUncategorized()
-    {
-        using var dir = new TempDirectory();
-        var session = CatalogOpen.Open(dir.Path).Session!;
-
-        Assert.True(session.ReplaceTagCatalog(
-            [],
-            [
-                new LibraryCatalogTag { Name = "Foo", CategoryId = "beta" },
-                new LibraryCatalogTag { Name = "foo", CategoryId = "" }
-            ]));
-
-        var tag = Assert.Single(LibraryCatalogStore.Read(session.DatabasePath).Tags);
-        Assert.Equal("Foo", tag.Name);
-        Assert.Equal("beta", tag.CategoryId);
-
-        Assert.True(session.ReplaceTagCatalog(
-            [],
-            [
-                new LibraryCatalogTag { Name = "foo", CategoryId = "" },
-                new LibraryCatalogTag { Name = "Foo", CategoryId = "alpha" }
-            ]));
-
-        var upgraded = Assert.Single(LibraryCatalogStore.Read(session.DatabasePath).Tags);
-        Assert.Equal("Foo", upgraded.Name);
-        Assert.Equal("alpha", upgraded.CategoryId);
-    }
-
-    [Fact]
     public void InsertItem_MissingFingerprintVersion_StoresOne()
     {
         using var dir = new TempDirectory();
