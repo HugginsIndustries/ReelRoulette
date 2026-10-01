@@ -10,6 +10,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using ReelRoulette.Core.Tags;
 
 namespace ReelRoulette
 {
@@ -284,7 +285,7 @@ namespace ReelRoulette
             var processedTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             // Group tags by category
-            foreach (var category in categories.OrderBy(c => c.SortOrder))
+            foreach (var category in categories.OrderBy(c => c.SortOrder).ThenBy(c => c.Name, TagNameComparer.Instance))
             {
                 var categoryId = string.IsNullOrWhiteSpace(category.Id)
                     ? ItemTagsCategoryViewModel.UncategorizedCategoryId
@@ -297,7 +298,7 @@ namespace ReelRoulette
                 };
 
                 // Process all tags that belong to this category OR that should belong to it (sorted alphabetically)
-                foreach (var tagName in allTagNames.OrderBy(t => t, StringComparer.OrdinalIgnoreCase))
+                foreach (var tagName in allTagNames.OrderBy(t => t, TagNameComparer.Instance))
                 {
                     // Find if this tag exists in available tags
                     var availableTag = availableTags.FirstOrDefault(t => 
@@ -353,7 +354,7 @@ namespace ReelRoulette
                     IsExpanded = !_sessionCollapsedCategoryIds.Contains(ItemTagsCategoryViewModel.UncategorizedCategoryId)
                 };
 
-                foreach (var tagName in orphanedTags.OrderBy(t => t))
+                foreach (var tagName in orphanedTags.OrderBy(t => t, TagNameComparer.Instance))
                 {
                     var itemsWithTag = _items.Count(item =>
                         (item.Tags ?? new List<string>()).Any(t =>

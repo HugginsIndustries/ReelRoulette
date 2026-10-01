@@ -26,6 +26,7 @@ import {
 import { parseLibraryQueryPage } from "./library/libraryProjectionModel.ts";
 import { createLibraryGridController } from "./library/libraryGridController.ts";
 import { mapPlayItemErrorToStatus } from "./library/libraryPlayModel.ts";
+import { compareTagNames } from "./library/tagNameOrder.ts";
 import {
   LIBRARY_OVERLAY_FETCH_ERROR,
   renderLibraryOverlayBodyHtml
@@ -743,7 +744,7 @@ export function startApp(config) {
   }
 
   function renderFilterTagsPanel() {
-    const categories = (filterTagModel?.categories || []).slice().sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+    const categories = (filterTagModel?.categories || []).slice().sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || compareTagNames(a.name, b.name));
     const tags = filterTagModel?.tags || [];
     const globalAnd = filterWorking.globalMatchMode !== false;
 
@@ -751,7 +752,7 @@ export function startApp(config) {
     const processed = new Set();
 
     for (const cat of categories) {
-      const catTags = tags.filter((t) => t.categoryId === cat.id).sort((a, b) => String(a.name).localeCompare(String(b.name)));
+      const catTags = tags.filter((t) => t.categoryId === cat.id).sort((a, b) => compareTagNames(a.name, b.name));
       if (catTags.length === 0) {
         continue;
       }
@@ -804,7 +805,7 @@ export function startApp(config) {
       const uncCollapsed = filterDialogCollapsedCategories.has(FILTER_DIALOG_UNCATEGORIZED_COLLAPSE_KEY);
       const uncIcon = uncCollapsed ? "keyboard_arrow_right" : "keyboard_arrow_down";
       let chips = "";
-      for (const name of [...new Set(orphans)].sort((a, b) => String(a).localeCompare(String(b)))) {
+      for (const name of [...new Set(orphans)].sort(compareTagNames)) {
         const inc = containsTagCi(filterWorking.selectedTags, name);
         const exc = containsTagCi(filterWorking.excludedTags, name);
         let cls = "tag-chip";
@@ -840,7 +841,7 @@ export function startApp(config) {
 
     const legacyFlat = categories.length === 0 && tags.length > 0;
     if (legacyFlat) {
-      const sorted = tags.slice().sort((a, b) => String(a.name).localeCompare(String(b.name)));
+      const sorted = tags.slice().sort((a, b) => compareTagNames(a.name, b.name));
       let chips = "";
       for (const t of sorted) {
         const inc = containsTagCi(filterWorking.selectedTags, t.name);
@@ -2119,7 +2120,7 @@ export function startApp(config) {
       const x = Number(a.sortOrder || 0);
       const y = Number(b.sortOrder || 0);
       if (x !== y) return x - y;
-      return String(a.name || "").localeCompare(String(b.name || ""));
+      return compareTagNames(a.name, b.name);
     });
     return options;
   }
@@ -2279,11 +2280,7 @@ export function startApp(config) {
         indices.push(idx);
       }
     });
-    indices.sort((a, b) =>
-      String(state.autoTagRows[a].tagName || "").localeCompare(String(state.autoTagRows[b].tagName || ""), undefined, {
-        sensitivity: "base"
-      })
-    );
+    indices.sort((a, b) => compareTagNames(state.autoTagRows[a].tagName, state.autoTagRows[b].tagName));
     return indices;
   }
 
@@ -2797,7 +2794,7 @@ export function startApp(config) {
     categories.forEach((category, index) => {
       category.sortOrder = isUncategorizedCategoryId(category.id) ? Number.MAX_SAFE_INTEGER : index;
     });
-    tags.sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
+    tags.sort((a, b) => compareTagNames(a.name, b.name));
     return { categories, tags, items };
   }
 
@@ -2921,7 +2918,7 @@ export function startApp(config) {
         grid.style.display = "none";
       }
       const categoryTags = tagsByCategory.get(category.id) || [];
-      categoryTags.sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
+      categoryTags.sort((a, b) => compareTagNames(a.name, b.name));
       categoryTags.forEach((tag) => {
         const chip = document.createElement("div");
         chip.className = `tag-chip ${computeTagStateForItems(tag.name, items)}`;
@@ -2992,7 +2989,7 @@ export function startApp(config) {
         const x = Number(a.sortOrder || 0);
         const y = Number(b.sortOrder || 0);
         if (x !== y) return x - y;
-        return String(a.name || "").localeCompare(String(b.name || ""));
+        return compareTagNames(a.name, b.name);
       });
       state.tagEditorCategoryOrder = initial.map((category) => String(category.id || ""));
     }

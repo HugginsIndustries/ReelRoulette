@@ -13,6 +13,7 @@ using System.Globalization;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
+using ReelRoulette.Core.Tags;
 
 namespace ReelRoulette
 {
@@ -771,7 +772,7 @@ namespace ReelRoulette
                     // Track which tags have been processed
                     var processedTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-                    foreach (var category in categories.OrderBy(c => c.SortOrder))
+                    foreach (var category in categories.OrderBy(c => c.SortOrder).ThenBy(c => c.Name, TagNameComparer.Instance))
                     {
                         var categoryVm = new FilterCategoryViewModel
                         {
@@ -780,7 +781,7 @@ namespace ReelRoulette
                         };
 
                         // Get tags for this category
-                        var categoryTags = tags.Where(t => t.CategoryId == category.Id).OrderBy(t => t.Name);
+                        var categoryTags = tags.Where(t => t.CategoryId == category.Id).OrderBy(t => t.Name, TagNameComparer.Instance);
 
                         foreach (var tag in categoryTags)
                         {
@@ -820,7 +821,7 @@ namespace ReelRoulette
                             CategoryName = "Uncategorized"
                         };
 
-                        foreach (var tagName in orphanedTags.OrderBy(t => t))
+                        foreach (var tagName in orphanedTags.OrderBy(t => t, TagNameComparer.Instance))
                         {
                             var tagVm = new FilterTagViewModel
                             {

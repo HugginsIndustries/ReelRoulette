@@ -19,11 +19,10 @@ Instructions:
 
 Commit Message:
 
-M10i18: Remove JSON-era leftovers that do not serve migration
+Bugfix: Sort tag names the same way on server, desktop, and WebUI
 
-- Remove the unused library-index file store, the verification-only tag mutator, and FilterSetBuilder with their verification checks. Randomization and DTO mapping checks stay.
-- Remove the throw-only server state mutation methods and the empty desktop tag-catalog and item-tag sync methods.
-- Remove the uncalled desktop library display filter, the full-catalog path check, and the legacy flat tag, fingerprint index, and item list fields on the desktop library model.
-- Drop the filter dialog's flat-tag branch and the unused LibraryGridViewEnabled setting. Old settings files with that key still load.
-- Reword comments that mentioned library.json outside startup migration, and fix the checklist and repository map.
-- Startup still migrates a leftover library.json. Import still rejects it.
+- Add one tag-name comparison in Core and mirror it in the WebUI: lower-case, then compare by character code, with an exact comparison when names differ only in case. `_` now sorts before letters everywhere.
+- Use it for the server tag editor model, auto-tag scan, and catalog normalize, and for the tag editor, filter Tags tab, and auto-tag results on both clients and the desktop current-file tags.
+- Break category ties on equal sort order by name on both clients, since stored sort orders can repeat.
+- Lock parity with a shared ordered fixture under shared/fixtures that the xUnit and Vitest suites both sort against.
+- Document the ordering rule for the tag editor model in docs/api.md.

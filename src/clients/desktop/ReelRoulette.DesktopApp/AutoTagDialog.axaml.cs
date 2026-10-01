@@ -8,6 +8,7 @@ using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
+using ReelRoulette.Core.Tags;
 
 namespace ReelRoulette
 {
@@ -341,7 +342,7 @@ namespace ReelRoulette
                 .Where(tag => !string.IsNullOrWhiteSpace(tag.Name))
                 .Select(tag => tag.Name.Trim())
                 .Distinct(StringComparer.OrdinalIgnoreCase)
-                .OrderBy(tag => tag, StringComparer.OrdinalIgnoreCase)
+                .OrderBy(tag => tag, TagNameComparer.Instance)
                 .ToList();
 
             if (tagNames.Count == 0)
@@ -422,7 +423,7 @@ namespace ReelRoulette
 
             var visibleRows = _allResults
                 .Where(row => ViewAllMatches || row.WouldChangeCount > 0)
-                .OrderBy(row => row.TagName, StringComparer.OrdinalIgnoreCase)
+                .OrderBy(row => row.TagName, TagNameComparer.Instance)
                 .ToList();
 
             Results.Clear();

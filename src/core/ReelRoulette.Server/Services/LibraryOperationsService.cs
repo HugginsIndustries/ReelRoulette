@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using ReelRoulette.Core.Fingerprints;
 using ReelRoulette.Core.Library;
 using ReelRoulette.Core.Storage;
+using ReelRoulette.Core.Tags;
 using ReelRoulette.Server.Contracts;
 
 namespace ReelRoulette.Server.Services;
@@ -298,7 +299,7 @@ public sealed class LibraryOperationsService
             {
                 Categories = categories
                     .OrderBy(category => category.SortOrder)
-                    .ThenBy(category => category.Name, StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(category => category.Name, TagNameComparer.Instance)
                     .ToList(),
                 Tags = read.Tags
                     .Select(tag => new TagSnapshot
@@ -307,7 +308,7 @@ public sealed class LibraryOperationsService
                         CategoryId = NormalizeCategoryId(tag.CategoryId)
                     })
                     .Where(tag => !string.IsNullOrWhiteSpace(tag.Name))
-                    .OrderBy(tag => tag.Name, StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(tag => tag.Name, TagNameComparer.Instance)
                     .ToList(),
                 Items = read.Items
                     .Select(item => new ItemTagsSnapshot
@@ -627,7 +628,7 @@ public sealed class LibraryOperationsService
                 .Select(name => name.Trim())
                 .Where(name => !string.IsNullOrWhiteSpace(name))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
-                .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+                .OrderBy(name => name, TagNameComparer.Instance)
                 .ToList();
 
             var selectedPaths = (request.ItemIds ?? [])
@@ -973,7 +974,7 @@ public sealed class LibraryOperationsService
             }
         }
 
-        kept.Sort((left, right) => StringComparer.OrdinalIgnoreCase.Compare(left.Name, right.Name));
+        kept.Sort((left, right) => TagNameComparer.Instance.Compare(left.Name, right.Name));
         return kept;
     }
 

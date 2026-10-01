@@ -32,6 +32,7 @@ using ReelRoulette.LibraryArchive;
 using System.Timers;
 using ReelRoulette.Core.Library;
 using ReelRoulette.Core.Storage;
+using ReelRoulette.Core.Tags;
 
 namespace ReelRoulette
 {
@@ -2056,13 +2057,13 @@ namespace ReelRoulette
                 // Group item's tags by category
                 var tagsByCategory = new List<(int SortOrder, string CategoryName, List<string> Tags)>();
                 
-                foreach (var category in categories.OrderBy(c => c.SortOrder))
+                foreach (var category in categories.OrderBy(c => c.SortOrder).ThenBy(c => c.Name, TagNameComparer.Instance))
                 {
                     var tagsInCategory = item.Tags
                         .Where(tagName => availableTags.Any(t => 
                             string.Equals(t.Name, tagName, StringComparison.OrdinalIgnoreCase) && 
                             t.CategoryId == category.Id))
-                        .OrderBy(t => t, StringComparer.OrdinalIgnoreCase)
+                        .OrderBy(t => t, TagNameComparer.Instance)
                         .ToList();
                     
                     if (tagsInCategory.Count > 0)
@@ -2083,7 +2084,7 @@ namespace ReelRoulette
                 
                 var orphanedTags = item.Tags
                     .Where(t => !processedTags.Contains(t))
-                    .OrderBy(t => t, StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(t => t, TagNameComparer.Instance)
                     .ToList();
                 
                 if (orphanedTags.Count > 0)

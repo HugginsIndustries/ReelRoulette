@@ -93,6 +93,7 @@ Use `pwsh ./tools/scripts/reset-checklist.ps1` to reset metadata/check states be
 - [x] Favorite/blacklist actions work.
 - [x] Tag editor open/edit/save/close works; Auto Tag scan and apply work correctly.
 - [x] Tag editor category reorder marks pending and persists after save.
+- [ ] Tag order matches on desktop and WebUI in the tag editor, filter Tags tab, and auto-tag results, and desktop current-file tags follow it: a tag starting with `_` comes after digits and before letters, a tag starting with `~` comes after letters, and a newly added tag lands in that same order before save.
 - [x] Session mute toggle works and glyph updates correctly.
 - [x] WebUI Fullscreen: overlays stay usable on desktop; pseudo-fullscreen works correctly on iOS WebKit.
 - [x] SSE status transitions are user-friendly (connected, reconnecting, resync paths).

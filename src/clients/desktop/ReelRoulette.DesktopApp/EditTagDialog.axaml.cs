@@ -3,6 +3,7 @@ using Avalonia.Interactivity;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using ReelRoulette.Core.Tags;
 
 namespace ReelRoulette
 {
@@ -40,7 +41,7 @@ namespace ReelRoulette
             // Populate category combo box
             CategoryComboBox.Items.Clear();
             
-            foreach (var category in categories.OrderBy(c => c.SortOrder))
+            foreach (var category in categories.OrderBy(c => c.SortOrder).ThenBy(c => c.Name, TagNameComparer.Instance))
             {
                 CategoryComboBox.Items.Add(new ComboBoxItem 
                 { 

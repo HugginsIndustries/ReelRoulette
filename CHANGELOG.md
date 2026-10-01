@@ -38,6 +38,7 @@ Write **[Unreleased]** bullets at the same level as the released sections below.
 
 ### Fixed
 
+- **Tag order:** Desktop and WebUI list tags and categories in the same order in the tag editor, the filter Tags tab, and the auto-tag results. The desktop current-file tags use that order too. A tag that starts with `_` comes before letters in both apps, where desktop used to list it after Z.
 - **Library import paths:** Remapping a source rejects a file that would land outside the folder you picked, including a sibling folder whose name starts with that folder's name.
 - **Desktop — folder import:** Importing a large folder no longer fails after 8 seconds. The desktop waits for the scan to finish, then shows how many files were imported or updated and starts refresh.
 - **Desktop — current file stats:** The current-file section updates when that file starts. A playback event that arrives first no longer leaves the previous file's stats on screen.
