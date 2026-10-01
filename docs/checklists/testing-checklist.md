@@ -1,245 +1,195 @@
 # ReelRoulette Testing Checklist
 
-**Rule:** Items here must be **testable checks** a maintainer can execute and mark pass or fail. Do not add roadmap text, deferrals, or other non-test process notes as checklist rows (keep those in `MILESTONES.md` and related docs). Intended use is **manual validation before releases** (full or targeted regression).
+This checklist is a regression check plus release-specific checks, run before a release.
 
-**Rule:** Keep checklist items concise. Do not inline implementation details, file paths, or platform caveats that already exist in other documentation (`README.md`, `docs/dev-setup.md`, `docs/architecture.md`, etc.). A one-line testable check is always preferred over a multi-line re-specification of a feature.
+**Rule:** Every item is a check that passes or fails. Roadmap text, deferrals, and known issues go in `MILESTONES.md`, not here.
 
-Use this checklist for manual regression passes. Check boxes inline as you go.
-Use `pwsh ./tools/scripts/reset-checklist.ps1` to reset metadata/check states before starting a new validation pass.
+**Rule:** One line per check. Do not repeat implementation details, file paths, or platform notes that other docs already cover.
+
+**Rule:** A manual item describes something a person can see or do in the apps. Behavior that is only visible in code, logs, or API responses belongs in automated tests, not in this list.
+
+Run `pwsh ./tools/scripts/reset-checklist.ps1` to clear check states and fill in the date and version before a new pass.
 
 ## Test Run Metadata
 
-- Test date: 2026-08-24
-- Tester: Christian Huggins
-- Release version: 0.12.0
-- Environment (OS + device(s) + browser(s)): CachyOS (desktop app & server + WebUI on Firefox), Windows 11 VM (desktop/server apps), iPad (WebUI in Safari), and Google Pixel 8 Pro (WebUI in Chrome)
-- Test mode:
-  - [x] Full regression sweep
-  - [ ] Targeted regression (list impacted areas):
+- Test date/time:
+- Tester:
+- Release version:
+- Environment (OS + device(s) + browser(s)):
 
 ---
 
-## Build & Preconditions
+## Automated Checks
 
-- [x] `dotnet build ReelRoulette.sln` passes.
-- [x] `dotnet test ReelRoulette.sln` passes.
-- [x] WebUI verify passes (`npm run verify` in `src/clients/web/ReelRoulette.WebUI`).
-- [x] `pwsh ./tools/scripts/verify-web-deploy.ps1` passes.
+An agent runs these and ticks them.
 
-## Server Baseline + Tray
+- [ ] `dotnet build ReelRoulette.sln` passes.
+- [ ] `dotnet test ReelRoulette.sln` passes.
+- [ ] `dotnet run --project src/core/ReelRoulette.Core.SystemChecks -- --verbose` passes.
+- [ ] `npm run verify` passes in `src/clients/web/ReelRoulette.WebUI`.
+- [ ] `./tools/scripts/verify-linux-packaged-server-smoke.sh` passes.
+- [ ] `pwsh ./tools/scripts/verify-web-deploy.ps1` passes. Skipped on every OS until the Server Data Folder Override backlog item lands, because it still writes to real app data.
+- [ ] Workflow YAML files in `.github/workflows` are valid, and default CI runs build, test, and web verify.
+- [ ] `release.yml` runs on a tag and on `workflow_dispatch`, and publishes Velopack feeds.
+- [ ] Docs review: `AGENTS.md`, `README.md`, `CONTEXT.md`, `MILESTONES.md`, `docs/api.md`, `docs/architecture.md`, `docs/dev-setup.md`, and `docs/domain-inventory.md` match current behavior.
+- [ ] Docs review: the changelog section being released follows the style note at the top of `CHANGELOG.md`, and the `RELEASE-NOTES.md` entry follows its style guide.
+- [ ] Docs review: this checklist matches current features and workflows.
 
-- [ ] `POST /api/library/query` returns a page with `totalCount` and `searchBaselineCount`, keeps missing files, and returns thumbnail layout fields for that page. `POST /api/library/item` returns one item by id or path, without thumbnail fields, and returns 404 when the item is missing.
-- [ ] Server startup loads sources from catalog rows. The tag table is the catalog's tag list. An item can still hold a tag name that is not in that table. A missing `library.db` still migrates a leftover `library.json` once.
-- [x] `ReelRoulette.ServerApp` starts without fatal startup errors.
-- [x] `/health` and WebUI static assets respond correctly.
-- [x] Server launches with no command prompt window on Windows.
-- [x] Tray icon appears and matches expected icon.
-- [x] Tray `Open Operator UI` opens default browser at `/operator`.
-- [x] Tray `Launch Server on Startup` toggle applies immediately on Windows (registry) and Linux (XDG autostart).
-- [x] Tray `Refresh Library` triggers refresh pipeline.
-- [x] Tray `Restart Server` performs graceful restart and service recovers.
-- [x] Tray `Stop Server / Exit` performs graceful shutdown.
-- [x] Packaged portable server runs with tray when a desktop session is available, headless otherwise.
-- [x] Packaged installer server runs with tray when a desktop session is available, headless otherwise.
+## Manual Regression
 
-## Operator UI
+### Server and Tray
 
-- [x] Page layout renders as expected.
-- [x] Connected Clients panel shows differentiated rows with expected fields.
-- [x] Connected Clients `Copy` button works.
-- [x] Server Logs refresh works without changing filters.
-- [x] Server Logs copy works.
-- [x] Incoming/outgoing event tables update during activity.
-- [x] Control settings apply flow behaves correctly, including `Launch Server on Startup` state.
-- [x] Restart/stop lifecycle buttons behave correctly.
+- [ ] Server starts without errors and serves the WebUI at `/` and Operator at `/operator`.
+- [ ] Server starts with no console window on Windows.
+- [ ] Tray icon appears with the right icon.
+- [ ] Tray **Open Operator UI** opens the browser at `/operator`.
+- [ ] Tray **Launch Server on Startup** takes effect right away on Windows and Linux.
+- [ ] Tray **Refresh Library** starts a refresh.
+- [ ] Tray **Restart Server** restarts and clients reconnect.
+- [ ] Tray **Stop Server / Exit** shuts down cleanly.
+- [ ] Installed server runs with a tray when a desktop session is available and headless otherwise.
 
-## Operator Testing Suite
+### Operator
 
-- [x] Testing Mode OFF blocks scenario/fault actions.
-- [x] Testing Mode ON enables scenario/fault actions.
-- [x] Admin auth policy enforcement matches mode (Off = unauthenticated allowed; TokenRequired = auth required).
-- [x] API version mismatch scenario produces deterministic client UX.
-- [x] Capability mismatch scenario produces deterministic client UX.
-- [x] API unavailable scenario produces recoverable client behavior.
-- [x] Missing media scenario shows clear playback guidance (no crash).
-- [x] SSE disconnect scenario triggers reconnect/resync behavior.
-- [x] Reset scenario flags returns system to baseline behavior.
+- [ ] Page layout renders correctly.
+- [ ] Connected Clients lists desktop and WebUI clients separately, and **Copy** works.
+- [ ] Server Logs refresh keeps filters, and copy works.
+- [ ] Incoming and outgoing event tables update during activity.
+- [ ] Control settings apply, including **Launch Server on Startup**.
+- [ ] Restart and stop buttons work.
 
-## WebUI
+### Operator Testing Suite
 
-- [x] WebUI bootstraps without runtime-config errors from a LAN device.
-- [x] WebUI PWA metadata: over HTTPS origin, Add to Home Screen / Install app opens in standalone shell with app icon.
-  - Issues: PWA on Android is not working (only creates a shortcut that opens in Chrome browser)
-- [x] Pair/auth flow works for current auth mode.
-- [x] Core controls are usable on touch.
-- [ ] Random play sends the current filter, and sends a preset id only when that filter still equals the selected named preset. A starred header row is not sent as a preset.
-- [x] Filter Media overlay opens and General, Tags, and Presets tabs function correctly.
-- [ ] Library overlay opens and closes from player controls, keeps an already-loaded query window across close/reopen without a new list query, and works in fullscreen and light/dark themes.
-- [ ] Library overlay browse uses `POST /api/library/query` for the active filter, search, and sort. Header **Showing N of M** uses `totalCount` and `searchBaselineCount`, including after a filter or preset change that finishes while the overlay is hidden. Search, sort, Filter Apply, and a header preset (including **None**, which restores the default filter and stays on **None** until that filter changes) start over at the first page and scroll to the top, including when the result is empty. Choosing the starred unsaved row leaves the filter in place. A further page that fails loads again after the scroll position changes. Search and sort persist across close/reopen.
-- [x] WebUI library grid: justified thumbnail layout at desktop and mobile widths; virtual scroll keeps mounted rows bounded; thumbnails load from `GET /api/thumbnail/{itemId}` only.
-- [x] WebUI library grid: mixed-aspect reflow on resize; missing-thumbnail placeholder (no broken image); favorite/blacklist badges; filename bar readable in light and dark themes.
-- [x] WebUI library grid visual parity: side-by-side with desktop grid at equivalent width (tile scrim, bar, badges, gaps).
-- [x] WebUI library SSE sync: with overlay open, desktop favorite/blacklist toggles update visible and scrolled-off WebUI tiles without closing overlay.
-- [x] WebUI library SSE sync: with overlay open, desktop playback updates **Play count** / **Last played** sort and **Only never played** filter correctly.
-- [ ] WebUI library SSE sync: `resyncRequired` reloads the loaded list-query window whether the overlay is shown or hidden, does not fetch the full catalog, and does not post an item-state read with an empty path list. Closing and reopening an already-loaded overlay does not query.
-- [ ] WebUI library SSE sync regression: search, sort, and filter requery still scrolls the grid to the top; playback continues while the overlay stays open.
-- [x] WebUI library click-to-play: single-click tile calls `POST /api/play/{itemId}`, overlay closes on success, media plays in WebUI player without duplicate `record-playback`.
-- [x] WebUI library click-to-play errors: missing/disabled/unsupported items show clear status messages (404/409/415); overlay stays open on failure.
-- [x] WebUI library keyboard: Escape closes overlay; Tab to tile + Enter/Space plays.
-- [x] WebUI library click-to-play cross-client SSE: playback from WebUI updates open library overlay sort/stats on another client.
-- [x] Preset catalog add, rename, delete, reorder, and load all work; header combobox stays ordered.
-- [x] Manual controls (prev/play-next) work.
-- [x] Loop/autoplay toggles work.
-- [x] Favorite/blacklist actions work.
-- [x] Tag editor open/edit/save/close works; Auto Tag scan and apply work correctly.
-- [x] Tag editor category reorder marks pending and persists after save.
-- [ ] Tag order matches on desktop and WebUI in the tag editor, filter Tags tab, and auto-tag results, and desktop current-file tags follow it: a tag starting with `_` comes after digits and before letters, a tag starting with `~` comes after letters, and a newly added tag lands in that same order before save.
-- [x] Session mute toggle works and glyph updates correctly.
-- [x] WebUI Fullscreen: overlays stay usable on desktop; pseudo-fullscreen works correctly on iOS WebKit.
-- [x] SSE status transitions are user-friendly (connected, reconnecting, resync paths).
-- [x] After a core refresh completes, status shows the correct segmented summary.
-- [ ] System light/dark theme change is reflected correctly in shell and tag editor. 
-  - Issues: 1 - filter media tags tab & tag editor chip text is black on light mode 2 - tag editor buttons (outside of tag grid) are always white (should be black on light mode)
-- [x] Diagnostics panel appears below status line.
-- [x] Client `clientType`/identity appears in Operator Connected Clients.
+- [ ] Testing Mode off blocks scenario and fault actions; on enables them.
+- [ ] Admin auth Off allows unauthenticated access; TokenRequired asks for auth.
+- [ ] API version mismatch shows a clear message in both clients.
+- [ ] Capability mismatch shows a clear message in both clients.
+- [ ] API unavailable recovers when the server comes back.
+- [ ] Missing media shows playback guidance without a crash.
+- [ ] SSE disconnect reconnects and resyncs.
+- [ ] Reset scenario flags returns to normal behavior.
 
-## Desktop App
+### WebUI
 
-- [x] Desktop app can connect to server.
-- [x] Desktop loads and shows current runtime status without crash.
-- [x] Random play works from active preset.
-- [x] Random play from desktop or WebUI, on a large library and immediately after a playback, still follows the current filter. Playing one library item still starts that item.
-- [x] Manual library play works.
-- [x] Missing/unavailable library items show clear desktop errors (404/409/415 mapping) with no path-first fallback.
-- [x] Previous/next timeline navigation works.
-- [x] Loop toggle works.
-- [x] Autoplay toggle works.
-- [x] Volume/mute controls work.
-- [x] Fullscreen/player-view transitions work.
-- [x] No stale/incorrect status text after playback actions.
-- [x] `View -> Diagnostics` opens and shows `CoreClientId`/`CoreSessionId`.
-- [x] Import folder works (or fails with clear guidance).
-- [ ] Import folder names the source after the folder when the picker path has a trailing slash.
-- [ ] Importing a folder adds new files and updates existing ones. An existing file keeps its tags, favorite, blacklist, and playback stats. Files missing on disk stay until refresh.
-- [x] Importing a large folder still lets library browse answer during the scan.
-- [x] Manage Sources opens and source enable/disable persists.
-- [x] Thumbnails appear in the library panel after refresh thumbnail generation completes (no desktop restart required).
-- [x] Duplicate scan + apply flow works (if test data exists).
-- [x] Duplicate groups render per-file thumbnail and info-row pairs in order.
-- [x] Duplicate groups allow per-group handling selection (Keep All and specific keep-item choice).
-- [x] Duplicate delete confirmation shows selected group/file counts before applying.
-- [x] Auto Tag scan + apply works (if test data exists).
-- [x] Favorites toggle updates item state.
-- [x] Blacklist toggle updates item state.
-- [x] Tag editor apply/remove updates item tags as expected.
-- [x] Tag editor category rows are readable in both light and dark themes.
-- [x] Tag chips render correctly in both light and dark themes.
-- [x] Filter dialog Tags tab shows per-category collapse toggles.
-- [x] Clear playback stats flow works with confirmation.
-- [ ] `Library → Export Library…` with the server running asks for a destination, then saves a `library.db` checkpoint. It does not write a zip.
-- [ ] `Library → Import Library…` requires the server-stopped acknowledgment. The overwrite confirmation names the library catalog. Restoring an export replaces the live catalog, including presets and thumbnail revision and dimensions. Settings and backups stay where they are. JPEG files stay until the next thumbnail stage completes. Run a refresh after import so those thumbnails are generated and JPEG files that are not in the imported catalog are removed. A folder that still has only `library.json` with sources or items asks for the same overwrite confirmation, and that file is not left as `library.json` afterward. A `library.db` that cannot be opened asks too. A file that is not a library database is rejected, including a `library.json` document, and the existing catalog stays.
-- [ ] With server backups enabled, a catalog change returns without waiting for the copy, then writes `library.db.backup.*` in the backups folder after the backup gap. Leftover `library.json.backup.*` files are left in place.
+- [ ] WebUI loads from another device on the LAN.
+- [ ] Over HTTPS, Add to Home Screen / Install app opens a standalone app with the app icon.
+- [ ] Pairing or sign-in works for the current auth mode.
+- [ ] Controls are usable on touch.
+- [ ] Random play follows the current filter, including after editing a selected preset without saving.
+- [ ] Filter Media opens, and its General, Tags, and Presets tabs work.
+- [ ] Preset add, rename, delete, reorder, and load work, and the header list stays in order.
+- [ ] Previous, next, loop, autoplay, favorite, and blacklist work.
+- [ ] Mute toggles and its icon updates.
+- [ ] Tag editor opens, edits, saves, and closes; category reorder persists after save.
+- [ ] Auto Tag scan and apply work.
+- [ ] Fullscreen keeps overlays usable on desktop browsers, and pseudo-fullscreen works on iOS.
+- [ ] Connection status reads clearly when connected, reconnecting, and resyncing.
+- [ ] After a refresh, the status line shows the refresh summary.
+- [ ] Switching the system theme updates the shell and tag editor.
+- [ ] Diagnostics panel appears below the status line.
+- [ ] Library overlay opens and closes from the player controls, in fullscreen and in both themes.
+- [ ] Library overlay **Showing N of M** matches the filter and search, and search and sort persist across close and reopen.
+- [ ] Changing search, sort, filter, or preset scrolls the overlay grid to the top.
+- [ ] Library grid lays out mixed-aspect thumbnails at desktop and mobile widths and reflows on resize.
+- [ ] Library grid shows a placeholder for a missing thumbnail, favorite and blacklist badges, and a readable filename bar in both themes.
+- [ ] Library grid looks like the desktop grid at the same width.
+- [ ] Clicking a tile plays it and closes the overlay; a missing or unsupported file shows a message and keeps the overlay open.
+- [ ] Escape closes the overlay; Tab to a tile and Enter or Space plays it.
+- [ ] With the overlay open, favorite, blacklist, and playback changes from the desktop update tiles, sort, and the **Only never played** filter.
+- [ ] With LAN access and mDNS on, the WebUI loads from another device at `http://<LAN hostname>.local:<port>`.
 
-## Cross-Client Parity + Sync
+### Desktop
 
-- [ ] Overall UI parity between desktop app and WebUI.
-  - Issues: desktop tag chip button toggle state doesn't apply when adding/removing tags (no visual user feedback - should change to HugginsOrange) - overall UI parity is not 100% in the desktop app.
-- [x] Favorite/blacklist changes on desktop reflect in web/mobile.
-- [x] Favorite/blacklist changes on web/mobile reflect in desktop.
-- [x] Tag edits converge across clients.
-- [x] Refresh status projection is consistent across clients.
-- [x] No critical cross-client state divergence observed.
+- [ ] Desktop connects to the server and shows current status.
+- [ ] Random play follows the active filter, including right after a playback.
+- [ ] Playing a library item starts that item; a missing or unsupported file shows a clear error.
+- [ ] Previous, next, loop, autoplay, volume, and mute work.
+- [ ] Fullscreen and player view switch correctly.
+- [ ] Status text stays correct after playback actions.
+- [ ] **View → Diagnostics** shows the client and session ids.
+- [ ] Import folder adds new files, names the source after the folder, and keeps tags, favorites, and stats on files already imported.
+- [ ] Library browse keeps responding while a large folder imports.
+- [ ] Manage Sources enable and disable persists.
+- [ ] Thumbnails appear in the library panel after a refresh, without restarting.
+- [ ] Duplicate scan shows thumbnail and info pairs per group, allows Keep All or a chosen file per group, and confirms counts before deleting.
+- [ ] Auto Tag scan and apply work.
+- [ ] Favorite and blacklist toggles update the item.
+- [ ] Tag editor adds and removes tags.
+- [ ] Tag editor category rows and tag chips are readable in both themes.
+- [ ] Filter dialog Tags tab has per-category collapse toggles.
+- [ ] Clear playback stats asks for confirmation and clears stats.
+- [ ] With backups on, a library change writes a `library.db.backup.*` file to the backups folder after the backup gap.
 
-## Logging + Diagnostics
+### Cross-Client
 
-- [x] Operator Server Logs shows non-empty log data during active test run.
-- [x] Entries contain clear timestamp/level/source identity.
-- [x] Desktop, web/mobile, and server-originated events all appear in server log stream.
-- [x] No obvious sensitive values (tokens/secrets/cookies) are logged.
+- [ ] Desktop and WebUI look and behave alike for the same features.
+- [ ] Favorite and blacklist changes show in the other client.
+- [ ] Tag edits show in the other client.
+- [ ] Refresh status matches in both clients.
 
-## Packaging + Deployment Smoke
+### Logging
 
-- [x] **Velopack install (Windows):** per-user `Setup.exe` installs without elevation; Desktop and Start Menu shortcuts present when offered; server serves WebUI at `/` and Operator at `/operator`.
-- [x] **Velopack install (Linux):** `.AppImage` runs after `chmod +x`; server serves WebUI and Operator; desktop plays video with system LibVLC; server refresh works with distro `ffmpeg`/`ffprobe`.
-- [x] **Linux AppImage menu registration:** After first launch of each AppImage, `reelroulette-server.desktop` and `reelroulette-desktop.desktop` appear under `~/.local/share/applications/` with matching hicolor icons; both show under Multimedia in the application menu and launch the correct AppImage.
-- [x] **Linux desktop — missing VLC:** On a system without VLC/LibVLC installed, launching the desktop AppImage shows the dependency dialog with a working, copyable install command instead of exiting silently; dismissing the dialog exits cleanly and does not leave a menu entry without its icon.
-- [x] **Linux AppImage menu — move/reconcile:** Move one AppImage to a new directory, run it directly, and confirm its `.desktop` `Exec=` updates; relaunch without moving and confirm the `.desktop` mtime does not change.
-- [x] **Linux AppImage menu — update:** After an in-app Velopack update, menu entries remain present and still launch the updated AppImage.
-- [x] **Server in-app updates (manual):** From packaged build *N*, background check surfaces *N+1* without downloading; operator Download reaches ready without restart; Apply & Restart relaunches on *N+1*; restart without apply re-checks feed (does not offer stale ready).
-- [x] **Desktop in-app updates (manual):** From packaged build *N*, Settings check surfaces *N+1* without downloading; Download reaches ready without restart; Apply & Restart relaunches on *N+1*; no restart without explicit Apply confirmation.
-- [x] **Packaged server smoke:** `./tools/scripts/verify-linux-packaged-server-smoke.sh` passes (builds Velopack server AppImage when no path given).
-- [x] **Branding:** icon parity across shortcuts, menus, and WebUI.
-- [ ] **GitHub installer mirror:** Stable GitHub release assets are `Setup.exe` and `.AppImage` only (no `.nupkg`, `releases.*.json`, or `Portable.zip`).
+- [ ] Operator Server Logs shows entries during a test run, with timestamp, level, and source.
+- [ ] Desktop, WebUI, and server entries all appear in the server log.
+- [ ] No tokens, secrets, or cookies appear in logs.
 
-## CI/Workflow Readiness
+### Packaging
 
-- [x] Workflow YAML files are valid and committed in `.github/workflows`.
-- [x] Default CI gates map to required checks (build, test, web verify).
-- [x] `release.yml` is runnable (tag + `workflow_dispatch`) and publishes Velopack feeds.
-
-## Documentation Sync
-
-- [x] `AGENTS.md` reflects current agent workflow/document ownership rules.
-- [x] `README.md` reflects current runtime scripts/commands and practical onboarding info.
-- [x] `CONTEXT.md` reflects current implemented capability/ownership map.
-- [x] `CHANGELOG.md` follows Keep a Changelog format and reflects only current unreleased delta.
-- [x] `MILESTONES.md` reflects current scope/status/acceptance evidence and deferrals.
-- [x] `docs/api.md` reflects current API/error-path contract behavior.
-- [x] `docs/architecture.md` reflects current architecture/runtime boundaries.
-- [x] `docs/dev-setup.md` reflects current local setup/run/verify workflows.
-- [x] `docs/domain-inventory.md` reflects current ownership-first implementation surfaces.
-- [x] `docs/checklists/testing-checklist.md` checklist sections/items match current feature/workflow reality.
+- [ ] Windows `Setup.exe` installs per user without elevation, and its shortcuts appear when offered.
+- [ ] Linux `.AppImage` runs after `chmod +x`; desktop plays video with system LibVLC and refresh works with system `ffmpeg`.
+- [ ] After first launch, both Linux AppImages appear under Multimedia in the app menu with their icons and launch the right AppImage.
+- [ ] Without LibVLC on Linux, the desktop AppImage shows a dependency dialog with a copyable install command and exits cleanly.
+- [ ] Moving a Linux AppImage and running it updates its menu entry; relaunching without moving does not rewrite it.
+- [ ] After an in-app update on Linux, menu entries still launch the updated AppImage.
+- [ ] Server in-app update: the check finds the new version without downloading, Download reaches ready, and Apply & Restart relaunches on it.
+- [ ] Desktop in-app update: Settings finds the new version without downloading, Download reaches ready, and Apply & Restart relaunches on it.
+- [ ] Icons match across shortcuts, menus, and the WebUI.
 
 ## Release Specific
 
-> Add checks here for features or changes introduced in the current release. Remove this section's items after the release is signed off and the checklist is reset. Do not add permanent checks here — if a check should survive future releases, promote it to the appropriate section above.
+> Add checks for features or changes in the current release. Clear these items after sign-off. If a check should outlive the release, move it to Manual Regression.
 
-- [x] Library grid view: single-click multi-select (Ctrl/Shift), double-click/Enter play, right-click bulk context menu, selection count updates, and selection persists across filter changes.
-- [x] `POST /api/play/{libraryItemId}` returns `200` with a `RandomResponse` for a playable item; `GET` on `mediaUrl` streams when paired/auth allows.
-- [x] Same request produces a `playbackRecorded` SSE event (or visible in Operator event tooling) without a separate `record-playback` call.
-- [x] Library panel is grid-only (no list view or grid/list toggle).
-- [x] Library **Date added** sort (from projection `lastWriteTimeUtc`) supports Newest→Oldest and Oldest→Newest; selecting Date added defaults to Newest→Oldest.
-- [x] Library grid activation calls `POST /api/play/{itemId}` and starts returned media locally without a duplicate `record-playback` for the same start.
-- [ ] Desktop library grid browses through `POST /api/library/query` (filter, search, sort, and the filtered count) and loads more tiles while scrolling. Thumbnail metadata comes from that query; JPEGs come from `GET /api/thumbnail/{itemId}`.
-- [ ] WebUI library overlay browses through `POST /api/library/query` (filter, search, sort, counts, and fill-on-scroll). The first page is loaded after connect, before the overlay is opened. Hiding and showing an already-loaded overlay is instant, issues no query, and keeps the scroll position. A favorite, playback, tag, or resync update while the overlay is hidden is what the next open shows. A filter or preset change while hidden, including header **None** back to the default filter, is what the next open shows, including the **Showing N of M** header. An empty result still scrolls to the top. A further page that fails loads again after the scroll position changes. Choosing the starred unsaved row leaves the current filter in place. Scoped auto-tag sends no client path list.
-- [ ] Favorite, blacklist, playback, and tag changes patch loaded tiles when they cannot change which files are shown or their order. When they can, the loaded window reloads without jumping to the first page. An update that arrives while a browse query is open, including before the first page arrives and including while a further page has not been applied yet, is still there after that query lands. An interrupted grid update does not shrink that window or request further pages while the scrollbar is held. Changing filter, sort, or search and then holding the scrollbar does not append the new query onto the old tiles. Selecting a tile leaves the filtered count on the server total. The same updates apply while the library panel is hidden, and a filter or preset change still starts over. Choosing **None** in the library preset list restores the default filter and stays on **None** until that filter changes, even when a saved preset has the same filter, including after a desktop restart. A filter that matches neither a saved preset nor the default shows a starred row first (`YouTube*` or `None*`); choosing that row leaves the filter in place. The filter dialog heading is `Preset:` plus that label. Preset-list sync does not reload the grid. Source sync reloads it only when an enabled flag changes. Auto-tag apply keeps the scroll position. A further page that fails loads again after the scroll position changes, and an empty result still scrolls to the top.
-- [ ] Auto Tag with **Scan full library** off scans enabled sources and does not depend on a client path list.
-- [ ] Tag editor save on desktop and WebUI closes immediately. The current file and loaded tiles show the new tags before the request finishes. A failed save puts that save's unconfirmed tags back, leaves tags that arrived while the request was running, including when that file's tags are now empty, keeps a tag when that save's own event already confirmed it, and shows an error when anything was restored. A category rename that only changes case is saved. The other client still receives the item-tag and catalog events, including a rename or delete of a tag those files had, and including a later add of a tag an auto-tag apply did not newly write.
-- [ ] A tag save that only changes item tags does not upsert unchanged categories or tags. When a tag filter can change which files are shown, a rename replaces that name in the applied filter and saved presets, a delete removes it, including when that delete removes the last filtered tag, and the loaded window reloads once after the save lands and keeps the scroll position. The other client does the same from the rename or delete event before it reloads.
-- [ ] Desktop library grid mixed-aspect layout reflows after refresh completion, including when the same files stay on screen and when a file is inserted or removed ahead of them. Resizing the panel reflows after the current grid update and keeps the tile in view. Header video and photo counts come from library stats. Connect and resync do not download the full catalog. Now-playing tags, favorite, blacklist, and playback stats use the loaded tile, or one item read when that file is not on screen. That read happens again on play, after a refresh, on resync, and when the runtime connects. A failed read leaves the current-file section as it was unless the server says the file is gone. A favorite, playback, or tag update for the file being read stays, and an update for another file does not drop that read. The current-file section updates when that file starts, including when playback was already recorded, and its last-played line is the time before this play. Loudness normalization uses the baseline from library stats. Global play totals still update when a played file is not loaded and is not the current video.
-- [ ] Stopping the server while a library refresh is running does not log that refresh as a failure or show it as complete. A forced duration or loudness rescan stays pending. Files that stage has already updated stay updated.
-- [ ] While a fingerprint scan is checking files, the status line counts how many files it has checked and how many still need a hash, and that count fills the progress percent. Hashing then starts its own percent. It does not stay on "Fingerprint scan starting...".
-- [ ] A library refresh saves source, fingerprint, duration, and loudness changes as each file finishes, and does not reload the whole library. A favorite, tag, blacklist, or playback change saved during that refresh is still there afterward. An unchanged thumbnail is reused from the stored fingerprint, size, and write time without walking that source file. A new file, a changed file, or a missing thumbnail image is generated, and that file's revision, width, and height are saved as it finishes, including when the revision already matches and only the dimensions were missing. Cancelling the thumbnail stage keeps columns already written. When the thumbnail stage completes, a JPEG whose item is not in the catalog is deleted and the status line reports that cleanup. Opening the library does not delete those files. A cancel during that cleanup leaves the remaining files for the next thumbnail stage that completes. A file that refresh removes also loses its thumbnail. Refresh does not delete thumbnails for files still in the library to stay under a count or size limit. The catalog backup for that refresh is taken after the refresh finishes and still follows the backup gap. A shorter backup gap applies on the next catalog save.
-- [x] Favorite, blacklist, playback record, and clear-stats for a selection persist as catalog row updates and do not stall browse on a large library. A favorite still clears blacklist, and a blacklist still clears favorite. A selection clears only those items. The other client still updates from the same item-state and playback events.
-- [ ] Clear stats with no selection clears played items across the library and does not change favorites or blacklist.
-- [ ] WebUI in Firefox reloads and stays connected, including several reloads in a row. An installed home-screen app still opens.
-- [ ] Library stats still show the same global and per-source totals. An item-state read for a path returns that item, and an empty path list returns nothing. WebUI resync does not request item state with an empty path list.
-- [ ] Auto-tag scan and duplicate scan read catalog rows and do not load the full library. Full-library scan still scans every item and ignores a path list. A scan with full library off and no path list still scans enabled sources only. An explicit path list still matches those files. Duplicate groups include only ready fingerprints. Pending, failed, and stale fingerprints stay out. Applying a duplicate choice deletes the other files and catalog rows and leaves the kept item. A missing file is reported and that row stays.
-- [ ] With tags included and **Category Combination** set to OR, the desktop main-window filter summary says `(any)`. With AND it says `(all)`.
-- [ ] In the desktop filter dialog, changing only **Category Combination** on a saved preset shows `Preset: Name*` and enables **Update Preset**. Switching it back clears the `*`, disables **Update Preset**, and leaves **Apply** disabled, including on a preset saved before this release. Applying a change, then reopening the dialog still shows the `*` with **Update Preset** enabled, and **Apply** stays disabled until something changes.
-- [ ] In the WebUI filter dialog, opened on a desktop preset saved before this release, switching **Category Combination** to OR and back clears the **Apply** `*`. In the desktop filter dialog, updating a preset to OR and then back to AND leaves **Apply** without a `*`.
-- [ ] A WebUI preset saved with **Category Combination** set to OR is selected on the desktop when the desktop filter is the same, and a desktop preset with an OR filter is selected in the WebUI the same way, including presets saved before this release.
+- [ ] A v0.12.0 library migrates on first start with favorites, tags, play history, sources, and presets intact.
+- [ ] Export Library saves a copy to a chosen folder; Import Library with the server stopped restores it and can remap source folders.
+- [ ] Favorite, tag, and playback changes made during a refresh are still there after it finishes.
+- [ ] Stopping the server mid-refresh does not show the refresh as failed or complete, and work already done is kept.
+- [ ] Desktop library grid loads more tiles as you scroll, and favorite, tag, and playback changes do not jump it back to the top.
+- [ ] WebUI library overlay loads more tiles as you scroll, and reopens instantly at the same scroll position.
+- [ ] Tag editor save on desktop and WebUI closes right away and shows the new tags; a failed save restores the previous tags.
+- [ ] Renaming or deleting a tag updates the applied filter and saved presets.
+- [ ] Choosing **None** in the preset list stays on **None** until the filter changes, and an unsaved filter shows a starred name.
+- [ ] With **Category Combination** set to OR, the desktop filter summary says "any"; with AND it says "all".
+- [ ] A preset with an OR tag filter is selected in the other app when the filters match, including presets saved before this release.
+- [ ] Tags list in the same order on desktop and WebUI in the tag editor, filter Tags tab, and auto-tag results, with `_` tags before letters.
+- [ ] Desktop current-file stats update when a new file starts playing.
+- [ ] WebUI in Firefox stays connected across several reloads in a row.
 
-## Optional Release Flow
+## Release Flow
 
-- [ ] Version aligned via `pwsh ./tools/scripts/set-release-version.ps1 -Version {VERSION}`; tag matches `.version`.
-- [ ] `release.yml` matrix legs succeed for the tag (Windows + Linux, server + desktop).
-- [ ] GitHub release assets are `Setup.exe` and `.AppImage` only (plus GitHub source archives); no `.nupkg`, feed JSON, or `Portable.zip`.
-- [ ] Installed server and desktop apps launch and function after Velopack install.
-- [ ] `CHANGELOG.md`: cut `Unreleased` into the new release section, then initialize a fresh `Unreleased` block.
+- [ ] Version set with `pwsh ./tools/scripts/set-release-version.ps1 -Version {VERSION}`, and `.version` matches the tag you will push.
+- [ ] `CHANGELOG.md` `[Unreleased]` is cut into the new release section titled with the release name, and a fresh `[Unreleased]` with empty headings is above it.
+- [ ] `RELEASE-NOTES.md` has the new release entry, it follows the style guide at the top of that file, and its Verification section is filled in from this pass.
+- [ ] CI passes on the commit being tagged, on both Linux and Windows.
+
+After tagging, keep an eye on:
+
+- `release.yml` finishing on Windows and Linux for server and desktop.
+- The GitHub release having only `Setup.exe` and `.AppImage`, plus source archives.
+- An installed previous release finding and applying this update in-app.
 
 ## Failure Documentation
 
-If any check fails, capture:
+If any check fails, record:
+
 - Steps to reproduce
-- Expected vs. actual behavior
-- Impacted client(s) / surface(s)
-- Follow-up owner and milestone/TODO link
+- Expected and actual behavior
+- Affected client(s) or surface(s)
+- Follow-up owner and backlog item
 
 ## Sign-Off
 
 - Overall result:
-  - [x] PASS
+  - [ ] PASS
   - [ ] FAIL
-- [x] All failures and skipped checks documented.
-- [x] Ready for commit/sign-off.
+- [ ] All failures and skipped checks documented.
+- [ ] Ready to tag.

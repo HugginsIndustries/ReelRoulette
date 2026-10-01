@@ -72,7 +72,8 @@ foreach ($line in $lines) {
     $updatedLines.Add($nextLine)
 }
 
-$nextRaw = [string]::Join([System.Environment]::NewLine, $updatedLines)
+$newline = if ($raw -match "\r\n") { "`r`n" } else { "`n" }
+$nextRaw = [string]::Join($newline, $updatedLines)
 if ($raw -ceq $nextRaw) {
     Write-Host "No change: $checklistPath"
     exit 0

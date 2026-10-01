@@ -1276,6 +1276,52 @@ Last milestone completed: M10i20
 - **Deferrals / Follow-ups**:
   - None yet.
 
+### P13 - WebUI Android PWA Install
+
+- **Status**: ⏳ Planned
+- **Goal**: Installing the WebUI from Chrome on Android opens it as a standalone app, as it does on iOS.
+- **Scope**:
+  - Found in the v0.12.0 manual regression pass on a Google Pixel 8 Pro: Add to Home Screen only creates a shortcut that opens in the Chrome browser.
+  - Cause not investigated. Candidates to check first are the web app manifest fields Chrome requires for installability and the service worker scope.
+- **Acceptance criteria**:
+  - On Android Chrome over HTTPS, Install app opens the WebUI in a standalone window with the app icon.
+  - The iOS Add to Home Screen and desktop browser install still open a standalone app.
+- **Verification evidence**:
+  - Completion evidence must include an Android device pass and an iOS pass.
+- **Deferrals / Follow-ups**:
+  - None yet.
+
+### P14 - WebUI Light Mode Tag Chips and Tag Editor Buttons
+
+- **Status**: ⏳ Planned
+- **Goal**: Tag chips and tag editor buttons are readable in WebUI light mode.
+- **Scope**:
+  - Found in the v0.12.0 manual regression pass: in light mode, tag chip text in the filter Tags tab and the tag editor is black, and the tag editor buttons outside the tag grid stay white instead of switching to dark.
+  - Dark mode stays as it is.
+- **Acceptance criteria**:
+  - In light mode, tag chip text in the filter Tags tab and the tag editor is readable on every chip state.
+  - In light mode, the tag editor buttons outside the tag grid use light-theme colors.
+  - Switching the system theme while the tag editor is open updates both.
+- **Verification evidence**:
+  - Completion evidence must include light and dark screenshots of the filter Tags tab and the tag editor.
+- **Deferrals / Follow-ups**:
+  - None yet.
+
+### P15 - Desktop Tag Chip Toggle State
+
+- **Status**: ⏳ Planned
+- **Goal**: Desktop tag chips show whether a tag is applied as you add or remove it, as the WebUI does.
+- **Scope**:
+  - Found in the v0.12.0 manual regression pass: in the desktop tag editor, a tag chip's toggle state does not change when the tag is added or removed, so there is no visual feedback. The chip should change to the accent color (HugginsOrange) when applied.
+  - The WebUI tag editor is the reference for the toggle states.
+- **Acceptance criteria**:
+  - Adding a tag in the desktop tag editor shows that chip in the accent color right away, and removing it returns the chip to its normal state.
+  - Chips show the correct state when the editor opens, in both themes.
+- **Verification evidence**:
+  - Completion evidence must include a side-by-side pass against the WebUI tag editor.
+- **Deferrals / Follow-ups**:
+  - None yet.
+
 ---
 
 ## Completed Milestones
