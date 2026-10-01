@@ -26,33 +26,6 @@ public enum TagMatchModeValue
     Or = 1
 }
 
-public sealed class FilterSource
-{
-    public string Id { get; set; } = string.Empty;
-    public bool IsEnabled { get; set; } = true;
-}
-
-public sealed class FilterTag
-{
-    public string Name { get; set; } = string.Empty;
-    public string CategoryId { get; set; } = string.Empty;
-}
-
-public sealed class FilterItem
-{
-    public string Key { get; set; } = string.Empty;
-    public string SourceId { get; set; } = string.Empty;
-    public string FullPath { get; set; } = string.Empty;
-    public bool IsBlacklisted { get; set; }
-    public bool IsFavorite { get; set; }
-    public int PlayCount { get; set; }
-    public bool? HasAudio { get; set; }
-    public TimeSpan? Duration { get; set; }
-    public double? IntegratedLoudness { get; set; }
-    public MediaTypeValue MediaType { get; set; } = MediaTypeValue.Video;
-    public List<string> Tags { get; set; } = new();
-}
-
 public sealed class FilterStateModel
 {
     public bool FavoritesOnly { get; set; }
@@ -70,12 +43,4 @@ public sealed class FilterStateModel
     public bool OnlyKnownLoudness { get; set; }
     public MediaTypeFilterValue MediaTypeFilter { get; set; } = MediaTypeFilterValue.All;
     public List<string> IncludedSourceIds { get; set; } = new();
-}
-
-public sealed class FilterSetRequest
-{
-    public List<FilterSource> Sources { get; set; } = new();
-    public List<FilterItem> Items { get; set; } = new();
-    public List<string>? CategoryIds { get; set; }
-    public List<FilterTag>? Tags { get; set; }
 }

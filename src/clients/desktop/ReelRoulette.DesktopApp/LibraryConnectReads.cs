@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 
 namespace ReelRoulette;
@@ -16,10 +15,4 @@ public static class LibraryConnectReads
     ];
 
     public static string ItemPath => CoreServerApiClient.LibraryItemPath;
-
-    public static bool IsFullCatalogPath(string? path)
-    {
-        return !string.IsNullOrWhiteSpace(path) &&
-               path.Contains("library/projection", StringComparison.OrdinalIgnoreCase);
-    }
 }

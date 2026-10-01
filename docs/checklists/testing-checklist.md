@@ -133,7 +133,7 @@ Use `pwsh ./tools/scripts/reset-checklist.ps1` to reset metadata/check states be
 - [x] Tag editor apply/remove updates item tags as expected.
 - [x] Tag editor category rows are readable in both light and dark themes.
 - [x] Tag chips render correctly in both light and dark themes.
-- [x] Filter dialog Tags tab shows per-category collapse toggles and legacy flat tag model renders correctly.
+- [x] Filter dialog Tags tab shows per-category collapse toggles.
 - [x] Clear playback stats flow works with confirmation.
 - [ ] `Library → Export Library…` with the server running asks for a destination, then saves a `library.db` checkpoint. It does not write a zip.
 - [ ] `Library → Import Library…` requires the server-stopped acknowledgment. The overwrite confirmation names the library catalog. Restoring an export replaces the live catalog, including presets and thumbnail revision and dimensions. Settings and backups stay where they are. JPEG files stay until the next thumbnail stage completes. Run a refresh after import so those thumbnails are generated and JPEG files that are not in the imported catalog are removed. A folder that still has only `library.json` with sources or items asks for the same overwrite confirmation, and that file is not left as `library.json` afterward. A `library.db` that cannot be opened asks too. A file that is not a library database is rejected, including a `library.json` document, and the existing catalog stays.

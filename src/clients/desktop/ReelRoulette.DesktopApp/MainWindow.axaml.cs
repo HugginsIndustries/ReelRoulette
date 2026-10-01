@@ -6701,12 +6701,6 @@ namespace ReelRoulette
             await SyncLibrarySessionAndCurrentFileAsync();
         }
 
-        private async Task SyncTagCatalogToCoreAsync()
-        {
-            // Desktop is API-required and no longer pushes local authoritative tag catalog state.
-            await Task.CompletedTask;
-        }
-
         private async Task SyncFilterDialogCatalogFromCoreAsync()
         {
             if (!_isCoreApiReachable)
@@ -6728,12 +6722,6 @@ namespace ReelRoulette
             {
                 Log($"FilterDialog: Failed to sync tag catalog from core ({ex.Message})");
             }
-        }
-
-        private void SyncRequestedItemTagsToCore(IReadOnlyList<string>? itemIds)
-        {
-            _ = itemIds;
-            // Desktop is API-required and no longer pushes local authoritative item-tag state.
         }
 
         private void EnsureCoreEventStreamStarted()
@@ -7055,7 +7043,7 @@ namespace ReelRoulette
                 if (!string.Equals(_lastAppliedRefreshCompletionRunId, completionRunId, StringComparison.Ordinal))
                 {
                     _lastAppliedRefreshCompletionRunId = completionRunId;
-                    // Do not reload local library.json on refresh completion.
+                    // Refresh completion resyncs the library session from the server.
                     _ = RefreshCompletedLibraryAsync();
 
                     var thumbnailStage = snapshot.Stages.FirstOrDefault(stage =>

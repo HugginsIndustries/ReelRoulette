@@ -142,13 +142,13 @@ namespace ReelRoulette
         public FingerprintStatus FingerprintStatus { get; set; } = FingerprintStatus.Pending;
 
         /// <summary>
-        /// Projection-only: generated thumbnail width from server thumbnail index (not persisted in library.json).
+        /// Projection-only: generated thumbnail width from the server catalog.
         /// </summary>
         [JsonPropertyName("thumbnailWidth")]
         public double? ThumbnailWidth { get; set; }
 
         /// <summary>
-        /// Projection-only: generated thumbnail height from server thumbnail index (not persisted in library.json).
+        /// Projection-only: generated thumbnail height from the server catalog.
         /// </summary>
         [JsonPropertyName("thumbnailHeight")]
         public double? ThumbnailHeight { get; set; }

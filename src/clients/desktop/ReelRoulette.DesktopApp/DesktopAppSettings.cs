@@ -68,9 +68,6 @@ public sealed class DesktopAppSettings
     public int MinimumSettingsBackupGapMinutes { get; set; } = 15;
     public int NumberOfSettingsBackups { get; set; } = 10;
 
-    // Library view settings
-    public bool LibraryGridViewEnabled { get; set; } = false;
-
     // Filter state. ActivePresetName is the base for that filter. The star is derived.
     // LibraryExplicitNone keeps header None across restart when a saved preset equals the default filter.
     public FilterState? FilterState { get; set; }

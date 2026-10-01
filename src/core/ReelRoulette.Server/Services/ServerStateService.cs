@@ -99,21 +99,6 @@ public sealed class ServerStateService
             capabilities: Capabilities);
     }
 
-    public void SetFavorite(FavoriteRequest request)
-    {
-        throw new NotSupportedException("Mutation authority moved to LibraryOperationsService.");
-    }
-
-    public void SetBlacklist(BlacklistRequest request)
-    {
-        throw new NotSupportedException("Mutation authority moved to LibraryOperationsService.");
-    }
-
-    public void RecordPlayback(RecordPlaybackRequest request, int? playCount = null, DateTime? lastPlayedUtc = null)
-    {
-        throw new NotSupportedException("Mutation authority moved to LibraryOperationsService.");
-    }
-
     public ReplayResult GetReplayAfter(long revision)
     {
         var currentRevision = GetCurrentRevision();
@@ -333,46 +318,6 @@ public sealed class ServerStateService
                 Items = items
             };
         }
-    }
-
-    public void ApplyItemTags(ApplyItemTagsRequest request)
-    {
-        throw new NotSupportedException("Mutation authority moved to LibraryOperationsService.");
-    }
-
-    public void UpsertCategory(UpsertCategoryRequest request)
-    {
-        throw new NotSupportedException("Mutation authority moved to LibraryOperationsService.");
-    }
-
-    public void UpsertTag(UpsertTagRequest request)
-    {
-        throw new NotSupportedException("Mutation authority moved to LibraryOperationsService.");
-    }
-
-    public void RenameTag(RenameTagRequest request)
-    {
-        throw new NotSupportedException("Mutation authority moved to LibraryOperationsService.");
-    }
-
-    public void DeleteTag(DeleteTagRequest request)
-    {
-        throw new NotSupportedException("Mutation authority moved to LibraryOperationsService.");
-    }
-
-    public void DeleteCategory(DeleteCategoryRequest request)
-    {
-        throw new NotSupportedException("Mutation authority moved to LibraryOperationsService.");
-    }
-
-    public void SyncTagCatalog(SyncTagCatalogRequest request)
-    {
-        throw new NotSupportedException("Mutation authority moved to LibraryOperationsService.");
-    }
-
-    public void SyncItemTags(SyncItemTagsRequest request)
-    {
-        throw new NotSupportedException("Mutation authority moved to LibraryOperationsService.");
     }
 
     public ChannelReader<ServerEventEnvelope> Subscribe(CancellationToken cancellationToken)

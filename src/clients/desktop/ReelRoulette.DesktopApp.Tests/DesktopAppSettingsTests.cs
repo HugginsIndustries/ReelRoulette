@@ -93,6 +93,24 @@ public sealed class DesktopAppSettingsTests : IDisposable
         Assert.False(reload.DevChannelEnabled);
     }
 
+    [Theory]
+    [InlineData("LibraryGridViewEnabled")]
+    [InlineData("libraryGridViewEnabled")]
+    public void LoadSettingsWithRetiredGridViewKey_KeepsTheOtherSettings(string retiredKey)
+    {
+        File.WriteAllText(_settingsPath, $$"""
+{
+  "{{retiredKey}}": true,
+  "DevChannelEnabled": true,
+  "NumberOfBackups": 3
+}
+""");
+
+        var reload = CreateStorage().Load();
+        Assert.True(reload.DevChannelEnabled);
+        Assert.Equal(3, reload.NumberOfBackups);
+    }
+
     private SettingsStorageService<DesktopAppSettings> CreateStorage()
     {
         return new SettingsStorageService<DesktopAppSettings>(new JsonFileStorageOptions<DesktopAppSettings>

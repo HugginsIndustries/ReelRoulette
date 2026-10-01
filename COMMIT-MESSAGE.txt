@@ -19,9 +19,11 @@ Instructions:
 
 Commit Message:
 
-Docs: Plan the rest of the v0.13.0 JSON-era cleanup
+M10i18: Remove JSON-era leftovers that do not serve migration
 
-- v0.13.0 keeps the one-time library.json startup migration and removes the other JSON-era leftovers.
-- The leftovers milestone also drops the unused item-tag sync stub, the desktop item list, the local filter builder, and the unused grid-view setting.
-- The unread server tag and item cache comes out next. Removing the client-authority sync routes is the last v0.13.0 milestone, after a v0.12.0 compatibility check.
-- Removing library.json support in v0.14.0 follows that milestone and deletes PrepareIncomingFromJson with the importer.
+- Remove the unused library-index file store, the verification-only tag mutator, and FilterSetBuilder with their verification checks. Randomization and DTO mapping checks stay.
+- Remove the throw-only server state mutation methods and the empty desktop tag-catalog and item-tag sync methods.
+- Remove the uncalled desktop library display filter, the full-catalog path check, and the legacy flat tag, fingerprint index, and item list fields on the desktop library model.
+- Drop the filter dialog's flat-tag branch and the unused LibraryGridViewEnabled setting. Old settings files with that key still load.
+- Reword comments that mentioned library.json outside startup migration, and fix the checklist and repository map.
+- Startup still migrates a leftover library.json. Import still rejects it.

@@ -12,8 +12,5 @@ public sealed class LibraryConnectReadsTests
             ["/api/library/stats", "/api/sources", "/api/tag-editor/model"],
             LibraryConnectReads.SessionPaths);
         Assert.Equal("/api/library/item", LibraryConnectReads.ItemPath);
-        Assert.DoesNotContain(LibraryConnectReads.SessionPaths, LibraryConnectReads.IsFullCatalogPath);
-        Assert.False(LibraryConnectReads.IsFullCatalogPath(LibraryConnectReads.ItemPath));
-        Assert.True(LibraryConnectReads.IsFullCatalogPath("/api/library/projection"));
     }
 }

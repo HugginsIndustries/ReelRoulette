@@ -439,13 +439,10 @@ namespace ReelRoulette
             }
         }
 
-        // Tags (legacy - kept for compatibility)
-        public ObservableCollection<FilterTagViewModel> AvailableTags { get; } = new ObservableCollection<FilterTagViewModel>();
-
-        // Tags by Category (new)
+        // Tags by Category
         public ObservableCollection<FilterCategoryViewModel> CategoryViewModels { get; } = new ObservableCollection<FilterCategoryViewModel>();
 
-        public bool HasTags => CategoryViewModels.Count > 0 || AvailableTags.Count > 0;
+        public bool HasTags => CategoryViewModels.Count > 0;
         public bool HasNoTags => !HasTags;
 
         public bool TagMatchAnd
@@ -755,7 +752,6 @@ namespace ReelRoulette
 
         private void UpdateTagSelectionState()
         {
-            AvailableTags.Clear();
             CategoryViewModels.Clear();
 
             if (_libraryIndex != null)
@@ -769,7 +765,7 @@ namespace ReelRoulette
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToList();
 
-                // If using new format (categories exist)
+                // Tags render by category
                 if (categories.Count > 0)
                 {
                     // Track which tags have been processed
@@ -844,20 +840,6 @@ namespace ReelRoulette
                         }
 
                         CategoryViewModels.Add(orphanedCategoryVm);
-                    }
-                }
-                else if (_libraryIndex.AvailableTags != null && _libraryIndex.AvailableTags.Count > 0)
-                {
-                    // Legacy format: flat tags (for backward compatibility)
-                    foreach (var tag in _libraryIndex.AvailableTags.OrderBy(t => t))
-                    {
-                        var tagVm = new FilterTagViewModel
-                        {
-                            Tag = tag,
-                            IsPlusSelected = _filterState.SelectedTags.Any(t => string.Equals(t, tag, StringComparison.OrdinalIgnoreCase)),
-                            IsMinusSelected = _filterState.ExcludedTags.Any(t => string.Equals(t, tag, StringComparison.OrdinalIgnoreCase))
-                        };
-                        AvailableTags.Add(tagVm);
                     }
                 }
             }

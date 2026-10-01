@@ -1,4 +1,3 @@
-using ReelRoulette.Core.Filtering;
 using ReelRoulette.Core.Randomization;
 using ReelRoulette.Core.Tags;
 
@@ -22,8 +21,6 @@ public static class CoreVerification
     {
         var result = new VerificationResult();
         VerifyRandomization(result);
-        VerifyFilterEvaluation(result);
-        VerifyTagOperations(result);
         VerifyDtoMappingRules(result);
         return result;
     }
@@ -44,49 +41,6 @@ public static class CoreVerification
             {
                 Name = "Randomization",
                 Message = "Expected SmartShuffle selection to return a path."
-            });
-        }
-    }
-
-    private static void VerifyFilterEvaluation(VerificationResult result)
-    {
-        var builder = new FilterSetBuilder();
-        var request = new FilterSetRequest
-        {
-            Sources = new List<FilterSource> { new() { Id = "a", IsEnabled = true } },
-            Items = new List<FilterItem>
-            {
-                new() { Key = "1", SourceId = "a", FullPath = "x", Tags = new List<string> { "tagA" } },
-                new() { Key = "2", SourceId = "a", FullPath = "y", Tags = new List<string> { "tagB" } }
-            }
-        };
-        var state = new FilterStateModel { SelectedTags = new List<string> { "tagA" } };
-        var eligible = builder.BuildEligibleSetWithoutFileCheck(state, request);
-        if (eligible.Count != 1 || eligible[0].Key != "1")
-        {
-            result.Issues.Add(new VerificationIssue
-            {
-                Name = "FilterEvaluation",
-                Message = "Expected filter to keep only tagA item."
-            });
-        }
-    }
-
-    private static void VerifyTagOperations(VerificationResult result)
-    {
-        var service = new TagMutationService();
-        var index = new CoreLibraryIndex
-        {
-            Tags = new List<CoreTag> { new() { Name = "old", CategoryId = "cat" } },
-            Items = new List<CoreLibraryItem> { new() { Tags = new List<string> { "old" } } }
-        };
-        service.RenameTag(index, "old", "new");
-        if (index.Items[0].Tags.All(t => !string.Equals(t, "new", StringComparison.Ordinal)))
-        {
-            result.Issues.Add(new VerificationIssue
-            {
-                Name = "TagOperations",
-                Message = "Expected renamed tag to be propagated to items."
             });
         }
     }

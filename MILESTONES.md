@@ -89,43 +89,7 @@ Do not use this file for detailed architecture explanation or current capability
 
 ## Active Milestones
 
-Last milestone completed: M10i17
-
-### M10i18 - JSON-Era Leftovers That Do Not Serve Migration
-
-- **Status**: ⏳ Planned
-- **Goal**: Remove JSON-era library code that does not read `library.json`, while v0.13.0 still migrates a leftover `library.json`. Import does not accept a `library.json` archive.
-- **Scope**:
-  - Depends on: catalog document removal.
-  - This follows catalog document removal. It does not depend on the document work itself. Dropping the unread server tag and item cache follows this milestone. Removing the client-authority sync routes is the last milestone in the v0.13.0 release.
-  - Remove the unused library-index file store. Settings JSON storage stays for core settings and desktop settings. Presets and thumbnail metadata are already in the catalog.
-  - Remove the verification-only in-memory tag mutator and the verification check that only exists to call it. Remove `FilterSetBuilder` and the verification check that only exists to call it. The rest of that verification stays.
-  - Remove the empty desktop tag-catalog sync method and the empty desktop item-tag sync method `SyncRequestedItemTagsToCore`.
-  - Remove every server state method whose body only throws because mutation authority moved. Live routes stay on library operations.
-  - Remove the desktop check that treats a full-catalog projection route as a live read, and the test that expects that route to count as one. That route is already gone.
-  - The desktop library model drops the legacy flat tag list, the fingerprint index, and `LibraryIndex.Items`. Sources, categories, and tags on that model stay. The filter dialog drops the branch that reads that flat list, and the collection that only that branch fills.
-  - Remove the unused desktop setting `LibraryGridViewEnabled`.
-  - Comments that are not describing startup migration no longer mention `library.json`. Current-state docs that describe that migration still do.
-  - Update the testing checklist line that says the filter dialog Tags tab shows per-category collapse toggles and the legacy flat tag model renders correctly. Update the checklist where the other leftovers were described.
-  - Fix the `CONTEXT.md` repository map sentence that calls `ReelRoulette.LibraryArchive` zip export/import helpers. That project imports and exports a `library.db` checkpoint.
-- **Acceptance criteria**:
-  - The unused library-index file store, the verification-only tag mutator, `FilterSetBuilder` and its verification check, the empty desktop tag-catalog sync method, `SyncRequestedItemTagsToCore`, and the throw-only server state methods are gone. Core settings and desktop settings JSON storage is unchanged. The rest of that verification stays.
-  - The desktop library model has no legacy flat tag list, no fingerprint index, and no item list. Sources, categories, and tags on that model stay. The filter dialog does not read a flat tag list.
-  - `LibraryGridViewEnabled` is gone. An existing desktop settings file containing `libraryGridViewEnabled` still loads.
-  - A full-catalog projection route is not treated as a live library read.
-  - Comments that are not about startup migration do not mention `library.json`.
-  - The testing checklist no longer says the legacy flat tag model renders correctly. `CONTEXT.md` does not call `ReelRoulette.LibraryArchive` zip export/import helpers.
-  - Startup still migrates a leftover `library.json`. Import Library does not accept a `library.json` archive.
-- **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include a build and tests after those types, methods, desktop fields, and comments are removed, a test that a desktop settings file containing `libraryGridViewEnabled` still loads, and a test that startup still migrates `library.json`.
-  - Docs evidence must include the checklist update for the legacy flat tag model line, the other checklist updates where those leftovers were described, and the `CONTEXT.md` repository map correction for `ReelRoulette.LibraryArchive`. Current-state docs still describe startup migration of a leftover `library.json`.
-- **Deferrals / Follow-ups**:
-  - Dropping the unread server tag and item cache is the next milestone, still in v0.13.0.
-  - Removing the client-authority sync routes ends the v0.13.0 release.
-  - Removing `library.json` file recognition and the JSON-to-SQLite importer ships in v0.14.0.
-  - Scrubbing every remaining `library.json` mention from product code, comments, user-facing copy, tests, and current-state docs follows that format removal.
-  - Renaming `LibraryProjectionItem` and the WebUI `libraryProjection*` modules is not planned.
-  - Account and PIN tables stay with the account and PIN data model work.
+Last milestone completed: M10i18
 
 ### M10i19 - Drop the Unread Server Tag and Item Cache
 
@@ -1332,6 +1296,49 @@ Last milestone completed: M10i17
 ## Completed Milestones
 
 Latest completions first:
+
+### M10i18 - JSON-Era Leftovers That Do Not Serve Migration
+
+- **Status**: ✅ Complete
+- **Goal**: Remove JSON-era library code that does not read `library.json`, while v0.13.0 still migrates a leftover `library.json`. Import does not accept a `library.json` archive.
+- **Scope**:
+  - Depends on: catalog document removal.
+  - This follows catalog document removal. It does not depend on the document work itself. Dropping the unread server tag and item cache follows this milestone. Removing the client-authority sync routes is the last milestone in the v0.13.0 release.
+  - Remove the unused library-index file store. Settings JSON storage stays for core settings and desktop settings. Presets and thumbnail metadata are already in the catalog.
+  - Remove the verification-only in-memory tag mutator and the verification check that only exists to call it. Remove `FilterSetBuilder` and the verification check that only exists to call it. The rest of that verification stays.
+  - Remove the empty desktop tag-catalog sync method and the empty desktop item-tag sync method `SyncRequestedItemTagsToCore`.
+  - Remove every server state method whose body only throws because mutation authority moved. Live routes stay on library operations.
+  - Remove the desktop check that treats a full-catalog projection route as a live read, and the test that expects that route to count as one. That route is already gone.
+  - The desktop library model drops the legacy flat tag list, the fingerprint index, and `LibraryIndex.Items`. Sources, categories, and tags on that model stay. The filter dialog drops the branch that reads that flat list, and the collection that only that branch fills.
+  - Remove the unused desktop setting `LibraryGridViewEnabled`.
+  - Comments that are not describing startup migration no longer mention `library.json`. Current-state docs that describe that migration still do.
+  - Update the testing checklist line that says the filter dialog Tags tab shows per-category collapse toggles and the legacy flat tag model renders correctly. Update the checklist where the other leftovers were described.
+  - Fix the `CONTEXT.md` repository map sentence that calls `ReelRoulette.LibraryArchive` zip export/import helpers. That project imports and exports a `library.db` checkpoint.
+  - Final-state addition: remove the desktop `LibraryProjectionDisplayFilter`. It has had no caller since desktop browse moved to the list query, so its legacy flat-tag branch could not run either. Library filtering through categories is the server list query. Also remove the Core filter-request, filter-item, filter-source, and filter-tag types and the in-memory index, item, category, and tag types that only the removed builder and mutator used.
+- **Acceptance criteria**:
+  - The unused library-index file store, the verification-only tag mutator, `FilterSetBuilder` and its verification check, the empty desktop tag-catalog sync method, `SyncRequestedItemTagsToCore`, and the throw-only server state methods are gone. Core settings and desktop settings JSON storage is unchanged. The rest of that verification stays.
+  - The desktop library model has no legacy flat tag list, no fingerprint index, and no item list. Sources, categories, and tags on that model stay. The filter dialog does not read a flat tag list.
+  - `LibraryGridViewEnabled` is gone. An existing desktop settings file containing `libraryGridViewEnabled` still loads.
+  - A full-catalog projection route is not treated as a live library read.
+  - Comments that are not about startup migration do not mention `library.json`.
+  - The testing checklist no longer says the legacy flat tag model renders correctly. `CONTEXT.md` does not call `ReelRoulette.LibraryArchive` zip export/import helpers.
+  - Startup still migrates a leftover `library.json`. Import Library does not accept a `library.json` archive.
+- **Verification evidence**:
+  - `dotnet build ReelRoulette.sln` (0 errors, 0 warnings) and `dotnet test ReelRoulette.sln` passed: 118 desktop tests and 265 core tests. `dotnet run --project src/core/ReelRoulette.Core.SystemChecks -- --verbose` passed with randomization and DTO mapping checks and exited 0.
+  - A search of `src/` finds no library-index file store, tag mutator, `FilterSetBuilder`, filter-request types, empty desktop sync methods, throw-only server state methods, full-catalog path check, `LibraryProjectionDisplayFilter`, legacy flat tag list, or fingerprint index. `LibraryGridViewEnabled` appears only as the key in the settings-load test. Nothing under `src/` assigns or deserializes the desktop `AvailableTags` before removal, so the filter dialog branch that read it could not run.
+  - `LoadSettingsWithRetiredGridViewKey_KeepsTheOtherSettings` loads a desktop settings file with `LibraryGridViewEnabled` or `libraryGridViewEnabled` and keeps the other values. Marking the settings type to reject unknown members made both cases fail, then that change was reverted.
+  - `Query_FilterMatchesPanelRules_ForTagsDurationAndPhotos` covers tag filtering through categories on the server list query. `Open_MigratesLibraryJson_IncludingStringEnumsNumericDurationAndAvailableTags` and `Open_PartialDatabase_QuarantinesAndLaterOpenMigratesPreservedJson` still migrate a leftover `library.json`. `Import_RejectsALibraryJsonDocument_AndLeavesTheLiveCatalog` still rejects a `library.json` import.
+  - `library.json` remains only in the catalog store's startup migration and in tests that seed through it.
+  - `docs/checklists/testing-checklist.md` no longer says the legacy flat tag model renders correctly. No other checklist item described these leftovers. `CONTEXT.md` describes `ReelRoulette.LibraryArchive` as `library.db` checkpoint import/export helpers and still describes startup migration of a leftover `library.json`.
+- **Deferrals / Follow-ups**:
+  - Dropping the unread server tag and item cache is the next milestone, still in v0.13.0.
+  - Removing the client-authority sync routes ends the v0.13.0 release.
+  - Removing `library.json` file recognition and the JSON-to-SQLite importer ships in v0.14.0.
+  - Scrubbing every remaining `library.json` mention from product code, comments, user-facing copy, tests, and current-state docs follows that format removal.
+  - Renaming `LibraryProjectionItem` and the WebUI `libraryProjection*` modules is not planned.
+  - Account and PIN tables stay with the account and PIN data model work.
+  - Follow-up candidate for the v0.13.0 cleanup: the server list query's no-categories tag path, covered by `Query_LegacyTagAnd_WhenCatalogHasNoCategories`, cannot be reached by a catalog ReelRoulette writes. An empty catalog, `library.json` migration, tag catalog sync, and tag catalog replace all ensure Uncategorized, and deleting Uncategorized is refused. Schema 1 never shipped, and its writer also ensured Uncategorized. Only a `library.db` edited outside the app reaches it. Removing it would remove that branch, the category-count check before it, and that test. A hand-edited catalog with no categories would then filter selected tags as one Uncategorized group.
+  - `docs/full-audit.md` and `docs/migration-cleanup.md` are report-only audits and still cite `FilterSetBuilder` and `TagMutationService`.
 
 ### M10i17 - Catalog Document Removal
 
