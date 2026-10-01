@@ -19,9 +19,6 @@ Instructions:
 
 Commit Message:
 
-M10i17: Stop using the catalog document for live reads and writes
+Bugfix: Make the case-only source remap test pass on Windows
 
-- Tag catalog sync, item-tag sync, and server startup read and write catalog rows.
-- Remove the catalog document builder, the full-document save, and the unused library reload.
-- Startup still migrates a leftover library.json, and Import Library still rejects that archive.
-- The tag table remains the catalog's tag list. A catalog spelling change updates item assignments that share that folded name.
+- The fixture roots live under the test directory, so the remapped clip path is the one the test asserts.

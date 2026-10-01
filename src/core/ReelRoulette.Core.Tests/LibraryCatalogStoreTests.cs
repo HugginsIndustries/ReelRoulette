@@ -868,23 +868,27 @@ public sealed class LibraryCatalogStoreTests
     public void RemapSources_StoresACaseOnlyRootChange()
     {
         using var dir = new TempDirectory();
-        File.WriteAllText(Path.Combine(dir.Path, "library.json"), """
+        var oldRoot = Path.Combine(dir.Path, "Media");
+        var newRoot = Path.Combine(dir.Path, "media");
+        var oldFullPath = Path.Combine(oldRoot, "clip.mp4");
+        var newFullPath = Path.Combine(newRoot, "clip.mp4");
+        File.WriteAllText(Path.Combine(dir.Path, "library.json"), $$"""
             {
-              "sources": [ { "id": "src-1", "rootPath": "/Media", "isEnabled": true } ],
-              "items": [ { "id": "item-1", "sourceId": "src-1", "fullPath": "/Media/clip.mp4", "relativePath": "clip.mp4", "fileName": "clip.mp4" } ]
+              "sources": [ { "id": "src-1", "rootPath": "{{oldRoot.Replace("\\", "\\\\")}}", "isEnabled": true } ],
+              "items": [ { "id": "item-1", "sourceId": "src-1", "fullPath": "{{oldFullPath.Replace("\\", "\\\\")}}", "relativePath": "clip.mp4", "fileName": "clip.mp4" } ]
             }
             """);
         var opened = CatalogOpen.Open(dir.Path);
         var result = LibraryCatalogStore.RemapSources(
             opened.Session!.DatabasePath,
-            new Dictionary<string, string> { ["/Media"] = "/media" },
+            new Dictionary<string, string> { [oldRoot] = newRoot },
             new HashSet<string>());
 
         Assert.True(result.Success);
         var stored = LibraryCatalogStore.Read(opened.Session.DatabasePath);
-        Assert.Equal("/media", Assert.Single(stored.Sources).RootPath);
+        Assert.Equal(newRoot, Assert.Single(stored.Sources).RootPath);
         var item = Assert.Single(stored.Items);
-        Assert.Equal("/media/clip.mp4", item.FullPath);
+        Assert.Equal(newFullPath, item.FullPath);
         Assert.Equal("clip.mp4", item.RelativePath);
     }
 
