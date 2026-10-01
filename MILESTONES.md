@@ -118,6 +118,8 @@ Last milestone completed: M10i16
   - Removing `library.json` file recognition and the JSON-to-SQLite importer ships in v0.14.0.
   - Unused JSON-era types, desktop fields, and comments that do not serve startup migration are the next milestone, still in v0.13.0.
   - Account and PIN tables stay with the account and PIN data model work.
+  - An item can still hold a tag name that is not in the tag table. The tag table is the catalog's tag list. That does not require every name stored on an item to be in that list.
+  - Source import does not refresh the in-memory source list that `GET /api/sources` reads. That list is filled at startup. This is pre-existing and is not fixed here.
 
 ### M10i18 - JSON-Era Leftovers That Do Not Serve Migration
 
