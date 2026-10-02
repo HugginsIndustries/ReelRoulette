@@ -482,6 +482,32 @@ public sealed class LibraryListQueryTests
     }
 
     [Fact]
+    public void QueryLibrary_ReturnsCatalogThumbnailDimensions_ForTaggedAndUntaggedItems()
+    {
+        using var dir = new TempDirectory();
+        var session = Open(dir);
+        session.InsertSource("on", "/media", "On", true);
+        Add(session, "tagged", "on", "a.mp4", "a.mp4", tags: ["x"]);
+        Add(session, "plain", "on", "b.mp4", "b.mp4");
+        Assert.True(session.SetThumbnail("tagged", "r1", 320, 180));
+        Assert.True(session.SetThumbnail("plain", "r2", 180, 320));
+        Assert.False(File.Exists(Path.Combine(dir.Path, "thumbnails", "index.json")));
+
+        var host = LibraryCatalogHost.Open(dir.Path, Path.Combine(dir.Path, "thumbnails"));
+        var operations = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, dir.Path, host);
+        var outcome = operations.QueryLibrary(new LibraryQueryRequest { Limit = 10 });
+        Assert.True(outcome.Accepted);
+        var items = outcome.Body!["items"]!.AsArray();
+        CreateRefresh(dir.Path).EnrichListedItems(items);
+
+        var byId = items.ToDictionary(item => item!["id"]!.GetValue<string>(), item => item!);
+        Assert.Equal(320, byId["tagged"]["thumbnailWidth"]?.GetValue<int>());
+        Assert.Equal(180, byId["tagged"]["thumbnailHeight"]?.GetValue<int>());
+        Assert.Equal(180, byId["plain"]["thumbnailWidth"]?.GetValue<int>());
+        Assert.Equal(320, byId["plain"]["thumbnailHeight"]?.GetValue<int>());
+    }
+
+    [Fact]
     public void QueryLibrary_AcceptsDesktopDurationFilterJson()
     {
         var appData = Path.Combine(Path.GetTempPath(), "reelroulette-library-query", Guid.NewGuid().ToString("N"));

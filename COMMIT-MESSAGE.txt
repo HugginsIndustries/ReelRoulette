@@ -19,10 +19,9 @@ Instructions:
 
 Commit Message:
 
-Docs: Record v0.13.0 regression pass results and new backlog items
+Bugfix: Keep thumbnail dimensions on tagged items in library browse
 
-- Record results of the v0.13.0 regression pass so far: run metadata, passed checks, and notes on skipped and failed checks that point to backlog items.
-- Skip the Operator Testing Suite checks until the suite is overhauled, and limit the WebUI diagnostics panel check to mobile browsers, where the panel is shown by design.
-- Add release checks for keeping a starred or None filter across a desktop restart and for importing a large folder.
-- Add backlog items for a suspected server tray shutdown race, slow shutdown with connected clients, client status line and Operator Testing Suite overhauls, a WebUI settings page, desktop player view and fullscreen fixes, a desktop Auto Tag busy indicator, and desktop filter dialog collapse toggle styling.
-- Document the backup settings API.
+- Return thumbnail width and height for tagged items from the library list query, so both library grids lay those tiles out at their real shape instead of a 16:9 or 4:3 fallback.
+- Add a list-query test with a tagged and an untagged item whose dimensions exist only in the catalog, and a test that fails when the tag copy drops any item field.
+- Reword the library grid shape check in the testing checklist to what a tester sees.
+- Add a backlog item to assign tags on catalog items in place instead of copying each item.

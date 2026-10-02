@@ -94,7 +94,7 @@ An agent runs these and ticks them.
 - [x] Library overlay opens and closes from the player controls, in fullscreen and in both themes.
 - [x] Library overlay **Showing N of M** matches the filter and search, and search and sort persist across close and reopen.
 - [x] Changing search, sort, filter, or preset scrolls the overlay grid to the top.
-- [x] Library grid lays out mixed-aspect thumbnails at desktop and mobile widths and reflows on resize.
+- [x] Library grid shows portrait and landscape thumbnails at their own shape, not stretched or cropped to one shape, and reflows on resize.
 - [x] Library grid shows a placeholder for a missing thumbnail, favorite and blacklist badges, and a readable filename bar in both themes.
 - [x] Library grid looks like the desktop grid at the same width.
 - [x] Clicking a tile plays it and closes the overlay; a missing or unsupported file shows a message and keeps the overlay open.

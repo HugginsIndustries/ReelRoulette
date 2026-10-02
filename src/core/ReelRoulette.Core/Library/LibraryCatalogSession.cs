@@ -2418,7 +2418,7 @@ public sealed class LibraryCatalogSession
         }
     }
 
-    private static LibraryCatalogItem CopyWithTags(LibraryCatalogItem item, IReadOnlyList<string> tags)
+    internal static LibraryCatalogItem CopyWithTags(LibraryCatalogItem item, IReadOnlyList<string> tags)
     {
         return new LibraryCatalogItem
         {
@@ -2447,6 +2447,9 @@ public sealed class LibraryCatalogSession
             FingerprintLastUtc = item.FingerprintLastUtc,
             FingerprintStatus = item.FingerprintStatus,
             LoudnessError = item.LoudnessError,
+            ThumbnailRevision = item.ThumbnailRevision,
+            ThumbnailWidth = item.ThumbnailWidth,
+            ThumbnailHeight = item.ThumbnailHeight,
             Tags = tags
         };
     }

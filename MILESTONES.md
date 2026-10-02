@@ -1473,6 +1473,23 @@ Last milestone completed: M10i20
 - **Deferrals / Follow-ups**:
   - None yet.
 
+### P24 - Catalog Item Tag Assignment Without Field Copy
+
+- **Status**: ⏳ Planned
+- **Goal**: Reading tags onto listed catalog items assigns them on the item, so the item is no longer rebuilt field by field and a new item field cannot be dropped on tagged items. Candidate for the v0.14.0 cleanup.
+- **Scope**:
+  - `LibraryCatalogSession.AttachTags` replaces each tagged item with `CopyWithTags`, which lists every `LibraryCatalogItem` property by hand because `Tags` is init-only. Thumbnail revision, width, and height were added to the item without being added to that copy, so the list query returned no thumbnail dimensions for tagged items until the copy was fixed.
+  - Let tags be assigned on an existing item (for example a settable `Tags`), have `AttachTags` set them in place, and remove `CopyWithTags` and its reflection test.
+  - Related trap to check while there: `InsertItem` writes neither thumbnail columns nor tags from the item it is given. Every caller passes a new item today and thumbnails arrive later through `SetThumbnail`, so nothing is lost, but an item passed in with those fields set would silently drop them.
+- **Acceptance criteria**:
+  - No code rebuilds a `LibraryCatalogItem` from another one field by field.
+  - The list query and single-item read return the same item fields for tagged and untagged items, including thumbnail revision, width, and height.
+  - `InsertItem` either writes every field it is given or its contract says which fields it ignores.
+- **Verification evidence**:
+  - Completion evidence must include `dotnet test ReelRoulette.sln` with the list-query test that covers a tagged and an untagged item with catalog-only thumbnail dimensions still passing.
+- **Deferrals / Follow-ups**:
+  - None yet.
+
 ---
 
 ## Completed Milestones

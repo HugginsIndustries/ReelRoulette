@@ -653,6 +653,66 @@ public sealed class LibraryCatalogSessionTests
         Assert.Equal("clip.mp4", item.FileName);
     }
 
+    [Fact]
+    public void CopyWithTags_KeepsEveryItemPropertyExceptTags()
+    {
+        var properties = typeof(LibraryCatalogItem).GetProperties()
+            .Where(property => property.Name != nameof(LibraryCatalogItem.Tags))
+            .ToList();
+        var source = new LibraryCatalogItem { Tags = ["old"] };
+        for (var i = 0; i < properties.Count; i++)
+        {
+            properties[i].SetValue(source, DistinctValue(properties[i].PropertyType, i + 1));
+        }
+
+        var copy = LibraryCatalogSession.CopyWithTags(source, ["new"]);
+
+        foreach (var property in properties)
+        {
+            Assert.True(
+                Equals(property.GetValue(source), property.GetValue(copy)),
+                $"CopyWithTags did not copy {property.Name}.");
+        }
+
+        Assert.Equal(["new"], copy.Tags);
+    }
+
+    private static object DistinctValue(Type type, int seed)
+    {
+        var target = Nullable.GetUnderlyingType(type) ?? type;
+        if (target == typeof(string))
+        {
+            return "value-" + seed;
+        }
+
+        if (target == typeof(int))
+        {
+            return seed;
+        }
+
+        if (target == typeof(long))
+        {
+            return (long)seed * 1000;
+        }
+
+        if (target == typeof(double))
+        {
+            return seed + 0.5;
+        }
+
+        if (target == typeof(bool))
+        {
+            return true;
+        }
+
+        if (target == typeof(DateTime))
+        {
+            return new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddMinutes(seed);
+        }
+
+        throw new InvalidOperationException($"Add a distinct value for {type.Name} so this test covers the new property.");
+    }
+
     private static string ReadUserVersion(string directory)
     {
         using var connection = new Microsoft.Data.Sqlite.SqliteConnection(new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder
