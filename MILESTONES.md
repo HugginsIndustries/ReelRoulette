@@ -1322,6 +1322,157 @@ Last milestone completed: M10i20
 - **Deferrals / Follow-ups**:
   - None yet.
 
+### P16 - Server Tray Shutdown Race
+
+- **Status**: ⏳ Planned
+- **Goal**: Operator **Stop**, Operator **Restart**, and in-app update apply shut the tray down on its UI thread, so they cannot deadlock the server's shutdown.
+- **Scope**:
+  - No hang has been observed. A suspected hang on CachyOS after Operator **Stop** was most likely the terminal not redrawing its prompt after the server exited: pressing Enter brings the prompt back.
+  - Suspected risk from code reading, not confirmed: these paths call `StopApplication` while the tray is still running, so the stopping callback shuts the Avalonia tray down from a non-UI thread. That calls `ClassicDesktopStyleApplicationLifetime.Shutdown()` off the UI thread, which cancels the UI main loop and then waits with no timeout in `Dispatcher.UIThread.InvokeShutdown()` for a job the UI thread may never run. If that happens, the blocked callback holds the `StopApplication` lock, so the host never stops its hosted services, `RunAsync` never returns, and a restart or update never relaunches. The tray menu paths avoid this because they shut the tray down on its UI thread before calling `StopApplication`.
+  - The code path is unchanged since v0.12.0: the ServerApp code and the Avalonia version are the same at that tag.
+  - Likely fix: always shut the tray down on its UI thread, and never call the desktop lifetime's `Shutdown()` from another thread.
+  - Windows has the same code path and is untested. Headless runs are not affected, because the headless host UI does nothing on stop.
+- **Acceptance criteria**:
+  - Operator **Stop** exits the process, and Operator **Restart** and update apply relaunch it, on Linux with the tray and on Windows.
+  - Tray **Stop Server / Exit** and **Restart Server** still exit and relaunch cleanly.
+  - No code path calls the tray's desktop lifetime `Shutdown()` from a non-UI thread.
+- **Verification evidence**:
+  - Completion evidence must include repeated Operator **Stop** and **Restart** runs on Linux with the tray and on Windows, each showing the process exit and, for restart, the new process.
+  - If a hang is ever reproduced, include a thread dump of the hung process to confirm the cause.
+- **Deferrals / Follow-ups**:
+  - None yet.
+
+### P17 - Slow Server Shutdown With Connected Clients
+
+- **Status**: ⏳ Planned
+- **Goal**: Stopping the server while clients are connected finishes in a few seconds.
+- **Scope**:
+  - Observed: stopping the server from the tray or the Operator UI takes about 25 seconds while clients are connected.
+  - Likely cause, observed but not confirmed: open event streams are only closed when the host shutdown timeout runs out, not when shutdown starts.
+- **Acceptance criteria**:
+  - With desktop and WebUI clients connected, tray **Stop Server / Exit** and Operator **Stop** exit the process within a few seconds.
+  - Connected clients see the server go offline and reconnect after a restart, as they do now.
+- **Verification evidence**:
+  - Completion evidence must include shutdown timings with and without connected clients, before and after the fix.
+- **Deferrals / Follow-ups**:
+  - None yet.
+
+### P18 - Client Status Line Overhaul
+
+- **Status**: ⏳ Planned
+- **Goal**: Each client's status line shows one stable message per situation, and desktop and WebUI show the same message for the same event.
+- **Scope**:
+  - Both clients' status lines can alternate between competing messages, and they often show different messages for the same event.
+  - Observed in the v0.13.0 manual regression pass: with the server stopped, the desktop alternates between "core runtime unavailable" and "core runtime is required to browse the library", and the WebUI shows "library load failed: HTTP 503" only briefly before "SSE reconnecting...". Refresh status also differs between desktop and WebUI for the same refresh.
+  - Refresh status is in scope: the same refresh stage, progress, and result read the same on both clients.
+  - Define one rule per client for which message wins when several apply, so the status line never alternates.
+  - Define the message for each event once and use it on both desktop and WebUI.
+- **Acceptance criteria**:
+  - With the server stopped, unavailable, or mismatched, each client's status line settles on one message and does not alternate.
+  - Desktop and WebUI show the same message for the same event.
+  - During and after a refresh, desktop and WebUI show the same refresh status.
+  - The precedence rule and the per-event messages are documented.
+- **Verification evidence**:
+  - Completion evidence must include a desktop and WebUI pass with the server stopped, the API unavailable, and an API version or capability mismatch, showing the message each client settles on, plus a side-by-side refresh showing both clients' refresh status during the run and after it finishes.
+- **Deferrals / Follow-ups**:
+  - The Operator Testing Suite overhaul checks these messages in its scenarios once they are defined.
+
+### P19 - Operator Testing Suite Overhaul
+
+- **Status**: ⏳ Planned
+- **Goal**: The Operator Testing Suite produces clear results that match current client connection and status handling.
+- **Scope**:
+  - Depends on: the client status line overhaul, which defines the messages these scenarios check.
+  - The suite predates the current client connection and status handling and no longer produces clear results.
+  - Observed in the v0.13.0 manual regression pass:
+    - With an API version mismatch or capability mismatch, the desktop alternates between "core runtime is required" and the mismatch warning too fast to read. The WebUI is fine.
+    - With the API unavailable, the desktop flickers between disconnected and reconnecting messages, and the WebUI shows "library load failed: HTTP 503" only briefly before settling on "SSE reconnecting...".
+    - SSE disconnect behaves inconsistently and may need redesigning.
+  - Redesign the scenarios against current client behavior.
+  - Define the expected message per client for each scenario.
+  - Verify client interactions as part of the suite.
+- **Acceptance criteria**:
+  - Each scenario lists the expected desktop and WebUI message, and both clients show it while the scenario is active.
+  - SSE disconnect behaves the same way on every run.
+  - Running and resetting each scenario leaves both clients connected and working.
+- **Verification evidence**:
+  - Completion evidence must include a pass of every scenario on desktop and WebUI, recording the message each client shows.
+- **Deferrals / Follow-ups**:
+  - None yet.
+
+### P20 - WebUI Settings Page
+
+- **Status**: ⏳ Planned
+- **Goal**: The WebUI has a settings page for per-device preferences and diagnostics, as the desktop has its settings dialog and Diagnostics view.
+- **Scope**:
+  - Add a settings page to the WebUI.
+  - Move the diagnostics information to the settings page and remove the diagnostics panel from below the main page's status line. That panel is currently shown only on mobile browsers by design; in the v0.13.0 manual regression pass it appeared only on the phone in Firefox.
+  - Add client-side preferences, starting with an option to remember filter settings across sessions.
+  - Where the desktop has an equivalent option, match its name and behavior. The desktop has no option for remembering filter settings: it always saves the filter state with its other saved data. Whether the desktop gains a matching option is decided in this item.
+- **Acceptance criteria**:
+  - The settings page shows the diagnostics information on desktop and mobile browsers, and the main page no longer shows the diagnostics panel.
+  - With the remember option on, filter settings survive closing and reopening the WebUI on that device. With it off, the WebUI opens with default filter settings.
+  - Preferences are stored per device and do not change other devices or the desktop.
+  - Every option with a desktop equivalent has the same name and behavior on both clients.
+- **Verification evidence**:
+  - Completion evidence must include a desktop browser and phone pass of the settings page, and the remember option checked across a browser restart.
+- **Deferrals / Follow-ups**:
+  - None yet.
+
+### P21 - Desktop Player View and Fullscreen Fixes
+
+- **Status**: ⏳ Planned
+- **Goal**: Desktop keyboard shortcuts work in player view and fullscreen, and the video fills the screen without leftover layout.
+- **Scope**:
+  - Three related problems, all existing behavior, not regressions. Found in the v0.13.0 manual regression pass.
+  - Keyboard shortcuts (**P**, **F11**, and the rest) stop working while the pointer is over the video. With player view and fullscreen combined, the video fills the screen, so neither can be exited from the keyboard.
+    - Likely cause, not confirmed: the embedded VLC video surface takes keyboard input. The desktop never sets LibVLC's `EnableKeyInput` or `EnableMouseInput`, so both are on by default. Try turning them off so input reaches the app.
+  - Player view leaves a thin divider line from the normal layout at the top of the screen.
+    - Moving the pointer onto that line is currently the only way to make shortcuts work again in fullscreen player view, so fix the keyboard problem first or together with this one, never after.
+  - The video does not always resize to fill the screen in fullscreen or player view.
+  - Check on both Linux and Windows.
+- **Acceptance criteria**:
+  - With the pointer over the video, every keyboard shortcut works in normal, player view, fullscreen, and combined player view and fullscreen.
+  - Combined player view and fullscreen can be exited from the keyboard.
+  - Player view shows no divider line or other leftover layout.
+  - The video fills the screen in fullscreen and player view, including after switching between them and after the window is resized.
+  - Existing mouse interaction on the video, such as the scroll wheel, still works.
+- **Verification evidence**:
+  - Completion evidence must include a Linux and a Windows pass of every view combination with the pointer over the video.
+- **Deferrals / Follow-ups**:
+  - None yet.
+
+### P22 - Desktop Auto Tag Busy Indicator
+
+- **Status**: ⏳ Planned
+- **Goal**: The desktop Auto Tag dialog shows that a scan is running, as the WebUI does.
+- **Scope**:
+  - While an Auto Tag scan runs, the WebUI shows an in-progress indicator, but the desktop shows nothing until results arrive.
+  - Add an indeterminate busy indicator to the desktop Auto Tag dialog during the scan, matching the WebUI.
+- **Acceptance criteria**:
+  - The desktop Auto Tag dialog shows an indeterminate busy indicator from the start of a scan until results arrive or the scan fails.
+  - The indicator matches the WebUI's in-progress indicator in placement and wording.
+  - The indicator clears on success, failure, and closing the dialog.
+- **Verification evidence**:
+  - Completion evidence must include a side-by-side desktop and WebUI scan on a library large enough for the scan to take a visible amount of time.
+- **Deferrals / Follow-ups**:
+  - None yet.
+
+### P23 - Desktop Filter Dialog Collapse Toggle Styling
+
+- **Status**: ⏳ Planned
+- **Goal**: The per-category collapse toggle in the desktop filter dialog's Tags tab looks the same as the desktop tag editor's.
+- **Scope**:
+  - In the desktop filter dialog's Tags tab, the per-category collapse toggle's arrow icon sits in the top-left of its button instead of centered, and the toggle is styled differently from the desktop tag editor's.
+  - Make it match the tag editor's collapse toggle, as the WebUI's filter Tags tab and tag editor already do.
+- **Acceptance criteria**:
+  - The filter dialog's collapse toggle arrow is centered in its button.
+  - The filter dialog's collapse toggle matches the tag editor's in size, icon, and styling, collapsed and expanded, in both themes.
+- **Verification evidence**:
+  - Completion evidence must include side-by-side screenshots of the filter dialog Tags tab and the tag editor, collapsed and expanded, in both themes.
+- **Deferrals / Follow-ups**:
+  - None yet.
+
 ---
 
 ## Completed Milestones

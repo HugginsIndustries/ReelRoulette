@@ -19,11 +19,10 @@ Instructions:
 
 Commit Message:
 
-Docs: Restructure the testing checklist into regression and release checks
+Docs: Record v0.13.0 regression pass results and new backlog items
 
-- Split the checklist into automated checks an agent runs, one-line manual regression checks grouped by surface, and v0.13.0 release-specific checks.
-- Add a rule that manual items must be visible in the apps; drop items that only restate API or event behavior already covered by tests, and the stale portable-server check.
-- Mark verify-web-deploy.ps1 as skipped until the server data folder override lands.
-- Move the Android PWA install, WebUI light-mode chip and button, and desktop tag chip toggle issues to backlog items.
-- Reset all check states and metadata for a new pass.
-- reset-checklist.ps1 keeps the checklist's existing line endings instead of switching to the OS default.
+- Record results of the v0.13.0 regression pass so far: run metadata, passed checks, and notes on skipped and failed checks that point to backlog items.
+- Skip the Operator Testing Suite checks until the suite is overhauled, and limit the WebUI diagnostics panel check to mobile browsers, where the panel is shown by design.
+- Add release checks for keeping a starred or None filter across a desktop restart and for importing a large folder.
+- Add backlog items for a suspected server tray shutdown race, slow shutdown with connected clients, client status line and Operator Testing Suite overhauls, a WebUI settings page, desktop player view and fullscreen fixes, a desktop Auto Tag busy indicator, and desktop filter dialog collapse toggle styling.
+- Document the backup settings API.

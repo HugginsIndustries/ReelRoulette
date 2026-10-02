@@ -157,6 +157,12 @@ Reconnect/resync behavior:
 - `POST /api/web-runtime/settings`
 - Web runtime snapshot fields include `enabled`, `port`, `bindOnLan`, `mdnsEnabled` (defaults to `true`; when `false`, LAN binding and CORS still apply but the server does not advertise `{lanHostname}.local` on the network), `lanHostname`, `authMode`, and `sharedToken`.
 
+### Backup settings
+
+- `GET /api/backup/settings`
+- `POST /api/backup/settings`
+- Backup snapshot fields are `enabled` (default `true`), `minimumBackupGapMinutes` (default 360, clamped to 1–10080), and `numberOfBackups` (default 8, clamped to 1–100). `POST` returns the stored snapshot after clamping. Settings persist in `core-settings.json`. The same settings govern both catalog backups (`library.db.backup.*`) and settings backups (`core-settings.json.backup.*`), each kept in `backups/` with its own gap and count.
+
 ### Tag editor
 
 - Item/tag/category operations are API-driven.
