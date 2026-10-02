@@ -105,7 +105,7 @@ Last milestone completed: M10i20
   - Tests that construct `ServerStateService` pass a data folder override instead of falling back to the real folder.
   - Also check `ReelRoulette.Core.SystemChecks`: it constructs `ServerStateService()` with no override, which creates the real data folder if it is missing.
   - Desktop data folder resolution is out of scope.
-  - Needs a Windows VM pass.
+  - Add a Release Specific checklist item: "`verify-web-deploy.ps1` on Windows leaves the real data and thumbnail folders unchanged."
 - **Acceptance criteria**:
   - With the environment variable set, the server reads and writes settings, catalog, backups, logs, and thumbnails only under that folder, with thumbnails under `<override>/thumbnails`.
   - With the variable unset, the server resolves the same folders as before.
@@ -113,7 +113,8 @@ Last milestone completed: M10i20
   - `verify-web-deploy.ps1` leaves the real `ApplicationData/ReelRoulette` and `LocalApplicationData/ReelRoulette` folders untouched on Windows and Linux.
   - No test sets `APPDATA` to isolate data, and every test that constructs `ServerStateService` passes an override.
 - **Verification evidence**:
-  - Completion evidence must include helper tests for the set and unset cases, a run of `verify-web-deploy.ps1` on Windows and Linux showing the real folders' contents and timestamps unchanged, and a passing build and test run.
+  - Completion evidence must include helper tests for the set and unset cases, a test that a server started with the override writes nothing outside it, one Linux run of `verify-web-deploy.ps1` showing the real folders' contents and timestamps unchanged, and a passing build and test run.
+  - The Windows run is the Release Specific checklist item above, run in the pre-release pass.
   - Docs evidence must include `docs/dev-setup.md` describing the override and the verification-script rules it satisfies.
 - **Deferrals / Follow-ups**:
   - None yet.
@@ -229,7 +230,7 @@ Last milestone completed: M10i20
   - Remove the desktop `LibraryArchive` JSON helpers: `LibraryJsonHasContent` in the overwrite check and `RetireUnmigratedLibraryJson` after import.
   - Import already has no `library.json` path and no zip. A file that is not a library database is rejected. A `.db` import still remaps sources. Export and catalog backups stay on `library.db`.
   - Update current-state docs and the testing checklist to say `library.json` library support is removed, including the checklist item that a v0.12.0 library migrates on first start.
-  - Needs a Windows VM pass of first-run catalog creation.
+  - Add a Release Specific checklist item: "On Windows, first start with no data folder, and with a data folder holding only `library.json`, opens an empty library."
 - **Acceptance criteria**:
   - Startup does not migrate `library.json` and does not rebuild a catalog from `library.json.migrated`.
   - A missing `library.db` creates an empty healthy `library.db` at schema version 2 with SQL, whether or not `library.json` or `library.json.migrated` is present. Those files are left in place and are not read. No message mentions them.
@@ -243,7 +244,7 @@ Last milestone completed: M10i20
   - Docs and the testing checklist describe `library.json` library support as removed in v0.14.0.
 - **Verification evidence**:
   - Evidence placeholders maintained at planned state; completion evidence must include tests that a missing database creates an empty schema version 2 database with SQL whether or not `library.json` or `library.json.migrated` is present and leaves those files untouched, does not read `presets.json` or the thumbnail index, a healthy database opens with those JSON files present, a corrupt database is refused the same way with or without them, a schema version 1 database is refused, a file that is not a library database is not imported, a `.db` import still remaps sources, and desktop import leaves `library.json` untouched.
-  - Completion evidence must include a Windows VM pass of first start with no data folder and with a data folder holding only `library.json`.
+  - Completion evidence must include one quick Linux spot check of first start with a data folder holding only `library.json`. The Windows first-start check is the Release Specific checklist item above, run in the pre-release pass.
   - Docs evidence must include current-state and checklist updates that `library.json` library support is removed in v0.14.0.
 - **Deferrals / Follow-ups**:
   - Release notes for v0.14.0 must say: users on v0.12.0 or earlier must start v0.13.0 once before updating to v0.14.0, because v0.14.0 does not convert `library.json`.
@@ -319,24 +320,37 @@ Last milestone completed: M10i20
 ### M10j9 - Desktop Player View and Fullscreen Fixes
 
 - **Status**: ⏳ Planned
-- **Goal**: Desktop keyboard shortcuts work in player view and fullscreen, and the video fills the screen without leftover layout.
+- **Goal**: Desktop keyboard shortcuts work in player view and fullscreen, the video fills the screen without leftover layout, and every video starts with the sound the mute button shows.
 - **Scope**:
-  - Ships in v0.14.0.
-  - Three related problems, all existing behavior, not regressions. Found in the v0.13.0 manual regression pass.
-  - Keyboard shortcuts (**P**, **F11**, and the rest) stop working while the pointer is over the video. With player view and fullscreen combined, the video fills the screen, so neither can be exited from the keyboard.
-    - Likely cause, not confirmed: the embedded VLC video surface takes keyboard input. The desktop never sets LibVLC's `EnableKeyInput` or `EnableMouseInput`, so both are on by default. Try turning them off so input reaches the app.
-  - Player view leaves a thin divider line from the normal layout at the top of the screen.
-    - Moving the pointer onto that line is currently the only way to make shortcuts work again in fullscreen player view, so fix the keyboard problem first or together with this one, never after.
-  - The video does not always resize to fill the screen in fullscreen or player view.
-  - Check on both Linux and Windows. Needs a Windows VM pass.
+  - Ships in v0.14.0. Two slices, each verified on its own: player view and fullscreen, then sound on video start.
+  - Player view and fullscreen slice:
+    - Three related problems, all existing behavior, not regressions. Found in the v0.13.0 manual regression pass.
+    - Keyboard shortcuts (**P**, **F11**, and the rest) stop working while the pointer is over the video. With player view and fullscreen combined, the video fills the screen, so neither can be exited from the keyboard.
+      - Likely cause, not confirmed: the embedded VLC video surface takes keyboard input. The desktop never sets LibVLC's `EnableKeyInput` or `EnableMouseInput`, so both are on by default. Try turning them off so input reaches the app.
+    - Player view leaves a thin divider line from the normal layout at the top of the screen.
+      - Moving the pointer onto that line is currently the only way to make shortcuts work again in fullscreen player view, so fix the keyboard problem first or together with this one, never after.
+    - The video does not always resize to fill the screen in fullscreen or player view.
+    - Add a Release Specific checklist item: "With the pointer over the video, every shortcut works and the video fills the screen in normal, player view, fullscreen, and both combined," on Linux and Windows.
+  - Sound on video start slice:
+    - Videos sometimes start with no sound on desktop after random play, next, or previous, while the mute button shows unmuted. Muting and unmuting restores sound. The WebUI, which plays through the browser's own video element, is unaffected. Existing behavior: the volume and mute code is unchanged since v0.12.0.
+    - Likely cause, not confirmed: `PlayMedia` sets volume and mute only before LibVLC creates the new audio output (before and right after `Play()`, which returns before the output exists), and never after playback starts. LibVLC documents that mute may not apply when no audio stream is active. The desktop does not listen to LibVLC's mute or volume events, so the button never learns the player is muted.
+    - Log LibVLC's `Muted`, `Unmuted`, and `VolumeChanged` events, and the player's mute and volume just before reapplying, so `last.log` shows whether a new file's audio output came up muted.
+    - Reapply volume and mute once playback has actually started: on `Playing`, and again on the first seek-timer tick where playback time advances, once per new media and not on resume from pause. Cover the loop-toggle media rebuild and the other player rebuild path, which do not reapply mute today.
+    - Fix the first-video volume check in `PlayMedia`, which reads the player's volume after `Play()`, before an audio output exists.
+    - Add a Release Specific checklist item: "Switching videos repeatedly with random, next, and previous never starts a video silently, and the mute button matches what you hear," on Linux and Windows.
 - **Acceptance criteria**:
   - With the pointer over the video, every keyboard shortcut works in normal, player view, fullscreen, and combined player view and fullscreen.
   - Combined player view and fullscreen can be exited from the keyboard.
   - Player view shows no divider line or other leftover layout.
   - The video fills the screen in fullscreen and player view, including after switching between them and after the window is resized.
   - Existing mouse interaction on the video, such as the scroll wheel, still works.
+  - After random play, next, previous, autoplay, and the loop-toggle rebuild, volume and mute are reapplied once playback has started, and not again on resume from pause.
+  - `last.log` records LibVLC mute and volume events and the player's mute and volume before each reapply.
+  - The first-video volume check does not read the player's volume before an audio output exists.
+  - A saved mute still applies: with the app muted, switching videos stays silent and the button shows muted.
 - **Verification evidence**:
-  - Completion evidence must include a Linux and a Windows pass of every view combination with the pointer over the video.
+  - Completion evidence must include automated tests where they reach the behavior (for example the LibVLC input options, the player view layout in a headless window, and the once-per-media reapply rule), `dotnet build ReelRoulette.sln`, `dotnet test ReelRoulette.sln`, and one quick Linux spot check per slice: shortcuts with the pointer over the video in fullscreen player view, and a few video switches with sound.
+  - The Linux and Windows passes of every view combination and of repeated video switching are the two Release Specific checklist items above, run in the pre-release pass.
 - **Deferrals / Follow-ups**:
   - None yet.
 
@@ -358,13 +372,15 @@ Last milestone completed: M10i20
   - Desktop filter dialog collapse toggle styling:
     - In the desktop filter dialog's Tags tab, the per-category collapse toggle's arrow icon sits in the top-left of its button instead of centered, and the toggle is styled differently from the desktop tag editor's.
     - Make it match the tag editor's collapse toggle, as the WebUI's filter Tags tab and tag editor already do.
+  - Add a Release Specific checklist item: "Tag chips, tag editor buttons, the Auto Tag busy indicator, and the filter collapse toggle look and respond the same on desktop and WebUI in light and dark themes."
 - **Acceptance criteria**:
   - In WebUI light mode, tag chip text in the filter Tags tab and the tag editor is readable on every chip state, and the tag editor buttons outside the tag grid use light-theme colors. Switching the system theme while the tag editor is open updates both.
   - Adding a tag in the desktop tag editor shows that chip in the accent color right away, and removing it returns the chip to its normal state. Chips show the correct state when the editor opens, in both themes.
   - The desktop Auto Tag dialog shows an indeterminate busy indicator from the start of a scan until results arrive or the scan fails. The indicator matches the WebUI's in-progress indicator in placement and wording, and clears on success, failure, and closing the dialog.
   - The desktop filter dialog's collapse toggle arrow is centered in its button and matches the tag editor's collapse toggle in size, icon, and styling, collapsed and expanded, in both themes.
 - **Verification evidence**:
-  - Completion evidence must include light and dark screenshots of the WebUI filter Tags tab and the tag editor, a side-by-side pass of the desktop tag editor against the WebUI tag editor, a side-by-side desktop and WebUI Auto Tag scan on a library large enough for the scan to take a visible amount of time, and side-by-side screenshots of the desktop filter dialog Tags tab and the tag editor, collapsed and expanded, in both themes.
+  - Completion evidence must include automated tests where they reach the behavior (for example light-theme chip and button styles in the WebUI, the desktop chip state after add and remove, and the desktop Auto Tag busy indicator from scan start to result, failure, and close in a headless window), `dotnet test ReelRoulette.sln`, `npm run verify`, and one quick spot check per slice in one theme.
+  - The side-by-side desktop and WebUI pass in both themes is the Release Specific checklist item above, run in the pre-release pass.
 - **Deferrals / Follow-ups**:
   - None yet.
 
@@ -373,7 +389,8 @@ Last milestone completed: M10i20
 - **Status**: ⏳ Planned
 - **Goal**: Stopping the server finishes in a few seconds with clients connected, and Operator **Stop**, Operator **Restart**, and in-app update apply shut the tray down on its UI thread, so they cannot deadlock the server's shutdown.
 - **Scope**:
-  - Ships in v0.14.0. Two slices in this order: slow shutdown first, then the tray shutdown race. Needs a Windows VM pass.
+  - Ships in v0.14.0. Two slices in this order: slow shutdown first, then the tray shutdown race.
+  - Add a Release Specific checklist item: "With clients connected, tray and Operator Stop exit within a few seconds, and Operator Restart relaunches the server, on Linux and Windows."
   - Slow shutdown with connected clients:
     - Observed: stopping the server from the tray or the Operator UI takes about 25 seconds while clients are connected.
     - Likely cause, observed but not confirmed: open event streams are only closed when the host shutdown timeout runs out, not when shutdown starts. The `/api/events` loop only watches the request's abort token, not application stopping.
@@ -391,8 +408,8 @@ Last milestone completed: M10i20
   - Tray **Stop Server / Exit** and **Restart Server** still exit and relaunch cleanly.
   - No code path calls the tray's desktop lifetime `Shutdown()` from a non-UI thread.
 - **Verification evidence**:
-  - Completion evidence must include shutdown timings with and without connected clients, before and after the fix.
-  - Completion evidence must include repeated Operator **Stop** and **Restart** runs on Linux with the tray and on Windows, each showing the process exit and, for restart, the new process.
+  - Completion evidence must include a test that an open event stream closes when the application starts stopping, a test or code check that the tray's desktop lifetime `Shutdown()` is only reached on the UI thread, shutdown timings on Linux with and without a connected client before and after the fix, and one quick Linux spot check of Operator **Stop** and **Restart** with the tray.
+  - Repeated runs and the Windows pass are the Release Specific checklist item above, run in the pre-release pass.
   - If a hang is ever reproduced, include a thread dump of the hung process to confirm the cause.
 - **Deferrals / Follow-ups**:
   - None yet.
@@ -408,13 +425,15 @@ Last milestone completed: M10i20
   - Refresh status is in scope: the same refresh stage, progress, and result read the same on both clients. Refresh summary parsing is implemented separately in each client today. If the refresh text moves to the server, that contract change is its own slice.
   - Define one rule per client for which message wins when several apply, so the status line never alternates.
   - Define the message for each event once and use it on both desktop and WebUI.
+  - Add a Release Specific checklist item: "With the server stopped, unavailable, or mismatched, and during a refresh, desktop and WebUI each settle on the same status message."
 - **Acceptance criteria**:
   - With the server stopped, unavailable, or mismatched, each client's status line settles on one message and does not alternate.
   - Desktop and WebUI show the same message for the same event.
   - During and after a refresh, desktop and WebUI show the same refresh status.
   - The precedence rule and the per-event messages are documented.
 - **Verification evidence**:
-  - Completion evidence must include a desktop and WebUI pass with the server stopped, the API unavailable, and an API version or capability mismatch, showing the message each client settles on, plus a side-by-side refresh showing both clients' refresh status during the run and after it finishes.
+  - Completion evidence must include desktop and WebUI tests of the precedence rule and the per-event messages, locked to one shared fixture under `shared/fixtures/` if the rule is implemented in both languages, covering the server stopped, the API unavailable, a version or capability mismatch, and refresh progress and results, plus one quick spot check of each client with the server stopped.
+  - The full side-by-side pass is the Release Specific checklist item above, run in the pre-release pass.
 - **Deferrals / Follow-ups**:
   - The Operator Testing Suite overhaul checks these messages in its scenarios once they are defined.
 
@@ -433,12 +452,14 @@ Last milestone completed: M10i20
   - Redesign the scenarios against current client behavior.
   - Define the expected message per client for each scenario.
   - Verify client interactions as part of the suite.
+  - Add a Release Specific checklist item: "Every Operator Testing Suite scenario shows its expected desktop and WebUI message, and resetting it leaves both clients connected."
 - **Acceptance criteria**:
   - Each scenario lists the expected desktop and WebUI message, and both clients show it while the scenario is active.
   - SSE disconnect behaves the same way on every run.
   - Running and resetting each scenario leaves both clients connected and working.
 - **Verification evidence**:
-  - Completion evidence must include a pass of every scenario on desktop and WebUI, recording the message each client shows.
+  - Completion evidence must include automated tests that each scenario sets and resets the server state it describes, and that SSE disconnect closes and reconnects the same way on repeated runs, plus one quick spot check of one scenario on desktop and WebUI.
+  - The pass of every scenario is the Release Specific checklist item above, run in the pre-release pass.
 - **Deferrals / Follow-ups**:
   - None yet.
 

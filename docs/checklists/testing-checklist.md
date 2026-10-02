@@ -156,23 +156,6 @@ An agent runs these and ticks them.
 
 > Add checks for features or changes in the current release. Clear these items after sign-off. If a check should outlive the release, move it to Manual Regression.
 
-- [x] A v0.12.0 library migrates on first start with favorites, tags, play history, sources, and presets intact.
-- [x] Export Library saves a copy to a chosen folder; Import Library with the server stopped restores it and can remap source folders.
-- [x] Favorite, tag, and playback changes made during a refresh are still there after it finishes.
-- [x] Stopping the server mid-refresh does not show the refresh as failed or complete, and work already done is kept.
-- [x] Desktop library grid loads more tiles as you scroll, and favorite, tag, and playback changes do not jump it back to the top.
-- [x] WebUI library overlay loads more tiles as you scroll, and reopens instantly at the same scroll position.
-- [x] Tag editor save on desktop and WebUI closes right away and shows the new tags; a failed save restores the previous tags.
-- [x] Renaming or deleting a tag updates the applied filter and saved presets.
-- [x] Choosing **None** in the preset list stays on **None** until the filter changes, and an unsaved filter shows a starred name.
-- [x] A starred unsaved filter, and an explicit **None**, are still selected after restarting the desktop app.
-- [x] With **Category Combination** set to OR, the desktop filter summary says "any"; with AND it says "all".
-- [x] A preset with an OR tag filter is selected in the other app when the filters match, including presets saved before this release.
-- [x] Tags list in the same order on desktop and WebUI in the tag editor, filter Tags tab, and auto-tag results, with `_` tags before letters.
-- [x] Desktop current-file stats update when a new file starts playing.
-- [x] Importing a large folder on desktop finishes without timing out, then shows how many files were imported or updated and starts a refresh.
-- [x] WebUI in Firefox stays connected across several reloads in a row.
-
 ## Release Flow
 
 - [x] Version set with `pwsh ./tools/scripts/set-release-version.ps1 -Version {VERSION}`, and `.version` matches the tag you will push.

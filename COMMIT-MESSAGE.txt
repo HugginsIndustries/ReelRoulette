@@ -19,11 +19,9 @@ Instructions:
 
 Commit Message:
 
-Docs: Plan the v0.14.0 cleanup and polish release
+Docs: Plan the desktop silent-start fix and slim v0.14.0 verification
 
-- Plan v0.14.0 as thirteen active milestones in release order, renumbered as one series.
-- Promote the data folder override, catalog item tag copy, Update Preset after delete, player view, tag UI, shutdown, status line, and Operator testing backlog items into it.
-- Add milestones for dead-code removal, the preset match route removal with a shared preset-equality fixture, the routes missing from OpenAPI, SQL test seeding, and the fixes found during planning.
-- Extend library.json removal to the schema 1 migration, the side-file copy, and the desktop archive JSON helpers, with a release notes reminder and recovery steps for updates straight from v0.12.0.
-- Extend the scrub to catalog document, schema 1, and legacy wording, and the domain inventory's list of still-local desktop flows.
-- Add a backlog item for per-preset write routes, and record why ordinal path identity, Android PWA install, and the WebUI settings page wait past v0.14.0.
+- Add a slice to the desktop player view milestone for videos that sometimes start silently while the mute button shows unmuted: log LibVLC mute and volume events, reapply volume and mute once playback starts, cover both player rebuild paths, and fix the first-video volume check.
+- Change v0.14.0 milestone verification to automated tests plus at most a quick spot check.
+- Record the Windows passes, side-by-side passes, and repeated runs as one-line Release Specific checklist items for the v0.14.0 pre-release pass.
+- Clear the signed-off v0.13.0 items from the testing checklist's Release Specific section.
