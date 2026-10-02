@@ -31,7 +31,7 @@ Keep this file short and enforceable. For details, use `CONTEXT.md`, `MILESTONES
   - Update affected docs when applicable: `README.md`, `docs/architecture.md`, `docs/api.md`, `docs/dev-setup.md`, `docs/domain-inventory.md`.
   - Keep `docs/checklists/testing-checklist.md` current: add, update, or remove items as features and workflows change.
 - When documenting current behavior, do not rewrite historical `CHANGELOG.md` or `MILESTONES.md` entries (released sections, completed milestones). Change only active surfaces (`[Unreleased]`, Active Milestones, the tracker line, and evidence you are landing) unless the user asks to correct historical text.
-- Milestone IDs (for example `M8f`) may appear only in `MILESTONES.md` section headers and tracker line, `CHANGELOG.md`, and `COMMIT-MESSAGE.txt`. Never put them in current-state docs, code, comments, log messages, or user-facing text.
+- Milestone IDs (for example `M8f`) may appear only in `MILESTONES.md` section headers, its tracker line, and its Planned Releases outline, `CHANGELOG.md`, and `COMMIT-MESSAGE.txt`. Never put them in current-state docs, code, comments, log messages, or user-facing text.
 
 ## Commands + Communication
 

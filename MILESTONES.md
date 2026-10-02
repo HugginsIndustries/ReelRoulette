@@ -3,6 +3,18 @@
 This document is the migration planning and verification board for ReelRoulette.
 It tracks scope, sequencing, acceptance criteria, and evidence by milestone.
 
+## Planned Releases
+
+An outline of upcoming releases and the milestones each one ships, in order. v0.14.0 closes the M10 series; each later release becomes a new `M*` series when it is promoted.
+
+- **v0.14.0 — Cleanup and polish**: Finish the SQLite migration cleanup, fix the defects found since, and close the control plane to the LAN without a token. M10j1, M10j2, M10j3, M10j4, M10j5, M10j6, M10j7, M10j8, M10j9, M10j10, M10j11, M10j12, M10j13.
+- **v0.15.0 — Operator administration**: Move source, item, and catalog administration into a tested Operator so a server plus WebUI install does not need the desktop app. P26a, P26b, P26c, P26d, P26e, P25.
+- **v0.15.1 — Structured log foundation**: Write `last.log` as structured JSON Lines through one server writer and give both clients a typed, privacy-safe log API. P27a, P27b.
+- **v0.16.0 — Accounts**: Require an account PIN from LAN and remote clients, with HTTPS through a reverse proxy and per-user source access. P28a, P28b, P28c, P28d, P28e, P28f, P28g, P28h, P28i, P28j, P28k, P28l.
+- **v0.17.0 — Structured log migration and Log Viewer**: Move every desktop, server, and WebUI log to the structured API and give the Operator a filterable Log Viewer. P27c, P27d, P27e, P27f, P27g.
+- **v0.18.0 — Playback sessions**: Let the server choose direct, remux, or transcode playback per session for desktop and WebUI. P2a, P2b, P2c, P2d, P2e, P2f, P2g, P2h.
+- **Unscheduled backlog**: P1, P3, P4, P5, P6, P7, P9a, P9b, P10, P20.
+
 ## Document Purpose
 
 Use this file for:
@@ -27,14 +39,15 @@ Do not use this file for detailed architecture explanation or current capability
 - Keep entries **current-state accurate**: update statuses and evidence as work progresses.
 - Keep scope locked to milestone intent; record out-of-scope items as explicit deferrals.
 - Organize milestone sections as:
+  - `## Planned Releases`: the release outline at the top of this file; keep it in sync when milestones are added, moved, promoted, completed, or removed.
   - `## Active Milestones`: milestones currently being worked, using `M*` IDs in historical order.
   - `## Planned Milestones`: backlog candidates not yet started, using `P*` IDs in numerical order (for example base phases and lettered sub-slices).
   - `## Completed Milestones`: archive of finished milestones, newest completions first.
 - Keep `## Active Milestones` updated with `Last milestone completed: Mx` so the next `M*` assignment is unambiguous.
-- When promoting planned work to active work, assign the next `M*` ID at promotion time and keep planned `P*` IDs stable until then.
+- When promoting planned work to active work, assign the next `M*` ID at promotion time and keep planned `P*` IDs stable until then. Promote a planned release as a new `M*` series, with lettered milestones in its outline order.
 - When a milestone is completed, move it to `## Completed Milestones` as-is: keep existing scope/acceptance/evidence detail unchanged except final-state corrections, and preserve newest completions first.
 - In milestone body content (scope/acceptance/evidence/deferrals), do not reference milestone IDs; use milestone names/descriptions (or "this milestone"/"this series") so ID reassignment does not require copy edits.
-- ID references are allowed only in milestone section headers and the `Last milestone completed: Mx` tracker line.
+- ID references are allowed only in milestone section headers, the `Last milestone completed: Mx` tracker line, and the `## Planned Releases` outline.
 - Keep acceptance criteria testable and outcome-focused (avoid implementation-narrative bloat).
 - Keep verification evidence concrete:
   - commands/checks run,
@@ -133,6 +146,7 @@ Last milestone completed: M10i20
     - `MainWindow` members with no caller: `PlayMedia(string, bool)`, `RemoveLibraryItemAsync`, `BeginLibraryArchiveOperationUI`, `EndLibraryArchiveOperationUI`, `BlacklistCurrentVideo`, `BuildGridRowModels`, `ContainsTagCaseInsensitive`, the `GetAutoTagScopeItems` stub that always returns an empty list, the `persistLibrary` parameter of `ApplyRemoteItemStateProjection`, and the unread `_rng` and `_videoExtensions` fields.
     - The unread `EditTagDialog._categories` field and the unused `TagViewModel` class in `FilterDialog.axaml.cs`.
     - `CoreServerApiClient.AppendClientLogAsync`, `GetVersionAsync`, and `TryReadJsonError`, and `TagSaveApply.EchoesFor`, which nothing calls. `LibraryConnectReads`, which only its test reads.
+    - Hide the desktop controls that cannot work because their server routes do not exist: **Rename** and **Remove** in the Manage Sources dialog, which only show "API-required and not available" after their dialogs, and **Remove from Library** in the grid's context menu, which shows its confirmation and then the same message. Found by the planned-milestones audit. They stay hidden until Operator Source and Item Management adds the routes. This is the one user-visible change in this milestone. The handlers and dialogs behind them stay: Remove from Library comes back on the new item route, and the Manage Sources dialog is replaced by Desktop Source Management Link.
   - Core and server slice:
     - `State/RuntimeStateServices.cs` (randomization, filter-session, and playback-session state services), the `IPathResolver` and `IBackgroundTaskScheduler` interfaces, and `CoreFilterState` / `CoreFilterPreset` with the `CoreVerification.VerifyDtoMappingRules` check that only exists to construct them. Drop the placeholder list from the SystemChecks verbose output.
     - `LibraryCatalogStore.DatabaseHasContent` (no caller) and `IsUsableDatabase` (tests only). `LibraryCatalogSession.ReplaceItemTags` (no caller), and `AddItemTags`, `RemoveItemTags`, and `SetPlayback`, which only tests call. Tests that seed through them move to the SQL seeding helper from the test seeding milestone, or to the production write they stand in for.
@@ -148,10 +162,11 @@ Last milestone completed: M10i20
   - Every item listed above is gone, or the evidence says why it stayed.
   - The unused-member analyzers and TypeScript unused-locals checks report nothing new for product code.
   - `LibraryCatalogStore.Open` does not read the full catalog, and server startup does not build a catalog snapshot.
-  - API routes, OpenAPI, generated WebUI types, desktop and WebUI behavior, and the Operator are unchanged.
+  - API routes, OpenAPI, generated WebUI types, desktop and WebUI behavior, and the Operator are unchanged, except that the desktop no longer shows Manage Sources **Rename** and **Remove** or the grid's **Remove from Library**.
+  - The rest of the Manage Sources dialog and the grid context menu work as before.
   - Test hooks listed in scope still exist and their tests pass.
 - **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include the analyzer and TypeScript check output before and after each slice, `dotnet build ReelRoulette.sln`, `dotnet test ReelRoulette.sln`, `npm run verify`, and the SystemChecks run.
+  - Evidence placeholders maintained at planned state; completion evidence must include the analyzer and TypeScript check output before and after each slice, `dotnet build ReelRoulette.sln`, `dotnet test ReelRoulette.sln`, `npm run verify`, and the SystemChecks run, plus headless desktop tests that the three hidden controls are not shown and the rest of the Manage Sources dialog and grid context menu still are.
   - Docs evidence must include `docs/dev-setup.md`, `docs/domain-inventory.md`, and `CONTEXT.md` no longer naming removed scripts or types.
 - **Deferrals / Follow-ups**:
   - Unused routes and contract types are the preset match route removal milestone.
@@ -250,8 +265,8 @@ Last milestone completed: M10i20
   - Release notes for v0.14.0 must say: users on v0.12.0 or earlier must start v0.13.0 once before updating to v0.14.0, because v0.14.0 does not convert `library.json`.
   - Release notes for v0.14.0 must give the recovery steps for anyone who updated straight from v0.12.0 and sees an empty library: delete the new `library.db`, start v0.13.0 once to convert `library.json`, then update to v0.14.0 again.
   - Scrubbing every remaining `library.json` mention from product code, comments, user-facing copy, tests, and current-state docs is the next milestone.
-  - Operator export and import stay with Operator library catalog transfer. That transfer is a `library.db` checkpoint.
-  - Account and PIN tables stay with the account and PIN data model work.
+  - Operator export and import stay with Operator Library Catalog Transfer. That transfer is a `library.db` checkpoint.
+  - Accounts stay with the Account Store work, in their own store outside `library.db`.
 
 ### M10j7 - Scrub library.json From the Product
 
@@ -263,6 +278,18 @@ Last milestone completed: M10i20
   - Product code, comments, user-facing copy, tests, and current-state docs do not mention `library.json`, `library.json.migrated`, or a legacy flat tag list.
   - They also do not mention the catalog document (for example "does not load the full catalog document" in `docs/api.md`, `docs/architecture.md`, `CONTEXT.md`, and the description text in `shared/api/openapi.yaml`), schema 1 or a schema 1 migration, `presets.json`, or the thumbnail `index.json`.
   - Remove the `docs/feature-migration.md` §3.17 Tag-Catalog Migration Wizard entry, whose dialog is gone.
+  - Fix the other `docs/feature-migration.md` sections the planned-milestones audit found stale:
+    - The header says no Operator UI project exists. The Operator page exists, served by the server at `/operator`.
+    - §3.1 says WebUI click-to-play is not implemented and describes a projection refetch on open. The WebUI library overlay plays on click and browses through the list query.
+    - §3.2 says the WebUI lacks the category, tag, duration, and source filter UI. The WebUI filter overlay has it.
+    - §3.9 says Manage Sources calls `/api/sources/*` for every action. There are no rename or remove routes.
+    - §3.11 says Auto Tag has no web equivalent. The WebUI tag overlay has an Auto Tag tab.
+    - §3.12 says tag rename has no web equivalent. The WebUI tag editor renames tags.
+    - §3.16 says item removal is backed by a server API. There is no item removal route.
+    - §3.18 names `/control/log`. The route is `/control/logs/server`.
+  - Fix two `CONTEXT.md` claims the audit found wrong:
+    - It says the service worker lets Android Chrome install the WebUI. The worker registers only in a secure context and the server serves plain HTTP, so on a LAN address Chrome offers only a shortcut. Say that installing on Android needs HTTPS, for example through a reverse proxy.
+    - It lists remove among the desktop grid's working bulk actions. Remove from Library has no server route and is hidden by the dead code removal milestone.
   - Remove leftover comments that describe removed or "legacy" paths, such as the disabled legacy tag migration dialog and legacy local-authority comments in `MainWindow.axaml.cs` and the legacy view-model comment in `FilterDialog.axaml.cs`. Code that is still live keeps its name; `AllowLegacyTokenAuth` stays with the auth cutover.
   - Add the desktop flows that still run locally to `docs/domain-inventory.md`, which `AGENTS.md` says it records: library database import writing the server's `library.db` from the desktop process, whole-list preset writes, preset-match heading comparison, refresh status summary parsing, and the client-owned flows that stay local by design (local-first playback, loudness baseline choice, desktop settings backups, Show in File Manager).
   - Core settings and desktop settings stay JSON. Presets and thumbnail revision, width, and height stay in the catalog. JPEG files stay in the local thumbnail directory.
@@ -270,7 +297,8 @@ Last milestone completed: M10i20
   - Update the testing checklist so it does not mention those names.
 - **Acceptance criteria**:
   - Product code, comments, user-facing copy, tests, and current-state docs do not mention `library.json`, `library.json.migrated`, a legacy flat tag list, the catalog document, schema 1, `presets.json`, or the thumbnail `index.json`.
-  - `docs/feature-migration.md` has no Tag-Catalog Migration Wizard entry.
+  - `docs/feature-migration.md` has no Tag-Catalog Migration Wizard entry, and its header and §3.1, §3.2, §3.9, §3.11, §3.12, §3.16, and §3.18 match the current WebUI, Operator, and routes.
+  - `CONTEXT.md` does not claim Android install works over plain HTTP or that the desktop can remove items from the library.
   - `docs/domain-inventory.md` lists the desktop flows that still run locally and says which are local by design.
   - Core settings and desktop settings stay JSON. Presets and thumbnail metadata stay in the catalog. JPEG files stay local.
   - Released changelog sections, completed milestone entries, and the historical audit and migration notes named above are left as written.
@@ -278,14 +306,14 @@ Last milestone completed: M10i20
   - Evidence placeholders maintained at planned state; completion evidence must include a search of product code, comments, user-facing copy, tests, and current-state docs that finds none of those names, plus a build, tests, and `npm run verify` after the scrub.
   - Released changelog sections, completed milestone entries, `docs/full-audit.md`, `docs/velopack-migration-audit.md`, and `docs/migration-cleanup.md` are left as written.
 - **Deferrals / Follow-ups**:
-  - Account and PIN tables stay with the account and PIN data model work.
+  - Accounts stay with the Account Store work, in their own store outside `library.db`.
 
 ### M10j8 - Post-Migration Fixes
 
 - **Status**: ⏳ Planned
-- **Goal**: Fix defects left from the move to the server-owned catalog, one slice per defect, each with a test that fails before the fix.
+- **Goal**: Fix defects left from the move to the server-owned catalog, and close the control plane to unauthenticated LAN callers, one slice per defect, each with a test that fails before the fix.
 - **Scope**:
-  - Ships in v0.14.0. Five slices, each verified on its own.
+  - Ships in v0.14.0. Six slices, each verified on its own.
   - Source list after source import (server):
     - Recorded as a deferral on catalog document removal: source import does not refresh the in-memory source list that `GET /api/sources` and source enable/disable read. That list is filled at startup.
     - Confirmed during v0.14.0 planning by a throwaway test: after a successful import, the server's source list still had 0 sources and disabling the new source failed until restart.
@@ -305,17 +333,31 @@ Last milestone completed: M10i20
   - Desktop scan menu items (desktop):
     - **Scan Durations** and **Scan Loudness** check `Directory.Exists` on each source root on the desktop's own disk before asking the server to refresh. When the server runs on another machine, that check uses the wrong disk. The server decides which sources it can read.
     - Both items request the server refresh without a local folder check, and their status and log text no longer names a single source folder.
+  - Control token for non-localhost control requests (server and Operator):
+    - Found by the planned-milestones audit and still accurate in `docs/full-audit.md` finding 1 (`/control/*` admin plane unauthenticated when `AdminAuthMode != "TokenRequired"`): with LAN binding on, the admin auth mode defaults to `Off`, so any LAN caller can stop, restart, or update the server, change settings, and run testing scenarios. First start writes that `Off` into `core-settings.json`, so changing the default alone would leave existing installs open.
+    - `docs/full-audit.md` finding 19 (`OperatorTestingService` mutations protected only by middleware policy) also still holds: the testing routes check the token themselves and do not exempt localhost, so requiring the token would lock the Operator's own testing panel out on the server machine.
+    - Every non-localhost control request needs the control token. There is no `Off` for non-localhost requests: a persisted `Off` no longer opens the control plane to the LAN, and the Operator settings no longer offer it. Whether the admin auth mode field leaves `/control/settings` or stays read-only is decided here; removing it is its own contract slice.
+    - Localhost stays trusted for every control route, including the testing routes.
+    - A server with no control token generates one on start and saves it.
+    - How a browser on another machine gets in: `/operator` still loads, and when its first control read returns `401`, the page shows only a control token prompt in place of the other sections. Submitting it posts to `POST /control/pair`, which sets the admin cookie, and the page then loads normally. The token is shown in the Operator settings opened on the server machine. For a headless server with no local browser, the docs say where `core-settings.json` keeps it. The page does not put the token in the URL.
+    - A reverse proxy on the server machine still looks like localhost; that is fixed with reverse proxy support in the accounts release.
+    - Add a Release Specific checklist item: "From another machine, the Operator asks for the control token, works after it is entered, and refuses a wrong one; on the server machine it opens without one, testing panel included," on Linux and Windows.
 - **Acceptance criteria**:
   - A source imported through `POST /api/sources/import` appears in `GET /api/sources` and can be enabled and disabled before a restart.
   - Changing auto-refresh enabled or interval through `POST /api/refresh/settings` moves the next scheduled run to match the new settings.
   - No code rebuilds a `LibraryCatalogItem` from another one field by field. The list query and single-item read return the same item fields for tagged and untagged items, including thumbnail revision, width, and height. `InsertItem` either writes every field it is given or its contract says which fields it ignores.
   - After deleting the active preset while the heading shows a starred preset, **Update Preset** is disabled and the heading shows **None** or `None*`. Deleting a preset that is not active leaves **Update Preset** as it was. A headless desktop filter dialog test covers deleting the active starred preset and fails without the fix.
   - Scan Durations and Scan Loudness do not read source folders on the desktop's disk and start a server refresh when the server is reachable.
+  - A non-localhost control request without the control token gets `401`, including with `Off` saved in `core-settings.json`. Localhost control requests, including the testing routes, work without it.
+  - A server that has no control token creates and saves one on start.
+  - On another machine, the Operator shows only the token prompt until a valid token is entered, then works; on the server machine it opens directly.
   - Each slice has a test that fails without its fix, or the evidence says why one cannot be written.
 - **Verification evidence**:
   - Evidence placeholders maintained at planned state; completion evidence must include each slice's failing test before the fix and passing after it, and `dotnet test ReelRoulette.sln` with the list-query test that covers a tagged and an untagged item with catalog-only thumbnail dimensions still passing.
+  - The control token slice's tests must cover a non-localhost request with `Off` saved, a localhost testing-route request, token generation on start, and `POST /control/pair` setting the admin cookie. The cross-machine pass is the Release Specific checklist item above.
 - **Deferrals / Follow-ups**:
-  - WebUI reaction to `sourceStateChanged` stays with WebUI source management alignment.
+  - WebUI reaction to `sourceStateChanged` stays with WebUI Source State Sync.
+  - Release notes for v0.14.0 must say that opening the Operator from another machine now asks for the control token, and where to find it.
 
 ### M10j9 - Desktop Player View and Fullscreen Fixes
 
@@ -463,1120 +505,375 @@ Last milestone completed: M10i20
 - **Deferrals / Follow-ups**:
   - None yet.
 
-### M10m - WebUI Source Management Alignment
-
-- **Status**: ⏳ Planned
-- **Goal**: Align WebUI source-dependent behavior with server-authoritative source state.
-- **Scope**:
-  - Depends on: WebUI library query cutover.
-  - Ships after v0.14.0, together with the later account and Operator milestones.
-  - Update WebUI source-aware filter/library behavior to read server-owned source state and react to `sourceStateChanged` by requery or resync.
-  - Remove any WebUI-local source enabled/disabled authority or duplicated source-state assumptions.
-  - Ensure library list-query browse and random playback requests honor the same source state as desktop.
-  - Do not add source administration to the WebUI.
-- **Acceptance criteria**:
-  - WebUI source-dependent filtering and library list-query behavior reflects server-owned enabled/disabled state.
-  - Source-state changes from desktop or another client update WebUI behavior through SSE/resync and list requery.
-  - Random playback and item playback do not diverge from server source eligibility decisions.
-  - No WebUI source-administration UI is introduced.
-- **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include WebUI tests for source-state list-query behavior, `sourceStateChanged` handling, and source-dependent random/library behavior.
-  - Manual evidence must include cross-client desktop-to-WebUI source-state sync smoke.
-- **Deferrals / Follow-ups**:
-  - Source add, remove, rename, enable/disable, and duplicate handling for admins are deferred to Operator source management.
-
-### M10n - Source Access Policy Groundwork
-
-- **Status**: ⏳ Planned
-- **Goal**: Add minimal access-policy architecture hooks for future per-user source access.
-- **Scope**:
-  - Depends on: WebUI source management alignment.
-  - Introduce a server-side source access policy abstraction that evaluates client/session context and source identity already stored in the catalog database, with default behavior matching current all-authorized paired-client access.
-  - Thread the policy boundary through library list query, random selection, item play, and source query paths without adding user accounts or permission editing UI.
-  - Document the intended future direction for per-user source access at a high level without treating it as implemented behavior.
-- **Acceptance criteria**:
-  - Source access checks flow through a single server-side policy boundary with default allow-all behavior for current authenticated clients.
-  - Library list query, random selection, item play, and source APIs can be constrained by the policy boundary in tests without client-side authority.
-  - Current user-visible behavior remains unchanged, including source enabled/disabled state.
-  - Documentation clearly separates implemented source-state authority from future per-user access control.
-- **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include policy-boundary tests for library list query, random selection, item play, and source APIs.
-  - Docs evidence must keep implemented source-state authority separate from future per-user access-control behavior.
-- **Deferrals / Follow-ups**:
-  - User accounts, role management, operator permission UI, source sharing invitations, and per-user audit/reporting are handled by later account and source-permission work where applicable.
-
-### M10o - Account and PIN Data Model
-
-- **Status**: ⏳ Planned
-- **Goal**: Establish the server/core account model required for PIN-authenticated clients and future per-user source access.
-- **Scope**:
-  - Depends on: source access policy groundwork.
-  - Add persisted account records in the same server SQLite database as the library catalog, with name, account level, hashed PIN, and stable identity suitable for later source-permission references.
-  - Require PIN hashes to use bcrypt or Argon2; do not introduce custom, fast, or reversible PIN storage.
-  - Support admin and user account levels, including multiple admin accounts.
-  - Seed a default admin account with placeholder name `Admin` and default PIN `1234`.
-  - Persist per-account, per-device failed PIN attempt state with one-hour lockout after 10 failed attempts.
-  - Keep the model free of guest/anonymous access assumptions; every interactive client session must resolve to an account in later milestones.
-- **Acceptance criteria**:
-  - Accounts can be persisted and loaded from the server SQLite catalog database with name, level, bcrypt- or Argon2-hashed PIN, stable account identity, and no plaintext PIN storage.
-  - Default startup state contains exactly one admin account named `Admin` with default PIN `1234` when no accounts exist.
-  - Multiple admin accounts can exist while account identity remains stable across name and PIN changes.
-  - Failed PIN attempt tracking is isolated by account and device and records lockout expiration deterministically.
-  - The account schema can reference future per-user source access grants without redesigning account identity or source identity.
-- **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include core/server persistence tests for account creation, default admin seeding, PIN hashing, level handling, and per-device lockout state.
-  - Docs evidence must describe account persistence ownership and default-admin behavior without documenting client login flows as implemented.
-- **Deferrals / Follow-ups**:
-  - Login endpoints, session tokens, account administration UI, and source-permission editing are deferred to later account-system milestones.
-
-### M10p - PIN Authentication API and Session Foundation
-
-- **Status**: ⏳ Planned
-- **Goal**: Replace pairing/control-token authentication with PIN login and transient session tokens.
-- **Scope**:
-  - Depends on: account and PIN data model.
-  - Remove the existing pairing/control-token authentication model from the active auth path, with no migration path and old sessions invalidated on upgrade.
-  - Add a PIN login endpoint where a client submits account identity, device identity, and PIN and receives a per-client session token on success.
-  - Keep session tokens non-persistent; clients must authenticate again after restart.
-  - Enforce failed-attempt lockout on the server and return lockout state, remaining duration, and deterministic failure errors to clients.
-  - Define logout/session invalidation semantics and session identity propagation for HTTP and SSE.
-- **Acceptance criteria**:
-  - Successful PIN login returns a session token tied to the authenticated account, client, and device context.
-  - Failed PIN attempts increment the correct per-account/per-device counter, trigger one-hour lockout after 10 failures, and return lockout details while locked.
-  - Session tokens are accepted only while valid for the current server runtime/session store and are not persisted by the server as restart-surviving client credentials.
-  - Pairing and control-token auth are no longer accepted for the new auth path, and stale sessions/tokens from the prior system fail deterministically after upgrade.
-  - API and SSE session identity can carry the authenticated account identity for later authorization checks.
-- **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include server API tests for login success, invalid PIN, lockout, lockout expiry, logout/invalidation, and old-token rejection.
-  - Contract evidence must include OpenAPI/docs updates for login/session payloads and lockout error shape.
-- **Deferrals / Follow-ups**:
-  - Full endpoint authorization cutover and client login screens are deferred until the session foundation exists.
-
-### M10q - Auth Cutover for API and Operator UI
-
-- **Status**: ⏳ Planned
-- **Goal**: Require session-token authentication across existing API surfaces and remove the separate Operator UI control-token layer.
-- **Scope**:
-  - Depends on: PIN authentication API and session foundation.
-  - Transition existing server API endpoints, control endpoints, and SSE connection setup to require valid session-token authentication where interactive client access is expected.
-  - Replace Operator UI auth with the account/session model; no separate control token remains.
-  - Ensure admin-only server/control capabilities can distinguish admin accounts from user accounts.
-  - Remove pairing/control-token client flows, docs, and contract references from active behavior.
-  - Explicitly keep external API/programmatic access out of scope.
-- **Acceptance criteria**:
-  - Existing API endpoints reject unauthenticated requests with deterministic auth errors.
-  - Operator UI access uses the same session model as other authenticated surfaces and no longer accepts a distinct control token.
-  - Admin-only operations reject user-level accounts while account-neutral read/playback operations use authenticated account context.
-  - SSE connections require valid session identity and expose auth failure/reconnect behavior consistently.
-  - Active API docs no longer describe pairing/control-token auth as a supported behavior.
-- **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include authorization tests across representative library, playback, source, SSE, and Operator/control endpoints.
-  - Docs evidence must include API/auth documentation updates and removal of active pairing/control-token guidance.
-- **Deferrals / Follow-ups**:
-  - Client-specific login screens and account-management UI are deferred to later milestones.
-
-### M10r - Admin First-Run Setup Flow
-
-- **Status**: ⏳ Planned
-- **Goal**: Require the default admin account to be secured through Operator UI before other clients can log in.
-- **Scope**:
-  - Depends on: auth cutover for API and Operator UI.
-  - Detect the first-run setup state when only the default admin account exists and the default PIN remains active.
-  - In Operator UI, show a user grid containing only the default admin tile in first-run setup state.
-  - After logging in with the default PIN, show a mandatory setup overlay requiring PIN change and prompting for a name change.
-  - Disallow completing setup while the admin PIN remains `1234`; name change is recommended but optional.
-  - Expose setup-state responses so desktop and WebUI can block login and direct users to Operator UI until setup is complete.
-- **Acceptance criteria**:
-  - First-run setup state is detected deterministically from account state and clears only after the default admin PIN is changed.
-  - Operator UI allows the default admin login with PIN `1234` only for setup and forces a non-default replacement PIN before normal use.
-  - The setup overlay permits keeping the placeholder name while clearly prompting for a better admin name.
-  - Desktop and WebUI auth/bootstrap calls can identify setup-incomplete state and do not allow login while setup remains incomplete.
-  - Normal login behavior applies to all clients after setup completion.
-- **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include server setup-state tests and Operator UI tests for default-admin login, mandatory PIN change, optional name change, and setup completion.
-  - Manual evidence must include first-launch Operator UI setup smoke and blocked desktop/WebUI login smoke before setup completion.
-- **Deferrals / Follow-ups**:
-  - General account add/edit/remove workflows are deferred to the Operator access-control milestone.
-
-### M10s - Operator Access Control Administration
-
-- **Status**: ⏳ Planned
-- **Goal**: Add admin-only Operator UI account management for creating and maintaining admin and user accounts.
-- **Scope**:
-  - Depends on: admin first-run setup flow.
-  - Add an admin-only Access Control section in Operator UI.
-  - List all accounts with name and level.
-  - Add accounts with name, level, and initial PIN.
-  - Edit account name, account level, and PIN reset.
-  - Remove accounts while preventing removal of the last admin account.
-  - Allow admins to change their own name and PIN through the standard self-service flow rather than a privileged bypass.
-- **Acceptance criteria**:
-  - Admin accounts can list, add, edit, reset PINs for, and remove accounts through Operator UI.
-  - User-level accounts cannot access account administration.
-  - The system prevents deleting or demoting the last remaining admin account.
-  - Account changes persist across restart and affect subsequent login/authorization decisions.
-  - Admin self-edits use the same PIN-change validation path as non-admin self-service.
-- **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include server/admin API tests for account CRUD, last-admin protection, level changes, and PIN resets.
-  - Operator UI evidence must include admin-only rendering and validation/error-state tests.
-- **Deferrals / Follow-ups**:
-  - Per-source permission editing is deferred until source management moves to Operator UI.
-
-### M10t - Self-Service PIN Change
-
-- **Status**: ⏳ Planned
-- **Goal**: Let authenticated users change their own PIN from every client without admin assistance.
-- **Scope**:
-  - Depends on: Operator access control administration.
-  - Add a self-service PIN change API requiring old PIN, new PIN, and confirm-new-PIN validation.
-  - Add the self-service PIN change flow to Operator UI, desktop, and WebUI for both admin and user accounts.
-  - Reuse server-side PIN hashing, validation, and lockout semantics without exposing plaintext PINs after submission.
-  - Ensure successful PIN change affects future logins while current session behavior remains deterministic.
-- **Acceptance criteria**:
-  - Authenticated admins and users can change their own PIN by entering old PIN, new PIN, and matching confirmation.
-  - Wrong old PIN, mismatched confirmation, invalid new PIN, and lockout conditions return clear deterministic errors.
-  - Successful PIN changes persist and require the new PIN on the next login.
-  - The flow is available in Operator UI, desktop, and WebUI without requiring account-administration privileges.
-- **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include server tests for self-service PIN change success/failure paths and client tests for validation rendering.
-  - Manual evidence must include self-service PIN change smoke in all clients.
-- **Deferrals / Follow-ups**:
-  - Broader profile editing beyond name and PIN remains out of scope.
-
-### M10u - Desktop Login Gate
-
-- **Status**: ⏳ Planned
-- **Goal**: Require PIN login before the desktop main window loads.
-- **Scope**:
-  - Depends on: self-service PIN change.
-  - Show a desktop login window before loading the main application window.
-  - Display a Plex-style account tile grid using `admin_panel_settings` for admin accounts and `account_circle` for user accounts, with account names below.
-  - On tile activation, prompt for PIN and start a session after successful authentication.
-  - Show server-unavailable messaging with retry when the server cannot be reached.
-  - Show setup-incomplete messaging that directs users to Operator UI and blocks login.
-  - Avoid persistent sessions; require PIN login each time the app opens.
-- **Acceptance criteria**:
-  - The desktop main window is inaccessible until a valid PIN login succeeds.
-  - Server-unavailable and setup-incomplete states block login with clear retry/direction messaging.
-  - Account tiles use the required Material Symbols and account-name labels.
-  - Failed PIN attempts and lockout responses display clear errors, including remaining lockout duration after 10 failed attempts.
-  - Restarting the desktop app requires re-authentication.
-- **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include desktop UI/API-client tests for login success, server-unavailable retry, setup-incomplete block, failed PIN, lockout, and no persistent session reuse.
-  - Manual evidence must include desktop launch/login smoke before and after server restart.
-- **Deferrals / Follow-ups**:
-  - Remembered-account convenience, biometric auth, and offline login are out of scope.
-
-### M10v - WebUI Login Gate
-
-- **Status**: ⏳ Planned
-- **Goal**: Require PIN login before any WebUI library or player surface is accessible.
-- **Scope**:
-  - Depends on: desktop login gate.
-  - Show a Plex-style account tile grid before the WebUI shell, library, player, or random controls are accessible.
-  - Use `admin_panel_settings` for admin account tiles and `account_circle` for user account tiles, with account names below.
-  - On tile activation, prompt for PIN and start a session after successful authentication.
-  - Show setup-incomplete messaging that directs users to Operator UI and blocks login.
-  - Avoid persistent sessions; require PIN login each time the WebUI is opened or reloaded.
-  - Ensure WebUI API and SSE clients attach the active session token after login.
-- **Acceptance criteria**:
-  - No WebUI library, random, playback, or player UI is reachable before successful login.
-  - Account tiles use the required Material Symbols and account-name labels across desktop and mobile widths.
-  - Failed PIN attempts and lockout responses display clear errors, including remaining lockout duration after 10 failed attempts.
-  - Reloading or reopening WebUI requires re-authentication and does not reuse a persistent session token.
-  - Authenticated WebUI API and SSE traffic uses the logged-in account session context.
-- **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include WebUI tests for route/shell gating, login success, setup-incomplete block, failed PIN, lockout, session attachment, and reload behavior.
-  - Manual evidence must include WebUI login smoke on desktop and mobile-width browsers.
-- **Deferrals / Follow-ups**:
-  - PWA offline auth behavior and persistent "remember me" sessions are out of scope.
-
-### M10w - Operator Source Management
-
-- **Status**: ⏳ Planned
-- **Goal**: Move source administration into an admin-only Operator UI section.
-- **Scope**:
-  - Depends on: Operator access control administration.
-  - Add an admin-only Manage Sources section in Operator UI.
-  - Support adding, removing, renaming, and enabling/disabling sources through server-authoritative APIs. Add the missing rename and remove APIs. Folder import and enable/disable already exist.
-  - Move duplicate scan and apply into Operator UI as admin-only actions. Those server APIs already exist; this milestone moves the admin entry point.
-  - Preserve existing source identity and library refresh behavior unless endpoint alignment is required for Operator ownership.
-  - Keep per-user source permission editing out of this milestone except for any API shape needed to compose with the later permission milestone.
-- **Acceptance criteria**:
-  - Admin accounts can add, remove, rename, enable, disable, scan duplicates, and handle duplicate groups from Operator UI.
-  - User-level accounts cannot access Operator source-management actions.
-  - Source mutations persist through the server and propagate to connected clients through SSE and library list requery.
-  - Duplicate scan and apply are no longer exposed as desktop source-management workflows.
-  - Existing libraries remain usable after source-management ownership moves to Operator UI.
-- **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include server/admin API tests for source add/remove/rename/enable and duplicate action authorization.
-  - Operator UI evidence must include admin-only Manage Sources rendering and mutation/error tests.
-- **Deferrals / Follow-ups**:
-  - Per-source per-user visibility grants are deferred to the source permission milestone.
-  - Library export and import in Operator UI are deferred to Operator library catalog transfer.
-
-### M10w1 - Operator Library Catalog Transfer
-
-- **Status**: ⏳ Planned
-- **Goal**: Let an admin export and import the library from Operator UI, with the server applying the catalog, so a server plus WebUI install does not need the desktop app.
-- **Scope**:
-  - Depends on: Operator source management and removal of `library.json` library support.
-  - Move the `library.db` checkpoint transfer onto server operations. The server writes the checkpoint while it has `library.db` open. Settings and backups are not part of the transfer. Presets and thumbnail revision and dimensions travel with `library.db`. JPEG files stay in the local thumbnail directory.
-  - Import runs while the server is up. The server replaces its own database by the same finished-file rename. The previous database stays aside until the new file is in place and opens. A crash between those renames restores the previous file, or promotes the finished temporary file if that is the one that landed. A file that is not a library database is rejected. There is no JSON dump action.
-  - Add admin-only export and import actions to Operator UI.
-  - Remove the desktop Library Export and Import menus.
-- **Acceptance criteria**:
-  - An admin can export a server-produced SQLite checkpoint, and can import that `library.db` while the server is running.
-  - An interrupted running-server import leaves the previous catalog or the finished incoming file, and does not leave a partial database or an empty catalog.
-  - Import rejects a file that is not a library database and does not replace the live catalog.
-  - Import replaces the catalog, including presets and thumbnail revision and dimensions. Settings and backups stay where they are. JPEG files stay in the local thumbnail directory.
-  - User-level accounts cannot export or import the catalog.
-  - The desktop client no longer exposes Library Export or Import.
-- **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include server tests for checkpoint export, running-server `.db` import, rejection of a file that is not a library database, and interrupted replace recovery.
-  - Operator UI evidence must include admin-only export/import rendering and error tests.
-  - Manual evidence must include a server-plus-WebUI export/import pass with no desktop app.
-- **Deferrals / Follow-ups**:
-  - Removing the desktop Manage Sources dialog remains in the cross-client source access cutover.
-
-### M10x - Per-User Source Permission Management
-
-- **Status**: ⏳ Planned
-- **Goal**: Let admins manage source visibility per user and enforce it through the server policy boundary.
-- **Scope**:
-  - Depends on: Operator source management.
-  - Add per-source per-user access controls to Operator UI source management.
-  - Persist source permission assignments against stable account and source identities.
-  - Enforce denied sources through the server-side source access policy for library list query, random selection, library browser, source queries, item playback, and `POST /api/play/{itemId}`.
-  - Ensure admins retain source-management authority while user accounts see only allowed sources.
-  - Keep source sharing invitations, groups, and audit/reporting out of scope.
-- **Acceptance criteria**:
-  - Admins can grant or deny each user access to each source from Operator UI.
-  - Denied sources are invisible to the affected user across source lists, library list query, random selection, library browser, and item playback.
-  - Denied-source items cannot be played through `POST /api/play/{itemId}` regardless of whether the requesting client has the item ID.
-  - Permission changes take effect for active sessions through SSE/resync or deterministic requery behavior.
-  - Server tests prove clients cannot bypass source denial by requesting hidden source IDs or item IDs directly.
-  - Permission data survives account/source rename operations because it is keyed by stable identities.
-- **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include policy tests for all listed source-dependent paths and Operator UI tests for permission editing.
-  - Manual evidence must include admin permission changes observed from at least one user account without client restart where supported.
-- **Deferrals / Follow-ups**:
-  - Role templates, account groups, source sharing invitations, and per-user audit/reporting remain future considerations.
-
-### M10y - Cross-Client Source Access Cutover
-
-- **Status**: ⏳ Planned
-- **Goal**: Align desktop and WebUI with server-authoritative source permissions and remove desktop source administration.
-- **Scope**:
-  - Depends on: per-user source permission management and Operator library catalog transfer.
-  - Remove the Manage Sources dialog from the desktop client entirely. Library Export and Import are already removed by Operator library catalog transfer. Enable/disable stays available in Operator source management.
-  - Ensure desktop and WebUI source lists, library list query, random playback, library browser, and item playback rely only on server-authoritative account permissions.
-  - Remove or hide any client-side source-management entry points that would conflict with Operator-only administration.
-  - Add user-facing empty/denied-state messaging where a user has no visible sources or a previously visible item becomes inaccessible.
-  - Update docs and testing checklist for Operator-only source management and per-user source visibility behavior.
-- **Acceptance criteria**:
-  - Desktop no longer exposes a Manage Sources dialog or client-side source administration path.
-  - Desktop and WebUI do not render denied sources or allow playback/random/library access to denied-source items.
-  - Permission changes made in Operator UI are reflected in desktop and WebUI through session-aware API/SSE behavior.
-  - Client-side filtering cannot broaden source visibility beyond what the server returns.
-  - Documentation and testing checklist describe the new Operator-only source-management workflow.
-- **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include desktop and WebUI tests for hidden denied sources, inaccessible item handling, and removed source-management entry points.
-  - Manual evidence must include cross-client source permission smoke for admin and user accounts.
-- **Deferrals / Follow-ups**:
-  - Client-side requests for source access, approval workflows, and external sharing remain out of scope.
-
-### M10z - Final Verification and Sign-Off
-
-- **Status**: ⏳ Planned
-- **Goal**: Complete release-gate verification and documentation sign-off for the account, auth, access-control, source-permission, and Operator catalog-transfer milestones.
-- **Scope**:
-  - Depends on: cross-client source access cutover and Operator library catalog transfer.
-  - This milestone is the release gate for the account and Operator work that follows the SQLite store/query release.
-  - Run full build, test, and WebUI verification passes.
-  - Complete manual cross-client smoke for desktop and WebUI login, admin setup, account add/edit/remove, per-user source access, self-service PIN change, lockout behavior, Operator source management, Operator library export/import, library list-query browse under authenticated sessions, and a server-plus-WebUI pass with no desktop app.
-  - Update the testing checklist for all new behavior in this series.
-  - Confirm milestone docs, API docs, and CHANGELOG entries for this series are accurate and complete.
-  - Resolve or explicitly defer any open regressions before treating this series as complete.
-- **Acceptance criteria**:
-  - `dotnet build ReelRoulette.sln`, `dotnet test ReelRoulette.sln`, and WebUI `npm run verify` pass for the completed series.
-  - Manual verification covers all listed cross-client account, auth, lockout, permission, source-management, and Operator export/import workflows, including a server-plus-WebUI pass with no desktop app.
-  - Testing checklist, API docs, CHANGELOG, and milestone evidence match implemented behavior.
-  - No open regressions remain from the series unless explicitly documented as accepted deferrals.
-  - This milestone is the final verification gate for the series.
-- **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include full automated command output summaries and manual smoke PASS/FAIL results.
-  - Docs evidence must include testing checklist, API docs, CHANGELOG, and milestone evidence review results.
-- **Deferrals / Follow-ups**:
-  - None at planned state.
-
-### M11a - Structured JSONL Schema + Server Writer Foundation
-
-- **Status**: ⏳ Planned
-- **Goal**: Establish canonical JSONL `last.log` foundation with server-owned write path and deterministic lifecycle behavior.
-- **Scope**:
-  - Define and enforce canonical JSONL log schema (one JSON object per line) with required core fields:
-    - required on every entry: `ts`, `lvl`, `svc`, `comp`, `op`, `msg`,
-    - `lvl` vocabulary is fixed to lowercase values only: `trace|debug|info|warn|error|fatal`.
-    - `svc` vocabulary for this structured-logging series is fixed to lowercase values only: `server|desktop|webui`; `android|ios` remain schema-reserved for later milestones and are not emitted by this series.
-    - conditional/optional fields in canonical serialization order: `evt`, `data`, `ingestReqId`, `clientOpId`, `traceId`, `spanId`, `clientId`, `sessionId`, `ver`, `build`, `clientTs`, `srcIp`, `userAgent`.
-    - canonical serialization order places `evt` immediately after `op` when present, and places `data` immediately after `msg` when present.
-    - `evt` is optional and free-form with naming convention guidance (dot-delimited, lowercase, action-oriented), for example: `sse.connected`, `ui.pair.submit`, `api.random.requested`.
-    - include `evt` only when it adds clarity beyond `op`; omit it when `op` already captures the event meaning.
-    - keep `evt` stable and low-cardinality; never embed user data, file names/paths, or other high-cardinality/sensitive values.
-    - `ingestReqId` is server-writer-assigned and required on every persisted entry; `clientOpId` is optional client-generated operation identifier for client-side action correlation.
-    - `data` payloads must be bounded and privacy-safe (safe primitives, allowlisted short strings, and small structured objects); arbitrary object dumps are not allowed.
-    - `ex` is API input convenience only and is not persisted as a top-level JSONL field.
-    - when `ex` is provided, it is normalized into privacy-safe `data.error` metadata (for example: `type`, `code`, `messageSafe`, optional bounded stack fingerprint).
-    - example (all fields shown in canonical order): `{"ts":"...","lvl":"info","svc":"desktop","comp":"ui.main-window","op":"UpdateLibraryPanel","evt":"ui.library.panel.updated","msg":"Library panel updated.","data":{"totalCount":38833,"eligibleCount":163},"ingestReqId":"...","clientOpId":"...","traceId":"...","spanId":"...","clientId":"...","sessionId":"...","ver":"...","build":"...","clientTs":"...","srcIp":"...","userAgent":"..."}`
-  - Centralize writes through one server writer for:
-    - server runtime logging pipeline (`ILogger` sink/provider),
-    - client ingestion endpoint (`POST /api/logs/client`).
-  - Enforce strict validation at `/api/logs/client`:
-    - preserve valid provided metadata fields without parsing/inference of `lvl`/`comp`/`op`,
-    - reject invalid rows (missing required fields, invalid `lvl`/`svc`, invalid/oversized `data`) instead of normalizing,
-    - return deterministic machine-readable `400` validation payloads for contract violations:
-      - one response may include multiple validation errors,
-      - each error includes `code`, `field`, `reason`,
-      - `field` uses canonical dotted-path notation (for example: `lvl`, `data.error.code`),
-      - unknown/unmodeled input fields are rejected rather than silently ignored.
-  - Keep optional human-readable rendering as a *view* over structured fields (Operator panel/console), not as the persisted source of truth.
-  - Treat `srcIp` and `userAgent` as server-enriched fields when available; clients do not set them directly.
-  - Define deterministic size-based rotation/retention for `last.log`:
-    - rotate at 25 MB per file,
-    - keep current file + 10 archives,
-    - no compression for rotated files,
-    - enforce retention/startup cleanup deterministically before append/write,
-    - define deterministic handling for single-entry oversize writes and concurrent writer append attempts.
-- **Acceptance criteria**:
-  - `last.log` is JSONL and entries include required core fields with consistent optional-field shapes when emitted.
-  - `lvl` values are always one of `trace|debug|info|warn|error|fatal` (lowercase).
-  - `svc` values are always one of `server|desktop|webui` for this series' emitted entries; `android|ios` remain reserved and unused in this series runtime flows.
-  - Optional fields serialize in canonical order with `evt` immediately after `op` when present and `data` immediately after `msg` when present.
-  - `ingestReqId` is present on every persisted log entry and is assigned by the centralized server writer path.
-  - `data` payload shape constraints are enforced (bounded, privacy-safe, no arbitrary object dumps).
-  - `/api/logs/client` rejects invalid payloads with deterministic `400` validation errors (`code`, `field`, `reason`) and does not normalize invalid metadata.
-  - Server runtime logs are written through the centralized writer path.
-  - Lifecycle behavior is deterministic and documented with 25 MB rotation, 10-archive cap (uncompressed), startup retention enforcement, and defined oversize/concurrency edge handling.
-- **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include schema/order validation checks, strict-ingest rejection-path checks, and lifecycle/rotation edge-case checks.
-  - Contract/docs evidence must capture canonical `svc` vocabulary and always-present writer-assigned `ingestReqId` behavior.
-- **Deferrals / Follow-ups**:
-  - None at planned state.
-
-### M11b - Ingestion Contract + Correlation Semantics
-
-- **Status**: ⏳ Planned
-- **Goal**: Make server/client event ordering and correlation deterministic through ingestion contracts and trace propagation.
-- **Scope**:
-  - Preserve two-time semantics for client-originated events:
-    - `ts` = server ingestion/write UTC time (authoritative ordering),
-    - `clientTs` = client-reported event time (diagnostic context).
-  - Define request/operation identifier semantics:
-    - `ingestReqId` = server-writer-assigned identifier present on every persisted row for deterministic traceability,
-    - `clientOpId` = optional client-generated operation identifier for client-side action correlation across retries/UI events.
-  - Require W3C trace context (`traceId`/`spanId`) for HTTP/SSE request-scoped logs when active trace context is available; keep it optional for background/local-only client events.
-  - Ensure `/api/logs/client` preserves valid provided metadata without parsing/inference of `lvl`/`comp`/`op`; reject invalid payloads rather than normalizing.
-- **Acceptance criteria**:
-  - Client-originated entries preserve both `ts` and `clientTs` semantics with server-side ordering.
-  - `ingestReqId` is server-writer-assigned, present on every persisted row, and deterministic; `clientOpId` is preserved when provided.
-  - Request-scoped HTTP/SSE flows include `traceId`/`spanId` when active trace context is available; paths without active trace context are explicitly documented/test-evidenced.
-  - `/api/logs/client` contract mapping is deterministic with no inferred metadata fields; invalid contract inputs return deterministic machine-readable `400` validation errors.
-- **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include two-time semantics checks (`ts` vs `clientTs`) and correlation checks across `ingestReqId`/`clientOpId`/trace fields.
-  - Ingest-contract evidence must include both valid preserve-path and invalid reject-path behavior (`400` with `code`/`field`/`reason`).
-- **Deferrals / Follow-ups**:
-  - None at planned state.
-
-### M11c - Structured Log API Introduction (Desktop + WebUI)
-
-- **Status**: ⏳ Planned
-- **Goal**: Introduce typed structured Log API surfaces that require explicit metadata at call sites.
-- **Scope**:
-  - Provide strongly-typed methods (or overloads) with optional typed context metadata:
-    - `LogTrace(comp, op, evt? = null, msg, data? = null, context? = null)`
-    - `LogDebug(comp, op, evt? = null, msg, data? = null, context? = null)`
-    - `LogInfo(comp, op, evt? = null, msg, data? = null, context? = null)`
-    - `LogWarn(comp, op, evt? = null, msg, data? = null, context? = null)`
-    - `LogError(comp, op, evt? = null, msg, data? = null, ex? = null, context? = null)`
-    - `LogFatal(comp, op, evt? = null, msg, data? = null, ex? = null, context? = null)`
-  - Enforce explicit `comp` and `op` parameters (no parsing from `msg`).
-  - Ensure `lvl` is set by API method used and constrained to `trace|debug|info|warn|error|fatal` only (no “everything is info” path and no custom variants).
-  - Support optional `evt` to classify event type independently from operation context (`op`), using free-form dot-delimited lowercase naming convention.
-  - Include `evt` only when it adds clarity beyond `op`; avoid redundant `evt` values.
-  - Keep `evt` tokens stable and low-cardinality; do not include user data, file names/paths, or other high-cardinality values.
-  - Optional `data` payloads must follow privacy-safe bounded-shape rules (safe primitives, allowlisted short strings, small objects; no arbitrary object dumps).
-  - `ex` parameter semantics:
-    - accepted only on `LogError`/`LogFatal`,
-    - normalized into `data.error` before emit,
-    - never written as a top-level field,
-    - raw exception text/stack is not emitted unless explicitly privacy-approved and bounded by policy.
-  - `context` holds conditional metadata (`clientOpId`, `traceId`, `spanId`, `clientId`, `sessionId`, `ver`, `build`, `clientTs`) where available/applicable.
-  - Define canonical `LogContext` shape used by all `Log*` methods:
-    - `LogContext = { clientOpId?: string; traceId?: string; spanId?: string; clientId?: string; sessionId?: string; ver?: string; build?: string; clientTs?: string }`
-    - `traceId`/`spanId` are required for request-scoped HTTP/SSE flows when active trace context is available.
-    - `ingestReqId` is assigned by the centralized server writer and is not client-supplied; clients may provide `clientOpId` when correlating multi-step client operations.
-    - `ingestReqId`, `srcIp`, and `userAgent` are excluded from client-supplied `LogContext` and are server-enriched only.
-  - Provide minimal canonical `comp` mapping list and enforce in review/docs:
-    - Desktop examples: `ui.main-window`, `ui.player`, `ui.settings`, `core.client`, `playback.vlc`, `library.panel`.
-    - Server examples (reference baseline for **Server/Core Meaningful Instrumentation Expansion**): `api`, `auth`, `sse`, `playback`, `refresh.pipeline`, `storage`.
-    - WebUI examples: `web.app`, `web.player`, `web.api`, `web.sse`.
-- **Acceptance criteria**:
-  - Structured Log API exists for desktop and WebUI with explicit `comp`/`op` and level-typed methods.
-  - `lvl` is determined by method choice, constrained to `trace|debug|info|warn|error|fatal`, and no “forced info” path is required.
-  - `evt` is supported as optional event-type metadata and appears in canonical serialized position when emitted.
-  - `data` payload constraints are enforced by API surface/policy (bounded safe shape, no arbitrary object dumps).
-  - Canonical `comp` mapping list is documented and used as migration baseline.
-- **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include API-surface validation for level-typed methods, `ex` normalization to `data.error`, and context-field mapping behavior.
-  - Evidence must confirm request-scoped trace fields are emitted when active trace context is available, and omitted paths are explicitly expected/tested.
-- **Deferrals / Follow-ups**:
-  - None at planned state.
-
-### M11d - Desktop Log Migration + Legacy API Obsoletion
-
-- **Status**: ⏳ Planned
-- **Goal**: Migrate the high-volume desktop logging surface to structured API as the primary structured-logging migration priority.
-- **Scope**:
-  - Update all desktop legacy `Log("OpName: ...")` call sites to structured API.
-  - Remove any desktop-side “infer op from msg” logic/normalizers.
-  - Concrete expected call-site pattern example:
-    - call: `LogInfo(comp: "ui.main-window", op: "UpdateLibraryPanel", evt: "ui.library.panel.updated", msg: "Library panel updated.", data: { totalCount: 38833, eligibleCount: 163 }, context: { clientOpId: <when-available>, traceId: <request-scoped>, spanId: <request-scoped>, clientId: <when-available>, sessionId: <when-available>, ver: <when-available>, build: <when-available>, clientTs: <client-originated> })`.
-    - expected emitted entry shape (all fields shown in canonical order): `{"ts":"...","lvl":"info","svc":"desktop","comp":"ui.main-window","op":"UpdateLibraryPanel","evt":"ui.library.panel.updated","msg":"Library panel updated.","data":{"totalCount":38833,"eligibleCount":163},"ingestReqId":"...","clientOpId":"...","traceId":"...","spanId":"...","clientId":"...","sessionId":"...","ver":"...","build":"...","clientTs":"...","srcIp":"...","userAgent":"..."}`
-  - Ensure desktop call sites choose appropriate levels:
-    - `trace/debug` for noisy flow details,
-    - `info` for meaningful state transitions,
-    - `warn` for recoverable degradations,
-    - `error` for failures/exceptions,
-    - `fatal` for unrecoverable failures.
-  - Mark legacy desktop `Log(string)` path as obsolete/error once migration is complete (or delete path).
-- **Acceptance criteria**:
-  - No legacy desktop `Log(string)` usage remains.
-  - Desktop logs provide explicit `comp`/`op` (with `evt` where meaningful) and correctly categorized levels.
-  - No desktop fallback path reintroduces string-prefix parsing or forced `info` levels.
-- **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include call-site migration inventory, obsolete/remove enforcement for legacy `Log(string)`, and representative emitted-entry validation.
-  - Evidence must confirm migrated desktop flows retain canonical field ordering and writer-assigned `ingestReqId`.
-- **Deferrals / Follow-ups**:
-  - None at planned state.
-
-### M11e - Server/Core Meaningful Instrumentation Expansion
-
-- **Status**: ⏳ Planned
-- **Goal**: Add meaningful, structured logs to server/core decision points and runtime features (not only transport wrappers).
-- **Scope**:
-  - Instrument server/core logic paths with structured logs:
-    - API handlers + auth/pairing outcomes,
-    - SSE lifecycle and session identity transitions,
-    - playback decision engine and playback-session orchestration,
-    - refresh pipeline stages/outcomes,
-    - storage/config apply and error paths.
-  - Emphasize meaningful state transitions, decisions, degradations, and failures over noisy repetitive logs.
-- **Acceptance criteria**:
-  - Server/core features emit meaningful structured logs with `comp`/`op` and correct levels across listed functional areas.
-  - Correlation fields (`traceId`/`spanId` when active trace context is available, plus writer-assigned `ingestReqId`) are present on request-scoped server/core logs; `clientOpId` is present only when propagated from a client-originated operation.
-- **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include representative logs across all listed functional areas with level/category correctness.
-  - Evidence must include request-scoped correlation checks and explicit expected handling for paths without active trace context.
-- **Deferrals / Follow-ups**:
-  - None at planned state.
-
-### M11f - WebUI Meaningful Instrumentation Expansion
-
-- **Status**: ⏳ Planned
-- **Goal**: Raise WebUI from minimal/wrapped status logging to meaningful structured logging aligned with unified API.
-- **Scope**:
-  - Add structured WebUI logging coverage for:
-    - app bootstrap and runtime initialization,
-    - auth/pairing flows and state transitions,
-    - SSE connect/disconnect/retry lifecycle,
-    - API request lifecycle/failure handling,
-    - key user action flows and major UX error states.
-  - Define and instrument the top 5 critical WebUI flows with stable operation keys:
-    - session bootstrap + compatibility gating (`BootstrapSession`),
-    - pairing/auth transition (`PairSession`),
-    - SSE connection lifecycle (`SseLifecycle`),
-    - random selection + playback start (`RandomPickAndPlay`),
-    - item-state mutation actions (favorite/blacklist/tag-edit apply) (`MutateItemState`).
-  - Migrate remaining WebUI legacy/prefix log usage to structured API.
-  - Remove any WebUI-side “infer op from msg” logic/normalizers.
-  - Use optional `evt` across those flows with free-form dot-delimited lowercase naming convention to classify event type without overloading `op`.
-  - Ensure WebUI call sites choose appropriate levels:
-    - `trace/debug` for noisy flow details,
-    - `info` for meaningful state transitions,
-    - `warn` for recoverable degradations,
-    - `error` for failures/exceptions,
-    - `fatal` for unrecoverable failures.
-- **Acceptance criteria**:
-  - WebUI no longer relies on minimal/wrapped status-only logging for critical flows.
-  - WebUI logs are emitted via structured API with explicit `comp`/`op` (and `evt` where meaningful) and appropriate levels.
-  - Top 5 critical WebUI flows listed in scope emit meaningful structured logs with request/trace linkage where applicable.
-  - `MutateItemState` instrumentation includes explicit subcase coverage for favorite, blacklist, and tag-edit apply actions.
-  - No legacy WebUI `Log(string)` usage remains.
-  - No WebUI fallback path reintroduces string-prefix parsing or forced `info` levels.
-- **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include one captured structured entry for each required critical flow and `MutateItemState` subcase.
-  - Evidence must include request-scoped correlation checks (trace fields when active trace context is available) and no-legacy-path enforcement.
-- **Deferrals / Follow-ups**:
-  - None at planned state.
-
-### M11g - Operator Structured Query Surface
-
-- **Status**: ⏳ Planned
-- **Goal**: Deliver operator triage capabilities over structured logs with typed filtering while keeping server write path file-based.
-- **Scope**:
-  - Perform end-to-end naming cutover from **Server Logs** to **Log Viewer** across UI, API contracts, and test/docs artifacts.
-  - Rename primary read/query endpoint from `/control/logs/server` to `/control/log-viewer` with compatibility alias:
-    - keep `/control/logs/server` temporarily as backward-compatible alias,
-    - maintain equivalent behavior/payload semantics during alias period,
-    - mark alias as deprecated in OpenAPI/docs during **Operator Structured Query Surface** with explicit planned removal in **Reliability Hardening and Final Verification** (no indefinite dual-endpoint ambiguity).
-  - Ensure `/control/log-viewer` remains read/query only; server runtime log writes continue directly to `last.log`.
-  - Update OpenAPI and docs (`shared/api/openapi.yaml`, `docs/api.md`, operator-facing docs) to:
-    - define `/control/log-viewer` as primary endpoint,
-    - mark `/control/logs/server` as deprecated compatibility alias with planned removal noted in **Reliability Hardening and Final Verification**.
-  - Update Operator page title and navigation labels from `Server Logs` to `Log Viewer`.
-  - Implement collapsible Log Viewer controls section:
-    - collapsed by default,
-    - expandable on demand,
-    - show active-filter summary chips while collapsed.
-  - Ensure Log Viewer supports full structured + text + time filtering:
-    - `svc`, `lvl`, `clientId`, `sessionId`, `traceId`, `ingestReqId`, `clientOpId`, `comp`, `op`, `evt`,
-    - message text search,
-    - time-window filter.
-  - Filter execution model:
-    - primary filtering path is server-side query/filter at `/control/log-viewer` for `svc`, `lvl`, `clientId`, `sessionId`, `traceId`, `ingestReqId`, `clientOpId`, `comp`, `op`, `evt`, text, and time-window inputs,
-    - client-side filtering is limited to transient UX refinement on already-fetched results,
-    - server query results are deterministic for identical filter inputs (including time window and pagination cursor),
-    - deterministic ordering contract is explicit and stable: newest-first by `ts` with deterministic tie-breakers (`ingestReqId`, then stable row sequence) to avoid page drift/duplication,
-    - when `ts` and `ingestReqId` are equal, ordering falls back to a stable per-row sequence key evaluated by cursor semantics so paging never duplicates/skips rows,
-    - cursor contract is explicit and versioned, with deterministic bound semantics for `from`/`to` time-window filters.
-  - Render human-readable log rows by default with expandable per-row raw JSON details.
-  - Implement newest-first ordering, incremental/cursor paging, and auto-refresh behavior:
-    - auto-refresh toggle,
-    - pause auto-refresh while user is scrolled away from newest rows,
-    - explicit resume control/state indicator.
-- **Acceptance criteria**:
-  - Operator Log Viewer can filter/search by structured fields, text, and time window without shell access.
-  - Primary endpoint `/control/log-viewer` returns structured-entry responses compatible with exact field filtering.
-  - Compatibility alias `/control/logs/server` remains functional during migration window.
-  - Alias lifecycle is explicit: OpenAPI/docs mark the alias deprecated during **Operator Structured Query Surface** with planned removal in **Reliability Hardening and Final Verification**.
-  - Log Viewer controls are collapsed by default and expose active filter state when collapsed.
-  - Human-readable row mode with expandable JSON detail is available and functional.
-  - Query ordering and cursor pagination are deterministic and documented (stable sort tuple, tie-break semantics, cursor version/bounds behavior).
-- **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include deterministic pagination checks (no duplicate/missing rows across page boundaries) and stable-result replay for identical filter inputs.
-  - Evidence must include contract/docs artifacts for sort/cursor/time-bound semantics and alias deprecation annotations.
-- **Deferrals / Follow-ups**:
-  - None at planned state.
-
-### M11h - Privacy-by-Construction Enforcement + Legacy Guardrails
-
-- **Status**: ⏳ Planned
-- **Goal**: Enforce source-safe logging policy and prevent regression to unsafe or inferred logging behavior.
-- **Scope**:
-  - Enforce privacy-by-default by construction:
-    - emitters must never include domain-identifying/sensitive values in `msg` or `data`, including:
-      - filenames or file paths,
-      - tag/category names,
-      - preset/source names,
-      - user-provided search text,
-      - token/cookie/secret values,
-      - raw media identifiers that could reveal content without server context.
-    - prefer safe templates and coarse counts/booleans/durations (examples):
-      - `"Saved desktop settings."` with `data: { wroteBackup: true }`
-      - `"Applied favorite update."` with `data: { isFavorite: true }`
-      - `"Library panel updated."` with `data: { totalCount: 38833, eligibleCount: 163 }`
-      - `"API request failed."` with `data: { endpoint: "SetFavorite" }` (no URL, no path)
-  - Exception handling policy for structured logging:
-    - `ex` inputs must be converted to privacy-safe `data.error` shape,
-    - do not emit raw stack traces, local file paths, or sensitive payload fragments by default,
-    - include only safe error descriptors (`type`, `code`, `messageSafe`, optional hash/fingerprint).
-    - explicit error emitted entry example (`ex` normalized into `data.error`): `{"ts":"...","lvl":"error","svc":"desktop","comp":"core.client","op":"PairSession","evt":"ui.pair.failed","msg":"Pairing request failed.","data":{"error":{"type":"HttpError","code":"401","messageSafe":"Unauthorized"}},"ingestReqId":"...","clientOpId":"...","traceId":"...","spanId":"...","clientId":"...","sessionId":"...","ver":"...","build":"...","clientTs":"...","srcIp":"...","userAgent":"..."}`
-  - Enforce bounded `data` payload contract at runtime:
-    - allow safe primitives, allowlisted short strings, and small objects only,
-    - reject/trim/block arbitrary object dumps and oversized payloads before serialization.
-  - Prevent reintroduction of legacy logging paths:
-    - remove/obsolete global `Log(string)` paths once migration is complete,
-    - enforce no parsing/inference fallback for `lvl`/`comp`/`op`.
-- **Acceptance criteria**:
-  - Privacy constraints are enforced at source in `msg` and `data`.
-  - Error/fatal logs with `ex` inputs persist only privacy-safe `data.error` payloads; no top-level `ex` field is written and no raw sensitive exception content is emitted by default.
-  - Runtime safety/correctness is achieved by source-safe templates + structured Log API contracts, not by post-hoc sanitizer/normalizer rewriting.
-  - Sanitizer/normalizer runtime paths are removed by end of this milestone with regression tests proving they are not in runtime data path.
-  - Legacy string-prefix logging paths are blocked from reintroduction.
-- **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include negative tests for sensitive content leakage and `ex` serialization policy enforcement.
-  - Evidence must include regression proof that sanitizer/normalizer paths are removed from runtime data path and legacy string-prefix logging is blocked.
-- **Deferrals / Follow-ups**:
-  - None at planned state.
-
-### M11i - Reliability Hardening and Final Verification
-
-- **Status**: ⏳ Planned
-- **Goal**: Finalize non-blocking behavior and complete cross-surface sign-off evidence for the structured-logging series.
-- **Scope**:
-  - Keep logging best-effort and non-blocking for clients:
-    - client relay failures must not block/interrupt user actions,
-    - retries are asynchronous and bounded.
-  - Complete endpoint cutover by removing compatibility alias `/control/logs/server` in this milestone; `/control/log-viewer` becomes sole supported endpoint after structured-logging sign-off.
-  - Complete OpenAPI/docs endpoint cutover in this milestone:
-    - remove deprecated `/control/logs/server` alias from contract/docs,
-    - keep `/control/log-viewer` as sole documented/supported endpoint.
-  - Scope for this implementation series is `server`, `desktop`, and `webui`; `android`/`ios` remain schema-reserved `svc` values for later milestones.
-- **Acceptance criteria**:
-  - `last.log` includes both server runtime logs and ingested desktop/web client logs through the same writer path.
-  - Desktop and WebUI logs are emitted using structured API with explicit `comp`/`op` and correctly categorized levels.
-  - Client log ingestion failures are non-blocking in user flows and bounded retry behavior is deterministic/tested.
-  - `/control/logs/server` compatibility alias is removed as part of this milestone cutover; `/control/log-viewer` remains the only supported log-viewer endpoint.
-  - Automated tests cover schema validation, ingestion mapping, timestamp semantics, request-scoped trace correlation fields, structured Log API behavior (field correctness + levels), privacy guardrails (source-safe templates), lifecycle behavior, and non-blocking relay behavior.
-- **Verification evidence**:
-  - Centralized server writer emits JSONL entries for both server and client-ingested events.
-  - `/api/logs/client` maps to canonical schema, preserves valid client/session/trace metadata without parsing/inference of `lvl`/`comp`/`op`, and rejects invalid inputs with deterministic machine-readable `400` validation errors.
-  - Desktop + WebUI relays verified with stable `svc`, `clientId`, `sessionId`; request-scoped paths include trace fields when active trace context is available.
-  - `clientOpId` appears only when propagated from a client-originated operation; absence on pure server-originated rows is expected.
-  - Operator Log Viewer validates mixed-source filtering/search by structured fields (`svc`, `lvl`, `clientId`, `sessionId`, `traceId`, `ingestReqId`, `clientOpId`, `comp`, `op`, `evt`) plus message text search and time-window filtering.
-  - Endpoint migration evidence captures:
-    - `/control/log-viewer` primary endpoint behavior,
-    - `/control/logs/server` alias deprecation state in **Operator Structured Query Surface** and removal behavior in **Reliability Hardening and Final Verification** (expected unsupported response after cutover).
-  - Log Viewer UX evidence captures:
-    - collapsed-by-default controls with active-filter summary while collapsed,
-    - human-readable rows with expandable JSON detail,
-    - auto-refresh toggle + pause-on-scroll behavior.
-  - Automated verification passes:
-    - `dotnet build ReelRoulette.sln`
-    - `dotnet test ReelRoulette.sln`
-    - `npm run verify` (`src/clients/web/ReelRoulette.WebUI`)
-  - Manual verification captures:
-    - server lifecycle logs,
-    - desktop action/error logs,
-    - web SSE/auth/error logs,
-    - one captured structured log example for each required WebUI flow (`BootstrapSession`, `PairSession`, `SseLifecycle`, `RandomPickAndPlay`, `MutateItemState`),
-    - `MutateItemState` evidence includes favorite, blacklist, and tag-edit apply subcases,
-    - combined trace-level evidence across server + client for at least one end-to-end flow,
-    - one explicit `/api/logs/client` failure simulation proving user actions remain non-blocking,
-    - field-level evidence snippets in `docs/checklists/testing-checklist.md`.
-
 ## Planned Milestones
 
 ### P1 - End-User README and Contributor Dev Documentation
 
 - **Status**: ⏳ Planned
-- **Goal**: Make `README.md` the primary, non-technical guide for installing and running ReelRoulette on **Windows** and on **Linux**, with **Debian/Ubuntu-family**, **Fedora-family**, and **Arch-based** distributions explicitly documented for runtime setup—while concentrating contributor and developer detail in `docs/dev-setup.md` with a single canonical command/script reference.
+- **Goal**: Make `README.md` the non-technical guide for installing and running ReelRoulette on Windows and Linux, and keep contributor detail in `docs/dev-setup.md` with one complete command and script reference.
 - **Scope**:
-  - **`README.md` (end users and operators)**:
-    - Refocus the body on installation and day-to-day use; **point developers and contributors explicitly to `docs/dev-setup.md`** for building from source, tooling, and workflow depth.
-    - Add a **table of contents** immediately after the introduction.
-    - Provide a **full manual** for getting server and **Desktop** client running on **Windows** and on **Linux**, with **explicit sections (or equivalent tables) for all of**: **Debian / Ubuntu** (and derivatives using `apt`), **Fedora** (and close RHEL-family derivatives using `dnf` where applicable), and **Arch-based** distros (including **CachyOS** as the documented Arch-style example). Cover **package-manager commands** for native prerequisites (**FFmpeg**/**ffprobe**, **VLC**/**LibVLC**), optional vs required steps, and any notable differences (paths, package names, codecs).
-    - Provide a **full user manual** covering all features and workflows: server and **Desktop** client installation and first launch, day-to-day use (playback, library management, tags, presets, operator/WebUI access), **Library Export/Import** (export options, import flow, source folder remapping dialog), **Launch Server on Startup** toggle, tray vs headless behavior, and any other user-facing surfaces shipped by the time this milestone lands.
-    - **`README.md` prerequisites**: list only what is needed to **run** the shipped apps (including native runtime deps such as FFmpeg/VLC where the product expects them); do **not** fold full SDK/editor prerequisites for development into the README—those belong in dev-setup.
-    - **Retain** the existing **Documentation Map** and **Third-Party Components** sections (update their surrounding prose only as needed for consistency).
-    - Preserve or improve coverage of **Linux**-specific operator concerns already in this series: **Avalonia** server tray vs **headless** fallback, **Launch Server on Startup** via **XDG Autostart** (`*.desktop` location, toggle semantics, manual verify/remove), **`desktop` paths** and **Desktop** naming where it helps end users.
-    - Document **release install paths** clearly: GitHub Releases (Windows installers/portables; Linux AppImage, portable tarball, **`install-linux-from-github.sh`** where applicable), how to obtain artifacts, first launch, and verifying application menu registration on Linux where relevant.
-    - **Troubleshooting** (in README or clearly linked subsections): native deps, permissions, display/audio, missing tray/status area, **LibVLC**/media hints on Linux, autostart conflicts.
-  - **`docs/dev-setup.md` (contributors)**:
-    - **Move** any README content that is **developer-focused** into dev-setup if it is not already covered there (build, test, package, CI context, editor/SDK installs).
-    - Ensure **all development prerequisites** (for example .NET SDK, Node, optional PowerShell, Inno Setup, `appimagetool`, etc.) are documented here, not as primary README install requirements.
-    - Add near the **top** of the document a **full commands list**: repository scripts and canonical commands with **short explanations each** (cover **all** `tools/scripts/*` entrypoints and other recurring commands such as `dotnet`/`npm` invocations the repo expects). Where contributor setup depends on the host OS, include **Debian/Ubuntu**, **Fedora**, and **Arch-based** variants (install .NET SDK, Node, `ffmpeg`/`vlc`, etc.) so the dev path matches the README’s end-user distro coverage.
-    - Note `appimagetool-git` (not `appimagetool-bin`) as the recommended AUR package on **CachyOS** due to a `squashfuse` conflict with `bambustudio-bin`.
-  - **`CONTEXT.md`**: refresh **current implemented capabilities**, **operational surfaces**, and **repository map** so they match the README/dev-setup split (what end users do vs what contributors run); keep **`desktop`** paths and **Desktop** naming consistent.
-  - **`docs/architecture.md`**: update **packaging and delivery**, **CI/workflow**, and related runtime-boundary prose so it stays accurate alongside the new README and dev-setup (no duplicate end-user install steps—link to README where appropriate).
-  - **`docs/domain-inventory.md`**: reconcile **packaging**, **verify**, **runtime**, and **CI** inventories with the canonical dev-setup command/script list and current workflow filenames.
-  - **`docs/api.md`**: align contributor-facing references and any README-cited entrypoints (health, operator, control plane) if cross-links or descriptions drift during the doc pass; no API contract edits unless a separate change requires them.
-  - **`docs/checklists/testing-checklist.md`**: full pass for **Linux**, **tray**, **packaging**, **autostart**, and **install-from-release** flows so checklist items match the updated README and dev-setup.
-  - **`AGENTS.md` / `README.md` Documentation Map**: ensure the map lists the right owning docs after the split (README vs dev-setup vs CONTEXT vs architecture vs domain-inventory vs api); update **Documentation Map** section prose in README accordingly.
-  - Document **CachyOS (Arch-based)** as the **primary development/sign-off** Linux baseline for this series; **beyond** the required **Debian/Ubuntu**, **Fedora**, and **Arch-based** coverage, additional distros remain **best-effort** unless expanded later.
+  - Unscheduled. Best done after the accounts release, which changes first-run setup and how clients connect.
+  - `README.md` (end users and operators):
+    - Installation and day-to-day use only, with a pointer to `docs/dev-setup.md` for building from source.
+    - A table of contents after the introduction.
+    - Install through the Velopack releases: the Windows per-user `Setup.exe` and the Linux AppImage, first launch, application menu registration on Linux, and in-app updates through Operator and desktop Settings.
+    - Runtime prerequisites only (FFmpeg with `ffprobe`, LibVLC, FUSE 2 for the AppImage), with package commands for Debian/Ubuntu, Fedora, and Arch-based distributions (CachyOS as the Arch example).
+    - A user manual covering playback, library browse, tags, presets, filters, Operator and WebUI access, account setup and login, reverse proxy access, Library Export and Import or the Operator catalog transfer (whichever has shipped), Launch Server on Startup, and tray versus headless behavior.
+    - Troubleshooting: native dependencies, permissions, display and audio, missing tray, autostart conflicts.
+    - Keep the Documentation Map and Third-Party Components sections.
+  - `docs/dev-setup.md` (contributors):
+    - Move any developer content out of the README.
+    - All development prerequisites (.NET SDK, Node, PowerShell) with Debian/Ubuntu, Fedora, and Arch-based install commands.
+    - A full list near the top of every `tools/scripts/*` entry point and recurring `dotnet` and `npm` command, with a short explanation each.
+  - Bring `CONTEXT.md`, `docs/architecture.md`, `docs/domain-inventory.md`, `docs/api.md`, and the testing checklist in line with the README and dev-setup split.
 - **Acceptance criteria**:
-  - A **non-developer** can follow **README.md** alone to install prerequisites (for running), install server and **Desktop** client on **Windows** and on **Linux** using the documented steps for **Debian/Ubuntu-family**, **Fedora-family**, and **Arch-based** systems, and reach a working setup including operator/WebUI access as documented.
-  - A **contributor** can rely on **`docs/dev-setup.md`** for environment setup, build/test/package workflows, and a complete script/command reference without hunting through README for developer steps.
-  - README prerequisites reflect **runtime/use** only; dev-setup lists **full dev** prerequisites with no important gap vs current repo tooling.
-  - Tray vs headless behavior, headless operator path, and **Linux** autostart behavior are explicit and actionable from the docs.
-  - **`CONTEXT.md`**, **`docs/architecture.md`**, **`docs/domain-inventory.md`**, **`docs/api.md`**, and **`docs/checklists/testing-checklist.md`** all read as current relative to the shipped scripts, workflows, and **`desktop`** layout—no stale install or contributor paths.
+  - A non-developer can follow `README.md` alone to install and run the server and desktop client on Windows and on each listed Linux family, and reach the Operator and WebUI.
+  - A contributor can rely on `docs/dev-setup.md` for setup, build, test, and release workflows, and its script list matches `tools/scripts/`.
+  - No current-state doc names retired packaging (Inno Setup, portable archives, install scripts, `appimagetool`).
 - **Verification evidence**:
-  - README contains TOC after intro, Documentation Map, Third-Party Components, and developer pointer to dev-setup; Linux install/prerequisite guidance names **Debian/Ubuntu**, **Fedora**, and **Arch-based** (with **CachyOS** as the Arch-style sign-off example); dev-setup opens with the consolidated commands/scripts list and matches those distro families for contributor prereqs where OS-specific commands apply.
-  - Landed updates across **`CONTEXT.md`**, **`docs/architecture.md`**, **`docs/domain-inventory.md`**, **`docs/api.md`**, and **`docs/checklists/testing-checklist.md`** (plus **`AGENTS.md`** only if Documentation Map / agent workflow boundaries need a one-line sync).
-  - Cross-doc consistency with scripts, workflows, and **`desktop`** paths.
-  - Maintainer spot-checks while writing docs are sufficient for closing this milestone; formal dry-run evidence (tray-capable + headless on **CachyOS**, full checklist pass) remains **deferred** to **Linux Release Readiness and Sign-off**.
+  - Completion evidence must include a check that every script in `tools/scripts/` is listed in `docs/dev-setup.md`, and a search showing no retired packaging names in current-state docs.
+  - A fresh-install walkthrough on Windows and one Linux distribution from the README alone is a Release Specific checklist item.
 - **Deferrals / Follow-ups**:
-  - Formal doc validation dry-runs and exhaustive checklist completion → **Linux Release Readiness and Sign-off**.
+  - None yet.
 
 ### P2a - Playback Session Contracts and Capability Surface
 
 - **Status**: ⏳ Planned
 - **Goal**: Establish contract-first playback-session APIs and capability signaling.
 - **Scope**:
-  - Milestone-sequencing guardrails for this playback-session series:
-    - complete current stabilization work before starting this series implementation,
-    - keep each slice independently verifiable and shippable,
-    - preserve thin-client boundaries while introducing server-side playback decisions.
-  - Define OpenAPI contracts for playback-session create/read and stream URL contracts.
-  - Add server capability markers for playback-session and transcode support in `/api/version`.
-  - Regenerate/refresh generated client contracts used by desktop and WebUI.
+  - First milestone of the playback sessions release, planned for v0.18.0. Depends on: Per-User Source Permissions, so every stream session is checked against the user's sources from the start.
+  - Keep each slice of this series independently verifiable and shippable, and keep thin-client boundaries while adding server-side playback decisions.
+  - Define OpenAPI contracts for playback-session create and read and the stream URL.
+  - Add playback-session and transcode capability markers to the capability list served by `/api/version` and `/api/capabilities`.
+  - Regenerate the WebUI types and update the desktop client contracts.
 - **Acceptance criteria**:
-  - This milestone establishes the contract/capability baseline used by subsequent slices in the playback-session series.
-  - OpenAPI includes playback-session surfaces and validates.
-  - Generated desktop/web client contracts are in sync with OpenAPI.
-  - Version/capability checks can detect missing playback features deterministically.
+  - OpenAPI includes the playback-session surfaces and validates.
+  - Generated WebUI types and desktop contracts match OpenAPI.
+  - Clients detect a server without playback sessions from the capability list.
+- **Verification evidence**:
+  - Completion evidence must include contract tests, `npm run verify:contracts`, and a capability check against a server without the feature.
+- **Deferrals / Follow-ups**:
+  - None yet.
 
 ### P2b - Server Playback Decision Engine
 
 - **Status**: ⏳ Planned
-- **Goal**: Make server the sole decision point for direct/remux/transcode mode selection.
+- **Goal**: Make the server the only place that chooses direct, remux, or transcode playback.
 - **Scope**:
-  - Implement playback-session decision service using media probe metadata and client capability hints.
-  - Add probe-cache strategy keyed by file path + mtime to avoid repeated ffprobe cost.
-  - Decision output includes:
-    - playback mode (`direct`/`remux`/`transcode`),
-    - delivery type (`progressive` or `hls-fmp4`),
-    - explicit decision reason diagnostics for troubleshooting.
+  - Planned for v0.18.0.
+  - Implement a playback-session decision service from media probe metadata and client capability hints.
+  - Cache probe results by file path and modification time to avoid repeated `ffprobe` runs.
+  - Decision output: playback mode (`direct`, `remux`, `transcode`), delivery type (`progressive` or `hls-fmp4`), and a reason for troubleshooting.
+  - Log each decision through the structured log API (component, operation, mode, reason), without file names or paths.
 - **Acceptance criteria**:
-  - Server deterministically selects `direct`, `remux/transmux`, or `transcode` for each session request.
-  - Decision outputs are stable/repeatable for identical inputs.
-  - Session responses include delivery type (`progressive` or `hls-fmp4`) and actionable reason fields.
+  - The server chooses `direct`, `remux`, or `transcode` for each session request, and the same inputs give the same decision.
+  - Session responses include the delivery type and a reason.
+  - Each decision appears in `last.log` as a structured entry without file names or paths.
+- **Verification evidence**:
+  - Completion evidence must include decision tests over a fixture of probe results and client hints, and probe-cache tests for unchanged and changed files.
+- **Deferrals / Follow-ups**:
+  - None yet.
 
-### P2c - Direct-Stream Session URL Baseline
+### P2c - Media Token Lifetime and Direct-Stream Sessions
 
 - **Status**: ⏳ Planned
-- **Goal**: Ship direct-stream playback-session URL path first as the initial playback foundation.
+- **Goal**: Direct-stream URLs are session tokens with a lifetime, and an expired or unknown token cannot stream anything.
 - **Scope**:
-  - Implement direct-stream session URL issuance and guarded token/session mapping.
-  - Add session TTL lifecycle cleanup for direct-stream sessions.
+  - Planned for v0.18.0.
+  - Already in place: `POST /api/random` and `POST /api/play/{itemId}` issue a media token, and `GET /api/media/{idOrToken}` streams it with range requests.
+  - `docs/full-audit.md` finding 11 (`ServerMediaTokenStore` has no expiry or eviction) still holds: every play adds a token that is never removed and stays valid until the server stops.
+  - Give tokens a time to live and a size cap, tie them to the playback session, and clean expired sessions up.
+  - `GET /api/media/{idOrToken}` also accepts a raw item id. The source access policy covers that path; decide here whether raw ids stay accepted once sessions exist.
 - **Acceptance criteria**:
-  - Direct-stream playback-session URLs are issued/validated deterministically.
-  - Session token/session mapping is guarded against invalid/expired use.
-  - Direct-stream sessions are cleaned up reliably after TTL expiry.
+  - Direct-stream URLs are issued and validated through playback sessions.
+  - An expired or unknown token returns the same not-found result, and expired sessions are removed.
+  - The token store size stays bounded under repeated plays.
+- **Verification evidence**:
+  - Completion evidence must include token expiry, eviction, and size-cap tests, and a range-request test on a session URL.
+- **Deferrals / Follow-ups**:
+  - None yet.
 
 ### P2d - Remux/Transcode and Segmented Streaming (HLS fMP4 Baseline)
 
 - **Status**: ⏳ Planned
-- **Goal**: Add resilient compatibility streaming for unsupported formats and long-form playback.
+- **Goal**: Add compatibility streaming for unsupported formats and long-form playback.
 - **Scope**:
-  - Implement remux/transmux and transcode orchestration using ffmpeg.
-  - Segmented streaming uses **HLS with fMP4 segments** as the single baseline profile.
-  - Add lifecycle cleanup for ffmpeg workers and temporary segment/transcode artifacts.
+  - Planned for v0.18.0.
+  - Implement remux and transcode with ffmpeg.
+  - Segmented streaming uses HLS with fMP4 segments as the single baseline profile.
+  - Clean up ffmpeg workers and temporary segment and transcode files.
 - **Acceptance criteria**:
-  - When API playback is selected, incompatible media is served through remux/transcode pipeline (no client-side format workarounds).
-  - Segmented streaming baseline is explicitly HLS with fMP4 segments and is validated in playback paths.
-  - No orphan ffmpeg processes or segment/transcode artifacts remain after session expiry or runtime shutdown.
+  - With API playback, incompatible media is served through remux or transcode, with no client-side format workarounds.
+  - Segmented streaming is HLS with fMP4 segments.
+  - No ffmpeg process or segment or transcode file is left after a session expires or the server stops.
+- **Verification evidence**:
+  - Completion evidence must include remux and transcode tests on a small media fixture set and a cleanup test after session expiry and after shutdown.
+- **Deferrals / Follow-ups**:
+  - None yet.
 
 ### P2e - Desktop Thin-Client Playback Cutover
 
 - **Status**: ⏳ Planned
-- **Goal**: Integrate desktop with playback-session APIs while preserving local-first performance semantics from the completed desktop playback-policy milestone.
+- **Goal**: Desktop API playback uses playback sessions, while local-first playback stays as it is.
 - **Scope**:
-  - Preserve the desktop playback-policy compromise baseline throughout this playback-session series:
-    - local-first playback with automatic API fallback,
-    - optional `ForceApiPlayback` for deterministic API-path validation.
-  - Add playback-session orchestration path for desktop API playback mode.
-  - Keep local-first playback behavior for locally accessible media paths when `ForceApiPlayback=false`.
-  - Define "locally accessible" deterministically:
-    - file exists at expected path,
-    - desktop has read access,
-    - path is not a server-issued token/virtual playback path,
-    - quick open-read preflight succeeds.
-  - Ensure automatic fallback to API playback when local path is inaccessible.
-  - Ensure `ForceApiPlayback=true` always routes desktop through API playback path (for this series validation and advanced-user preference).
-  - Desktop loop parity requirement:
-    - toggling loop must not reload media,
-    - loop transitions remain gapless,
-    - loop iterations do not increment playback stats (same playback session semantics).
-  - Preserve reconnect/status UX with deterministic behavior across local/API path selection.
+  - Planned for v0.18.0.
+  - Keep local-first playback with automatic API fallback, and `ForceApiPlayback` for validating the API path.
+  - Add playback-session orchestration for desktop API playback.
+  - Define "locally accessible": the file exists at the expected path, the desktop can read it, the path is not a server-issued token, and a quick open-read succeeds.
+  - Fall back to API playback when the local path is not accessible, and always use API playback with `ForceApiPlayback=true`.
+  - Loop toggle without reload is new work, not existing behavior: toggling loop today stops playback, rebuilds the LibVLC media with the new repeat option, and seeks back. In this series, toggling loop does not reload media, loop transitions stay gapless, and loop iterations do not count as plays.
+  - Keep reconnect and status behavior consistent across local and API playback.
 - **Acceptance criteria**:
-  - Desktop path selection is deterministic:
-    - local playback when locally accessible and `ForceApiPlayback=false`,
-    - API playback when local path is inaccessible or `ForceApiPlayback=true`.
-  - Desktop API playback mode uses server playback-session contract successfully.
-  - Outside allowed desktop playback-policy exceptions (`desktop-settings.json`, media-read for playback), no new local file authority paths are introduced.
-  - Desktop looping parity is preserved: loop toggling/iteration semantics remain gapless without per-loop stat increments.
-  - Disconnect/reconnect behavior remains user-friendly and deterministic.
+  - Local playback when the file is locally accessible and `ForceApiPlayback=false`; API playback otherwise.
+  - Desktop API playback uses the playback-session contract.
+  - No new local file authority beyond `desktop-settings.json` and reading media for playback.
+  - Toggling loop does not reload media or count a play, and loop transitions are gapless.
+- **Verification evidence**:
+  - Completion evidence must include path-selection tests and a loop-toggle test that the media is not rebuilt.
+- **Deferrals / Follow-ups**:
+  - None yet.
 
 ### P2f - WebUI Playback Cutover and Format Resilience
 
 - **Status**: ⏳ Planned
-- **Goal**: Align WebUI playback with server playback-session contract and robust format handling, while preserving parity with desktop API playback mode.
+- **Goal**: WebUI playback starts through playback sessions and handles formats the browser cannot play.
 - **Scope**:
-  - Route WebUI playback startup through playback-session API flow.
-  - Prefer direct playback when supported; fallback to HLS with fMP4 segmented/transcoded stream path when needed.
-  - Preserve current WebUI seamless loop behavior for both progressive and HLS playback paths after cutover.
-  - Validate long-form behavior for buffering, seek, reconnect, and format compatibility edge cases.
+  - Planned for v0.18.0.
+  - Route WebUI playback start through the playback-session API.
+  - Prefer direct playback when supported; fall back to the HLS fMP4 stream when needed.
+  - Keep the WebUI's seamless loop on both progressive and HLS playback.
+  - Check long-form buffering, seek, reconnect, and format edge cases.
 - **Acceptance criteria**:
-  - WebUI uses server-issued playback sessions for playback start.
-  - Format incompatibilities are handled by server pipeline path rather than client failure/local workaround.
-  - Movie-length playback reliability issues are resolved for supported validation corpus.
-  - Looping parity is preserved: WebUI behavior remains unchanged across progressive and HLS playback paths.
+  - WebUI playback starts from server-issued playback sessions.
+  - Formats the browser cannot play are handled by the server pipeline.
+  - Movie-length playback works on the validation set.
+  - Looping behaves the same on progressive and HLS playback.
+- **Verification evidence**:
+  - Completion evidence must include WebUI tests of session start and fallback, and `npm run verify`. The long-form validation set pass is a Release Specific checklist item.
+- **Deferrals / Follow-ups**:
+  - None yet.
 
 ### P2g - Resume Position and Session Continuity
 
 - **Status**: ⏳ Planned
-- **Goal**: Deliver server-authoritative remember-position behavior across desktop and WebUI playback paths.
+- **Goal**: The server remembers playback position for desktop and WebUI.
 - **Scope**:
-  - Add server-owned resume-position contract and persistence for playback sessions.
-  - Record playback position updates with throttled writes and deterministic completion/clear rules.
-  - Provide resume-position query/clear APIs so desktop and WebUI can present consistent resume UX.
-  - Add policy settings for resume behavior (enable/disable, threshold windows, retention/auto-clear) through server-authoritative settings flows.
-  - Preserve looping semantics while tracking resume state:
-    - loop iterations do not inflate playback stats,
-    - looping does not create false resume checkpoints.
+  - Planned for v0.18.0.
+  - Add a server-owned resume-position contract and storage, with throttled writes and clear completion and reset rules.
+  - Add resume-position query and clear APIs.
+  - Add resume settings (on or off, threshold windows, retention) through server settings.
+  - Loop iterations do not count as plays and do not create resume points.
+  - Decide whether resume positions are per account.
 - **Acceptance criteria**:
-  - Resume position persists across reconnects/restarts through server state (not client-local authoritative persistence).
-  - Desktop and WebUI resume behavior is consistent for API playback paths.
-  - Clear-resume operations are deterministic and observable.
-  - Resume policy settings are documented, persisted, and enforced by server.
+  - Resume position survives reconnects and restarts through server state.
+  - Desktop and WebUI resume the same way on API playback.
+  - Clearing a resume position works and is visible to both clients.
+  - Resume settings are documented, stored, and enforced by the server.
+- **Verification evidence**:
+  - Completion evidence must include server tests for recording, clearing, and the loop rule, and client tests for resume.
+- **Deferrals / Follow-ups**:
+  - None yet.
 
-### P2h - Hardening, Operations, and Final Verification
+### P2h - Playback Concurrency, Diagnostics, and Hardening
 
 - **Status**: ⏳ Planned
-- **Goal**: Stabilize playback pipeline for multi-client operation and operational visibility.
+- **Goal**: Keep the playback pipeline stable with several clients and make failures diagnosable from the Operator.
 - **Scope**:
-  - Add concurrency/backpressure controls (max concurrent transcodes + queueing policy).
-  - Add operator diagnostics for active sessions, mode decisions, and failure reasons.
-  - Execute full automated/manual verification matrix and finalize docs/tracking updates for this playback-session series.
+  - Last milestone of the playback sessions release, planned for v0.18.0.
+  - Limit concurrent transcodes, with a queueing policy, as a server setting with a safe default. This takes over the transcode-concurrency part of the removed advanced runtime and cache controls backlog item; the rest of that item was overtaken when refresh stopped trimming thumbnails to a count or size limit.
+  - Add Operator diagnostics for active sessions, mode decisions, and failure reasons.
+  - Add Release Specific checklist items for the multi-client playback matrix on Linux and Windows.
 - **Acceptance criteria**:
-  - Multi-client playback remains stable under constrained transcode capacity.
-  - Operator-facing diagnostics are sufficient to troubleshoot playback failures.
-  - Automated gates and manual playback matrix pass before playback-session series sign-off.
-  - After server shutdown, no ffmpeg workers remain, and temporary playback/transcode directories are cleaned or explicitly TTL-managed.
+  - Multi-client playback stays stable when transcode capacity is limited.
+  - The Operator shows enough to troubleshoot a playback failure.
+  - After the server stops, no ffmpeg worker remains, and temporary playback and transcode folders are cleaned or expire.
+- **Verification evidence**:
+  - Completion evidence must include concurrency-limit and queueing tests and a shutdown cleanup test. The multi-client matrix is the Release Specific checklist item above.
+- **Deferrals / Follow-ups**:
+  - None yet.
 
 ### P3 - Android Client Bootstrap
 
 - **Status**: ⏳ Planned
-- **Goal**: Enable initial Android app development on stable API seam after desktop/web client migration is functionally complete.
+- **Goal**: Start an Android app on the API once accounts and playback sessions exist.
 - **Scope**:
-  - Create `src/clients/android/ReelRoulette.Android` Gradle project.
-  - Implement basic API connectivity + SSE consumption.
-  - Add mDNS discovery and integrate with the existing pairing/auth primitive from earlier milestones.
-  - Optional: generate Kotlin API client from OpenAPI.
+  - Unscheduled. Depends on: PIN Login API and Sessions, and Playback Concurrency, Diagnostics, and Hardening.
+  - Create `src/clients/android/ReelRoulette.Android` as a Gradle project.
+  - Basic API connectivity and event stream use.
+  - Find the server through mDNS, which the server already advertises, and log in with an account PIN like the other LAN clients.
+  - Optional: generate a Kotlin API client from OpenAPI.
 - **Acceptance criteria**:
-  - Android app can discover/connect, list presets, request random media, and stream.
-  - Event sync works for favorite/blacklist/tag updates.
-  - Mobile resume/reconnect auth continuity is verified (pairing/auth state survives app background/resume and SSE reconnect paths).
-  - Regression tests validate Android client API/SSE compatibility expectations (schema, event envelope handling, and reconnect behavior) and pass in `dotnet test`.
+  - The app can find the server, log in, list presets, request random media, and stream it.
+  - Favorite, blacklist, and tag events update the app.
+  - Returning from background and event stream reconnects keep working within the session rules.
+- **Verification evidence**:
+  - Completion evidence must include Android tests for API and event envelope handling and reconnect behavior.
+- **Deferrals / Follow-ups**:
+  - None yet.
 
 ### P4 - File Metadata Sync and Extended Metadata
 
 - **Status**: ⏳ Planned
-- **Goal**: Add server-authoritative metadata sync so tags/metadata can be imported from and exported to media files, while preserving thin-client boundaries and cross-client parity.
+- **Goal**: Import tags and metadata from media files and write them back, through the server.
 - **Scope**:
-  - Implement metadata sync in core/server domain services (not client-local mutation paths):
-    - import tags from supported file formats during import/refresh,
-    - export tags/metadata back to file metadata on demand (and optional auto-export policy),
-    - keep merge/conflict policy explicit and configurable.
-  - Introduce metadata sync settings through server-authoritative settings APIs:
-    - auto-import enable/disable,
-    - auto-export enable/disable,
-    - merge strategy policy,
-    - write-warning/confirmation behavior.
-  - Add extended metadata support in core model and APIs:
-    - genre, year, artist/creator, title, album/series, comment, rating.
-  - Expose metadata in client projections and filtering surfaces:
-    - library presentation fields (sortable where applicable),
-    - filter/query support for selected metadata dimensions,
-    - batch metadata edit support through API commands.
-  - Add operational safety:
-    - unsupported format handling,
-    - read-only/locked/network-path failure handling,
-    - clear result summaries and structured logging.
+  - Unscheduled.
+  - Needs a catalog schema change (schema version 3) for the extended metadata columns, with its own migration from schema version 2. No metadata library is referenced today.
+  - Implement metadata sync in core and server services:
+    - import tags from supported formats during import and refresh,
+    - export tags and metadata to files on demand, with an optional auto-export policy,
+    - an explicit, configurable merge policy.
+  - Metadata sync settings through server settings: auto-import, auto-export, merge strategy, and write confirmation.
+  - Extended metadata: genre, year, artist or creator, title, album or series, comment, rating.
+  - Show metadata in library browse and filters, with batch metadata edit through the API.
+  - Handle unsupported formats, read-only or locked files, and network paths, with result summaries and structured logs.
 - **Acceptance criteria**:
-  - Metadata import/export executes through core/server APIs/services only (no client-authoritative metadata file mutation path).
-  - Supported format matrix and field mappings are documented and covered by verification.
-  - Merge policy behavior is deterministic and validated.
-  - Extended metadata persists through server-owned state and is visible/usable in desktop and WebUI without behavior divergence.
-  - Batch metadata operations work through API contracts and respect conflict/error policies.
-  - Error reporting is actionable (success/failure counts + reasons), and logging follows centralized server logging ownership.
+  - Metadata import and export run only through server APIs.
+  - The supported formats and field mappings are documented and tested.
+  - The merge policy gives the same result for the same inputs.
+  - Extended metadata is stored by the server and behaves the same on desktop and WebUI.
+  - Batch operations follow the conflict and error policy and report success and failure counts with reasons.
+- **Verification evidence**:
+  - Completion evidence must include schema migration tests, format mapping tests, and merge-policy tests.
+- **Deferrals / Follow-ups**:
+  - None yet.
 
 ### P5 - Customizable Keyboard Shortcuts (Desktop)
 
 - **Status**: ⏳ Planned
-- **Goal**: Enable user-configurable desktop keyboard shortcuts while preserving reliable input handling and existing default behavior.
+- **Goal**: Let desktop users rebind keyboard shortcuts while keeping input handling reliable and the current defaults.
 - **Scope**:
-  - Add keyboard-shortcuts configuration UX in desktop client:
-    - open shortcuts editor dialog from menu,
-    - list actions with current bindings,
-    - capture/rebind keys including modifier combinations (`Ctrl`, `Shift`, `Alt`),
-    - detect conflicts and require explicit resolution,
-    - reset selected/all bindings to defaults.
-  - Add read-only shortcut reference entry in Help menu.
-  - Persist shortcut bindings in desktop client preferences (`desktop-settings.json`) only.
-  - Refactor desktop key-dispatch path to resolve actions from configurable binding map instead of hardcoded key checks.
-  - Define reserved/system key policy and menu-accelerator conflict policy.
+  - Unscheduled. Depends on: Desktop Player View and Fullscreen Fixes, which changes how keyboard input reaches the app over the video.
+  - Today 31 hard-coded key cases in the desktop decide what each key does.
+  - Shortcuts editor dialog from the menu: list actions and bindings, capture keys with `Ctrl`, `Shift`, and `Alt`, detect conflicts, and reset one or all bindings.
+  - Read-only shortcut reference in the Help menu.
+  - Store bindings in `desktop-settings.json` only.
+  - Resolve keys through a binding map instead of hard-coded checks.
+  - Define reserved system keys and menu-accelerator conflicts.
 - **Acceptance criteria**:
-  - Users can rebind supported actions and changes persist across restarts.
-  - Conflict detection prevents ambiguous active bindings.
-  - Default shortcut set is available and can be restored deterministically.
-  - System-reserved shortcuts are protected from unsafe overrides.
-  - Existing playback/control workflows remain stable with both default and customized bindings.
+  - Rebound actions work and survive a restart.
+  - Conflicts cannot leave two actions on one binding.
+  - Defaults can be restored.
+  - Reserved system shortcuts cannot be overridden.
+  - Playback and controls work with default and custom bindings.
+- **Verification evidence**:
+  - Completion evidence must include binding-map, conflict, and reset tests.
+- **Deferrals / Follow-ups**:
+  - None yet.
 
-### P6 - Playback Analytics and Visualization
+### P6 - Playback History and Analytics
 
 - **Status**: ⏳ Planned
-- **Goal**: Provide server-authoritative playback analytics with rich client-side visualization for desktop/WebUI parity.
+- **Goal**: Record playback history on the server and show analytics from it on desktop and WebUI.
 - **Scope**:
-  - Add server-side analytics query surfaces over playback history/library stats:
-    - time-series aggregates (day/week/month),
-    - top-played items,
-    - favorites ratio and completion-oriented aggregates,
-    - distribution metrics (duration/source/time-of-day),
-    - tag usage/play weighting aggregates.
-  - Support analytics query parameters:
-    - date ranges (`7d`, `30d`, `90d`, `1y`, `all`),
-    - optional grouping/bucketing controls.
-  - Add client-side analytics UI surfaces (desktop first, WebUI parity path):
-    - chart views and summary metrics panel,
-    - date-range selector,
-    - export support (chart image + CSV/JSON data exports).
-  - Keep role boundaries explicit:
-    - server computes/owns analytics data contracts,
-    - clients render/visualize only (no duplicated analytics business logic).
+  - Unscheduled.
+  - The catalog keeps only a play count and last-played time per item, so there is no history to chart yet. Start with a server-owned playback events table (catalog schema change) written when the server records a play, with a retention setting.
+  - Server analytics queries over that history and library stats: plays per day, week, and month; top-played items; favorites ratio; duration, source, and time-of-day distributions; tag usage.
+  - Date ranges (`7d`, `30d`, `90d`, `1y`, `all`) and optional grouping.
+  - Client charts and summary panels (desktop first, then WebUI), a date-range selector, and image and CSV or JSON export.
+  - The server computes analytics; clients only render.
+  - Decide whether history is per account.
 - **Acceptance criteria**:
-  - Analytics data is produced via server APIs only and is consistent across clients for the same query window.
-  - Desktop analytics view renders required chart/summary categories from server query results.
-  - Export outputs (image/data) are generated deterministically from current visualization/query state.
-  - Date-range filters produce correct aggregate differences and are validated by tests.
-  - Client visualizations do not introduce local authoritative analytics calculations that diverge from server semantics.
+  - Each recorded play adds a history row, and retention removes old rows.
+  - Analytics come only from server APIs and match across clients for the same range.
+  - Date ranges change the aggregates correctly.
+  - Exports match the current query.
+- **Verification evidence**:
+  - Completion evidence must include schema migration tests, history write and retention tests, and aggregate tests per range.
+- **Deferrals / Follow-ups**:
+  - None yet.
 
 ### P7 - Desktop Confirmation Dialog Standardization
 
 - **Status**: ⏳ Planned
-- **Goal**: Reduce desktop UI duplication and improve consistency by standardizing confirmation dialogs behind a reusable component.
+- **Goal**: Replace the desktop's ad-hoc confirmation windows with one reusable dialog.
 - **Scope**:
-  - Introduce a reusable `ConfirmDialog` component for desktop UI with configurable:
-    - title,
-    - message/body content,
-    - button sets (`OK/Cancel`, `Yes/No`, `Remove/Cancel`, etc.),
-    - default/cancel action behavior.
-  - Refactor existing desktop confirmation flows to use the shared component incrementally.
-  - Preserve current UX semantics (wording, destructive-action emphasis, default button intent) unless explicitly changed.
-  - Keep compatibility-safe rollout:
-    - allow legacy dialog implementations to coexist during migration,
-    - remove obsolete dialog variants only after parity validation.
+  - Unscheduled. Best done after Desktop Source Management Link, which removes the Manage Sources dialog and its five ad-hoc windows. The desktop builds 23 ad-hoc windows today.
+  - A reusable `ConfirmDialog` with title, message, button sets (`OK/Cancel`, `Yes/No`, `Remove/Cancel`), and default and cancel actions.
+  - Move the existing confirmations to it one at a time, keeping wording, destructive-action emphasis, and default buttons.
+  - Remove each old dialog only after its replacement behaves the same.
 - **Acceptance criteria**:
-  - New confirmation dialog component supports required button/action patterns used by current desktop flows.
-  - Migrated dialog flows preserve existing behavior and outcomes.
-  - Duplicate confirmation-dialog code paths are reduced with no functional regressions.
-  - Desktop UI tests/manual checks confirm parity for destructive and non-destructive confirmation actions.
-
-### P8 - Advanced Runtime and Cache Controls
-
-- **Status**: ⏳ Planned
-- **Goal**: Provide controlled, server-authoritative cache/performance tuning for varied hardware and storage environments, with safe defaults and clear operator observability.
-- **Scope**:
-  - Define server-owned advanced settings domains:
-    - cache policies (thumbnail/metadata/preview where applicable),
-    - concurrency limits (ffmpeg/ffprobe/transcode/thumbnail workers),
-    - network-storage tuning (timeouts/retries/check cadence),
-    - runtime throttling policies (background/battery/priority where supported).
-  - Expose settings via server APIs and apply semantics consistent with runtime policy model:
-    - immediate-apply vs restart-required classification,
-    - validation/normalization and deterministic apply-result reporting.
-  - Add management UX surfaces (operator first; desktop/web parity where appropriate):
-    - advanced settings section,
-    - current cache stats and last cleanup time,
-    - explicit cleanup actions (targeted + clear-all with confirmation),
-    - reset-to-defaults action.
-  - Add presets/profile model:
-    - `LowEnd`, `Balanced` (default), `HighPerformance`, `Custom`.
-  - Keep thin-client boundaries:
-    - clients do not directly mutate authoritative runtime/cache state outside server APIs.
-- **Acceptance criteria**:
-  - Advanced settings are persisted and enforced by server-owned configuration/state flows.
-  - Safe defaults are preserved; invalid values are rejected or normalized with explicit feedback.
-  - Cache cleanup operations are observable and report deterministic outcomes (freed space/counts/failures).
-  - Concurrency/throttling settings measurably affect runtime behavior without regressions.
-  - Desktop/WebUI/operator surfaces show consistent effective settings and apply results.
-  - No client-local authoritative settings drift is introduced.
+  - The dialog supports every button pattern the desktop uses.
+  - Moved confirmations behave and end the same as before.
+  - Duplicate confirmation code is gone with no regressions.
+- **Verification evidence**:
+  - Completion evidence must include headless dialog tests for destructive and non-destructive confirmations.
+- **Deferrals / Follow-ups**:
+  - None yet.
 
 ### P9a - Photo Face Detection Baseline
 
 - **Status**: ⏳ Planned
 - **Goal**: Deliver reliable face detection for photos with practical UX and performance controls.
 - **Scope**:
-  - Establish the face-analysis baseline in core/server:
-    - detection job orchestration,
-    - result persistence/caching,
-    - API query/projection surfaces for clients.
-  - Keep clients as orchestration/render layers:
-    - no client-local detection authority,
-    - clients display overlays/results and invoke server jobs/queries.
-  - This milestone is the first phase of the face-detection rollout, with video expansion in the companion video-detection phase.
-  - Select and integrate a .NET-compatible detection stack (OpenCV/ML.NET/other) for photo inputs.
-  - Add detection execution modes:
-    - import-time and/or on-demand scan jobs.
-  - Persist detection outputs per item:
-    - bounding boxes, confidence, metadata versioning.
-  - Add client UX surfaces:
-    - optional bounding box overlays in preview,
-    - face-aware filter/search entry points where applicable.
-  - Add operational controls:
-    - enable/disable setting (default off),
-    - async/background execution,
-    - cached result reuse and invalidation strategy.
+  - Unscheduled.
+  - Establish the face-analysis baseline in core and server: detection jobs, stored results, and API queries for clients.
+  - Clients display results and start server jobs; they do not detect locally.
+  - This milestone is the first phase of the face-detection rollout, with video in the companion video-detection phase.
+  - Choose a .NET-compatible detection stack (OpenCV, ML.NET, or other) for photos.
+  - Import-time and on-demand scans.
+  - Store bounding boxes, confidence, and a metadata version per item (catalog schema change).
+  - Optional bounding box overlays in preview and face-aware filter entry points.
+  - Off by default, run in the background, and reuse cached results with a clear invalidation rule.
 - **Acceptance criteria**:
-  - Face detection outputs are produced and owned by server-side workflows.
-  - Desktop/WebUI consume face metadata through APIs without local business-logic duplication.
-  - Photo detection runs asynchronously and does not block core playback/import UX.
-  - Detection results are queryable and consistently projected to clients.
-  - Overlay/filter behavior works for detected photo faces with deterministic result semantics.
+  - Face detection results are produced and owned by the server.
+  - Desktop and WebUI read face metadata through APIs.
+  - Photo detection runs in the background and does not block playback or import.
+  - Overlays and filters work for detected photo faces.
   - Performance impact is bounded and documented.
+- **Verification evidence**:
+  - Completion evidence must include detection job, storage, and query tests on a photo fixture set.
+- **Deferrals / Follow-ups**:
+  - None yet.
 
 ### P9b - Video Face Detection Expansion
 
 - **Status**: ⏳ Planned
-- **Goal**: Extend face detection to video with sampling/throughput strategies suitable for long-form media.
+- **Goal**: Extend face detection to video with sampling suited to long media.
 - **Scope**:
-  - This milestone is the second phase of the face-detection rollout and extends the server-authoritative model established in the companion photo-detection phase.
-  - Define video frame-sampling strategy (interval/keyframe/scene-aware options as needed).
-  - Run detection as background jobs with queueing/concurrency controls.
-  - Persist timeline-aware face detection outputs for video items.
-  - Add client UX surfaces for video results:
-    - timeline/segment-aware overlays or markers,
-    - filter/search hooks aligned with photo semantics where practical.
-  - Optional extension path:
-    - identity/recognition layer only after detection baseline stability.
+  - Unscheduled. This milestone is the second phase of the face-detection rollout and builds on the photo-detection phase.
+  - Define frame sampling (interval, keyframe, or scene-aware).
+  - Run detection as background jobs with queueing and concurrency limits.
+  - Store timeline-aware results for video items.
+  - Timeline overlays or markers and filter hooks matching photo behavior where practical.
+  - Recognition or identity only after the detection baseline is stable, and only if separately approved.
 - **Acceptance criteria**:
-  - Video detection pipeline runs within configured resource limits and does not destabilize playback/transcode workloads.
-  - Results are available through server APIs and align with photo detection contract shape where possible.
-  - Long-duration media processing is resumable/retry-safe and operationally observable.
-  - Recognition/identity features remain explicitly out of scope unless separately approved.
+  - Video detection runs within its resource limits and does not disturb playback or transcodes.
+  - Results come through server APIs in the same shape as photo results where possible.
+  - Long media processing can resume and retry and is visible to the operator.
+- **Verification evidence**:
+  - Completion evidence must include sampling, resume, and resource-limit tests.
+- **Deferrals / Follow-ups**:
+  - None yet.
 
 ### P10 - Ordinal Path Identity on Linux
 
 - **Status**: ⏳ Planned
 - **Goal**: On Linux, treat paths that differ only by case as different paths in folder import and in refresh, and keep the ignore-case path compare on Windows.
 - **Scope**:
+  - Unscheduled.
   - Folder import and refresh use ordinal path identity on Linux. Windows keeps the ignore-case compare.
   - A case-only rename on Linux rewrites the stored full path, relative path, and file name together. Two files that differ only by case stay two items.
   - Source roots have the same case problem: `/Media` and `/media` can be different directories on Linux and are still compared ignoring case.
+  - Path identity is built into the catalog: source and item paths are matched on lowercase `root_path_fold`, `full_path_fold`, and `relative_path_fold` columns, and only those columns are indexed. Ordinal lookups on Linux need matching indexes on the stored paths, or fold columns that keep case on Linux, so this is a catalog schema change with its own migration.
   - This needs a Windows VM pass before the compare changes. Windows enumeration casing was not measured. An ordinal compare there may treat an operating-system casing difference as a removed file plus a new file.
 - **Acceptance criteria**:
   - On Linux, importing a case-only rename of an existing file stores the new full path, relative path, and file name, and that full path exists.
   - On Linux, refresh of that rename reports the rename and stores the discovered path. Two files in one folder that differ only by case both remain in the catalog.
   - On Windows, a casing difference between the stored path and the enumerated path does not remove the item or add a second one.
   - Source-root casing is decided in the same change, including two directories that differ only by case on Linux.
+  - Path lookups stay indexed after the change.
 - **Verification evidence**:
   - Measured on Linux before this backlog item, for both v0.12.0 import and the current import: after `Clip.mp4` is renamed to `clip.mp4`, the stored full path stays `Clip.mp4` while the relative path and file name become `clip.mp4`. Refresh then reports 0 added, 0 removed, 0 renamed, and 0 moved. The thumbnail stage reports 1 missing source. An ignore-case set of a folder that contains both `clip.mp4` and `Clip.mp4` keeps one path; an ordinal set keeps both.
-  - Completion evidence must include those Linux cases after the fix, plus a Windows VM pass for the ignore-case compare.
+  - Completion evidence must include those Linux cases after the fix, schema migration tests, plus a Windows VM pass for the ignore-case compare.
 - **Deferrals / Follow-ups**:
   - Deferred past v0.14.0: Windows enumeration casing has not been measured, an ordinal compare there risks removing and re-adding items, and a v0.14.0 planning query of a real 48,938-item catalog found no case-only path collisions.
-
-### P13 - WebUI Android PWA Install
-
-- **Status**: ⏳ Planned
-- **Goal**: Installing the WebUI from Chrome on Android opens it as a standalone app, as it does on iOS.
-- **Scope**:
-  - Found in the v0.12.0 manual regression pass on a Google Pixel 8 Pro: Add to Home Screen only creates a shortcut that opens in the Chrome browser.
-  - Cause not investigated. Candidates to check first are the web app manifest fields Chrome requires for installability and the service worker scope.
-- **Acceptance criteria**:
-  - On Android Chrome over HTTPS, Install app opens the WebUI in a standalone window with the app icon.
-  - The iOS Add to Home Screen and desktop browser install still open a standalone app.
-- **Verification evidence**:
-  - Completion evidence must include an Android device pass and an iOS pass.
-- **Deferrals / Follow-ups**:
-  - Deferred past v0.14.0: the cause is not investigated and the pass needs an Android device. The service worker has shipped since before v0.12.0, and the bug was still seen in the v0.12.0 pass.
 
 ### P20 - WebUI Settings Page
 
 - **Status**: ⏳ Planned
 - **Goal**: The WebUI has a settings page for per-device preferences and diagnostics, as the desktop has its settings dialog and Diagnostics view.
 - **Scope**:
+  - Unscheduled.
   - Add a settings page to the WebUI.
   - Move the diagnostics information to the settings page and remove the diagnostics panel from below the main page's status line. That panel is currently shown only on mobile browsers by design; in the v0.13.0 manual regression pass it appeared only on the phone in Firefox.
   - Add client-side preferences, starting with an option to remember filter settings across sessions.
@@ -1596,6 +893,7 @@ Last milestone completed: M10i20
 - **Status**: ⏳ Planned
 - **Goal**: Saving, renaming, reordering, or deleting a preset on one client changes only that preset on the server, so two clients editing presets do not overwrite each other.
 - **Scope**:
+  - Planned for v0.15.0, last in the Operator administration release. Builds on the shared preset-equality fixture from Remove the Preset Match Route.
   - Found during v0.14.0 planning: the desktop and the WebUI both post the whole preset list to `POST /api/presets`, which replaces the server's preset catalog. The last writer wins, so a preset saved on one client can be lost when the other client saves its older list. This is the same client-held whole-catalog pattern as the tag sync routes removed in v0.13.0.
   - Add per-preset write routes (save, rename, reorder, delete) and move both clients to them. Remove the whole-list replace once no client uses it.
   - Tag rename and delete keep updating presets on the server.
@@ -1609,6 +907,564 @@ Last milestone completed: M10i20
   - Completion evidence must include server tests for each write, a two-client test of concurrent saves, and `npm run verify`.
 - **Deferrals / Follow-ups**:
   - None yet.
+
+### P26a - Operator UI Extraction
+
+- **Status**: ⏳ Planned
+- **Goal**: Move the Operator page out of `Program.cs` into a frontend with automated tests, without changing what it does.
+- **Scope**:
+  - First milestone of the Operator administration release, planned for v0.15.0. Every later Operator milestone needs Operator UI tests, and there is nowhere to write them today.
+  - The Operator page is about 780 lines of HTML, CSS, and JavaScript inside a raw string in `src/core/ReelRoulette.ServerApp/Program.cs`, and no test covers `/operator`.
+  - Where it lives is decided here. The first candidate is a second entry in the WebUI Vite project, which already has `npm run verify`, type checking, and tests, and is already staged into server builds by `stage-webui-assets.ps1`.
+  - The page stays at `/operator`, calls the same control routes, and keeps its sections, labels, and behavior.
+  - Replace `innerHTML` with escaped rendering where the page inserts settings and status text (`docs/full-audit.md` finding 43, Operator HTML page interpolates user input via `innerHTML`).
+  - Packaged server builds serve the extracted page.
+- **Acceptance criteria**:
+  - `/operator` shows the same sections and controls and calls the same routes as before.
+  - Operator UI tests run in `npm run verify`.
+  - The page renders settings and status text without `innerHTML` interpolation.
+  - The packaged Linux server smoke still reaches `/operator`.
+- **Verification evidence**:
+  - Completion evidence must include Operator UI tests for loading status and settings, saving settings, and the testing panel, `npm run verify`, `dotnet test ReelRoulette.sln`, and `./tools/scripts/verify-linux-packaged-server-smoke.sh`.
+- **Deferrals / Follow-ups**:
+  - None yet.
+
+### P26b - WebUI Source State Sync
+
+- **Status**: ⏳ Planned
+- **Goal**: The WebUI updates its library window and filter source list when a source is enabled, disabled, added, or removed elsewhere.
+- **Scope**:
+  - Planned for v0.15.0.
+  - The server already applies source state: list query, random selection, and item play only use enabled sources. The WebUI keeps no source authority of its own; its source checkboxes are a filter choice.
+  - What is missing: the WebUI ignores `sourceStateChanged`, and it reads `GET /api/sources` only when the filter dialog opens.
+  - On `sourceStateChanged`, reload the loaded library window (keeping the scroll position, as the desktop does) and refresh the filter source list.
+  - Do not add source administration to the WebUI.
+- **Acceptance criteria**:
+  - Enabling or disabling a source from the desktop or the Operator updates the WebUI library window and filter source list without a reload.
+  - A source imported elsewhere appears in the WebUI filter source list.
+  - No WebUI source administration is added.
+- **Verification evidence**:
+  - Completion evidence must include WebUI tests for `sourceStateChanged` handling and `npm run verify`, plus one quick spot check of a desktop source toggle seen in the WebUI.
+- **Deferrals / Follow-ups**:
+  - None yet.
+
+### P26c - Operator Source and Item Management
+
+- **Status**: ⏳ Planned
+- **Goal**: Manage sources and remove library items from the Operator, with server routes for what the desktop cannot do today.
+- **Scope**:
+  - Planned for v0.15.0. Depends on: Operator UI Extraction.
+  - Gated by the control plane: localhost, or the control token from other machines. The accounts release later moves this behind admin accounts.
+  - Today the desktop Manage Sources dialog shows Rename and Remove buttons and the grid shows Remove from Library, but none of them has a server route; v0.14.0 hides them until this milestone.
+  - Add server routes to rename a source, remove a source (its items leave the catalog; files stay on disk), and remove items from the library, with the delete-from-disk option the desktop remove dialog offers.
+  - Add a Manage Sources section to the Operator: list sources with item and duration statistics, add a folder, rename, remove, enable and disable, refresh, and duplicate scan and apply. Folder import, enable and disable, refresh, and the duplicate routes already exist.
+  - Bring back the desktop grid's Remove from Library on the new item route.
+  - Source and item changes publish events so connected clients update.
+- **Acceptance criteria**:
+  - From the Operator, sources can be added, renamed, removed, enabled, and disabled, and duplicates scanned and applied.
+  - Removing a source removes its items from the catalog and leaves its files.
+  - The desktop Remove from Library removes the selected items through the server, with and without deleting from disk.
+  - Connected desktop and WebUI clients update through events and list requery.
+  - New routes are in OpenAPI, and `npm run verify:contracts` passes.
+- **Verification evidence**:
+  - Completion evidence must include server tests for each new route, Operator UI tests for the Manage Sources section, a desktop test for Remove from Library, `dotnet test ReelRoulette.sln`, and `npm run verify`.
+  - Add a Release Specific checklist item: "From the Operator, add, rename, disable, and remove a source, and scan and apply duplicates; desktop and WebUI update without a restart."
+- **Deferrals / Follow-ups**:
+  - Per-user source visibility is Per-User Source Permissions.
+
+### P26d - Operator Library Catalog Transfer
+
+- **Status**: ⏳ Planned
+- **Goal**: Export and import the library from the Operator, with the server applying the catalog, so a server plus WebUI install does not need the desktop app.
+- **Scope**:
+  - Planned for v0.15.0. Depends on: Operator UI Extraction, and Remove library.json Library Support.
+  - Gated by the control plane, like Operator source management.
+  - Move the `library.db` checkpoint transfer onto server operations. The server writes the checkpoint while it has `library.db` open. Settings and backups are not part of the transfer. Presets and thumbnail revision and dimensions travel with `library.db`. JPEG files stay in the local thumbnail directory.
+  - Reuse the replace-and-recover protocol already in `LibraryCatalogStore` (incoming file, finished-file rename, recovery), which the desktop import uses today with the server stopped. What is new is replacing the database while the server's catalog session is open.
+  - Import runs while the server is up. The previous database stays aside until the new file is in place and opens. A crash between those renames restores the previous file, or promotes the finished temporary file if that is the one that landed. A file that is not a library database is rejected.
+  - Import keeps the source folder remap the desktop import offers.
+  - Add export and import actions to the Operator.
+  - Remove the desktop Library Export and Import menus.
+- **Acceptance criteria**:
+  - The Operator can export a server-produced checkpoint and import a `library.db` while the server is running.
+  - An interrupted import leaves the previous catalog or the finished incoming file, never a partial database or an empty catalog.
+  - Import rejects a file that is not a library database and does not replace the live catalog.
+  - Import replaces the catalog, including presets and thumbnail revision and dimensions. Settings and backups stay where they are. JPEG files stay in the local thumbnail directory.
+  - Connected clients resync after an import.
+  - The desktop client no longer has Library Export or Import.
+- **Verification evidence**:
+  - Completion evidence must include server tests for checkpoint export, running-server import, rejection of a file that is not a library database, and interrupted-replace recovery, plus Operator UI tests for export and import.
+  - Add a Release Specific checklist item: "With no desktop app, export the library from the Operator and import it into a fresh server, on Linux and Windows."
+- **Deferrals / Follow-ups**:
+  - None yet.
+
+### P26e - Desktop Source Management Link
+
+- **Status**: ⏳ Planned
+- **Goal**: The desktop's Manage Sources dialog is replaced by a link that opens source management in the Operator.
+- **Scope**:
+  - Planned for v0.15.0. Depends on: Operator Source and Item Management.
+  - Replace the **Manage Sources** dialog with a **Manage Sources** menu item that opens the Operator's Manage Sources section in the browser, for the server the desktop is connected to.
+  - Remove `ManageSourcesDialog`, its rename dialog, and its duplicate-scope prompt. Duplicate review moves to the Operator with source management.
+  - **Import Folder** stays in the desktop Library menu.
+  - Update the testing checklist and docs for the moved workflow.
+- **Acceptance criteria**:
+  - **Manage Sources** opens the Operator's source section for the connected server and no longer opens a desktop dialog.
+  - The desktop has no source rename, remove, enable, or duplicate workflow of its own.
+  - **Import Folder** still works from the desktop.
+- **Verification evidence**:
+  - Completion evidence must include a desktop test that the menu item opens the expected Operator URL, `dotnet test ReelRoulette.sln`, and one quick spot check.
+- **Deferrals / Follow-ups**:
+  - None yet.
+
+### P27a - Structured Log Schema, Writer, and Ingestion
+
+- **Status**: ⏳ Planned
+- **Goal**: `last.log` is JSON Lines written by one server writer, for server logs and ingested client logs alike, with correlation fields and deterministic rotation.
+- **Scope**:
+  - First milestone of the structured log foundation release, planned for v0.15.1. Depends on: Server Data Folder Override, whose folder helper resolves the log path.
+  - Today `last.log` is free text: a few server paths append bracketed lines by hand, the server's `ILogger` output goes only to the console, client logs arrive through `POST /api/logs/client` as source, level, and message, and startup empties the file. Decide here whether startup still empties it once rotation exists.
+  - Schema, one JSON object per line:
+    - required on every entry: `ts`, `lvl`, `svc`, `comp`, `op`, `msg`, and the writer-assigned `ingestReqId`,
+    - `lvl` is one of lowercase `trace|debug|info|warn|error|fatal`,
+    - `svc` is one of `server|desktop|webui`; `android|ios` are reserved and not emitted,
+    - optional fields in canonical order: `evt`, `data`, `ingestReqId`, `clientOpId`, `traceId`, `spanId`, `clientId`, `sessionId`, `ver`, `build`, `clientTs`, `srcIp`, `userAgent`; `evt` sits right after `op` and `data` right after `msg`,
+    - `evt` is optional, dot-delimited, lowercase, stable, and low-cardinality, used only when it adds something `op` does not,
+    - `data` is bounded: safe primitives, short allowlisted strings, and small objects, with no arbitrary object dumps,
+    - `ex` is accepted on input only and normalized into `data.error` (`type`, `code`, `messageSafe`, optional bounded stack fingerprint); it is never a top-level field.
+    - example: `{"ts":"...","lvl":"info","svc":"desktop","comp":"ui.main-window","op":"UpdateLibraryPanel","evt":"ui.library.panel.updated","msg":"Library panel updated.","data":{"totalCount":38833,"eligibleCount":163},"ingestReqId":"...","clientOpId":"...","traceId":"...","spanId":"...","clientId":"...","sessionId":"...","ver":"...","build":"...","clientTs":"...","srcIp":"...","userAgent":"..."}`
+  - One writer for the server's `ILogger` pipeline (a logging provider) and for `POST /api/logs/client`. The hand-written appends go through it.
+  - Time and correlation:
+    - `ts` is the server write time and decides order; `clientTs` is the client's event time, kept for context,
+    - `clientOpId` is an optional client operation id, kept when provided,
+    - request-scoped HTTP and event stream logs carry W3C `traceId` and `spanId` when trace context is active; background and client-local events may omit them,
+    - `srcIp` and `userAgent` are added by the server, never by clients.
+  - Strict ingestion at `POST /api/logs/client`: keep valid fields as sent without inferring `lvl`, `comp`, or `op` from the message; reject missing required fields, invalid `lvl` or `svc`, invalid or oversized `data`, and unknown fields; return a `400` listing every error with `code`, `field` (dotted path such as `data.error.code`), and `reason`. JSON serialization also closes the forged-line problem in `docs/full-audit.md` finding 21 (`AppendClientLog` does not sanitize newlines or control characters).
+  - Rotation: rotate at 25 MB, keep the current file plus 10 uncompressed archives, enforce retention at startup before writing, and define what happens to a single oversized entry and to concurrent appends.
+  - Human-readable rendering is a view over the fields (Operator, console), not what is stored.
+  - Contract change for `POST /api/logs/client` in OpenAPI and the generated WebUI types.
+- **Acceptance criteria**:
+  - Every `last.log` line is a JSON object with the required fields and canonical field order.
+  - `lvl` and `svc` values are always from their fixed lists.
+  - Server `ILogger` logs and ingested client logs go through the same writer, and every persisted entry has a writer-assigned `ingestReqId`.
+  - Client entries keep `clientTs`, `clientOpId`, and trace fields as sent, and `ts` is the write time.
+  - Invalid client payloads get a `400` with every error listed and are not written.
+  - A client message with line breaks or control characters cannot produce a second log line.
+  - Rotation, retention, oversized entries, and concurrent appends behave as documented.
+- **Verification evidence**:
+  - Completion evidence must include schema and order tests, rejection tests for each invalid case, correlation and time-field tests, rotation and retention edge-case tests, `dotnet test ReelRoulette.sln`, and `npm run verify:contracts`.
+  - Docs evidence must include the schema, ingestion contract, and rotation rules in `docs/api.md` and `docs/architecture.md`.
+- **Deferrals / Follow-ups**:
+  - The Operator log view keeps reading the file through its current route until Operator Log Viewer.
+
+### P27b - Structured Log API and Privacy Rules
+
+- **Status**: ⏳ Planned
+- **Goal**: Desktop and WebUI log through a typed structured API that requires explicit metadata and makes privacy-safe entries the only kind it can emit.
+- **Scope**:
+  - Last milestone of the structured log foundation release, planned for v0.15.1. Depends on: Structured Log Schema, Writer, and Ingestion.
+  - Level-typed methods for desktop and WebUI, each with explicit `comp` and `op`:
+    - `LogTrace(comp, op, evt? = null, msg, data? = null, context? = null)`
+    - `LogDebug(comp, op, evt? = null, msg, data? = null, context? = null)`
+    - `LogInfo(comp, op, evt? = null, msg, data? = null, context? = null)`
+    - `LogWarn(comp, op, evt? = null, msg, data? = null, context? = null)`
+    - `LogError(comp, op, evt? = null, msg, data? = null, ex? = null, context? = null)`
+    - `LogFatal(comp, op, evt? = null, msg, data? = null, ex? = null, context? = null)`
+  - `lvl` comes from the method; there is no parsing of `comp` or `op` from the message.
+  - `LogContext = { clientOpId?, traceId?, spanId?, clientId?, sessionId?, ver?, build?, clientTs? }`; `ingestReqId`, `srcIp`, and `userAgent` are never client-supplied.
+  - Baseline `comp` names: desktop `ui.main-window`, `ui.player`, `ui.settings`, `core.client`, `playback.vlc`, `library.panel`; server `api`, `auth`, `sse`, `playback`, `refresh.pipeline`, `storage`; WebUI `web.app`, `web.player`, `web.api`, `web.sse`.
+  - Privacy by construction, enforced by the API rather than by rewriting entries afterwards:
+    - `msg` and `data` never carry file names or paths, tag or category names, preset or source names, search text, tokens, cookies, PINs or other secrets, or raw media identifiers that reveal content. The one exception is the one-time first-run setup code from Admin First-Run Setup, which the server logs only while no account exists,
+    - prefer fixed templates with counts, booleans, and durations, for example `"Saved desktop settings."` with `data: { wroteBackup: true }`, or `"API request failed."` with `data: { endpoint: "SetFavorite" }` and no URL,
+    - `ex` on `LogError` and `LogFatal` becomes `data.error` with `type`, `code`, `messageSafe`, and an optional fingerprint; raw stack traces, local paths, and payload fragments are not emitted,
+    - `data` is checked for size and shape before serialization.
+  - Until the migration milestones, the existing desktop `Log(string)` calls and the WebUI status relay keep working by emitting through the new API as `comp` `legacy`, `op` `unmigrated`, level `info`. This is the only inferred path, and the migration milestones remove it.
+- **Acceptance criteria**:
+  - Desktop and WebUI have the level-typed API with explicit `comp` and `op`, optional `evt`, and typed context.
+  - `ex` is always written as privacy-safe `data.error`, never as a top-level field.
+  - Oversized or arbitrary `data` is rejected before it is written.
+  - The legacy path is the only one that emits `comp` `legacy`, and it is documented as temporary.
+  - The `comp` baseline and privacy rules are documented.
+- **Verification evidence**:
+  - Completion evidence must include API tests per level, `ex` normalization tests, context mapping tests, negative tests that paths, names, and secrets in the shapes above are refused, `dotnet test ReelRoulette.sln`, and `npm run verify`.
+- **Deferrals / Follow-ups**:
+  - Migrating desktop call sites is Desktop Log Migration; WebUI call sites are WebUI Instrumentation.
+
+### P27c - Desktop Log Migration
+
+- **Status**: ⏳ Planned
+- **Goal**: Every desktop log call uses the structured API, and the legacy `Log(string)` path is gone and cannot come back.
+- **Scope**:
+  - First milestone of the structured log migration release, planned for v0.17.0. Depends on: Structured Log API and Privacy Rules.
+  - The desktop has about 660 `Log(` call sites, most of them in `MainWindow.axaml.cs`.
+  - Move every call site to the structured API with a fitting level: `trace` or `debug` for noisy detail, `info` for state changes, `warn` for recoverable problems, `error` for failures, `fatal` for unrecoverable ones.
+  - Rewrite messages that carry file names, paths, tag names, or other content to fixed templates.
+  - Delete `Log(string)` and the `legacy` path on the desktop, and add a test or analyzer rule that fails if a string-only log path or message parsing comes back.
+  - Example: `LogInfo(comp: "ui.main-window", op: "UpdateLibraryPanel", evt: "ui.library.panel.updated", msg: "Library panel updated.", data: { totalCount: 38833, eligibleCount: 163 })`.
+- **Acceptance criteria**:
+  - No desktop `Log(string)` call or `legacy` entry remains.
+  - Desktop entries have explicit `comp` and `op` and fitting levels.
+  - A reintroduced string-only log call fails the build or tests.
+  - Desktop entries contain no file names, paths, or tag names.
+- **Verification evidence**:
+  - Completion evidence must include a before and after call-site inventory, the guard test failing on a reintroduced call, a scan of a captured desktop `last.log` for paths and names, and `dotnet test ReelRoulette.sln`.
+- **Deferrals / Follow-ups**:
+  - None yet.
+
+### P27d - Server Instrumentation
+
+- **Status**: ⏳ Planned
+- **Goal**: The server logs its meaningful decisions and failures as structured entries, not only transport events.
+- **Scope**:
+  - Planned for v0.17.0. Depends on: Structured Log Schema, Writer, and Ingestion.
+  - Structured logs for: API handlers and login and session outcomes, event stream connect and disconnect, refresh pipeline stages and outcomes, catalog open, import, backup, and replace, and settings changes and their errors. Playback decisions are logged by the playback sessions release.
+  - Favor state changes, decisions, degradations, and failures over repetitive noise.
+  - Move the remaining hand-built server log lines to `ILogger` with structured fields.
+- **Acceptance criteria**:
+  - Each listed area emits structured entries with `comp`, `op`, and fitting levels.
+  - Request-scoped entries carry trace fields when trace context is active, and every entry carries `ingestReqId`; `clientOpId` appears only when a client sent one.
+  - Server entries contain no file names, paths, tag names, or secrets.
+- **Verification evidence**:
+  - Completion evidence must include a captured entry per listed area, correlation checks, and a scan of a captured `last.log` for paths, names, and secrets.
+- **Deferrals / Follow-ups**:
+  - None yet.
+
+### P27e - WebUI Instrumentation
+
+- **Status**: ⏳ Planned
+- **Goal**: The WebUI logs its key flows as structured entries instead of relaying status-line text.
+- **Scope**:
+  - Planned for v0.17.0. Depends on: Structured Log API and Privacy Rules, and WebUI Login Gate.
+  - Today the WebUI logs mainly by relaying each status-line message as free text.
+  - Structured logs for app startup and compatibility checks, login, event stream connect and retry, API request failures, and major user actions and error states.
+  - Five flows with stable operation names: `BootstrapSession` (startup and compatibility gating), `LoginSession` (account tile, PIN, and session start), `SseLifecycle`, `RandomPickAndPlay`, and `MutateItemState` (favorite, blacklist, and tag-edit apply).
+  - Remove the status-line relay and the `legacy` path in the WebUI, with a test that fails if string-only logging or message parsing comes back.
+- **Acceptance criteria**:
+  - The five flows emit structured entries, with trace linkage on request-scoped steps.
+  - `MutateItemState` covers favorite, blacklist, and tag-edit apply.
+  - No WebUI string-only logging or `legacy` entry remains.
+  - WebUI entries contain no file names, paths, tag names, search text, or PINs.
+- **Verification evidence**:
+  - Completion evidence must include one captured entry per flow and `MutateItemState` case, the guard test, and `npm run verify`.
+- **Deferrals / Follow-ups**:
+  - None yet.
+
+### P27f - Operator Log Viewer
+
+- **Status**: ⏳ Planned
+- **Goal**: The Operator can filter and page structured logs by field, text, and time without shell access.
+- **Scope**:
+  - Planned for v0.17.0. Depends on: Structured Log Schema, Writer, and Ingestion, and Operator UI Extraction.
+  - Rename **Server Logs** to **Log Viewer** across the Operator, API, tests, and docs, and rename `GET /control/logs/server` to `GET /control/log-viewer` in one step. There is no alias period: the bundled Operator page is the route's only caller and ships in the same binary.
+  - The route stays read-only; logs are still written directly to `last.log`.
+  - Server-side filters: `svc`, `lvl`, `clientId`, `sessionId`, `traceId`, `ingestReqId`, `clientOpId`, `comp`, `op`, `evt`, message text, and a time window. Client-side filtering only refines results already fetched.
+  - Newest first by `ts`, tie-broken by `ingestReqId` and then a stable row sequence, with a versioned cursor and defined `from` and `to` bounds, so paging never repeats or skips rows.
+  - Read from the end of the file and across rotated archives instead of walking every line on each request (`docs/full-audit.md` finding 12, `ServerLogService.Read` walks the entire log on every request).
+  - Operator view: controls collapsed by default with active-filter chips, readable rows with expandable raw JSON, and auto-refresh that pauses while scrolled away from the newest rows, with a resume control.
+- **Acceptance criteria**:
+  - The Operator Log Viewer filters by every listed field, text, and time window.
+  - `/control/logs/server` is gone and `/control/log-viewer` is in OpenAPI and `docs/api.md`.
+  - The same filters and cursor return the same rows, and paging never repeats or skips a row.
+  - A request reads only as much of the log as its page needs.
+  - Controls start collapsed and show active filters; rows expand to raw JSON; auto-refresh pauses and resumes as described.
+- **Verification evidence**:
+  - Completion evidence must include paging tests across page and archive boundaries, replay tests for identical filters, a read-cost test on a large log, Operator UI tests for the view, and `npm run verify`.
+- **Deferrals / Follow-ups**:
+  - None yet.
+
+### P27g - Client Log Relay Reliability
+
+- **Status**: ⏳ Planned
+- **Goal**: Client log relay never blocks or interrupts user actions, and its retries are bounded and predictable.
+- **Scope**:
+  - Last milestone of the structured log migration release, planned for v0.17.0.
+  - Desktop and WebUI relay asynchronously with bounded retries and a bounded queue; a failing log endpoint drops entries after the bound instead of slowing the client.
+  - Add Release Specific checklist items for a combined trace across server and both clients for one end-to-end flow, and for a simulated log endpoint failure during normal use.
+- **Acceptance criteria**:
+  - A failing or slow `POST /api/logs/client` does not delay or interrupt any user action on either client.
+  - Retry and drop behavior matches its documented bounds.
+  - `last.log` holds server and both clients' entries through the same writer.
+- **Verification evidence**:
+  - Completion evidence must include relay tests with a failing and a slow endpoint on both clients, `dotnet test ReelRoulette.sln`, and `npm run verify`. The end-to-end trace and failure simulation are the Release Specific checklist items above.
+- **Deferrals / Follow-ups**:
+  - None yet.
+
+### P28a - Reverse Proxy and HTTPS Access
+
+- **Status**: ⏳ Planned
+- **Goal**: The server works correctly behind an HTTPS reverse proxy, and the docs show how to set one up, including `tailscale serve`.
+- **Scope**:
+  - First milestone of the accounts release, planned for v0.16.0. HTTPS comes before PIN login so LAN and remote logins do not send PINs in clear text. The server does not serve HTTPS itself.
+  - Document reverse proxy setup in `README.md` and `docs/dev-setup.md`: a general proxy example and `tailscale serve`, with the headers the server needs.
+  - Server fixes so it behaves correctly behind a proxy:
+    - Honor forwarded headers only from configured proxies. A request that came through a proxy is not a localhost request, even when the proxy runs on the server machine, so localhost trust applies only to direct loopback connections. Check during this milestone which forwarding headers `tailscale serve` sends; if a proxy sends none, document that it must, or how the server is told the proxy address.
+    - Treat a missing remote address as not local (`docs/full-audit.md` finding 8, `RemoteIpAddress == null` treated as local).
+    - Mark cookies `Secure` when the original request was HTTPS, and never send `SameSite=None` without `Secure` (`docs/full-audit.md` finding 9, `SameSite=None` allowed without `Secure`).
+    - Accept `https` origins for CORS and build LAN origins with the scheme clients actually use (`docs/full-audit.md` finding 10, CORS hard-coded to HTTP only).
+    - Links the server builds (Operator links, runtime config) use the proxied scheme and host.
+  - Android PWA install, folded in from the backlog: found in the v0.12.0 manual regression pass on a Google Pixel 8 Pro, Add to Home Screen only creates a shortcut that opens in Chrome. Likely cause, not confirmed on a device: the WebUI registers its service worker only in a secure context, and a plain-HTTP LAN address is not one, so Chrome has no service worker and does not offer Install app. iOS installs from its home-screen meta tags without one. Over HTTPS through a proxy, Install app should open the WebUI standalone; check the manifest fields Chrome requires if it does not.
+  - Add Release Specific checklist items: "Behind `tailscale serve` and one other HTTPS proxy, desktop, WebUI, and Operator connect, log in, browse, and play, and the server treats them as remote," and "On Android Chrome over HTTPS, Install app opens the WebUI standalone with its icon; iOS Add to Home Screen and desktop browser install still open standalone."
+- **Acceptance criteria**:
+  - Behind an HTTPS reverse proxy, desktop, WebUI, Operator, the event stream, and media range requests work.
+  - A request through a proxy on the server machine is not treated as localhost.
+  - Cookies are `Secure` for HTTPS clients, and CORS accepts the HTTPS origin.
+  - A request with no remote address is not treated as local.
+  - On Android Chrome over HTTPS, Install app opens the WebUI as a standalone app, and iOS and desktop browser installs still do.
+  - The docs give working `tailscale serve` and general proxy setups.
+- **Verification evidence**:
+  - Completion evidence must include server tests for forwarded-header trust, proxied-localhost handling, missing remote address, cookie flags, and HTTPS CORS origins, plus one quick spot check through `tailscale serve`. The proxy matrix and the Android and iOS install pass are the Release Specific checklist items above.
+- **Deferrals / Follow-ups**:
+  - None yet.
+
+### P28b - Source Access Policy
+
+- **Status**: ⏳ Planned
+- **Goal**: Every path that reads or serves library items asks one server-side source access policy, which allows everything until per-user permissions exist.
+- **Scope**:
+  - Planned for v0.16.0.
+  - Today source enabled state is applied by separate SQL conditions in list query, random selection, and item play, and some paths skip it: `GET /api/media/{idOrToken}` streams any item by its raw id regardless of its source.
+  - Add one policy that takes the request's session context and returns the sources it may see, and apply it on every item path: library list query, random selection, item play, `GET /api/media/{idOrToken}` (tokens and raw ids), `GET /api/thumbnail/{itemId}`, `POST /api/library/item`, `POST /api/library-states`, the tag-editor model, auto-tag and duplicate scans, library stats, and `GET /api/sources`.
+  - The default policy allows every enabled source, so behavior does not change, except that a raw item id of a disabled source no longer streams.
+  - No accounts or permission UI yet.
+- **Acceptance criteria**:
+  - Every listed path goes through the policy, and a test policy that denies a source hides that source's items on every one of them.
+  - Current behavior is unchanged with the default policy, except that disabled-source items no longer stream by raw id.
+  - Docs separate implemented source state from future per-user access.
+- **Verification evidence**:
+  - Completion evidence must include a denying-policy test per listed path, a raw-id media test for a disabled source, and `dotnet test ReelRoulette.sln`.
+- **Deferrals / Follow-ups**:
+  - Per-user grants are Per-User Source Permissions.
+
+### P28c - Account Store
+
+- **Status**: ⏳ Planned
+- **Goal**: Accounts live in their own server store, separate from the library catalog.
+- **Scope**:
+  - Planned for v0.16.0.
+  - Accounts are not stored in `library.db`. Catalog export, import, and backups copy or replace that whole file, so accounts there would ship PIN hashes inside every export and be replaced by every import.
+  - Store accounts in their own SQLite database in the server data folder (for example `accounts.db`), resolved through the server data folder helper.
+  - What catalog transfer does with accounts:
+    - catalog export and the catalog checkpoint do not contain accounts,
+    - catalog import replaces the catalog and leaves accounts as they are,
+    - catalog backups do not contain accounts; the account store keeps its own backup copies on the catalog backup schedule, in separate files that a catalog restore does not touch.
+  - Account records: stable id, name, level (admin or user), and a bcrypt or Argon2 PIN hash. No custom, fast, or reversible PIN storage. Multiple admins are allowed.
+  - No default account is seeded. A store with no accounts is the first-run setup state, handled by Admin First-Run Setup.
+  - Per-account, per-device failed attempts, with a one-hour lockout after 10 failures.
+  - There is no guest account. Localhost connections are trusted as admin without an account session (see PIN Login API and Sessions).
+  - Source permissions will reference account ids here and source ids in the catalog, so the schema keeps account identity stable across name and PIN changes.
+- **Acceptance criteria**:
+  - Accounts persist in their own store with stable id, name, level, and a bcrypt or Argon2 hash, and no plaintext PIN.
+  - A new store has no accounts, and no default account or PIN exists.
+  - Catalog export contains no account data, catalog import leaves accounts unchanged, and catalog backups contain no account data.
+  - The account store has its own backups, and a catalog restore does not touch them.
+  - Failed attempts are tracked per account and device, with a deterministic lockout end.
+- **Verification evidence**:
+  - Completion evidence must include store tests for creation, an empty new store, hashing, levels, lockout, and backups, and tests that a catalog export, import, and backup neither contain nor change accounts.
+  - Docs evidence must describe account storage, backups, and the empty first-run state without describing login flows as implemented.
+- **Deferrals / Follow-ups**:
+  - None yet.
+
+### P28d - PIN Login API and Sessions
+
+- **Status**: ⏳ Planned
+- **Goal**: LAN and remote clients log in with an account PIN and get a session; localhost stays trusted.
+- **Scope**:
+  - Planned for v0.16.0. Depends on: Account Store, and Reverse Proxy and HTTPS Access.
+  - Add a login route: the client sends account id, device id, and PIN, and gets a per-client session token on success.
+  - Sessions are not persisted; clients log in again after a restart.
+  - Enforce lockout on the server and return lockout state and remaining time.
+  - Define logout, session invalidation, and how account identity reaches HTTP and event stream handlers.
+  - Localhost trust: a direct localhost connection is trusted as admin and needs no PIN. A request through a reverse proxy is not localhost.
+  - There is no general auth-off mode once accounts exist: the API `AuthMode` `Off` setting and running without a shared token no longer open the API to LAN clients.
+  - Remove pairing and the shared pairing token, with no migration; old pairing cookies and tokens fail. Remove query-string tokens (`docs/full-audit.md` finding 2, `AllowLegacyTokenAuth` defaults to `true`, accepting tokens via query string).
+  - Compare session tokens in constant time (`docs/full-audit.md` finding 7, non-constant-time comparison of secrets).
+- **Acceptance criteria**:
+  - A correct PIN returns a session tied to the account, client, and device.
+  - Failed PINs count per account and device, lock out for one hour after 10 failures, and return lockout details.
+  - Sessions do not survive a server restart.
+  - Direct localhost requests work without a session; LAN, remote, and proxied requests need one.
+  - No setting turns authentication off for LAN or remote clients.
+  - Pairing, the shared pairing token, and query-string tokens are no longer accepted.
+- **Verification evidence**:
+  - Completion evidence must include server tests for login, wrong PIN, lockout and its expiry, logout, restart, localhost and proxied requests, and rejection of old pairing tokens.
+  - Contract evidence must include OpenAPI and `docs/api.md` for the login and session payloads and the lockout error.
+- **Deferrals / Follow-ups**:
+  - None yet.
+
+### P28e - Auth Cutover for API and Operator
+
+- **Status**: ⏳ Planned
+- **Goal**: Every API route, the event stream, and the Operator require an account session from LAN and remote clients, and the separate control token is gone.
+- **Scope**:
+  - Planned for v0.16.0. Depends on: PIN Login API and Sessions.
+  - Require a session on every API and control route and on the event stream for non-localhost requests.
+  - The Operator uses admin account sessions and no longer accepts the control token added in v0.14.0. Remove the control token, its setting, and its prompt.
+  - Admin-only operations (control plane, source and item management, catalog transfer, account administration, testing routes) reject user-level accounts. Testing routes use the same check as the rest of the control plane (`docs/full-audit.md` finding 19, `OperatorTestingService` mutations protected only by middleware policy).
+  - Settings reads no longer return secrets (`docs/full-audit.md` finding 20, auth and secret fields in DTOs encourage credential leakage; `GET /control/settings` returns the admin token today).
+  - Remove pairing and control-token flows from clients, docs, and contracts.
+  - External programmatic API access stays out of scope.
+- **Acceptance criteria**:
+  - LAN and remote requests without a valid session get a deterministic auth error on every API and control route and on the event stream.
+  - The Operator uses account sessions, and no control token is accepted anywhere.
+  - User-level accounts are refused on admin-only operations.
+  - No settings response contains a secret.
+  - Active docs no longer describe pairing or control tokens.
+- **Verification evidence**:
+  - Completion evidence must include authorization tests across library, playback, source, event stream, Operator, and testing routes for localhost, admin, user, and no session.
+- **Deferrals / Follow-ups**:
+  - None yet.
+
+### P28f - Admin First-Run Setup
+
+- **Status**: ⏳ Planned
+- **Goal**: The first admin account is created in the Operator, from localhost directly or from another machine with a one-time setup code, before any LAN or remote client can log in.
+- **Scope**:
+  - Planned for v0.16.0. Depends on: Auth Cutover for API and Operator.
+  - There is no default account and no default PIN. First-run setup state is an account store with no accounts.
+  - In that state, the server generates a random one-time setup code from a cryptographic random source on start, writes it to the server log, and shows it in the Operator opened on localhost. Each start without accounts makes a new code, and the previous one stops working.
+  - The setup code is the only secret the server writes to its log, and only while no account exists. The structured log privacy rules carry it as their one documented exception.
+  - From localhost, the Operator opens straight into setup and needs no code. From another machine, the Operator shows only a setup code prompt, and only the setup route accepts LAN or remote requests until setup finishes.
+  - Setup creates the first admin account with a name and a PIN.
+  - The code stops working as soon as the first admin account exists, and the server no longer generates or logs one.
+  - Failed code attempts count per device with the same one-hour lockout after 10 failures as PIN login, the code is compared in constant time, and it never appears in a URL.
+  - Desktop and WebUI login from LAN or remote clients is blocked until setup is done, with a message pointing to the Operator. Localhost clients keep working.
+  - Add a Release Specific checklist item: "On a fresh install, LAN login is blocked until the first admin is created: from localhost without a code, and from another machine only with the setup code from the server log; the code is refused afterwards."
+- **Acceptance criteria**:
+  - Setup state is detected from the account store and ends when the first admin account exists.
+  - On start with no accounts, a new setup code is written to the server log and shown in the Operator on localhost, and the previous code is refused.
+  - Localhost setup needs no code. Setup from another machine needs the current code, and wrong codes lock that device out after 10 failures.
+  - Once the first admin exists, the code is refused and no new code is generated or logged.
+  - LAN and remote desktop and WebUI logins report setup-incomplete and are refused until setup finishes.
+- **Verification evidence**:
+  - Completion evidence must include server tests for code generation, logging, replacement on restart, constant-time comparison, lockout, refusal after the first admin exists, and setup-only access before setup, plus Operator UI tests for setup from localhost and from another machine with the code.
+- **Deferrals / Follow-ups**:
+  - None yet.
+
+### P28g - Operator Account Administration
+
+- **Status**: ⏳ Planned
+- **Goal**: Admins create and maintain accounts in the Operator.
+- **Scope**:
+  - Planned for v0.16.0. Depends on: Admin First-Run Setup.
+  - An admin-only Access Control section: list accounts with name and level, add accounts with name, level, and initial PIN, edit name and level, reset a PIN, and remove accounts.
+  - The last admin cannot be removed or demoted.
+  - Admins change their own name and PIN through the same self-service flow as users.
+- **Acceptance criteria**:
+  - Admins can list, add, edit, reset PINs for, and remove accounts.
+  - User-level accounts cannot reach account administration.
+  - The last admin cannot be deleted or demoted.
+  - Changes persist across restart and apply to later logins.
+- **Verification evidence**:
+  - Completion evidence must include server tests for account changes, last-admin protection, level changes, and PIN resets, and Operator UI tests for the section and its errors.
+- **Deferrals / Follow-ups**:
+  - None yet.
+
+### P28h - Self-Service PIN Change
+
+- **Status**: ⏳ Planned
+- **Goal**: Logged-in users change their own PIN from every client.
+- **Scope**:
+  - Planned for v0.16.0. Depends on: Operator Account Administration.
+  - A PIN change route that needs the old PIN, the new PIN, and a confirmation.
+  - The flow in the Operator, desktop, and WebUI for admins and users.
+  - Reuse server hashing, validation, and lockout, and never return a PIN.
+  - Define what happens to the current session after a change.
+- **Acceptance criteria**:
+  - Admins and users can change their own PIN with the old PIN, a new PIN, and a matching confirmation.
+  - Wrong old PIN, mismatched confirmation, invalid new PIN, and lockout return clear errors.
+  - The next login needs the new PIN.
+  - The flow is available in all three clients without admin rights.
+- **Verification evidence**:
+  - Completion evidence must include server tests for each success and failure path and client tests for the validation messages.
+- **Deferrals / Follow-ups**:
+  - Profile editing beyond name and PIN stays out of scope.
+
+### P28i - Desktop Login Gate
+
+- **Status**: ⏳ Planned
+- **Goal**: The desktop asks for a PIN before the main window loads when its server is not on the same machine.
+- **Scope**:
+  - Planned for v0.16.0. Depends on: Self-Service PIN Change.
+  - A desktop connected to a localhost server is trusted and shows no login.
+  - Otherwise, show a login window before the main window: an account tile grid with `admin_panel_settings` for admins and `account_circle` for users, names below; a PIN prompt on selecting a tile.
+  - Server-unavailable and setup-incomplete messages with retry or a pointer to the Operator.
+  - No persisted session: log in each time the app opens.
+  - Add a Release Specific checklist item: "A desktop on another machine needs a PIN on every launch and after a server restart; a desktop on the server machine does not."
+- **Acceptance criteria**:
+  - With a non-localhost server, the main window is unreachable until a PIN login succeeds; with a localhost server, no login is shown.
+  - Server-unavailable and setup-incomplete states block login with clear messages.
+  - Tiles use the required icons and account names.
+  - Failed PINs and lockouts show clear errors, including the remaining lockout time.
+  - Restarting the desktop needs a new login.
+- **Verification evidence**:
+  - Completion evidence must include desktop tests for login, server unavailable, setup incomplete, wrong PIN, lockout, localhost trust, and no session reuse.
+- **Deferrals / Follow-ups**:
+  - Remembered accounts, biometrics, and offline login are out of scope.
+
+### P28j - WebUI Login Gate
+
+- **Status**: ⏳ Planned
+- **Goal**: The WebUI asks for a PIN before any library or player surface when it is not opened from the server machine.
+- **Scope**:
+  - Planned for v0.16.0. Depends on: Desktop Login Gate.
+  - Opened from localhost, the WebUI is trusted and shows no login.
+  - Otherwise, show the account tile grid before the shell, library, player, or random controls, with the same icons as the desktop.
+  - PIN prompt, setup-incomplete message, and no persisted session: log in on every open or reload.
+  - API and event stream calls carry the session after login.
+  - Add a Release Specific checklist item: "The WebUI from another device needs a PIN on every open and reload, on desktop and phone browsers; from the server machine it does not."
+- **Acceptance criteria**:
+  - From another device, no library, random, or player surface is reachable before login; from localhost, no login is shown.
+  - Tiles use the required icons and names at desktop and mobile widths.
+  - Failed PINs and lockouts show clear errors, including the remaining lockout time.
+  - Reloading or reopening needs a new login.
+  - API and event stream traffic uses the logged-in session.
+- **Verification evidence**:
+  - Completion evidence must include WebUI tests for gating, login, setup incomplete, wrong PIN, lockout, session use, and reload, and `npm run verify`.
+- **Deferrals / Follow-ups**:
+  - Offline PWA login and remember-me sessions are out of scope.
+
+### P28k - Per-User Source Permissions
+
+- **Status**: ⏳ Planned
+- **Goal**: Admins choose which sources each user sees, and the source access policy enforces it.
+- **Scope**:
+  - Planned for v0.16.0. Depends on: Source Access Policy, Operator Account Administration, and Operator Source and Item Management.
+  - Per-source, per-user access in the Operator's Manage Sources section.
+  - Grants are stored in the account store against account ids and catalog source ids. A grant for a source id that is not in the catalog (for example after a catalog import) is ignored and shown as stale in the Operator.
+  - Enforce denied sources through the source access policy on every path it covers, including `GET /api/media/{idOrToken}`, `GET /api/thumbnail/{itemId}`, and `POST /api/play/{itemId}`.
+  - Admins and localhost connections see every source.
+  - Groups, invitations, and audit reporting stay out of scope.
+- **Acceptance criteria**:
+  - Admins can grant or deny each user each source in the Operator.
+  - Denied sources and their items are invisible to that user on every policy path.
+  - A denied item cannot be streamed, played, or have its thumbnail read, even by a client that knows its id.
+  - Permission changes reach active sessions through events or requery.
+  - Grants survive account and source renames, and a catalog import leaves grants for missing sources inert.
+- **Verification evidence**:
+  - Completion evidence must include policy tests for every path with a denied source, direct-id bypass tests, a catalog-import test for stale grants, and Operator UI tests for permission editing.
+- **Deferrals / Follow-ups**:
+  - None yet.
+
+### P28l - Permission-Aware Clients
+
+- **Status**: ⏳ Planned
+- **Goal**: Desktop and WebUI show only what the server allows the logged-in user, with clear empty and denied states.
+- **Scope**:
+  - Last milestone of the accounts release, planned for v0.16.0. Depends on: Per-User Source Permissions, and Desktop Source Management Link.
+  - Desktop and WebUI source lists, library browse, random playback, and item playback rely only on what the server returns for the session.
+  - The desktop **Manage Sources** link is shown only to admins and localhost.
+  - Messages for a user with no visible sources and for an item that becomes inaccessible.
+  - Update docs and the testing checklist for per-user source visibility.
+  - Add a Release Specific checklist item: "An admin and a user account on desktop and WebUI see only their allowed sources, and a permission change in the Operator reaches both clients without a restart."
+- **Acceptance criteria**:
+  - Desktop and WebUI never show denied sources or play denied items.
+  - Permission changes made in the Operator reach both clients through events or requery.
+  - Client filtering cannot widen what the server returns.
+  - Users without admin rights do not see the Manage Sources link.
+- **Verification evidence**:
+  - Completion evidence must include desktop and WebUI tests for hidden sources, inaccessible items, and the link's visibility.
+- **Deferrals / Follow-ups**:
+  - Client requests for source access, approval workflows, and external sharing remain out of scope.
 
 ---
 
