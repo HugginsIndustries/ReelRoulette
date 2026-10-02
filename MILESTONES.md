@@ -91,54 +91,356 @@ Do not use this file for detailed architecture explanation or current capability
 
 Last milestone completed: M10i20
 
-### M10j1 - Remove library.json Library Support
+### M10j1 - Server Data Folder Override
 
 - **Status**: ⏳ Planned
-- **Goal**: Remove `library.json` as a library format in v0.14.0 so startup no longer migrates or recovers a catalog from JSON, and the JSON-to-SQLite importer is gone. Import already does not accept a `library.json` archive.
+- **Goal**: Let verification scripts and tests point the server at a temporary data folder on every OS, so they never read or write the developer's real settings, catalog, or thumbnails.
 - **Scope**:
-  - Depends on: removal of the client-authority sync routes.
-  - This milestone ships in v0.14.0. Removing those routes is the last milestone in the v0.13.0 release.
-  - Startup does not look for `library.json` or `library.json.migrated`. Those files do not change open, refuse, or empty-catalog behavior. A missing `library.db` creates an empty catalog with SQL, not by parsing an empty document. A healthy `library.db` opens. A corrupt `library.db` is quarantined and startup refuses with the same result it uses when those files are absent. They are not read, not a restore path, and not deleted. Startup and user-facing strings do not mention either file.
+  - This is the first milestone in the v0.14.0 release. It comes first so later milestones can verify the server on Windows without touching real settings.
+  - Why: `verify-web-deploy.ps1` isolates data by setting `APPDATA` on Windows and `XDG_CONFIG_HOME` on Linux. Setting `APPDATA` does not redirect `Environment.GetFolderPath` on Windows, so that script currently runs against real settings there. On Linux it does not set `XDG_DATA_HOME`, so thumbnails still resolve under the real `LocalApplicationData` folder. `set-release-version.ps1` runs that script by default.
+  - Add one server helper that reads an environment variable such as `REELROULETTE_DATA_DIR` and otherwise falls back to the current folder lookup (`ApplicationData/ReelRoulette` for data, `LocalApplicationData/ReelRoulette/thumbnails` for thumbnails). With the override set, data lives in the override folder and thumbnails under `<override>/thumbnails`.
+  - Use that helper at every place the server and ServerApp resolve their data or thumbnail folder: `ServerHostComposition` (three places), `CoreSettingsService`, `LibraryPlaybackService`, `RefreshPipelineService` (data and thumbnail folders), `ServerLogService`, `ServerStateService`, `LibraryOperationsService`, `LibraryCatalogHost` (thumbnail folder), and the ServerApp `Program.cs` data folder lookup. Explicit constructor path overrides keep precedence.
+  - `verify-web-deploy.ps1` sets the override to its temporary folder on every OS, in place of the `APPDATA` / `XDG_CONFIG_HOME` split.
+  - Remove the `APPDATA` scope (`AppDataScope`) in `RefreshPipelineServiceTests`, which has no effect on `Environment.GetFolderPath` on Windows. Those tests pass their temporary folder explicitly.
+  - Tests that construct `ServerStateService` pass a data folder override instead of falling back to the real folder.
+  - Also check `ReelRoulette.Core.SystemChecks`: it constructs `ServerStateService()` with no override, which creates the real data folder if it is missing.
+  - Desktop data folder resolution is out of scope.
+  - Needs a Windows VM pass.
+- **Acceptance criteria**:
+  - With the environment variable set, the server reads and writes settings, catalog, backups, logs, and thumbnails only under that folder, with thumbnails under `<override>/thumbnails`.
+  - With the variable unset, the server resolves the same folders as before.
+  - No server or ServerApp code outside the helper calls `Environment.GetFolderPath` for its data or thumbnail folder.
+  - `verify-web-deploy.ps1` leaves the real `ApplicationData/ReelRoulette` and `LocalApplicationData/ReelRoulette` folders untouched on Windows and Linux.
+  - No test sets `APPDATA` to isolate data, and every test that constructs `ServerStateService` passes an override.
+- **Verification evidence**:
+  - Completion evidence must include helper tests for the set and unset cases, a run of `verify-web-deploy.ps1` on Windows and Linux showing the real folders' contents and timestamps unchanged, and a passing build and test run.
+  - Docs evidence must include `docs/dev-setup.md` describing the override and the verification-script rules it satisfies.
+- **Deferrals / Follow-ups**:
+  - None yet.
+
+### M10j2 - Dead Code Removal Without Contract Changes
+
+- **Status**: ⏳ Planned
+- **Goal**: Remove code that nothing calls at runtime, on every surface, without changing the API contract or user-visible behavior.
+- **Scope**:
+  - Ships in v0.14.0. Code that only tests call counts as unused. Test hooks that hold or observe a production code path stay (`Hold*` / `*Entered` and `CancelRunsForShutdown` in `RefreshPipelineService`, `LibraryCatalogBackup.WaitForPending`, `ClientLogRelay.DisableForTests`, `AppDataManager.UseDirectoryForTests`).
+  - Found by the v0.14.0 planning report: the Roslyn unused-member analyzers (IDE0051, IDE0052, IDE0060) run on a copy of the repo, TypeScript `--noUnusedLocals --checkJs`, and caller searches. Removing one item can leave others unused, so re-run those checks until they report nothing.
+  - Three slices, each verified on its own:
+  - Desktop slice:
+    - The never-constructed `MigrationDialog` (`MigrationDialog.axaml`, `MigrationDialog.axaml.cs`, `MigrationTagViewModel`).
+    - Handlers for the removed History, Recently Played, Favorites, and Blacklist list views, which nothing wires: `HistoryPlayAgain_Click`, `RecentlyPlayedPlay_Click`, `RecentlyPlayedShowInFileManager_Click`, `RecentlyPlayedRemove_Click`, `BlacklistPlay_Click`, `BlacklistRemove_Click`, `BlacklistShowInFileManager_Click`, `FavoritesPlay_Click`, `FavoritesRemove_Click`, `FavoritesShowInFileManager_Click`, and `BlacklistCurrentVideo_Click`.
+    - `MainWindow` members with no caller: `PlayMedia(string, bool)`, `RemoveLibraryItemAsync`, `BeginLibraryArchiveOperationUI`, `EndLibraryArchiveOperationUI`, `BlacklistCurrentVideo`, `BuildGridRowModels`, `ContainsTagCaseInsensitive`, the `GetAutoTagScopeItems` stub that always returns an empty list, the `persistLibrary` parameter of `ApplyRemoteItemStateProjection`, and the unread `_rng` and `_videoExtensions` fields.
+    - The unread `EditTagDialog._categories` field and the unused `TagViewModel` class in `FilterDialog.axaml.cs`.
+    - `CoreServerApiClient.AppendClientLogAsync`, `GetVersionAsync`, and `TryReadJsonError`, and `TagSaveApply.EchoesFor`, which nothing calls. `LibraryConnectReads`, which only its test reads.
+  - Core and server slice:
+    - `State/RuntimeStateServices.cs` (randomization, filter-session, and playback-session state services), the `IPathResolver` and `IBackgroundTaskScheduler` interfaces, and `CoreFilterState` / `CoreFilterPreset` with the `CoreVerification.VerifyDtoMappingRules` check that only exists to construct them. Drop the placeholder list from the SystemChecks verbose output.
+    - `LibraryCatalogStore.DatabaseHasContent` (no caller) and `IsUsableDatabase` (tests only). `LibraryCatalogSession.ReplaceItemTags` (no caller), and `AddItemTags`, `RemoveItemTags`, and `SetPlayback`, which only tests call. Tests that seed through them move to the SQL seeding helper from the test seeding milestone, or to the production write they stand in for.
+    - The full-catalog read on every open: `LibraryCatalogStore.Open` builds `LibraryCatalogOpenResult.Catalog`, and only tests read it. Measured on a 48,938-item catalog at about 360-450 ms and about 100 MB of allocations at each server start. Tests read the snapshot through `LibraryCatalogStore.Read` instead.
+    - `ServerSessionStore.GetActiveSessionCount`, `ServerStateService.GetSubscriberCount`, `MediaPlayableExtensions.IsPhotoExtension`, `CoreSettingsService.ReloadFromDisk`, `FilterStateProjection.ToModel`, and `RefreshPipelineService.GetSettings`, `GetWebRuntimeSettings`, and `UpdateWebRuntimeSettings`. Keep `RefreshPipelineService.UpdateSettings` for the auto-refresh reschedule fix in the post-migration fixes milestone.
+    - The unread `CoreSettingsService._logger` and `RefreshPipelineService.JsonOptions` fields.
+    - The `catalog ?? LibraryCatalogHost.Open(...)` fallbacks in `LibraryOperationsService`, `LibraryPlaybackService`, `RefreshPipelineService`, and `ServerStateService` are reached only from tests. Remove them if the server data folder override leaves no test that needs them.
+  - WebUI and scripts slice:
+    - The unread `filterActiveTab` in `app.js`.
+    - The flat-tag branch in the WebUI filter Tags tab (`legacyFlat` in `app.js`), which renders tags when the catalog has no categories. The server always keeps Uncategorized and no longer has a no-categories tag path, so this branch cannot be reached.
+    - `tools/scripts/publish-web.ps1`, which writes a `.web-deploy` folder that nothing reads, and `tools/scripts/verify-web.ps1`, which only runs `npm install` and `npm run verify`. Remove their references in `docs/dev-setup.md` and `docs/domain-inventory.md`.
+- **Acceptance criteria**:
+  - Every item listed above is gone, or the evidence says why it stayed.
+  - The unused-member analyzers and TypeScript unused-locals checks report nothing new for product code.
+  - `LibraryCatalogStore.Open` does not read the full catalog, and server startup does not build a catalog snapshot.
+  - API routes, OpenAPI, generated WebUI types, desktop and WebUI behavior, and the Operator are unchanged.
+  - Test hooks listed in scope still exist and their tests pass.
+- **Verification evidence**:
+  - Evidence placeholders maintained at planned state; completion evidence must include the analyzer and TypeScript check output before and after each slice, `dotnet build ReelRoulette.sln`, `dotnet test ReelRoulette.sln`, `npm run verify`, and the SystemChecks run.
+  - Docs evidence must include `docs/dev-setup.md`, `docs/domain-inventory.md`, and `CONTEXT.md` no longer naming removed scripts or types.
+- **Deferrals / Follow-ups**:
+  - Unused routes and contract types are the preset match route removal milestone.
+
+### M10j3 - Remove the Preset Match Route
+
+- **Status**: ⏳ Planned
+- **Goal**: Remove `POST /api/presets/match`, which no client calls, and lock the desktop and WebUI preset comparisons to one shared fixture.
+- **Scope**:
+  - Ships in v0.14.0. Contract change in its own slice.
+  - The desktop `CoreServerApiClient.MatchPresetAsync` is the route's only client method, and only a test calls it. The desktop compares presets with `LibraryPresetSelection.FiltersEqual`, and the WebUI with `filterStatesEqualForPresetMatch`. Neither asks the server.
+  - Remove the route, `PresetMatchRequest` and `PresetMatchResponse` from `ApiContracts.cs` and `shared/api/openapi.yaml`, the regenerated WebUI types, the desktop client method and its request and response types, and the tests that call them.
+  - Remove the server-side preset equality that only the route uses: `LibraryPlaybackService.TryMatchPreset`, `ResolvePresetByFilterState`, `ParseFilterState`, `FilterStateProjection`, and the token and value helpers only `ParseFilterState` calls.
+  - `POST /api/random` still resolves `presetId` by name.
+  - Add a shared fixture under `shared/fixtures/` listing pairs of filter states with whether they are the same preset, covering at least an unset global match mode against an explicit AND, per-category local match modes, include and exclude tags, source inclusion, media type, audio filter, duration bounds, and a saved filter that still carries `tagMatchMode`. Desktop and WebUI preset-equality tests both run against it.
+- **Acceptance criteria**:
+  - The route, its contract types, and its generated WebUI types are gone, and `npm run verify:contracts` passes.
+  - The server has no preset equality code. `POST /api/random` with `presetId` gives the same result as before.
+  - Desktop and WebUI preset-equality tests read the same fixture, and changing an expected result in it fails both.
+  - The desktop filter dialog and library preset list, and the WebUI filter dialog preset heading, behave as before.
+- **Verification evidence**:
+  - Evidence placeholders maintained at planned state; completion evidence must include `dotnet test ReelRoulette.sln`, `npm run verify`, and a check that a flipped fixture entry fails both the desktop and WebUI tests.
+  - Docs evidence must include `docs/api.md` no longer listing the route.
+- **Deferrals / Follow-ups**:
+  - None yet.
+
+### M10j4 - Document Unlisted Server Routes in OpenAPI
+
+- **Status**: ⏳ Planned
+- **Goal**: Every route the server serves to clients is in `shared/api/openapi.yaml`.
+- **Scope**:
+  - Ships in v0.14.0. Additive contract change in its own slice.
+  - The server serves four routes that the spec does not list: `GET` and `POST /api/backup/settings`, `GET /api/library/stats`, `GET` and `POST /api/web-runtime/settings`, and `GET` and `POST /control/startup`. The desktop calls the first three, and the Operator calls the web-runtime and startup routes.
+  - Add them to the spec with the request and response shapes the server returns today, and regenerate the WebUI types.
+  - `/`, `/runtime-config.json`, and `/health` stay out of the spec.
+  - No server or client behavior changes.
+- **Acceptance criteria**:
+  - Each listed route and method is in the spec, and its schema matches what the server returns.
+  - The spec's paths and the server's mapped API and control routes match, apart from the three left out above.
+  - `npm run verify:contracts` passes after regeneration.
+- **Verification evidence**:
+  - Evidence placeholders maintained at planned state; completion evidence must include a path diff between the spec and the server's mapped routes, a contract test or captured response per route, and `npm run verify`.
+  - Docs evidence must include `docs/api.md` listing the routes.
+- **Deferrals / Follow-ups**:
+  - None yet.
+
+### M10j5 - Seed Tests Through SQL
+
+- **Status**: ⏳ Planned
+- **Goal**: Tests build their catalog in `library.db` directly, so removing `library.json` support does not touch what they check.
+- **Scope**:
+  - Ships in v0.14.0. Test-only. No product change.
+  - Measured during v0.14.0 planning: with startup `library.json` migration switched off, 81 tests fail because they seed through `library.json`. By class: `LibraryOperationsServiceTests` 23, `LibraryCatalogStoreTests` 21, `RefreshPipelineServiceTests` 17, `LibraryPlaybackServiceTests` 12, `LibraryArchiveMigrationTests` 4, `LibraryListQueryTests` 2, `LibraryCatalogSessionTests` 1, `PlayItemOrchestrationTests` 1.
+  - Add one test seeding helper that creates a schema version 2 catalog and writes sources, categories, tags, items, item tags, and presets with SQL.
+  - Move every test that seeds through `library.json` to that helper, except tests whose subject is `library.json` migration or recognition. Those stay unchanged until the removal milestone deletes them.
+  - Each moved test checks the same thing as before.
+- **Acceptance criteria**:
+  - With startup `library.json` migration switched off on a scratch copy, the only failing tests are those whose subject is `library.json` migration or recognition.
+  - No test outside that set writes `library.json`.
+  - The test count and pass count are unchanged on the real code.
+- **Verification evidence**:
+  - Evidence placeholders maintained at planned state; completion evidence must include `dotnet test ReelRoulette.sln` before and after, and the scratch-copy run with migration switched off listing the remaining failures.
+- **Deferrals / Follow-ups**:
+  - None yet.
+
+### M10j6 - Remove library.json Library Support
+
+- **Status**: ⏳ Planned
+- **Goal**: Remove `library.json` as a library format, the schema 1 catalog migration, and the side-file copy in v0.14.0, so the catalog store only opens or creates a schema version 2 `library.db`.
+- **Scope**:
+  - Depends on: seeding tests through SQL.
+  - Ships in v0.14.0.
+  - Startup does not look for `library.json` or `library.json.migrated`. Those files do not change open, refuse, or empty-catalog behavior. A missing `library.db` creates an empty catalog with SQL, not by parsing an empty document, whether or not `library.json` is present. `library.json` is left untouched. A healthy `library.db` opens. A corrupt `library.db` is quarantined and startup refuses with the same result it uses when those files are absent. They are not read, not a restore path, and not deleted. Startup and user-facing strings do not mention either file.
   - Delete the JSON-to-SQLite importer, including `PrepareIncomingFromJson`. Tests build a catalog in `library.db`. They do not write `library.json` to create one.
-  - Deleting that importer does not remove the schema 1 to schema 2 migration. A schema 1 database still migrates on open. A missing database is created empty at schema version 2 and does not read `presets.json` or the thumbnail index.
+  - Also remove the schema 1 to schema 2 migration and the `presets.json` / `index.json` side-file copy. This overrides the earlier decision to keep the schema 1 migration: no release ever wrote a schema 1 catalog. Release builds before v0.13.0 had no catalog, and the first build after schema 1 was introduced already wrote schema version 2. That removes `LibraryCatalogStore.SideFiles.cs`, `PreviousSchemaVersion`, the schema 1 table list and health branch, the `side_files_copied` key handling, `AfterSideFileCopy`, the open result's migrated-schema flag, and the server's migrated-schema log line. A `library.db` at schema version 1 is treated like any other database with an unrecognized schema. An existing `side_files_copied` row in a catalog is left in place and not read. `presets.json`, `index.json`, and their `.migrated` copies are left untouched.
+  - Remove the desktop `LibraryArchive` JSON helpers: `LibraryJsonHasContent` in the overwrite check and `RetireUnmigratedLibraryJson` after import.
   - Import already has no `library.json` path and no zip. A file that is not a library database is rejected. A `.db` import still remaps sources. Export and catalog backups stay on `library.db`.
-  - Update current-state docs and the testing checklist to say `library.json` library support is removed.
+  - Update current-state docs and the testing checklist to say `library.json` library support is removed, including the checklist item that a v0.12.0 library migrates on first start.
+  - Needs a Windows VM pass of first-run catalog creation.
 - **Acceptance criteria**:
   - Startup does not migrate `library.json` and does not rebuild a catalog from `library.json.migrated`.
-  - A missing `library.db` creates an empty healthy `library.db` whether or not `library.json` or `library.json.migrated` is present. Those files are left in place and are not read. The empty database is created with SQL.
+  - A missing `library.db` creates an empty healthy `library.db` at schema version 2 with SQL, whether or not `library.json` or `library.json.migrated` is present. Those files are left in place and are not read. No message mentions them.
   - A healthy `library.db` opens. A corrupt `library.db` is quarantined and startup refuses the same way whether or not those JSON files are present, and it is not repaired from them.
-  - There is no JSON-to-SQLite importer and no `PrepareIncomingFromJson`. A schema 1 database still migrates to schema version 2 on open. A missing database does not read `presets.json` or the thumbnail index.
+  - There is no JSON-to-SQLite importer and no `PrepareIncomingFromJson`. There is no schema 1 migration and no side-file copy. A missing database does not read `presets.json` or the thumbnail index, and those files are left in place.
+  - A schema version 1 `library.db` is quarantined and refused like any other unrecognized database.
+  - Desktop import does not read or rename `library.json`. A folder whose only library data is `library.json` does not ask for overwrite confirmation.
   - There is no `library.json` import path and no deprecation message for that format. A `.db` import still remaps sources.
   - A file that is not a library database is not imported, including a file that used to be a `library.json` archive. Import does not replace the live catalog.
   - Startup messages and user-facing copy do not mention `library.json` or `library.json.migrated`.
   - Docs and the testing checklist describe `library.json` library support as removed in v0.14.0.
 - **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include tests that a missing database creates an empty database with SQL whether or not `library.json` or `library.json.migrated` is present and does not read `presets.json` or the thumbnail index, a schema 1 database still migrates to schema version 2 on open, a healthy database opens with those JSON files present, a corrupt database is refused the same way with or without them, a file that is not a library database is not imported, and a `.db` import still remaps sources.
+  - Evidence placeholders maintained at planned state; completion evidence must include tests that a missing database creates an empty schema version 2 database with SQL whether or not `library.json` or `library.json.migrated` is present and leaves those files untouched, does not read `presets.json` or the thumbnail index, a healthy database opens with those JSON files present, a corrupt database is refused the same way with or without them, a schema version 1 database is refused, a file that is not a library database is not imported, a `.db` import still remaps sources, and desktop import leaves `library.json` untouched.
+  - Completion evidence must include a Windows VM pass of first start with no data folder and with a data folder holding only `library.json`.
   - Docs evidence must include current-state and checklist updates that `library.json` library support is removed in v0.14.0.
 - **Deferrals / Follow-ups**:
+  - Release notes for v0.14.0 must say: users on v0.12.0 or earlier must start v0.13.0 once before updating to v0.14.0, because v0.14.0 does not convert `library.json`.
+  - Release notes for v0.14.0 must give the recovery steps for anyone who updated straight from v0.12.0 and sees an empty library: delete the new `library.db`, start v0.13.0 once to convert `library.json`, then update to v0.14.0 again.
   - Scrubbing every remaining `library.json` mention from product code, comments, user-facing copy, tests, and current-state docs is the next milestone.
   - Operator export and import stay with Operator library catalog transfer. That transfer is a `library.db` checkpoint.
   - Account and PIN tables stay with the account and PIN data model work.
 
-### M10j2 - Scrub library.json From the Product
+### M10j7 - Scrub library.json From the Product
 
 - **Status**: ⏳ Planned
-- **Goal**: Make product code, comments, user-facing copy, tests, and current-state docs read as if a JSON library never existed.
+- **Goal**: Make product code, comments, user-facing copy, tests, and current-state docs read as if a JSON library, a schema 1 catalog, and a catalog document never existed.
 - **Scope**:
   - Depends on: removal of `library.json` library support.
+  - Ships in v0.14.0.
   - Product code, comments, user-facing copy, tests, and current-state docs do not mention `library.json`, `library.json.migrated`, or a legacy flat tag list.
+  - They also do not mention the catalog document (for example "does not load the full catalog document" in `docs/api.md`, `docs/architecture.md`, `CONTEXT.md`, and the description text in `shared/api/openapi.yaml`), schema 1 or a schema 1 migration, `presets.json`, or the thumbnail `index.json`.
+  - Remove the `docs/feature-migration.md` §3.17 Tag-Catalog Migration Wizard entry, whose dialog is gone.
+  - Remove leftover comments that describe removed or "legacy" paths, such as the disabled legacy tag migration dialog and legacy local-authority comments in `MainWindow.axaml.cs` and the legacy view-model comment in `FilterDialog.axaml.cs`. Code that is still live keeps its name; `AllowLegacyTokenAuth` stays with the auth cutover.
+  - Add the desktop flows that still run locally to `docs/domain-inventory.md`, which `AGENTS.md` says it records: library database import writing the server's `library.db` from the desktop process, whole-list preset writes, preset-match heading comparison, refresh status summary parsing, and the client-owned flows that stay local by design (local-first playback, loudness baseline choice, desktop settings backups, Show in File Manager).
   - Core settings and desktop settings stay JSON. Presets and thumbnail revision, width, and height stay in the catalog. JPEG files stay in the local thumbnail directory.
   - Do not rewrite released changelog sections, completed milestone entries, `docs/full-audit.md`, `docs/velopack-migration-audit.md`, or `docs/migration-cleanup.md`. The unreleased changelog may record that the format was removed.
   - Update the testing checklist so it does not mention those names.
 - **Acceptance criteria**:
-  - Product code, comments, user-facing copy, tests, and current-state docs do not mention `library.json`, `library.json.migrated`, or a legacy flat tag list.
+  - Product code, comments, user-facing copy, tests, and current-state docs do not mention `library.json`, `library.json.migrated`, a legacy flat tag list, the catalog document, schema 1, `presets.json`, or the thumbnail `index.json`.
+  - `docs/feature-migration.md` has no Tag-Catalog Migration Wizard entry.
+  - `docs/domain-inventory.md` lists the desktop flows that still run locally and says which are local by design.
   - Core settings and desktop settings stay JSON. Presets and thumbnail metadata stay in the catalog. JPEG files stay local.
   - Released changelog sections, completed milestone entries, and the historical audit and migration notes named above are left as written.
 - **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include a search of product code, comments, user-facing copy, tests, and current-state docs that finds none of those names, plus a build and tests after the scrub.
+  - Evidence placeholders maintained at planned state; completion evidence must include a search of product code, comments, user-facing copy, tests, and current-state docs that finds none of those names, plus a build, tests, and `npm run verify` after the scrub.
   - Released changelog sections, completed milestone entries, `docs/full-audit.md`, `docs/velopack-migration-audit.md`, and `docs/migration-cleanup.md` are left as written.
 - **Deferrals / Follow-ups**:
   - Account and PIN tables stay with the account and PIN data model work.
+
+### M10j8 - Post-Migration Fixes
+
+- **Status**: ⏳ Planned
+- **Goal**: Fix defects left from the move to the server-owned catalog, one slice per defect, each with a test that fails before the fix.
+- **Scope**:
+  - Ships in v0.14.0. Five slices, each verified on its own.
+  - Source list after source import (server):
+    - Recorded as a deferral on catalog document removal: source import does not refresh the in-memory source list that `GET /api/sources` and source enable/disable read. That list is filled at startup.
+    - Confirmed during v0.14.0 planning by a throwaway test: after a successful import, the server's source list still had 0 sources and disabling the new source failed until restart.
+    - A newly imported source appears in `GET /api/sources` and can be enabled and disabled without a restart. Whether the list is refreshed after import or read from catalog rows is decided here.
+  - Auto-refresh interval reschedule (server):
+    - `POST /api/refresh/settings` writes through `CoreSettingsService` and skips `RefreshPipelineService.UpdateSettings`, so changing the auto-refresh interval or enabling auto-refresh does not reschedule the next run. Found by code reading and git history during v0.14.0 planning: the route has gone around the pipeline since the change that also split web runtime settings onto their own route.
+    - Changing auto-refresh settings through the API schedules the next run from the new settings.
+  - Catalog item tag assignment without field copy (Core):
+    - `LibraryCatalogSession.AttachTags` replaces each tagged item with `CopyWithTags`, which lists every `LibraryCatalogItem` property by hand because `Tags` is init-only. Thumbnail revision, width, and height were added to the item without being added to that copy, so the list query returned no thumbnail dimensions for tagged items until the copy was fixed.
+    - Let tags be assigned on an existing item (for example a settable `Tags`), have `AttachTags` set them in place, and remove `CopyWithTags` and its reflection test.
+    - Related trap to check while there: `InsertItem` writes neither thumbnail columns nor tags from the item it is given. Every caller passes a new item today and thumbnails arrive later through `SetThumbnail`, so nothing is lost, but an item passed in with those fields set would silently drop them.
+  - Desktop filter dialog Update Preset after preset delete (desktop):
+    - In the desktop filter dialog, **Update Preset** can stay enabled after the active preset is deleted from the preset list, although no saved preset is left to update.
+    - Found during review of the client-authority sync routes removal. The behavior existed before that work.
+    - Likely cause, not confirmed: `DeletePresetButton_Click` clears the active preset name and refreshes the heading and pending state, but does not raise the `CanUpdatePreset` change notification.
+    - The WebUI filter dialog has no Update Preset gate, so it is out of scope.
+  - Desktop scan menu items (desktop):
+    - **Scan Durations** and **Scan Loudness** check `Directory.Exists` on each source root on the desktop's own disk before asking the server to refresh. When the server runs on another machine, that check uses the wrong disk. The server decides which sources it can read.
+    - Both items request the server refresh without a local folder check, and their status and log text no longer names a single source folder.
+- **Acceptance criteria**:
+  - A source imported through `POST /api/sources/import` appears in `GET /api/sources` and can be enabled and disabled before a restart.
+  - Changing auto-refresh enabled or interval through `POST /api/refresh/settings` moves the next scheduled run to match the new settings.
+  - No code rebuilds a `LibraryCatalogItem` from another one field by field. The list query and single-item read return the same item fields for tagged and untagged items, including thumbnail revision, width, and height. `InsertItem` either writes every field it is given or its contract says which fields it ignores.
+  - After deleting the active preset while the heading shows a starred preset, **Update Preset** is disabled and the heading shows **None** or `None*`. Deleting a preset that is not active leaves **Update Preset** as it was. A headless desktop filter dialog test covers deleting the active starred preset and fails without the fix.
+  - Scan Durations and Scan Loudness do not read source folders on the desktop's disk and start a server refresh when the server is reachable.
+  - Each slice has a test that fails without its fix, or the evidence says why one cannot be written.
+- **Verification evidence**:
+  - Evidence placeholders maintained at planned state; completion evidence must include each slice's failing test before the fix and passing after it, and `dotnet test ReelRoulette.sln` with the list-query test that covers a tagged and an untagged item with catalog-only thumbnail dimensions still passing.
+- **Deferrals / Follow-ups**:
+  - WebUI reaction to `sourceStateChanged` stays with WebUI source management alignment.
+
+### M10j9 - Desktop Player View and Fullscreen Fixes
+
+- **Status**: ⏳ Planned
+- **Goal**: Desktop keyboard shortcuts work in player view and fullscreen, and the video fills the screen without leftover layout.
+- **Scope**:
+  - Ships in v0.14.0.
+  - Three related problems, all existing behavior, not regressions. Found in the v0.13.0 manual regression pass.
+  - Keyboard shortcuts (**P**, **F11**, and the rest) stop working while the pointer is over the video. With player view and fullscreen combined, the video fills the screen, so neither can be exited from the keyboard.
+    - Likely cause, not confirmed: the embedded VLC video surface takes keyboard input. The desktop never sets LibVLC's `EnableKeyInput` or `EnableMouseInput`, so both are on by default. Try turning them off so input reaches the app.
+  - Player view leaves a thin divider line from the normal layout at the top of the screen.
+    - Moving the pointer onto that line is currently the only way to make shortcuts work again in fullscreen player view, so fix the keyboard problem first or together with this one, never after.
+  - The video does not always resize to fill the screen in fullscreen or player view.
+  - Check on both Linux and Windows. Needs a Windows VM pass.
+- **Acceptance criteria**:
+  - With the pointer over the video, every keyboard shortcut works in normal, player view, fullscreen, and combined player view and fullscreen.
+  - Combined player view and fullscreen can be exited from the keyboard.
+  - Player view shows no divider line or other leftover layout.
+  - The video fills the screen in fullscreen and player view, including after switching between them and after the window is resized.
+  - Existing mouse interaction on the video, such as the scroll wheel, still works.
+- **Verification evidence**:
+  - Completion evidence must include a Linux and a Windows pass of every view combination with the pointer over the video.
+- **Deferrals / Follow-ups**:
+  - None yet.
+
+### M10j10 - Tag UI Polish
+
+- **Status**: ⏳ Planned
+- **Goal**: Tag chips, tag editor controls, and the Auto Tag dialog look and respond the same on desktop and WebUI.
+- **Scope**:
+  - Ships in v0.14.0. Four slices, one per surface change, each verified on its own.
+  - WebUI light mode tag chips and tag editor buttons:
+    - Found in the v0.12.0 manual regression pass: in light mode, tag chip text in the filter Tags tab and the tag editor is black, and the tag editor buttons outside the tag grid stay white instead of switching to dark.
+    - Dark mode stays as it is.
+  - Desktop tag chip toggle state:
+    - Found in the v0.12.0 manual regression pass: in the desktop tag editor, a tag chip's toggle state does not change when the tag is added or removed, so there is no visual feedback. The chip should change to the accent color (HugginsOrange) when applied.
+    - The WebUI tag editor is the reference for the toggle states.
+  - Desktop Auto Tag busy indicator:
+    - While an Auto Tag scan runs, the WebUI shows an in-progress indicator, but the desktop shows nothing until results arrive.
+    - Add an indeterminate busy indicator to the desktop Auto Tag dialog during the scan, matching the WebUI.
+  - Desktop filter dialog collapse toggle styling:
+    - In the desktop filter dialog's Tags tab, the per-category collapse toggle's arrow icon sits in the top-left of its button instead of centered, and the toggle is styled differently from the desktop tag editor's.
+    - Make it match the tag editor's collapse toggle, as the WebUI's filter Tags tab and tag editor already do.
+- **Acceptance criteria**:
+  - In WebUI light mode, tag chip text in the filter Tags tab and the tag editor is readable on every chip state, and the tag editor buttons outside the tag grid use light-theme colors. Switching the system theme while the tag editor is open updates both.
+  - Adding a tag in the desktop tag editor shows that chip in the accent color right away, and removing it returns the chip to its normal state. Chips show the correct state when the editor opens, in both themes.
+  - The desktop Auto Tag dialog shows an indeterminate busy indicator from the start of a scan until results arrive or the scan fails. The indicator matches the WebUI's in-progress indicator in placement and wording, and clears on success, failure, and closing the dialog.
+  - The desktop filter dialog's collapse toggle arrow is centered in its button and matches the tag editor's collapse toggle in size, icon, and styling, collapsed and expanded, in both themes.
+- **Verification evidence**:
+  - Completion evidence must include light and dark screenshots of the WebUI filter Tags tab and the tag editor, a side-by-side pass of the desktop tag editor against the WebUI tag editor, a side-by-side desktop and WebUI Auto Tag scan on a library large enough for the scan to take a visible amount of time, and side-by-side screenshots of the desktop filter dialog Tags tab and the tag editor, collapsed and expanded, in both themes.
+- **Deferrals / Follow-ups**:
+  - None yet.
+
+### M10j11 - Server Shutdown Fixes
+
+- **Status**: ⏳ Planned
+- **Goal**: Stopping the server finishes in a few seconds with clients connected, and Operator **Stop**, Operator **Restart**, and in-app update apply shut the tray down on its UI thread, so they cannot deadlock the server's shutdown.
+- **Scope**:
+  - Ships in v0.14.0. Two slices in this order: slow shutdown first, then the tray shutdown race. Needs a Windows VM pass.
+  - Slow shutdown with connected clients:
+    - Observed: stopping the server from the tray or the Operator UI takes about 25 seconds while clients are connected.
+    - Likely cause, observed but not confirmed: open event streams are only closed when the host shutdown timeout runs out, not when shutdown starts. The `/api/events` loop only watches the request's abort token, not application stopping.
+  - Tray shutdown race:
+    - No hang has been observed. A suspected hang on CachyOS after Operator **Stop** was most likely the terminal not redrawing its prompt after the server exited: pressing Enter brings the prompt back.
+    - Suspected risk from code reading, not confirmed: these paths call `StopApplication` while the tray is still running, so the stopping callback shuts the Avalonia tray down from a non-UI thread. That calls `ClassicDesktopStyleApplicationLifetime.Shutdown()` off the UI thread, which cancels the UI main loop and then waits with no timeout in `Dispatcher.UIThread.InvokeShutdown()` for a job the UI thread may never run. If that happens, the blocked callback holds the `StopApplication` lock, so the host never stops its hosted services, `RunAsync` never returns, and a restart or update never relaunches. The tray menu paths avoid this because they shut the tray down on its UI thread before calling `StopApplication`.
+    - `AvaloniaTrayHostUi.RequestUiExitAsync` posts the shutdown to the UI thread and then also calls the desktop lifetime's `Shutdown()` directly as an unconditional fallback.
+    - The code path is unchanged since v0.12.0: the ServerApp code and the Avalonia version are the same at that tag.
+    - Likely fix: always shut the tray down on its UI thread, and never call the desktop lifetime's `Shutdown()` from another thread.
+    - Windows has the same code path and is untested. Headless runs are not affected, because the headless host UI does nothing on stop.
+- **Acceptance criteria**:
+  - With desktop and WebUI clients connected, tray **Stop Server / Exit** and Operator **Stop** exit the process within a few seconds.
+  - Connected clients see the server go offline and reconnect after a restart, as they do now.
+  - Operator **Stop** exits the process, and Operator **Restart** and update apply relaunch it, on Linux with the tray and on Windows.
+  - Tray **Stop Server / Exit** and **Restart Server** still exit and relaunch cleanly.
+  - No code path calls the tray's desktop lifetime `Shutdown()` from a non-UI thread.
+- **Verification evidence**:
+  - Completion evidence must include shutdown timings with and without connected clients, before and after the fix.
+  - Completion evidence must include repeated Operator **Stop** and **Restart** runs on Linux with the tray and on Windows, each showing the process exit and, for restart, the new process.
+  - If a hang is ever reproduced, include a thread dump of the hung process to confirm the cause.
+- **Deferrals / Follow-ups**:
+  - None yet.
+
+### M10j12 - Client Status Line Overhaul
+
+- **Status**: ⏳ Planned
+- **Goal**: Each client's status line shows one stable message per situation, and desktop and WebUI show the same message for the same event.
+- **Scope**:
+  - Ships in v0.14.0. Can be cut from the release if it runs long; the Operator Testing Suite overhaul is then cut with it.
+  - Both clients' status lines can alternate between competing messages, and they often show different messages for the same event.
+  - Observed in the v0.13.0 manual regression pass: with the server stopped, the desktop alternates between "core runtime unavailable" and "core runtime is required to browse the library", and the WebUI shows "library load failed: HTTP 503" only briefly before "SSE reconnecting...". Refresh status also differs between desktop and WebUI for the same refresh.
+  - Refresh status is in scope: the same refresh stage, progress, and result read the same on both clients. Refresh summary parsing is implemented separately in each client today. If the refresh text moves to the server, that contract change is its own slice.
+  - Define one rule per client for which message wins when several apply, so the status line never alternates.
+  - Define the message for each event once and use it on both desktop and WebUI.
+- **Acceptance criteria**:
+  - With the server stopped, unavailable, or mismatched, each client's status line settles on one message and does not alternate.
+  - Desktop and WebUI show the same message for the same event.
+  - During and after a refresh, desktop and WebUI show the same refresh status.
+  - The precedence rule and the per-event messages are documented.
+- **Verification evidence**:
+  - Completion evidence must include a desktop and WebUI pass with the server stopped, the API unavailable, and an API version or capability mismatch, showing the message each client settles on, plus a side-by-side refresh showing both clients' refresh status during the run and after it finishes.
+- **Deferrals / Follow-ups**:
+  - The Operator Testing Suite overhaul checks these messages in its scenarios once they are defined.
+
+### M10j13 - Operator Testing Suite Overhaul
+
+- **Status**: ⏳ Planned
+- **Goal**: The Operator Testing Suite produces clear results that match current client connection and status handling.
+- **Scope**:
+  - Depends on: the client status line overhaul, which defines the messages these scenarios check, and the server shutdown fixes, which change how event streams close.
+  - This is the last milestone in the v0.14.0 release. It can be cut from the release if the release runs long.
+  - The suite predates the current client connection and status handling and no longer produces clear results.
+  - Observed in the v0.13.0 manual regression pass:
+    - With an API version mismatch or capability mismatch, the desktop alternates between "core runtime is required" and the mismatch warning too fast to read. The WebUI is fine.
+    - With the API unavailable, the desktop flickers between disconnected and reconnecting messages, and the WebUI shows "library load failed: HTTP 503" only briefly before settling on "SSE reconnecting...".
+    - SSE disconnect behaves inconsistently and may need redesigning.
+  - Redesign the scenarios against current client behavior.
+  - Define the expected message per client for each scenario.
+  - Verify client interactions as part of the suite.
+- **Acceptance criteria**:
+  - Each scenario lists the expected desktop and WebUI message, and both clients show it while the scenario is active.
+  - SSE disconnect behaves the same way on every run.
+  - Running and resetting each scenario leaves both clients connected and working.
+- **Verification evidence**:
+  - Completion evidence must include a pass of every scenario on desktop and WebUI, recording the message each client shows.
+- **Deferrals / Follow-ups**:
+  - None yet.
 
 ### M10m - WebUI Source Management Alignment
 
@@ -146,7 +448,7 @@ Last milestone completed: M10i20
 - **Goal**: Align WebUI source-dependent behavior with server-authoritative source state.
 - **Scope**:
   - Depends on: WebUI library query cutover.
-  - Ships in the release after the SQLite store/query sequence, together with the later account and Operator milestones.
+  - Ships after v0.14.0, together with the later account and Operator milestones.
   - Update WebUI source-aware filter/library behavior to read server-owned source state and react to `sourceStateChanged` by requery or resync.
   - Remove any WebUI-local source enabled/disabled authority or duplicated source-state assumptions.
   - Ensure library list-query browse and random playback requests honor the same source state as desktop.
@@ -1232,49 +1534,7 @@ Last milestone completed: M10i20
   - Measured on Linux before this backlog item, for both v0.12.0 import and the current import: after `Clip.mp4` is renamed to `clip.mp4`, the stored full path stays `Clip.mp4` while the relative path and file name become `clip.mp4`. Refresh then reports 0 added, 0 removed, 0 renamed, and 0 moved. The thumbnail stage reports 1 missing source. An ignore-case set of a folder that contains both `clip.mp4` and `Clip.mp4` keeps one path; an ordinal set keeps both.
   - Completion evidence must include those Linux cases after the fix, plus a Windows VM pass for the ignore-case compare.
 - **Deferrals / Follow-ups**:
-  - None yet.
-
-### P11 - Desktop Filter Dialog Update Preset After Preset Delete
-
-- **Status**: ⏳ Planned
-- **Goal**: Deleting the active preset in the desktop filter dialog disables **Update Preset**.
-- **Scope**:
-  - In the desktop filter dialog, **Update Preset** can stay enabled after the active preset is deleted from the preset list, although no saved preset is left to update.
-  - Found during review of the client-authority sync routes removal. The behavior existed before that work.
-  - Likely cause, not confirmed: `DeletePresetButton_Click` clears the active preset name and refreshes the heading and pending state, but does not raise the `CanUpdatePreset` change notification.
-  - The WebUI filter dialog has no Update Preset gate, so it is out of scope.
-- **Acceptance criteria**:
-  - After deleting the active preset while the heading shows a starred preset, **Update Preset** is disabled and the heading shows **None** or `None*`.
-  - Deleting a preset that is not active leaves **Update Preset** as it was.
-  - A headless desktop filter dialog test covers deleting the active starred preset and fails without the fix.
-- **Verification evidence**:
-  - Completion evidence must include the failing test before the fix and passing after it.
-- **Deferrals / Follow-ups**:
-  - None yet.
-
-### P12 - Server Data Folder Override
-
-- **Status**: ⏳ Planned
-- **Goal**: Let verification scripts and tests point the server at a temporary data folder on every OS, so they never read or write the developer's real settings, catalog, or thumbnails.
-- **Scope**:
-  - Why: `verify-web-deploy.ps1` isolates data by setting `APPDATA` on Windows and `XDG_CONFIG_HOME` on Linux. Setting `APPDATA` does not redirect `Environment.GetFolderPath` on Windows, so that script currently runs against real settings there. On Linux it does not set `XDG_DATA_HOME`, so thumbnails still resolve under the real `LocalApplicationData` folder. `set-release-version.ps1` runs that script by default.
-  - Add one server helper that reads an environment variable such as `REELROULETTE_DATA_DIR` and otherwise falls back to the current folder lookup (`ApplicationData/ReelRoulette` for data, `LocalApplicationData/ReelRoulette/thumbnails` for thumbnails). With the override set, data lives in the override folder and thumbnails under `<override>/thumbnails`.
-  - Use that helper at every place the server and ServerApp resolve their data or thumbnail folder: `ServerHostComposition` (three places), `CoreSettingsService`, `LibraryPlaybackService`, `RefreshPipelineService` (data and thumbnail folders), `ServerLogService`, `ServerStateService`, `LibraryOperationsService`, `LibraryCatalogHost` (thumbnail folder), and the ServerApp `Program.cs` data folder lookup. Explicit constructor path overrides keep precedence.
-  - `verify-web-deploy.ps1` sets the override to its temporary folder on every OS, in place of the `APPDATA` / `XDG_CONFIG_HOME` split.
-  - Remove the `APPDATA` scope (`AppDataScope`) in `RefreshPipelineServiceTests`, which has no effect on `Environment.GetFolderPath` on Windows. Those tests pass their temporary folder explicitly.
-  - Tests that construct `ServerStateService` pass a data folder override instead of falling back to the real folder.
-  - Desktop data folder resolution is out of scope.
-- **Acceptance criteria**:
-  - With the environment variable set, the server reads and writes settings, catalog, backups, logs, and thumbnails only under that folder, with thumbnails under `<override>/thumbnails`.
-  - With the variable unset, the server resolves the same folders as before.
-  - No server or ServerApp code outside the helper calls `Environment.GetFolderPath` for its data or thumbnail folder.
-  - `verify-web-deploy.ps1` leaves the real `ApplicationData/ReelRoulette` and `LocalApplicationData/ReelRoulette` folders untouched on Windows and Linux.
-  - No test sets `APPDATA` to isolate data, and every test that constructs `ServerStateService` passes an override.
-- **Verification evidence**:
-  - Completion evidence must include helper tests for the set and unset cases, a run of `verify-web-deploy.ps1` on Windows and Linux showing the real folders' contents and timestamps unchanged, and a passing build and test run.
-  - Docs evidence must include `docs/dev-setup.md` describing the override and the verification-script rules it satisfies.
-- **Deferrals / Follow-ups**:
-  - None yet.
+  - Deferred past v0.14.0: Windows enumeration casing has not been measured, an ordinal compare there risks removing and re-adding items, and a v0.14.0 planning query of a real 48,938-item catalog found no case-only path collisions.
 
 ### P13 - WebUI Android PWA Install
 
@@ -1289,116 +1549,7 @@ Last milestone completed: M10i20
 - **Verification evidence**:
   - Completion evidence must include an Android device pass and an iOS pass.
 - **Deferrals / Follow-ups**:
-  - None yet.
-
-### P14 - WebUI Light Mode Tag Chips and Tag Editor Buttons
-
-- **Status**: ⏳ Planned
-- **Goal**: Tag chips and tag editor buttons are readable in WebUI light mode.
-- **Scope**:
-  - Found in the v0.12.0 manual regression pass: in light mode, tag chip text in the filter Tags tab and the tag editor is black, and the tag editor buttons outside the tag grid stay white instead of switching to dark.
-  - Dark mode stays as it is.
-- **Acceptance criteria**:
-  - In light mode, tag chip text in the filter Tags tab and the tag editor is readable on every chip state.
-  - In light mode, the tag editor buttons outside the tag grid use light-theme colors.
-  - Switching the system theme while the tag editor is open updates both.
-- **Verification evidence**:
-  - Completion evidence must include light and dark screenshots of the filter Tags tab and the tag editor.
-- **Deferrals / Follow-ups**:
-  - None yet.
-
-### P15 - Desktop Tag Chip Toggle State
-
-- **Status**: ⏳ Planned
-- **Goal**: Desktop tag chips show whether a tag is applied as you add or remove it, as the WebUI does.
-- **Scope**:
-  - Found in the v0.12.0 manual regression pass: in the desktop tag editor, a tag chip's toggle state does not change when the tag is added or removed, so there is no visual feedback. The chip should change to the accent color (HugginsOrange) when applied.
-  - The WebUI tag editor is the reference for the toggle states.
-- **Acceptance criteria**:
-  - Adding a tag in the desktop tag editor shows that chip in the accent color right away, and removing it returns the chip to its normal state.
-  - Chips show the correct state when the editor opens, in both themes.
-- **Verification evidence**:
-  - Completion evidence must include a side-by-side pass against the WebUI tag editor.
-- **Deferrals / Follow-ups**:
-  - None yet.
-
-### P16 - Server Tray Shutdown Race
-
-- **Status**: ⏳ Planned
-- **Goal**: Operator **Stop**, Operator **Restart**, and in-app update apply shut the tray down on its UI thread, so they cannot deadlock the server's shutdown.
-- **Scope**:
-  - No hang has been observed. A suspected hang on CachyOS after Operator **Stop** was most likely the terminal not redrawing its prompt after the server exited: pressing Enter brings the prompt back.
-  - Suspected risk from code reading, not confirmed: these paths call `StopApplication` while the tray is still running, so the stopping callback shuts the Avalonia tray down from a non-UI thread. That calls `ClassicDesktopStyleApplicationLifetime.Shutdown()` off the UI thread, which cancels the UI main loop and then waits with no timeout in `Dispatcher.UIThread.InvokeShutdown()` for a job the UI thread may never run. If that happens, the blocked callback holds the `StopApplication` lock, so the host never stops its hosted services, `RunAsync` never returns, and a restart or update never relaunches. The tray menu paths avoid this because they shut the tray down on its UI thread before calling `StopApplication`.
-  - The code path is unchanged since v0.12.0: the ServerApp code and the Avalonia version are the same at that tag.
-  - Likely fix: always shut the tray down on its UI thread, and never call the desktop lifetime's `Shutdown()` from another thread.
-  - Windows has the same code path and is untested. Headless runs are not affected, because the headless host UI does nothing on stop.
-- **Acceptance criteria**:
-  - Operator **Stop** exits the process, and Operator **Restart** and update apply relaunch it, on Linux with the tray and on Windows.
-  - Tray **Stop Server / Exit** and **Restart Server** still exit and relaunch cleanly.
-  - No code path calls the tray's desktop lifetime `Shutdown()` from a non-UI thread.
-- **Verification evidence**:
-  - Completion evidence must include repeated Operator **Stop** and **Restart** runs on Linux with the tray and on Windows, each showing the process exit and, for restart, the new process.
-  - If a hang is ever reproduced, include a thread dump of the hung process to confirm the cause.
-- **Deferrals / Follow-ups**:
-  - None yet.
-
-### P17 - Slow Server Shutdown With Connected Clients
-
-- **Status**: ⏳ Planned
-- **Goal**: Stopping the server while clients are connected finishes in a few seconds.
-- **Scope**:
-  - Observed: stopping the server from the tray or the Operator UI takes about 25 seconds while clients are connected.
-  - Likely cause, observed but not confirmed: open event streams are only closed when the host shutdown timeout runs out, not when shutdown starts.
-- **Acceptance criteria**:
-  - With desktop and WebUI clients connected, tray **Stop Server / Exit** and Operator **Stop** exit the process within a few seconds.
-  - Connected clients see the server go offline and reconnect after a restart, as they do now.
-- **Verification evidence**:
-  - Completion evidence must include shutdown timings with and without connected clients, before and after the fix.
-- **Deferrals / Follow-ups**:
-  - None yet.
-
-### P18 - Client Status Line Overhaul
-
-- **Status**: ⏳ Planned
-- **Goal**: Each client's status line shows one stable message per situation, and desktop and WebUI show the same message for the same event.
-- **Scope**:
-  - Both clients' status lines can alternate between competing messages, and they often show different messages for the same event.
-  - Observed in the v0.13.0 manual regression pass: with the server stopped, the desktop alternates between "core runtime unavailable" and "core runtime is required to browse the library", and the WebUI shows "library load failed: HTTP 503" only briefly before "SSE reconnecting...". Refresh status also differs between desktop and WebUI for the same refresh.
-  - Refresh status is in scope: the same refresh stage, progress, and result read the same on both clients.
-  - Define one rule per client for which message wins when several apply, so the status line never alternates.
-  - Define the message for each event once and use it on both desktop and WebUI.
-- **Acceptance criteria**:
-  - With the server stopped, unavailable, or mismatched, each client's status line settles on one message and does not alternate.
-  - Desktop and WebUI show the same message for the same event.
-  - During and after a refresh, desktop and WebUI show the same refresh status.
-  - The precedence rule and the per-event messages are documented.
-- **Verification evidence**:
-  - Completion evidence must include a desktop and WebUI pass with the server stopped, the API unavailable, and an API version or capability mismatch, showing the message each client settles on, plus a side-by-side refresh showing both clients' refresh status during the run and after it finishes.
-- **Deferrals / Follow-ups**:
-  - The Operator Testing Suite overhaul checks these messages in its scenarios once they are defined.
-
-### P19 - Operator Testing Suite Overhaul
-
-- **Status**: ⏳ Planned
-- **Goal**: The Operator Testing Suite produces clear results that match current client connection and status handling.
-- **Scope**:
-  - Depends on: the client status line overhaul, which defines the messages these scenarios check.
-  - The suite predates the current client connection and status handling and no longer produces clear results.
-  - Observed in the v0.13.0 manual regression pass:
-    - With an API version mismatch or capability mismatch, the desktop alternates between "core runtime is required" and the mismatch warning too fast to read. The WebUI is fine.
-    - With the API unavailable, the desktop flickers between disconnected and reconnecting messages, and the WebUI shows "library load failed: HTTP 503" only briefly before settling on "SSE reconnecting...".
-    - SSE disconnect behaves inconsistently and may need redesigning.
-  - Redesign the scenarios against current client behavior.
-  - Define the expected message per client for each scenario.
-  - Verify client interactions as part of the suite.
-- **Acceptance criteria**:
-  - Each scenario lists the expected desktop and WebUI message, and both clients show it while the scenario is active.
-  - SSE disconnect behaves the same way on every run.
-  - Running and resetting each scenario leaves both clients connected and working.
-- **Verification evidence**:
-  - Completion evidence must include a pass of every scenario on desktop and WebUI, recording the message each client shows.
-- **Deferrals / Follow-ups**:
-  - None yet.
+  - Deferred past v0.14.0: the cause is not investigated and the pass needs an Android device. The service worker has shipped since before v0.12.0, and the bug was still seen in the v0.12.0 pass.
 
 ### P20 - WebUI Settings Page
 
@@ -1417,76 +1568,24 @@ Last milestone completed: M10i20
 - **Verification evidence**:
   - Completion evidence must include a desktop browser and phone pass of the settings page, and the remember option checked across a browser restart.
 - **Deferrals / Follow-ups**:
-  - None yet.
+  - Deferred past v0.14.0: the remember-filter option and whether the desktop gains a matching option need UX decisions first.
 
-### P21 - Desktop Player View and Fullscreen Fixes
-
-- **Status**: ⏳ Planned
-- **Goal**: Desktop keyboard shortcuts work in player view and fullscreen, and the video fills the screen without leftover layout.
-- **Scope**:
-  - Three related problems, all existing behavior, not regressions. Found in the v0.13.0 manual regression pass.
-  - Keyboard shortcuts (**P**, **F11**, and the rest) stop working while the pointer is over the video. With player view and fullscreen combined, the video fills the screen, so neither can be exited from the keyboard.
-    - Likely cause, not confirmed: the embedded VLC video surface takes keyboard input. The desktop never sets LibVLC's `EnableKeyInput` or `EnableMouseInput`, so both are on by default. Try turning them off so input reaches the app.
-  - Player view leaves a thin divider line from the normal layout at the top of the screen.
-    - Moving the pointer onto that line is currently the only way to make shortcuts work again in fullscreen player view, so fix the keyboard problem first or together with this one, never after.
-  - The video does not always resize to fill the screen in fullscreen or player view.
-  - Check on both Linux and Windows.
-- **Acceptance criteria**:
-  - With the pointer over the video, every keyboard shortcut works in normal, player view, fullscreen, and combined player view and fullscreen.
-  - Combined player view and fullscreen can be exited from the keyboard.
-  - Player view shows no divider line or other leftover layout.
-  - The video fills the screen in fullscreen and player view, including after switching between them and after the window is resized.
-  - Existing mouse interaction on the video, such as the scroll wheel, still works.
-- **Verification evidence**:
-  - Completion evidence must include a Linux and a Windows pass of every view combination with the pointer over the video.
-- **Deferrals / Follow-ups**:
-  - None yet.
-
-### P22 - Desktop Auto Tag Busy Indicator
+### P25 - Per-Preset Preset Writes
 
 - **Status**: ⏳ Planned
-- **Goal**: The desktop Auto Tag dialog shows that a scan is running, as the WebUI does.
+- **Goal**: Saving, renaming, reordering, or deleting a preset on one client changes only that preset on the server, so two clients editing presets do not overwrite each other.
 - **Scope**:
-  - While an Auto Tag scan runs, the WebUI shows an in-progress indicator, but the desktop shows nothing until results arrive.
-  - Add an indeterminate busy indicator to the desktop Auto Tag dialog during the scan, matching the WebUI.
+  - Found during v0.14.0 planning: the desktop and the WebUI both post the whole preset list to `POST /api/presets`, which replaces the server's preset catalog. The last writer wins, so a preset saved on one client can be lost when the other client saves its older list. This is the same client-held whole-catalog pattern as the tag sync routes removed in v0.13.0.
+  - Add per-preset write routes (save, rename, reorder, delete) and move both clients to them. Remove the whole-list replace once no client uses it.
+  - Tag rename and delete keep updating presets on the server.
+  - Contract change, crossing server, OpenAPI, generated WebUI types, desktop, and WebUI.
 - **Acceptance criteria**:
-  - The desktop Auto Tag dialog shows an indeterminate busy indicator from the start of a scan until results arrive or the scan fails.
-  - The indicator matches the WebUI's in-progress indicator in placement and wording.
-  - The indicator clears on success, failure, and closing the dialog.
+  - A preset saved on one client while the other client has its preset list open is still present after the other client saves a different preset.
+  - Rename, reorder, and delete change only the named preset.
+  - Desktop and WebUI show the same preset list after either client changes it.
+  - No client posts the whole preset list.
 - **Verification evidence**:
-  - Completion evidence must include a side-by-side desktop and WebUI scan on a library large enough for the scan to take a visible amount of time.
-- **Deferrals / Follow-ups**:
-  - None yet.
-
-### P23 - Desktop Filter Dialog Collapse Toggle Styling
-
-- **Status**: ⏳ Planned
-- **Goal**: The per-category collapse toggle in the desktop filter dialog's Tags tab looks the same as the desktop tag editor's.
-- **Scope**:
-  - In the desktop filter dialog's Tags tab, the per-category collapse toggle's arrow icon sits in the top-left of its button instead of centered, and the toggle is styled differently from the desktop tag editor's.
-  - Make it match the tag editor's collapse toggle, as the WebUI's filter Tags tab and tag editor already do.
-- **Acceptance criteria**:
-  - The filter dialog's collapse toggle arrow is centered in its button.
-  - The filter dialog's collapse toggle matches the tag editor's in size, icon, and styling, collapsed and expanded, in both themes.
-- **Verification evidence**:
-  - Completion evidence must include side-by-side screenshots of the filter dialog Tags tab and the tag editor, collapsed and expanded, in both themes.
-- **Deferrals / Follow-ups**:
-  - None yet.
-
-### P24 - Catalog Item Tag Assignment Without Field Copy
-
-- **Status**: ⏳ Planned
-- **Goal**: Reading tags onto listed catalog items assigns them on the item, so the item is no longer rebuilt field by field and a new item field cannot be dropped on tagged items. Candidate for the v0.14.0 cleanup.
-- **Scope**:
-  - `LibraryCatalogSession.AttachTags` replaces each tagged item with `CopyWithTags`, which lists every `LibraryCatalogItem` property by hand because `Tags` is init-only. Thumbnail revision, width, and height were added to the item without being added to that copy, so the list query returned no thumbnail dimensions for tagged items until the copy was fixed.
-  - Let tags be assigned on an existing item (for example a settable `Tags`), have `AttachTags` set them in place, and remove `CopyWithTags` and its reflection test.
-  - Related trap to check while there: `InsertItem` writes neither thumbnail columns nor tags from the item it is given. Every caller passes a new item today and thumbnails arrive later through `SetThumbnail`, so nothing is lost, but an item passed in with those fields set would silently drop them.
-- **Acceptance criteria**:
-  - No code rebuilds a `LibraryCatalogItem` from another one field by field.
-  - The list query and single-item read return the same item fields for tagged and untagged items, including thumbnail revision, width, and height.
-  - `InsertItem` either writes every field it is given or its contract says which fields it ignores.
-- **Verification evidence**:
-  - Completion evidence must include `dotnet test ReelRoulette.sln` with the list-query test that covers a tagged and an untagged item with catalog-only thumbnail dimensions still passing.
+  - Completion evidence must include server tests for each write, a two-client test of concurrent saves, and `npm run verify`.
 - **Deferrals / Follow-ups**:
   - None yet.
 

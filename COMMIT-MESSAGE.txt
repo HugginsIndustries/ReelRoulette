@@ -19,11 +19,11 @@ Instructions:
 
 Commit Message:
 
-Chore: Set v0.13.0 and finish the release
+Docs: Plan the v0.14.0 cleanup and polish release
 
-- Set the release version to v0.13.0 from the v0.13.0-dev.1 test build.
-- Point the changelog footer at v0.13.0 and add its compare link.
-- Fill in the v0.13.0 release notes verification from the manual pass, with the known issues users may hit.
-- Title release notes entries with the version and release name only, matching the GitHub release title.
-- Record the release-specific and release flow results in the testing checklist.
-- Move the CI check out of the checklist's Release Flow boxes into the steps after committing, since it can only pass on the committed release.
+- Plan v0.14.0 as thirteen active milestones in release order, renumbered as one series.
+- Promote the data folder override, catalog item tag copy, Update Preset after delete, player view, tag UI, shutdown, status line, and Operator testing backlog items into it.
+- Add milestones for dead-code removal, the preset match route removal with a shared preset-equality fixture, the routes missing from OpenAPI, SQL test seeding, and the fixes found during planning.
+- Extend library.json removal to the schema 1 migration, the side-file copy, and the desktop archive JSON helpers, with a release notes reminder and recovery steps for updates straight from v0.12.0.
+- Extend the scrub to catalog document, schema 1, and legacy wording, and the domain inventory's list of still-local desktop flows.
+- Add a backlog item for per-preset write routes, and record why ordinal path identity, Android PWA install, and the WebUI settings page wait past v0.14.0.
