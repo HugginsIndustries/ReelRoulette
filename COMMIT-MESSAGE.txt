@@ -19,12 +19,11 @@ Instructions:
 
 Commit Message:
 
-Docs: Restructure the planned milestones into releases after v0.14.0
+Docs: Plan client event efficiency and a v0.14.1 performance release
 
-- Close the M10 series at v0.14.0 and move every later planned milestone back under Planned Milestones with P IDs, grouped by release.
-- Add a Planned Releases outline for v0.14.0 through v0.18.0 plus the unscheduled backlog, and allow milestone IDs there in MILESTONES.md and AGENTS.md.
-- Plan the Operator administration release: Operator UI extraction, WebUI source state sync, Operator source and item management, Operator catalog transfer, a desktop link to Operator source management, and per-preset writes.
-- Split structured logging around accounts: the JSONL writer and privacy-safe log API first, then the call-site migrations and Log Viewer, with no log route alias period.
-- Rewrite the accounts release for trusted localhost, PIN login for LAN and remote clients, a separate account store, first-run setup with a one-time setup code instead of a default admin, and HTTPS through a reverse proxy, and fold Android PWA install into it.
-- Refresh the playback series and backlog items against the current code, and remove the advanced runtime and cache controls item.
-- Add to v0.14.0: a control token for non-localhost control requests, hiding the desktop's non-working source and item removal controls, and fixes to stale feature-migration and CONTEXT claims.
+- Add Client Event Efficiency to v0.14.0 as M10j9 and renumber the later v0.14.0 milestones to M10j10-M10j14: a patch-or-reload rule locked to a shared fixture, WebUI event stream resume, desktop stats coalescing, and refresh progress throttling.
+- Add desktop media type from the server and matching sort direction labels to the post-migration fixes.
+- Add the desktop Auto Tag local matching fallback and the client-side list sort to dead code removal, and keep the WebUI SSE client it would otherwise remove.
+- Correct the CONTEXT claim that both clients resume their event stream with the last event ID.
+- Plan v0.14.1 Performance: library query, random selection, desktop thumbnail memory and caching, and item IDs in the contract, with the measured costs and the tag filter query plan trap.
+- Add backlog items for shared fixtures of the remaining cross-language rules, WebUI grid rendering, and a desktop and WebUI UI rework.

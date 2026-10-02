@@ -7,13 +7,14 @@ It tracks scope, sequencing, acceptance criteria, and evidence by milestone.
 
 An outline of upcoming releases and the milestones each one ships, in order. v0.14.0 closes the M10 series; each later release becomes a new `M*` series when it is promoted.
 
-- **v0.14.0 — Cleanup and polish**: Finish the SQLite migration cleanup, fix the defects found since, and close the control plane to the LAN without a token. M10j1, M10j2, M10j3, M10j4, M10j5, M10j6, M10j7, M10j8, M10j9, M10j10, M10j11, M10j12, M10j13.
+- **v0.14.0 — Cleanup and polish**: Finish the SQLite migration cleanup, fix the defects found since, cut redundant client and refresh event work, and close the control plane to the LAN without a token. M10j1, M10j2, M10j3, M10j4, M10j5, M10j6, M10j7, M10j8, M10j9, M10j10, M10j11, M10j12, M10j13, M10j14.
+- **v0.14.1 — Performance**: Make library browse, window reloads, and random selection cheap on large catalogs, keep desktop thumbnail memory bounded, and identify items by ID in every event and response. P29a, P29b, P29c, P29d.
 - **v0.15.0 — Operator administration**: Move source, item, and catalog administration into a tested Operator so a server plus WebUI install does not need the desktop app. P26a, P26b, P26c, P26d, P26e, P25.
 - **v0.15.1 — Structured log foundation**: Write `last.log` as structured JSON Lines through one server writer and give both clients a typed, privacy-safe log API. P27a, P27b.
 - **v0.16.0 — Accounts**: Require an account PIN from LAN and remote clients, with HTTPS through a reverse proxy and per-user source access. P28a, P28b, P28c, P28d, P28e, P28f, P28g, P28h, P28i, P28j, P28k, P28l.
 - **v0.17.0 — Structured log migration and Log Viewer**: Move every desktop, server, and WebUI log to the structured API and give the Operator a filterable Log Viewer. P27c, P27d, P27e, P27f, P27g.
 - **v0.18.0 — Playback sessions**: Let the server choose direct, remux, or transcode playback per session for desktop and WebUI. P2a, P2b, P2c, P2d, P2e, P2f, P2g, P2h.
-- **Unscheduled backlog**: P1, P3, P4, P5, P6, P7, P9a, P9b, P10, P20.
+- **Unscheduled backlog**: P1, P3, P4, P5, P6, P7, P9a, P9b, P10, P20, P30, P31, P32.
 
 ## Document Purpose
 
@@ -138,6 +139,7 @@ Last milestone completed: M10i20
 - **Goal**: Remove code that nothing calls at runtime, on every surface, without changing the API contract or user-visible behavior.
 - **Scope**:
   - Ships in v0.14.0. Code that only tests call counts as unused. Test hooks that hold or observe a production code path stay (`Hold*` / `*Entered` and `CancelRunsForShutdown` in `RefreshPipelineService`, `LibraryCatalogBackup.WaitForPending`, `ClientLogRelay.DisableForTests`, `AppDataManager.UseDirectoryForTests`).
+  - The WebUI `events/sseClient.ts` (`createSseClient`) and `buildEventsUrl` in `events/eventEnvelope.ts` stay, although only their tests call them today: the client event efficiency milestone wires them into the WebUI for reconnect resume.
   - Found by the v0.14.0 planning report: the Roslyn unused-member analyzers (IDE0051, IDE0052, IDE0060) run on a copy of the repo, TypeScript `--noUnusedLocals --checkJs`, and caller searches. Removing one item can leave others unused, so re-run those checks until they report nothing.
   - Three slices, each verified on its own:
   - Desktop slice:
@@ -146,6 +148,8 @@ Last milestone completed: M10i20
     - `MainWindow` members with no caller: `PlayMedia(string, bool)`, `RemoveLibraryItemAsync`, `BeginLibraryArchiveOperationUI`, `EndLibraryArchiveOperationUI`, `BlacklistCurrentVideo`, `BuildGridRowModels`, `ContainsTagCaseInsensitive`, the `GetAutoTagScopeItems` stub that always returns an empty list, the `persistLibrary` parameter of `ApplyRemoteItemStateProjection`, and the unread `_rng` and `_videoExtensions` fields.
     - The unread `EditTagDialog._categories` field and the unused `TagViewModel` class in `FilterDialog.axaml.cs`.
     - `CoreServerApiClient.AppendClientLogAsync`, `GetVersionAsync`, and `TryReadJsonError`, and `TagSaveApply.EchoesFor`, which nothing calls. `LibraryConnectReads`, which only its test reads.
+    - The Auto Tag dialog's local matching fallback: `ItemMatchesTag` and the scan branch that runs it when no API scan is passed. Production always passes the API scan, so this branch is a client-local fallback that never runs. Found by the efficiency and divergence report.
+    - `LibraryPanelSort.Apply` and its file name comparer, an in-memory client sort that only tests call. The server sorts the list query. `IsDefaultDescendingForSortMode` and `GetSortDirectionLabel` stay: the sort control uses them. Found by the efficiency and divergence report.
     - Hide the desktop controls that cannot work because their server routes do not exist: **Rename** and **Remove** in the Manage Sources dialog, which only show "API-required and not available" after their dialogs, and **Remove from Library** in the grid's context menu, which shows its confirmation and then the same message. Found by the planned-milestones audit. They stay hidden until Operator Source and Item Management adds the routes. This is the one user-visible change in this milestone. The handlers and dialogs behind them stay: Remove from Library comes back on the new item route, and the Manage Sources dialog is replaced by Desktop Source Management Link.
   - Core and server slice:
     - `State/RuntimeStateServices.cs` (randomization, filter-session, and playback-session state services), the `IPathResolver` and `IBackgroundTaskScheduler` interfaces, and `CoreFilterState` / `CoreFilterPreset` with the `CoreVerification.VerifyDtoMappingRules` check that only exists to construct them. Drop the placeholder list from the SystemChecks verbose output.
@@ -165,6 +169,8 @@ Last milestone completed: M10i20
   - API routes, OpenAPI, generated WebUI types, desktop and WebUI behavior, and the Operator are unchanged, except that the desktop no longer shows Manage Sources **Rename** and **Remove** or the grid's **Remove from Library**.
   - The rest of the Manage Sources dialog and the grid context menu work as before.
   - Test hooks listed in scope still exist and their tests pass.
+  - `events/sseClient.ts` and `buildEventsUrl` still exist and their tests pass.
+  - The desktop Auto Tag scan has no local matching path, and the desktop has no client-side list sort.
 - **Verification evidence**:
   - Evidence placeholders maintained at planned state; completion evidence must include the analyzer and TypeScript check output before and after each slice, `dotnet build ReelRoulette.sln`, `dotnet test ReelRoulette.sln`, `npm run verify`, and the SystemChecks run, plus headless desktop tests that the three hidden controls are not shown and the rest of the Manage Sources dialog and grid context menu still are.
   - Docs evidence must include `docs/dev-setup.md`, `docs/domain-inventory.md`, and `CONTEXT.md` no longer naming removed scripts or types.
@@ -287,9 +293,10 @@ Last milestone completed: M10i20
     - §3.12 says tag rename has no web equivalent. The WebUI tag editor renames tags.
     - §3.16 says item removal is backed by a server API. There is no item removal route.
     - §3.18 names `/control/log`. The route is `/control/logs/server`.
-  - Fix two `CONTEXT.md` claims the audit found wrong:
+  - Fix three `CONTEXT.md` claims the audits found wrong:
     - It says the service worker lets Android Chrome install the WebUI. The worker registers only in a secure context and the server serves plain HTTP, so on a LAN address Chrome offers only a shortcut. Say that installing on Android needs HTTPS, for example through a reverse proxy.
     - It lists remove among the desktop grid's working bulk actions. Remove from Library has no server route and is hidden by the dead code removal milestone.
+    - It lists reconnect recovery with `Last-Event-ID` as an SSE capability without naming a client. Found by the efficiency and divergence report: only the desktop resumes with the last event ID. The WebUI opens a new event stream with no last event ID after an error, so it gets neither the missed events nor `resyncRequired`. Say that only the desktop resumes; the client event efficiency milestone updates it when the WebUI does.
   - Remove leftover comments that describe removed or "legacy" paths, such as the disabled legacy tag migration dialog and legacy local-authority comments in `MainWindow.axaml.cs` and the legacy view-model comment in `FilterDialog.axaml.cs`. Code that is still live keeps its name; `AllowLegacyTokenAuth` stays with the auth cutover.
   - Add the desktop flows that still run locally to `docs/domain-inventory.md`, which `AGENTS.md` says it records: library database import writing the server's `library.db` from the desktop process, whole-list preset writes, preset-match heading comparison, refresh status summary parsing, and the client-owned flows that stay local by design (local-first playback, loudness baseline choice, desktop settings backups, Show in File Manager).
   - Core settings and desktop settings stay JSON. Presets and thumbnail revision, width, and height stay in the catalog. JPEG files stay in the local thumbnail directory.
@@ -298,7 +305,7 @@ Last milestone completed: M10i20
 - **Acceptance criteria**:
   - Product code, comments, user-facing copy, tests, and current-state docs do not mention `library.json`, `library.json.migrated`, a legacy flat tag list, the catalog document, schema 1, `presets.json`, or the thumbnail `index.json`.
   - `docs/feature-migration.md` has no Tag-Catalog Migration Wizard entry, and its header and §3.1, §3.2, §3.9, §3.11, §3.12, §3.16, and §3.18 match the current WebUI, Operator, and routes.
-  - `CONTEXT.md` does not claim Android install works over plain HTTP or that the desktop can remove items from the library.
+  - `CONTEXT.md` does not claim Android install works over plain HTTP, that the desktop can remove items from the library, or that the WebUI resumes its event stream with the last event ID.
   - `docs/domain-inventory.md` lists the desktop flows that still run locally and says which are local by design.
   - Core settings and desktop settings stay JSON. Presets and thumbnail metadata stay in the catalog. JPEG files stay local.
   - Released changelog sections, completed milestone entries, and the historical audit and migration notes named above are left as written.
@@ -311,9 +318,9 @@ Last milestone completed: M10i20
 ### M10j8 - Post-Migration Fixes
 
 - **Status**: ⏳ Planned
-- **Goal**: Fix defects left from the move to the server-owned catalog, and close the control plane to unauthenticated LAN callers, one slice per defect, each with a test that fails before the fix.
+- **Goal**: Fix defects left from the move to the server-owned catalog and two places where desktop and WebUI disagree, and close the control plane to unauthenticated LAN callers, one slice per defect, each with a test that fails before the fix.
 - **Scope**:
-  - Ships in v0.14.0. Six slices, each verified on its own.
+  - Ships in v0.14.0. Eight slices, each verified on its own.
   - Source list after source import (server):
     - Recorded as a deferral on catalog document removal: source import does not refresh the in-memory source list that `GET /api/sources` and source enable/disable read. That list is filled at startup.
     - Confirmed during v0.14.0 planning by a throwaway test: after a successful import, the server's source list still had 0 sources and disabling the new source failed until restart.
@@ -333,6 +340,12 @@ Last milestone completed: M10i20
   - Desktop scan menu items (desktop):
     - **Scan Durations** and **Scan Loudness** check `Directory.Exists` on each source root on the desktop's own disk before asking the server to refresh. When the server runs on another machine, that check uses the wrong disk. The server decides which sources it can read.
     - Both items request the server refresh without a local folder check, and their status and log text no longer names a single source folder.
+  - Desktop media type from the server (desktop):
+    - Found by the efficiency and divergence report: the desktop decides whether the playing file is a photo or a video from its file extension, in `PlayMedia` and in the file-not-found message in `PlayFromPath`, using its own copy of the photo extension list. The playback response already carries the server's `mediaType`, and the WebUI uses it.
+    - The desktop uses the server's media type for the playing item, and its photo and video extension lists are removed. The server keeps the only extension lists.
+  - Sort direction labels (desktop and WebUI):
+    - Found by the efficiency and divergence report: the two clients label the same sort direction differently. The WebUI shows `Newest → Oldest`, `A–Z`, and `Z–A`; the desktop shows `Newest -> Oldest`, `A-Z`, and `Z-A`.
+    - Both clients use the WebUI's labels, with `→` and `–`. Check that the desktop font renders both characters in light and dark themes.
   - Control token for non-localhost control requests (server and Operator):
     - Found by the planned-milestones audit and still accurate in `docs/full-audit.md` finding 1 (`/control/*` admin plane unauthenticated when `AdminAuthMode != "TokenRequired"`): with LAN binding on, the admin auth mode defaults to `Off`, so any LAN caller can stop, restart, or update the server, change settings, and run testing scenarios. First start writes that `Off` into `core-settings.json`, so changing the default alone would leave existing installs open.
     - `docs/full-audit.md` finding 19 (`OperatorTestingService` mutations protected only by middleware policy) also still holds: the testing routes check the token themselves and do not exempt localhost, so requiring the token would lock the Operator's own testing panel out on the server machine.
@@ -351,15 +364,62 @@ Last milestone completed: M10i20
   - A non-localhost control request without the control token gets `401`, including with `Off` saved in `core-settings.json`. Localhost control requests, including the testing routes, work without it.
   - A server that has no control token creates and saves one on start.
   - On another machine, the Operator shows only the token prompt until a valid token is entered, then works; on the server machine it opens directly.
+  - The desktop decides photo or video for the playing item from the server's media type, including when that type disagrees with the file extension, and has no extension list of its own.
+  - Every sort mode and direction shows the same label on desktop and WebUI, and the desktop renders `→` and `–`.
   - Each slice has a test that fails without its fix, or the evidence says why one cannot be written.
 - **Verification evidence**:
   - Evidence placeholders maintained at planned state; completion evidence must include each slice's failing test before the fix and passing after it, and `dotnet test ReelRoulette.sln` with the list-query test that covers a tagged and an untagged item with catalog-only thumbnail dimensions still passing.
   - The control token slice's tests must cover a non-localhost request with `Off` saved, a localhost testing-route request, token generation on start, and `POST /control/pair` setting the admin cookie. The cross-machine pass is the Release Specific checklist item above.
+  - The media type slice's test must cover a playback response whose `mediaType` disagrees with the file extension. The sort label slice's tests must check every mode and direction on both clients against the same expected labels, plus one quick spot check of the desktop label in each theme.
 - **Deferrals / Follow-ups**:
   - WebUI reaction to `sourceStateChanged` stays with WebUI Source State Sync.
   - Release notes for v0.14.0 must say that opening the Operator from another machine now asks for the control token, and where to find it.
 
-### M10j9 - Desktop Player View and Fullscreen Fixes
+### M10j9 - Client Event Efficiency
+
+- **Status**: ⏳ Planned
+- **Goal**: Library events cost the clients and server only the work they need: a loaded window reloads only when an event can change what it shows, the WebUI resumes its event stream without losing events, the desktop does not refetch library stats once per event, and refresh progress does not send one event per file.
+- **Scope**:
+  - Ships in v0.14.0, right after the post-migration fixes. Four slices, each verified on its own.
+  - Found and measured by the efficiency and divergence report on a copy of a 48,938-item catalog and 13 hours of `last.log`.
+  - Patch-or-reload rule (desktop and WebUI, shared fixture):
+    - Both clients reload every loaded window on a favorite or blacklist event while the filter has `favoritesOnly` or `excludeBlacklisted` (on by default), on a playback event while sorted by last played or play count or filtered to never played, and on a tag event while any tag filter is set. A reload re-reads the window in 200-item pages, one after another. Measured: reloading 5,000 loaded tiles sorted by last played takes 2.45 s and allocates 1.1 GB on the server, per event and per client. In one minute of real use, 31 WebUI plays caused 37 play-count-sorted library queries.
+    - Reload the loaded window only when a field the event changed affects the current filter or sort; otherwise patch the tile. For example, a favorite on a loaded tile whose blacklist flag does not change patches under `excludeBlacklisted`, and a playback event under name sort patches. An event for an item that is not loaded reloads only when the change could bring it into the window.
+    - Both clients implement the rule today in `LibraryPanelBrowse.EffectFor` and `libraryQueryTileEffect`, identically but with no shared fixture. Add a fixture under `shared/fixtures/` listing event kind, the fields that changed with before and after values, whether the tile is loaded, filter, and sort, with the expected patch or reload. Desktop and WebUI tests both run against it.
+  - WebUI event stream resume (WebUI, with one server fix):
+    - The WebUI's live event stream in `app.js` opens a new `EventSource` on every error, with no last event ID. It receives neither the events published while it was away nor `resyncRequired`, so it shows stale favorites, tags, and playback until something else reloads. The desktop resumes with the last event ID.
+    - `events/sseClient.ts` already tracks the last revision and builds the stream URL with it, but only its test uses it. Wire it into the WebUI and remove the duplicate `EventSource`, reconnect timer, and stream URL code in `app.js`.
+    - `sseClient.ts` listens only for `refreshStatusChanged` and `resyncRequired`. It needs to carry every event type `app.js` handles today, with the same handling.
+    - `sseClient.ts` has its own connection status wording. The WebUI keeps the connection messages `app.js` shows today; the client status line overhaul defines them.
+    - `sseClient.ts` reconnects when no event arrives for 30 seconds, and the server sends no keepalive, so an idle stream would reconnect every 30 seconds. Decided here: add a periodic keepalive comment to the server's event stream, or drop the watchdog.
+    - Server fix found while planning this slice, from code reading: the server's revision counter starts over when it restarts, and a reconnect whose last event ID is ahead of the current revision gets no replay and no `resyncRequired`. Treat a last event ID ahead of the current revision as a gap and send `resyncRequired`.
+    - Update `CONTEXT.md` to say both clients resume with the last event ID.
+  - Desktop library stats coalescing (desktop):
+    - The desktop refetches `GET /api/library/stats` from the playback, favorite, and blacklist event handlers, from the current-file read, and after other actions, once per call. Measured: 1,723 stats fetches in 13 hours, and 116 fetches for 31 WebUI plays in one minute, about 3.7 per play. Each fetch costs about 138 ms of server time under the lock the list query and item updates also take.
+    - Coalesce them: at most one stats request in flight, a short delay to gather a burst of events, and one more request when events arrived while a request was in flight. Totals stay server-computed; the desktop does not add play counts or favorite counts itself.
+  - Refresh progress throttling (server):
+    - The fingerprint and thumbnail stages publish progress at most every 400–500 ms. The duration and loudness stages publish one `refreshStatusChanged` event per file they scan. A forced rescan of the 17,307 videos in the measured catalog sends about 17,000 events per stage, which overflows the server's 256-event replay history, so a client that reconnects during the scan gets `resyncRequired` and reloads its window.
+    - Throttle duration and loudness progress the same way as the fingerprint and thumbnail stages, and keep the stage completion event and its final counts.
+  - Add a Release Specific checklist item: "With the WebUI open, stop and restart the server, change a favorite and a tag on the desktop while the WebUI reconnects, and the WebUI shows both."
+- **Acceptance criteria**:
+  - Desktop and WebUI patch-or-reload tests read the same fixture, and changing an expected result in it fails both.
+  - Under the default filter and name sort, a favorite on a loaded tile and a playback event patch the tile and do not query the library.
+  - An event that can change which items are shown or their order still reloads the loaded window, keeping the scroll position.
+  - After the WebUI's event stream drops and reconnects, the events published in between are applied, or the WebUI receives `resyncRequired` and reloads.
+  - After a server restart, a reconnecting client whose last event ID is ahead of the server's revision receives `resyncRequired`.
+  - The WebUI has one event stream implementation, and an idle stream does not reconnect on its own.
+  - A burst of playback events on any client causes at most two desktop stats requests, and the desktop header totals match `GET /api/library/stats` once the burst settles.
+  - A duration or loudness stage over N files publishes at most one progress event per throttle interval plus its completion event, and the completion message reports the same counts as before.
+  - `CONTEXT.md` says both clients resume their event stream with the last event ID.
+- **Verification evidence**:
+  - Evidence placeholders maintained at planned state; completion evidence must include `dotnet test ReelRoulette.sln`, `npm run verify`, a check that a flipped fixture entry fails both the desktop and WebUI tests, a WebUI test that a reconnect sends the last event ID and applies replayed events, a server test for a last event ID ahead of the current revision, a desktop test counting stats requests for a burst of events, and a server test counting progress events for a duration and a loudness stage.
+  - Completion evidence must include the stats fetch count from `last.log` for the same kind of WebUI playback burst, before and after, and one quick spot check of a WebUI reconnect.
+  - The full outage pass is the Release Specific checklist item above, run in the pre-release pass.
+- **Deferrals / Follow-ups**:
+  - Making each reload cheaper (one request for the loaded window, indexed sort, no counts on later pages) is the library query performance milestone.
+  - Matching event items by ID instead of by path is the item IDs in the contract milestone.
+
+### M10j10 - Desktop Player View and Fullscreen Fixes
 
 - **Status**: ⏳ Planned
 - **Goal**: Desktop keyboard shortcuts work in player view and fullscreen, the video fills the screen without leftover layout, and every video starts with the sound the mute button shows.
@@ -396,7 +456,7 @@ Last milestone completed: M10i20
 - **Deferrals / Follow-ups**:
   - None yet.
 
-### M10j10 - Tag UI Polish
+### M10j11 - Tag UI Polish
 
 - **Status**: ⏳ Planned
 - **Goal**: Tag chips, tag editor controls, and the Auto Tag dialog look and respond the same on desktop and WebUI.
@@ -426,7 +486,7 @@ Last milestone completed: M10i20
 - **Deferrals / Follow-ups**:
   - None yet.
 
-### M10j11 - Server Shutdown Fixes
+### M10j12 - Server Shutdown Fixes
 
 - **Status**: ⏳ Planned
 - **Goal**: Stopping the server finishes in a few seconds with clients connected, and Operator **Stop**, Operator **Restart**, and in-app update apply shut the tray down on its UI thread, so they cannot deadlock the server's shutdown.
@@ -456,7 +516,7 @@ Last milestone completed: M10i20
 - **Deferrals / Follow-ups**:
   - None yet.
 
-### M10j12 - Client Status Line Overhaul
+### M10j13 - Client Status Line Overhaul
 
 - **Status**: ⏳ Planned
 - **Goal**: Each client's status line shows one stable message per situation, and desktop and WebUI show the same message for the same event.
@@ -479,7 +539,7 @@ Last milestone completed: M10i20
 - **Deferrals / Follow-ups**:
   - The Operator Testing Suite overhaul checks these messages in its scenarios once they are defined.
 
-### M10j13 - Operator Testing Suite Overhaul
+### M10j14 - Operator Testing Suite Overhaul
 
 - **Status**: ⏳ Planned
 - **Goal**: The Operator Testing Suite produces clear results that match current client connection and status handling.
@@ -1465,6 +1525,157 @@ Last milestone completed: M10i20
   - Completion evidence must include desktop and WebUI tests for hidden sources, inaccessible items, and the link's visibility.
 - **Deferrals / Follow-ups**:
   - Client requests for source access, approval workflows, and external sharing remain out of scope.
+
+### P29a - Library Query Performance
+
+- **Status**: ⏳ Planned
+- **Goal**: Library browse pages and loaded-window reloads cost about the same at any scroll depth, and a reload of the loaded window is one request.
+- **Scope**:
+  - Planned for v0.14.1.
+  - Measured by the efficiency and divergence report on a copy of a 48,938-item catalog, through the real list query in a Release build: the first 200-item page takes about 50 ms and allocates about 11 MB. The page at offset 10,000 takes 177 ms and 104 MB, and at offset 40,000 takes 221 ms and 154 MB. Reloading 5,000 loaded tiles takes 2.45 s and 1.1 GB.
+  - Causes measured in the same run:
+    - Name order uses `COLLATE ORDINAL_IGNORE_CASE`, a managed collation callback with no index, so every page sorts the whole filtered set. The same page ordered by an indexed binary column takes 0.1 ms, against 19.9 ms with the callback.
+    - Every page also runs two `COUNT(*)` queries of about 13.5 ms each, including on later pages of the same query.
+    - A reload re-reads the window in 200-item pages, one request each, and the query limit is 500.
+  - Add a stored, indexed sort key for file name whose order matches today's `OrdinalIgnoreCase` order, and order name sorts and name tie-breaks by it. A `ToLowerInvariant` key such as the existing `file_name_fold` would change today's order for names containing `_`, `[`, `\`, `]`, `^`, or `` ` ``, which sort after letters today and would sort before them. An uppercase-invariant key should keep it; the sort order tests confirm it. This is a catalog schema change with its own migration.
+  - Skip both counts when the offset is above 0. The clients keep the totals from the first page.
+  - Reload the loaded window in one request. Whether that raises the query limit or adds a reload request with its own bound is decided here; either is a contract change in its own slice.
+  - Library stats: the per-source figures join items to sources by path prefix and re-derive video or photo from the file extension in SQL. Measured: about 90 ms in `sqlite3` and 138 ms through the service. Every item in the measured catalog has a source id and a media type of 0 or 1. Group by source id and media type instead, with the same results.
+  - Drop `idx_item_tags_item_id`, which duplicates the leading `item_id` column of the `item_tags` primary key.
+  - Measured trap for the tag filter: the tag filter compares `item_tags.name` with the managed collation inside a correlated `EXISTS`, which the planner runs through `idx_item_tags_item_id` and which takes 45 ms for a 22,476-item tag. Rewriting it as `item_tags.name_fold = ?` inside the same `EXISTS` makes the planner use `idx_item_tags_name_fold` for every item, and the same filter took 55 s. The form `items.id IN (SELECT item_id FROM item_tags WHERE name_fold = ?)` takes 35 ms. Any tag filter change keeps a plan of that shape, and after `idx_item_tags_item_id` is dropped the filter still looks up tags by item id through the primary key, both checked with `EXPLAIN QUERY PLAN`.
+- **Acceptance criteria**:
+  - Name, last played, play count, duration, and date added sorts return the same items in the same order as before, including names that differ only by case and names containing `_`, `[`, `\`, `]`, `^`, or `` ` ``.
+  - A page at offset 40,000 of the measured catalog costs within a small factor of the first page, measured.
+  - Pages after the first do not run count queries, and the clients still show the totals from the first page.
+  - A reload of the loaded window is one request.
+  - Library stats return the same global and per-source figures as before on the measured catalog.
+  - Tag filters return the same items as before, and none takes longer than the current form on the measured catalog.
+  - `item_tags` has one index on `item_id`.
+- **Verification evidence**:
+  - Completion evidence must include before-and-after timings and allocations, on a copy of a large catalog in a temp folder, for the first page, offset 10,000, offset 40,000, a 5,000-tile reload, a common-tag filter, a search, and library stats, plus `EXPLAIN QUERY PLAN` for the list, count, and tag filter queries.
+  - Completion evidence must include tests that each sort order matches the previous order on a fixture with case-only and punctuation differences, the schema migration tests, `dotnet test ReelRoulette.sln`, and `npm run verify` after any contract change.
+- **Deferrals / Follow-ups**:
+  - Keyset paging instead of offsets, if the measured cost of deep offsets is still high after the sort key.
+
+### P29b - Random Selection Performance
+
+- **Status**: ⏳ Planned
+- **Goal**: A random pick over the whole library reads only what selection needs and costs a few tens of milliseconds.
+- **Scope**:
+  - Planned for v0.14.1.
+  - Measured by the efficiency and divergence report on a copy of a 48,938-item catalog: `POST /api/random` selection with the default filter takes about 240 ms and allocates about 105 MB per request, in every randomization mode. Reading the eligible items with all 28 columns takes 207 ms and 91 MB; the eligible-set signature, which lowercases and sorts every path on every request, takes 23 ms. Reading only the four columns selection needs takes 12 ms in `sqlite3`. A selective preset takes 35 ms.
+  - Read only the columns selection and the response need: id, full path, play count, and last played for the eligible set, then the selected item's response fields.
+  - Cache the eligible-set signature by catalog revision and filter, so an unchanged library and filter do not recompute it.
+  - Replace the linear scans: the smart shuffle check of each dequeued path against the eligible list, and the final lookup of the selected item.
+  - Selection results stay the same: the same modes, weights, shuffle-bag behavior, and folder spread.
+- **Acceptance criteria**:
+  - Each randomization mode picks from the same eligible set with the same weighting as before.
+  - Smart shuffle still plays every eligible item once before repeating, and rebuilds its bag when the eligible set changes.
+  - A random pick over the measured catalog with the default filter takes a few tens of milliseconds, measured before and after.
+- **Verification evidence**:
+  - Completion evidence must include before-and-after timings and allocations per randomization mode on a copy of a large catalog in a temp folder, tests that the selection rules are unchanged, and `dotnet test ReelRoulette.sln`.
+- **Deferrals / Follow-ups**:
+  - None yet.
+
+### P29c - Desktop Thumbnail Memory and Caching
+
+- **Status**: ⏳ Planned
+- **Goal**: Desktop grid thumbnail memory stays bounded however far the user scrolls, and thumbnails are fetched again only when they change.
+- **Scope**:
+  - Planned for v0.14.1.
+  - Found by the efficiency and divergence report from code reading, not measured:
+    - Each tile keeps its decoded bitmap until its item changes or leaves the loaded window, including after it scrolls out of view. Thumbnails average 370×436 in the measured catalog, about 645 KB decoded each, so scrolling through 5,000 tiles could hold about 3 GB.
+    - Each JPEG is decoded at full size, not at the tile's display size.
+    - Every change of visible rows starts a new fetch loop over the visible tiles with no cancellation, so loops overlap during scrolling and can fetch the same thumbnail twice.
+    - `GET /api/thumbnail/{itemId}` sends no cache headers, its URL has no revision, and the desktop keeps no cache of its own.
+  - Release decoded bitmaps for tiles that leave the visible rows plus overscan, and load them again when they return.
+  - Decode at the tile's display size.
+  - Cancel a fetch loop when a newer one replaces it, and fetch each thumbnail once.
+  - Add cache headers to thumbnail responses, or a revision to the thumbnail URL so it can be cached until the thumbnail changes. A revision in the URL needs the thumbnail revision in the list query page, which is a contract change in its own slice. The WebUI uses the same URLs and benefits from the same change.
+- **Acceptance criteria**:
+  - Scrolling the desktop grid through thousands of tiles and back keeps decoded thumbnail memory bounded by the visible rows plus overscan, measured.
+  - A thumbnail is fetched once while it stays unchanged and is shown again after it scrolls back into view.
+  - A regenerated thumbnail is shown on both clients without a restart.
+  - Grid layout and placeholders behave as before.
+- **Verification evidence**:
+  - Completion evidence must include desktop tests for bitmap release and fetch cancellation, the process memory after scrolling a large catalog before and after, a server test for the thumbnail cache headers or revision, `dotnet test ReelRoulette.sln`, and `npm run verify` after any contract change.
+- **Deferrals / Follow-ups**:
+  - WebUI grid rendering is its own backlog item.
+
+### P29d - Item IDs in the Contract
+
+- **Status**: ⏳ Planned
+- **Goal**: Every event and response that refers to a library item carries its item id, and desktop and WebUI match items by id instead of by path.
+- **Scope**:
+  - Planned for v0.14.1. Contract change in its own slice.
+  - Found by the efficiency and divergence report: `playbackRecorded` carries only a path, the random and play responses put the full path in `id`, while item tag events and `POST /api/play/{itemId}` use item ids. Both clients therefore match event items by path: the desktop ignoring case, and the WebUI ignoring case and treating `/` and `\` as the same.
+  - Add the item id to every event and response that refers to an item, including `playbackRecorded` and the random and play responses. Whether the random response's `id` becomes the item id, or the item id is a new field beside it, is decided here.
+  - Return duration in seconds next to, or in place of, the `hh:mm:ss` string the WebUI parses back into seconds. Which one is decided here.
+  - Desktop and WebUI match loaded tiles, the current item, and pending tag saves by item id, and stop folding paths to match them.
+- **Acceptance criteria**:
+  - Every item-related event and response in `shared/api/openapi.yaml` has an item id, and `npm run verify:contracts` passes.
+  - Desktop and WebUI apply favorite, blacklist, playback, and tag events to the right tile by item id, including for two items whose paths differ only by case.
+  - Neither client normalizes paths to match items.
+  - Duration reaches both clients as a number of seconds.
+- **Verification evidence**:
+  - Completion evidence must include contract tests for each changed event and response, desktop and WebUI tests that match by id with two paths that differ only by case, `dotnet test ReelRoulette.sln`, and `npm run verify`.
+  - Docs evidence must include `docs/api.md` for the changed events and responses.
+- **Deferrals / Follow-ups**:
+  - The server still treats paths that differ only by case as one path on Linux until Ordinal Path Identity on Linux. Matching by id on the clients removes their part of that problem.
+
+### P30 - Shared Fixtures for Cross-Language Rules
+
+- **Status**: ⏳ Planned
+- **Goal**: Every rule implemented in both C# and the WebUI is locked to one shared fixture under `shared/fixtures/`.
+- **Scope**:
+  - Unscheduled. Add each fixture the next time its rule is touched, not all at once.
+  - Found by the efficiency and divergence report: only tag name order is locked today. Preset equality, the status line messages, and the patch-or-reload rule get fixtures in their own milestones.
+  - Rules still implemented in both languages with no shared fixture:
+    - Justified grid layout: `ReelRoulette.Core.Library.LibraryGridLayout` and the WebUI `libraryGridLayout` port.
+    - Tag save reconciliation: `TagSaveApply.cs` and `tagSave.ts`.
+    - Filter duration text: the desktop filter dialog's duration labels and the WebUI's duration parse and format.
+    - Path normalization for matching items, until item ids replace it.
+  - Each fixture follows the existing tag name order pattern: one file under `shared/fixtures/`, read by a desktop or Core test and a WebUI test.
+- **Acceptance criteria**:
+  - Each listed rule has a fixture that both its C# and WebUI tests read, and changing an expected result in it fails both.
+- **Verification evidence**:
+  - Completion evidence per fixture must include a check that a flipped fixture entry fails both tests, `dotnet test ReelRoulette.sln`, and `npm run verify`.
+- **Deferrals / Follow-ups**:
+  - A rule that moves to the server no longer needs a fixture.
+
+### P31 - WebUI Grid Rendering
+
+- **Status**: ⏳ Planned
+- **Goal**: The WebUI library grid updates only the rows and tiles that change.
+- **Scope**:
+  - Unscheduled.
+  - Found by the efficiency and divergence report from code reading, not measured: each change of visible rows replaces the rows' HTML, which recreates every tile image. Each patch and each appended page rebuilds the layout and virtualizer for every loaded item, so loading a window page by page costs time that grows with the square of its size.
+  - Keep row elements that stay visible, add and remove only the rows that enter or leave, update a patched tile in place, and extend the layout for appended items instead of rebuilding it.
+  - Grid layout, scrolling, focus, and tile behavior stay as they are.
+- **Acceptance criteria**:
+  - Scrolling keeps the image elements of rows that stay visible.
+  - A favorite, blacklist, playback, or tag patch updates only the affected tile.
+  - Appending a page does not lay out the already-loaded items again.
+  - Layout results match the current layout for the same items and width.
+- **Verification evidence**:
+  - Completion evidence must include WebUI tests for row reuse, tile patching, and append layout, before-and-after timings for rendering a large window in a browser, and `npm run verify`.
+- **Deferrals / Follow-ups**:
+  - None yet.
+
+### P32 - Desktop and WebUI UI Rework
+
+- **Status**: ⏳ Planned
+- **Goal**: Rework the desktop and WebUI interfaces together so the same features look and read the same on both, keeping platform differences that are deliberate.
+- **Scope**:
+  - Unscheduled. Scope is not set yet; changes to user-facing UX need explicit approval.
+  - Deliberate differences found by the efficiency and divergence report, which stay unless this milestone changes them: single-click play in the WebUI and double-click play on the desktop, and loudness normalization and local-first playback on the desktop only.
+  - Decided here: whether the desktop keeps its filter summary line, and whether the WebUI gets one.
+- **Acceptance criteria**:
+  - Set when the scope is decided.
+- **Verification evidence**:
+  - Set when the scope is decided.
+- **Deferrals / Follow-ups**:
+  - None yet.
 
 ---
 
