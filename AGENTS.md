@@ -5,6 +5,7 @@ Keep this file short and enforceable. For details, use `CONTEXT.md`, `MILESTONES
 ## Workflow Priorities
 
 - For milestone work, read `CONTEXT.md`, then the milestone's full entry in `MILESTONES.md`.
+- Milestone verification is automated tests plus, at most, a quick manual spot check. Longer manual checks, repeated runs, and Windows VM passes go into the Release Specific section of `docs/checklists/testing-checklist.md` as one-line checks, to be run in the pre-release pass.
 - Stay within the requested milestone or task unless the user expands scope. Record anything out of scope as a deferral or backlog item instead of doing it.
 - Before sign-off, verify each acceptance criterion explicitly and call out any that are unmet.
 
