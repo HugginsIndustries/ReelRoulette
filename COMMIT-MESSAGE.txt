@@ -19,9 +19,11 @@ Instructions:
 
 Commit Message:
 
-Bugfix: Keep thumbnail dimensions on tagged items in library browse
+Chore: Set v0.13.0 and finish the release
 
-- Return thumbnail width and height for tagged items from the library list query, so both library grids lay those tiles out at their real shape instead of a 16:9 or 4:3 fallback.
-- Add a list-query test with a tagged and an untagged item whose dimensions exist only in the catalog, and a test that fails when the tag copy drops any item field.
-- Reword the library grid shape check in the testing checklist to what a tester sees.
-- Add a backlog item to assign tags on catalog items in place instead of copying each item.
+- Set the release version to v0.13.0 from the v0.13.0-dev.1 test build.
+- Point the changelog footer at v0.13.0 and add its compare link.
+- Fill in the v0.13.0 release notes verification from the manual pass, with the known issues users may hit.
+- Title release notes entries with the version and release name only, matching the GitHub release title.
+- Record the release-specific and release flow results in the testing checklist.
+- Move the CI check out of the checklist's Release Flow boxes into the steps after committing, since it can only pass on the committed release.

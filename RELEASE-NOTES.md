@@ -20,7 +20,7 @@ Use this document for public GitHub releases. Rules:
 
 ---
 
-## ReelRoulette v0.13.0 — Moving Day
+## v0.13.0 — Moving Day
 
 Your library just moved into a new home, and you don't have to lift a thing.
 
@@ -59,8 +59,13 @@ v0.13.0 rebuilds how ReelRoulette stores your library from the ground up. Big li
 
 ## Verification
 
-Full build, test, and WebUI verify passed.
-<!-- TODO: manual validation -->
+Full build, test, and WebUI verify passed. Manual testing covered the desktop app, server, and WebUI in Firefox on CachyOS; the WebUI in Firefox on a second CachyOS machine over the home network; a Pixel 8 Pro in Firefox and an iPad Pro with the WebUI installed from Safari, both over Tailscale; and a Windows 11 VM, including a fresh `Setup.exe` install and an in-app update from v0.12.0.
+
+A few known issues are still open:
+
+- Installing the WebUI on Android still adds a shortcut that opens in the browser instead of a standalone app. It works as a standalone app on iOS.
+- On desktop, keyboard shortcuts stop working while the pointer is over the video, so player view combined with fullscreen can't be left from the keyboard. Move the pointer to the thin line at the top of the screen to get them back.
+- Desktop and the WebUI don't always show the same status message, including after a refresh.
 
 ## Notes
 
@@ -72,7 +77,7 @@ Full build, test, and WebUI verify passed.
 
 ---
 
-## ReelRoulette v0.12.0 — Stay Current
+## v0.12.0 — Stay Current
 
 Install it once. Keep it current. Pick a reel from the grid — on the desktop or in the browser.
 
@@ -118,7 +123,7 @@ Full build, test, and WebUI verify passed. Manual validation covered CachyOS (de
 
 ---
 
-## ReelRoulette v0.11.0 — Cross-Platform Unlocked
+## v0.11.0 — Cross-Platform Unlocked
 
 This one's been a long time coming.
 
@@ -168,7 +173,7 @@ Full build, test, and smoke checks passed. Manual validation covered Linux porta
 
 ---
 
-## ReelRoulette v0.10.0 — Out of the Terminal
+## v0.10.0 — Out of the Terminal
 
 The command prompt window is gone. The server lives in your tray now, like it always should have.
 
@@ -201,7 +206,7 @@ Full build, test, and smoke checks passed. Manual validation covered the Windows
 
 ---
 
-## ReelRoulette v0.9.0 — It Started as a Script
+## v0.9.0 — It Started as a Script
 
 Every app starts somewhere. For ReelRoulette, it was a simple script that picked a random video. This is how far it's come.
 

@@ -157,13 +157,13 @@ An agent runs these and ticks them.
 > Add checks for features or changes in the current release. Clear these items after sign-off. If a check should outlive the release, move it to Manual Regression.
 
 - [x] A v0.12.0 library migrates on first start with favorites, tags, play history, sources, and presets intact.
-- [ ] Export Library saves a copy to a chosen folder; Import Library with the server stopped restores it and can remap source folders.
-- [ ] Favorite, tag, and playback changes made during a refresh are still there after it finishes.
+- [x] Export Library saves a copy to a chosen folder; Import Library with the server stopped restores it and can remap source folders.
+- [x] Favorite, tag, and playback changes made during a refresh are still there after it finishes.
 - [x] Stopping the server mid-refresh does not show the refresh as failed or complete, and work already done is kept.
 - [x] Desktop library grid loads more tiles as you scroll, and favorite, tag, and playback changes do not jump it back to the top.
 - [x] WebUI library overlay loads more tiles as you scroll, and reopens instantly at the same scroll position.
 - [x] Tag editor save on desktop and WebUI closes right away and shows the new tags; a failed save restores the previous tags.
-- [ ] Renaming or deleting a tag updates the applied filter and saved presets.
+- [x] Renaming or deleting a tag updates the applied filter and saved presets.
 - [x] Choosing **None** in the preset list stays on **None** until the filter changes, and an unsaved filter shows a starred name.
 - [x] A starred unsaved filter, and an explicit **None**, are still selected after restarting the desktop app.
 - [x] With **Category Combination** set to OR, the desktop filter summary says "any"; with AND it says "all".
@@ -177,8 +177,12 @@ An agent runs these and ticks them.
 
 - [x] Version set with `pwsh ./tools/scripts/set-release-version.ps1 -Version {VERSION}`, and `.version` matches the tag you will push.
 - [x] `CHANGELOG.md` `[Unreleased]` is cut into the new release section titled with the release name, and a fresh `[Unreleased]` with empty headings is above it.
-- [ ] `RELEASE-NOTES.md` has the new release entry, it follows the style guide at the top of that file, and its Verification section is filled in from this pass.
-- [x] CI passes on the commit being tagged, on both Linux and Windows.
+- [x] `CHANGELOG.md` footer links: `[Unreleased]` compares the new version with `HEAD`, and a new line for this version compares the previous version with it.
+- [x] `RELEASE-NOTES.md` has the new release entry, it follows the style guide at the top of that file, and its Verification section is filled in from this pass.
+
+After committing the release, before tagging:
+
+- CI passes on that commit, on both Linux and Windows.
 
 After tagging, keep an eye on:
 
@@ -198,7 +202,7 @@ If any check fails, record:
 ## Sign-Off
 
 - Overall result:
-  - [ ] PASS
+  - [x] PASS
   - [ ] FAIL
-- [ ] All failures and skipped checks documented.
-- [ ] Ready to tag.
+- [x] All failures and skipped checks documented.
+- [x] Ready to tag.
