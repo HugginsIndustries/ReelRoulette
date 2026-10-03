@@ -7,6 +7,7 @@ It describes current behavior and endpoint surfaces without roadmap/milestone hi
 
 - Canonical contract: `shared/api/openapi.yaml`
 - If this document and OpenAPI disagree, OpenAPI is authoritative.
+- OpenAPI lists every `/api/*` and `/control/*` route the server maps, plus `/health`. Only the WebUI shell (`/`), `/runtime-config.json`, and the Operator page (`/operator`) are left out. A test compares the spec's paths with the server's route mappings.
 - Keep this file focused on integration semantics, not implementation history.
 
 ## Contract Principles
@@ -190,6 +191,7 @@ Reconnect/resync behavior:
 - `GET /api/refresh/status`
 - `GET /api/refresh/settings`
 - `POST /api/refresh/settings`
+- Refresh settings fields are `autoRefreshEnabled`, `autoRefreshIntervalMinutes` (clamped to 5–1440), `forceRescanLoudness`, `forceRescanDuration`, and `fingerprintScanMaxDegreeOfParallelism` (clamped to 1–16). Each force flag makes the next refresh rescan that stage for every item, and the server clears it once that stage ends, unless the refresh is canceled.
 
 ### Duplicates and auto-tag
 
@@ -209,6 +211,8 @@ Reconnect/resync behavior:
 ### Control plane (operator/runtime)
 
 - `GET /control/settings` / `POST /control/settings` — `ControlRuntimeSettingsSnapshot` includes `adminAuthMode`, optional `adminSharedToken`, and optional `devChannelEnabled` (defaults to `false` / stable update channel; when toggled, the server runs an immediate Velopack **check** against the persisted value and continues periodic **check-only** background polls on schedule).
+
+- `GET /control/startup` / `POST /control/startup` — Launch Server on Startup. `GET` returns `supported`, `launchServerOnStartup`, and `message`. `POST` takes `{ launchServerOnStartup }` and returns `accepted`, `supported`, `launchServerOnStartup`, and `message`, with **409** and the same body when the change is not applied (for example, an unsupported platform, or a server run through `dotnet` rather than its app binary on Linux).
 
 - `GET /control/update/status` — current Velopack self-update phase (`notInstalled`, `idle`, `noReleases`, `checkFailed`, `upToDate`, `updateAvailable`, `downloading`, `updateReady`, `restarting`), running/target versions when relevant, and `velopackInstalled`.
 - `POST /control/update/check` — query the configured feed; does not download or apply.

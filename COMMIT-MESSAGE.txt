@@ -19,11 +19,9 @@ Instructions:
 
 Commit Message:
 
-M10j3: Remove the preset match route
+M10j4: Document unlisted server routes in OpenAPI
 
-- Server: remove `POST /api/presets/match`, its contract types, and the server-side preset equality only it used; `POST /api/random` still resolves `presetId` by name.
-- Remove the route and schemas from `openapi.yaml`, the regenerated WebUI types, and the desktop client method.
-- Desktop and WebUI compare preset tags as case-insensitive sets and sources as sets, and category modes by key in any order; the desktop treats a missing tag or source list as empty, ignores empty tag and source names, and treats an empty category mode map as none, matching the WebUI.
-- Add `shared/fixtures/preset-filter-equality.json` and lock both clients' preset comparisons to it.
-- Add a test that `POST /api/random` resolves `presetId` without an inline filter.
-- Update the API docs, current-state docs, and the changelog.
+- Add backup settings, library stats, web runtime settings, and Launch Server on Startup routes and schemas to `openapi.yaml`, and regenerate the WebUI types.
+- Add the refresh settings force rescan fields the server already returns, and remove the milestone ID from the spec description.
+- Add a test that the spec's paths match the server's route mappings, and shape tests that settings and library stats responses match their schemas.
+- Update the API docs and milestone tracking, and record a refresh settings reset found in passing.

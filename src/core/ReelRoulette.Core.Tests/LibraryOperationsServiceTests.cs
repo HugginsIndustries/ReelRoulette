@@ -788,6 +788,70 @@ public sealed class LibraryOperationsServiceTests
     }
 
     [Fact]
+    public void GetLibraryStats_ResponseMatchesSpec()
+    {
+        var appDataRoot = CreateTempAppDataRoot();
+        try
+        {
+            SeedLibrary(appDataRoot, new JsonObject
+            {
+                ["sources"] = new JsonArray
+                {
+                    new JsonObject
+                    {
+                        ["id"] = "src-a",
+                        ["rootPath"] = @"C:\media\a",
+                        ["isEnabled"] = true
+                    },
+                    new JsonObject
+                    {
+                        ["id"] = "src-empty",
+                        ["rootPath"] = @"C:\media\empty",
+                        ["displayName"] = "Empty",
+                        ["isEnabled"] = false
+                    }
+                },
+                ["items"] = new JsonArray
+                {
+                    new JsonObject
+                    {
+                        ["id"] = "video-1",
+                        ["sourceId"] = "src-a",
+                        ["fullPath"] = @"C:\media\a\v1.mp4",
+                        ["mediaType"] = "Video",
+                        ["hasAudio"] = true,
+                        ["duration"] = "00:02:00",
+                        ["playCount"] = 1
+                    }
+                },
+                ["tags"] = new JsonArray(),
+                ["categories"] = new JsonArray()
+            });
+
+            var host = LibraryCatalogHost.Open(appDataRoot, Path.Combine(appDataRoot, "thumbnails"));
+            var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot, host);
+            var json = OpenApiSpec.SerializeAsServer(service.GetLibraryStats());
+
+            OpenApiSpec.AssertMatchesSchema(json, "LibraryStatsResponse");
+            OpenApiSpec.AssertMatchesSchema(json.GetProperty("global"), "LibraryGlobalStatsResponse");
+            var sources = json.GetProperty("sources").EnumerateArray().ToList();
+            Assert.Equal(2, sources.Count);
+            foreach (var source in sources)
+            {
+                OpenApiSpec.AssertMatchesSchema(source, "SourceStatsResponse");
+            }
+        }
+        finally
+        {
+            LibraryCatalogBackup.WaitForPending();
+            if (Directory.Exists(appDataRoot))
+            {
+                Directory.Delete(appDataRoot, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public void GetLibraryStats_ShouldHandleLegacyMediaTypeAndMissingSourceId()
     {
         var appDataRoot = CreateTempAppDataRoot();

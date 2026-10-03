@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: ReelRoulette API
   version: 0.13.0
-  description: Contract-first API with M6b refresh pipeline, status/settings APIs, and thumbnail artifact retrieval endpoints.
+  description: Contract-first API with the refresh pipeline, status and settings APIs, and thumbnail artifact retrieval endpoints.
 paths:
   /health:
     get:
@@ -320,6 +320,64 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ControlSettingsApplyResponse"
+        "401":
+          description: Unauthorized when control admin auth is required and request is not paired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden when request is non-local and LAN control access is disabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /control/startup:
+    get:
+      summary: Get Launch Server on Startup status
+      operationId: getControlStartup
+      responses:
+        "200":
+          description: Whether this platform supports launching the server at sign-in, and whether it is on
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StartupLaunchStatus"
+        "401":
+          description: Unauthorized when control admin auth is required and request is not paired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden when request is non-local and LAN control access is disabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      summary: Turn Launch Server on Startup on or off
+      operationId: postControlStartup
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StartupLaunchUpdateRequest"
+      responses:
+        "200":
+          description: The change was applied
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StartupLaunchResult"
+        "409":
+          description: The change was not applied, for example because the platform does not support it
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StartupLaunchResult"
         "401":
           description: Unauthorized when control admin auth is required and request is not paired
           content:
@@ -675,6 +733,22 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+
+  /api/library/stats:
+    get:
+      summary: Get library statistics
+      description: |
+        Returns global totals and per-source totals from SQL aggregates, plus `baselineLoudnessLufs`, the
+        75th percentile of integrated loudness for videos that have audio (−18 LUFS when none qualify).
+        This read does not build the full catalog document.
+      operationId: getLibraryStats
+      responses:
+        "200":
+          description: Library statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LibraryStatsResponse"
 
   /api/library/catalog-checkpoint:
     get:
@@ -1218,6 +1292,37 @@ paths:
               schema:
                 $ref: "#/components/schemas/RefreshSettingsSnapshot"
 
+  /api/backup/settings:
+    get:
+      summary: Get core-owned backup settings
+      operationId: getBackupSettings
+      responses:
+        "200":
+          description: Backup settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BackupSettingsSnapshot"
+    post:
+      summary: Update core-owned backup settings
+      description: |
+        Clamps `minimumBackupGapMinutes` to 1–10080 and `numberOfBackups` to 1–100, persists the result,
+        and returns the stored snapshot.
+      operationId: postBackupSettings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BackupSettingsSnapshot"
+      responses:
+        "200":
+          description: Stored backup settings after clamping
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BackupSettingsSnapshot"
+
   /api/duplicates/scan:
     post:
       summary: Scan for fingerprint-based duplicate groups
@@ -1335,6 +1440,37 @@ paths:
                 properties:
                   accepted:
                     type: boolean
+  /api/web-runtime/settings:
+    get:
+      summary: Get web runtime settings
+      operationId: getWebRuntimeSettings
+      responses:
+        "200":
+          description: Web runtime settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebRuntimeSettingsSnapshot"
+    post:
+      summary: Update web runtime settings
+      description: |
+        A port of 0 or less becomes 45123, a blank `lanHostname` becomes `reel`, a blank `authMode` becomes
+        `TokenRequired`, and a blank `sharedToken` becomes null. Returns the stored snapshot.
+      operationId: postWebRuntimeSettings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WebRuntimeSettingsSnapshot"
+      responses:
+        "200":
+          description: Stored web runtime settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebRuntimeSettingsSnapshot"
+
   /api/thumbnail/{itemId}:
     get:
       summary: Get generated thumbnail by item id
@@ -1609,6 +1745,36 @@ components:
           type: array
           items:
             type: string
+
+    StartupLaunchStatus:
+      type: object
+      required: [supported, launchServerOnStartup, message]
+      properties:
+        supported:
+          type: boolean
+        launchServerOnStartup:
+          type: boolean
+        message:
+          type: string
+
+    StartupLaunchUpdateRequest:
+      type: object
+      properties:
+        launchServerOnStartup:
+          type: boolean
+
+    StartupLaunchResult:
+      type: object
+      required: [accepted, supported, launchServerOnStartup, message]
+      properties:
+        accepted:
+          type: boolean
+        supported:
+          type: boolean
+        launchServerOnStartup:
+          type: boolean
+        message:
+          type: string
 
     ControlSettingsApplyResponse:
       type: object
@@ -2419,10 +2585,177 @@ components:
         autoRefreshIntervalMinutes:
           type: integer
           format: int32
+        forceRescanLoudness:
+          type: boolean
+          description: Rescan loudness for every item on the next refresh. The server clears it once that loudness stage ends, unless the refresh is canceled.
+        forceRescanDuration:
+          type: boolean
+          description: Rescan duration for every item on the next refresh. The server clears it once that duration stage ends, unless the refresh is canceled.
         fingerprintScanMaxDegreeOfParallelism:
           type: integer
           format: int32
           description: Max parallel fingerprint hashes during core refresh (1-16).
+
+    BackupSettingsSnapshot:
+      type: object
+      required: [enabled, minimumBackupGapMinutes, numberOfBackups]
+      properties:
+        enabled:
+          type: boolean
+        minimumBackupGapMinutes:
+          type: integer
+          format: int32
+          description: Minimum minutes between backups (1-10080).
+        numberOfBackups:
+          type: integer
+          format: int32
+          description: Backups kept per kind (1-100).
+
+    WebRuntimeSettingsSnapshot:
+      type: object
+      required: [enabled, port, bindOnLan, mdnsEnabled, lanHostname, authMode, sharedToken]
+      properties:
+        enabled:
+          type: boolean
+        port:
+          type: integer
+          format: int32
+        bindOnLan:
+          type: boolean
+        mdnsEnabled:
+          type: boolean
+          description: When false, the server does not advertise `{lanHostname}.local` on the network.
+        lanHostname:
+          type: string
+        authMode:
+          type: string
+          description: Web client auth mode, such as `TokenRequired`.
+        sharedToken:
+          type: string
+          nullable: true
+
+    LibraryStatsResponse:
+      type: object
+      required: [global, sources]
+      properties:
+        global:
+          $ref: "#/components/schemas/LibraryGlobalStatsResponse"
+        sources:
+          type: array
+          items:
+            $ref: "#/components/schemas/SourceStatsResponse"
+
+    LibraryGlobalStatsResponse:
+      type: object
+      required:
+        - totalVideos
+        - totalPhotos
+        - totalMedia
+        - favorites
+        - blacklisted
+        - uniquePlayedVideos
+        - uniquePlayedPhotos
+        - uniquePlayedMedia
+        - neverPlayedVideos
+        - neverPlayedPhotos
+        - neverPlayedMedia
+        - totalPlays
+        - videosWithAudio
+        - videosWithoutAudio
+        - baselineLoudnessLufs
+      properties:
+        totalVideos:
+          type: integer
+          format: int32
+        totalPhotos:
+          type: integer
+          format: int32
+        totalMedia:
+          type: integer
+          format: int32
+        favorites:
+          type: integer
+          format: int32
+        blacklisted:
+          type: integer
+          format: int32
+        uniquePlayedVideos:
+          type: integer
+          format: int32
+        uniquePlayedPhotos:
+          type: integer
+          format: int32
+        uniquePlayedMedia:
+          type: integer
+          format: int32
+        neverPlayedVideos:
+          type: integer
+          format: int32
+        neverPlayedPhotos:
+          type: integer
+          format: int32
+        neverPlayedMedia:
+          type: integer
+          format: int32
+        totalPlays:
+          type: integer
+          format: int32
+        videosWithAudio:
+          type: integer
+          format: int32
+        videosWithoutAudio:
+          type: integer
+          format: int32
+        baselineLoudnessLufs:
+          type: number
+          format: double
+
+    SourceStatsResponse:
+      type: object
+      required:
+        - sourceId
+        - rootPath
+        - displayName
+        - isEnabled
+        - totalVideos
+        - totalPhotos
+        - totalMedia
+        - videosWithAudio
+        - videosWithoutAudio
+        - totalDurationSeconds
+        - averageDurationSeconds
+      properties:
+        sourceId:
+          type: string
+        rootPath:
+          type: string
+        displayName:
+          type: string
+          nullable: true
+        isEnabled:
+          type: boolean
+        totalVideos:
+          type: integer
+          format: int32
+        totalPhotos:
+          type: integer
+          format: int32
+        totalMedia:
+          type: integer
+          format: int32
+        videosWithAudio:
+          type: integer
+          format: int32
+        videosWithoutAudio:
+          type: integer
+          format: int32
+        totalDurationSeconds:
+          type: number
+          format: double
+        averageDurationSeconds:
+          type: number
+          format: double
+          nullable: true
 
     DuplicateScanRequest:
       type: object

@@ -214,6 +214,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/control/startup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Launch Server on Startup status */
+        get: operations["getControlStartup"];
+        put?: never;
+        /** Turn Launch Server on Startup on or off */
+        post: operations["postControlStartup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/control/logs/server": {
         parameters: {
             query?: never;
@@ -391,6 +409,28 @@ export interface paths {
          *     `POST /api/library/query`. This read does not build the full catalog document.
          */
         post: operations["postLibraryItem"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/library/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get library statistics
+         * @description Returns global totals and per-source totals from SQL aggregates, plus `baselineLoudnessLufs`, the
+         *     75th percentile of integrated loudness for videos that have audio (−18 LUFS when none qualify).
+         *     This read does not build the full catalog document.
+         */
+        get: operations["getLibraryStats"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -754,6 +794,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/backup/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get core-owned backup settings */
+        get: operations["getBackupSettings"];
+        put?: never;
+        /**
+         * Update core-owned backup settings
+         * @description Clamps `minimumBackupGapMinutes` to 1–10080 and `numberOfBackups` to 1–100, persists the result,
+         *     and returns the stored snapshot.
+         */
+        post: operations["postBackupSettings"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/duplicates/scan": {
         parameters: {
             query?: never;
@@ -833,6 +895,28 @@ export interface paths {
         put?: never;
         /** Ingest client-originated log events to centralized server log */
         post: operations["postClientLog"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/web-runtime/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get web runtime settings */
+        get: operations["getWebRuntimeSettings"];
+        put?: never;
+        /**
+         * Update web runtime settings
+         * @description A port of 0 or less becomes 45123, a blank `lanHostname` becomes `reel`, a blank `authMode` becomes
+         *     `TokenRequired`, and a blank `sharedToken` becomes null. Returns the stored snapshot.
+         */
+        post: operations["postWebRuntimeSettings"];
         delete?: never;
         options?: never;
         head?: never;
@@ -950,6 +1034,20 @@ export interface components {
             restartRequired: boolean;
             message: string;
             errors?: string[];
+        };
+        StartupLaunchStatus: {
+            supported: boolean;
+            launchServerOnStartup: boolean;
+            message: string;
+        };
+        StartupLaunchUpdateRequest: {
+            launchServerOnStartup?: boolean;
+        };
+        StartupLaunchResult: {
+            accepted: boolean;
+            supported: boolean;
+            launchServerOnStartup: boolean;
+            message: string;
         };
         ControlSettingsApplyResponse: {
             settings: components["schemas"]["ControlRuntimeSettingsSnapshot"];
@@ -1306,11 +1404,96 @@ export interface components {
             autoRefreshEnabled: boolean;
             /** Format: int32 */
             autoRefreshIntervalMinutes: number;
+            /** @description Rescan loudness for every item on the next refresh. The server clears it once that loudness stage ends, unless the refresh is canceled. */
+            forceRescanLoudness?: boolean;
+            /** @description Rescan duration for every item on the next refresh. The server clears it once that duration stage ends, unless the refresh is canceled. */
+            forceRescanDuration?: boolean;
             /**
              * Format: int32
              * @description Max parallel fingerprint hashes during core refresh (1-16).
              */
             fingerprintScanMaxDegreeOfParallelism?: number;
+        };
+        BackupSettingsSnapshot: {
+            enabled: boolean;
+            /**
+             * Format: int32
+             * @description Minimum minutes between backups (1-10080).
+             */
+            minimumBackupGapMinutes: number;
+            /**
+             * Format: int32
+             * @description Backups kept per kind (1-100).
+             */
+            numberOfBackups: number;
+        };
+        WebRuntimeSettingsSnapshot: {
+            enabled: boolean;
+            /** Format: int32 */
+            port: number;
+            bindOnLan: boolean;
+            /** @description When false, the server does not advertise `{lanHostname}.local` on the network. */
+            mdnsEnabled: boolean;
+            lanHostname: string;
+            /** @description Web client auth mode, such as `TokenRequired`. */
+            authMode: string;
+            sharedToken: string | null;
+        };
+        LibraryStatsResponse: {
+            global: components["schemas"]["LibraryGlobalStatsResponse"];
+            sources: components["schemas"]["SourceStatsResponse"][];
+        };
+        LibraryGlobalStatsResponse: {
+            /** Format: int32 */
+            totalVideos: number;
+            /** Format: int32 */
+            totalPhotos: number;
+            /** Format: int32 */
+            totalMedia: number;
+            /** Format: int32 */
+            favorites: number;
+            /** Format: int32 */
+            blacklisted: number;
+            /** Format: int32 */
+            uniquePlayedVideos: number;
+            /** Format: int32 */
+            uniquePlayedPhotos: number;
+            /** Format: int32 */
+            uniquePlayedMedia: number;
+            /** Format: int32 */
+            neverPlayedVideos: number;
+            /** Format: int32 */
+            neverPlayedPhotos: number;
+            /** Format: int32 */
+            neverPlayedMedia: number;
+            /** Format: int32 */
+            totalPlays: number;
+            /** Format: int32 */
+            videosWithAudio: number;
+            /** Format: int32 */
+            videosWithoutAudio: number;
+            /** Format: double */
+            baselineLoudnessLufs: number;
+        };
+        SourceStatsResponse: {
+            sourceId: string;
+            rootPath: string;
+            displayName: string | null;
+            isEnabled: boolean;
+            /** Format: int32 */
+            totalVideos: number;
+            /** Format: int32 */
+            totalPhotos: number;
+            /** Format: int32 */
+            totalMedia: number;
+            /** Format: int32 */
+            videosWithAudio: number;
+            /** Format: int32 */
+            videosWithoutAudio: number;
+            /** Format: double */
+            totalDurationSeconds: number;
+            /** Format: double */
+            averageDurationSeconds: number | null;
         };
         DuplicateScanRequest: {
             /** @enum {string} */
@@ -1960,6 +2143,95 @@ export interface operations {
             };
         };
     };
+    getControlStartup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Whether this platform supports launching the server at sign-in, and whether it is on */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StartupLaunchStatus"];
+                };
+            };
+            /** @description Unauthorized when control admin auth is required and request is not paired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden when request is non-local and LAN control access is disabled */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    postControlStartup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartupLaunchUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description The change was applied */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StartupLaunchResult"];
+                };
+            };
+            /** @description Unauthorized when control admin auth is required and request is not paired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden when request is non-local and LAN control access is disabled */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The change was not applied, for example because the platform does not support it */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StartupLaunchResult"];
+                };
+            };
+        };
+    };
     getControlServerLogs: {
         parameters: {
             query?: {
@@ -2416,6 +2688,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getLibraryStats: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Library statistics */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LibraryStatsResponse"];
                 };
             };
         };
@@ -3147,6 +3439,50 @@ export interface operations {
             };
         };
     };
+    getBackupSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Backup settings */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackupSettingsSnapshot"];
+                };
+            };
+        };
+    };
+    postBackupSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BackupSettingsSnapshot"];
+            };
+        };
+        responses: {
+            /** @description Stored backup settings after clamping */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackupSettingsSnapshot"];
+                };
+            };
+        };
+    };
     postDuplicateScan: {
         parameters: {
             query?: never;
@@ -3301,6 +3637,50 @@ export interface operations {
                     "application/json": {
                         accepted: boolean;
                     };
+                };
+            };
+        };
+    };
+    getWebRuntimeSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Web runtime settings */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebRuntimeSettingsSnapshot"];
+                };
+            };
+        };
+    };
+    postWebRuntimeSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WebRuntimeSettingsSnapshot"];
+            };
+        };
+        responses: {
+            /** @description Stored web runtime settings */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebRuntimeSettingsSnapshot"];
                 };
             };
         };

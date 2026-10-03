@@ -103,27 +103,7 @@ Do not use this file for detailed architecture explanation or current capability
 
 ## Active Milestones
 
-Last milestone completed: M10j3
-
-### M10j4 - Document Unlisted Server Routes in OpenAPI
-
-- **Status**: ⏳ Planned
-- **Goal**: Every route the server serves to clients is in `shared/api/openapi.yaml`.
-- **Scope**:
-  - Ships in v0.14.0. Additive contract change in its own slice.
-  - The server serves four routes that the spec does not list: `GET` and `POST /api/backup/settings`, `GET /api/library/stats`, `GET` and `POST /api/web-runtime/settings`, and `GET` and `POST /control/startup`. The desktop calls the first three, and the Operator calls the web-runtime and startup routes.
-  - Add them to the spec with the request and response shapes the server returns today, and regenerate the WebUI types.
-  - `/`, `/runtime-config.json`, and `/health` stay out of the spec.
-  - No server or client behavior changes.
-- **Acceptance criteria**:
-  - Each listed route and method is in the spec, and its schema matches what the server returns.
-  - The spec's paths and the server's mapped API and control routes match, apart from the three left out above.
-  - `npm run verify:contracts` passes after regeneration.
-- **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include a path diff between the spec and the server's mapped routes, a contract test or captured response per route, and `npm run verify`.
-  - Docs evidence must include `docs/api.md` listing the routes.
-- **Deferrals / Follow-ups**:
-  - None yet.
+Last milestone completed: M10j4
 
 ### M10j5 - Seed Tests Through SQL
 
@@ -226,7 +206,7 @@ Last milestone completed: M10j3
 - **Status**: ⏳ Planned
 - **Goal**: Fix defects left from the move to the server-owned catalog and two places where desktop and WebUI disagree, and close the control plane to unauthenticated LAN callers, one slice per defect, each with a test that fails before the fix.
 - **Scope**:
-  - Ships in v0.14.0. Nine slices, each verified on its own.
+  - Ships in v0.14.0. Ten slices, each verified on its own.
   - Source list after source import (server):
     - Recorded as a deferral on catalog document removal: source import does not refresh the in-memory source list that `GET /api/sources` and source enable/disable read. That list is filled at startup.
     - Confirmed during v0.14.0 planning by a throwaway test: after a successful import, the server's source list still had 0 sources and disabling the new source failed until restart.
@@ -255,6 +235,9 @@ Last milestone completed: M10j3
   - Numeric preset durations on the desktop (desktop):
     - Found while removing the preset match route: the desktop reads saved preset text with `JsonSerializer.Deserialize<FilterState>`, which throws on a numeric `minDuration` or `maxDuration` (seconds). `ParseCorePresetFilterState` then falls back to the default filter, so that whole preset is read as **None**. The WebUI and server filtering accept seconds, and `docs/api.md` documents them.
     - The desktop reads a numeric duration as seconds. Add a `"minDuration": 60` against `"00:01:00"` entry with `same: true` to `shared/fixtures/preset-filter-equality.json`; it fails on the desktop until the fix.
+  - Fingerprint parallelism after a forced rescan (server):
+    - Found by code reading while documenting the refresh settings: `RefreshPipelineService.ConsumeRefreshRescanFlags` clears a force flag by building a new `RefreshSettingsSnapshot` from auto-refresh enabled, interval, and the two force flags only. `FingerprintScanMaxDegreeOfParallelism` falls back to its default of 4, so a forced duration or loudness rescan resets a saved value such as 8.
+    - Clearing a force flag keeps every other refresh setting.
   - Control token for non-localhost control requests (server and Operator):
     - Found by the planned-milestones audit and still accurate in `docs/full-audit.md` finding 1 (`/control/*` admin plane unauthenticated when `AdminAuthMode != "TokenRequired"`): with LAN binding on, the admin auth mode defaults to `Off`, so any LAN caller can stop, restart, or update the server, change settings, and run testing scenarios. First start writes that `Off` into `core-settings.json`, so changing the default alone would leave existing installs open.
     - `docs/full-audit.md` finding 19 (`OperatorTestingService` mutations protected only by middleware policy) also still holds: the testing routes check the token themselves and do not exempt localhost, so requiring the token would lock the Operator's own testing panel out on the server machine.
@@ -270,6 +253,7 @@ Last milestone completed: M10j3
   - No code rebuilds a `LibraryCatalogItem` from another one field by field. The list query and single-item read return the same item fields for tagged and untagged items, including thumbnail revision, width, and height. `InsertItem` either writes every field it is given or its contract says which fields it ignores.
   - After deleting the active preset while the heading shows a starred preset, **Update Preset** is disabled and the heading shows **None** or `None*`. Deleting a preset that is not active leaves **Update Preset** as it was. A headless desktop filter dialog test covers deleting the active starred preset and fails without the fix.
   - Scan Durations and Scan Loudness do not read source folders on the desktop's disk and start a server refresh when the server is reachable.
+  - After a forced duration or loudness rescan clears its flag, `fingerprintScanMaxDegreeOfParallelism` keeps its saved value.
   - A non-localhost control request without the control token gets `401`, including with `Off` saved in `core-settings.json`. Localhost control requests, including the testing routes, work without it.
   - A server that has no control token creates and saves one on start.
   - On another machine, the Operator shows only the token prompt until a valid token is entered, then works; on the server machine it opens directly.
@@ -1605,6 +1589,31 @@ Last milestone completed: M10j3
 ## Completed Milestones
 
 Latest completions first:
+
+### M10j4 - Document Unlisted Server Routes in OpenAPI
+
+- **Status**: ✅ Complete
+- **Goal**: Every route the server serves to clients is in `shared/api/openapi.yaml`.
+- **Scope**:
+  - Ships in v0.14.0. Additive contract change in its own slice.
+  - The server serves four routes that the spec does not list: `GET` and `POST /api/backup/settings`, `GET /api/library/stats`, `GET` and `POST /api/web-runtime/settings`, and `GET` and `POST /control/startup`. The desktop calls the first three, and the Operator calls the web-runtime and startup routes.
+  - Add them to the spec with the request and response shapes the server returns today, and regenerate the WebUI types.
+  - `/` and `/runtime-config.json` stay out of the spec. `/health` was already in the spec and stays there.
+  - No server or client behavior changes.
+  - Scope expanded with approval: add `forceRescanLoudness` and `forceRescanDuration`, which the server already returns, to `RefreshSettingsSnapshot`, and remove the milestone ID from the spec's `info.description`.
+- **Acceptance criteria**:
+  - Each listed route and method is in the spec, and its schema matches what the server returns.
+  - The spec's paths and the server's mapped API and control routes match, apart from `/` and `/runtime-config.json`.
+  - `npm run verify:contracts` passes after regeneration.
+- **Verification evidence**:
+  - Path diff before the change, from the `MapGet` and `MapPost` literals in `ServerHostComposition.cs` and `ServerApp/Program.cs` against the spec's path and method pairs: the spec lacked exactly the seven listed operations, the server alone had `GET /` and `GET /runtime-config.json`, and the spec had nothing the server does not serve. The Operator page is mapped from a configured path, not a literal, and is also left out.
+  - Added the seven operations and the `BackupSettingsSnapshot`, `WebRuntimeSettingsSnapshot`, `LibraryStatsResponse`, `LibraryGlobalStatsResponse`, `SourceStatsResponse`, `StartupLaunchStatus`, `StartupLaunchUpdateRequest`, and `StartupLaunchResult` schemas. Response fields are required, with `sharedToken`, `displayName`, and `averageDurationSeconds` nullable. `StartupLaunchUpdateRequest` requires no fields; the backup and web runtime settings `POST` bodies take the full snapshot, using the same schema as their responses. `POST /control/startup` lists `409` with the same body, and both startup operations list `401` and `403` like the other control routes. The regenerated WebUI types only gained lines.
+  - `OpenApiRouteContractTests.Spec_ListsEveryMappedApiAndControlRoute` compares the scanned route mappings with the spec. Property-name shape tests serialize real `CoreSettingsService` get and update results for backup, web runtime, and refresh settings, and `LibraryOperationsService.GetLibraryStats` with a source that has no display name and a source with no items, using ASP.NET's default minimal API JSON options, and require the property names to equal the spec schema's, nested schemas included. They check property names only, not types, nullability, or required lists. `/control/startup` has no automated shape test; the captured responses below cover it. Against the HEAD spec, all five tests failed and the route test named exactly the seven missing operations. Removing `averageDurationSeconds` from `SourceStatsResponse` failed only the stats test, and adding an unserved `GET /api/bogus` failed only the route test. All passed again once the spec was restored.
+  - `/control/startup` responses were captured from the Debug server started with `REELROULETTE_DATA_DIR`, `XDG_CONFIG_HOME`, and `XDG_DATA_HOME` in a temporary folder on a random localhost port, then stopped by PID and removed. Run through `dotnet`, `GET` returned `200 {"supported":true,"launchServerOnStartup":false,"message":"…"}` and `POST` returned `409 {"accepted":false,"supported":true,"launchServerOnStartup":false,"message":"…"}`. Run as the app binary, `POST` with `true` returned `200` with `accepted: true` and wrote the autostart entry under the temporary `XDG_CONFIG_HOME`, the following `GET` reported it on, and `POST` with `false` removed it.
+  - `dotnet build ReelRoulette.sln` passed with 0 warnings. `dotnet test ReelRoulette.sln` passed: Core 270 (+5), Desktop 167. `npm run verify` passed, including `verify:contracts`, with 170 tests. `dotnet run --project src/core/ReelRoulette.Core.SystemChecks -- --verbose` passed.
+  - Docs: `docs/api.md` already listed every route. It now says which server routes the spec leaves out, lists the refresh settings fields, and describes the `/control/startup` fields and `409`.
+- **Deferrals / Follow-ups**:
+  - A forced duration or loudness rescan resets the fingerprint parallelism setting to its default -> Post-Migration Fixes.
 
 ### M10j3 - Remove the Preset Match Route
 
