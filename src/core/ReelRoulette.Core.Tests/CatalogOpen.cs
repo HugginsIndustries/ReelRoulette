@@ -1,4 +1,5 @@
 using ReelRoulette.Core.Library;
+using ReelRoulette.Server.Services;
 
 namespace ReelRoulette.Core.Tests;
 
@@ -23,6 +24,14 @@ internal static class CatalogOpen
             AfterSideFileCopy = options?.AfterSideFileCopy,
             ThumbnailDirectory = Path.Combine(directory, "thumbnails")
         };
+    }
+
+    /// <summary>
+    /// Opens the catalog in a server data folder the way the server does, with thumbnails beside it.
+    /// </summary>
+    public static LibraryCatalogHost Host(string directory)
+    {
+        return LibraryCatalogHost.Open(directory, Path.Combine(directory, "thumbnails"));
     }
 
     /// <summary>

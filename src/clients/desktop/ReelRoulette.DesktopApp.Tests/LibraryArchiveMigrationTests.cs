@@ -1,3 +1,4 @@
+using ReelRoulette.Core.Tests;
 using ReelRoulette.LibraryArchive;
 using Xunit;
 
@@ -111,9 +112,17 @@ public sealed class LibraryArchiveMigrationTests
         Directory.CreateDirectory(source);
         try
         {
-            File.WriteAllText(Path.Combine(source, "library.json"), """
-                {"sources":[{"id":"s1","rootPath":"/from","displayName":"x","isEnabled":true}],"items":[{"id":"clip","sourceId":"s1","fullPath":"/from/clip.mp4","relativePath":"nested/../clip.mp4","fileName":"clip.mp4"}]}
-                """);
+            CatalogSeed.Write(
+                source,
+                sources: [new SeedSource("s1", "/from", "x")],
+                items:
+                [
+                    new SeedItem("clip", "/from/clip.mp4")
+                    {
+                        SourceId = "s1",
+                        RelativePath = "nested/../clip.mp4"
+                    }
+                ]);
             var opened = OpenCatalog(source);
             var checkpoint = Path.Combine(temp, "checkpoint.db");
             ReelRoulette.Core.Library.LibraryCatalogStore.WriteCheckpoint(opened.Session!.DatabasePath, checkpoint);
@@ -212,13 +221,10 @@ public sealed class LibraryArchiveMigrationTests
         Directory.CreateDirectory(source);
         try
         {
-            File.WriteAllText(Path.Combine(dest, "library.json"), """{"items":[{"id":"kept","fullPath":"/clips/kept.mp4","fileName":"kept.mp4"}]}""");
+            CatalogSeed.Write(
+                dest,
+                items: [new SeedItem("kept", "/clips/kept.mp4")]);
             Assert.NotNull(OpenCatalog(dest).Session);
-            var migrated = Path.Combine(dest, "library.json.migrated");
-            if (File.Exists(migrated))
-            {
-                File.Delete(migrated);
-            }
 
             var checkpoint = CreateCheckpoint(source, temp);
             var remap = new Dictionary<string, string>(StringComparer.Ordinal) { ["/from"] = "/to" };
@@ -252,9 +258,17 @@ public sealed class LibraryArchiveMigrationTests
 
     private static string CreateCheckpoint(string sourceDirectory, string temp)
     {
-        File.WriteAllText(Path.Combine(sourceDirectory, "library.json"), """
-            {"sources":[{"id":"s1","rootPath":"/from","displayName":"x","isEnabled":true}],"items":[{"id":"clip","sourceId":"s1","fullPath":"/from/clip.mp4","relativePath":"clip.mp4","fileName":"clip.mp4"}]}
-            """);
+        CatalogSeed.Write(
+            sourceDirectory,
+            sources: [new SeedSource("s1", "/from", "x")],
+            items:
+            [
+                new SeedItem("clip", "/from/clip.mp4")
+                {
+                    SourceId = "s1",
+                    RelativePath = "clip.mp4"
+                }
+            ]);
         var opened = OpenCatalog(sourceDirectory);
         var checkpoint = Path.Combine(temp, "checkpoint.db");
         ReelRoulette.Core.Library.LibraryCatalogStore.WriteCheckpoint(opened.Session!.DatabasePath, checkpoint);

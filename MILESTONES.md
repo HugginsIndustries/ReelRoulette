@@ -104,26 +104,7 @@ Do not use this file for detailed architecture explanation or current capability
 
 ## Active Milestones
 
-Last milestone completed: M10j4
-
-### M10j5 - Seed Tests Through SQL
-
-- **Status**: ⏳ Planned
-- **Goal**: Tests build their catalog in `library.db` directly, so removing `library.json` support does not touch what they check.
-- **Scope**:
-  - Ships in v0.14.0. Test-only. No product change.
-  - Measured during v0.14.0 planning: with startup `library.json` migration switched off, 81 tests fail because they seed through `library.json`. By class: `LibraryOperationsServiceTests` 23, `LibraryCatalogStoreTests` 21, `RefreshPipelineServiceTests` 17, `LibraryPlaybackServiceTests` 12, `LibraryArchiveMigrationTests` 4, `LibraryListQueryTests` 2, `LibraryCatalogSessionTests` 1, `PlayItemOrchestrationTests` 1.
-  - Add one test seeding helper that creates a schema version 2 catalog and writes sources, categories, tags, items, item tags, and presets with SQL.
-  - Move every test that seeds through `library.json` to that helper, except tests whose subject is `library.json` migration or recognition. Those stay unchanged until the removal milestone deletes them.
-  - Each moved test checks the same thing as before.
-- **Acceptance criteria**:
-  - With startup `library.json` migration switched off on a scratch copy, the only failing tests are those whose subject is `library.json` migration or recognition.
-  - No test outside that set writes `library.json`.
-  - The test count and pass count are unchanged on the real code.
-- **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include `dotnet test ReelRoulette.sln` before and after, and the scratch-copy run with migration switched off listing the remaining failures.
-- **Deferrals / Follow-ups**:
-  - None yet.
+Last milestone completed: M10j5
 
 ### M10j6 - Remove library.json Library Support
 
@@ -1590,6 +1571,33 @@ Last milestone completed: M10j4
 ## Completed Milestones
 
 Latest completions first:
+
+### M10j5 - Seed Tests Through SQL
+
+- **Status**: ✅ Complete
+- **Goal**: Tests build their catalog in `library.db` directly, so removing `library.json` support does not touch what they check.
+- **Scope**:
+  - Ships in v0.14.0. Test-only. No product change.
+  - Measured during v0.14.0 planning: with startup `library.json` migration switched off, 81 tests fail because they seed through `library.json`. By class: `LibraryOperationsServiceTests` 23, `LibraryCatalogStoreTests` 21, `RefreshPipelineServiceTests` 17, `LibraryPlaybackServiceTests` 12, `LibraryArchiveMigrationTests` 4, `LibraryListQueryTests` 2, `LibraryCatalogSessionTests` 1, `PlayItemOrchestrationTests` 1.
+  - Add one test seeding helper that creates a schema version 2 catalog and writes sources, categories, tags, items, item tags, and presets with SQL.
+  - Move every test that seeds through `library.json` to that helper, except tests whose subject is `library.json` migration or recognition. Those stay unchanged until the removal milestone deletes them.
+  - Each moved test checks the same thing as before.
+- **Acceptance criteria**:
+  - With startup `library.json` migration switched off on a scratch copy, the only failing tests are those whose subject is `library.json` migration or recognition.
+  - No test outside that set writes `library.json`.
+  - The test count and pass count are unchanged on the real code.
+- **Verification evidence**:
+  - Before: `dotnet test ReelRoulette.sln` passed 437 (Core 270, Desktop 167). With startup migration switched off on a scratch copy, 83 failed, not the 81 measured during planning: `LibraryOperationsServiceTests` had 24 and `LibraryPlaybackServiceTests` 13.
+  - After: `dotnet test ReelRoulette.sln` passes 441 (Core 274, Desktop 167). The four added tests cover the seeding helper: its case fold matches the catalog store's, its schema (tables, columns with types, indexes, and user version) matches a catalog the store creates, and a seeded catalog opens healthy with every column read back. Changing a column type, dropping an index, adding a column, or changing the user version in the helper each fails the schema test. Every existing test still runs and passes.
+  - After, with migration switched off on a scratch copy, 15 fail, each with `library.json` migration or recognition as its subject: 13 `LibraryCatalogStoreTests` (`Open_MigratesLibraryJson_…`, `Open_BeforePublish_…`, `Open_DirectorySyncFails_…`, `Open_ExistingSnapshot_…`, `Open_PartialDatabase_…`, `Open_HealthyDatabase_DoesNotReadEitherJsonFile`, `Open_TimeSpanDuration_…`, `Open_BlankCategoryId_…`, `Open_DuplicateTagNames_…`, `Open_ItemWithoutFullPath_…`, `Open_MissingFingerprintStatus_…`, `Open_MissingUncategorizedCategory_…`, `Open_SourceMissingIdOrRootPath_…`), `LibraryCatalogSessionTests.Open_StoresLoudnessErrorFromLibraryJson`, and desktop `Import_RejectsALibraryJsonDocument_…`.
+  - The only tests that still write `library.json` are those 15 and tests that already pass with migration off and test recognition (`Open_CorruptRowPage_…`, `Open_UnversionedDatabaseWithoutJson_…`, `Open_MigratedSnapshotOnly_…`, `InspectCatalogFile_RejectsALibraryJsonDocument`, desktop `LibraryExistsWithContent_IncludesUnmigratedLibraryJson_…` and `Import_UnmigratedLibraryJson_…`).
+  - Same data proven: on scratch copies, a temporary hook in `LibraryCatalogStore.Open` recorded every test's first-open catalog (sources, categories, tags, items with all columns, presets) before and after the move. All 160 shared snapshots match except one `LastWriteTimeUtc` that the test reads from a file it creates at run time.
+  - Mutation check: a seeding helper that dropped favorites, blacklists, play counts, and item tags failed 19 moved tests and the helper's own test.
+  - Approved addition, requested when the plan was confirmed: the services that fell back to opening their own catalog from a data folder (`LibraryOperationsService`, `LibraryPlaybackService`, `RefreshPipelineService`, `ServerStateService`) no longer do. The tests pass the catalog they seeded, and the server already passed its one catalog to each, so runtime behavior is unchanged. `ServerDataPathsTests` resolves all four services from the server's composition. SystemChecks passes.
+  - Two replace-recovery tests prepared their incoming catalog from JSON and now prepare it from a seeded database file. One startup test no longer asserts that `library.json.migrated` exists; it still checks that sources load from the catalog. The importer dropped the orchestration test's source because it had no root path, so its seed has no source row.
+- **Deferrals / Follow-ups**:
+  - `ServerStateService` keeps an optional catalog. SystemChecks and 38 test constructions use it without one, a mode that touches no disk and is not a data-folder fallback.
+  - The 15 tests above stay until the removal milestone deletes or rewrites them, and their names, together with the "Legacy" and "LibraryJson" names of moved tests, are left for the scrub milestone.
 
 ### M10j4 - Document Unlisted Server Routes in OpenAPI
 

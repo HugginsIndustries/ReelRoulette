@@ -679,9 +679,9 @@ public sealed class LibraryCatalogStoreTests
     public void WriteCheckpoint_IncludesCommittedRows_WithoutAWalSidecar()
     {
         using var dir = new TempDirectory();
-        File.WriteAllText(Path.Combine(dir.Path, "library.json"), """
-            { "items": [ { "id": "item-1", "fullPath": "/clips/a.mp4", "fileName": "a.mp4" } ] }
-            """);
+        CatalogSeed.Write(
+            dir.Path,
+            items: [new SeedItem("item-1", "/clips/a.mp4")]);
         var opened = CatalogOpen.Open(dir.Path);
         Assert.True(opened.Session!.SetFavorite("item-1", true));
 
@@ -698,25 +698,15 @@ public sealed class LibraryCatalogStoreTests
     public void Open_AfterInterruptedReplace_RestoresPreviousCatalog()
     {
         using var dir = new TempDirectory();
-        File.WriteAllText(Path.Combine(dir.Path, "library.json"), """
-            { "items": [ { "id": "kept", "fullPath": "/clips/kept.mp4", "fileName": "kept.mp4" } ] }
-            """);
+        CatalogSeed.Write(
+            dir.Path,
+            items: [new SeedItem("kept", "/clips/kept.mp4")]);
         var opened = CatalogOpen.Open(dir.Path);
         Assert.NotNull(opened.Session);
-        File.Delete(Path.Combine(dir.Path, "library.json.migrated"));
 
-        LibraryCatalogStore.PrepareIncomingFromJson(dir.Path, new System.Text.Json.Nodes.JsonObject
-        {
-            ["items"] = new System.Text.Json.Nodes.JsonArray
-            {
-                new System.Text.Json.Nodes.JsonObject
-                {
-                    ["id"] = "incoming",
-                    ["fullPath"] = "/clips/new.mp4",
-                    ["fileName"] = "new.mp4"
-                }
-            }
-        });
+        var incoming = Path.Combine(dir.Path, "incoming");
+        CatalogSeed.Write(incoming, items: [new SeedItem("incoming", "/clips/new.mp4")]);
+        LibraryCatalogStore.PrepareIncomingFromFile(dir.Path, Path.Combine(incoming, "library.db"));
         LibraryCatalogStore.PublishIncoming(dir.Path, new LibraryCatalogReplaceOptions { StopAfterMovingPrevious = true });
 
         Assert.False(File.Exists(Path.Combine(dir.Path, "library.db")));
@@ -733,31 +723,20 @@ public sealed class LibraryCatalogStoreTests
     public void Open_AfterPublishedIncoming_KeepsTheNewCatalog()
     {
         using var dir = new TempDirectory();
-        File.WriteAllText(Path.Combine(dir.Path, "library.json"), """
-            { "items": [ { "id": "old", "fullPath": "/clips/old.mp4", "fileName": "old.mp4" } ] }
-            """);
+        CatalogSeed.Write(
+            dir.Path,
+            items: [new SeedItem("old", "/clips/old.mp4")]);
         _ = CatalogOpen.Open(dir.Path);
-        File.Delete(Path.Combine(dir.Path, "library.json.migrated"));
 
-        LibraryCatalogStore.PrepareIncomingFromJson(dir.Path, new System.Text.Json.Nodes.JsonObject
-        {
-            ["items"] = new System.Text.Json.Nodes.JsonArray
-            {
-                new System.Text.Json.Nodes.JsonObject
-                {
-                    ["id"] = "landed",
-                    ["fullPath"] = "/clips/new.mp4",
-                    ["fileName"] = "new.mp4"
-                }
-            }
-        });
+        var incoming = Path.Combine(dir.Path, "incoming");
+        CatalogSeed.Write(incoming, items: [new SeedItem("landed", "/clips/new.mp4")]);
+        LibraryCatalogStore.PrepareIncomingFromFile(dir.Path, Path.Combine(incoming, "library.db"));
         LibraryCatalogStore.PublishIncoming(dir.Path, new LibraryCatalogReplaceOptions { StopAfterPublishingIncoming = true });
         Assert.True(File.Exists(Path.Combine(dir.Path, "library.db.previous")));
 
         var recovered = CatalogOpen.Open(dir.Path);
         Assert.Equal("landed", Assert.Single(recovered.Snapshot()!.Items).Id);
         Assert.False(File.Exists(Path.Combine(dir.Path, "library.db.previous")));
-        Assert.False(File.Exists(Path.Combine(dir.Path, "library.json")));
     }
 
     [Fact]
@@ -767,9 +746,9 @@ public sealed class LibraryCatalogStoreTests
         var source = new TempDirectory();
         try
         {
-            File.WriteAllText(Path.Combine(source.Path, "library.json"), """
-                { "items": [ { "id": "promoted", "fullPath": "/clips/a.mp4", "fileName": "a.mp4" } ] }
-                """);
+            CatalogSeed.Write(
+                source.Path,
+                items: [new SeedItem("promoted", "/clips/a.mp4")]);
             var opened = CatalogOpen.Open(source.Path);
             LibraryCatalogStore.WriteCheckpoint(opened.Session!.DatabasePath, Path.Combine(dir.Path, "library.db.incoming"));
 
@@ -787,9 +766,9 @@ public sealed class LibraryCatalogStoreTests
     public void Open_IgnoresPartialIncoming_AndKeepsAHealthyCatalog()
     {
         using var dir = new TempDirectory();
-        File.WriteAllText(Path.Combine(dir.Path, "library.json"), """
-            { "items": [ { "id": "kept", "fullPath": "/clips/a.mp4", "fileName": "a.mp4" } ] }
-            """);
+        CatalogSeed.Write(
+            dir.Path,
+            items: [new SeedItem("kept", "/clips/a.mp4")]);
         _ = CatalogOpen.Open(dir.Path);
         File.WriteAllText(Path.Combine(dir.Path, "library.db.incoming"), "partial");
 
@@ -805,9 +784,9 @@ public sealed class LibraryCatalogStoreTests
         var source = new TempDirectory();
         try
         {
-            File.WriteAllText(Path.Combine(source.Path, "library.json"), """
-                { "items": [ { "id": "previous", "fullPath": "/clips/a.mp4", "fileName": "a.mp4" } ] }
-                """);
+            CatalogSeed.Write(
+                source.Path,
+                items: [new SeedItem("previous", "/clips/a.mp4")]);
             var opened = CatalogOpen.Open(source.Path);
             LibraryCatalogStore.WriteCheckpoint(opened.Session!.DatabasePath, Path.Combine(dir.Path, "library.db.previous"));
             File.WriteAllText(Path.Combine(dir.Path, "library.db"), "partial");
@@ -827,12 +806,17 @@ public sealed class LibraryCatalogStoreTests
     public void RemapSources_RejectsItemThatResolvesBesideTheDestinationRoot()
     {
         using var dir = new TempDirectory();
-        File.WriteAllText(Path.Combine(dir.Path, "library.json"), """
-            {
-              "sources": [ { "id": "s1", "rootPath": "/media/movies", "displayName": "Movies", "isEnabled": true } ],
-              "items": [ { "id": "i1", "sourceId": "s1", "fullPath": "/media/movies-extra/a.mp4", "relativePath": "../movies-extra/a.mp4", "fileName": "a.mp4" } ]
-            }
-            """);
+        CatalogSeed.Write(
+            dir.Path,
+            sources: [new SeedSource("s1", "/media/movies", "Movies")],
+            items:
+            [
+                new SeedItem("i1", "/media/movies-extra/a.mp4")
+                {
+                    SourceId = "s1",
+                    RelativePath = "../movies-extra/a.mp4"
+                }
+            ]);
         var opened = CatalogOpen.Open(dir.Path);
         var result = LibraryCatalogStore.RemapSources(
             opened.Session!.DatabasePath,
@@ -872,12 +856,18 @@ public sealed class LibraryCatalogStoreTests
         var newRoot = Path.Combine(dir.Path, "media");
         var oldFullPath = Path.Combine(oldRoot, "clip.mp4");
         var newFullPath = Path.Combine(newRoot, "clip.mp4");
-        File.WriteAllText(Path.Combine(dir.Path, "library.json"), $$"""
-            {
-              "sources": [ { "id": "src-1", "rootPath": "{{oldRoot.Replace("\\", "\\\\")}}", "isEnabled": true } ],
-              "items": [ { "id": "item-1", "sourceId": "src-1", "fullPath": "{{oldFullPath.Replace("\\", "\\\\")}}", "relativePath": "clip.mp4", "fileName": "clip.mp4" } ]
-            }
-            """);
+        CatalogSeed.Write(
+            dir.Path,
+            sources: [new SeedSource("src-1", oldRoot)],
+            items:
+            [
+                new SeedItem("item-1", oldFullPath)
+                {
+                    SourceId = "src-1",
+                    RelativePath = "clip.mp4",
+                    FileName = "clip.mp4"
+                }
+            ]);
         var opened = CatalogOpen.Open(dir.Path);
         var result = LibraryCatalogStore.RemapSources(
             opened.Session!.DatabasePath,
@@ -896,9 +886,9 @@ public sealed class LibraryCatalogStoreTests
     public void WriteCheckpoint_DeletesDestinationWhenTheCopyFails()
     {
         using var dir = new TempDirectory();
-        File.WriteAllText(Path.Combine(dir.Path, "library.json"), """
-            { "items": [ { "id": "item-1", "fullPath": "/clips/a.mp4", "fileName": "a.mp4" } ] }
-            """);
+        CatalogSeed.Write(
+            dir.Path,
+            items: [new SeedItem("item-1", "/clips/a.mp4")]);
         var opened = CatalogOpen.Open(dir.Path);
         var destination = Path.Combine(dir.Path, "checkpoint.db");
         var created = false;

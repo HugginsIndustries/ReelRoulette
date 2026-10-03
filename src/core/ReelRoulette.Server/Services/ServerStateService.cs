@@ -55,24 +55,11 @@ public sealed class ServerStateService
 
     public ServerStateService(
         ILogger<ServerStateService>? logger = null,
-        string? appDataPathOverride = null,
         LibraryCatalogHost? catalog = null)
     {
         _logger = logger ?? NullLogger<ServerStateService>.Instance;
-        // The data folder is only needed to open a catalog; without one, nothing touches disk.
-        if (catalog != null)
-        {
-            _catalog = catalog;
-        }
-        else if (!string.IsNullOrWhiteSpace(appDataPathOverride))
-        {
-            Directory.CreateDirectory(appDataPathOverride);
-            _catalog = LibraryCatalogHost.Open(appDataPathOverride, LibraryCatalogHost.LocalThumbnailDirectory(appDataPathOverride));
-        }
-        else
-        {
-            _catalog = null;
-        }
+        // Without a catalog, nothing touches disk.
+        _catalog = catalog;
 
         if (_catalog != null)
         {

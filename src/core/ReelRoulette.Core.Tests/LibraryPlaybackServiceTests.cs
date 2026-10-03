@@ -37,27 +37,20 @@ public sealed class LibraryPlaybackServiceTests : IDisposable
         var mediaPath = Path.Combine(_tempDir, "clip.mp4");
         File.WriteAllBytes(mediaPath, [0x01, 0x02, 0x03]);
 
-        var libraryJson = $$"""
-        {
-          "items": [
-            {
-              "id": "item-1",
-              "fullPath": "{{mediaPath.Replace("\\", "\\\\")}}",
-              "fileName": "clip.mp4",
-              "mediaType": 0,
-              "sourceId": "s1",
-              "isFavorite": true,
-              "isBlacklisted": false,
-              "duration": "00:00:12",
-              "tags": ["tag-a"]
-            }
-          ],
-          "sources": [
-            { "id": "s1", "rootPath": "{{_tempDir.Replace("\\", "\\\\")}}", "isEnabled": true }
-          ]
-        }
-        """;
-        File.WriteAllText(Path.Combine(_tempDir, "library.json"), libraryJson);
+        CatalogSeed.Write(
+            _tempDir,
+            sources: [new SeedSource("s1", _tempDir)],
+            items:
+            [
+                new SeedItem("item-1", mediaPath)
+                {
+                    FileName = "clip.mp4",
+                    SourceId = "s1",
+                    IsFavorite = true,
+                    Duration = TimeSpan.FromSeconds(12),
+                    Tags = ["tag-a"]
+                }
+            ]);
 
         var service = CreateService();
         IReadOnlyList<FilterPresetSnapshot> presets =
@@ -91,24 +84,18 @@ public sealed class LibraryPlaybackServiceTests : IDisposable
         Directory.CreateDirectory(_tempDir);
         var mediaPath = Path.Combine(_tempDir, "clip-filter.mp4");
         File.WriteAllBytes(mediaPath, [0x01, 0x02, 0x03]);
-        File.WriteAllText(Path.Combine(_tempDir, "library.json"), $$"""
-        {
-          "items": [
-            {
-              "id": "item-2",
-              "fullPath": "{{mediaPath.Replace("\\", "\\\\")}}",
-              "fileName": "clip-filter.mp4",
-              "mediaType": 0,
-              "sourceId": "s1",
-              "isFavorite": true,
-              "isBlacklisted": false
-            }
-          ],
-          "sources": [
-            { "id": "s1", "rootPath": "{{_tempDir.Replace("\\", "\\\\")}}", "isEnabled": true }
-          ]
-        }
-        """);
+        CatalogSeed.Write(
+            _tempDir,
+            sources: [new SeedSource("s1", _tempDir)],
+            items:
+            [
+                new SeedItem("item-2", mediaPath)
+                {
+                    FileName = "clip-filter.mp4",
+                    SourceId = "s1",
+                    IsFavorite = true
+                }
+            ]);
 
         var service = CreateService();
         var ok = service.TrySelectRandom(new RandomRequest
@@ -132,33 +119,23 @@ public sealed class LibraryPlaybackServiceTests : IDisposable
         var otherPath = Path.Combine(_tempDir, "other.mp4");
         File.WriteAllBytes(favoritePath, [0x01, 0x02]);
         File.WriteAllBytes(otherPath, [0x01, 0x02]);
-        File.WriteAllText(Path.Combine(_tempDir, "library.json"), $$"""
-        {
-          "items": [
-            {
-              "id": "item-fav",
-              "fullPath": "{{favoritePath.Replace("\\", "\\\\")}}",
-              "fileName": "favorite.mp4",
-              "mediaType": 0,
-              "sourceId": "s1",
-              "isFavorite": true,
-              "isBlacklisted": false
-            },
-            {
-              "id": "item-other",
-              "fullPath": "{{otherPath.Replace("\\", "\\\\")}}",
-              "fileName": "other.mp4",
-              "mediaType": 0,
-              "sourceId": "s1",
-              "isFavorite": false,
-              "isBlacklisted": false
-            }
-          ],
-          "sources": [
-            { "id": "s1", "rootPath": "{{_tempDir.Replace("\\", "\\\\")}}", "isEnabled": true }
-          ]
-        }
-        """);
+        CatalogSeed.Write(
+            _tempDir,
+            sources: [new SeedSource("s1", _tempDir)],
+            items:
+            [
+                new SeedItem("item-fav", favoritePath)
+                {
+                    FileName = "favorite.mp4",
+                    SourceId = "s1",
+                    IsFavorite = true
+                },
+                new SeedItem("item-other", otherPath)
+                {
+                    FileName = "other.mp4",
+                    SourceId = "s1"
+                }
+            ]);
 
         var service = CreateService();
         IReadOnlyList<FilterPresetSnapshot> presets =
@@ -189,17 +166,23 @@ public sealed class LibraryPlaybackServiceTests : IDisposable
         File.WriteAllBytes(videoPath, [0x01, 0x02]);
         File.WriteAllBytes(photoPath, [0x01, 0x02]);
 
-        File.WriteAllText(Path.Combine(_tempDir, "library.json"), $$"""
-        {
-          "items": [
-            { "id": "v1", "fullPath": "{{videoPath.Replace("\\", "\\\\")}}", "fileName": "video-a.mp4", "mediaType": 0, "sourceId": "s1" },
-            { "id": "p1", "fullPath": "{{photoPath.Replace("\\", "\\\\")}}", "fileName": "photo-a.jpg", "mediaType": 1, "sourceId": "s1" }
-          ],
-          "sources": [
-            { "id": "s1", "rootPath": "{{_tempDir.Replace("\\", "\\\\")}}", "isEnabled": true }
-          ]
-        }
-        """);
+        CatalogSeed.Write(
+            _tempDir,
+            sources: [new SeedSource("s1", _tempDir)],
+            items:
+            [
+                new SeedItem("v1", videoPath)
+                {
+                    FileName = "video-a.mp4",
+                    SourceId = "s1"
+                },
+                new SeedItem("p1", photoPath)
+                {
+                    FileName = "photo-a.jpg",
+                    MediaType = 1,
+                    SourceId = "s1"
+                }
+            ]);
 
         var service = CreateService();
         var ok = service.TrySelectRandom(
@@ -232,17 +215,23 @@ public sealed class LibraryPlaybackServiceTests : IDisposable
         File.WriteAllBytes(neverPlayedPath, [0x01, 0x02]);
         File.WriteAllBytes(playedPath, [0x01, 0x02]);
 
-        File.WriteAllText(Path.Combine(_tempDir, "library.json"), $$"""
-        {
-          "items": [
-            { "id": "n1", "fullPath": "{{neverPlayedPath.Replace("\\", "\\\\")}}", "fileName": "never-played.mp4", "mediaType": 0, "playCount": 0, "sourceId": "s1" },
-            { "id": "p1", "fullPath": "{{playedPath.Replace("\\", "\\\\")}}", "fileName": "played.mp4", "mediaType": 0, "playCount": 4, "sourceId": "s1" }
-          ],
-          "sources": [
-            { "id": "s1", "rootPath": "{{_tempDir.Replace("\\", "\\\\")}}", "isEnabled": true }
-          ]
-        }
-        """);
+        CatalogSeed.Write(
+            _tempDir,
+            sources: [new SeedSource("s1", _tempDir)],
+            items:
+            [
+                new SeedItem("n1", neverPlayedPath)
+                {
+                    FileName = "never-played.mp4",
+                    SourceId = "s1"
+                },
+                new SeedItem("p1", playedPath)
+                {
+                    FileName = "played.mp4",
+                    PlayCount = 4,
+                    SourceId = "s1"
+                }
+            ]);
 
         var service = CreateService();
         var ok = service.TrySelectRandom(
@@ -272,17 +261,25 @@ public sealed class LibraryPlaybackServiceTests : IDisposable
         File.WriteAllBytes(withAudioPath, [0x01, 0x02]);
         File.WriteAllBytes(withoutAudioPath, [0x01, 0x02]);
 
-        File.WriteAllText(Path.Combine(_tempDir, "library.json"), $$"""
-        {
-          "items": [
-            { "id": "a1", "fullPath": "{{withAudioPath.Replace("\\", "\\\\")}}", "fileName": "with-audio.mp4", "mediaType": 0, "hasAudio": true, "integratedLoudness": -14.2, "sourceId": "s1" },
-            { "id": "a2", "fullPath": "{{withoutAudioPath.Replace("\\", "\\\\")}}", "fileName": "without-audio.mp4", "mediaType": 0, "hasAudio": false, "sourceId": "s1" }
-          ],
-          "sources": [
-            { "id": "s1", "rootPath": "{{_tempDir.Replace("\\", "\\\\")}}", "isEnabled": true }
-          ]
-        }
-        """);
+        CatalogSeed.Write(
+            _tempDir,
+            sources: [new SeedSource("s1", _tempDir)],
+            items:
+            [
+                new SeedItem("a1", withAudioPath)
+                {
+                    FileName = "with-audio.mp4",
+                    HasAudio = true,
+                    IntegratedLoudness = -14.2,
+                    SourceId = "s1"
+                },
+                new SeedItem("a2", withoutAudioPath)
+                {
+                    FileName = "without-audio.mp4",
+                    HasAudio = false,
+                    SourceId = "s1"
+                }
+            ]);
 
         var service = CreateService();
         var ok = service.TrySelectRandom(
@@ -334,23 +331,18 @@ public sealed class LibraryPlaybackServiceTests : IDisposable
         var mediaPath = Path.Combine(_tempDir, "blocked.mp4");
         File.WriteAllBytes(mediaPath, [0x01, 0x02]);
 
-        File.WriteAllText(Path.Combine(_tempDir, "library.json"), $$"""
-        {
-          "items": [
-            {
-              "id": "blk-1",
-              "fullPath": "{{mediaPath.Replace("\\", "\\\\")}}",
-              "fileName": "blocked.mp4",
-              "mediaType": 0,
-              "isBlacklisted": true,
-              "sourceId": "s1"
-            }
-          ],
-          "sources": [
-            { "id": "s1", "rootPath": "{{_tempDir.Replace("\\", "\\\\")}}", "isEnabled": true }
-          ]
-        }
-        """);
+        CatalogSeed.Write(
+            _tempDir,
+            sources: [new SeedSource("s1", _tempDir)],
+            items:
+            [
+                new SeedItem("blk-1", mediaPath)
+                {
+                    FileName = "blocked.mp4",
+                    IsBlacklisted = true,
+                    SourceId = "s1"
+                }
+            ]);
 
         var service = CreateService();
         var ok = service.TrySelectRandom(
@@ -379,23 +371,17 @@ public sealed class LibraryPlaybackServiceTests : IDisposable
         var mediaPath = Path.Combine(_tempDir, "play.mp4");
         File.WriteAllBytes(mediaPath, [0x01, 0x02]);
 
-        File.WriteAllText(Path.Combine(_tempDir, "library.json"), $$"""
-        {
-          "items": [
-            {
-              "id": "stable-id-1",
-              "fullPath": "{{mediaPath.Replace("\\", "\\\\")}}",
-              "fileName": "play.mp4",
-              "mediaType": 0,
-              "sourceId": "s1",
-              "isBlacklisted": false
-            }
-          ],
-          "sources": [
-            { "id": "s1", "rootPath": "{{_tempDir.Replace("\\", "\\\\")}}", "isEnabled": true }
-          ]
-        }
-        """);
+        CatalogSeed.Write(
+            _tempDir,
+            sources: [new SeedSource("s1", _tempDir)],
+            items:
+            [
+                new SeedItem("stable-id-1", mediaPath)
+                {
+                    FileName = "play.mp4",
+                    SourceId = "s1"
+                }
+            ]);
 
         var service = CreateService();
         var ok = service.TryPlayItem("stable-id-1", false, out var response, out var statusCode, out var error, out var code);
@@ -416,23 +402,18 @@ public sealed class LibraryPlaybackServiceTests : IDisposable
         var mediaPath = Path.Combine(_tempDir, "blisted.mp4");
         File.WriteAllBytes(mediaPath, [0x01, 0x02]);
 
-        File.WriteAllText(Path.Combine(_tempDir, "library.json"), $$"""
-        {
-          "items": [
-            {
-              "id": "bl-1",
-              "fullPath": "{{mediaPath.Replace("\\", "\\\\")}}",
-              "fileName": "blisted.mp4",
-              "mediaType": 0,
-              "sourceId": "s1",
-              "isBlacklisted": true
-            }
-          ],
-          "sources": [
-            { "id": "s1", "rootPath": "{{_tempDir.Replace("\\", "\\\\")}}", "isEnabled": true }
-          ]
-        }
-        """);
+        CatalogSeed.Write(
+            _tempDir,
+            sources: [new SeedSource("s1", _tempDir)],
+            items:
+            [
+                new SeedItem("bl-1", mediaPath)
+                {
+                    FileName = "blisted.mp4",
+                    SourceId = "s1",
+                    IsBlacklisted = true
+                }
+            ]);
 
         var service = CreateService();
         var ok = service.TryPlayItem("bl-1", false, out var response, out var statusCode, out _, out _);
@@ -447,12 +428,7 @@ public sealed class LibraryPlaybackServiceTests : IDisposable
     public void TryPlayItem_ShouldReturn404_WhenIdUnknown()
     {
         Directory.CreateDirectory(_tempDir);
-        File.WriteAllText(Path.Combine(_tempDir, "library.json"), """
-        {
-          "items": [],
-          "sources": []
-        }
-        """);
+        CatalogSeed.Write(_tempDir);
 
         var service = CreateService();
         var ok = service.TryPlayItem("missing-id", false, out _, out var statusCode, out var error, out var code);
@@ -469,22 +445,17 @@ public sealed class LibraryPlaybackServiceTests : IDisposable
         Directory.CreateDirectory(_tempDir);
         var mediaPath = Path.Combine(_tempDir, "nope.mp4");
 
-        File.WriteAllText(Path.Combine(_tempDir, "library.json"), $$"""
-        {
-          "items": [
-            {
-              "id": "x-1",
-              "fullPath": "{{mediaPath.Replace("\\", "\\\\")}}",
-              "fileName": "nope.mp4",
-              "mediaType": 0,
-              "sourceId": "s1"
-            }
-          ],
-          "sources": [
-            { "id": "s1", "rootPath": "{{_tempDir.Replace("\\", "\\\\")}}", "isEnabled": true }
-          ]
-        }
-        """);
+        CatalogSeed.Write(
+            _tempDir,
+            sources: [new SeedSource("s1", _tempDir)],
+            items:
+            [
+                new SeedItem("x-1", mediaPath)
+                {
+                    FileName = "nope.mp4",
+                    SourceId = "s1"
+                }
+            ]);
 
         var service = CreateService();
         var ok = service.TryPlayItem("x-1", false, out _, out var statusCode, out var error, out var code);
@@ -502,22 +473,17 @@ public sealed class LibraryPlaybackServiceTests : IDisposable
         var mediaPath = Path.Combine(_tempDir, "present.mp4");
         File.WriteAllBytes(mediaPath, [0x01]);
 
-        File.WriteAllText(Path.Combine(_tempDir, "library.json"), $$"""
-        {
-          "items": [
-            {
-              "id": "fm-1",
-              "fullPath": "{{mediaPath.Replace("\\", "\\\\")}}",
-              "fileName": "present.mp4",
-              "mediaType": 0,
-              "sourceId": "s1"
-            }
-          ],
-          "sources": [
-            { "id": "s1", "rootPath": "{{_tempDir.Replace("\\", "\\\\")}}", "isEnabled": true }
-          ]
-        }
-        """);
+        CatalogSeed.Write(
+            _tempDir,
+            sources: [new SeedSource("s1", _tempDir)],
+            items:
+            [
+                new SeedItem("fm-1", mediaPath)
+                {
+                    FileName = "present.mp4",
+                    SourceId = "s1"
+                }
+            ]);
 
         var service = CreateService();
         var ok = service.TryPlayItem("fm-1", forceMediaMissing: true, out _, out var statusCode, out _, out var code);
@@ -534,22 +500,17 @@ public sealed class LibraryPlaybackServiceTests : IDisposable
         var mediaPath = Path.Combine(_tempDir, "off.mp4");
         File.WriteAllBytes(mediaPath, [0x01]);
 
-        File.WriteAllText(Path.Combine(_tempDir, "library.json"), $$"""
-        {
-          "items": [
-            {
-              "id": "off-1",
-              "fullPath": "{{mediaPath.Replace("\\", "\\\\")}}",
-              "fileName": "off.mp4",
-              "mediaType": 0,
-              "sourceId": "s1"
-            }
-          ],
-          "sources": [
-            { "id": "s1", "rootPath": "{{_tempDir.Replace("\\", "\\\\")}}", "isEnabled": false }
-          ]
-        }
-        """);
+        CatalogSeed.Write(
+            _tempDir,
+            sources: [new SeedSource("s1", _tempDir, IsEnabled: false)],
+            items:
+            [
+                new SeedItem("off-1", mediaPath)
+                {
+                    FileName = "off.mp4",
+                    SourceId = "s1"
+                }
+            ]);
 
         var service = CreateService();
         var ok = service.TryPlayItem("off-1", false, out _, out var statusCode, out var error, out var code);
@@ -567,22 +528,17 @@ public sealed class LibraryPlaybackServiceTests : IDisposable
         var mediaPath = Path.Combine(_tempDir, "weird.xyz");
         File.WriteAllBytes(mediaPath, [0x01]);
 
-        File.WriteAllText(Path.Combine(_tempDir, "library.json"), $$"""
-        {
-          "items": [
-            {
-              "id": "badext-1",
-              "fullPath": "{{mediaPath.Replace("\\", "\\\\")}}",
-              "fileName": "weird.xyz",
-              "mediaType": 0,
-              "sourceId": "s1"
-            }
-          ],
-          "sources": [
-            { "id": "s1", "rootPath": "{{_tempDir.Replace("\\", "\\\\")}}", "isEnabled": true }
-          ]
-        }
-        """);
+        CatalogSeed.Write(
+            _tempDir,
+            sources: [new SeedSource("s1", _tempDir)],
+            items:
+            [
+                new SeedItem("badext-1", mediaPath)
+                {
+                    FileName = "weird.xyz",
+                    SourceId = "s1"
+                }
+            ]);
 
         var service = CreateService();
         var ok = service.TryPlayItem("badext-1", false, out _, out var statusCode, out _, out var code);
@@ -611,12 +567,11 @@ public sealed class LibraryPlaybackServiceTests : IDisposable
         var playback = new LibraryPlaybackService(
             new ServerMediaTokenStore(),
             NullLogger<LibraryPlaybackService>.Instance,
-            _tempDir,
             host);
         var operations = new LibraryOperationsService(
+            host,
             NullLogger<LibraryOperationsService>.Instance,
-            _tempDir,
-            host);
+            _tempDir);
         var request = new RandomRequest
         {
             FilterState = ParseJson("{}"),
@@ -695,7 +650,6 @@ public sealed class LibraryPlaybackServiceTests : IDisposable
         var playback = new LibraryPlaybackService(
             new ServerMediaTokenStore(),
             NullLogger<LibraryPlaybackService>.Instance,
-            _tempDir,
             host);
         var listed = host.Session.QueryList(new LibraryListRequest
         {
@@ -753,7 +707,6 @@ public sealed class LibraryPlaybackServiceTests : IDisposable
         var service = new LibraryPlaybackService(
             new ServerMediaTokenStore(),
             NullLogger<LibraryPlaybackService>.Instance,
-            _tempDir,
             host);
 
         var ok = service.TrySelectRandom(new RandomRequest
@@ -795,7 +748,7 @@ public sealed class LibraryPlaybackServiceTests : IDisposable
         return new LibraryPlaybackService(
             new ServerMediaTokenStore(),
             NullLogger<LibraryPlaybackService>.Instance,
-            _tempDir);
+            CatalogOpen.Host(_tempDir));
     }
 
     private static JsonElement ParseJson(string json)

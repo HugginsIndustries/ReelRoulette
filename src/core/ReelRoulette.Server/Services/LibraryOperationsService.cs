@@ -37,16 +37,16 @@ public sealed class LibraryOperationsService
     private readonly Func<string, IReadOnlyList<string>> _enumerateFiles;
 
     public LibraryOperationsService(
+        LibraryCatalogHost catalog,
         ILogger<LibraryOperationsService>? logger = null,
         string? appDataPathOverride = null,
-        LibraryCatalogHost? catalog = null,
         Func<string, IReadOnlyList<string>>? enumerateMediaFiles = null)
     {
         _logger = logger ?? NullLogger<LibraryOperationsService>.Instance;
         var appData = appDataPathOverride ?? ServerDataPaths.DataDirectory();
         Directory.CreateDirectory(appData);
         _logPath = Path.Combine(appData, "last.log");
-        _catalog = catalog ?? LibraryCatalogHost.Open(appData, LibraryCatalogHost.LocalThumbnailDirectory(appDataPathOverride));
+        _catalog = catalog;
         _enumerateFiles = enumerateMediaFiles ?? EnumerateAllFiles;
         LibraryCatalogBackup.Attach(_catalog.Session, appData, _logger);
     }

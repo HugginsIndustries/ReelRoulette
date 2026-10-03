@@ -179,7 +179,7 @@ public sealed class ServerStateRegressionTests
             }
             """);
 
-            var service = new ServerStateService(appDataPathOverride: appDataPath);
+            var service = new ServerStateService(catalog: CatalogOpen.Host(appDataPath));
             var presetCatalog = service.GetPresetCatalogSnapshot();
             Assert.Empty(presetCatalog);
             Assert.False(File.Exists(Path.Combine(appDataPath, "presets.json")));
@@ -200,7 +200,7 @@ public sealed class ServerStateRegressionTests
         Directory.CreateDirectory(appDataPath);
         try
         {
-            var service = new ServerStateService(appDataPathOverride: appDataPath);
+            var service = new ServerStateService(catalog: CatalogOpen.Host(appDataPath));
             service.SetPresetCatalog(
             [
                 new FilterPresetSnapshot
@@ -223,11 +223,11 @@ public sealed class ServerStateRegressionTests
             Assert.False(File.Exists(Path.Combine(appDataPath, "presets.json")));
             Assert.False(File.Exists(Path.Combine(appDataPath, "desktop-settings.json")));
 
-            var reloaded = new ServerStateService(appDataPathOverride: appDataPath);
+            var reloaded = new ServerStateService(catalog: CatalogOpen.Host(appDataPath));
             var reloadedPreset = Assert.Single(reloaded.GetPresetCatalogSnapshot());
             Assert.Contains("TagB", reloadedPreset.FilterState.GetRawText(), StringComparison.Ordinal);
             Assert.True(reloaded.RemoveTagFromPresetCatalogOnly("TagB"));
-            var afterDelete = new ServerStateService(appDataPathOverride: appDataPath);
+            var afterDelete = new ServerStateService(catalog: CatalogOpen.Host(appDataPath));
             Assert.DoesNotContain("TagB", Assert.Single(afterDelete.GetPresetCatalogSnapshot()).FilterState.GetRawText(), StringComparison.Ordinal);
 
             var coreSettings = new CoreSettingsService(

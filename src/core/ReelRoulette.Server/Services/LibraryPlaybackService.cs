@@ -17,14 +17,11 @@ public sealed class LibraryPlaybackService
     public LibraryPlaybackService(
         ServerMediaTokenStore tokenStore,
         ILogger<LibraryPlaybackService> logger,
-        string? appDataPathOverride = null,
-        LibraryCatalogHost? catalog = null)
+        LibraryCatalogHost catalog)
     {
         _tokenStore = tokenStore;
         _logger = logger;
-        var roamingAppData = appDataPathOverride ?? ServerDataPaths.DataDirectory();
-        Directory.CreateDirectory(roamingAppData);
-        _catalog = catalog ?? LibraryCatalogHost.Open(roamingAppData, LibraryCatalogHost.LocalThumbnailDirectory(appDataPathOverride));
+        _catalog = catalog;
     }
 
     public IReadOnlyList<PresetResponse> GetPresets(IReadOnlyList<FilterPresetSnapshot> presets)

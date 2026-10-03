@@ -19,12 +19,10 @@ Instructions:
 
 Commit Message:
 
-Chore: Add milestones checker and changelog cut scripts
+M10j5: Seed tests through SQL
 
-- Add `check-milestones.ps1`, which fails with the line and reason when a milestone ID appears outside section headers, the tracker line, and the Planned Releases outline, when the outline and the sections disagree, or when a `Depends on` names no existing milestone title. Prose such as "MP3" or "P2P" is not mistaken for an ID.
-- Given a base (`-BaseRef`), the checker also fails when Completed Milestones changed beyond new entries on top that existed elsewhere in the base; `-Release` drops that last condition for comparisons against a release tag, and `-Staged` checks the staged file.
-- Add `cut-changelog.ps1`, which moves `[Unreleased]` into a dated release section with only its non-empty headings, leaves a fresh empty `[Unreleased]`, and updates the footer compare links, changing nothing if any check fails.
-- Add fixture tests for both scripts, including each failure case, run by `tools/scripts/tests/test-scripts.ps1`.
-- `plan-from-report`, `review-staged`, and `pre-release` run the scripts instead of describing the checks, and the testing checklist runs the fixture tests and the checker against the previous release.
-- `MILESTONES.md` maintenance rules require exact titles in `Depends on` lines, and the two active lines that paraphrased now use them.
-- `AGENTS.md` allows running the checker, the cut script, and their fixture tests without approval.
+- Add a `CatalogSeed` test helper that writes a schema version 2 `library.db` with SQL (sources, categories, tags, items, item tags, presets), shared by the core and desktop test projects. A test keeps its schema (tables, columns with types, indexes, and user version) identical to a catalog the store creates.
+- Move every test that seeded its catalog through `library.json` to the helper, except tests whose subject is `library.json` migration or recognition. A before-and-after dump of each test's first-open catalog shows the moved tests start from the same rows.
+- With startup `library.json` migration switched off, only those 15 migration and recognition tests fail, down from 83.
+- Drop the `catalog ?? LibraryCatalogHost.Open(...)` fallbacks in `LibraryOperationsService`, `LibraryPlaybackService`, `RefreshPipelineService`, and `ServerStateService`. Tests pass the catalog they seed; the server already passed its own.
+- Mark the milestone complete with its evidence.

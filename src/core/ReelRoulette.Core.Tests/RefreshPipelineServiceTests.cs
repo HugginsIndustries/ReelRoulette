@@ -18,11 +18,7 @@ public sealed class RefreshPipelineServiceTests
     public async Task TryStartManual_ShouldRejectOverlapWithConflictSemantics()
     {
         using var scope = new DataFolderScope();
-        await SeedLibraryAsync(scope.LibraryPath, new JsonObject
-        {
-            ["sources"] = new JsonArray(),
-            ["items"] = new JsonArray()
-        });
+        CatalogSeed.Write(scope.RootPath);
 
         var state = new ServerStateService();
         var service = CreateService(state, scope.RootPath);
@@ -40,11 +36,7 @@ public sealed class RefreshPipelineServiceTests
     public async Task ShutdownCancel_ShouldStopManualRunWithoutRecordingAFailure()
     {
         using var scope = new DataFolderScope();
-        await SeedLibraryAsync(scope.LibraryPath, new JsonObject
-        {
-            ["sources"] = new JsonArray(),
-            ["items"] = new JsonArray()
-        });
+        CatalogSeed.Write(scope.RootPath);
 
         var service = CreateService(new ServerStateService(), scope.RootPath);
         service.CancelRunsForShutdown();
@@ -63,11 +55,7 @@ public sealed class RefreshPipelineServiceTests
     public async Task ShutdownCancel_DuringFfmpegCheck_DoesNotRecordLoudnessAsUnavailable()
     {
         using var scope = new DataFolderScope();
-        await SeedLibraryAsync(scope.LibraryPath, new JsonObject
-        {
-            ["sources"] = new JsonArray(),
-            ["items"] = new JsonArray()
-        });
+        CatalogSeed.Write(scope.RootPath);
 
         var service = CreateService(new ServerStateService(), scope.RootPath);
         var hold = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -91,11 +79,7 @@ public sealed class RefreshPipelineServiceTests
     public async Task ShutdownCancel_LeavesForcedRescansPending()
     {
         using var scope = new DataFolderScope();
-        await SeedLibraryAsync(scope.LibraryPath, new JsonObject
-        {
-            ["sources"] = new JsonArray(),
-            ["items"] = new JsonArray()
-        });
+        CatalogSeed.Write(scope.RootPath);
 
         var service = CreateService(new ServerStateService(), scope.RootPath);
         service.UpdateSettings(new ReelRoulette.Server.Contracts.RefreshSettingsSnapshot
@@ -123,19 +107,9 @@ public sealed class RefreshPipelineServiceTests
     public async Task PipelineRun_ShouldCompleteStagesInDefinedOrder_AndPublishStatusEvents()
     {
         using var scope = new DataFolderScope();
-        await SeedLibraryAsync(scope.LibraryPath, new JsonObject
-        {
-            ["sources"] = new JsonArray(),
-            ["items"] = new JsonArray
-            {
-                new JsonObject
-                {
-                    ["id"] = "item-1",
-                    ["mediaType"] = 0,
-                    ["fullPath"] = "C:\\media\\item-1.mp4"
-                }
-            }
-        });
+        CatalogSeed.Write(
+            scope.RootPath,
+            items: [new SeedItem("item-1", "C:\\media\\item-1.mp4")]);
 
         var state = new ServerStateService();
         var service = CreateService(state, scope.RootPath);
@@ -165,46 +139,31 @@ public sealed class RefreshPipelineServiceTests
         var missingPath = Path.Combine(sourceDir, "missing.mp4");
         await File.WriteAllTextAsync(existingPath, "existing");
 
-        await SeedLibraryAsync(scope.LibraryPath, new JsonObject
-        {
-            ["sources"] = new JsonArray
-            {
-                new JsonObject
+        CatalogSeed.Write(
+            scope.RootPath,
+            sources: [new SeedSource("src-a", sourceDir)],
+            items:
+            [
+                new SeedItem("item-existing", existingPath)
                 {
-                    ["id"] = "src-a",
-                    ["rootPath"] = sourceDir,
-                    ["isEnabled"] = true
-                }
-            },
-            ["items"] = new JsonArray
-            {
-                new JsonObject
-                {
-                    ["id"] = "item-existing",
-                    ["sourceId"] = "src-a",
-                    ["fullPath"] = existingPath,
-                    ["relativePath"] = "existing.mp4",
-                    ["fileName"] = "existing.mp4",
-                    ["mediaType"] = 0
+                    SourceId = "src-a",
+                    RelativePath = "existing.mp4",
+                    FileName = "existing.mp4"
                 },
-                new JsonObject
+                new SeedItem("item-missing", missingPath)
                 {
-                    ["id"] = "item-missing",
-                    ["sourceId"] = "src-a",
-                    ["fullPath"] = missingPath,
-                    ["relativePath"] = "missing.mp4",
-                    ["fileName"] = "missing.mp4",
-                    ["mediaType"] = 0
+                    SourceId = "src-a",
+                    RelativePath = "missing.mp4",
+                    FileName = "missing.mp4"
                 }
-            }
-        });
+            ]);
 
         var state = new ServerStateService();
         var service = CreateService(state, scope.RootPath);
         Assert.True(service.TryStartManual().Accepted);
         var final = await WaitForCompletionAsync(service, TimeSpan.FromSeconds(30));
 
-        var itemList = LoadCatalog(scope.LibraryPath).Items;
+        var itemList = LoadCatalog(scope.RootPath).Items;
         var kept = Assert.Single(itemList);
         Assert.Equal("item-existing", kept.Id);
         Assert.Equal(existingPath, kept.FullPath);
@@ -218,34 +177,24 @@ public sealed class RefreshPipelineServiceTests
     public async Task LoudnessStage_ShouldPreserveExistingValues_AndNotInventMissingValues()
     {
         using var scope = new DataFolderScope();
-        await SeedLibraryAsync(scope.LibraryPath, new JsonObject
-        {
-            ["sources"] = new JsonArray(),
-            ["items"] = new JsonArray
-            {
-                new JsonObject
+        CatalogSeed.Write(
+            scope.RootPath,
+            items:
+            [
+                new SeedItem("has-loudness", "C:\\media\\has-loudness.mp4")
                 {
-                    ["id"] = "has-loudness",
-                    ["mediaType"] = 0,
-                    ["fullPath"] = "C:\\media\\has-loudness.mp4",
-                    ["integratedLoudness"] = -14.2,
-                    ["hasAudio"] = true,
-                    ["peakDb"] = -0.5
+                    IntegratedLoudness = -14.2,
+                    HasAudio = true,
+                    PeakDb = -0.5
                 },
-                new JsonObject
-                {
-                    ["id"] = "needs-loudness",
-                    ["mediaType"] = 0,
-                    ["fullPath"] = "C:\\media\\needs-loudness.mp4"
-                }
-            }
-        });
+                new SeedItem("needs-loudness", "C:\\media\\needs-loudness.mp4")
+            ]);
 
         var service = CreateService(new ServerStateService(), scope.RootPath);
         Assert.True(service.TryStartManual().Accepted);
         await WaitForCompletionAsync(service, TimeSpan.FromSeconds(10));
 
-        var items = LoadCatalog(scope.LibraryPath).Items;
+        var items = LoadCatalog(scope.RootPath).Items;
         var hasLoudness = items.Single(i => i.Id == "has-loudness");
         var needsLoudness = items.Single(i => i.Id == "needs-loudness");
 
@@ -261,20 +210,16 @@ public sealed class RefreshPipelineServiceTests
         using var scope = new DataFolderScope();
         var mediaPath = Path.Combine(scope.RootPath, "thumb-source.png");
         await WriteTinyPngAsync(mediaPath);
-        await SeedLibraryAsync(scope.LibraryPath, new JsonObject
-        {
-            ["sources"] = new JsonArray(),
-            ["items"] = new JsonArray
-            {
-                new JsonObject
+        CatalogSeed.Write(
+            scope.RootPath,
+            items:
+            [
+                new SeedItem("thumb-1", mediaPath)
                 {
-                    ["id"] = "thumb-1",
-                    ["mediaType"] = 1,
-                    ["fullPath"] = mediaPath,
-                    ["fingerprint"] = "fp-a"
+                    MediaType = 1,
+                    Fingerprint = "fp-a"
                 }
-            }
-        });
+            ]);
 
         var service = CreateService(new ServerStateService(), scope.RootPath);
         Assert.True(service.TryStartManual().Accepted);
@@ -304,20 +249,16 @@ public sealed class RefreshPipelineServiceTests
         using var scope = new DataFolderScope();
         var mediaPath = Path.Combine(scope.RootPath, "thumb-source-reuse.png");
         await WriteTinyPngAsync(mediaPath);
-        await SeedLibraryAsync(scope.LibraryPath, new JsonObject
-        {
-            ["sources"] = new JsonArray(),
-            ["items"] = new JsonArray
-            {
-                new JsonObject
+        CatalogSeed.Write(
+            scope.RootPath,
+            items:
+            [
+                new SeedItem("thumb-reuse-1", mediaPath)
                 {
-                    ["id"] = "thumb-reuse-1",
-                    ["mediaType"] = 1,
-                    ["fullPath"] = mediaPath,
-                    ["fingerprint"] = "fp-reuse-a"
+                    MediaType = 1,
+                    Fingerprint = "fp-reuse-a"
                 }
-            }
-        });
+            ]);
 
         var service = CreateService(new ServerStateService(), scope.RootPath);
         Assert.True(service.TryStartManual().Accepted);
@@ -386,20 +327,16 @@ public sealed class RefreshPipelineServiceTests
         using var scope = new DataFolderScope();
         var mediaPath = Path.Combine(scope.RootPath, "thumb-source-metadata.png");
         await WriteTinyPngAsync(mediaPath);
-        await SeedLibraryAsync(scope.LibraryPath, new JsonObject
-        {
-            ["sources"] = new JsonArray(),
-            ["items"] = new JsonArray
-            {
-                new JsonObject
+        CatalogSeed.Write(
+            scope.RootPath,
+            items:
+            [
+                new SeedItem("thumb-meta-1", mediaPath)
                 {
-                    ["id"] = "thumb-meta-1",
-                    ["mediaType"] = 1,
-                    ["fullPath"] = mediaPath,
-                    ["fingerprint"] = "fp-meta-a"
+                    MediaType = 1,
+                    Fingerprint = "fp-meta-a"
                 }
-            }
-        });
+            ]);
 
         var host = LibraryCatalogHost.Open(scope.RootPath, Path.Combine(scope.RootPath, "thumbnails"));
         var service = CreateService(new ServerStateService(), scope.RootPath, host);
@@ -419,20 +356,16 @@ public sealed class RefreshPipelineServiceTests
         using var scope = new DataFolderScope();
         var mediaPath = Path.Combine(scope.RootPath, "thumb-source-legacy.png");
         await WriteTinyPngAsync(mediaPath);
-        await SeedLibraryAsync(scope.LibraryPath, new JsonObject
-        {
-            ["sources"] = new JsonArray(),
-            ["items"] = new JsonArray
-            {
-                new JsonObject
+        CatalogSeed.Write(
+            scope.RootPath,
+            items:
+            [
+                new SeedItem("thumb-legacy-1", mediaPath)
                 {
-                    ["id"] = "thumb-legacy-1",
-                    ["mediaType"] = 1,
-                    ["fullPath"] = mediaPath,
-                    ["fingerprint"] = "fp-legacy-a"
+                    MediaType = 1,
+                    Fingerprint = "fp-legacy-a"
                 }
-            }
-        });
+            ]);
 
         var host = LibraryCatalogHost.Open(scope.RootPath, Path.Combine(scope.RootPath, "thumbnails"));
         var service = CreateService(new ServerStateService(), scope.RootPath, host);
@@ -472,20 +405,15 @@ public sealed class RefreshPipelineServiceTests
     public async Task DurationForceRescan_ShouldBeOneShot_AndShowForcedHint()
     {
         using var scope = new DataFolderScope();
-        await SeedLibraryAsync(scope.LibraryPath, new JsonObject
-        {
-            ["sources"] = new JsonArray(),
-            ["items"] = new JsonArray
-            {
-                new JsonObject
+        CatalogSeed.Write(
+            scope.RootPath,
+            items:
+            [
+                new SeedItem("duration-1", Path.Combine(scope.RootPath, "missing-duration.mp4"))
                 {
-                    ["id"] = "duration-1",
-                    ["mediaType"] = 0,
-                    ["fullPath"] = Path.Combine(scope.RootPath, "missing-duration.mp4"),
-                    ["duration"] = "00:00:03"
+                    Duration = TimeSpan.FromSeconds(3)
                 }
-            }
-        });
+            ]);
 
         var state = new ServerStateService();
         var logger = new Microsoft.Extensions.Logging.Abstractions.NullLogger<RefreshPipelineService>();
@@ -497,7 +425,7 @@ public sealed class RefreshPipelineServiceTests
             ForceRescanLoudness = false
         };
         var coreSettings = new CoreSettingsService(options, scope.RootPath);
-        var service = new RefreshPipelineService(state, logger, coreSettings, scope.RootPath);
+        var service = new RefreshPipelineService(state, logger, coreSettings, CatalogOpen.Host(scope.RootPath), scope.RootPath);
 
         Assert.True(service.TryStartManual().Accepted);
         var completed = await WaitForCompletionAsync(service, TimeSpan.FromSeconds(10));
@@ -515,28 +443,23 @@ public sealed class RefreshPipelineServiceTests
         using var scope = new DataFolderScope();
         var brokenMediaPath = Path.Combine(scope.RootPath, "broken-audio.mkv");
         await File.WriteAllTextAsync(brokenMediaPath, "not-a-valid-media-file");
-        await SeedLibraryAsync(scope.LibraryPath, new JsonObject
-        {
-            ["sources"] = new JsonArray(),
-            ["items"] = new JsonArray
-            {
-                new JsonObject
+        CatalogSeed.Write(
+            scope.RootPath,
+            items:
+            [
+                new SeedItem("broken-1", brokenMediaPath)
                 {
-                    ["id"] = "broken-1",
-                    ["mediaType"] = 0,
-                    ["fullPath"] = brokenMediaPath,
-                    ["hasAudio"] = false,
-                    ["integratedLoudness"] = -20.0,
-                    ["peakDb"] = -2.0
+                    HasAudio = false,
+                    IntegratedLoudness = -20.0,
+                    PeakDb = -2.0
                 }
-            }
-        });
+            ]);
 
         var service = CreateService(new ServerStateService(), scope.RootPath);
         Assert.True(service.TryStartManual().Accepted);
         await WaitForCompletionAsync(service, TimeSpan.FromSeconds(20));
 
-        var item = Assert.Single(LoadCatalog(scope.LibraryPath).Items);
+        var item = Assert.Single(LoadCatalog(scope.RootPath).Items);
         Assert.True(item.HasAudio);
         Assert.Null(item.IntegratedLoudness);
         Assert.Null(item.PeakDb);
@@ -547,11 +470,7 @@ public sealed class RefreshPipelineServiceTests
     public async Task ManualRun_ShouldScheduleNextAutoRun_FromCompletionTime()
     {
         using var scope = new DataFolderScope();
-        await SeedLibraryAsync(scope.LibraryPath, new JsonObject
-        {
-            ["sources"] = new JsonArray(),
-            ["items"] = new JsonArray()
-        });
+        CatalogSeed.Write(scope.RootPath);
 
         var state = new ServerStateService();
         var logger = new Microsoft.Extensions.Logging.Abstractions.NullLogger<RefreshPipelineService>();
@@ -561,7 +480,7 @@ public sealed class RefreshPipelineServiceTests
             AutoRefreshIntervalMinutes = 5
         };
         var coreSettings = new CoreSettingsService(options, scope.RootPath);
-        var service = new RefreshPipelineService(state, logger, coreSettings, scope.RootPath);
+        var service = new RefreshPipelineService(state, logger, coreSettings, CatalogOpen.Host(scope.RootPath), scope.RootPath);
 
         Assert.True(service.TryStartManual().Accepted);
         var final = await WaitForCompletionAsync(service, TimeSpan.FromSeconds(10));
@@ -587,36 +506,22 @@ public sealed class RefreshPipelineServiceTests
         var oldRelative = Path.GetRelativePath(sourceRoot, oldPath);
 
         var sourceId = "source-1";
-        await SeedLibraryAsync(scope.LibraryPath, new JsonObject
-        {
-            ["sources"] = new JsonArray
-            {
-                new JsonObject
+        CatalogSeed.Write(
+            scope.RootPath,
+            sources: [new SeedSource(sourceId, sourceRoot)],
+            items:
+            [
+                new SeedItem("item-1", oldPath)
                 {
-                    ["id"] = sourceId,
-                    ["rootPath"] = sourceRoot,
-                    ["isEnabled"] = true
+                    SourceId = sourceId,
+                    RelativePath = oldRelative,
+                    FileName = "clip.mp4",
+                    Fingerprint = fingerprint,
+                    FingerprintStatus = 1,
+                    FileSizeBytes = fileInfo.Length,
+                    LastWriteTimeUtc = fileInfo.LastWriteTimeUtc
                 }
-            },
-            ["items"] = new JsonArray
-            {
-                new JsonObject
-                {
-                    ["id"] = "item-1",
-                    ["sourceId"] = sourceId,
-                    ["fullPath"] = oldPath,
-                    ["relativePath"] = oldRelative,
-                    ["fileName"] = "clip.mp4",
-                    ["mediaType"] = 0,
-                    ["fingerprint"] = fingerprint,
-                    ["fingerprintAlgorithm"] = "SHA-256",
-                    ["fingerprintVersion"] = 1,
-                    ["fingerprintStatus"] = 1,
-                    ["fileSizeBytes"] = fileInfo.Length,
-                    ["lastWriteTimeUtc"] = fileInfo.LastWriteTimeUtc
-                }
-            }
-        });
+            ]);
 
         var newPath = Path.Combine(newDir, "clip.mp4");
         File.Move(oldPath, newPath);
@@ -626,7 +531,7 @@ public sealed class RefreshPipelineServiceTests
         Assert.True(service.TryStartManual().Accepted);
         var final = await WaitForCompletionAsync(service, TimeSpan.FromSeconds(30));
 
-        var only = Assert.Single(LoadCatalog(scope.LibraryPath).Items);
+        var only = Assert.Single(LoadCatalog(scope.RootPath).Items);
         Assert.Equal("item-1", only.Id);
         Assert.Equal(newPath, only.FullPath);
 
@@ -690,25 +595,21 @@ public sealed class RefreshPipelineServiceTests
         using var scope = new DataFolderScope();
         var mediaPath = Path.Combine(scope.RootPath, "fingerprint-pending.png");
         await WriteTinyPngAsync(mediaPath);
-        await SeedLibraryAsync(scope.LibraryPath, new JsonObject
-        {
-            ["sources"] = new JsonArray(),
-            ["items"] = new JsonArray
-            {
-                new JsonObject
+        CatalogSeed.Write(
+            scope.RootPath,
+            items:
+            [
+                new SeedItem("fp-pending-1", mediaPath)
                 {
-                    ["id"] = "fp-pending-1",
-                    ["mediaType"] = 1,
-                    ["fullPath"] = mediaPath,
-                    ["fingerprintStatus"] = "Pending"
+                    MediaType = 1,
+                    FingerprintStatus = 0
                 }
-            }
-        });
+            ]);
 
         var service = CreateService(new ServerStateService(), scope.RootPath);
         await service.RunFingerprintStageAsync(CancellationToken.None);
 
-        var item = Assert.Single(LoadCatalog(scope.LibraryPath).Items);
+        var item = Assert.Single(LoadCatalog(scope.RootPath).Items);
         Assert.Equal(1, item.FingerprintStatus);
         Assert.False(string.IsNullOrWhiteSpace(item.Fingerprint));
         Assert.Equal(ComputeSha256(mediaPath), item.Fingerprint, StringComparer.OrdinalIgnoreCase);
@@ -726,44 +627,27 @@ public sealed class RefreshPipelineServiceTests
         await GenerateTinyVideoAsync(keptPath);
         await GenerateTinyVideoAsync(addedPath);
 
-        await SeedLibraryAsync(scope.LibraryPath, new JsonObject
-        {
-            ["sources"] = new JsonArray
-            {
-                new JsonObject
+        CatalogSeed.Write(
+            scope.RootPath,
+            sources: [new SeedSource("src-media", sourceDir)],
+            items:
+            [
+                new SeedItem("kept-1", keptPath)
                 {
-                    ["id"] = "src-media",
-                    ["rootPath"] = sourceDir,
-                    ["isEnabled"] = true
-                }
-            },
-            ["items"] = new JsonArray
-            {
-                new JsonObject
-                {
-                    ["id"] = "kept-1",
-                    ["sourceId"] = "src-media",
-                    ["fullPath"] = keptPath,
-                    ["relativePath"] = "kept.mp4",
-                    ["fileName"] = "kept.mp4",
-                    ["mediaType"] = 0,
-                    ["isFavorite"] = true,
-                    ["fingerprintStatus"] = 0,
-                    ["tags"] = new JsonArray("Keep")
+                    SourceId = "src-media",
+                    RelativePath = "kept.mp4",
+                    FileName = "kept.mp4",
+                    IsFavorite = true,
+                    FingerprintStatus = 0,
+                    Tags = ["Keep"]
                 },
-                new JsonObject
+                new SeedItem("missing-1", missingPath)
                 {
-                    ["id"] = "missing-1",
-                    ["sourceId"] = "src-media",
-                    ["fullPath"] = missingPath,
-                    ["relativePath"] = "missing.mp4",
-                    ["fileName"] = "missing.mp4",
-                    ["mediaType"] = 0
+                    SourceId = "src-media",
+                    RelativePath = "missing.mp4",
+                    FileName = "missing.mp4"
                 }
-            },
-            ["tags"] = new JsonArray(),
-            ["categories"] = new JsonArray()
-        });
+            ]);
 
         var host = LibraryCatalogHost.Open(scope.RootPath, Path.Combine(scope.RootPath, "thumbnails"));
         var service = CreateService(new ServerStateService(), scope.RootPath, host);
@@ -790,28 +674,22 @@ public sealed class RefreshPipelineServiceTests
         using var scope = new DataFolderScope();
         var mediaPath = Path.Combine(scope.RootPath, "ready.png");
         await WriteTinyPngAsync(mediaPath);
-        await SeedLibraryAsync(scope.LibraryPath, new JsonObject
-        {
-            ["sources"] = new JsonArray(),
-            ["items"] = new JsonArray
-            {
-                new JsonObject
+        CatalogSeed.Write(
+            scope.RootPath,
+            items:
+            [
+                new SeedItem("ready-1", mediaPath)
                 {
-                    ["id"] = "ready-1",
-                    ["mediaType"] = 1,
-                    ["fullPath"] = mediaPath,
-                    ["fingerprint"] = "abc",
-                    ["fingerprintStatus"] = 1
+                    MediaType = 1,
+                    Fingerprint = "abc",
+                    FingerprintStatus = 1
                 },
-                new JsonObject
+                new SeedItem("missing-1", Path.Combine(scope.RootPath, "missing.png"))
                 {
-                    ["id"] = "missing-1",
-                    ["mediaType"] = 1,
-                    ["fullPath"] = Path.Combine(scope.RootPath, "missing.png"),
-                    ["fingerprintStatus"] = 0
+                    MediaType = 1,
+                    FingerprintStatus = 0
                 }
-            }
-        });
+            ]);
 
         var state = new ServerStateService();
         var service = CreateService(state, scope.RootPath);
@@ -838,20 +716,16 @@ public sealed class RefreshPipelineServiceTests
         using var scope = new DataFolderScope();
         var mediaPath = Path.Combine(scope.RootPath, "hold.png");
         await WriteTinyPngAsync(mediaPath);
-        await SeedLibraryAsync(scope.LibraryPath, new JsonObject
-        {
-            ["sources"] = new JsonArray(),
-            ["items"] = new JsonArray
-            {
-                new JsonObject
+        CatalogSeed.Write(
+            scope.RootPath,
+            items:
+            [
+                new SeedItem("hold-1", mediaPath)
                 {
-                    ["id"] = "hold-1",
-                    ["mediaType"] = 1,
-                    ["fullPath"] = mediaPath,
-                    ["fingerprintStatus"] = 0
+                    MediaType = 1,
+                    FingerprintStatus = 0
                 }
-            }
-        });
+            ]);
 
         var host = LibraryCatalogHost.Open(scope.RootPath, Path.Combine(scope.RootPath, "thumbnails"));
         var service = CreateService(new ServerStateService(), scope.RootPath, host);
@@ -878,22 +752,18 @@ public sealed class RefreshPipelineServiceTests
     {
         using var scope = new DataFolderScope();
         var missingSource = Path.Combine(scope.RootPath, "gone.png");
-        await SeedLibraryAsync(scope.LibraryPath, new JsonObject
-        {
-            ["sources"] = new JsonArray(),
-            ["items"] = new JsonArray
-            {
-                new JsonObject
+        CatalogSeed.Write(
+            scope.RootPath,
+            items:
+            [
+                new SeedItem("thumb-match", missingSource)
                 {
-                    ["id"] = "thumb-match",
-                    ["mediaType"] = 1,
-                    ["fullPath"] = missingSource,
-                    ["fingerprint"] = "fp-match",
-                    ["fileSizeBytes"] = 42,
-                    ["lastWriteTimeUtc"] = "2024-05-06T07:08:09.0000000Z"
+                    MediaType = 1,
+                    Fingerprint = "fp-match",
+                    FileSizeBytes = 42,
+                    LastWriteTimeUtc = DateTimeOffset.Parse("2024-05-06T07:08:09.0000000Z", System.Globalization.CultureInfo.InvariantCulture).UtcDateTime
                 }
-            }
-        });
+            ]);
 
         var host = LibraryCatalogHost.Open(scope.RootPath, Path.Combine(scope.RootPath, "thumbnails"));
         var stored = Assert.Single(host.Session.ReadRefreshItems());
@@ -921,22 +791,18 @@ public sealed class RefreshPipelineServiceTests
         using var scope = new DataFolderScope();
         var mediaPath = Path.Combine(scope.RootPath, "thumb-missing-jpeg.png");
         await WriteTinyPngAsync(mediaPath);
-        await SeedLibraryAsync(scope.LibraryPath, new JsonObject
-        {
-            ["sources"] = new JsonArray(),
-            ["items"] = new JsonArray
-            {
-                new JsonObject
+        CatalogSeed.Write(
+            scope.RootPath,
+            items:
+            [
+                new SeedItem("thumb-missing-jpeg", mediaPath)
                 {
-                    ["id"] = "thumb-missing-jpeg",
-                    ["mediaType"] = 1,
-                    ["fullPath"] = mediaPath,
-                    ["fingerprint"] = "fp-jpeg",
-                    ["fileSizeBytes"] = 42,
-                    ["lastWriteTimeUtc"] = "2024-05-06T07:08:09.0000000Z"
+                    MediaType = 1,
+                    Fingerprint = "fp-jpeg",
+                    FileSizeBytes = 42,
+                    LastWriteTimeUtc = DateTimeOffset.Parse("2024-05-06T07:08:09.0000000Z", System.Globalization.CultureInfo.InvariantCulture).UtcDateTime
                 }
-            }
-        });
+            ]);
 
         var host = LibraryCatalogHost.Open(scope.RootPath, Path.Combine(scope.RootPath, "thumbnails"));
         var stored = Assert.Single(host.Session.ReadRefreshItems());
@@ -960,41 +826,28 @@ public sealed class RefreshPipelineServiceTests
         var keptPath = Path.Combine(sourceDir, "kept.png");
         var missingPath = Path.Combine(sourceDir, "missing.png");
         await WriteTinyPngAsync(keptPath);
-        await SeedLibraryAsync(scope.LibraryPath, new JsonObject
-        {
-            ["sources"] = new JsonArray
-            {
-                new JsonObject
+        CatalogSeed.Write(
+            scope.RootPath,
+            sources: [new SeedSource("src-thumbs", sourceDir)],
+            items:
+            [
+                new SeedItem("kept-thumb", keptPath)
                 {
-                    ["id"] = "src-thumbs",
-                    ["rootPath"] = sourceDir,
-                    ["isEnabled"] = true
-                }
-            },
-            ["items"] = new JsonArray
-            {
-                new JsonObject
-                {
-                    ["id"] = "kept-thumb",
-                    ["sourceId"] = "src-thumbs",
-                    ["fullPath"] = keptPath,
-                    ["relativePath"] = "kept.png",
-                    ["fileName"] = "kept.png",
-                    ["mediaType"] = 1,
-                    ["fingerprint"] = "fp-kept",
-                    ["fingerprintStatus"] = 1
+                    SourceId = "src-thumbs",
+                    RelativePath = "kept.png",
+                    FileName = "kept.png",
+                    MediaType = 1,
+                    Fingerprint = "fp-kept",
+                    FingerprintStatus = 1
                 },
-                new JsonObject
+                new SeedItem("gone-thumb", missingPath)
                 {
-                    ["id"] = "gone-thumb",
-                    ["sourceId"] = "src-thumbs",
-                    ["fullPath"] = missingPath,
-                    ["relativePath"] = "missing.png",
-                    ["fileName"] = "missing.png",
-                    ["mediaType"] = 1
+                    SourceId = "src-thumbs",
+                    RelativePath = "missing.png",
+                    FileName = "missing.png",
+                    MediaType = 1
                 }
-            }
-        });
+            ]);
 
         var host = LibraryCatalogHost.Open(scope.RootPath, Path.Combine(scope.RootPath, "thumbnails"));
         var service = CreateService(new ServerStateService(), scope.RootPath, host);
@@ -1038,15 +891,19 @@ public sealed class RefreshPipelineServiceTests
         var secondPath = Path.Combine(scope.RootPath, "hold-b.png");
         await WriteTinyPngAsync(firstPath);
         await WriteTinyPngAsync(secondPath);
-        await SeedLibraryAsync(scope.LibraryPath, new JsonObject
-        {
-            ["sources"] = new JsonArray(),
-            ["items"] = new JsonArray
-            {
-                new JsonObject { ["id"] = "hold-a", ["mediaType"] = 1, ["fullPath"] = firstPath },
-                new JsonObject { ["id"] = "hold-b", ["mediaType"] = 1, ["fullPath"] = secondPath }
-            }
-        });
+        CatalogSeed.Write(
+            scope.RootPath,
+            items:
+            [
+                new SeedItem("hold-a", firstPath)
+                {
+                    MediaType = 1
+                },
+                new SeedItem("hold-b", secondPath)
+                {
+                    MediaType = 1
+                }
+            ]);
 
         var host = LibraryCatalogHost.Open(scope.RootPath, Path.Combine(scope.RootPath, "thumbnails"));
         var service = CreateService(new ServerStateService(), scope.RootPath, host);
@@ -1082,15 +939,19 @@ public sealed class RefreshPipelineServiceTests
         var secondPath = Path.Combine(scope.RootPath, "cancel-b.png");
         await WriteTinyPngAsync(firstPath);
         await WriteTinyPngAsync(secondPath);
-        await SeedLibraryAsync(scope.LibraryPath, new JsonObject
-        {
-            ["sources"] = new JsonArray(),
-            ["items"] = new JsonArray
-            {
-                new JsonObject { ["id"] = "cancel-a", ["mediaType"] = 1, ["fullPath"] = firstPath },
-                new JsonObject { ["id"] = "cancel-b", ["mediaType"] = 1, ["fullPath"] = secondPath }
-            }
-        });
+        CatalogSeed.Write(
+            scope.RootPath,
+            items:
+            [
+                new SeedItem("cancel-a", firstPath)
+                {
+                    MediaType = 1
+                },
+                new SeedItem("cancel-b", secondPath)
+                {
+                    MediaType = 1
+                }
+            ]);
 
         var host = LibraryCatalogHost.Open(scope.RootPath, Path.Combine(scope.RootPath, "thumbnails"));
         var service = CreateService(new ServerStateService(), scope.RootPath, host);
@@ -1198,7 +1059,7 @@ public sealed class RefreshPipelineServiceTests
             AutoRefreshIntervalMinutes = 15
         };
         var coreSettings = new CoreSettingsService(options, appDataPathOverride);
-        return new RefreshPipelineService(state, logger, coreSettings, appDataPathOverride, catalog);
+        return new RefreshPipelineService(state, logger, coreSettings, catalog ?? CatalogOpen.Host(appDataPathOverride), appDataPathOverride);
     }
 
     private static ParsedLoudnessResult? InvokeParseLoudness(string output, int exitCode)
@@ -1270,16 +1131,8 @@ public sealed class RefreshPipelineServiceTests
         throw new TimeoutException(timeoutMessage);
     }
 
-    private static async Task SeedLibraryAsync(string path, JsonObject root)
+    private static LibraryCatalogSnapshot LoadCatalog(string directory)
     {
-        var dir = Path.GetDirectoryName(path)!;
-        Directory.CreateDirectory(dir);
-        await File.WriteAllTextAsync(path, root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
-    }
-
-    private static LibraryCatalogSnapshot LoadCatalog(string libraryJsonPath)
-    {
-        var directory = Path.GetDirectoryName(libraryJsonPath)!;
         var opened = CatalogOpen.Open(directory);
         Assert.NotNull(opened.Session);
         return LibraryCatalogStore.Read(opened.Session.DatabasePath);
@@ -1310,7 +1163,6 @@ public sealed class RefreshPipelineServiceTests
     private sealed class DataFolderScope : IDisposable
     {
         public string RootPath { get; }
-        public string LibraryPath => Path.Combine(RootPath, "library.json");
 
         public DataFolderScope()
         {

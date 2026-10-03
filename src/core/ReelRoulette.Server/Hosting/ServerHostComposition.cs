@@ -34,8 +34,7 @@ public static class ServerHostComposition
         {
             var logger = sp.GetRequiredService<ILogger<ServerStateService>>();
             var catalog = sp.GetRequiredService<LibraryCatalogHost>();
-            var appDataRoot = ServerDataPaths.DataDirectory();
-            return new ServerStateService(logger, appDataRoot, catalog);
+            return new ServerStateService(logger, catalog);
         });
         services.AddSingleton(sp =>
         {

@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging.Abstractions;
 using ReelRoulette.Core.Library;
 using ReelRoulette.Server.Contracts;
@@ -16,15 +15,9 @@ public sealed class LibraryOperationsServiceTests
         try
         {
             SeedCoreSettings(appDataRoot, enabled: true, minimumGapMinutes: 360, numberOfBackups: 8);
-            SeedLibrary(appDataRoot, new JsonObject
-            {
-                ["sources"] = new JsonArray(),
-                ["items"] = new JsonArray(),
-                ["tags"] = new JsonArray(),
-                ["categories"] = new JsonArray()
-            });
+            CatalogSeed.Write(appDataRoot);
 
-            _ = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot);
+            _ = new LibraryOperationsService(CatalogOpen.Host(appDataRoot), NullLogger<LibraryOperationsService>.Instance, appDataRoot);
 
             var backupDir = Path.Combine(appDataRoot, "backups");
             if (Directory.Exists(backupDir))
@@ -53,21 +46,15 @@ public sealed class LibraryOperationsServiceTests
         try
         {
             SeedCoreSettings(appDataRoot, enabled: true, minimumGapMinutes: 1, numberOfBackups: 1);
-            SeedLibrary(appDataRoot, new JsonObject
-            {
-                ["sources"] = new JsonArray(),
-                ["items"] = new JsonArray
-                {
-                    new JsonObject
+            CatalogSeed.Write(
+                appDataRoot,
+                items:
+                [
+                    new SeedItem("item-1", @"C:\media\movie.mp4")
                     {
-                        ["id"] = "item-1",
-                        ["fullPath"] = @"C:\media\movie.mp4",
-                        ["playCount"] = 1
+                        PlayCount = 1
                     }
-                },
-                ["tags"] = new JsonArray(),
-                ["categories"] = new JsonArray()
-            });
+                ]);
 
             var backupDir = Path.Combine(appDataRoot, "backups");
             Directory.CreateDirectory(backupDir);
@@ -75,7 +62,7 @@ public sealed class LibraryOperationsServiceTests
             File.WriteAllText(leftover, "{\"items\":[]}");
             SetBackupTimestampUtc(leftover, DateTime.UtcNow.AddHours(-12));
 
-            var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot);
+            var service = new LibraryOperationsService(CatalogOpen.Host(appDataRoot), NullLogger<LibraryOperationsService>.Instance, appDataRoot);
             Assert.True(service.RecordPlayback(@"C:\media\movie.mp4").Found);
 
             var backupFiles = Directory.GetFiles(backupDir, "library.json.backup.*");
@@ -100,24 +87,17 @@ public sealed class LibraryOperationsServiceTests
         try
         {
             SeedCoreSettings(appDataRoot, enabled: true, minimumGapMinutes: 360, numberOfBackups: 8);
-            SeedLibrary(appDataRoot, new JsonObject
-            {
-                ["sources"] = new JsonArray(),
-                ["items"] = new JsonArray
-                {
-                    new JsonObject
+            CatalogSeed.Write(
+                appDataRoot,
+                items:
+                [
+                    new SeedItem("item-1", @"C:\media\movie.mp4")
                     {
-                        ["id"] = "item-1",
-                        ["fullPath"] = @"C:\media\movie.mp4",
-                        ["playCount"] = 2,
-                        ["lastPlayedUtc"] = null
+                        PlayCount = 2
                     }
-                },
-                ["tags"] = new JsonArray(),
-                ["categories"] = new JsonArray()
-            });
+                ]);
 
-            var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot);
+            var service = new LibraryOperationsService(CatalogOpen.Host(appDataRoot), NullLogger<LibraryOperationsService>.Instance, appDataRoot);
             var before = DateTime.UtcNow;
             var result = service.RecordPlayback(@"C:\media\movie.mp4");
             var after = DateTime.UtcNow;
@@ -149,15 +129,9 @@ public sealed class LibraryOperationsServiceTests
         try
         {
             SeedCoreSettings(appDataRoot, enabled: true, minimumGapMinutes: 360, numberOfBackups: 8);
-            SeedLibrary(appDataRoot, new JsonObject
-            {
-                ["sources"] = new JsonArray(),
-                ["items"] = new JsonArray(),
-                ["tags"] = new JsonArray(),
-                ["categories"] = new JsonArray()
-            });
+            CatalogSeed.Write(appDataRoot);
 
-            var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot);
+            var service = new LibraryOperationsService(CatalogOpen.Host(appDataRoot), NullLogger<LibraryOperationsService>.Instance, appDataRoot);
             var result = service.RecordPlayback(@"C:\media\missing.mp4");
 
             Assert.False(result.Found);
@@ -181,24 +155,17 @@ public sealed class LibraryOperationsServiceTests
         try
         {
             SeedCoreSettings(appDataRoot, enabled: true, minimumGapMinutes: 360, numberOfBackups: 8);
-            SeedLibrary(appDataRoot, new JsonObject
-            {
-                ["sources"] = new JsonArray(),
-                ["items"] = new JsonArray
-                {
-                    new JsonObject
+            CatalogSeed.Write(
+                appDataRoot,
+                items:
+                [
+                    new SeedItem("item-1", @"C:\media\movie.mp4")
                     {
-                        ["id"] = "item-1",
-                        ["fullPath"] = @"C:\media\movie.mp4",
-                        ["isFavorite"] = false,
-                        ["isBlacklisted"] = true
+                        IsBlacklisted = true
                     }
-                },
-                ["tags"] = new JsonArray(),
-                ["categories"] = new JsonArray()
-            });
+                ]);
 
-            var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot);
+            var service = new LibraryOperationsService(CatalogOpen.Host(appDataRoot), NullLogger<LibraryOperationsService>.Instance, appDataRoot);
             var updated = service.SetFavorite(@"C:\media\movie.mp4", isFavorite: true);
 
             Assert.NotNull(updated);
@@ -226,40 +193,25 @@ public sealed class LibraryOperationsServiceTests
         try
         {
             SeedCoreSettings(appDataRoot, enabled: true, minimumGapMinutes: 360, numberOfBackups: 8);
-            SeedLibrary(appDataRoot, new JsonObject
-            {
-                ["sources"] = new JsonArray(),
-                ["items"] = new JsonArray
-                {
-                    new JsonObject
+            CatalogSeed.Write(
+                appDataRoot,
+                items:
+                [
+                    new SeedItem("item-1", @"C:\media\movie.mp4")
                     {
-                        ["id"] = "item-1",
-                        ["fullPath"] = @"C:\media\movie.mp4",
-                        ["isFavorite"] = false,
-                        ["isBlacklisted"] = true,
-                        ["playCount"] = 2
+                        IsBlacklisted = true,
+                        PlayCount = 2
                     },
-                    new JsonObject
+                    new SeedItem("item-2", @"C:\media\other.mp4")
                     {
-                        ["id"] = "item-2",
-                        ["fullPath"] = @"C:\media\other.mp4",
-                        ["isFavorite"] = true,
-                        ["isBlacklisted"] = false,
-                        ["playCount"] = 5
+                        IsFavorite = true,
+                        PlayCount = 5
                     },
-                    new JsonObject
-                    {
-                        ["id"] = "item-3",
-                        ["fullPath"] = @"C:\media\fresh.mp4",
-                        ["playCount"] = 0
-                    }
-                },
-                ["tags"] = new JsonArray(),
-                ["categories"] = new JsonArray()
-            });
+                    new SeedItem("item-3", @"C:\media\fresh.mp4")
+                ]);
 
             var host = LibraryCatalogHost.Open(appDataRoot, Path.Combine(appDataRoot, "thumbnails"));
-            var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot, host);
+            var service = new LibraryOperationsService(host, NullLogger<LibraryOperationsService>.Instance, appDataRoot);
             var revision = host.Session.Revision;
 
             var favorited = service.SetFavorite(@"C:\MEDIA\MOVIE.MP4", isFavorite: true);
@@ -329,29 +281,21 @@ public sealed class LibraryOperationsServiceTests
         try
         {
             SeedCoreSettings(appDataRoot, enabled: true, minimumGapMinutes: 360, numberOfBackups: 8);
-            SeedLibrary(appDataRoot, new JsonObject
-            {
-                ["sources"] = new JsonArray(),
-                ["items"] = new JsonArray
-                {
-                    new JsonObject
+            CatalogSeed.Write(
+                appDataRoot,
+                items:
+                [
+                    new SeedItem("item-1", @"C:\media\one.mp4")
                     {
-                        ["id"] = "item-1",
-                        ["fullPath"] = @"C:\media\one.mp4",
-                        ["tags"] = new JsonArray("old")
+                        Tags = ["old"]
                     },
-                    new JsonObject
+                    new SeedItem("item-2", @"C:\media\two.mp4")
                     {
-                        ["id"] = "item-2",
-                        ["fullPath"] = @"C:\media\two.mp4",
-                        ["tags"] = new JsonArray("old")
+                        Tags = ["old"]
                     }
-                },
-                ["tags"] = new JsonArray(),
-                ["categories"] = new JsonArray()
-            });
+                ]);
 
-            var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot);
+            var service = new LibraryOperationsService(CatalogOpen.Host(appDataRoot), NullLogger<LibraryOperationsService>.Instance, appDataRoot);
             var changed = service.ApplyItemTags(new ReelRoulette.Server.Contracts.ApplyItemTagsRequest
             {
                 ItemIds = ["item-1", @"C:\media\two.mp4"],
@@ -384,30 +328,17 @@ public sealed class LibraryOperationsServiceTests
         try
         {
             SeedCoreSettings(appDataRoot, enabled: true, minimumGapMinutes: 360, numberOfBackups: 8);
-            SeedLibrary(appDataRoot, new JsonObject
-            {
-                ["sources"] = new JsonArray(),
-                ["items"] = new JsonArray
-                {
-                    new JsonObject
-                    {
-                        ["id"] = "item-1",
-                        ["fullPath"] = @"C:\media\one.mp4",
-                        ["tags"] = new JsonArray()
-                    }
-                },
-                ["tags"] = new JsonArray
-                {
-                    new JsonObject { ["name"] = "TagA", ["categoryId"] = "cat-1" }
-                },
-                ["categories"] = new JsonArray
-                {
-                    new JsonObject { ["id"] = "cat-1", ["name"] = "Category 1", ["sortOrder"] = 1 },
-                    new JsonObject { ["id"] = "uncategorized", ["name"] = "Uncategorized", ["sortOrder"] = int.MaxValue }
-                }
-            });
+            CatalogSeed.Write(
+                appDataRoot,
+                categories:
+                [
+                    new SeedCategory("cat-1", "Category 1", 1),
+                    new SeedCategory("uncategorized", "Uncategorized", int.MaxValue)
+                ],
+                tags: [new SeedTag("TagA", "cat-1")],
+                items: [new SeedItem("item-1", @"C:\media\one.mp4")]);
 
-            var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot);
+            var service = new LibraryOperationsService(CatalogOpen.Host(appDataRoot), NullLogger<LibraryOperationsService>.Instance, appDataRoot);
             var changed = service.ApplyItemTags(new ReelRoulette.Server.Contracts.ApplyItemTagsRequest
             {
                 ItemIds = ["item-1"],
@@ -442,30 +373,23 @@ public sealed class LibraryOperationsServiceTests
         try
         {
             SeedCoreSettings(appDataRoot, enabled: true, minimumGapMinutes: 360, numberOfBackups: 8);
-            SeedLibrary(appDataRoot, new JsonObject
-            {
-                ["sources"] = new JsonArray(),
-                ["items"] = new JsonArray
-                {
-                    new JsonObject
+            CatalogSeed.Write(
+                appDataRoot,
+                categories:
+                [
+                    new SeedCategory("cat-1", "Category 1", 1),
+                    new SeedCategory("uncategorized", "Uncategorized", int.MaxValue)
+                ],
+                tags: [new SeedTag("TagA", "cat-1")],
+                items:
+                [
+                    new SeedItem("item-1", @"C:\media\one.mp4")
                     {
-                        ["id"] = "item-1",
-                        ["fullPath"] = @"C:\media\one.mp4",
-                        ["tags"] = new JsonArray("TagA")
+                        Tags = ["TagA"]
                     }
-                },
-                ["tags"] = new JsonArray
-                {
-                    new JsonObject { ["name"] = "TagA", ["categoryId"] = "cat-1" }
-                },
-                ["categories"] = new JsonArray
-                {
-                    new JsonObject { ["id"] = "cat-1", ["name"] = "Category 1", ["sortOrder"] = 1 },
-                    new JsonObject { ["id"] = "uncategorized", ["name"] = "Uncategorized", ["sortOrder"] = int.MaxValue }
-                }
-            });
+                ]);
 
-            var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot);
+            var service = new LibraryOperationsService(CatalogOpen.Host(appDataRoot), NullLogger<LibraryOperationsService>.Instance, appDataRoot);
             var changed = service.ApplyItemTags(new ReelRoulette.Server.Contracts.ApplyItemTagsRequest
             {
                 ItemIds = ["item-1"],
@@ -493,30 +417,17 @@ public sealed class LibraryOperationsServiceTests
         try
         {
             SeedCoreSettings(appDataRoot, enabled: true, minimumGapMinutes: 360, numberOfBackups: 8);
-            SeedLibrary(appDataRoot, new JsonObject
-            {
-                ["sources"] = new JsonArray(),
-                ["items"] = new JsonArray
-                {
-                    new JsonObject
-                    {
-                        ["id"] = "item-1",
-                        ["fullPath"] = @"C:\media\one.mp4",
-                        ["tags"] = new JsonArray()
-                    }
-                },
-                ["tags"] = new JsonArray
-                {
-                    new JsonObject { ["name"] = "TagA", ["categoryId"] = "cat-1" }
-                },
-                ["categories"] = new JsonArray
-                {
-                    new JsonObject { ["id"] = "cat-1", ["name"] = "Category 1", ["sortOrder"] = 1 },
-                    new JsonObject { ["id"] = "uncategorized", ["name"] = "Uncategorized", ["sortOrder"] = int.MaxValue }
-                }
-            });
+            CatalogSeed.Write(
+                appDataRoot,
+                categories:
+                [
+                    new SeedCategory("cat-1", "Category 1", 1),
+                    new SeedCategory("uncategorized", "Uncategorized", int.MaxValue)
+                ],
+                tags: [new SeedTag("TagA", "cat-1")],
+                items: [new SeedItem("item-1", @"C:\media\one.mp4")]);
 
-            var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot);
+            var service = new LibraryOperationsService(CatalogOpen.Host(appDataRoot), NullLogger<LibraryOperationsService>.Instance, appDataRoot);
             var changed = service.ApplyItemTags(new ReelRoulette.Server.Contracts.ApplyItemTagsRequest
             {
                 ItemIds = ["item-1"],
@@ -544,38 +455,21 @@ public sealed class LibraryOperationsServiceTests
         try
         {
             SeedCoreSettings(appDataRoot, enabled: true, minimumGapMinutes: 360, numberOfBackups: 8);
-            SeedLibrary(appDataRoot, new JsonObject
-            {
-                ["sources"] = new JsonArray(),
-                ["items"] = new JsonArray
-                {
-                    new JsonObject
+            CatalogSeed.Write(
+                appDataRoot,
+                categories: [new SeedCategory("people", "People", 1)],
+                tags: [new SeedTag("Old", "people")],
+                items:
+                [
+                    new SeedItem("item-1", "/media/one.mp4")
                     {
-                        ["id"] = "item-1",
-                        ["fullPath"] = "/media/one.mp4",
-                        ["fileName"] = "one.mp4",
-                        ["tags"] = new JsonArray("Old")
+                        Tags = ["Old"]
                     },
-                    new JsonObject
-                    {
-                        ["id"] = "item-2",
-                        ["fullPath"] = "/media/two.mp4",
-                        ["fileName"] = "two.mp4",
-                        ["tags"] = new JsonArray()
-                    }
-                },
-                ["tags"] = new JsonArray
-                {
-                    new JsonObject { ["name"] = "Old", ["categoryId"] = "people" }
-                },
-                ["categories"] = new JsonArray
-                {
-                    new JsonObject { ["id"] = "people", ["name"] = "People", ["sortOrder"] = 1 }
-                }
-            });
+                    new SeedItem("item-2", "/media/two.mp4")
+                ]);
 
             var host = LibraryCatalogHost.Open(appDataRoot, Path.Combine(appDataRoot, "thumbnails"));
-            var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot, host);
+            var service = new LibraryOperationsService(host, NullLogger<LibraryOperationsService>.Instance, appDataRoot);
 
             var changed = service.ApplyItemTags(new ApplyItemTagsRequest
             {
@@ -631,29 +525,19 @@ public sealed class LibraryOperationsServiceTests
         try
         {
             SeedCoreSettings(appDataRoot, enabled: true, minimumGapMinutes: 360, numberOfBackups: 8);
-            SeedLibrary(appDataRoot, new JsonObject
-            {
-                ["sources"] = new JsonArray(),
-                ["items"] = new JsonArray
-                {
-                    new JsonObject
+            CatalogSeed.Write(
+                appDataRoot,
+                categories: [new SeedCategory("uncategorized", "Uncategorized", int.MaxValue)],
+                tags: [new SeedTag("TagA")],
+                items:
+                [
+                    new SeedItem("item-1", @"C:\media\one.mp4")
                     {
-                        ["id"] = "item-1",
-                        ["fullPath"] = @"C:\media\one.mp4",
-                        ["tags"] = new JsonArray("TagA")
+                        Tags = ["TagA"]
                     }
-                },
-                ["tags"] = new JsonArray
-                {
-                    new JsonObject { ["name"] = "TagA", ["categoryId"] = "uncategorized" }
-                },
-                ["categories"] = new JsonArray
-                {
-                    new JsonObject { ["id"] = "uncategorized", ["name"] = "Uncategorized", ["sortOrder"] = int.MaxValue }
-                }
-            });
+                ]);
 
-            var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot);
+            var service = new LibraryOperationsService(CatalogOpen.Host(appDataRoot), NullLogger<LibraryOperationsService>.Instance, appDataRoot);
             Assert.True(service.RenameTag(new ReelRoulette.Server.Contracts.RenameTagRequest
             {
                 OldName = "TagA",
@@ -689,68 +573,40 @@ public sealed class LibraryOperationsServiceTests
         try
         {
             SeedCoreSettings(appDataRoot, enabled: true, minimumGapMinutes: 360, numberOfBackups: 8);
-            SeedLibrary(appDataRoot, new JsonObject
-            {
-                ["sources"] = new JsonArray
-                {
-                    new JsonObject
+            CatalogSeed.Write(
+                appDataRoot,
+                sources:
+                [
+                    new SeedSource("src-a", @"C:\media\a", "A"),
+                    new SeedSource("src-b", @"C:\media\b", "B", IsEnabled: false)
+                ],
+                items:
+                [
+                    new SeedItem("video-1", @"C:\media\a\v1.mp4")
                     {
-                        ["id"] = "src-a",
-                        ["rootPath"] = @"C:\media\a",
-                        ["displayName"] = "A",
-                        ["isEnabled"] = true
+                        SourceId = "src-a",
+                        HasAudio = true,
+                        Duration = TimeSpan.FromSeconds(120),
+                        IsFavorite = true,
+                        PlayCount = 2
                     },
-                    new JsonObject
+                    new SeedItem("video-2", @"C:\media\a\v2.mp4")
                     {
-                        ["id"] = "src-b",
-                        ["rootPath"] = @"C:\media\b",
-                        ["displayName"] = "B",
-                        ["isEnabled"] = false
+                        SourceId = "src-a",
+                        HasAudio = false,
+                        Duration = TimeSpan.FromSeconds(180),
+                        IsBlacklisted = true
+                    },
+                    new SeedItem("photo-1", @"C:\media\b\p1.jpg")
+                    {
+                        SourceId = "src-b",
+                        MediaType = 1,
+                        PlayCount = 1
                     }
-                },
-                ["items"] = new JsonArray
-                {
-                    new JsonObject
-                    {
-                        ["id"] = "video-1",
-                        ["sourceId"] = "src-a",
-                        ["fullPath"] = @"C:\media\a\v1.mp4",
-                        ["mediaType"] = "Video",
-                        ["hasAudio"] = true,
-                        ["duration"] = "00:02:00",
-                        ["isFavorite"] = true,
-                        ["isBlacklisted"] = false,
-                        ["playCount"] = 2
-                    },
-                    new JsonObject
-                    {
-                        ["id"] = "video-2",
-                        ["sourceId"] = "src-a",
-                        ["fullPath"] = @"C:\media\a\v2.mp4",
-                        ["mediaType"] = "Video",
-                        ["hasAudio"] = false,
-                        ["duration"] = "00:03:00",
-                        ["isFavorite"] = false,
-                        ["isBlacklisted"] = true,
-                        ["playCount"] = 0
-                    },
-                    new JsonObject
-                    {
-                        ["id"] = "photo-1",
-                        ["sourceId"] = "src-b",
-                        ["fullPath"] = @"C:\media\b\p1.jpg",
-                        ["mediaType"] = "Photo",
-                        ["isFavorite"] = false,
-                        ["isBlacklisted"] = false,
-                        ["playCount"] = 1
-                    }
-                },
-                ["tags"] = new JsonArray(),
-                ["categories"] = new JsonArray()
-            });
+                ]);
 
             var host = LibraryCatalogHost.Open(appDataRoot, Path.Combine(appDataRoot, "thumbnails"));
-            var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot, host);
+            var service = new LibraryOperationsService(host, NullLogger<LibraryOperationsService>.Instance, appDataRoot);
             var stats = service.GetLibraryStats();
 
             Assert.Equal(2, stats.Global.TotalVideos);
@@ -793,43 +649,26 @@ public sealed class LibraryOperationsServiceTests
         var appDataRoot = CreateTempAppDataRoot();
         try
         {
-            SeedLibrary(appDataRoot, new JsonObject
-            {
-                ["sources"] = new JsonArray
-                {
-                    new JsonObject
+            CatalogSeed.Write(
+                appDataRoot,
+                sources:
+                [
+                    new SeedSource("src-a", @"C:\media\a"),
+                    new SeedSource("src-empty", @"C:\media\empty", "Empty", IsEnabled: false)
+                ],
+                items:
+                [
+                    new SeedItem("video-1", @"C:\media\a\v1.mp4")
                     {
-                        ["id"] = "src-a",
-                        ["rootPath"] = @"C:\media\a",
-                        ["isEnabled"] = true
-                    },
-                    new JsonObject
-                    {
-                        ["id"] = "src-empty",
-                        ["rootPath"] = @"C:\media\empty",
-                        ["displayName"] = "Empty",
-                        ["isEnabled"] = false
+                        SourceId = "src-a",
+                        HasAudio = true,
+                        Duration = TimeSpan.FromSeconds(120),
+                        PlayCount = 1
                     }
-                },
-                ["items"] = new JsonArray
-                {
-                    new JsonObject
-                    {
-                        ["id"] = "video-1",
-                        ["sourceId"] = "src-a",
-                        ["fullPath"] = @"C:\media\a\v1.mp4",
-                        ["mediaType"] = "Video",
-                        ["hasAudio"] = true,
-                        ["duration"] = "00:02:00",
-                        ["playCount"] = 1
-                    }
-                },
-                ["tags"] = new JsonArray(),
-                ["categories"] = new JsonArray()
-            });
+                ]);
 
             var host = LibraryCatalogHost.Open(appDataRoot, Path.Combine(appDataRoot, "thumbnails"));
-            var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot, host);
+            var service = new LibraryOperationsService(host, NullLogger<LibraryOperationsService>.Instance, appDataRoot);
             var json = OpenApiSpec.SerializeAsServer(service.GetLibraryStats());
 
             OpenApiSpec.AssertMatchesSchema(json, "LibraryStatsResponse");
@@ -858,41 +697,23 @@ public sealed class LibraryOperationsServiceTests
         try
         {
             SeedCoreSettings(appDataRoot, enabled: true, minimumGapMinutes: 360, numberOfBackups: 8);
-            SeedLibrary(appDataRoot, new JsonObject
-            {
-                ["sources"] = new JsonArray
-                {
-                    new JsonObject
+            CatalogSeed.Write(
+                appDataRoot,
+                sources: [new SeedSource("src-a", @"C:\media\a", "A")],
+                items:
+                [
+                    new SeedItem("video-legacy", @"C:\media\a\video-legacy.mp4")
                     {
-                        ["id"] = "src-a",
-                        ["rootPath"] = @"C:\media\a",
-                        ["displayName"] = "A",
-                        ["isEnabled"] = true
-                    }
-                },
-                ["items"] = new JsonArray
-                {
-                    new JsonObject
-                    {
-                        ["id"] = "video-legacy",
-                        ["fullPath"] = @"C:\media\a\video-legacy.mp4",
-                        ["mediaType"] = 0,
-                        ["playCount"] = 1
+                        PlayCount = 1
                     },
-                    new JsonObject
+                    new SeedItem("photo-legacy", @"C:\media\a\photo-legacy.jpg")
                     {
-                        ["id"] = "photo-legacy",
-                        ["fullPath"] = @"C:\media\a\photo-legacy.jpg",
-                        ["mediaType"] = 1,
-                        ["playCount"] = 0
+                        MediaType = 1
                     }
-                },
-                ["tags"] = new JsonArray(),
-                ["categories"] = new JsonArray()
-            });
+                ]);
 
             var host = LibraryCatalogHost.Open(appDataRoot, Path.Combine(appDataRoot, "thumbnails"));
-            var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot, host);
+            var service = new LibraryOperationsService(host, NullLogger<LibraryOperationsService>.Instance, appDataRoot);
             var stats = service.GetLibraryStats();
 
             Assert.Equal(1, stats.Global.TotalVideos);
@@ -922,53 +743,32 @@ public sealed class LibraryOperationsServiceTests
         try
         {
             SeedCoreSettings(appDataRoot, enabled: true, minimumGapMinutes: 360, numberOfBackups: 8);
-            SeedLibrary(appDataRoot, new JsonObject
-            {
-                ["sources"] = new JsonArray
-                {
-                    new JsonObject
+            CatalogSeed.Write(
+                appDataRoot,
+                sources: [new SeedSource("src-a", @"C:\media\a", "A")],
+                items:
+                [
+                    new SeedItem("video-fraction", @"C:\media\a\fraction.mp4")
                     {
-                        ["id"] = "src-a",
-                        ["rootPath"] = @"C:\media\a",
-                        ["displayName"] = "A",
-                        ["isEnabled"] = true
-                    }
-                },
-                ["items"] = new JsonArray
-                {
-                    new JsonObject
-                    {
-                        ["id"] = "video-fraction",
-                        ["sourceId"] = "src-a",
-                        ["fullPath"] = @"C:\media\a\fraction.mp4",
-                        ["mediaType"] = "Video",
-                        ["duration"] = 120.5,
-                        ["playCount"] = -2
+                        SourceId = "src-a",
+                        Duration = TimeSpan.FromSeconds(120.5),
+                        PlayCount = -2
                     },
-                    new JsonObject
+                    new SeedItem("video-whole", @"C:\media\a\whole.mp4")
                     {
-                        ["id"] = "video-whole",
-                        ["sourceId"] = "src-a",
-                        ["fullPath"] = @"C:\media\a\whole.mp4",
-                        ["mediaType"] = "Video",
-                        ["hasAudio"] = false,
-                        ["duration"] = 60,
-                        ["playCount"] = 4
+                        SourceId = "src-a",
+                        HasAudio = false,
+                        Duration = TimeSpan.FromSeconds(60),
+                        PlayCount = 4
                     },
-                    new JsonObject
+                    new SeedItem("photo-odd", @"C:\media\a\odd.jpg")
                     {
-                        ["id"] = "photo-odd",
-                        ["fullPath"] = @"C:\media\a\odd.jpg",
-                        ["mediaType"] = 2,
-                        ["playCount"] = 0
+                        MediaType = 2
                     }
-                },
-                ["tags"] = new JsonArray(),
-                ["categories"] = new JsonArray()
-            });
+                ]);
 
             var host = LibraryCatalogHost.Open(appDataRoot, Path.Combine(appDataRoot, "thumbnails"));
-            var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot, host);
+            var service = new LibraryOperationsService(host, NullLogger<LibraryOperationsService>.Instance, appDataRoot);
             var stats = service.GetLibraryStats();
 
             Assert.Equal(2, stats.Global.TotalVideos);
@@ -1028,22 +828,15 @@ public sealed class LibraryOperationsServiceTests
         try
         {
             SeedCoreSettings(appDataRoot, enabled: true, minimumGapMinutes: 360, numberOfBackups: 3);
-            SeedLibrary(appDataRoot, new JsonObject
-            {
-                ["sources"] = new JsonArray(),
-                ["items"] = new JsonArray
-                {
-                    new JsonObject
+            CatalogSeed.Write(
+                appDataRoot,
+                items:
+                [
+                    new SeedItem("item-1", @"C:\media\movie.mp4")
                     {
-                        ["id"] = "item-1",
-                        ["fullPath"] = @"C:\media\movie.mp4",
-                        ["playCount"] = 2,
-                        ["lastPlayedUtc"] = null
+                        PlayCount = 2
                     }
-                },
-                ["tags"] = new JsonArray(),
-                ["categories"] = new JsonArray()
-            });
+                ]);
 
             var backupDir = Path.Combine(appDataRoot, "backups");
             Directory.CreateDirectory(backupDir);
@@ -1057,7 +850,7 @@ public sealed class LibraryOperationsServiceTests
             SetBackupTimestampUtc(backupB, DateTime.UtcNow.AddHours(-7));
             SetBackupTimestampUtc(backupC, DateTime.UtcNow.AddMinutes(-10));
 
-            var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot);
+            var service = new LibraryOperationsService(CatalogOpen.Host(appDataRoot), NullLogger<LibraryOperationsService>.Instance, appDataRoot);
             var before = Directory.GetFiles(backupDir, "library.json.backup.*").OrderBy(path => path).ToArray();
             _ = service.RecordPlayback(@"C:\media\movie.mp4");
             var after = Directory.GetFiles(backupDir, "library.json.backup.*").OrderBy(path => path).ToArray();
@@ -1081,23 +874,17 @@ public sealed class LibraryOperationsServiceTests
         try
         {
             SeedCoreSettings(appDataRoot, enabled: true, minimumGapMinutes: 360, numberOfBackups: 1);
-            SeedLibrary(appDataRoot, new JsonObject
-            {
-                ["sources"] = new JsonArray(),
-                ["items"] = new JsonArray
-                {
-                    new JsonObject
+            CatalogSeed.Write(
+                appDataRoot,
+                items:
+                [
+                    new SeedItem("item-1", @"C:\media\movie.mp4")
                     {
-                        ["id"] = "item-1",
-                        ["fullPath"] = @"C:\media\movie.mp4",
-                        ["playCount"] = 2
+                        PlayCount = 2
                     }
-                },
-                ["tags"] = new JsonArray(),
-                ["categories"] = new JsonArray()
-            });
+                ]);
 
-            var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot);
+            var service = new LibraryOperationsService(CatalogOpen.Host(appDataRoot), NullLogger<LibraryOperationsService>.Instance, appDataRoot);
             var backupDir = Path.Combine(appDataRoot, "backups");
             var before = Assert.Single(Directory.GetFiles(backupDir, "library.db.backup.*"));
             var bytes = File.ReadAllBytes(before);
@@ -1124,22 +911,15 @@ public sealed class LibraryOperationsServiceTests
         try
         {
             SeedCoreSettings(appDataRoot, enabled: true, minimumGapMinutes: 60, numberOfBackups: 3);
-            SeedLibrary(appDataRoot, new JsonObject
-            {
-                ["sources"] = new JsonArray(),
-                ["items"] = new JsonArray
-                {
-                    new JsonObject
+            CatalogSeed.Write(
+                appDataRoot,
+                items:
+                [
+                    new SeedItem("item-1", @"C:\media\movie.mp4")
                     {
-                        ["id"] = "item-1",
-                        ["fullPath"] = @"C:\media\movie.mp4",
-                        ["playCount"] = 2,
-                        ["lastPlayedUtc"] = null
+                        PlayCount = 2
                     }
-                },
-                ["tags"] = new JsonArray(),
-                ["categories"] = new JsonArray()
-            });
+                ]);
 
             var backupDir = Path.Combine(appDataRoot, "backups");
             Directory.CreateDirectory(backupDir);
@@ -1153,7 +933,7 @@ public sealed class LibraryOperationsServiceTests
             SetBackupTimestampUtc(backupB, DateTime.UtcNow.AddHours(-8));
             SetBackupTimestampUtc(backupC, DateTime.UtcNow.AddHours(-7));
 
-            var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot);
+            var service = new LibraryOperationsService(CatalogOpen.Host(appDataRoot), NullLogger<LibraryOperationsService>.Instance, appDataRoot);
             foreach (var existing in Directory.GetFiles(backupDir, "library.db.backup.*"))
             {
                 SetBackupTimestampUtc(existing, DateTime.UtcNow.AddHours(-3));
@@ -1189,23 +969,17 @@ public sealed class LibraryOperationsServiceTests
         try
         {
             SeedCoreSettings(appDataRoot, enabled: true, minimumGapMinutes: 360, numberOfBackups: 8);
-            SeedLibrary(appDataRoot, new JsonObject
-            {
-                ["sources"] = new JsonArray(),
-                ["items"] = new JsonArray
-                {
-                    new JsonObject
+            CatalogSeed.Write(
+                appDataRoot,
+                items:
+                [
+                    new SeedItem("item-1", @"C:\media\movie.mp4")
                     {
-                        ["id"] = "item-1",
-                        ["fullPath"] = @"C:\media\movie.mp4",
-                        ["playCount"] = 1
+                        PlayCount = 1
                     }
-                },
-                ["tags"] = new JsonArray(),
-                ["categories"] = new JsonArray()
-            });
+                ]);
 
-            var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot);
+            var service = new LibraryOperationsService(CatalogOpen.Host(appDataRoot), NullLogger<LibraryOperationsService>.Instance, appDataRoot);
             var backupDir = Path.Combine(appDataRoot, "backups");
             foreach (var existing in Directory.GetFiles(backupDir, "library.db.backup.*"))
             {
@@ -1242,23 +1016,17 @@ public sealed class LibraryOperationsServiceTests
         try
         {
             SeedCoreSettings(appDataRoot, enabled: true, minimumGapMinutes: 60, numberOfBackups: 8);
-            SeedLibrary(appDataRoot, new JsonObject
-            {
-                ["sources"] = new JsonArray(),
-                ["items"] = new JsonArray
-                {
-                    new JsonObject
+            CatalogSeed.Write(
+                appDataRoot,
+                items:
+                [
+                    new SeedItem("item-1", @"C:\media\movie.mp4")
                     {
-                        ["id"] = "item-1",
-                        ["fullPath"] = @"C:\media\movie.mp4",
-                        ["playCount"] = 1
+                        PlayCount = 1
                     }
-                },
-                ["tags"] = new JsonArray(),
-                ["categories"] = new JsonArray()
-            });
+                ]);
 
-            var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot);
+            var service = new LibraryOperationsService(CatalogOpen.Host(appDataRoot), NullLogger<LibraryOperationsService>.Instance, appDataRoot);
             var backupDir = Path.Combine(appDataRoot, "backups");
             foreach (var existing in Directory.GetFiles(backupDir, "library.db.backup.*"))
             {
@@ -1304,23 +1072,17 @@ public sealed class LibraryOperationsServiceTests
         try
         {
             SeedCoreSettings(appDataRoot, enabled: true, minimumGapMinutes: 60, numberOfBackups: 8);
-            SeedLibrary(appDataRoot, new JsonObject
-            {
-                ["sources"] = new JsonArray(),
-                ["items"] = new JsonArray
-                {
-                    new JsonObject
+            CatalogSeed.Write(
+                appDataRoot,
+                items:
+                [
+                    new SeedItem("item-1", @"C:\media\movie.mp4")
                     {
-                        ["id"] = "item-1",
-                        ["fullPath"] = @"C:\media\movie.mp4",
-                        ["playCount"] = 1
+                        PlayCount = 1
                     }
-                },
-                ["tags"] = new JsonArray(),
-                ["categories"] = new JsonArray()
-            });
+                ]);
 
-            var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot);
+            var service = new LibraryOperationsService(CatalogOpen.Host(appDataRoot), NullLogger<LibraryOperationsService>.Instance, appDataRoot);
             var backupDir = Path.Combine(appDataRoot, "backups");
             foreach (var existing in ListCatalogBackupFiles(backupDir))
             {
@@ -1369,23 +1131,17 @@ public sealed class LibraryOperationsServiceTests
         try
         {
             SeedCoreSettings(appDataRoot, enabled: true, minimumGapMinutes: 60, numberOfBackups: 8);
-            SeedLibrary(appDataRoot, new JsonObject
-            {
-                ["sources"] = new JsonArray(),
-                ["items"] = new JsonArray
-                {
-                    new JsonObject
+            CatalogSeed.Write(
+                appDataRoot,
+                items:
+                [
+                    new SeedItem("item-1", @"C:\media\movie.mp4")
                     {
-                        ["id"] = "item-1",
-                        ["fullPath"] = @"C:\media\movie.mp4",
-                        ["playCount"] = 1
+                        PlayCount = 1
                     }
-                },
-                ["tags"] = new JsonArray(),
-                ["categories"] = new JsonArray()
-            });
+                ]);
 
-            _ = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot);
+            _ = new LibraryOperationsService(CatalogOpen.Host(appDataRoot), NullLogger<LibraryOperationsService>.Instance, appDataRoot);
             var backupDir = Path.Combine(appDataRoot, "backups");
             foreach (var existing in Directory.GetFiles(backupDir, "library.db.backup.*"))
             {
@@ -1427,15 +1183,9 @@ public sealed class LibraryOperationsServiceTests
         try
         {
             SeedCoreSettings(appDataRoot, enabled: true, minimumGapMinutes: 60, numberOfBackups: 8);
-            SeedLibrary(appDataRoot, new JsonObject
-            {
-                ["sources"] = new JsonArray(),
-                ["items"] = new JsonArray(),
-                ["tags"] = new JsonArray(),
-                ["categories"] = new JsonArray()
-            });
+            CatalogSeed.Write(appDataRoot);
 
-            _ = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot);
+            _ = new LibraryOperationsService(CatalogOpen.Host(appDataRoot), NullLogger<LibraryOperationsService>.Instance, appDataRoot);
             var backupDir = Path.Combine(appDataRoot, "backups");
             blocked = Assert.Single(
                 Directory.GetFiles(backupDir, "library.db.backup.*"),
@@ -1487,39 +1237,20 @@ public sealed class LibraryOperationsServiceTests
             File.WriteAllText(keepPath, "keep");
             File.WriteAllText(removePath, "remove");
 
-            SeedLibrary(appDataRoot, new JsonObject
-            {
-                ["sources"] = new JsonArray(),
-                ["items"] = new JsonArray
-                {
-                    new JsonObject
+            CatalogSeed.Write(
+                appDataRoot,
+                items:
+                [
+                    new SeedItem("keep-1", keepPath)
                     {
-                        ["id"] = "keep-1",
-                        ["fullPath"] = keepPath,
-                        ["isFavorite"] = true,
-                        ["isBlacklisted"] = false
+                        IsFavorite = true
                     },
-                    new JsonObject
-                    {
-                        ["id"] = "remove-1",
-                        ["fullPath"] = removePath,
-                        ["isFavorite"] = false,
-                        ["isBlacklisted"] = false
-                    },
-                    new JsonObject
-                    {
-                        ["id"] = "missing-1",
-                        ["fullPath"] = missingPath,
-                        ["isFavorite"] = false,
-                        ["isBlacklisted"] = false
-                    }
-                },
-                ["tags"] = new JsonArray(),
-                ["categories"] = new JsonArray()
-            });
+                    new SeedItem("remove-1", removePath),
+                    new SeedItem("missing-1", missingPath)
+                ]);
 
             var host = LibraryCatalogHost.Open(appDataRoot, Path.Combine(appDataRoot, "thumbnails"));
-            var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot, host);
+            var service = new LibraryOperationsService(host, NullLogger<LibraryOperationsService>.Instance, appDataRoot);
             var skipped = service.ApplyDuplicateSelection(new ReelRoulette.Server.Contracts.DuplicateApplyRequest
             {
                 Selections =
@@ -1586,9 +1317,9 @@ public sealed class LibraryOperationsServiceTests
         {
             Directory.CreateDirectory(mediaRoot);
             SeedCoreSettings(appDataRoot, enabled: true, minimumGapMinutes: 360, numberOfBackups: 8);
-            SeedLibrary(appDataRoot, EmptyLibraryRoot());
+            CatalogSeed.Write(appDataRoot);
 
-            var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot);
+            var service = new LibraryOperationsService(CatalogOpen.Host(appDataRoot), NullLogger<LibraryOperationsService>.Instance, appDataRoot);
             var response = service.ImportSource(new SourceImportRequest
             {
                 RootPath = mediaRoot + Path.DirectorySeparatorChar,
@@ -1624,9 +1355,9 @@ public sealed class LibraryOperationsServiceTests
         {
             Directory.CreateDirectory(mediaRoot);
             SeedCoreSettings(appDataRoot, enabled: true, minimumGapMinutes: 360, numberOfBackups: 8);
-            SeedLibrary(appDataRoot, EmptyLibraryRoot());
+            CatalogSeed.Write(appDataRoot);
 
-            var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot);
+            var service = new LibraryOperationsService(CatalogOpen.Host(appDataRoot), NullLogger<LibraryOperationsService>.Instance, appDataRoot);
             var first = service.ImportSource(new SourceImportRequest
             {
                 RootPath = mediaRoot + Path.DirectorySeparatorChar
@@ -1673,53 +1404,36 @@ public sealed class LibraryOperationsServiceTests
             File.WriteAllBytes(freshPath, [0x00]);
             File.WriteAllText(Path.Combine(mediaRoot, "notes.txt"), "skip");
             SeedCoreSettings(appDataRoot, enabled: true, minimumGapMinutes: 360, numberOfBackups: 8);
-            SeedLibrary(appDataRoot, new JsonObject
-            {
-                ["sources"] = new JsonArray
-                {
-                    new JsonObject
+            CatalogSeed.Write(
+                appDataRoot,
+                sources: [new SeedSource("src-clips", mediaRoot + Path.DirectorySeparatorChar, "Clips")],
+                items:
+                [
+                    new SeedItem("kept-1", keptStoredPath)
                     {
-                        ["id"] = "src-clips",
-                        ["rootPath"] = mediaRoot + Path.DirectorySeparatorChar,
-                        ["displayName"] = "Clips",
-                        ["isEnabled"] = true
-                    }
-                },
-                ["items"] = new JsonArray
-                {
-                    new JsonObject
-                    {
-                        ["id"] = "kept-1",
-                        ["sourceId"] = "other-source",
-                        ["fullPath"] = keptStoredPath,
-                        ["relativePath"] = "old/kept.mp4",
-                        ["fileName"] = "Nope.mp4",
-                        ["mediaType"] = "Photo",
-                        ["isFavorite"] = true,
-                        ["isBlacklisted"] = false,
-                        ["playCount"] = 4,
-                        ["lastPlayedUtc"] = "2024-03-04T05:06:07Z",
-                        ["duration"] = "00:00:12",
-                        ["fingerprint"] = "abc123",
-                        ["fingerprintStatus"] = "Ready",
-                        ["tags"] = new JsonArray("Holiday", "Night")
+                        SourceId = "other-source",
+                        RelativePath = "old/kept.mp4",
+                        FileName = "Nope.mp4",
+                        MediaType = 1,
+                        IsFavorite = true,
+                        PlayCount = 4,
+                        LastPlayedUtc = DateTimeOffset.Parse("2024-03-04T05:06:07Z", System.Globalization.CultureInfo.InvariantCulture).UtcDateTime,
+                        Duration = TimeSpan.FromSeconds(12),
+                        Fingerprint = "abc123",
+                        FingerprintStatus = 1,
+                        Tags = ["Holiday", "Night"]
                     },
-                    new JsonObject
+                    new SeedItem("gone-1", gonePath)
                     {
-                        ["id"] = "gone-1",
-                        ["sourceId"] = "src-clips",
-                        ["fullPath"] = gonePath,
-                        ["fileName"] = "gone.mp4",
-                        ["playCount"] = 2,
-                        ["tags"] = new JsonArray("Keep")
+                        SourceId = "src-clips",
+                        FileName = "gone.mp4",
+                        PlayCount = 2,
+                        Tags = ["Keep"]
                     }
-                },
-                ["tags"] = new JsonArray(),
-                ["categories"] = new JsonArray()
-            });
+                ]);
 
             var host = LibraryCatalogHost.Open(appDataRoot, Path.Combine(appDataRoot, "thumbnails"));
-            var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot, host);
+            var service = new LibraryOperationsService(host, NullLogger<LibraryOperationsService>.Instance, appDataRoot);
             var revision = host.Session.Revision;
 
             var response = service.ImportSource(new SourceImportRequest
@@ -1816,12 +1530,12 @@ public sealed class LibraryOperationsServiceTests
         {
             Directory.CreateDirectory(mediaRoot);
             SeedCoreSettings(appDataRoot, enabled: true, minimumGapMinutes: 360, numberOfBackups: 8);
-            SeedLibrary(appDataRoot, EmptyLibraryRoot());
+            CatalogSeed.Write(appDataRoot);
             var host = LibraryCatalogHost.Open(appDataRoot, Path.Combine(appDataRoot, "thumbnails"));
             var service = new LibraryOperationsService(
+                host,
                 NullLogger<LibraryOperationsService>.Instance,
                 appDataRoot,
-                host,
                 _ =>
                 {
                     entered.Set();
@@ -1876,25 +1590,12 @@ public sealed class LibraryOperationsServiceTests
         try
         {
             SeedCoreSettings(appDataRoot, enabled: true, minimumGapMinutes: 360, numberOfBackups: 8);
-            SeedLibrary(appDataRoot, new JsonObject
-            {
-                ["sources"] = new JsonArray
-                {
-                    new JsonObject
-                    {
-                        ["id"] = "src-yt",
-                        ["rootPath"] = storedRoot,
-                        ["displayName"] = "",
-                        ["isEnabled"] = true
-                    }
-                },
-                ["items"] = new JsonArray(),
-                ["tags"] = new JsonArray(),
-                ["categories"] = new JsonArray()
-            });
+            CatalogSeed.Write(
+                appDataRoot,
+                sources: [new SeedSource("src-yt", storedRoot)]);
 
             var host = LibraryCatalogHost.Open(appDataRoot, Path.Combine(appDataRoot, "thumbnails"));
-            var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot, host);
+            var service = new LibraryOperationsService(host, NullLogger<LibraryOperationsService>.Instance, appDataRoot);
             var stats = service.GetLibraryStats();
             var source = Assert.Single(stats.Sources);
             Assert.Equal("YouTube", source.DisplayName);
@@ -1920,62 +1621,42 @@ public sealed class LibraryOperationsServiceTests
         var appDataRoot = CreateTempAppDataRoot();
         try
         {
-            SeedLibrary(appDataRoot, new JsonObject
-            {
-                ["sources"] = new JsonArray
-                {
-                    new JsonObject { ["id"] = "on", ["rootPath"] = "/media/on", ["isEnabled"] = true },
-                    new JsonObject { ["id"] = "off", ["rootPath"] = "/media/off", ["isEnabled"] = false }
-                },
-                ["items"] = new JsonArray
-                {
-                    new JsonObject
+            CatalogSeed.Write(
+                appDataRoot,
+                sources:
+                [
+                    new SeedSource("on", "/media/on"),
+                    new SeedSource("off", "/media/off", IsEnabled: false)
+                ],
+                tags: [new SeedTag("Holiday")],
+                items:
+                [
+                    new SeedItem("a", "/media/on/Holiday-a.mp4")
                     {
-                        ["id"] = "a",
-                        ["sourceId"] = "on",
-                        ["fullPath"] = "/media/on/Holiday-a.mp4",
-                        ["fileName"] = "Holiday-a.mp4"
+                        SourceId = "on"
                     },
-                    new JsonObject
+                    new SeedItem("kept", "/media/on/Holiday-kept.mp4")
                     {
-                        ["id"] = "kept",
-                        ["sourceId"] = "on",
-                        ["fullPath"] = "/media/on/Holiday-kept.mp4",
-                        ["fileName"] = "Holiday-kept.mp4",
-                        ["tags"] = new JsonArray { "Holiday" }
+                        SourceId = "on",
+                        Tags = ["Holiday"]
                     },
-                    new JsonObject
+                    new SeedItem("plain", "/media/on/plain.mp4")
                     {
-                        ["id"] = "plain",
-                        ["sourceId"] = "on",
-                        ["fullPath"] = "/media/on/plain.mp4",
-                        ["relativePath"] = "clips/Holiday/plain.mp4",
-                        ["fileName"] = "plain.mp4"
+                        SourceId = "on",
+                        RelativePath = "clips/Holiday/plain.mp4"
                     },
-                    new JsonObject
+                    new SeedItem("b", "/media/off/Holiday-b.mp4")
                     {
-                        ["id"] = "b",
-                        ["sourceId"] = "off",
-                        ["fullPath"] = "/media/off/Holiday-b.mp4",
-                        ["fileName"] = "Holiday-b.mp4"
+                        SourceId = "off"
                     },
-                    new JsonObject
+                    new SeedItem("orphan", "/media/missing/Holiday-c.mp4")
                     {
-                        ["id"] = "orphan",
-                        ["sourceId"] = "missing",
-                        ["fullPath"] = "/media/missing/Holiday-c.mp4",
-                        ["fileName"] = "Holiday-c.mp4"
+                        SourceId = "missing"
                     }
-                },
-                ["tags"] = new JsonArray
-                {
-                    new JsonObject { ["name"] = "Holiday", ["categoryId"] = "uncategorized" }
-                },
-                ["categories"] = new JsonArray()
-            });
+                ]);
 
             var host = LibraryCatalogHost.Open(appDataRoot, Path.Combine(appDataRoot, "thumbnails"));
-            var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot, host);
+            var service = new LibraryOperationsService(host, NullLogger<LibraryOperationsService>.Instance, appDataRoot);
             var enabledOnly = service.ScanAutoTags(new AutoTagScanRequest { ScanFullLibrary = false, ItemIds = [] });
             var enabledFiles = Assert.Single(enabledOnly.Rows).Files;
             Assert.Equal(
@@ -2027,31 +1708,20 @@ public sealed class LibraryOperationsServiceTests
         var appDataRoot = CreateTempAppDataRoot();
         try
         {
-            SeedLibrary(appDataRoot, new JsonObject
-            {
-                ["sources"] = new JsonArray
-                {
-                    new JsonObject { ["id"] = "off", ["rootPath"] = "/media/off", ["isEnabled"] = false }
-                },
-                ["items"] = new JsonArray
-                {
-                    new JsonObject
+            CatalogSeed.Write(
+                appDataRoot,
+                sources: [new SeedSource("off", "/media/off", IsEnabled: false)],
+                tags: [new SeedTag("Holiday")],
+                items:
+                [
+                    new SeedItem("b", "/media/off/Holiday-b.mp4")
                     {
-                        ["id"] = "b",
-                        ["sourceId"] = "off",
-                        ["fullPath"] = "/media/off/Holiday-b.mp4",
-                        ["fileName"] = "Holiday-b.mp4"
+                        SourceId = "off"
                     }
-                },
-                ["tags"] = new JsonArray
-                {
-                    new JsonObject { ["name"] = "Holiday", ["categoryId"] = "uncategorized" }
-                },
-                ["categories"] = new JsonArray()
-            });
+                ]);
 
             var host = LibraryCatalogHost.Open(appDataRoot, Path.Combine(appDataRoot, "thumbnails"));
-            var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot, host);
+            var service = new LibraryOperationsService(host, NullLogger<LibraryOperationsService>.Instance, appDataRoot);
             var response = service.ScanAutoTags(new AutoTagScanRequest { ScanFullLibrary = false, ItemIds = [] });
             Assert.Empty(response.Rows);
         }
@@ -2071,15 +1741,16 @@ public sealed class LibraryOperationsServiceTests
         var appDataRoot = CreateTempAppDataRoot();
         try
         {
-            var readyA = Item("ready-a", "/media/ready-a.mp4", "fp-ready", 1);
-            readyA["isFavorite"] = true;
-            readyA["playCount"] = 4;
-            readyA["tags"] = new JsonArray { "One", "Two" };
-            SeedLibrary(appDataRoot, new JsonObject
+            var readyA = Item("ready-a", "/media/ready-a.mp4", "fp-ready", 1) with
             {
-                ["sources"] = new JsonArray(),
-                ["items"] = new JsonArray
-                {
+                IsFavorite = true,
+                PlayCount = 4,
+                Tags = ["One", "Two"]
+            };
+            CatalogSeed.Write(
+                appDataRoot,
+                items:
+                [
                     readyA,
                     Item("ready-b", "/media/ready-b.mp4", "fp-ready", 1),
                     Item("pending-1", "/media/pending.mp4", "fp-pending", 0),
@@ -2087,13 +1758,10 @@ public sealed class LibraryOperationsServiceTests
                     Item("failed-1", "/media/failed.mp4", null, 2),
                     Item("unset-a", "/media/unset-a.mp4", "fp-unset", null),
                     Item("unset-b", "/media/unset-b.mp4", "fp-unset", null)
-                },
-                ["tags"] = new JsonArray(),
-                ["categories"] = new JsonArray()
-            });
+                ]);
 
             var host = LibraryCatalogHost.Open(appDataRoot, Path.Combine(appDataRoot, "thumbnails"));
-            var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot, host);
+            var service = new LibraryOperationsService(host, NullLogger<LibraryOperationsService>.Instance, appDataRoot);
             var response = service.ScanDuplicates(new DuplicateScanRequest());
 
             Assert.Equal(1, response.ExcludedPending);
@@ -2122,28 +1790,25 @@ public sealed class LibraryOperationsServiceTests
         var appDataRoot = CreateTempAppDataRoot();
         try
         {
-            SeedLibrary(appDataRoot, new JsonObject
-            {
-                ["sources"] = new JsonArray
-                {
-                    new JsonObject { ["id"] = "src-on", ["rootPath"] = "/media/on", ["isEnabled"] = true },
-                    new JsonObject { ["id"] = "src-off", ["rootPath"] = "/media/off", ["isEnabled"] = false }
-                },
-                ["items"] = new JsonArray
-                {
+            CatalogSeed.Write(
+                appDataRoot,
+                sources:
+                [
+                    new SeedSource("src-on", "/media/on"),
+                    new SeedSource("src-off", "/media/off", IsEnabled: false)
+                ],
+                items:
+                [
                     Item("on-a", "/media/on/a.mp4", "fp-on", 1, "src-on"),
                     Item("on-b", "/media/on/b.mp4", "fp-on", 1, "src-on"),
                     Item("on-pending", "/media/on/pending.mp4", "fp-pending", 0, "src-on"),
                     Item("off-a", "/media/off/a.mp4", "fp-off", 1, "src-off"),
                     Item("off-b", "/media/off/b.mp4", "fp-off", 1, "src-off"),
                     Item("off-stale", "/media/off/stale.mp4", "fp-stale", 3, "src-off")
-                },
-                ["tags"] = new JsonArray(),
-                ["categories"] = new JsonArray()
-            });
+                ]);
 
             var host = LibraryCatalogHost.Open(appDataRoot, Path.Combine(appDataRoot, "thumbnails"));
-            var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot, host);
+            var service = new LibraryOperationsService(host, NullLogger<LibraryOperationsService>.Instance, appDataRoot);
 
             var current = service.ScanDuplicates(new DuplicateScanRequest { Scope = "CurrentSource", SourceId = "SRC-ON" });
             var currentGroup = Assert.Single(current.Groups);
@@ -2172,32 +1837,14 @@ public sealed class LibraryOperationsServiceTests
         }
     }
 
-    private static JsonObject Item(string id, string fullPath, string? fingerprint, int? fingerprintStatus, string? sourceId = null)
+    private static SeedItem Item(string id, string fullPath, string? fingerprint, int? fingerprintStatus, string? sourceId = null)
     {
-        var item = new JsonObject
+        return new SeedItem(id, fullPath)
         {
-            ["id"] = id,
-            ["fullPath"] = fullPath,
-            ["fileName"] = Path.GetFileName(fullPath),
-            ["fingerprintAlgorithm"] = "SHA-256",
-            ["fingerprintVersion"] = 1
+            SourceId = sourceId ?? string.Empty,
+            Fingerprint = fingerprint,
+            FingerprintStatus = fingerprintStatus
         };
-        if (sourceId != null)
-        {
-            item["sourceId"] = sourceId;
-        }
-
-        if (fingerprint != null)
-        {
-            item["fingerprint"] = fingerprint;
-        }
-
-        if (fingerprintStatus != null)
-        {
-            item["fingerprintStatus"] = fingerprintStatus;
-        }
-
-        return item;
     }
 
     [Fact]
@@ -2206,33 +1853,25 @@ public sealed class LibraryOperationsServiceTests
         var appDataRoot = CreateTempAppDataRoot();
         try
         {
-            SeedLibrary(appDataRoot, new JsonObject
-            {
-                ["sources"] = new JsonArray
-                {
-                    new JsonObject { ["id"] = "src-1", ["rootPath"] = "/media", ["displayName"] = "Clips", ["isEnabled"] = true }
-                },
-                ["items"] = new JsonArray
-                {
-                    new JsonObject
+            CatalogSeed.Write(
+                appDataRoot,
+                sources: [new SeedSource("src-1", "/media", "Clips")],
+                items:
+                [
+                    new SeedItem("fav-1", "/media/fav.mp4")
                     {
-                        ["id"] = "fav-1",
-                        ["fullPath"] = "/media/fav.mp4",
-                        ["fileName"] = "fav.mp4",
-                        ["isFavorite"] = true,
-                        ["tags"] = new JsonArray("Night")
+                        IsFavorite = true,
+                        Tags = ["Night"]
                     }
-                }
-            });
+                ]);
 
-            var state = new ServerStateService(appDataPathOverride: appDataRoot);
+            var state = new ServerStateService(catalog: CatalogOpen.Host(appDataRoot));
             var source = Assert.Single(state.GetSourcesSnapshot());
             Assert.Equal("src-1", source.Id);
             Assert.Equal("/media", source.RootPath);
             Assert.Equal("Clips", source.DisplayName);
             Assert.True(source.IsEnabled);
             Assert.True(File.Exists(Path.Combine(appDataRoot, "library.db")));
-            Assert.True(File.Exists(Path.Combine(appDataRoot, "library.json.migrated")));
         }
         finally
         {
@@ -2272,7 +1911,7 @@ public sealed class LibraryOperationsServiceTests
     private static (LibraryCatalogHost Host, LibraryOperationsService Service) OpenOperations(string appDataRoot)
     {
         var host = LibraryCatalogHost.Open(appDataRoot, Path.Combine(appDataRoot, "thumbnails"));
-        var service = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appDataRoot, host);
+        var service = new LibraryOperationsService(host, NullLogger<LibraryOperationsService>.Instance, appDataRoot);
         return (host, service);
     }
 
@@ -2285,28 +1924,11 @@ public sealed class LibraryOperationsServiceTests
         }
     }
 
-    private static JsonObject EmptyLibraryRoot()
-    {
-        return new JsonObject
-        {
-            ["sources"] = new JsonArray(),
-            ["items"] = new JsonArray(),
-            ["tags"] = new JsonArray(),
-            ["categories"] = new JsonArray()
-        };
-    }
-
     private static string CreateTempAppDataRoot()
     {
         var root = Path.Combine(Path.GetTempPath(), "reelroulette-library-ops-tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         return root;
-    }
-
-    private static void SeedLibrary(string appDataRoot, JsonObject root)
-    {
-        var libraryPath = Path.Combine(appDataRoot, "library.json");
-        File.WriteAllText(libraryPath, root.ToJsonString());
     }
 
     private static LibraryCatalogSnapshot LoadLibrary(string appDataRoot)

@@ -1,5 +1,4 @@
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging.Abstractions;
 using ReelRoulette.Core.Filtering;
 using ReelRoulette.Core.Library;
@@ -424,21 +423,30 @@ public sealed class LibraryListQueryTests
         Directory.CreateDirectory(appData);
         try
         {
-            File.WriteAllText(Path.Combine(appData, "library.json"), """
-                {
-                  "sources": [ { "id": "on", "rootPath": "/media", "isEnabled": true } ],
-                  "items": [
-                    { "id": "a", "sourceId": "on", "fullPath": "/media/a.mp4", "fileName": "a.mp4", "relativePath": "a.mp4" },
-                    { "id": "b", "sourceId": "on", "fullPath": "/media/b.mp4", "fileName": "b.mp4", "relativePath": "b.mp4" }
-                  ]
-                }
-                """);
+            CatalogSeed.Write(
+                appData,
+                sources: [new SeedSource("on", "/media")],
+                items:
+                [
+                    new SeedItem("a", "/media/a.mp4")
+                    {
+                        SourceId = "on",
+                        RelativePath = "a.mp4",
+                        ThumbnailRevision = "r",
+                        ThumbnailWidth = 320,
+                        ThumbnailHeight = 180
+                    },
+                    new SeedItem("b", "/media/b.mp4")
+                    {
+                        SourceId = "on",
+                        RelativePath = "b.mp4"
+                    }
+                ]);
             var thumbs = Path.Combine(appData, "thumbnails");
             Directory.CreateDirectory(thumbs);
             File.WriteAllBytes(Path.Combine(thumbs, "a.jpg"), [0xFF, 0xD8, 0xFF]);
-            File.WriteAllText(Path.Combine(thumbs, "index.json"), """{"a":{"width":320,"height":180,"revision":"r"}}""");
 
-            var operations = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appData);
+            var operations = new LibraryOperationsService(CatalogOpen.Host(appData), NullLogger<LibraryOperationsService>.Instance, appData);
             Assert.False(operations.QueryLibrary(new LibraryQueryRequest { Offset = -1 }).Accepted);
             Assert.False(operations.QueryLibrary(new LibraryQueryRequest { Limit = 0 }).Accepted);
             Assert.False(operations.QueryLibrary(new LibraryQueryRequest { Limit = 501 }).Accepted);
@@ -494,7 +502,7 @@ public sealed class LibraryListQueryTests
         Assert.False(File.Exists(Path.Combine(dir.Path, "thumbnails", "index.json")));
 
         var host = LibraryCatalogHost.Open(dir.Path, Path.Combine(dir.Path, "thumbnails"));
-        var operations = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, dir.Path, host);
+        var operations = new LibraryOperationsService(host, NullLogger<LibraryOperationsService>.Instance, dir.Path);
         var outcome = operations.QueryLibrary(new LibraryQueryRequest { Limit = 10 });
         Assert.True(outcome.Accepted);
         var items = outcome.Body!["items"]!.AsArray();
@@ -514,16 +522,25 @@ public sealed class LibraryListQueryTests
         Directory.CreateDirectory(appData);
         try
         {
-            File.WriteAllText(Path.Combine(appData, "library.json"), """
-                {
-                  "sources": [ { "id": "on", "rootPath": "/media", "isEnabled": true } ],
-                  "items": [
-                    { "id": "brief", "sourceId": "on", "fullPath": "/media/brief.mp4", "fileName": "brief.mp4", "relativePath": "brief.mp4", "duration": "00:00:30" },
-                    { "id": "long", "sourceId": "on", "fullPath": "/media/long.mp4", "fileName": "long.mp4", "relativePath": "long.mp4", "duration": "00:02:00" }
-                  ]
-                }
-                """);
-            var operations = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, appData);
+            CatalogSeed.Write(
+                appData,
+                sources: [new SeedSource("on", "/media")],
+                items:
+                [
+                    new SeedItem("brief", "/media/brief.mp4")
+                    {
+                        SourceId = "on",
+                        RelativePath = "brief.mp4",
+                        Duration = TimeSpan.FromSeconds(30)
+                    },
+                    new SeedItem("long", "/media/long.mp4")
+                    {
+                        SourceId = "on",
+                        RelativePath = "long.mp4",
+                        Duration = TimeSpan.FromSeconds(120)
+                    }
+                ]);
+            var operations = new LibraryOperationsService(CatalogOpen.Host(appData), NullLogger<LibraryOperationsService>.Instance, appData);
             var outcome = operations.QueryLibrary(new LibraryQueryRequest
             {
                 FilterState = JsonSerializer.SerializeToElement(new
@@ -594,7 +611,7 @@ public sealed class LibraryListQueryTests
         Assert.Null(session.ReadListedItem("missing"));
 
         var host = LibraryCatalogHost.Open(dir.Path, Path.Combine(dir.Path, "thumbnails"));
-        var operations = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, dir.Path, host);
+        var operations = new LibraryOperationsService(host, NullLogger<LibraryOperationsService>.Instance, dir.Path);
         var item = operations.ReadLibraryItem("keep");
         Assert.NotNull(item);
         Assert.Equal("keep", item!["id"]!.GetValue<string>());
@@ -616,6 +633,7 @@ public sealed class LibraryListQueryTests
             new ServerStateService(),
             NullLogger<RefreshPipelineService>.Instance,
             settings,
+            CatalogOpen.Host(appData),
             appData);
     }
 

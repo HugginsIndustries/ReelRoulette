@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging.Abstractions;
 using ReelRoulette.Server.Contracts;
 using ReelRoulette.Server.Services;
@@ -31,35 +30,24 @@ public sealed class PlayItemOrchestrationTests : IDisposable
 }
 """);
 
-        var library = new JsonObject
-        {
-            ["sources"] = new JsonArray
-            {
-                new JsonObject { ["id"] = "s1", ["isEnabled"] = true }
-            },
-            ["items"] = new JsonArray
-            {
-                new JsonObject
+        // The catalog lists no source, so the item points at a source id it does not know.
+        CatalogSeed.Write(
+            _appData,
+            items:
+            [
+                new SeedItem("orch-item", mediaPath)
                 {
-                    ["id"] = "orch-item",
-                    ["fullPath"] = mediaPath,
-                    ["fileName"] = "clip.mp4",
-                    ["mediaType"] = 0,
-                    ["sourceId"] = "s1",
-                    ["isBlacklisted"] = false
+                    SourceId = "s1"
                 }
-            },
-            ["tags"] = new JsonArray(),
-            ["categories"] = new JsonArray()
-        };
-        File.WriteAllText(Path.Combine(_appData, "library.json"), library.ToJsonString());
+            ]);
 
+        var catalog = CatalogOpen.Host(_appData);
         var playback = new LibraryPlaybackService(
             new ServerMediaTokenStore(),
             NullLogger<LibraryPlaybackService>.Instance,
-            _appData);
-        var operations = new LibraryOperationsService(NullLogger<LibraryOperationsService>.Instance, _appData);
-        var state = new ServerStateService(NullLogger<ServerStateService>.Instance, _appData);
+            catalog);
+        var operations = new LibraryOperationsService(catalog, NullLogger<LibraryOperationsService>.Instance, _appData);
+        var state = new ServerStateService(NullLogger<ServerStateService>.Instance, catalog);
 
         Assert.True(playback.TryPlayItem("orch-item", false, out var playResponse, out _, out _, out _));
         Assert.NotNull(playResponse);

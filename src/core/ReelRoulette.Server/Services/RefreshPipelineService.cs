@@ -55,15 +55,13 @@ public sealed class RefreshPipelineService : BackgroundService
         ServerStateService state,
         ILogger<RefreshPipelineService> logger,
         CoreSettingsService coreSettings,
-        string? appDataPathOverride = null,
-        LibraryCatalogHost? catalog = null)
+        LibraryCatalogHost catalog,
+        string? appDataPathOverride = null)
     {
         _state = state;
         _logger = logger;
         _coreSettings = coreSettings;
-        var roamingAppData = appDataPathOverride ?? ServerDataPaths.DataDirectory();
-        Directory.CreateDirectory(roamingAppData);
-        _catalog = catalog ?? LibraryCatalogHost.Open(roamingAppData, LibraryCatalogHost.LocalThumbnailDirectory(appDataPathOverride));
+        _catalog = catalog;
 
         _thumbnailDir = LibraryCatalogHost.LocalThumbnailDirectory(appDataPathOverride);
         Directory.CreateDirectory(Path.GetDirectoryName(_thumbnailDir)!);
