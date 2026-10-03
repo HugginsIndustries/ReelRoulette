@@ -41,10 +41,10 @@ Keep this file short and enforceable. For details, use `CONTEXT.md`, `MILESTONES
   - In `src/clients/web/ReelRoulette.WebUI`: `npm run generate:contracts`, `npm run verify`, and the scripts `verify` runs.
   - `pwsh ./tools/scripts/reset-checklist.ps1`
   - `./tools/scripts/verify-linux-packaged-server-smoke.sh`, which runs an isolated packaged server.
+  - `pwsh ./tools/scripts/verify-web-deploy.ps1`
   - `pwsh ./tools/scripts/set-release-version.ps1 -Version {VERSION} -NoRunVerify`, when asked to set the release version.
   - Read-only git and GitHub commands: `git status`, `git log`, `git diff`, `git show`, `git grep`, `git tag --contains`, `gh run list`, `gh run view`.
   - Read-only inspection: searching and listing files, and `sqlite3 -readonly` against a copy in a temp folder.
-- Do not run `verify-web-deploy.ps1`, or `set-release-version.ps1` without `-NoRunVerify`, until the Server Data Folder Override backlog item lands: both write to real app data.
 - Never open, write to, or run anything against the user's live config, library, or settings folders. Copy what you need into a temp folder first, and isolate tests and experiments from real settings.
 - Anything else, such as installing packages, starting the server or clients, network calls, or writing outside the repo and temp folders, needs approval: explain what it does and why, then ask.
 - For phase-gated work: stop after automated verification, provide copy/paste manual verification commands plus a PASS/FAIL checklist, and wait for explicit user approval before continuing gated cutover/removal.
@@ -53,7 +53,7 @@ Keep this file short and enforceable. For details, use `CONTEXT.md`, `MILESTONES
 
 ## Verification and smoke scripts
 
-- Scripts under `tools/scripts/` that start a server for automated verification or smoke testing must isolate application data in a fresh temporary directory per run and remove it afterward, including on failure paths. On Linux, set both `XDG_CONFIG_HOME` and `XDG_DATA_HOME`. On Windows, setting `APPDATA` does not isolate anything, because the app resolves its folders through the OS, which ignores that variable. Do not run server-starting verification scripts on Windows until the server supports an explicit data-folder override.
+- Scripts under `tools/scripts/` that start a server for automated verification or smoke testing must isolate application data in a fresh temporary directory per run and remove it afterward, including on failure paths. Set `REELROULETTE_DATA_DIR` to the temporary directory on every OS, and on Linux also set both `XDG_CONFIG_HOME` and `XDG_DATA_HOME`, since desktop integration such as autostart and menu entries uses those locations rather than the data folder.
 - Those scripts must stop the server process they started (by started handle/PID, not broad name matching) before removing the isolated directory, using graceful shutdown with a short timeout then force kill if needed, including on failure and interrupt paths.
 - Do not point verification or smoke servers at the developer's real `%ApplicationData%/ReelRoulette` / `~/.config/ReelRoulette` tree.
 - Dev-run helpers such as `run-server.ps1` intentionally use real settings and must not be isolated.

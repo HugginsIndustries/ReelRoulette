@@ -68,4 +68,3 @@ Run this after the user says their manual pass is done.
 
 - Do not tick manual checks, and do not touch the Sign-Off section; those are the user's.
 - Do not commit, tag, or push.
-- Until the Server Data Folder Override backlog item lands, always pass `-NoRunVerify` to `set-release-version.ps1`, and never run `verify-web-deploy.ps1`.

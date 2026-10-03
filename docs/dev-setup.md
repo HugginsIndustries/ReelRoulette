@@ -83,6 +83,7 @@ Desktop behavior notes:
 - `dotnet build ReelRoulette.sln`
 - `dotnet test ReelRoulette.sln`
 - Desktop tests use a temporary settings folder, removed when the run ends, and do not send log lines to a server, so they leave your desktop settings and a running server alone. Filter dialog tests run the real dialog headlessly with `Avalonia.Headless`.
+- Core and server tests set `REELROULETTE_DATA_DIR` to a temporary folder, removed when the run ends, so server code they run never falls back to your real data folders. On Linux they also point `XDG_CONFIG_HOME` and `XDG_DATA_HOME` at temporary folders.
 
 ### WebUI verification
 
@@ -99,7 +100,7 @@ From `src/clients/web/ReelRoulette.WebUI`:
 Optional helper scripts:
 
 - `pwsh ./tools/scripts/verify-web.ps1`
-- `pwsh ./tools/scripts/verify-web-deploy.ps1`
+- `pwsh ./tools/scripts/verify-web-deploy.ps1` builds the WebUI and starts the server on port 51312 with `REELROULETTE_DATA_DIR` set to a temporary folder on every OS, plus temporary `XDG_CONFIG_HOME` and `XDG_DATA_HOME` on Linux. It checks that the server wrote its log, catalog, and settings there, then stops the server it started and removes that folder. Your real data folders are not touched.
 
 ### Optional system checks
 
@@ -127,6 +128,8 @@ Per-user data uses .NET `Environment.SpecialFolder` mappings:
 
 - **Linux** (XDG): config / roaming (`ApplicationData`) → `~/.config/ReelRoulette/` (includes `library.db`). Local cache (`LocalApplicationData`) → `~/.local/share/ReelRoulette/` (thumbnails in `thumbnails/`).
 - **Windows**: config / roaming (`ApplicationData`) → `%APPDATA%/ReelRoulette/`. Local cache (`LocalApplicationData`) → `%LOCALAPPDATA%/ReelRoulette/` (thumbnails in `thumbnails/`).
+
+**Server data folder override:** Set `REELROULETTE_DATA_DIR` to run the server against another folder on any OS. The server then keeps its settings, catalog, backups, `last.log`, and thumbnails (in `thumbnails/`) under that folder and does not use the folders above. A relative path resolves against the working directory. Setting `APPDATA` does not move anything on Windows, because .NET resolves that folder through the OS. Scripts that start a server for verification or smoke testing set this variable to a fresh temporary folder, stop the server they started, and remove that folder afterward, including on failure. On Linux they also set `XDG_CONFIG_HOME` and `XDG_DATA_HOME`. Dev-run helpers such as `run-server.ps1` use your real data on purpose. The desktop client does not read this variable.
 
 The server opens `library.db` in that roaming directory at startup (`user_version` 2). A schema 1 database migrates in place and copies `presets.json` from that directory and `index.json` from the local thumbnail directory, then renames those files aside. A missing database is migrated from `library.json`, which is then renamed to `library.json.migrated`. A refused database stops the process. Leftover `library.json` is not the live catalog. Presets and thumbnail revision, width, and height live in the catalog. Core settings stay in `core-settings.json`. Desktop export saves a checkpoint of `library.db`, so presets and thumbnail metadata travel with it. Import replaces that database while the server is stopped, including the preset list. JPEG files stay in `thumbnails/` until the next completed thumbnail stage. Run a refresh after import. A `library.json` archive is not an import. Startup still migrates a leftover `library.json` when `library.db` is missing. Server catalog backups are `library.db.backup.*` files in `backups/`.
 

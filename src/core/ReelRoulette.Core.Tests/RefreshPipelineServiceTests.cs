@@ -17,7 +17,7 @@ public sealed class RefreshPipelineServiceTests
     [Fact]
     public async Task TryStartManual_ShouldRejectOverlapWithConflictSemantics()
     {
-        using var scope = new AppDataScope();
+        using var scope = new DataFolderScope();
         await SeedLibraryAsync(scope.LibraryPath, new JsonObject
         {
             ["sources"] = new JsonArray(),
@@ -39,7 +39,7 @@ public sealed class RefreshPipelineServiceTests
     [Fact]
     public async Task ShutdownCancel_ShouldStopManualRunWithoutRecordingAFailure()
     {
-        using var scope = new AppDataScope();
+        using var scope = new DataFolderScope();
         await SeedLibraryAsync(scope.LibraryPath, new JsonObject
         {
             ["sources"] = new JsonArray(),
@@ -62,7 +62,7 @@ public sealed class RefreshPipelineServiceTests
     [Fact]
     public async Task ShutdownCancel_DuringFfmpegCheck_DoesNotRecordLoudnessAsUnavailable()
     {
-        using var scope = new AppDataScope();
+        using var scope = new DataFolderScope();
         await SeedLibraryAsync(scope.LibraryPath, new JsonObject
         {
             ["sources"] = new JsonArray(),
@@ -90,7 +90,7 @@ public sealed class RefreshPipelineServiceTests
     [Fact]
     public async Task ShutdownCancel_LeavesForcedRescansPending()
     {
-        using var scope = new AppDataScope();
+        using var scope = new DataFolderScope();
         await SeedLibraryAsync(scope.LibraryPath, new JsonObject
         {
             ["sources"] = new JsonArray(),
@@ -122,7 +122,7 @@ public sealed class RefreshPipelineServiceTests
     [Fact]
     public async Task PipelineRun_ShouldCompleteStagesInDefinedOrder_AndPublishStatusEvents()
     {
-        using var scope = new AppDataScope();
+        using var scope = new DataFolderScope();
         await SeedLibraryAsync(scope.LibraryPath, new JsonObject
         {
             ["sources"] = new JsonArray(),
@@ -157,7 +157,7 @@ public sealed class RefreshPipelineServiceTests
     [Fact]
     public async Task SourceRefresh_ShouldPersistRemovalOfMissingItem_AndKeepProjectionParity()
     {
-        using var scope = new AppDataScope();
+        using var scope = new DataFolderScope();
         var sourceDir = Path.Combine(scope.RootPath, "source-a");
         Directory.CreateDirectory(sourceDir);
 
@@ -217,7 +217,7 @@ public sealed class RefreshPipelineServiceTests
     [Fact]
     public async Task LoudnessStage_ShouldPreserveExistingValues_AndNotInventMissingValues()
     {
-        using var scope = new AppDataScope();
+        using var scope = new DataFolderScope();
         await SeedLibraryAsync(scope.LibraryPath, new JsonObject
         {
             ["sources"] = new JsonArray(),
@@ -258,7 +258,7 @@ public sealed class RefreshPipelineServiceTests
     [Fact]
     public async Task ThumbnailStage_ShouldRegenerateWhenSourceRevisionChanges()
     {
-        using var scope = new AppDataScope();
+        using var scope = new DataFolderScope();
         var mediaPath = Path.Combine(scope.RootPath, "thumb-source.png");
         await WriteTinyPngAsync(mediaPath);
         await SeedLibraryAsync(scope.LibraryPath, new JsonObject
@@ -301,7 +301,7 @@ public sealed class RefreshPipelineServiceTests
     [Fact]
     public async Task ThumbnailStage_ShouldReuseWhenRevisionUnchanged()
     {
-        using var scope = new AppDataScope();
+        using var scope = new DataFolderScope();
         var mediaPath = Path.Combine(scope.RootPath, "thumb-source-reuse.png");
         await WriteTinyPngAsync(mediaPath);
         await SeedLibraryAsync(scope.LibraryPath, new JsonObject
@@ -339,7 +339,7 @@ public sealed class RefreshPipelineServiceTests
     [Fact]
     public void EnrichListedItems_UsesRowDimensionsAndJpegExistence()
     {
-        using var scope = new AppDataScope();
+        using var scope = new DataFolderScope();
         var thumbsDir = Path.Combine(scope.RootPath, "thumbnails");
         Directory.CreateDirectory(thumbsDir);
         File.WriteAllBytes(Path.Combine(thumbsDir, "item-1.jpg"), TinyPngBytes);
@@ -383,7 +383,7 @@ public sealed class RefreshPipelineServiceTests
     [Fact]
     public async Task ThumbnailStage_ShouldWriteIndexMetadataObject()
     {
-        using var scope = new AppDataScope();
+        using var scope = new DataFolderScope();
         var mediaPath = Path.Combine(scope.RootPath, "thumb-source-metadata.png");
         await WriteTinyPngAsync(mediaPath);
         await SeedLibraryAsync(scope.LibraryPath, new JsonObject
@@ -416,7 +416,7 @@ public sealed class RefreshPipelineServiceTests
     [Fact]
     public async Task ThumbnailStage_ShouldBackfillLegacyStringIndexEntry()
     {
-        using var scope = new AppDataScope();
+        using var scope = new DataFolderScope();
         var mediaPath = Path.Combine(scope.RootPath, "thumb-source-legacy.png");
         await WriteTinyPngAsync(mediaPath);
         await SeedLibraryAsync(scope.LibraryPath, new JsonObject
@@ -456,7 +456,7 @@ public sealed class RefreshPipelineServiceTests
     [Fact]
     public void UpdateSettings_ShouldClampToAllowedInterval()
     {
-        using var scope = new AppDataScope();
+        using var scope = new DataFolderScope();
         var service = CreateService(new ServerStateService(), scope.RootPath);
 
         var updated = service.UpdateSettings(new ReelRoulette.Server.Contracts.RefreshSettingsSnapshot
@@ -471,7 +471,7 @@ public sealed class RefreshPipelineServiceTests
     [Fact]
     public async Task DurationForceRescan_ShouldBeOneShot_AndShowForcedHint()
     {
-        using var scope = new AppDataScope();
+        using var scope = new DataFolderScope();
         await SeedLibraryAsync(scope.LibraryPath, new JsonObject
         {
             ["sources"] = new JsonArray(),
@@ -513,7 +513,7 @@ public sealed class RefreshPipelineServiceTests
     [Fact]
     public async Task LoudnessFailure_ShouldMarkHasAudioTrue_AndSetLoudnessError()
     {
-        using var scope = new AppDataScope();
+        using var scope = new DataFolderScope();
         var brokenMediaPath = Path.Combine(scope.RootPath, "broken-audio.mkv");
         await File.WriteAllTextAsync(brokenMediaPath, "not-a-valid-media-file");
         await SeedLibraryAsync(scope.LibraryPath, new JsonObject
@@ -547,7 +547,7 @@ public sealed class RefreshPipelineServiceTests
     [Fact]
     public async Task ManualRun_ShouldScheduleNextAutoRun_FromCompletionTime()
     {
-        using var scope = new AppDataScope();
+        using var scope = new DataFolderScope();
         await SeedLibraryAsync(scope.LibraryPath, new JsonObject
         {
             ["sources"] = new JsonArray(),
@@ -575,7 +575,7 @@ public sealed class RefreshPipelineServiceTests
     [Fact]
     public async Task SourceRefresh_ShouldReconcileMovedFile_ByFingerprintWithoutAddRemove()
     {
-        using var scope = new AppDataScope();
+        using var scope = new DataFolderScope();
         var sourceRoot = Path.Combine(scope.RootPath, "sourceA");
         var oldDir = Path.Combine(sourceRoot, "old");
         var newDir = Path.Combine(sourceRoot, "new");
@@ -689,7 +689,7 @@ public sealed class RefreshPipelineServiceTests
     [Fact]
     public async Task FingerprintStage_ShouldHashPendingItem_WhenFileExists()
     {
-        using var scope = new AppDataScope();
+        using var scope = new DataFolderScope();
         var mediaPath = Path.Combine(scope.RootPath, "fingerprint-pending.png");
         await WriteTinyPngAsync(mediaPath);
         await SeedLibraryAsync(scope.LibraryPath, new JsonObject
@@ -719,7 +719,7 @@ public sealed class RefreshPipelineServiceTests
     [Fact]
     public async Task Refresh_PersistsStageColumnsWithoutBuildingTheCatalogDocument()
     {
-        using var scope = new AppDataScope();
+        using var scope = new DataFolderScope();
         var sourceDir = Path.Combine(scope.RootPath, "media");
         Directory.CreateDirectory(sourceDir);
         var keptPath = Path.Combine(sourceDir, "kept.mp4");
@@ -789,7 +789,7 @@ public sealed class RefreshPipelineServiceTests
     [Fact]
     public async Task FingerprintStage_PublishesCheckProgressBeforeHashing()
     {
-        using var scope = new AppDataScope();
+        using var scope = new DataFolderScope();
         var mediaPath = Path.Combine(scope.RootPath, "ready.png");
         await WriteTinyPngAsync(mediaPath);
         await SeedLibraryAsync(scope.LibraryPath, new JsonObject
@@ -837,7 +837,7 @@ public sealed class RefreshPipelineServiceTests
     [Fact]
     public async Task FingerprintStage_PreservesFavoriteAndTagCommittedDuringTheWrite()
     {
-        using var scope = new AppDataScope();
+        using var scope = new DataFolderScope();
         var mediaPath = Path.Combine(scope.RootPath, "hold.png");
         await WriteTinyPngAsync(mediaPath);
         await SeedLibraryAsync(scope.LibraryPath, new JsonObject
@@ -878,7 +878,7 @@ public sealed class RefreshPipelineServiceTests
     [Fact]
     public async Task ThumbnailStage_ReusesMatchingRevisionWithoutTheSourceFile()
     {
-        using var scope = new AppDataScope();
+        using var scope = new DataFolderScope();
         var missingSource = Path.Combine(scope.RootPath, "gone.png");
         await SeedLibraryAsync(scope.LibraryPath, new JsonObject
         {
@@ -920,7 +920,7 @@ public sealed class RefreshPipelineServiceTests
     [Fact]
     public async Task ThumbnailStage_GeneratesWhenJpegIsMissing()
     {
-        using var scope = new AppDataScope();
+        using var scope = new DataFolderScope();
         var mediaPath = Path.Combine(scope.RootPath, "thumb-missing-jpeg.png");
         await WriteTinyPngAsync(mediaPath);
         await SeedLibraryAsync(scope.LibraryPath, new JsonObject
@@ -956,7 +956,7 @@ public sealed class RefreshPipelineServiceTests
     [Fact]
     public async Task ThumbnailStage_RemovesDeletedItemThumbnail_AndKeepsLibraryThumbnails()
     {
-        using var scope = new AppDataScope();
+        using var scope = new DataFolderScope();
         var sourceDir = Path.Combine(scope.RootPath, "thumbs");
         Directory.CreateDirectory(sourceDir);
         var keptPath = Path.Combine(sourceDir, "kept.png");
@@ -1035,7 +1035,7 @@ public sealed class RefreshPipelineServiceTests
     [Fact]
     public async Task ThumbnailStage_PreservesFavoriteTagBlacklistAndPlaybackDuringTheWrite()
     {
-        using var scope = new AppDataScope();
+        using var scope = new DataFolderScope();
         var firstPath = Path.Combine(scope.RootPath, "hold-a.png");
         var secondPath = Path.Combine(scope.RootPath, "hold-b.png");
         await WriteTinyPngAsync(firstPath);
@@ -1079,7 +1079,7 @@ public sealed class RefreshPipelineServiceTests
     [Fact]
     public async Task ThumbnailStage_CancelKeepsColumnsAlreadyWritten_AndLeavesRemainingCleanup()
     {
-        using var scope = new AppDataScope();
+        using var scope = new DataFolderScope();
         var firstPath = Path.Combine(scope.RootPath, "cancel-a.png");
         var secondPath = Path.Combine(scope.RootPath, "cancel-b.png");
         await WriteTinyPngAsync(firstPath);
@@ -1308,23 +1308,19 @@ public sealed class RefreshPipelineServiceTests
         return File.WriteAllBytesAsync(path, TinyPngBytes);
     }
 
-    private sealed class AppDataScope : IDisposable
+    private sealed class DataFolderScope : IDisposable
     {
-        private readonly string? _previousAppData;
         public string RootPath { get; }
         public string LibraryPath => Path.Combine(RootPath, "library.json");
 
-        public AppDataScope()
+        public DataFolderScope()
         {
-            _previousAppData = Environment.GetEnvironmentVariable("APPDATA");
             RootPath = Path.Combine(Path.GetTempPath(), "ReelRoulette.Tests", Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(RootPath);
-            Environment.SetEnvironmentVariable("APPDATA", RootPath);
         }
 
         public void Dispose()
         {
-            Environment.SetEnvironmentVariable("APPDATA", _previousAppData);
             try
             {
                 if (Directory.Exists(RootPath))

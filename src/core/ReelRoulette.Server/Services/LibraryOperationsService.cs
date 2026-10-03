@@ -43,8 +43,7 @@ public sealed class LibraryOperationsService
         Func<string, IReadOnlyList<string>>? enumerateMediaFiles = null)
     {
         _logger = logger ?? NullLogger<LibraryOperationsService>.Instance;
-        var appData = appDataPathOverride ??
-                      Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ReelRoulette");
+        var appData = appDataPathOverride ?? ServerDataPaths.DataDirectory();
         Directory.CreateDirectory(appData);
         _logPath = Path.Combine(appData, "last.log");
         _catalog = catalog ?? LibraryCatalogHost.Open(appData, LibraryCatalogHost.LocalThumbnailDirectory(appDataPathOverride));

@@ -19,8 +19,12 @@ Instructions:
 
 Commit Message:
 
-Docs: Plan the Windows tray right-click fix in v0.14.0
+M10j1: Add a server data folder override
 
-- Add a Windows tray right-click slice to M10j12, ordered before the tray shutdown race: start the tray with `ShutdownMode.OnExplicitShutdown`, since the Windows tray menu is a temporary Avalonia window whose close shuts the tray down under the default last-window rule.
-- Log to `last.log` when the tray's UI loop exits without a requested shutdown.
-- Add a Release Specific check for the Windows right-click menu, a README Known Issues update once it is confirmed, and a Windows-only native menu as the fallback.
+- Add `REELROULETTE_DATA_DIR`: when set, the server keeps settings, catalog, backups, `last.log`, and thumbnails under that folder on every OS; unset, folders resolve as before.
+- Route every server and ServerApp data and thumbnail folder lookup through one `ServerDataPaths` helper.
+- `ServerStateService` no longer creates the real data folder when it opens no catalog, so tests and core verification leave it alone.
+- Isolate core and server tests with a module initializer that sets the override (and XDG folders on Linux) to a temporary folder; drop the ineffective `APPDATA` scope.
+- Add helper tests and a composition test that checks the server writes only under the override.
+- `verify-web-deploy.ps1` sets the override on every OS, keeps both XDG folders on Linux, and checks the server's data landed in the override; `verify-linux-packaged-server-smoke.sh` also sets the override alongside its XDG folders and makes the same data check.
+- Document the override and the verification-script rules; `AGENTS.md` and the pre-release skill drop the ban on `verify-web-deploy.ps1` and on `set-release-version.ps1` without `-NoRunVerify`, and `AGENTS.md` allows `verify-web-deploy.ps1` without approval; add the Windows Release Specific check and un-skip the `verify-web-deploy.ps1` check.

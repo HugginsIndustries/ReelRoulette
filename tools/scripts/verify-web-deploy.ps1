@@ -89,10 +89,16 @@ function Stop-StartedServerProcess {
     }
 }
 
-# Verification scripts must not read or write the developer's real ApplicationData settings.
-# .NET resolves SpecialFolder.ApplicationData from APPDATA (Windows) or XDG_CONFIG_HOME (Linux).
-$isolatedConfigHome = Join-Path ([IO.Path]::GetTempPath()) ("reelroulette-verify-web-deploy-" + [Guid]::NewGuid().ToString("N"))
-New-Item -ItemType Directory -Path $isolatedConfigHome -Force | Out-Null
+# Verification scripts must not read or write the developer's real data folders.
+# REELROULETTE_DATA_DIR moves the server's settings, catalog, backups, logs, and thumbnails on every OS.
+# On Linux, XDG_CONFIG_HOME and XDG_DATA_HOME also keep anything else the host writes out of ~/.config and ~/.local/share.
+$isolatedRoot = Join-Path ([IO.Path]::GetTempPath()) ("reelroulette-verify-web-deploy-" + [Guid]::NewGuid().ToString("N"))
+$isolatedDataDir = Join-Path $isolatedRoot "data"
+$isolatedConfigHome = Join-Path $isolatedRoot "xdg-config"
+$isolatedDataHome = Join-Path $isolatedRoot "xdg-data"
+foreach ($dir in @($isolatedDataDir, $isolatedConfigHome, $isolatedDataHome)) {
+    New-Item -ItemType Directory -Path $dir -Force | Out-Null
+}
 
 $serverProcess = $null
 $serverListenProcessId = 0
@@ -122,12 +128,12 @@ try {
         Remove-Item $serverErrLogPath -Force
     }
 
-    $isolatedEnv = @{}
-    if ($IsWindows) {
-        $isolatedEnv["APPDATA"] = $isolatedConfigHome
+    $isolatedEnv = @{
+        REELROULETTE_DATA_DIR = $isolatedDataDir
     }
-    else {
+    if (-not $IsWindows) {
         $isolatedEnv["XDG_CONFIG_HOME"] = $isolatedConfigHome
+        $isolatedEnv["XDG_DATA_HOME"] = $isolatedDataHome
     }
 
     $startProcessArgs = @{
@@ -231,6 +237,19 @@ try {
             throw "Server process exited unexpectedly during validation."
         }
 
+        foreach ($expected in @("last.log", "library.db", "core-settings.json")) {
+            if (-not (Test-Path (Join-Path $isolatedDataDir $expected))) {
+                throw "Expected server data file '$expected' under REELROULETTE_DATA_DIR ($isolatedDataDir)."
+            }
+        }
+        if (-not $IsWindows) {
+            foreach ($xdgHome in @($isolatedConfigHome, $isolatedDataHome)) {
+                if (Test-Path (Join-Path $xdgHome "ReelRoulette")) {
+                    throw "Server wrote a ReelRoulette folder under $xdgHome instead of REELROULETTE_DATA_DIR."
+                }
+            }
+        }
+
     Write-Output "Single-origin and control-plane server smoke verification passed."
 }
 finally {
@@ -241,7 +260,7 @@ finally {
         $serverListenProcessId = 0
     }
     Stop-StartedServerProcess -Process $serverProcess -ListenProcessId $serverListenProcessId
-    if (Test-Path $isolatedConfigHome) {
-        Remove-Item -Path $isolatedConfigHome -Recurse -Force -ErrorAction SilentlyContinue
+    if (Test-Path $isolatedRoot) {
+        Remove-Item -Path $isolatedRoot -Recurse -Force -ErrorAction SilentlyContinue
     }
 }

@@ -18,6 +18,7 @@ ReelRoulette is migrating from a monolithic desktop app to a thin-client, API-fi
   - Control-plane surfaces under `/control/*` for runtime status/settings/pairing/lifecycle/testing/logs.
   - Operator testing mode supports deterministic fault simulation (version/capability mismatch, API unavailable, media missing, SSE disconnect).
   - mDNS LAN hostname advertisement for WebUI when enabled.
+  - `REELROULETTE_DATA_DIR` moves the server's settings, catalog, backups, `last.log`, and thumbnails (`<folder>/thumbnails`) to one folder on every OS; unset, the server uses `ApplicationData/ReelRoulette` and `LocalApplicationData/ReelRoulette/thumbnails`. Server-starting verification scripts and the core test run set it to a temporary folder.
   - Host-UI abstraction keeps server runtime tray-agnostic:
     - Uses a cross-platform Avalonia tray host when available (lifecycle/refresh/operator shortcuts).
     - Falls back to a deterministic headless host when a tray cannot be created.

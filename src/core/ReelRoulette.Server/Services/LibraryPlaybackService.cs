@@ -23,8 +23,7 @@ public sealed class LibraryPlaybackService
     {
         _tokenStore = tokenStore;
         _logger = logger;
-        var roamingAppData = appDataPathOverride ??
-                             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ReelRoulette");
+        var roamingAppData = appDataPathOverride ?? ServerDataPaths.DataDirectory();
         Directory.CreateDirectory(roamingAppData);
         _catalog = catalog ?? LibraryCatalogHost.Open(roamingAppData, LibraryCatalogHost.LocalThumbnailDirectory(appDataPathOverride));
     }

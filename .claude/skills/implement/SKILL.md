@@ -35,7 +35,7 @@ Follow the plan. If you hit something that makes it wrong — an assumption that
 
 Do not work around a blocker silently. Do not adjust a test, a fixture, or a default to make something pass.
 
-Do not edit `AGENTS.md`. If a rule there blocks the task, report it and stop.
+Do not edit `AGENTS.md` unless the user explicitly asks you to. If a rule there blocks the task, report it and stop rather than changing it yourself.
 
 Keep the project's tracker and docs in the state `AGENTS.md` (and any docs it points at) require — complete what this change finishes, record anything deferred, and update current-state docs the project says to keep in sync. Do not invent extra docs.
 

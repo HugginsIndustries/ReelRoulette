@@ -119,11 +119,13 @@ work="$(mktemp -d)"
 out_log="$work/server.out"
 err_log="$work/server.err"
 
-# Verification scripts must not read or write the developer's real ApplicationData settings.
-# .NET uses XDG_CONFIG_HOME on Linux for SpecialFolder.ApplicationData (ReelRoulette under config home).
+# Verification scripts must not read or write the developer's real data folders.
+# REELROULETTE_DATA_DIR moves the server's settings, catalog, backups, logs, and thumbnails.
+# XDG_CONFIG_HOME and XDG_DATA_HOME also keep autostart and menu entries out of ~/.config and ~/.local/share.
+isolated_data_dir="$work/isolated-data"
 isolated_config_home="$work/isolated-config-home"
 isolated_data_home="$work/isolated-data-home"
-mkdir -p "$isolated_config_home" "$isolated_data_home"
+mkdir -p "$isolated_data_dir" "$isolated_config_home" "$isolated_data_home"
 
 real_user_data_snapshot="$work/real-user-data-snapshot.txt"
 real_applications_dir="${HOME}/.local/share/applications"
@@ -192,6 +194,7 @@ trap cleanup EXIT
 
 (
   exec env -u DISPLAY -u WAYLAND_DISPLAY -u DBUS_SESSION_BUS_ADDRESS \
+    REELROULETTE_DATA_DIR="$isolated_data_dir" \
     XDG_CONFIG_HOME="$isolated_config_home" \
     XDG_DATA_HOME="$isolated_data_home" \
     "$appimage" --appimage-extract-and-run --CoreServer:ListenUrl="$listen_url"
@@ -258,6 +261,19 @@ fi
 
 if [[ ! -f "$isolated_data_home/applications/reelroulette-server.desktop" ]]; then
   echo "Expected isolated menu entry at $isolated_data_home/applications/reelroulette-server.desktop" >&2
+  exit 1
+fi
+
+for expected in last.log library.db core-settings.json; do
+  if [[ ! -f "$isolated_data_dir/$expected" ]]; then
+    echo "Expected server data file '$expected' under REELROULETTE_DATA_DIR ($isolated_data_dir)." >&2
+    exit 1
+  fi
+done
+
+stray_config="$(find "$isolated_config_home" -name 'ReelRoulette' -print -quit 2>/dev/null || true)"
+if [[ -n "$stray_config" ]]; then
+  echo "Server wrote $stray_config under XDG_CONFIG_HOME instead of REELROULETTE_DATA_DIR." >&2
   exit 1
 fi
 

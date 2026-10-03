@@ -8,7 +8,7 @@ public sealed class ServerLogService
 
     public ServerLogService()
     {
-        var appData = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ReelRoulette");
+        var appData = ServerDataPaths.DataDirectory();
         Directory.CreateDirectory(appData);
         _logPath = Path.Combine(appData, "last.log");
     }

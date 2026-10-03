@@ -28,8 +28,7 @@ An agent runs these and ticks them.
 - [x] `dotnet run --project src/core/ReelRoulette.Core.SystemChecks -- --verbose` passes.
 - [x] `npm run verify` passes in `src/clients/web/ReelRoulette.WebUI`.
 - [x] `./tools/scripts/verify-linux-packaged-server-smoke.sh` passes.
-- [ ] `pwsh ./tools/scripts/verify-web-deploy.ps1` passes. Skipped on every OS until the Server Data Folder Override backlog item lands, because it still writes to real app data.
-  - Skipped: pending the Server Data Folder Override backlog item; the script still writes to real app data.
+- [ ] `pwsh ./tools/scripts/verify-web-deploy.ps1` passes.
 - [x] Workflow YAML files in `.github/workflows` are valid, and default CI runs build, test, and web verify.
 - [x] `release.yml` runs on a tag and on `workflow_dispatch`, and publishes Velopack feeds.
 - [x] Docs review: `AGENTS.md`, `README.md`, `CONTEXT.md`, `MILESTONES.md`, `docs/api.md`, `docs/architecture.md`, `docs/dev-setup.md`, and `docs/domain-inventory.md` match current behavior.
@@ -155,6 +154,8 @@ An agent runs these and ticks them.
 ## Release Specific
 
 > Add checks for features or changes in the current release. Clear these items after sign-off. If a check should outlive the release, move it to Manual Regression.
+
+- [ ] `verify-web-deploy.ps1` on Windows leaves the real data and thumbnail folders unchanged.
 
 ## Release Flow
 

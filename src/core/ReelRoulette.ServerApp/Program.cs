@@ -1535,7 +1535,7 @@ file static class ServerAppRuntimeHelpers
     {
         try
         {
-            var appData = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ReelRoulette");
+            var appData = ServerDataPaths.DataDirectory();
             Directory.CreateDirectory(appData);
             var logPath = Path.Combine(appData, "last.log");
             File.WriteAllText(logPath, string.Empty);

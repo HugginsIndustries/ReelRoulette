@@ -59,16 +59,15 @@ public sealed class ServerStateService
         LibraryCatalogHost? catalog = null)
     {
         _logger = logger ?? NullLogger<ServerStateService>.Instance;
-        var roamingAppData = appDataPathOverride ??
-                             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ReelRoulette");
-        Directory.CreateDirectory(roamingAppData);
+        // The data folder is only needed to open a catalog; without one, nothing touches disk.
         if (catalog != null)
         {
             _catalog = catalog;
         }
         else if (!string.IsNullOrWhiteSpace(appDataPathOverride))
         {
-            _catalog = LibraryCatalogHost.Open(roamingAppData, LibraryCatalogHost.LocalThumbnailDirectory(appDataPathOverride));
+            Directory.CreateDirectory(appDataPathOverride);
+            _catalog = LibraryCatalogHost.Open(appDataPathOverride, LibraryCatalogHost.LocalThumbnailDirectory(appDataPathOverride));
         }
         else
         {

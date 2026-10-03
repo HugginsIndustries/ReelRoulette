@@ -66,15 +66,12 @@ public sealed class RefreshPipelineService : BackgroundService
         _state = state;
         _logger = logger;
         _coreSettings = coreSettings;
-        var roamingAppData = appDataPathOverride ??
-                             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ReelRoulette");
+        var roamingAppData = appDataPathOverride ?? ServerDataPaths.DataDirectory();
         Directory.CreateDirectory(roamingAppData);
         _catalog = catalog ?? LibraryCatalogHost.Open(roamingAppData, LibraryCatalogHost.LocalThumbnailDirectory(appDataPathOverride));
 
-        var localAppData = appDataPathOverride ??
-                           Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ReelRoulette");
-        Directory.CreateDirectory(localAppData);
-        _thumbnailDir = Path.Combine(localAppData, "thumbnails");
+        _thumbnailDir = LibraryCatalogHost.LocalThumbnailDirectory(appDataPathOverride);
+        Directory.CreateDirectory(Path.GetDirectoryName(_thumbnailDir)!);
         var refreshSettings = _coreSettings.GetRefreshSettings();
         _nextAutoRunUtc = DateTimeOffset.UtcNow.AddMinutes(refreshSettings.AutoRefreshIntervalMinutes);
     }

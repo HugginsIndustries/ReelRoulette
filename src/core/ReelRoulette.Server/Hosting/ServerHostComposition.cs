@@ -17,8 +17,8 @@ public static class ServerHostComposition
     {
         services.AddSingleton(sp =>
         {
-            var appDataRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ReelRoulette");
-            var host = LibraryCatalogHost.Open(appDataRoot, LibraryCatalogHost.LocalThumbnailDirectory());
+            var appDataRoot = ServerDataPaths.DataDirectory();
+            var host = LibraryCatalogHost.Open(appDataRoot, ServerDataPaths.ThumbnailDirectory());
             var logger = sp.GetRequiredService<ILogger<LibraryCatalogHost>>();
             logger.LogInformation(
                 "Opened library catalog {DatabasePath}.",
@@ -34,14 +34,14 @@ public static class ServerHostComposition
         {
             var logger = sp.GetRequiredService<ILogger<ServerStateService>>();
             var catalog = sp.GetRequiredService<LibraryCatalogHost>();
-            var appDataRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ReelRoulette");
+            var appDataRoot = ServerDataPaths.DataDirectory();
             return new ServerStateService(logger, appDataRoot, catalog);
         });
         services.AddSingleton(sp =>
         {
             var logger = sp.GetRequiredService<ILogger<CoreSettingsService>>();
             var options = sp.GetRequiredService<ServerRuntimeOptions>();
-            var appDataRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ReelRoulette");
+            var appDataRoot = ServerDataPaths.DataDirectory();
             return new CoreSettingsService(logger, options, appDataRoot);
         });
         services.AddSingleton<ServerMediaTokenStore>();

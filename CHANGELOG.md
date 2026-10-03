@@ -9,6 +9,8 @@ Write **[Unreleased]** bullets at the same level as the released sections below.
 
 ### Added
 
+- **Server data folder setting:** Set the `REELROULETTE_DATA_DIR` environment variable to run the server from a different folder. Its settings, library, backups, log, and thumbnails all go there. The web deploy check now uses it, so it no longer touches your real library on Windows.
+
 ### Changed
 
 ### Deprecated

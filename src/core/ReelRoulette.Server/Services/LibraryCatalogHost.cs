@@ -23,10 +23,7 @@ public sealed class LibraryCatalogHost
             return Path.Combine(appDataPathOverride, "thumbnails");
         }
 
-        return Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "ReelRoulette",
-            "thumbnails");
+        return ServerDataPaths.ThumbnailDirectory();
     }
 
     public static LibraryCatalogHost Open(string directory, string? thumbnailDirectory = null)

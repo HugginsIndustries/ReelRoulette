@@ -103,35 +103,7 @@ Do not use this file for detailed architecture explanation or current capability
 
 ## Active Milestones
 
-Last milestone completed: M10i20
-
-### M10j1 - Server Data Folder Override
-
-- **Status**: ⏳ Planned
-- **Goal**: Let verification scripts and tests point the server at a temporary data folder on every OS, so they never read or write the developer's real settings, catalog, or thumbnails.
-- **Scope**:
-  - This is the first milestone in the v0.14.0 release. It comes first so later milestones can verify the server on Windows without touching real settings.
-  - Why: `verify-web-deploy.ps1` isolates data by setting `APPDATA` on Windows and `XDG_CONFIG_HOME` on Linux. Setting `APPDATA` does not redirect `Environment.GetFolderPath` on Windows, so that script currently runs against real settings there. On Linux it does not set `XDG_DATA_HOME`, so thumbnails still resolve under the real `LocalApplicationData` folder. `set-release-version.ps1` runs that script by default.
-  - Add one server helper that reads an environment variable such as `REELROULETTE_DATA_DIR` and otherwise falls back to the current folder lookup (`ApplicationData/ReelRoulette` for data, `LocalApplicationData/ReelRoulette/thumbnails` for thumbnails). With the override set, data lives in the override folder and thumbnails under `<override>/thumbnails`.
-  - Use that helper at every place the server and ServerApp resolve their data or thumbnail folder: `ServerHostComposition` (three places), `CoreSettingsService`, `LibraryPlaybackService`, `RefreshPipelineService` (data and thumbnail folders), `ServerLogService`, `ServerStateService`, `LibraryOperationsService`, `LibraryCatalogHost` (thumbnail folder), and the ServerApp `Program.cs` data folder lookup. Explicit constructor path overrides keep precedence.
-  - `verify-web-deploy.ps1` sets the override to its temporary folder on every OS, in place of the `APPDATA` / `XDG_CONFIG_HOME` split.
-  - Remove the `APPDATA` scope (`AppDataScope`) in `RefreshPipelineServiceTests`, which has no effect on `Environment.GetFolderPath` on Windows. Those tests pass their temporary folder explicitly.
-  - Tests that construct `ServerStateService` pass a data folder override instead of falling back to the real folder.
-  - Also check `ReelRoulette.Core.SystemChecks`: it constructs `ServerStateService()` with no override, which creates the real data folder if it is missing.
-  - Desktop data folder resolution is out of scope.
-  - Add a Release Specific checklist item: "`verify-web-deploy.ps1` on Windows leaves the real data and thumbnail folders unchanged."
-- **Acceptance criteria**:
-  - With the environment variable set, the server reads and writes settings, catalog, backups, logs, and thumbnails only under that folder, with thumbnails under `<override>/thumbnails`.
-  - With the variable unset, the server resolves the same folders as before.
-  - No server or ServerApp code outside the helper calls `Environment.GetFolderPath` for its data or thumbnail folder.
-  - `verify-web-deploy.ps1` leaves the real `ApplicationData/ReelRoulette` and `LocalApplicationData/ReelRoulette` folders untouched on Windows and Linux.
-  - No test sets `APPDATA` to isolate data, and every test that constructs `ServerStateService` passes an override.
-- **Verification evidence**:
-  - Completion evidence must include helper tests for the set and unset cases, a test that a server started with the override writes nothing outside it, one Linux run of `verify-web-deploy.ps1` showing the real folders' contents and timestamps unchanged, and a passing build and test run.
-  - The Windows run is the Release Specific checklist item above, run in the pre-release pass.
-  - Docs evidence must include `docs/dev-setup.md` describing the override and the verification-script rules it satisfies.
-- **Deferrals / Follow-ups**:
-  - None yet.
+Last milestone completed: M10j1
 
 ### M10j2 - Dead Code Removal Without Contract Changes
 
@@ -1695,6 +1667,42 @@ Last milestone completed: M10i20
 ## Completed Milestones
 
 Latest completions first:
+
+### M10j1 - Server Data Folder Override
+
+- **Status**: ✅ Complete
+- **Goal**: Let verification scripts and tests point the server at a temporary data folder on every OS, so they never read or write the developer's real settings, catalog, or thumbnails.
+- **Scope**:
+  - This is the first milestone in the v0.14.0 release. It comes first so later milestones can verify the server on Windows without touching real settings.
+  - Why: `verify-web-deploy.ps1` isolates data by setting `APPDATA` on Windows and `XDG_CONFIG_HOME` on Linux. Setting `APPDATA` does not redirect `Environment.GetFolderPath` on Windows, so that script currently runs against real settings there. On Linux it does not set `XDG_DATA_HOME`, so thumbnails still resolve under the real `LocalApplicationData` folder. `set-release-version.ps1` runs that script by default.
+  - Add one server helper that reads an environment variable such as `REELROULETTE_DATA_DIR` and otherwise falls back to the current folder lookup (`ApplicationData/ReelRoulette` for data, `LocalApplicationData/ReelRoulette/thumbnails` for thumbnails). With the override set, data lives in the override folder and thumbnails under `<override>/thumbnails`.
+  - Use that helper at every place the server and ServerApp resolve their data or thumbnail folder: `ServerHostComposition` (three places), `CoreSettingsService`, `LibraryPlaybackService`, `RefreshPipelineService` (data and thumbnail folders), `ServerLogService`, `ServerStateService`, `LibraryOperationsService`, `LibraryCatalogHost` (thumbnail folder), and the ServerApp `Program.cs` data folder lookup. Explicit constructor path overrides keep precedence.
+  - `verify-web-deploy.ps1` sets the override to its temporary folder on every OS, in place of the `APPDATA` / `XDG_CONFIG_HOME` split.
+  - Remove the `APPDATA` scope (`AppDataScope`) in `RefreshPipelineServiceTests`, which has no effect on `Environment.GetFolderPath` on Windows. Those tests pass their temporary folder explicitly.
+  - Tests that construct `ServerStateService` pass a data folder override instead of falling back to the real folder.
+  - Also check `ReelRoulette.Core.SystemChecks`: it constructs `ServerStateService()` with no override, which creates the real data folder if it is missing.
+  - Desktop data folder resolution is out of scope.
+  - Add a Release Specific checklist item: "`verify-web-deploy.ps1` on Windows leaves the real data and thumbnail folders unchanged."
+- **Acceptance criteria**:
+  - With the environment variable set, the server reads and writes settings, catalog, backups, logs, and thumbnails only under that folder, with thumbnails under `<override>/thumbnails`.
+  - With the variable unset, the server resolves the same folders as before.
+  - No server or ServerApp code outside the helper calls `Environment.GetFolderPath` for its data or thumbnail folder.
+  - `verify-web-deploy.ps1` leaves the real `ApplicationData/ReelRoulette` and `LocalApplicationData/ReelRoulette` folders untouched on Windows and Linux.
+  - No test sets `APPDATA` to isolate data, and every test that constructs `ServerStateService` passes an override.
+- **Verification evidence**:
+  - Added `ServerDataPaths` in the server project. Every server and ServerApp data and thumbnail lookup goes through it. `git grep GetFolderPath` in `ReelRoulette.Server` and `ReelRoulette.ServerApp` finds only the helper and the unrelated XDG autostart and AppImage `UserProfile` lookups.
+  - Met differently: `ServerStateService` with no override and no catalog touches no folder, so tests that construct it without an override are safe. Core verification no longer creates the real data folder.
+  - `Core.Tests` now has a test-isolation module initializer. It sets `REELROULETTE_DATA_DIR` to a temporary folder for the run and, on Linux, points `XDG_CONFIG_HOME` and `XDG_DATA_HOME` at temporary folders it creates first, because `GetFolderPath` returns an empty path for an XDG folder that does not exist. `AppDataScope` is gone from `RefreshPipelineServiceTests`.
+  - Helper tests cover the unset, blank, set, and relative override cases and the environment variable read. A composition test builds `AddReelRouletteServer()` with the override, resolves every server service, saves settings, writes a log line, and starts and stops the hosted services. It checks that `library.db`, `core-settings.json`, a settings backup, and `last.log` are under the override, and that the Linux XDG folders contain no `ReelRoulette` folder.
+  - The composition test was confirmed to fail when `ServerLogService` or `ServerHostComposition` bypasses the helper, and when the thumbnail folder lookup does (caught by the XDG check).
+  - `verify-web-deploy.ps1` sets the override on every OS and drops `APPDATA`. Rather than replacing the XDG variables, on Linux it keeps both `XDG_CONFIG_HOME` and `XDG_DATA_HOME` alongside the override, as the verification-script rules in `AGENTS.md` require, so desktop integration such as autostart and menu entries stays isolated too. `verify-linux-packaged-server-smoke.sh` also sets the override, keeping its XDG variables, and checks that `last.log`, `library.db`, and `core-settings.json` are under the override and that the isolated XDG config folder contains nothing named `ReelRoulette`. It passed, and a copy with the override removed failed on the missing `last.log`.
+  - `verify-web-deploy.ps1` now checks that `last.log`, `library.db`, and `core-settings.json` are under the override and, on Linux, that the isolated XDG folders contain no `ReelRoulette` folder.
+  - One Linux run of `pwsh ./tools/scripts/verify-web-deploy.ps1` passed with no other ReelRoulette server running (checked by port and process list). Names, sizes, and modification times under `~/.config/ReelRoulette` and `~/.local/share/ReelRoulette` (48,973 entries) were identical before and after the run. Port 51312 was free afterward, and the temporary folder was removed.
+  - `dotnet build ReelRoulette.sln` passed with 0 warnings. `dotnet test ReelRoulette.sln` passed (Core 274, Desktop 137). `dotnet run --project src/core/ReelRoulette.Core.SystemChecks -- --verbose` passed.
+  - The Windows run is the Release Specific checklist item, run in the pre-release pass.
+  - Docs: `docs/dev-setup.md` describes the override, the core test isolation, and the verification-script rules it satisfies. Updated `CONTEXT.md`, the testing checklist (the automated `verify-web-deploy.ps1` check is no longer skipped, plus the Release Specific Windows check), and `CHANGELOG.md`.
+- **Deferrals / Follow-ups**:
+  - Desktop data folder resolution stays out of scope. Desktop library import writes `library.db` into the server data folder it resolves itself, so it does not follow a server started with `REELROULETTE_DATA_DIR`.
 
 ### M10i20 - Remove Client-Authority Sync Routes
 
