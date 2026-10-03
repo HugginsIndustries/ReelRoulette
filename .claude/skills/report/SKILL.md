@@ -5,7 +5,7 @@ description: Use when the user asks a question about this project — how someth
 
 # Report
 
-Read `AGENTS.md` before starting, then any other repo docs relevant to the question. Follow `AGENTS.md`.
+Follow `AGENTS.md`. Read any other repo docs relevant to the question.
 
 Answer the question. **Report only — write no code beyond throwaway experiments needed to establish a fact.** No changes to any tracked file.
 
@@ -21,13 +21,13 @@ Any question about the project is in scope — how something should be done, why
 
 ### When the question is about a decision or an approach
 
-Give the options, including ones I have not suggested. For each: what it costs, what it forecloses, and where it breaks down.
+Give the options, including ones the user has not suggested. For each: what it costs, what it forecloses, and where it breaks down.
 
 Recommend one, and say what would change your mind.
 
-Flag anything that conflicts with existing behaviour, an invariant in `AGENTS.md`, or a decision already recorded in the project's tracker or other docs.
+Flag anything that conflicts with existing behaviour, an invariant in `AGENTS.md`, or a decision already recorded in `MILESTONES.md` or other docs.
 
-Say what is genuinely undecided and needs my call rather than picking for me.
+Say what is genuinely undecided and needs the user's call rather than picking for them.
 
 ### When the question is about why something is as it is
 

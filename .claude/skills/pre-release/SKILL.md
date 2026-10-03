@@ -5,7 +5,7 @@ description: Use only when the user explicitly asks to prepare a release, start 
 
 # Pre-release
 
-Read `AGENTS.md` before starting, then `CHANGELOG.md`, `RELEASE-NOTES.md`, and `docs/checklists/testing-checklist.md` in full. Follow `AGENTS.md`.
+Follow `AGENTS.md`. Read `CHANGELOG.md`, `RELEASE-NOTES.md`, and `docs/checklists/testing-checklist.md` in full.
 
 The user starts this skill twice: once to prepare and test (Part 1), and again after their manual pass to finish the release (Part 2). Work out which from what they ask; if unclear, ask. Between the two, the version stays a dev version so fixes can ship as dev builds.
 

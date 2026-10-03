@@ -5,7 +5,7 @@ description: Use when the user asks to fix findings from a review of staged chan
 
 # Review fix
 
-Read `AGENTS.md` before starting. Follow `AGENTS.md`.
+Follow `AGENTS.md`.
 
 The user names which review findings to fix, and may add decisions or changes to the suggested fixes. Fix exactly those, as decided. Leave findings the user accepted or declined alone, unless they asked to record or document them.
 

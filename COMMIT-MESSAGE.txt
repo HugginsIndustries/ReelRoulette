@@ -19,8 +19,8 @@ Instructions:
 
 Commit Message:
 
-Chore: Add review-fix and plan-from-report agent skills
+Chore: Tighten project skill wording
 
-- Add a `review-fix` skill that applies only the staged-review findings the user picked, with their decisions, stops if a fix grows beyond its finding, verifies each fix, and leaves the fixes unstaged with the commit message and records kept current.
-- Add a `plan-from-report` skill that turns a report or findings into `MILESTONES.md` planning changes: it maps each finding to existing items before adding new ones, places new work by release theme, and stops for confirmation before editing.
-- After confirmation, `plan-from-report` checks by script that milestone IDs stay in their allowed places, the release outline and sections agree, name references resolve, and Completed Milestones is untouched.
+- `review-staged` takes the commit message format straight from `COMMIT-MESSAGE.txt` instead of a generic fallback format.
+- `implement` and `report` name `MILESTONES.md` as the tracker, and `implement` lists the actual build, test, WebUI, and SystemChecks verification commands.
+- All skills refer to the person as "the user" and open with "Follow `AGENTS.md`" rather than re-reading it, since `CLAUDE.md` already imports it.

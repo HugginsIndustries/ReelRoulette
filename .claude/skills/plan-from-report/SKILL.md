@@ -5,7 +5,7 @@ description: Use when asked to turn a report, review, or list of findings into p
 
 # Plan from report
 
-Read `AGENTS.md`, then the top of `MILESTONES.md` (its maintenance rules and the Planned Releases outline) in full, then the report or findings the user points to. Follow `AGENTS.md` and the file's own rules; where they disagree, ask.
+Follow `AGENTS.md`. Read the top of `MILESTONES.md` (its maintenance rules and the Planned Releases outline) in full, then the report or findings the user points to. Follow the file's own rules too; where they disagree with `AGENTS.md`, ask.
 
 ## Map before adding
 

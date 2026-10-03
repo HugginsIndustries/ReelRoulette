@@ -5,7 +5,7 @@ description: Use when the user asks for a review of their staged changes, asks w
 
 # Review staged changes
 
-Read `AGENTS.md` before starting, then any other repo docs relevant to the staged change. Follow `AGENTS.md`.
+Follow `AGENTS.md`. Read any other repo docs relevant to the staged change.
 
 Review the staged changes. Report only — make no changes.
 
@@ -33,8 +33,6 @@ Say plainly if you find nothing. Do not pad the list — a finding you are unsur
 
 Say the commit is good to go, then write a commit message for it in a fenced code block, so it can be copied without picking it out of prose.
 
-If the project documents a commit message format, or a file that should hold the message, follow that.
-
-Otherwise: one summary line, then up to eight bullets. No hard wrapping — each bullet is one line however long. Describe what changed and why it matters, not which files were touched. Skip anything obvious from the diff — "added tests" and "updated the README" are not worth a bullet unless something about them is notable.
+Follow the Instructions section of `COMMIT-MESSAGE.txt` for the title and bullets. No hard wrapping — each bullet is one line however long. Skip anything obvious from the diff — "added tests" and "updated the README" are not worth a bullet unless something about them is notable.
 
 Do not describe intermediate states the repo never had. If a behaviour was introduced and revised before committing, only the final state exists as far as the log is concerned.
