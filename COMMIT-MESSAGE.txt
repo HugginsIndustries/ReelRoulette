@@ -19,9 +19,8 @@ Instructions:
 
 Commit Message:
 
-M10j4: Document unlisted server routes in OpenAPI
+Chore: Guard real ReelRoulette data folders with a Claude Code hook
 
-- Add backup settings, library stats, web runtime settings, and Launch Server on Startup routes and schemas to `openapi.yaml`, and regenerate the WebUI types.
-- Add the refresh settings force rescan fields the server already returns, and remove the milestone ID from the spec description.
-- Add a test that the spec's paths match the server's route mappings, and shape tests that settings and library stats responses match their schemas.
-- Update the API docs and milestone tracking, and record a refresh settings reset found in passing.
+- Add a project PreToolUse hook that asks for explicit approval before any Bash, Read, Edit, Write, Glob, or Grep call that touches the home `.config` or `.local/share` folders or an XDG config or data path, where the real ReelRoulette data, autostart, and menu entries live.
+- The hook is a best-effort, Linux-only guard, and it asks on every call if `jq` is missing rather than letting calls through unchecked.
+- Track the hook and the shared `.claude/settings.json` in git, while personal `.claude` files such as `settings.local.json` stay ignored.

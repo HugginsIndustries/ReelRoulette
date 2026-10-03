@@ -23,6 +23,8 @@ obj/
 # Claude
 .claude/*
 !.claude/skills/
+!.claude/hooks/
+!.claude/settings.json
 
 # Local .NET CLI/XDG scratch (dev-only)
 .dotnet/
