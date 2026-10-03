@@ -19,8 +19,8 @@ Instructions:
 
 Commit Message:
 
-Chore: Guard real ReelRoulette data folders with a Claude Code hook
+Chore: Add review-fix and plan-from-report agent skills
 
-- Add a project PreToolUse hook that asks for explicit approval before any Bash, Read, Edit, Write, Glob, or Grep call that touches the home `.config` or `.local/share` folders or an XDG config or data path, where the real ReelRoulette data, autostart, and menu entries live.
-- The hook is a best-effort, Linux-only guard, and it asks on every call if `jq` is missing rather than letting calls through unchecked.
-- Track the hook and the shared `.claude/settings.json` in git, while personal `.claude` files such as `settings.local.json` stay ignored.
+- Add a `review-fix` skill that applies only the staged-review findings the user picked, with their decisions, stops if a fix grows beyond its finding, verifies each fix, and leaves the fixes unstaged with the commit message and records kept current.
+- Add a `plan-from-report` skill that turns a report or findings into `MILESTONES.md` planning changes: it maps each finding to existing items before adding new ones, places new work by release theme, and stops for confirmation before editing.
+- After confirmation, `plan-from-report` checks by script that milestone IDs stay in their allowed places, the release outline and sections agree, name references resolve, and Completed Milestones is untouched.
