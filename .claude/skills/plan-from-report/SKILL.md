@@ -22,6 +22,7 @@ For each finding, check whether an existing milestone or backlog item already co
 ## Writing entries
 
 - Use the file's template: Status, Goal, Scope (with a `Depends on:` line), Acceptance criteria, Verification evidence, Deferrals / Follow-ups.
+- Write `Depends on:` as exact milestone titles joined by commas or "and". An explanation may follow a title after ", which", ", whose", or ", so".
 - Refer to other milestones by name, never by ID, except in section headers, the tracker line, and the Planned Releases outline.
 - Carry over the report's measured numbers and evidence, and keep its measured-versus-inferred labels. Record known traps (an approach measured to be slow or wrong) in the entry that will hit them.
 - Verification is automated tests plus at most a quick spot check. Longer manual checks, repeated runs, and Windows VM passes become one-line notes for the release's Release Specific checklist, not milestone steps.
@@ -37,10 +38,6 @@ Present it and stop. Show: each finding and where it goes (existing item or new 
 
 ## After confirmation
 
-Make the edits, then verify with scripts and say what you ran:
-- Milestone IDs appear only in section headers, the tracker line, and the Planned Releases outline.
-- Every ID in the outline has a section, and every planned section is in the outline once.
-- Every `Depends on` and name reference matches an existing milestone title.
-- Completed Milestones is unchanged.
+Make the edits, then run `pwsh ./tools/scripts/check-milestones.ps1 -BaseRef HEAD` and fix everything it reports. It checks that milestone IDs appear only in section headers, the tracker line, and the Planned Releases outline; that the outline and the sections agree; that every `Depends on` names an existing milestone title; and that Completed Milestones only grew by entries moved in. It cannot check milestone names mentioned in other prose, so check any name reference you added or changed by reading. Say what you ran and its result.
 
 Start or update the `COMMIT-MESSAGE.txt` entry per `AGENTS.md`. No changelog entry; planning changes nothing user-visible.

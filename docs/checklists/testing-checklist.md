@@ -29,6 +29,8 @@ An agent runs these and ticks them.
 - [x] `npm run verify` passes in `src/clients/web/ReelRoulette.WebUI`.
 - [x] `./tools/scripts/verify-linux-packaged-server-smoke.sh` passes.
 - [ ] `pwsh ./tools/scripts/verify-web-deploy.ps1` passes.
+- [ ] `pwsh ./tools/scripts/tests/test-scripts.ps1` passes.
+- [ ] `pwsh ./tools/scripts/check-milestones.ps1 -BaseRef {previous release tag} -Release` passes.
 - [x] Workflow YAML files in `.github/workflows` are valid, and default CI runs build, test, and web verify.
 - [x] `release.yml` runs on a tag and on `workflow_dispatch`, and publishes Velopack feeds.
 - [x] Docs review: `AGENTS.md`, `README.md`, `CONTEXT.md`, `MILESTONES.md`, `docs/api.md`, `docs/architecture.md`, `docs/dev-setup.md`, and `docs/domain-inventory.md` match current behavior.

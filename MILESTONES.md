@@ -49,6 +49,7 @@ Do not use this file for detailed architecture explanation or current capability
 - When a milestone is completed, move it to `## Completed Milestones` as-is: keep existing scope/acceptance/evidence detail unchanged except final-state corrections, and preserve newest completions first.
 - In milestone body content (scope/acceptance/evidence/deferrals), do not reference milestone IDs; use milestone names/descriptions (or "this milestone"/"this series") so ID reassignment does not require copy edits.
 - ID references are allowed only in milestone section headers, the `Last milestone completed: Mx` tracker line, and the `## Planned Releases` outline.
+- `Depends on` lines name milestones by their exact titles, which `check-milestones.ps1` enforces.
 - Keep acceptance criteria testable and outcome-focused (avoid implementation-narrative bloat).
 - Keep verification evidence concrete:
   - commands/checks run,
@@ -129,7 +130,7 @@ Last milestone completed: M10j4
 - **Status**: ⏳ Planned
 - **Goal**: Remove `library.json` as a library format, the schema 1 catalog migration, and the side-file copy in v0.14.0, so the catalog store only opens or creates a schema version 2 `library.db`.
 - **Scope**:
-  - Depends on: seeding tests through SQL.
+  - Depends on: Seed Tests Through SQL.
   - Ships in v0.14.0.
   - Startup does not look for `library.json` or `library.json.migrated`. Those files do not change open, refuse, or empty-catalog behavior. A missing `library.db` creates an empty catalog with SQL, not by parsing an empty document, whether or not `library.json` is present. `library.json` is left untouched. A healthy `library.db` opens. A corrupt `library.db` is quarantined and startup refuses with the same result it uses when those files are absent. They are not read, not a restore path, and not deleted. Startup and user-facing strings do not mention either file.
   - Delete the JSON-to-SQLite importer, including `PrepareIncomingFromJson`. Tests build a catalog in `library.db`. They do not write `library.json` to create one.
@@ -165,7 +166,7 @@ Last milestone completed: M10j4
 - **Status**: ⏳ Planned
 - **Goal**: Make product code, comments, user-facing copy, tests, and current-state docs read as if a JSON library, a schema 1 catalog, and a catalog document never existed.
 - **Scope**:
-  - Depends on: removal of `library.json` library support.
+  - Depends on: Remove library.json Library Support.
   - Ships in v0.14.0.
   - Product code, comments, user-facing copy, tests, and current-state docs do not mention `library.json`, `library.json.migrated`, or a legacy flat tag list.
   - They also do not mention the catalog document (for example "does not load the full catalog document" in `docs/api.md`, `docs/architecture.md`, `CONTEXT.md`, and the description text in `shared/api/openapi.yaml`), schema 1 or a schema 1 migration, `presets.json`, or the thumbnail `index.json`.

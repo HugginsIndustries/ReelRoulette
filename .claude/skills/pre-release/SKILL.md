@@ -39,7 +39,7 @@ Run each item in the Automated Checks section, in order. Tick a box only for a c
 
 - If a check fails, leave it unticked and add a sub-bullet: `Failed:` plus one line saying what failed and where.
 - If a check is marked as skipped (for example pending a backlog item), leave it unticked and add `Skipped:` with the reason.
-- For docs-review items, do the review. Tick only if you found no problems; otherwise list each problem as a sub-bullet.
+- For docs-review items, do the review. Tick only if you found no problems; otherwise list each problem as a sub-bullet. For `MILESTONES.md`, start from the milestones checker item's result and review the rest by reading.
 
 ## 5. Release-specific coverage
 
@@ -57,12 +57,11 @@ Run this after the user says their manual pass is done.
 2. Check that every failure and skip points to a backlog item in `MILESTONES.md`. List any that don't.
 3. Re-check `[Unreleased]` against the style note, since fixes made during testing may have added to it, and update the release notes draft to match.
 4. Set the final version with `pwsh ./tools/scripts/set-release-version.ps1 -Version v{VERSION} -NoRunVerify`, and show what it changed.
-5. Cut the changelog: move the contents of `[Unreleased]` into `## [{VERSION}] — {Release Name} (YYYY-MM-DD)` with today's date, keeping only headings that have entries. Above it, leave a fresh `[Unreleased]` with every heading (Added, Changed, Deprecated, Removed, Fixed, Security), each empty, and keep the `---` separators.
-6. Update the changelog footer links: `[Unreleased]` compares `v{VERSION}...HEAD`, and add a line for `[{VERSION}]` comparing the previous version with it. Leave older lines as they are.
-7. Fill in the release notes' Verification section from the checklist: what was tested and where (from Environment), and any failures or skips users should know about, in plain language. Replace the TODO comment, and check the whole entry against the style guide once more.
-8. Tick the Release Flow items you verified: version, changelog cut and fresh headings, footer links, and release notes. CI is checked after the commit, so it is not a box in this list.
-9. Update the `COMMIT-MESSAGE.txt` entry for the final commit, following `AGENTS.md`.
-10. Tell the user: commit and push, then check CI passes on that commit on Linux and Windows (offer to check with `gh run list`). Then create the release on GitHub: tag `v{VERSION}` on that commit, title `v{VERSION} — {Release Name}`, and the new `RELEASE-NOTES.md` entry as the body. Creating it tags the commit, runs the release workflow, and attaches the installers. Print the release notes entry in a fenced code block so it can be pasted straight into GitHub.
+5. Cut the changelog with `pwsh ./tools/scripts/cut-changelog.ps1 -Version {VERSION} -Name "{Release Name}"`. It moves `[Unreleased]` into `## [{VERSION}] — {Release Name} (YYYY-MM-DD)` with today's date, keeping only headings that have entries, leaves a fresh `[Unreleased]` with every heading empty, and updates the footer compare links. If it refuses, fix what it reports and run it again. Show what it changed.
+6. Fill in the release notes' Verification section from the checklist: what was tested and where (from Environment), and any failures or skips users should know about, in plain language. Replace the TODO comment, and check the whole entry against the style guide once more.
+7. Tick the Release Flow items you verified: version, changelog cut and fresh headings, footer links, and release notes. CI is checked after the commit, so it is not a box in this list.
+8. Update the `COMMIT-MESSAGE.txt` entry for the final commit, following `AGENTS.md`.
+9. Tell the user: commit and push, then check CI passes on that commit on Linux and Windows (offer to check with `gh run list`). Then create the release on GitHub: tag `v{VERSION}` on that commit, title `v{VERSION} — {Release Name}`, and the new `RELEASE-NOTES.md` entry as the body. Creating it tags the commit, runs the release workflow, and attaches the installers. Print the release notes entry in a fenced code block so it can be pasted straight into GitHub.
 
 # Rules
 

@@ -181,6 +181,8 @@ Manual test guide:
 
 - `docs/checklists/testing-checklist.md`
 - `pwsh ./tools/scripts/reset-checklist.ps1` resets testing-checklist metadata/checklist state for a new pass.
+- `pwsh ./tools/scripts/check-milestones.ps1` checks `MILESTONES.md` against its maintenance rules (ID placement, release outline, `Depends on` titles). Add `-BaseRef <ref>` to also check that Completed Milestones only grew by moved entries, with `-Release` when the base is a release tag.
+- `pwsh ./tools/scripts/tests/test-scripts.ps1` runs the milestones checker and changelog cut script against their fixtures.
 
 ## Known Issues
 
@@ -199,11 +201,17 @@ ReelRoulette ships through **Velopack** only. The **`.github/workflows/release.y
 1. Set the repo version and align contract/project surfaces:
 
    ```bash
-   pwsh ./tools/scripts/set-release-version.ps1 -Version v0.13.0
+   pwsh ./tools/scripts/set-release-version.ps1 -Version {VERSION}
    ```
 
-2. Commit, push, and create/publish the GitHub release notes for the tag.
-3. Push the **`v*`** tag (must match `.version` exactly). The release workflow validates the tag, builds all matrix legs, and uploads to B2 (and GitHub for stable).
+2. Cut the changelog's `[Unreleased]` section into the release:
+
+   ```bash
+   pwsh ./tools/scripts/cut-changelog.ps1 -Version {VERSION} -Name "{Release Name}"
+   ```
+
+3. Commit, push, and create/publish the GitHub release notes for the tag.
+4. Push the **`v*`** tag (must match `.version` exactly). The release workflow validates the tag, builds all matrix legs, and uploads to B2 (and GitHub for stable).
 
 Repo-root **`.version`** holds the canonical release version (v-prefixed semver2). **Server** packaging delegates WebUI build and static asset staging to **`stage-webui-assets.ps1`**, copying built assets into published **`wwwroot`**.
 

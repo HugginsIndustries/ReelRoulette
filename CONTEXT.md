@@ -85,7 +85,7 @@ ReelRoulette is migrating from a monolithic desktop app to a thin-client, API-fi
   - `desktop/ReelRoulette.DesktopApp`: shipping Desktop client location (Avalonia).
   - `desktop/ReelRoulette.LibraryArchive`: desktop-local `library.db` checkpoint import/export helpers (referenced by the Desktop app and its tests).
 - `shared/api/openapi.yaml`: API contract source of truth.
-- `tools/scripts/`: runtime/verify/release scripts (`run-server*`, `verify-web-deploy*`, `verify-linux-packaged-server-smoke.sh`, `set-release-version.ps1`, `stage-webui-assets.ps1`, `reset-checklist.ps1`).
+- `tools/scripts/`: runtime/verify/release scripts (`run-server*`, `verify-web-deploy*`, `verify-linux-packaged-server-smoke.sh`, `set-release-version.ps1`, `stage-webui-assets.ps1`, `reset-checklist.ps1`, `check-milestones.ps1`, `cut-changelog.ps1`, with fixture tests under `tests/`).
 
 ## Working Commands (Canonical Set)
 

@@ -180,7 +180,8 @@ This updates:
 
 GitHub / B2 release flow:
 
-- Run `set-release-version.ps1`, commit, and push.
+- Run `set-release-version.ps1`, then `pwsh ./tools/scripts/cut-changelog.ps1 -Version {VERSION} -Name "{Release Name}"` to move `[Unreleased]` into the release section and update the footer compare links. It changes nothing if `[Unreleased]` is empty, the version already exists, or a heading is not one of the standard six.
+- Commit and push.
 - Create/publish the GitHub release notes for the tag.
 - Push the **`v*`** tag matching `.version`. **`release.yml`** builds all matrix legs and publishes to B2 (stable also uploads to GitHub).
 
@@ -189,6 +190,13 @@ Reset manual testing checklist state for a fresh run:
 - `pwsh ./tools/scripts/reset-checklist.ps1`
 - `pwsh ./tools/scripts/reset-checklist.ps1 -KeepMetadata`
 - `pwsh ./tools/scripts/reset-checklist.ps1 -RemoveWaived`
+
+Check `MILESTONES.md` against its maintenance rules:
+
+- `pwsh ./tools/scripts/check-milestones.ps1` checks that milestone IDs appear only in section headers, the tracker line, and the Planned Releases outline; that the outline and the sections agree; and that every `Depends on` names an existing milestone title.
+- `-BaseRef HEAD` also checks that Completed Milestones only grew by entries moved in from Active or Planned. `-Staged` checks the staged file instead of the working tree.
+- `-BaseRef <previous release tag> -Release` does the same across a release, allowing completed entries that were planned after the tag.
+- `pwsh ./tools/scripts/tests/test-scripts.ps1` runs both scripts against the fixtures in `tools/scripts/tests/fixtures/`.
 
 ## Troubleshooting
 

@@ -19,8 +19,12 @@ Instructions:
 
 Commit Message:
 
-Chore: Tighten project skill wording
+Chore: Add milestones checker and changelog cut scripts
 
-- `review-staged` takes the commit message format straight from `COMMIT-MESSAGE.txt` instead of a generic fallback format.
-- `implement` and `report` name `MILESTONES.md` as the tracker, and `implement` lists the actual build, test, WebUI, and SystemChecks verification commands.
-- All skills refer to the person as "the user" and open with "Follow `AGENTS.md`" rather than re-reading it, since `CLAUDE.md` already imports it.
+- Add `check-milestones.ps1`, which fails with the line and reason when a milestone ID appears outside section headers, the tracker line, and the Planned Releases outline, when the outline and the sections disagree, or when a `Depends on` names no existing milestone title. Prose such as "MP3" or "P2P" is not mistaken for an ID.
+- Given a base (`-BaseRef`), the checker also fails when Completed Milestones changed beyond new entries on top that existed elsewhere in the base; `-Release` drops that last condition for comparisons against a release tag, and `-Staged` checks the staged file.
+- Add `cut-changelog.ps1`, which moves `[Unreleased]` into a dated release section with only its non-empty headings, leaves a fresh empty `[Unreleased]`, and updates the footer compare links, changing nothing if any check fails.
+- Add fixture tests for both scripts, including each failure case, run by `tools/scripts/tests/test-scripts.ps1`.
+- `plan-from-report`, `review-staged`, and `pre-release` run the scripts instead of describing the checks, and the testing checklist runs the fixture tests and the checker against the previous release.
+- `MILESTONES.md` maintenance rules require exact titles in `Depends on` lines, and the two active lines that paraphrased now use them.
+- `AGENTS.md` allows running the checker, the cut script, and their fixture tests without approval.

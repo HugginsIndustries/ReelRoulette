@@ -40,6 +40,9 @@ Keep this file short and enforceable. For details, use `CONTEXT.md`, `MILESTONES
   - `dotnet run --project src/core/ReelRoulette.Core.SystemChecks -- --verbose`
   - In `src/clients/web/ReelRoulette.WebUI`: `npm run generate:contracts`, `npm run verify`, and the scripts `verify` runs.
   - `pwsh ./tools/scripts/reset-checklist.ps1`
+  - `pwsh ./tools/scripts/check-milestones.ps1`, which only reads.
+  - `pwsh ./tools/scripts/cut-changelog.ps1`, which edits `CHANGELOG.md` and changes nothing if a check fails.
+  - `pwsh ./tools/scripts/tests/test-scripts.ps1`, which runs both against fixtures in a temporary folder.
   - `./tools/scripts/verify-linux-packaged-server-smoke.sh`, which runs an isolated packaged server.
   - `pwsh ./tools/scripts/verify-web-deploy.ps1`
   - `pwsh ./tools/scripts/set-release-version.ps1 -Version {VERSION} -NoRunVerify`, when asked to set the release version.
