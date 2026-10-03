@@ -25,7 +25,7 @@ public sealed class LibraryCatalogSessionTests
 
         var opened = CatalogOpen.Open(dir.Path);
 
-        var item = Assert.Single(opened.Catalog!.Items);
+        var item = Assert.Single(opened.Snapshot()!.Items);
         Assert.Equal("no audio stream", item.LoudnessError);
         Assert.Equal("2", ReadUserVersion(dir.Path));
     }
@@ -67,7 +67,7 @@ public sealed class LibraryCatalogSessionTests
             FullPath = "/clips/a.mp4",
             FileName = "a.mp4"
         }));
-        Assert.True(session.AddItemTags("item-1", ["Café"]));
+        Assert.True(session.ApplyItemTagEdits(["item-1"], ["Café"], [], out _));
 
         var other = new LibraryCatalogSession(session.DatabasePath);
         Assert.True(other.SetSourceEnabled("source-1", true));
@@ -121,7 +121,7 @@ public sealed class LibraryCatalogSessionTests
 
         Assert.Equal(["Café"], Assert.Single(LibraryCatalogStore.Read(session.DatabasePath).Items).Tags);
 
-        Assert.True(session.RemoveItemTags("item-1", ["café"]));
+        Assert.True(session.ApplyItemTagEdits(["item-1"], [], ["café"], out _));
         Assert.Empty(Assert.Single(LibraryCatalogStore.Read(session.DatabasePath).Items).Tags);
     }
 
@@ -206,7 +206,7 @@ public sealed class LibraryCatalogSessionTests
     }
 
     [Fact]
-    public void AddItemTags_CreatesMissingCatalogTag_AndLeavesExistingCategoryAndSpelling()
+    public void ApplyItemTagEdits_CreatesMissingCatalogTag_AndLeavesExistingCategoryAndSpelling()
     {
         using var dir = new TempDirectory();
         var session = CatalogOpen.Open(dir.Path).Session!;
@@ -218,7 +218,7 @@ public sealed class LibraryCatalogSessionTests
             FileName = "a.mp4"
         }));
 
-        Assert.True(session.AddItemTags("item-1", [" café ", "New"]));
+        Assert.True(session.ApplyItemTagEdits(["item-1"], [" café ", "New"], [], out _));
 
         var catalog = LibraryCatalogStore.Read(session.DatabasePath);
         Assert.Equal(["café", "New"], Assert.Single(catalog.Items).Tags);
@@ -230,7 +230,7 @@ public sealed class LibraryCatalogSessionTests
     }
 
     [Fact]
-    public void AddItemTags_WhenItemAlreadyHasTag_FillsMissingCatalogRow()
+    public void ApplyItemTagEdits_WhenItemAlreadyHasTag_FillsMissingCatalogRow()
     {
         using var dir = new TempDirectory();
         var session = CatalogOpen.Open(dir.Path).Session!;
@@ -243,7 +243,7 @@ public sealed class LibraryCatalogSessionTests
         }));
         var revision = session.Revision;
 
-        Assert.True(session.AddItemTags("item-1", ["café"]));
+        Assert.True(session.ApplyItemTagEdits(["item-1"], ["café"], [], out _));
 
         var catalog = LibraryCatalogStore.Read(session.DatabasePath);
         Assert.Equal(["Café"], Assert.Single(catalog.Items).Tags);
@@ -251,20 +251,6 @@ public sealed class LibraryCatalogSessionTests
         Assert.Equal("café", tag.Name);
         Assert.Equal("uncategorized", tag.CategoryId);
         Assert.Equal(revision + 1, session.Revision);
-    }
-
-    [Fact]
-    public void AddItemTags_MissingItem_CreatesNothing()
-    {
-        using var dir = new TempDirectory();
-        var session = CatalogOpen.Open(dir.Path).Session!;
-
-        Assert.False(session.AddItemTags("missing", ["Café"]));
-
-        var catalog = LibraryCatalogStore.Read(session.DatabasePath);
-        Assert.Empty(catalog.Items);
-        Assert.Empty(catalog.Tags);
-        Assert.Equal(0, session.Revision);
     }
 
     [Fact]

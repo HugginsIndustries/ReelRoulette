@@ -4,7 +4,6 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
-using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
@@ -195,9 +194,7 @@ namespace ReelRoulette
 
     public partial class AutoTagDialog : Window, INotifyPropertyChanged
     {
-        private readonly LibraryIndex? _libraryIndex;
-        private readonly Func<bool, List<LibraryItem>> _getScopeItems;
-        private readonly Func<bool, List<string>, Task<CoreAutoTagScanResponse?>>? _scanViaApiAsync;
+        private readonly Func<bool, List<string>, Task<CoreAutoTagScanResponse?>> _scanViaApiAsync;
         private bool _scanFullLibrary;
         private bool _viewAllMatches;
         private bool _scanHasRun;
@@ -242,14 +239,10 @@ namespace ReelRoulette
         }
 
         public AutoTagDialog(
-            LibraryIndex? libraryIndex,
             bool scanFullLibraryDefault,
-            Func<bool, List<LibraryItem>> getScopeItems,
-            Func<bool, List<string>, Task<CoreAutoTagScanResponse?>>? scanViaApiAsync = null)
+            Func<bool, List<string>, Task<CoreAutoTagScanResponse?>> scanViaApiAsync)
         {
             InitializeComponent();
-            _libraryIndex = libraryIndex;
-            _getScopeItems = getScopeItems;
             _scanViaApiAsync = scanViaApiAsync;
             _scanFullLibrary = scanFullLibraryDefault;
             DataContext = this;
@@ -274,119 +267,30 @@ namespace ReelRoulette
             _allResults.Clear();
             _scanHasRun = true;
 
-            if (_scanViaApiAsync != null)
+            var response = await _scanViaApiAsync(ScanFullLibrary, []);
+            if (response == null)
             {
-                var response = await _scanViaApiAsync(ScanFullLibrary, []);
-                if (response == null)
-                {
-                    StatusTextBlock.Text = "Auto-tag scan failed. Core runtime is unavailable or still recovering.";
-                    return;
-                }
-
-                foreach (var apiRow in response.Rows)
-                {
-                    var row = new AutoTagMatchRow
-                    {
-                        TagName = apiRow.TagName,
-                        TotalMatchedCount = apiRow.TotalMatchedCount,
-                        WouldChangeCount = apiRow.WouldChangeCount,
-                        IsExpanded = false
-                    };
-
-                    foreach (var file in apiRow.Files)
-                    {
-                        row.Files.Add(new AutoTagMatchedFile
-                        {
-                            FullPath = file.FullPath,
-                            DisplayPath = file.DisplayPath,
-                            NeedsChange = file.NeedsChange,
-                            IsSelected = false
-                        });
-                    }
-
-                    if (row.Files.Count > 0)
-                    {
-                        row.InitializeSubscriptions();
-                        row.SelectionChanged += HandleRowSelectionChanged;
-                        _allResults.Add(row);
-                    }
-                }
-
-                RefreshVisibleResults();
-                if (Results.Count == 0)
-                {
-                    StatusTextBlock.Text = "Scan complete: no matching tags found.";
-                    return;
-                }
-
-                UpdateStatusText();
+                StatusTextBlock.Text = "Auto-tag scan failed. Core runtime is unavailable or still recovering.";
                 return;
             }
 
-            if (_libraryIndex?.Tags == null || _libraryIndex.Tags.Count == 0)
+            foreach (var apiRow in response.Rows)
             {
-                StatusTextBlock.Text = "No tags exist yet. Create tags first, then scan.";
-                Log("AutoTagDialog.ScanFiles: No tags available");
-                return;
-            }
-
-            var candidateItems = _getScopeItems(ScanFullLibrary) ?? new List<LibraryItem>();
-            if (candidateItems.Count == 0)
-            {
-                StatusTextBlock.Text = "No items available in this scan scope.";
-                Log($"AutoTagDialog.ScanFiles: No candidate items (ScanFullLibrary={ScanFullLibrary})");
-                return;
-            }
-
-            var tagNames = _libraryIndex.Tags
-                .Where(tag => !string.IsNullOrWhiteSpace(tag.Name))
-                .Select(tag => tag.Name.Trim())
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .OrderBy(tag => tag, TagNameComparer.Instance)
-                .ToList();
-
-            if (tagNames.Count == 0)
-            {
-                StatusTextBlock.Text = "No tags exist yet. Create tags first, then scan.";
-                Log("AutoTagDialog.ScanFiles: No valid tag names available");
-                return;
-            }
-
-            Log($"AutoTagDialog.ScanFiles: Starting scan. Tags={tagNames.Count}, Items={candidateItems.Count}, ScanFullLibrary={ScanFullLibrary}");
-
-            foreach (var tagName in tagNames)
-            {
-                var matchedItems = candidateItems
-                    .Where(item => ItemMatchesTag(item, tagName))
-                    .ToList();
-
-                if (matchedItems.Count == 0)
-                {
-                    continue;
-                }
-
-                var wouldChangeCount = matchedItems.Count(item => !ItemHasTag(item, tagName));
                 var row = new AutoTagMatchRow
                 {
-                    TagName = tagName,
-                    TotalMatchedCount = matchedItems.Count,
-                    WouldChangeCount = wouldChangeCount,
+                    TagName = apiRow.TagName,
+                    TotalMatchedCount = apiRow.TotalMatchedCount,
+                    WouldChangeCount = apiRow.WouldChangeCount,
                     IsExpanded = false
                 };
 
-                foreach (var item in matchedItems)
+                foreach (var file in apiRow.Files)
                 {
-                    var fullPath = item.FullPath;
-                    if (string.IsNullOrWhiteSpace(fullPath))
-                    {
-                        continue;
-                    }
-
                     row.Files.Add(new AutoTagMatchedFile
                     {
-                        FullPath = fullPath,
-                        DisplayPath = BuildDisplayPath(item),
-                        NeedsChange = !ItemHasTag(item, tagName),
+                        FullPath = file.FullPath,
+                        DisplayPath = file.DisplayPath,
+                        NeedsChange = file.NeedsChange,
                         IsSelected = false
                     });
                 }
@@ -400,18 +304,13 @@ namespace ReelRoulette
             }
 
             RefreshVisibleResults();
-
             if (Results.Count == 0)
             {
                 StatusTextBlock.Text = "Scan complete: no matching tags found.";
-                Log("AutoTagDialog.ScanFiles: Scan complete with zero matches");
                 return;
             }
 
             UpdateStatusText();
-            var totalMatches = _allResults.Sum(row => row.TotalMatchedCount);
-            var totalWouldChange = _allResults.Sum(row => row.WouldChangeCount);
-            Log($"AutoTagDialog.ScanFiles: Scan complete. MatchingTags={_allResults.Count}, TotalMatches={totalMatches}, TotalWouldChange={totalWouldChange}");
         }
 
         private void RefreshVisibleResults()
@@ -462,73 +361,6 @@ namespace ReelRoulette
                 .Count(file => file.NeedsChange && file.IsSelected);
 
             StatusTextBlock.Text = $"Scan complete: {matchingTags} matching tags, {totalMatches} matches, {selectedChanges}/{totalWouldChange} selected changes.";
-        }
-
-        private static string BuildDisplayPath(LibraryItem item)
-        {
-            var relativePath = item.RelativePath ?? string.Empty;
-            if (!string.IsNullOrWhiteSpace(relativePath))
-            {
-                return relativePath;
-            }
-
-            return item.FullPath ?? item.FileName ?? string.Empty;
-        }
-
-        private static bool ItemMatchesTag(LibraryItem item, string tagName)
-        {
-            if (string.IsNullOrWhiteSpace(tagName))
-            {
-                return false;
-            }
-
-            var fileName = item.FileName;
-            if (string.IsNullOrWhiteSpace(fileName))
-            {
-                fileName = Path.GetFileName(item.FullPath) ?? string.Empty;
-            }
-
-            var fileNameWithoutExtension = Path.GetFileNameWithoutExtension(fileName);
-            if (!string.IsNullOrWhiteSpace(fileNameWithoutExtension) &&
-                fileNameWithoutExtension.Contains(tagName, StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-
-            var relativePath = item.RelativePath ?? string.Empty;
-            if (!string.IsNullOrWhiteSpace(relativePath))
-            {
-                var normalizedRelative = relativePath.Replace('\\', '/');
-                if (normalizedRelative.Contains(tagName, StringComparison.OrdinalIgnoreCase))
-                {
-                    return true;
-                }
-
-                var relativeSegments = normalizedRelative.Split('/', StringSplitOptions.RemoveEmptyEntries);
-                if (relativeSegments.Any(segment => segment.Contains(tagName, StringComparison.OrdinalIgnoreCase)))
-                {
-                    return true;
-                }
-            }
-
-            var fullPath = item.FullPath ?? string.Empty;
-            if (!string.IsNullOrWhiteSpace(fullPath))
-            {
-                var normalizedFullPath = fullPath.Replace('\\', '/');
-                var fullSegments = normalizedFullPath.Split('/', StringSplitOptions.RemoveEmptyEntries);
-                if (fullSegments.Any(segment => segment.Contains(tagName, StringComparison.OrdinalIgnoreCase)))
-                {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        private static bool ItemHasTag(LibraryItem item, string tagName)
-        {
-            return item.Tags != null &&
-                item.Tags.Any(existingTag => string.Equals(existingTag, tagName, StringComparison.OrdinalIgnoreCase));
         }
 
         private void OkButton_Click(object? sender, RoutedEventArgs e)

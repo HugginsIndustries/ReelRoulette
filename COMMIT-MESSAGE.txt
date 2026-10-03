@@ -19,12 +19,12 @@ Instructions:
 
 Commit Message:
 
-M10j1: Add a server data folder override
+M10j2: Remove dead code without contract changes
 
-- Add `REELROULETTE_DATA_DIR`: when set, the server keeps settings, catalog, backups, `last.log`, and thumbnails under that folder on every OS; unset, folders resolve as before.
-- Route every server and ServerApp data and thumbnail folder lookup through one `ServerDataPaths` helper.
-- `ServerStateService` no longer creates the real data folder when it opens no catalog, so tests and core verification leave it alone.
-- Isolate core and server tests with a module initializer that sets the override (and XDG folders on Linux) to a temporary folder; drop the ineffective `APPDATA` scope.
-- Add helper tests and a composition test that checks the server writes only under the override.
-- `verify-web-deploy.ps1` sets the override on every OS, keeps both XDG folders on Linux, and checks the server's data landed in the override; `verify-linux-packaged-server-smoke.sh` also sets the override alongside its XDG folders and makes the same data check.
-- Document the override and the verification-script rules; `AGENTS.md` and the pre-release skill drop the ban on `verify-web-deploy.ps1` and on `set-release-version.ps1` without `-NoRunVerify`, and `AGENTS.md` allows `verify-web-deploy.ps1` without approval; add the Windows Release Specific check and un-skip the `verify-web-deploy.ps1` check.
+- Desktop: remove the never-built migration dialog, handlers for the removed list views, uncalled `MainWindow`, API client, and tag-save members, `LibraryConnectReads`, the client-side list sort, and the Auto Tag dialog's local matching fallback.
+- Desktop: hide Manage Sources Rename and Remove and the grid's Remove from Library until the server has routes for them; their handlers and dialogs stay.
+- Core and server: remove the unused runtime-state services, interfaces, and filter DTOs with their placeholder verification check, and unused catalog, session, settings, and refresh members.
+- Catalog open no longer reads the whole catalog; tests read it through the session's database instead.
+- Tests that wrote through removed session methods use the production tag and playback writes.
+- WebUI: remove the unread filter tab variable and the unreachable flat-tag branch; remove `publish-web.ps1` and `verify-web.ps1`.
+- Add a headless Manage Sources test, update docs, the changelog, and a Release Specific checklist check.

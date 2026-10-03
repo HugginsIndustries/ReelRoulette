@@ -255,14 +255,6 @@ public sealed class ServerStateService
         return channel.Reader;
     }
 
-    public int GetSubscriberCount()
-    {
-        lock (_subscribersLock)
-        {
-            return _subscribers.Count;
-        }
-    }
-
     public ServerEventEnvelope PublishExternal(string eventType, object payload)
     {
         return Publish(eventType, payload);

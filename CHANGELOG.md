@@ -13,6 +13,8 @@ Write **[Unreleased]** bullets at the same level as the released sections below.
 
 ### Changed
 
+- **Desktop hides unavailable source and item removal:** **Rename** and **Remove** in Manage Sources and **Remove from Library** in the library grid menu are hidden, since the server cannot do them yet and they only showed an error. They come back when the server supports them.
+
 ### Deprecated
 
 ### Removed

@@ -24,4 +24,12 @@ internal static class CatalogOpen
             ThumbnailDirectory = Path.Combine(directory, "thumbnails")
         };
     }
+
+    /// <summary>
+    /// Reads the opened catalog, or null when the open was refused.
+    /// </summary>
+    public static LibraryCatalogSnapshot? Snapshot(this LibraryCatalogOpenResult result)
+    {
+        return result.Session == null ? null : LibraryCatalogStore.Read(result.Session.DatabasePath);
+    }
 }

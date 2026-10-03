@@ -156,6 +156,7 @@ An agent runs these and ticks them.
 > Add checks for features or changes in the current release. Clear these items after sign-off. If a check should outlive the release, move it to Manual Regression.
 
 - [ ] `verify-web-deploy.ps1` on Windows leaves the real data and thumbnail folders unchanged.
+- [ ] Desktop hides **Rename** and **Remove** in Manage Sources and **Remove from Library** in the library grid menu; the other Manage Sources actions and grid menu items still show and work.
 
 ## Release Flow
 

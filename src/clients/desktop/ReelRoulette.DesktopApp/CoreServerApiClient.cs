@@ -47,18 +47,6 @@ public sealed class CoreServerApiClient
         _httpClient = httpClient;
     }
 
-    public async Task<CoreVersionResponse?> GetVersionAsync(string baseUrl, CancellationToken cancellationToken = default)
-    {
-        using var response = await _httpClient.GetAsync($"{baseUrl.TrimEnd('/')}/api/version", cancellationToken).ConfigureAwait(false);
-        if (!response.IsSuccessStatusCode)
-        {
-            return null;
-        }
-
-        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-        return await JsonSerializer.DeserializeAsync<CoreVersionResponse>(stream, _serializerOptions, cancellationToken).ConfigureAwait(false);
-    }
-
     public async Task DownloadCatalogCheckpointAsync(string baseUrl, string destinationPath, CancellationToken cancellationToken = default)
     {
         using var response = await _httpClient.GetAsync(
@@ -254,12 +242,6 @@ public sealed class CoreServerApiClient
 
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
         return await JsonSerializer.DeserializeAsync<CoreLibraryStatsResponse>(stream, _serializerOptions, cancellationToken).ConfigureAwait(false);
-    }
-
-    private static string? TryReadJsonError(string body)
-    {
-        var (error, _) = TryReadJsonErrorBody(body);
-        return error;
     }
 
     private static (string? Error, string? Code) TryReadJsonErrorBody(string body)
@@ -624,13 +606,6 @@ public sealed class CoreServerApiClient
 
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
         return await JsonSerializer.DeserializeAsync<CoreAutoTagApplyResponse>(stream, _serializerOptions, cancellationToken).ConfigureAwait(false);
-    }
-
-    public async Task<bool> AppendClientLogAsync(string baseUrl, CoreClientLogRequest request, CancellationToken cancellationToken = default)
-    {
-        using var content = SerializeJson(request);
-        using var response = await _httpClient.PostAsync($"{baseUrl.TrimEnd('/')}/api/logs/client", content, cancellationToken).ConfigureAwait(false);
-        return response.IsSuccessStatusCode;
     }
 
     public async Task ListenToEventsAsync(

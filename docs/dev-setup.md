@@ -99,7 +99,6 @@ From `src/clients/web/ReelRoulette.WebUI`:
 
 Optional helper scripts:
 
-- `pwsh ./tools/scripts/verify-web.ps1`
 - `pwsh ./tools/scripts/verify-web-deploy.ps1` builds the WebUI and starts the server on port 51312 with `REELROULETTE_DATA_DIR` set to a temporary folder on every OS, plus temporary `XDG_CONFIG_HOME` and `XDG_DATA_HOME` on Linux. It checks that the server wrote its log, catalog, and settings there, then stops the server it started and removes that folder. Your real data folders are not touched.
 
 ### Optional system checks

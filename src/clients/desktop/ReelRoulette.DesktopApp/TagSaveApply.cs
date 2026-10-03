@@ -251,68 +251,6 @@ public static class TagSaveApply
         Apply(items, accepted);
     }
 
-    public static List<TagSaveEcho> EchoesFor(IReadOnlyList<TagEditorSaveStep> steps)
-    {
-        var echoes = new List<TagSaveEcho>();
-        foreach (var step in steps)
-        {
-            if (step.Kind == TagEditorSaveKind.ApplyItemTags)
-            {
-                echoes.Add(new TagSaveEcho
-                {
-                    ItemIds = step.ItemIds.ToList(),
-                    AddedTags = step.AddTags.ToList(),
-                    RemovedTags = step.RemoveTags.ToList()
-                });
-                continue;
-            }
-
-            if (step.Kind != TagEditorSaveKind.ApplyAutoTags)
-            {
-                continue;
-            }
-
-            foreach (var assignment in step.Assignments)
-            {
-                if (string.IsNullOrWhiteSpace(assignment.TagName))
-                {
-                    continue;
-                }
-
-                var paths = new List<string>();
-                var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                foreach (var path in assignment.ItemPaths)
-                {
-                    if (string.IsNullOrWhiteSpace(path))
-                    {
-                        continue;
-                    }
-
-                    var trimmed = path.Trim();
-                    if (seen.Add(trimmed))
-                    {
-                        paths.Add(trimmed);
-                    }
-                }
-
-                if (paths.Count == 0)
-                {
-                    continue;
-                }
-
-                echoes.Add(new TagSaveEcho
-                {
-                    ItemIds = paths,
-                    AddedTags = [assignment.TagName.Trim()],
-                    RemovedTags = [],
-                    MatchPathsAsSubset = true
-                });
-            }
-        }
-
-        return echoes;
-    }
-
     public static List<string> Merge(IReadOnlyList<string>? tags, IReadOnlyList<string> addTags, IReadOnlyList<string> removeTags)
     {
         var updated = (tags ?? [])

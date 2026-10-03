@@ -334,12 +334,6 @@
                            FontSize="11"
                            Foreground="Gray"
                            VerticalAlignment="Center"/>
-                <ProgressBar x:Name="StatusLibraryArchiveProgressBar"
-                             Height="6"
-                             VerticalAlignment="Center"
-                             IsIndeterminate="True"
-                             IsVisible="False"
-                             MinWidth="80"/>
             </Grid>
             <TextBlock x:Name="StatusTimeTextBlock"
                        Grid.Column="1"
@@ -738,8 +732,11 @@
                                         <TextBlock Text="🏷️"/>
                                     </MenuItem.Icon>
                                 </MenuItem>
-                                <Separator/>
-                                <MenuItem Header="Remove from Library"
+                                <!-- Hidden until the server has an item remove route. -->
+                                <Separator x:Name="ContextMenu_RemoveFromLibrarySeparator" IsVisible="False"/>
+                                <MenuItem x:Name="ContextMenu_RemoveFromLibraryMenuItem"
+                                         Header="Remove from Library"
+                                         IsVisible="False"
                                          Click="ContextMenu_RemoveFromLibrary_Click">
                                     <MenuItem.Icon>
                                         <TextBlock Text="🗑️"/>

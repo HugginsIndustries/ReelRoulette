@@ -103,51 +103,7 @@ Do not use this file for detailed architecture explanation or current capability
 
 ## Active Milestones
 
-Last milestone completed: M10j1
-
-### M10j2 - Dead Code Removal Without Contract Changes
-
-- **Status**: ⏳ Planned
-- **Goal**: Remove code that nothing calls at runtime, on every surface, without changing the API contract or user-visible behavior.
-- **Scope**:
-  - Ships in v0.14.0. Code that only tests call counts as unused. Test hooks that hold or observe a production code path stay (`Hold*` / `*Entered` and `CancelRunsForShutdown` in `RefreshPipelineService`, `LibraryCatalogBackup.WaitForPending`, `ClientLogRelay.DisableForTests`, `AppDataManager.UseDirectoryForTests`).
-  - The WebUI `events/sseClient.ts` (`createSseClient`) and `buildEventsUrl` in `events/eventEnvelope.ts` stay, although only their tests call them today: the client event efficiency milestone wires them into the WebUI for reconnect resume.
-  - Found by the v0.14.0 planning report: the Roslyn unused-member analyzers (IDE0051, IDE0052, IDE0060) run on a copy of the repo, TypeScript `--noUnusedLocals --checkJs`, and caller searches. Removing one item can leave others unused, so re-run those checks until they report nothing.
-  - Three slices, each verified on its own:
-  - Desktop slice:
-    - The never-constructed `MigrationDialog` (`MigrationDialog.axaml`, `MigrationDialog.axaml.cs`, `MigrationTagViewModel`).
-    - Handlers for the removed History, Recently Played, Favorites, and Blacklist list views, which nothing wires: `HistoryPlayAgain_Click`, `RecentlyPlayedPlay_Click`, `RecentlyPlayedShowInFileManager_Click`, `RecentlyPlayedRemove_Click`, `BlacklistPlay_Click`, `BlacklistRemove_Click`, `BlacklistShowInFileManager_Click`, `FavoritesPlay_Click`, `FavoritesRemove_Click`, `FavoritesShowInFileManager_Click`, and `BlacklistCurrentVideo_Click`.
-    - `MainWindow` members with no caller: `PlayMedia(string, bool)`, `RemoveLibraryItemAsync`, `BeginLibraryArchiveOperationUI`, `EndLibraryArchiveOperationUI`, `BlacklistCurrentVideo`, `BuildGridRowModels`, `ContainsTagCaseInsensitive`, the `GetAutoTagScopeItems` stub that always returns an empty list, the `persistLibrary` parameter of `ApplyRemoteItemStateProjection`, and the unread `_rng` and `_videoExtensions` fields.
-    - The unread `EditTagDialog._categories` field and the unused `TagViewModel` class in `FilterDialog.axaml.cs`.
-    - `CoreServerApiClient.AppendClientLogAsync`, `GetVersionAsync`, and `TryReadJsonError`, and `TagSaveApply.EchoesFor`, which nothing calls. `LibraryConnectReads`, which only its test reads.
-    - The Auto Tag dialog's local matching fallback: `ItemMatchesTag` and the scan branch that runs it when no API scan is passed. Production always passes the API scan, so this branch is a client-local fallback that never runs. Found by the efficiency and divergence report.
-    - `LibraryPanelSort.Apply` and its file name comparer, an in-memory client sort that only tests call. The server sorts the list query. `IsDefaultDescendingForSortMode` and `GetSortDirectionLabel` stay: the sort control uses them. Found by the efficiency and divergence report.
-    - Hide the desktop controls that cannot work because their server routes do not exist: **Rename** and **Remove** in the Manage Sources dialog, which only show "API-required and not available" after their dialogs, and **Remove from Library** in the grid's context menu, which shows its confirmation and then the same message. Found by the planned-milestones audit. They stay hidden until Operator Source and Item Management adds the routes. This is the one user-visible change in this milestone. The handlers and dialogs behind them stay: Remove from Library comes back on the new item route, and the Manage Sources dialog is replaced by Desktop Source Management Link.
-  - Core and server slice:
-    - `State/RuntimeStateServices.cs` (randomization, filter-session, and playback-session state services), the `IPathResolver` and `IBackgroundTaskScheduler` interfaces, and `CoreFilterState` / `CoreFilterPreset` with the `CoreVerification.VerifyDtoMappingRules` check that only exists to construct them. Drop the placeholder list from the SystemChecks verbose output.
-    - `LibraryCatalogStore.DatabaseHasContent` (no caller) and `IsUsableDatabase` (tests only). `LibraryCatalogSession.ReplaceItemTags` (no caller), and `AddItemTags`, `RemoveItemTags`, and `SetPlayback`, which only tests call. Tests that seed through them move to the SQL seeding helper from the test seeding milestone, or to the production write they stand in for.
-    - The full-catalog read on every open: `LibraryCatalogStore.Open` builds `LibraryCatalogOpenResult.Catalog`, and only tests read it. Measured on a 48,938-item catalog at about 360-450 ms and about 100 MB of allocations at each server start. Tests read the snapshot through `LibraryCatalogStore.Read` instead.
-    - `ServerSessionStore.GetActiveSessionCount`, `ServerStateService.GetSubscriberCount`, `MediaPlayableExtensions.IsPhotoExtension`, `CoreSettingsService.ReloadFromDisk`, `FilterStateProjection.ToModel`, and `RefreshPipelineService.GetSettings`, `GetWebRuntimeSettings`, and `UpdateWebRuntimeSettings`. Keep `RefreshPipelineService.UpdateSettings` for the auto-refresh reschedule fix in the post-migration fixes milestone.
-    - The unread `CoreSettingsService._logger` and `RefreshPipelineService.JsonOptions` fields.
-    - The `catalog ?? LibraryCatalogHost.Open(...)` fallbacks in `LibraryOperationsService`, `LibraryPlaybackService`, `RefreshPipelineService`, and `ServerStateService` are reached only from tests. Remove them if the server data folder override leaves no test that needs them.
-  - WebUI and scripts slice:
-    - The unread `filterActiveTab` in `app.js`.
-    - The flat-tag branch in the WebUI filter Tags tab (`legacyFlat` in `app.js`), which renders tags when the catalog has no categories. The server always keeps Uncategorized and no longer has a no-categories tag path, so this branch cannot be reached.
-    - `tools/scripts/publish-web.ps1`, which writes a `.web-deploy` folder that nothing reads, and `tools/scripts/verify-web.ps1`, which only runs `npm install` and `npm run verify`. Remove their references in `docs/dev-setup.md` and `docs/domain-inventory.md`.
-- **Acceptance criteria**:
-  - Every item listed above is gone, or the evidence says why it stayed.
-  - The unused-member analyzers and TypeScript unused-locals checks report nothing new for product code.
-  - `LibraryCatalogStore.Open` does not read the full catalog, and server startup does not build a catalog snapshot.
-  - API routes, OpenAPI, generated WebUI types, desktop and WebUI behavior, and the Operator are unchanged, except that the desktop no longer shows Manage Sources **Rename** and **Remove** or the grid's **Remove from Library**.
-  - The rest of the Manage Sources dialog and the grid context menu work as before.
-  - Test hooks listed in scope still exist and their tests pass.
-  - `events/sseClient.ts` and `buildEventsUrl` still exist and their tests pass.
-  - The desktop Auto Tag scan has no local matching path, and the desktop has no client-side list sort.
-- **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include the analyzer and TypeScript check output before and after each slice, `dotnet build ReelRoulette.sln`, `dotnet test ReelRoulette.sln`, `npm run verify`, and the SystemChecks run, plus headless desktop tests that the three hidden controls are not shown and the rest of the Manage Sources dialog and grid context menu still are.
-  - Docs evidence must include `docs/dev-setup.md`, `docs/domain-inventory.md`, and `CONTEXT.md` no longer naming removed scripts or types.
-- **Deferrals / Follow-ups**:
-  - Unused routes and contract types are the preset match route removal milestone.
+Last milestone completed: M10j2
 
 ### M10j3 - Remove the Preset Match Route
 
@@ -1667,6 +1623,61 @@ Last milestone completed: M10j1
 ## Completed Milestones
 
 Latest completions first:
+
+### M10j2 - Dead Code Removal Without Contract Changes
+
+- **Status**: ✅ Complete
+- **Goal**: Remove code that nothing calls at runtime, on every surface, without changing the API contract or user-visible behavior.
+- **Scope**:
+  - Ships in v0.14.0. Code that only tests call counts as unused. Test hooks that hold or observe a production code path stay (`Hold*` / `*Entered` and `CancelRunsForShutdown` in `RefreshPipelineService`, `LibraryCatalogBackup.WaitForPending`, `ClientLogRelay.DisableForTests`, `AppDataManager.UseDirectoryForTests`).
+  - The WebUI `events/sseClient.ts` (`createSseClient`) and `buildEventsUrl` in `events/eventEnvelope.ts` stay, although only their tests call them today: the client event efficiency milestone wires them into the WebUI for reconnect resume.
+  - Found by the v0.14.0 planning report: the Roslyn unused-member analyzers (IDE0051, IDE0052, IDE0060) run on a copy of the repo, TypeScript `--noUnusedLocals --checkJs`, and caller searches. Removing one item can leave others unused, so re-run those checks until they report nothing.
+  - Three slices, each verified on its own:
+  - Desktop slice:
+    - The never-constructed `MigrationDialog` (`MigrationDialog.axaml`, `MigrationDialog.axaml.cs`, `MigrationTagViewModel`).
+    - Handlers for the removed History, Recently Played, Favorites, and Blacklist list views, which nothing wires: `HistoryPlayAgain_Click`, `RecentlyPlayedPlay_Click`, `RecentlyPlayedShowInFileManager_Click`, `RecentlyPlayedRemove_Click`, `BlacklistPlay_Click`, `BlacklistRemove_Click`, `BlacklistShowInFileManager_Click`, `FavoritesPlay_Click`, `FavoritesRemove_Click`, `FavoritesShowInFileManager_Click`, and `BlacklistCurrentVideo_Click`.
+    - `MainWindow` members with no caller: `PlayMedia(string, bool)`, `RemoveLibraryItemAsync`, `BeginLibraryArchiveOperationUI`, `EndLibraryArchiveOperationUI`, `BlacklistCurrentVideo`, `BuildGridRowModels`, `ContainsTagCaseInsensitive`, the `GetAutoTagScopeItems` stub that always returns an empty list, the `persistLibrary` parameter of `ApplyRemoteItemStateProjection`, and the unread `_rng` and `_videoExtensions` fields.
+    - The unread `EditTagDialog._categories` field and the unused `TagViewModel` class in `FilterDialog.axaml.cs`.
+    - `CoreServerApiClient.AppendClientLogAsync`, `GetVersionAsync`, and `TryReadJsonError`, and `TagSaveApply.EchoesFor`, which nothing calls. `LibraryConnectReads`, which only its test reads.
+    - The Auto Tag dialog's local matching fallback: `ItemMatchesTag` and the scan branch that runs it when no API scan is passed. Production always passes the API scan, so this branch is a client-local fallback that never runs. Found by the efficiency and divergence report.
+    - `LibraryPanelSort.Apply` and its file name comparer, an in-memory client sort that only tests call. The server sorts the list query. `IsDefaultDescendingForSortMode` and `GetSortDirectionLabel` stay: the sort control uses them. Found by the efficiency and divergence report.
+    - Hide the desktop controls that cannot work because their server routes do not exist: **Rename** and **Remove** in the Manage Sources dialog, which only show "API-required and not available" after their dialogs, and **Remove from Library** in the grid's context menu, which shows its confirmation and then the same message. Found by the planned-milestones audit. They stay hidden until Operator Source and Item Management adds the routes. This is the one user-visible change in this milestone. The handlers and dialogs behind them stay: Remove from Library comes back on the new item route, and the Manage Sources dialog is replaced by Desktop Source Management Link.
+  - Core and server slice:
+    - `State/RuntimeStateServices.cs` (randomization, filter-session, and playback-session state services), the `IPathResolver` and `IBackgroundTaskScheduler` interfaces, and `CoreFilterState` / `CoreFilterPreset` with the `CoreVerification.VerifyDtoMappingRules` check that only exists to construct them. Drop the placeholder list from the SystemChecks verbose output.
+    - `LibraryCatalogStore.DatabaseHasContent` (no caller) and `IsUsableDatabase` (tests only). `LibraryCatalogSession.ReplaceItemTags` (no caller), and `AddItemTags`, `RemoveItemTags`, and `SetPlayback`, which only tests call. Tests that seed through them move to the SQL seeding helper from the test seeding milestone, or to the production write they stand in for.
+    - The full-catalog read on every open: `LibraryCatalogStore.Open` builds `LibraryCatalogOpenResult.Catalog`, and only tests read it. Measured on a 48,938-item catalog at about 360-450 ms and about 100 MB of allocations at each server start. Tests read the snapshot through `LibraryCatalogStore.Read` instead.
+    - `ServerSessionStore.GetActiveSessionCount`, `ServerStateService.GetSubscriberCount`, `MediaPlayableExtensions.IsPhotoExtension`, `CoreSettingsService.ReloadFromDisk`, `FilterStateProjection.ToModel`, and `RefreshPipelineService.GetSettings`, `GetWebRuntimeSettings`, and `UpdateWebRuntimeSettings`. Keep `RefreshPipelineService.UpdateSettings` for the auto-refresh reschedule fix in the post-migration fixes milestone.
+    - The unread `CoreSettingsService._logger` and `RefreshPipelineService.JsonOptions` fields.
+    - The `catalog ?? LibraryCatalogHost.Open(...)` fallbacks in `LibraryOperationsService`, `LibraryPlaybackService`, `RefreshPipelineService`, and `ServerStateService` are reached only from tests. Remove them if the server data folder override leaves no test that needs them.
+  - WebUI and scripts slice:
+    - The unread `filterActiveTab` in `app.js`.
+    - The flat-tag branch in the WebUI filter Tags tab (`legacyFlat` in `app.js`), which renders tags when the catalog has no categories. The server always keeps Uncategorized and no longer has a no-categories tag path, so this branch cannot be reached.
+    - `tools/scripts/publish-web.ps1`, which writes a `.web-deploy` folder that nothing reads, and `tools/scripts/verify-web.ps1`, which only runs `npm install` and `npm run verify`. Remove their references in `docs/dev-setup.md` and `docs/domain-inventory.md`.
+- **Acceptance criteria**:
+  - Every item listed above is gone, or the evidence says why it stayed.
+  - The unused-member analyzers and TypeScript unused-locals checks report nothing new for product code.
+  - `LibraryCatalogStore.Open` does not read the full catalog, and server startup does not build a catalog snapshot.
+  - API routes, OpenAPI, generated WebUI types, desktop and WebUI behavior, and the Operator are unchanged, except that the desktop no longer shows Manage Sources **Rename** and **Remove** or the grid's **Remove from Library**.
+  - The rest of the Manage Sources dialog and the grid context menu work as before.
+  - Test hooks listed in scope still exist and their tests pass.
+  - `events/sseClient.ts` and `buildEventsUrl` still exist and their tests pass.
+  - The desktop Auto Tag scan has no local matching path, and the desktop has no client-side list sort.
+- **Verification evidence**:
+  - Unused-member analyzers (IDE0051, IDE0052, IDE0060, plus CS0169 and CS0649) on a copy of the working tree. Before: 15 hits, all on the list above except one pre-existing IDE0060 on the `cancellationToken` parameter of `AvaloniaTrayHostUi.RequestUiExitAsync`, which was left alone because it is not dead code on this list. After the desktop slice: 4 (that one plus three server items). After the core and server slice: only that one remains. TypeScript `tsc --noUnusedLocals --noUnusedParameters --checkJs --allowJs`: before, `filterActiveTab` only; after the WebUI slice, nothing.
+  - Removals left more items unused, and those went too. Desktop: `RemoveFromBlacklistAsync`, `PlayFromPath`, the archive-operation status fields, the always-hidden status-bar progress bar, and the Auto Tag dialog's `ItemHasTag`, display-path helper, catalog, and scope-items arguments. Core and server: `LibraryCatalogSession.ItemExists`, `CoreSettingsService.ApplyLoadedSettings` and `_serverRuntimeOptions`, and the `CoreSettingsService` constructor's logger parameter, which only fed the removed field.
+  - Searches for callers confirmed the public members the analyzers cannot see. `FilterStateProjection.ToModel` is gone; the class stays for the preset match route removal.
+  - Catalog open: `LibraryCatalogOpenResult.Catalog` is gone, and `Open` no longer calls `Read`. On a synthetic 50,000-item catalog, `Open` went from a median of 150 ms with 44.5 MB allocated (HEAD) to 0.8 ms with almost nothing allocated (7 runs each). Tests read the snapshot through `LibraryCatalogStore.Read` on the opened database. A check confirmed no test writes between its open and that read.
+  - Tests that used `AddItemTags`, `RemoveItemTags`, or `SetPlayback` now use `ApplyItemTagEdits` and `RecordPlayback`. The refresh hold test checks a play count of 1 from a seeded 0 instead of an explicit 3. `AddItemTags_MissingItem_CreatesNothing` was deleted because it covered only the removed method. `ApplyItemTagEdits` still adds the catalog tag for a missing item. The backup test checks `InspectCatalogFile` instead of `IsUsableDatabase`.
+  - Met differently: the `catalog ?? LibraryCatalogHost.Open(...)` fallbacks in `LibraryOperationsService`, `LibraryPlaybackService`, `RefreshPipelineService`, and `ServerStateService` stay. About 35 tests build these services from a data folder alone and rely on them.
+  - The test hooks listed in scope, `events/sseClient.ts`, and `buildEventsUrl` still exist, and their tests pass. `shared/api/openapi.yaml`, `ApiContracts.cs`, and `openapi.generated.ts` are unchanged, and `npm run verify:contracts` passes.
+  - Hidden controls use `IsVisible="False"`, and their handlers and dialogs stay. A new headless test opens Manage Sources with one source and checks that Rename and Remove are not shown while Refresh and Find Duplicates are. It failed with Rename made visible. The test classes now share one headless session. `MainWindow` cannot be built in a headless test without side effects: its constructor loads native LibVLC, and its `Loaded` handler starts the core reconnect loop and the update service. So the grid menu gets a manual spot check instead of a test.
+  - Grid menu spot check (manual, desktop app): PASS. **Remove from Library** is hidden from the grid menu with no doubled separator, and the other menu items work. Manage Sources shows the enable toggle, **Refresh**, and **Find Duplicates...** without **Rename** or **Remove**.
+  - `dotnet build ReelRoulette.sln` passed with 0 warnings. `dotnet test ReelRoulette.sln` passed: Core 273 (one deleted test), Desktop 130 (−1 `LibraryConnectReads`, −7 list-sort tests, +1 Manage Sources). `npm run verify` passed with 133 tests. `dotnet run --project src/core/ReelRoulette.Core.SystemChecks -- --verbose` passed, with no placeholder list.
+  - Docs: `docs/dev-setup.md`, `docs/domain-inventory.md`, and `CONTEXT.md` no longer name the removed scripts. `docs/feature-migration.md` drops the migration wizard and notes the hidden controls. `CONTEXT.md` and `docs/domain-inventory.md` note that opening the catalog does not read it whole. Added an `[Unreleased]` Changed entry and a Release Specific checklist check for the hidden controls.
+- **Deferrals / Follow-ups**:
+  - Unused routes and contract types are the preset match route removal milestone.
+  - Make the catalog a required constructor argument of `LibraryOperationsService`, `LibraryPlaybackService`, `RefreshPipelineService`, and `ServerStateService`, and drop their `catalog ?? LibraryCatalogHost.Open(...)` fallbacks, once the tests that build them from a data folder are rewritten -> the test seeding milestone or later.
+  - The pre-existing unused `cancellationToken` parameter of `AvaloniaTrayHostUi.RequestUiExitAsync` -> backlog; not on this milestone's list.
 
 ### M10j1 - Server Data Folder Override
 

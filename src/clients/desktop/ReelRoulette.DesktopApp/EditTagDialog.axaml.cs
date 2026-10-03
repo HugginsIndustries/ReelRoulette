@@ -14,7 +14,6 @@ namespace ReelRoulette
             ClientLogRelay.Log("desktop-edit-tag-dialog", message);
         }
 
-        private List<TagCategory> _categories;
         private const string CreateNewCategoryOption = "+ Create New Category...";
 
         public string? TagName { get; private set; }
@@ -25,7 +24,6 @@ namespace ReelRoulette
         public EditTagDialog()
         {
             InitializeComponent();
-            _categories = new List<TagCategory>();
             Log("EditTagDialog: Constructor called");
         }
 
@@ -35,8 +33,6 @@ namespace ReelRoulette
         public void Initialize(List<TagCategory> categories, string? existingTagName = null, string? existingCategoryId = null)
         {
             Log($"EditTagDialog.Initialize: categories={categories.Count}, existingTagName={existingTagName ?? "null"}, existingCategoryId={existingCategoryId ?? "null"}");
-            
-            _categories = categories;
 
             // Populate category combo box
             CategoryComboBox.Items.Clear();

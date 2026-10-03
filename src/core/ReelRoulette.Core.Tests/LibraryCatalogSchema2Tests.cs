@@ -37,15 +37,15 @@ public sealed class LibraryCatalogSchema2Tests
         Assert.False(TableExists(dir.Path, "available_tags"));
         Assert.False(MetaExists(dir.Path, "available_tags_present"));
         Assert.False(ColumnExists(dir.Path, "items", "generated_utc"));
-        Assert.Equal("kept-tag", Assert.Single(opened.Catalog!.Tags).Name);
+        Assert.Equal("kept-tag", Assert.Single(opened.Snapshot()!.Tags).Name);
         var preset = Assert.Single(opened.Session!.ReadPresets());
         Assert.Equal("Night", preset.Name);
         Assert.Contains("kept-tag", preset.FilterStateJson, StringComparison.Ordinal);
-        var item = Assert.Single(opened.Catalog.Items, row => row.Id == "item-1");
+        var item = Assert.Single(opened.Snapshot()!.Items, row => row.Id == "item-1");
         Assert.Equal("rev-1", item.ThumbnailRevision);
         Assert.Equal(320, item.ThumbnailWidth);
         Assert.Equal(180, item.ThumbnailHeight);
-        var zeroWidth = Assert.Single(opened.Catalog.Items, row => row.Id == "item-2");
+        var zeroWidth = Assert.Single(opened.Snapshot()!.Items, row => row.Id == "item-2");
         Assert.Equal("rev-2", zeroWidth.ThumbnailRevision);
         Assert.Null(zeroWidth.ThumbnailWidth);
         Assert.Equal(15, zeroWidth.ThumbnailHeight);
@@ -80,7 +80,7 @@ public sealed class LibraryCatalogSchema2Tests
         var opened = CatalogOpen.Open(dir.Path);
 
         Assert.Equal("Original", Assert.Single(opened.Session!.ReadPresets()).Name);
-        var item = Assert.Single(opened.Catalog!.Items, row => row.Id == "item-1");
+        var item = Assert.Single(opened.Snapshot()!.Items, row => row.Id == "item-1");
         Assert.Equal("rev-1", item.ThumbnailRevision);
         Assert.Equal(11, item.ThumbnailWidth);
         Assert.False(File.Exists(Path.Combine(dir.Path, "presets.json")));
@@ -96,7 +96,7 @@ public sealed class LibraryCatalogSchema2Tests
         var missingOpen = CatalogOpen.Open(missing.Path);
         Assert.Equal(LibraryCatalogOpenStatus.Opened, missingOpen.Status);
         Assert.Empty(missingOpen.Session!.ReadPresets());
-        Assert.Null(Assert.Single(missingOpen.Catalog!.Items, row => row.Id == "item-1").ThumbnailRevision);
+        Assert.Null(Assert.Single(missingOpen.Snapshot()!.Items, row => row.Id == "item-1").ThumbnailRevision);
 
         using var unreadable = new TempDirectory();
         Directory.CreateDirectory(Path.Combine(unreadable.Path, "thumbnails"));
@@ -106,8 +106,8 @@ public sealed class LibraryCatalogSchema2Tests
         var opened = CatalogOpen.Open(unreadable.Path);
         Assert.Equal(LibraryCatalogOpenStatus.Opened, opened.Status);
         Assert.Empty(opened.Session!.ReadPresets());
-        Assert.Null(Assert.Single(opened.Catalog!.Items, row => row.Id == "item-1").ThumbnailWidth);
-        Assert.Equal("kept-tag", Assert.Single(opened.Catalog.Tags).Name);
+        Assert.Null(Assert.Single(opened.Snapshot()!.Items, row => row.Id == "item-1").ThumbnailWidth);
+        Assert.Equal("kept-tag", Assert.Single(opened.Snapshot()!.Tags).Name);
     }
 
     [Fact]
@@ -141,7 +141,7 @@ public sealed class LibraryCatalogSchema2Tests
         Assert.True(TableExists(dest.Path, "available_tags"));
         var migrated = CatalogOpen.Open(dest.Path);
         Assert.Equal("2", ReadUserVersion(dest.Path));
-        Assert.Equal("kept-tag", Assert.Single(migrated.Catalog!.Tags).Name);
+        Assert.Equal("kept-tag", Assert.Single(migrated.Snapshot()!.Tags).Name);
         Assert.False(TableExists(dest.Path, "available_tags"));
     }
 

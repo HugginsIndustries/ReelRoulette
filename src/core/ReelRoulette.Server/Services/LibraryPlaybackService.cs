@@ -649,54 +649,6 @@ public sealed class LibraryPlaybackService
         public List<string> IncludedSourceIds { get; } = [];
         public Dictionary<string, string> CategoryLocalMatchModes { get; } = new(StringComparer.OrdinalIgnoreCase);
 
-        public FilterStateModel ToModel()
-        {
-            var model = new FilterStateModel
-            {
-                FavoritesOnly = FavoritesOnly,
-                ExcludeBlacklisted = ExcludeBlacklisted,
-                OnlyNeverPlayed = OnlyNeverPlayed,
-                OnlyKnownDuration = OnlyKnownDuration,
-                OnlyKnownLoudness = OnlyKnownLoudness,
-                GlobalMatchMode = GlobalMatchMode,
-                MinDuration = MinDurationSeconds.HasValue ? TimeSpan.FromSeconds(MinDurationSeconds.Value) : null,
-                MaxDuration = MaxDurationSeconds.HasValue ? TimeSpan.FromSeconds(MaxDurationSeconds.Value) : null
-            };
-
-            if (Enum.TryParse<AudioFilterModeValue>(AudioFilter, ignoreCase: true, out var audioFilter))
-            {
-                model.AudioFilter = audioFilter;
-            }
-
-            if (Enum.TryParse<MediaTypeFilterValue>(MediaTypeFilter, ignoreCase: true, out var mediaTypeFilter))
-            {
-                model.MediaTypeFilter = mediaTypeFilter;
-            }
-
-            model.SelectedTags.AddRange(SelectedTags.Where(v => !string.IsNullOrWhiteSpace(v)));
-            model.ExcludedTags.AddRange(ExcludedTags.Where(v => !string.IsNullOrWhiteSpace(v)));
-            model.IncludedSourceIds.AddRange(IncludedSourceIds.Where(v => !string.IsNullOrWhiteSpace(v)));
-
-            if (CategoryLocalMatchModes.Count > 0)
-            {
-                model.CategoryLocalMatchModes = new Dictionary<string, TagMatchModeValue>(StringComparer.OrdinalIgnoreCase);
-                foreach (var pair in CategoryLocalMatchModes)
-                {
-                    if (string.IsNullOrWhiteSpace(pair.Key))
-                    {
-                        continue;
-                    }
-
-                    if (Enum.TryParse<TagMatchModeValue>(pair.Value, ignoreCase: true, out var parsed))
-                    {
-                        model.CategoryLocalMatchModes[pair.Key] = parsed;
-                    }
-                }
-            }
-
-            return model;
-        }
-
         public bool Equals(FilterStateProjection? other)
         {
             if (other is null)

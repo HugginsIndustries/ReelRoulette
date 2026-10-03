@@ -1,5 +1,4 @@
 using ReelRoulette.Core.Randomization;
-using ReelRoulette.Core.Tags;
 
 namespace ReelRoulette.Core.Verification;
 
@@ -21,7 +20,6 @@ public static class CoreVerification
     {
         var result = new VerificationResult();
         VerifyRandomization(result);
-        VerifyDtoMappingRules(result);
         return result;
     }
 
@@ -41,28 +39,6 @@ public static class CoreVerification
             {
                 Name = "Randomization",
                 Message = "Expected SmartShuffle selection to return a path."
-            });
-        }
-    }
-
-    // Placeholder for shape/compat assertions as mapping contracts evolve.
-    private static void VerifyDtoMappingRules(VerificationResult result)
-    {
-        var mappingSmoke = new CoreFilterPreset
-        {
-            Name = "PresetA",
-            FilterState = new CoreFilterState
-            {
-                SelectedTags = new List<string> { "x" },
-                ExcludedTags = new List<string>()
-            }
-        };
-        if (string.IsNullOrWhiteSpace(mappingSmoke.Name))
-        {
-            result.Issues.Add(new VerificationIssue
-            {
-                Name = "DtoMappingRules",
-                Message = "Preset name should not be empty."
             });
         }
     }

@@ -49,7 +49,6 @@ public sealed class LibraryCatalogOpenResult
 {
     public LibraryCatalogOpenStatus Status { get; init; }
     public string? Message { get; init; }
-    public LibraryCatalogSnapshot? Catalog { get; init; }
     public LibraryCatalogSession? Session { get; init; }
     public bool MigratedSchema { get; init; }
 }
@@ -287,11 +286,6 @@ public static partial class LibraryCatalogStore
         }
     }
 
-    public static bool IsUsableDatabase(string databasePath)
-    {
-        return IsHealthyFile(databasePath);
-    }
-
     public static IReadOnlyList<string> ReadSourceRootPaths(string databasePath)
     {
         using var connection = OpenReadOnly(databasePath);
@@ -349,11 +343,6 @@ public static partial class LibraryCatalogStore
         {
             return DatabaseContentRead.Unreadable;
         }
-    }
-
-    public static bool DatabaseHasContent(string databasePath)
-    {
-        return ReadDatabaseContent(databasePath) == DatabaseContentRead.HasContent;
     }
 
     public static void PrepareIncomingFromFile(string directory, string checkpointPath)
@@ -675,7 +664,6 @@ public static partial class LibraryCatalogStore
         return new LibraryCatalogOpenResult
         {
             Status = LibraryCatalogOpenStatus.Opened,
-            Catalog = Read(databasePath),
             Session = new LibraryCatalogSession(databasePath),
             MigratedSchema = migratedSchema
         };

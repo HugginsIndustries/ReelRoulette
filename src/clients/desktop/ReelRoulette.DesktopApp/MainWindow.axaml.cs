@@ -45,11 +45,6 @@ namespace ReelRoulette
 
     public partial class MainWindow : Window, INotifyPropertyChanged, ITagMutationClient
     {
-        private readonly string[] _videoExtensions =
-        {
-            ".mp4", ".mkv", ".avi", ".mov", ".wmv", ".mpg", ".mpeg"
-        };
-
         private readonly string[] _photoExtensions =
         {
             // Primary formats (VLC native)
@@ -57,8 +52,6 @@ namespace ReelRoulette
             // Extended formats (bonus support)
             ".tiff", ".tif", ".heic", ".heif", ".avif", ".ico", ".svg", ".raw", ".cr2", ".nef", ".orf", ".sr2"
         };
-
-        private readonly Random _rng = new();
         private System.Timers.Timer? _autoPlayTimer;
         private bool _isKeepPlayingActive = false;
 
@@ -186,8 +179,6 @@ namespace ReelRoulette
         private DateTime _lastStatusMessageTime = DateTime.MinValue;
         private CancellationTokenSource? _statusMessageCancellation;
         private readonly object _statusMessageLock = new object();
-        private volatile bool _suppressStatusUpdatesForLibraryArchive;
-        private Cursor? _libraryArchiveCursorRestore;
         
         // Prevent recursive SaveSettings calls when updating UI from settings
         private bool _isApplyingSettings = false;
@@ -1410,7 +1401,7 @@ namespace ReelRoulette
             UpdateLibraryPanel();
         }
 
-        private void ApplyRemoteItemStateProjection(string fullPath, bool isFavorite, bool isBlacklisted, string statusMessage, bool persistLibrary = false)
+        private void ApplyRemoteItemStateProjection(string fullPath, bool isFavorite, bool isBlacklisted, string statusMessage)
         {
             if (string.IsNullOrWhiteSpace(fullPath))
             {
@@ -1529,63 +1520,6 @@ namespace ReelRoulette
             SetStatusMessage("Core runtime is required for state changes. Please wait for startup and retry.", 0);
             await EnsureCoreRuntimeAvailableAsync();
             UpdatePerVideoToggleStates();
-        }
-
-        #endregion
-
-        #region Blacklist System
-
-        private void BlacklistCurrentVideo()
-        {
-            // Legacy local-authority path intentionally disabled.
-            // Use API-authoritative toggle handlers instead.
-        }
-
-        private async Task RemoveFromBlacklistAsync(string videoPath)
-        {
-            if (string.IsNullOrWhiteSpace(videoPath))
-            {
-                return;
-            }
-
-            if (_isCoreApiReachable)
-            {
-                try
-                {
-                    var state = await _coreServerApiClient.SetBlacklistWithStateAsync(
-                        _coreServerBaseUrl,
-                        videoPath,
-                        false,
-                        _coreClientId,
-                        _coreSessionId);
-                    if (state == null)
-                    {
-                        SetStatusMessage("Core runtime rejected blacklist update.", 0);
-                        return;
-                    }
-
-                    ApplyRemoteItemStateProjection(
-                        state.Path,
-                        state.IsFavorite,
-                        state.IsBlacklisted,
-                        $"Removed from blacklist: {Path.GetFileName(videoPath)}");
-                    return;
-                }
-                catch (Exception ex)
-                {
-                    Log($"RemoveFromBlacklist: API call failed ({ex.Message})");
-                }
-            }
-            else
-            {
-                await EnsureCoreRuntimeAvailableAsync();
-            }
-
-            if (!_isCoreApiReachable)
-            {
-                SetStatusMessage("Core runtime is required for state changes. Please wait for startup and retry.", 0);
-                return;
-            }
         }
 
         #endregion
@@ -3090,22 +3024,6 @@ namespace ReelRoulette
             return FindCurrentFileLibraryItem(fullPath);
         }
 
-        private List<LibraryItem> GetAutoTagScopeItems(bool scanFullLibrary)
-        {
-            _ = scanFullLibrary;
-            return [];
-        }
-
-        private static bool ContainsTagCaseInsensitive(List<string>? tags, string tagName)
-        {
-            if (tags == null)
-            {
-                return false;
-            }
-
-            return tags.Any(tag => string.Equals(tag, tagName, StringComparison.OrdinalIgnoreCase));
-        }
-
         private void UpdateSelectionCountDisplay()
         {
             UpdateFilterCountDisplay(_libraryBrowseTotalCount);
@@ -3346,11 +3264,6 @@ namespace ReelRoulette
             }
 
             return (diffWindow.StartIndex, firstLayout);
-        }
-
-        private (List<LibraryGridRowViewModel> Rows, int MaxColumns) BuildGridRowModels(IReadOnlyList<LibraryItemViewModel> items, double layoutWidth)
-        {
-            return BuildGridRowModelsRange(items, 0, items.Count, layoutWidth);
         }
 
         private (List<LibraryGridRowViewModel> Rows, int MaxColumns) BuildGridRowModelsRange(IReadOnlyList<LibraryItemViewModel> items, int startIndex, int endExclusive, double layoutWidth)
@@ -4495,117 +4408,6 @@ namespace ReelRoulette
 
         #endregion
 
-        private void HistoryPlayAgain_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-        {
-            if (sender is Button button && button.Tag is string path)
-            {
-                Log($"UI ACTION: HistoryPlayAgain clicked for: {Path.GetFileName(path)}");
-                PlayFromPath(path);
-            }
-        }
-
-        private void RecentlyPlayedPlay_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-        {
-            if (sender is Button button && button.Tag is string path)
-            {
-                Log($"UI ACTION: RecentlyPlayedPlay clicked for: {Path.GetFileName(path)}");
-                PlayFromPath(path);
-            }
-        }
-
-        private void RecentlyPlayedShowInFileManager_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-        {
-            if (sender is Button button && button.Tag is string path)
-            {
-                Log($"UI ACTION: RecentlyPlayedShowInFileManager clicked for: {Path.GetFileName(path)}");
-                OpenFileLocation(path);
-            }
-        }
-
-        private void RecentlyPlayedRemove_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-        {
-            // This handler is legacy - recently played items are managed via library items
-            // Items cannot be removed from "Recently played" view (they're based on LastPlayedUtc)
-            // If user wants to hide them, they should use blacklist instead
-        }
-
-        private void BlacklistPlay_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-        {
-            if (sender is Button button && button.Tag is string path)
-            {
-                Log($"UI ACTION: BlacklistPlay clicked for: {Path.GetFileName(path)}");
-                PlayFromPath(path);
-            }
-        }
-
-        private async void BlacklistRemove_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-        {
-            if (sender is Button button && button.Tag is string path)
-            {
-                Log($"UI ACTION: BlacklistRemove clicked for: {Path.GetFileName(path)}");
-                await RemoveFromBlacklistAsync(path);
-            }
-        }
-
-        private void BlacklistShowInFileManager_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-        {
-            if (sender is Button button && button.Tag is string path)
-            {
-                Log($"UI ACTION: BlacklistShowInFileManager clicked for: {Path.GetFileName(path)}");
-                OpenFileLocation(path);
-            }
-        }
-
-        private void FavoritesPlay_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-        {
-            if (sender is Button button && button.Tag is string path)
-            {
-                Log($"UI ACTION: FavoritesPlay clicked for: {Path.GetFileName(path)}");
-                PlayFromPath(path);
-            }
-        }
-
-        private async void FavoritesRemove_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-        {
-            if (sender is Button button && button.Tag is string path)
-            {
-                Log($"UI ACTION: FavoritesRemove clicked for: {Path.GetFileName(path)}");
-                if (!await EnsureCoreCommandApiAvailableAsync())
-                {
-                    StatusTextBlock.Text = "Core runtime is required for favorites updates.";
-                    return;
-                }
-
-                var state = await _coreServerApiClient.SetFavoriteWithStateAsync(
-                    _coreServerBaseUrl,
-                    path,
-                    false,
-                    _coreClientId,
-                    _coreSessionId);
-                if (state == null)
-                {
-                    StatusTextBlock.Text = "Favorite update rejected by core runtime.";
-                    return;
-                }
-
-                ApplyRemoteItemStateProjection(
-                    state.Path,
-                    state.IsFavorite,
-                    state.IsBlacklisted,
-                    $"Removed from favorites: {System.IO.Path.GetFileName(path)}");
-                StatusTextBlock.Text = $"Removed from favorites: {System.IO.Path.GetFileName(path)}";
-            }
-        }
-
-        private void FavoritesShowInFileManager_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-        {
-            if (sender is Button button && button.Tag is string path)
-            {
-                Log($"UI ACTION: FavoritesShowInFileManager clicked for: {Path.GetFileName(path)}");
-                OpenFileLocation(path);
-            }
-        }
-
         #region Randomization System
 
         private void UpdateRandomizationModeComboBox()
@@ -4831,35 +4633,8 @@ namespace ReelRoulette
             }
         }
 
-        private void PlayFromPath(string videoPath, bool addToHistory = true)
-        {
-            // Synchronous wrapper for backward compatibility
-            _ = PlayFromPathAsync(videoPath, addToHistory);
-        }
-
-        private async Task RemoveLibraryItemAsync(string? path)
-        {
-            Log($"RemoveLibraryItemAsync: Removing library item: {path ?? "null"}");
-            
-            if (string.IsNullOrEmpty(path))
-            {
-                Log("RemoveLibraryItemAsync: Path is null or empty");
-                return;
-            }
-            
-            await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
-            {
-                SetStatusMessage("Removing items from library is now API-required and not available as a desktop-local operation.");
-            });
-        }
-
         private void SetStatusMessage(string message, int minimumDisplayMilliseconds = 1000)
         {
-            if (_suppressStatusUpdatesForLibraryArchive)
-            {
-                return;
-            }
-
             CancellationTokenSource? previousCts;
             CancellationTokenSource? newCts;
             double delayMs;
@@ -4900,11 +4675,6 @@ namespace ReelRoulette
                             return;
                         }
 
-                        if (_suppressStatusUpdatesForLibraryArchive)
-                        {
-                            return;
-                        }
-
                         lock (_statusMessageLock)
                         {
                             if (!ReferenceEquals(_statusMessageCancellation, newCts))
@@ -4926,26 +4696,6 @@ namespace ReelRoulette
                     Log($"SetStatusMessage: ERROR scheduling status update - Exception: {ex.GetType().Name}, Message: {ex.Message}");
                 }
             });
-        }
-
-        private void BeginLibraryArchiveOperationUI()
-        {
-            _suppressStatusUpdatesForLibraryArchive = true;
-            LibraryMenuItem.IsEnabled = false;
-            _libraryArchiveCursorRestore = Cursor;
-            Cursor = new Cursor(StandardCursorType.Wait);
-            StatusTextBlock.IsVisible = false;
-            StatusLibraryArchiveProgressBar.IsVisible = true;
-        }
-
-        private void EndLibraryArchiveOperationUI()
-        {
-            _suppressStatusUpdatesForLibraryArchive = false;
-            LibraryMenuItem.IsEnabled = true;
-            Cursor = _libraryArchiveCursorRestore;
-            _libraryArchiveCursorRestore = null;
-            StatusLibraryArchiveProgressBar.IsVisible = false;
-            StatusTextBlock.IsVisible = true;
         }
 
         private void OpenFileLocation(string? path)
@@ -5008,17 +4758,6 @@ namespace ReelRoulette
             {
                 StatusTextBlock.Text = $"Could not open file location: {ex.Message}";
             }
-        }
-
-        private void PlayMedia(string videoPath, bool addToHistory = true)
-        {
-            var localTarget = new PlaybackTarget(
-                StatsPath: videoPath,
-                PlaybackSource: videoPath,
-                PlaybackSourceType: FromType.FromPath,
-                IsLocallyAccessible: IsLocalMediaReadable(videoPath),
-                UsedApiPath: false);
-            PlayMedia(localTarget, addToHistory);
         }
 
         private void PlayMedia(PlaybackTarget target, bool addToHistory = true)
@@ -8804,13 +8543,6 @@ namespace ReelRoulette
             }
         }
 
-        private void BlacklistCurrentVideo_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-        {
-            Log("UI ACTION: BlacklistCurrentVideo clicked (delegating to BlacklistToggle)");
-            // Toggle button now drives this; keep for safety if invoked elsewhere
-            BlacklistToggle.IsChecked = true;
-        }
-
 
         private void ShowMenuMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
@@ -8941,7 +8673,7 @@ namespace ReelRoulette
                 return;
             }
 
-            var dialog = new AutoTagDialog(EnsureCatalogShell(), _autoTagScanFullLibrary, GetAutoTagScopeItems, ScanAutoTagViaCoreAsync);
+            var dialog = new AutoTagDialog(_autoTagScanFullLibrary, ScanAutoTagViaCoreAsync);
             var result = await dialog.ShowDialog<bool?>(this);
             if (result != true)
             {

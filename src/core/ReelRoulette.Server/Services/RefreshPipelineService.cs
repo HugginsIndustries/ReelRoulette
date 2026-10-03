@@ -14,11 +14,6 @@ namespace ReelRoulette.Server.Services;
 
 public sealed class RefreshPipelineService : BackgroundService
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
-    {
-        WriteIndented = true
-    };
-
     private const int ThumbnailMaxEdge = 480;
 
     private static SemaphoreSlim? _ffprobeSemaphore;
@@ -84,11 +79,6 @@ public sealed class RefreshPipelineService : BackgroundService
         }
     }
 
-    public RefreshSettingsSnapshot GetSettings()
-    {
-        return _coreSettings.GetRefreshSettings();
-    }
-
     public RefreshSettingsSnapshot UpdateSettings(RefreshSettingsSnapshot snapshot)
     {
         lock (_runLock)
@@ -97,16 +87,6 @@ public sealed class RefreshPipelineService : BackgroundService
             ScheduleNextAutoRunFromNowLocked();
             return updated;
         }
-    }
-
-    public WebRuntimeSettingsSnapshot GetWebRuntimeSettings()
-    {
-        return _coreSettings.GetWebRuntimeSettings();
-    }
-
-    public WebRuntimeSettingsSnapshot UpdateWebRuntimeSettings(WebRuntimeSettingsSnapshot snapshot)
-    {
-        return _coreSettings.UpdateWebRuntimeSettings(snapshot);
     }
 
     public RefreshStartResponse TryStartManual()

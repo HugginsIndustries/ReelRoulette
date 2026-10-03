@@ -1,9 +1,6 @@
-using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Headless;
 using Avalonia.Interactivity;
 using Avalonia.LogicalTree;
-using Avalonia.Themes.Fluent;
 using Avalonia.Threading;
 using ReelRoulette;
 using Xunit;
@@ -12,9 +9,6 @@ namespace ReelRoulette.DesktopApp.Tests;
 
 public sealed class FilterDialogPresetUpdateTests
 {
-    private static readonly Lazy<HeadlessUnitTestSession> Session =
-        new(() => HeadlessUnitTestSession.StartNew(typeof(HeadlessTestApp)));
-
     [Theory]
     [InlineData(false, null)]
     [InlineData(true, false)]
@@ -152,7 +146,7 @@ public sealed class FilterDialogPresetUpdateTests
 
     private static T Run<T>(Func<T> action)
     {
-        return Session.Value.Dispatch(action, CancellationToken.None).GetAwaiter().GetResult();
+        return HeadlessTestSession.Run(action);
     }
 
     private static FilterState Filter(bool? globalMatchMode)
@@ -186,19 +180,5 @@ public sealed class FilterDialogPresetUpdateTests
         Assert.True(button.IsEnabled);
         button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         Dispatcher.UIThread.RunJobs();
-    }
-}
-
-public sealed class HeadlessTestApp : Application
-{
-    public static AppBuilder BuildAvaloniaApp()
-    {
-        return AppBuilder.Configure<HeadlessTestApp>()
-            .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = true });
-    }
-
-    public override void Initialize()
-    {
-        Styles.Add(new FluentTheme());
     }
 }

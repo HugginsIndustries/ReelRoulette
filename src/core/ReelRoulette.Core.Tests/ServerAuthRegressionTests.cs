@@ -113,9 +113,8 @@ public sealed class ServerAuthRegressionTests
 
     private static CoreSettingsService CreateSettingsService(ServerRuntimeOptions options)
     {
-        var logger = new Microsoft.Extensions.Logging.Abstractions.NullLogger<CoreSettingsService>();
         var tempDir = Path.Combine(Path.GetTempPath(), "rr-auth-test", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempDir);
-        return new CoreSettingsService(logger, options, tempDir);
+        return new CoreSettingsService(options, tempDir);
     }
 }

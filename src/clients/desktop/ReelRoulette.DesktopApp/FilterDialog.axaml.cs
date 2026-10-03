@@ -1500,45 +1500,6 @@ namespace ReelRoulette
     }
 
     /// <summary>
-    /// View model for a tag in the filter dialog (legacy, used by other parts of the codebase).
-    /// </summary>
-    public class TagViewModel : INotifyPropertyChanged
-    {
-        private bool _isSelected;
-        private string _tag = string.Empty;
-
-        public string Tag
-        {
-            get => _tag;
-            set
-            {
-                _tag = value;
-                OnPropertyChanged();
-            }
-        }
-
-        public bool IsSelected
-        {
-            get => _isSelected;
-            set
-            {
-                if (_isSelected != value)
-                {
-                    _isSelected = value;
-                    OnPropertyChanged();
-                }
-            }
-        }
-
-        public event PropertyChangedEventHandler? PropertyChanged;
-
-        protected virtual void OnPropertyChanged([CallerMemberName] string? propertyName = null)
-        {
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
-        }
-    }
-
-    /// <summary>
     /// View model for a category in the filter dialog tags tab.
     /// </summary>
     public class FilterCategoryViewModel : INotifyPropertyChanged

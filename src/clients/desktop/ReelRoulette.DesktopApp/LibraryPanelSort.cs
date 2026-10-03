@@ -1,47 +1,10 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-
 namespace ReelRoulette;
 
 /// <summary>
-/// In-memory sort for the desktop library panel projection list.
+/// Sort-control defaults and labels for the desktop library panel. The server sorts the list query.
 /// </summary>
 public static class LibraryPanelSort
 {
-    private static readonly StringComparer FileNameComparer = StringComparer.OrdinalIgnoreCase;
-
-    public static List<LibraryItem> Apply(IReadOnlyList<LibraryItem> items, string sortMode, bool descending)
-    {
-        ArgumentNullException.ThrowIfNull(items);
-
-        IEnumerable<LibraryItem> sorted = sortMode switch
-        {
-            "LastPlayed" => descending
-                ? items.OrderByDescending(item => item.LastPlayedUtc ?? DateTime.MinValue).ThenByFileName()
-                : items.OrderBy(item => item.LastPlayedUtc ?? DateTime.MinValue).ThenByFileName(),
-            "PlayCount" => descending
-                ? items.OrderByDescending(item => item.PlayCount).ThenByFileName()
-                : items.OrderBy(item => item.PlayCount).ThenByFileName(),
-            "Duration" => descending
-                ? items.OrderByDescending(item => item.Duration ?? TimeSpan.Zero).ThenByFileName()
-                : items.OrderBy(item => item.Duration ?? TimeSpan.Zero).ThenByFileName(),
-            "DateAdded" => descending
-                ? items.OrderByDescending(item => item.LastWriteTimeUtc ?? DateTime.MinValue).ThenByFileName()
-                : items.OrderBy(item => item.LastWriteTimeUtc ?? DateTime.MinValue).ThenByFileName(),
-            _ => descending
-                ? items.OrderByDescending(item => item.FileName, FileNameComparer)
-                : items.OrderBy(item => item.FileName, FileNameComparer)
-        };
-
-        return sorted.ToList();
-    }
-
-    private static IOrderedEnumerable<LibraryItem> ThenByFileName(this IOrderedEnumerable<LibraryItem> ordered)
-    {
-        return ordered.ThenBy(item => item.FileName, FileNameComparer);
-    }
-
     public static bool IsDefaultDescendingForSortMode(string sortMode)
     {
         return sortMode is "LastPlayed" or "PlayCount" or "Duration" or "DateAdded";

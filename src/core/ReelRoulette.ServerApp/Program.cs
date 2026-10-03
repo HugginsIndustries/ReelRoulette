@@ -5,7 +5,6 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.Extensions.FileProviders;
-using Microsoft.Extensions.Logging.Abstractions;
 using ReelRoulette.ServerApp;
 using ReelRoulette.ServerApp.Hosting;
 using ReelRoulette.Server.Contracts;
@@ -44,7 +43,7 @@ static async Task RunAsync(string[] args)
             ContentRootPath = AppContext.BaseDirectory
         });
         var runtimeOptions = ServerRuntimeOptions.FromConfiguration(builder.Configuration);
-        var startupSettings = new CoreSettingsService(NullLogger<CoreSettingsService>.Instance, runtimeOptions);
+        var startupSettings = new CoreSettingsService(runtimeOptions);
         var startupWebRuntime = startupSettings.GetWebRuntimeSettings();
         ServerAppRuntimeHelpers.ApplyWebRuntimeSettingsToRuntimeOptions(runtimeOptions, startupWebRuntime);
         var webUiEnabledAtStartup = startupWebRuntime.Enabled;

@@ -56,11 +56,6 @@ if (replay.Events.Count < 2 || replay.GapDetected)
 if (verbose)
 {
     Console.WriteLine("Core verification passed.");
-    Console.WriteLine("System-check placeholders:");
-    Console.WriteLine("- Migration fixture checks");
-    Console.WriteLine("- Fingerprint pipeline invariants");
-    Console.WriteLine("- Refresh reconciliation fixtures");
-    Console.WriteLine("- Performance sanity budgets");
 }
 
 Console.WriteLine("All core verification checks passed.");

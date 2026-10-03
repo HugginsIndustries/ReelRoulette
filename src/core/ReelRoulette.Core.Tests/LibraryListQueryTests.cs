@@ -610,7 +610,6 @@ public sealed class LibraryListQueryTests
     private static RefreshPipelineService CreateRefresh(string appData)
     {
         var settings = new CoreSettingsService(
-            NullLogger<CoreSettingsService>.Instance,
             new ServerRuntimeOptions(),
             appData);
         return new RefreshPipelineService(
@@ -659,7 +658,7 @@ public sealed class LibraryListQueryTests
         }));
         if (tags is { Count: > 0 })
         {
-            Assert.True(session.AddItemTags(id, tags));
+            Assert.True(session.ApplyItemTagEdits([id], tags, [], out _));
         }
     }
 

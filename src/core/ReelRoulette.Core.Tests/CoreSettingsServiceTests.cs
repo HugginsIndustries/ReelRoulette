@@ -366,7 +366,6 @@ public sealed class CoreSettingsServiceTests : IDisposable
         int numberOfBackups = 8,
         bool backupEnabled = true)
     {
-        var logger = new Microsoft.Extensions.Logging.Abstractions.NullLogger<CoreSettingsService>();
         var options = new ServerRuntimeOptions
         {
             AutoRefreshEnabled = true,
@@ -375,7 +374,7 @@ public sealed class CoreSettingsServiceTests : IDisposable
             MinimumBackupGapMinutes = minimumBackupGapMinutes,
             NumberOfBackups = numberOfBackups
         };
-        return new CoreSettingsService(logger, options, _tempDir);
+        return new CoreSettingsService(options, _tempDir);
     }
 
     private void SeedCoreSettingsFile(int minimumBackupGapMinutes = 360, int numberOfBackups = 8)

@@ -429,7 +429,6 @@ export function startApp(config) {
   let filterTagModel = null;
   let filterDialogOriginal = createDefaultFilterState();
   let filterPresetCatalogDirty = false;
-  let filterActiveTab = "general";
   /** Preset name selected inside the filter dialog only (header combobox uses `state.activePresetName` after Apply). */
   let filterDialogActiveName = null;
   let suppressFilterDialogPresetSelect = false;
@@ -559,7 +558,6 @@ export function startApp(config) {
   }
 
   function switchFilterTab(tab) {
-    filterActiveTab = tab;
     document.querySelectorAll(".filter-tab").forEach((btn) => {
       const t = btn.getAttribute("data-filter-tab");
       const on = t === tab;
@@ -837,29 +835,6 @@ export function startApp(config) {
         </div>
         <div class="tag-editor-tag-grid"${uncCollapsed ? " style=\"display:none\"" : ""}>${chips}</div>
       </div>`);
-    }
-
-    const legacyFlat = categories.length === 0 && tags.length > 0;
-    if (legacyFlat) {
-      const sorted = tags.slice().sort((a, b) => compareTagNames(a.name, b.name));
-      let chips = "";
-      for (const t of sorted) {
-        const inc = containsTagCi(filterWorking.selectedTags, t.name);
-        const exc = containsTagCi(filterWorking.excludedTags, t.name);
-        let cls = "tag-chip";
-        if (inc) {
-          cls += " state-all";
-        } else if (exc) {
-          cls += " state-none";
-        }
-        chips += `<div class="${cls}">
-          <span class="tag-chip-label">${escapeHtml(t.name)}</span>
-          <button type="button" class="chip-btn icon-glyph-base icon-glyph-toggle${inc ? " is-selected" : ""}" data-filter-chip="inc" data-tag="${escapeHtml(t.name)}" title="Include"><span class="material-symbol-icon">add</span></button>
-          <button type="button" class="chip-btn icon-glyph-base icon-glyph-toggle${exc ? " is-selected" : ""}" data-filter-chip="exc" data-tag="${escapeHtml(t.name)}" title="Exclude"><span class="material-symbol-icon">remove</span></button>
-        </div>`;
-      }
-      catBlocks.length = 0;
-      catBlocks.push(`<div class="tag-editor-tag-grid">${chips}</div>`);
     }
 
     if (catBlocks.length === 0) {

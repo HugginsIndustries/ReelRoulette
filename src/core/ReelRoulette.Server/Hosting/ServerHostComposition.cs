@@ -39,10 +39,9 @@ public static class ServerHostComposition
         });
         services.AddSingleton(sp =>
         {
-            var logger = sp.GetRequiredService<ILogger<CoreSettingsService>>();
             var options = sp.GetRequiredService<ServerRuntimeOptions>();
             var appDataRoot = ServerDataPaths.DataDirectory();
-            return new CoreSettingsService(logger, options, appDataRoot);
+            return new CoreSettingsService(options, appDataRoot);
         });
         services.AddSingleton<ServerMediaTokenStore>();
         services.AddSingleton<LibraryPlaybackService>();

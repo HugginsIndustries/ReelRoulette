@@ -100,7 +100,10 @@
                                         <StackPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2"
                                                     Orientation="Horizontal"
                                                     Spacing="8">
-                                            <Button Content="Rename"
+                                            <!-- Hidden until the server has a source rename route. -->
+                                            <Button x:Name="RenameSourceButton"
+                                                    Content="Rename"
+                                                    IsVisible="False"
                                                     MinWidth="80"
                                                     Tag="{Binding Id}"
                                                     Click="RenameButton_Click"/>
@@ -112,7 +115,10 @@
                                                     MinWidth="120"
                                                     Tag="{Binding Id}"
                                                     Click="FindDuplicatesButton_Click"/>
-                                            <Button Content="Remove"
+                                            <!-- Hidden until the server has a source remove route. -->
+                                            <Button x:Name="RemoveSourceButton"
+                                                    Content="Remove"
+                                                    IsVisible="False"
                                                     MinWidth="80"
                                                     Tag="{Binding Id}"
                                                     Click="RemoveButton_Click"

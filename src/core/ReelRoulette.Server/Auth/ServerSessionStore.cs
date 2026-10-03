@@ -59,16 +59,6 @@ public sealed class ServerSessionStore
         }
     }
 
-    public int GetActiveSessionCount(string scope, DateTimeOffset nowUtc)
-    {
-        var normalizedScope = NormalizeScope(scope);
-        lock (_lock)
-        {
-            PruneExpiredLocked(nowUtc);
-            return _sessions.Values.Count(session => string.Equals(session.Scope, normalizedScope, StringComparison.Ordinal));
-        }
-    }
-
     public IReadOnlyList<SessionSnapshot> GetActiveSessions(string scope, DateTimeOffset nowUtc, int maxCount = 100)
     {
         var normalizedScope = NormalizeScope(scope);

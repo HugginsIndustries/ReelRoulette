@@ -43,15 +43,4 @@ public static class MediaPlayableExtensions
         var normalized = extension.StartsWith('.') ? extension : "." + extension;
         return VideoExtensions.Contains(normalized);
     }
-
-    public static bool IsPhotoExtension(string? extension)
-    {
-        if (string.IsNullOrEmpty(extension))
-        {
-            return false;
-        }
-
-        var normalized = extension.StartsWith('.') ? extension : "." + extension;
-        return PhotoExtensions.Contains(normalized);
-    }
 }

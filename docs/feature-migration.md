@@ -114,7 +114,7 @@ A direct file-manager launch has no web equivalent. A "copy path to clipboard" a
 
 **Desktop location:** `ManageSourcesDialog.axaml` / `ManageSourcesDialog.axaml.cs`, `SourceViewModel`
 
-Add, remove, rename, enable/disable library sources; per-source item and duration statistics; trigger a duplicate scan scoped to a single source.
+Enable/disable library sources; per-source item and duration statistics; trigger a duplicate scan scoped to a single source. The dialog's Rename and Remove buttons are hidden until the server has routes for them.
 
 **Target surface:** Operator UI
 
@@ -198,7 +198,7 @@ Library data management belongs on the Operator UI. `LibraryArchiveMigration` co
 
 **Desktop location:** `RemoveItemsDialog.axaml` / `RemoveItemsDialog.axaml.cs`
 
-Confirmation dialog for removing selected items from the library (backed by server API). Supports removing from the library index only or also deleting from disk.
+Confirmation dialog for removing selected items from the library index only or also deleting from disk. Its **Remove from Library** grid menu entry is hidden until the server has an item remove route.
 
 **Target surface:** Operator UI
 
@@ -206,19 +206,7 @@ Library mutation action; no web equivalent.
 
 ---
 
-### 3.17 Tag-Catalog Migration Wizard
-
-**Desktop location:** `MigrationDialog.axaml` / `MigrationDialog.axaml.cs`, `MigrationTagViewModel`
-
-One-time wizard that assigns legacy flat (uncategorised) tags to categories when upgrading from the old tag schema. Presents all orphaned tags with a category picker and bulk-assigns on confirm.
-
-**Target surface:** Operator UI
-
-Schema migration tooling belongs on the Operator UI; alternatively this could be driven server-side as a one-time background operation surfaced via a status endpoint.
-
----
-
-### 3.18 FFmpeg Log Viewer
+### 3.17 FFmpeg Log Viewer
 
 **Desktop location:** `FFmpegLogWindow.axaml` / `FFmpegLogWindow.axaml.cs`; accessed via Help menu
 

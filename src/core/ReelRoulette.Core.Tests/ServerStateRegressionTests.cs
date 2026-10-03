@@ -231,7 +231,6 @@ public sealed class ServerStateRegressionTests
             Assert.DoesNotContain("TagB", Assert.Single(afterDelete.GetPresetCatalogSnapshot()).FilterState.GetRawText(), StringComparison.Ordinal);
 
             var coreSettings = new CoreSettingsService(
-                Microsoft.Extensions.Logging.Abstractions.NullLogger<CoreSettingsService>.Instance,
                 new ServerRuntimeOptions(),
                 appDataPath);
             coreSettings.UpdateRefreshSettings(new RefreshSettingsSnapshot { AutoRefreshEnabled = false, AutoRefreshIntervalMinutes = 15 });

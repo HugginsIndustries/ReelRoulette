@@ -489,7 +489,6 @@ public sealed class RefreshPipelineServiceTests
 
         var state = new ServerStateService();
         var logger = new Microsoft.Extensions.Logging.Abstractions.NullLogger<RefreshPipelineService>();
-        var settingsLogger = new Microsoft.Extensions.Logging.Abstractions.NullLogger<CoreSettingsService>();
         var options = new ServerRuntimeOptions
         {
             AutoRefreshEnabled = true,
@@ -497,7 +496,7 @@ public sealed class RefreshPipelineServiceTests
             ForceRescanDuration = true,
             ForceRescanLoudness = false
         };
-        var coreSettings = new CoreSettingsService(settingsLogger, options, scope.RootPath);
+        var coreSettings = new CoreSettingsService(options, scope.RootPath);
         var service = new RefreshPipelineService(state, logger, coreSettings, scope.RootPath);
 
         Assert.True(service.TryStartManual().Accepted);
@@ -556,13 +555,12 @@ public sealed class RefreshPipelineServiceTests
 
         var state = new ServerStateService();
         var logger = new Microsoft.Extensions.Logging.Abstractions.NullLogger<RefreshPipelineService>();
-        var settingsLogger = new Microsoft.Extensions.Logging.Abstractions.NullLogger<CoreSettingsService>();
         var options = new ServerRuntimeOptions
         {
             AutoRefreshEnabled = true,
             AutoRefreshIntervalMinutes = 5
         };
-        var coreSettings = new CoreSettingsService(settingsLogger, options, scope.RootPath);
+        var coreSettings = new CoreSettingsService(options, scope.RootPath);
         var service = new RefreshPipelineService(state, logger, coreSettings, scope.RootPath);
 
         Assert.True(service.TryStartManual().Accepted);
@@ -862,7 +860,7 @@ public sealed class RefreshPipelineServiceTests
         Assert.True(service.TryStartManual().Accepted);
         await service.FingerprintWriteEntered.WaitAsync(TimeSpan.FromSeconds(15));
         Assert.True(host.Session.SetFavorite("hold-1", true));
-        Assert.True(host.Session.AddItemTags("hold-1", ["Night"]));
+        Assert.True(host.Session.ApplyItemTagEdits(["hold-1"], ["Night"], [], out _));
         hold.TrySetResult();
 
         await WaitForCompletionAsync(service, TimeSpan.FromSeconds(20));
@@ -1057,8 +1055,8 @@ public sealed class RefreshPipelineServiceTests
         var run = service.RunThumbnailStageAsync(CancellationToken.None);
         await service.ThumbnailWriteEntered.WaitAsync(TimeSpan.FromSeconds(15));
         Assert.True(host.Session.SetFavorite("hold-a", true));
-        Assert.True(host.Session.AddItemTags("hold-a", ["Night"]));
-        Assert.True(host.Session.SetPlayback("hold-a", 3, new DateTime(2024, 5, 6, 7, 8, 9, DateTimeKind.Utc)));
+        Assert.True(host.Session.ApplyItemTagEdits(["hold-a"], ["Night"], [], out _));
+        Assert.NotNull(host.Session.RecordPlayback("hold-a"));
         Assert.True(host.Session.SetBlacklist("hold-b", true));
         hold.TrySetResult();
         await run.WaitAsync(TimeSpan.FromSeconds(15));
@@ -1067,7 +1065,7 @@ public sealed class RefreshPipelineServiceTests
         Assert.NotNull(first);
         Assert.True(first!.IsFavorite);
         Assert.False(first.IsBlacklisted);
-        Assert.Equal(3, first.PlayCount);
+        Assert.Equal(1, first.PlayCount);
         var holdA = Assert.Single(LibraryCatalogStore.Read(host.Session.DatabasePath).Items, item => item.Id == "hold-a");
         Assert.Contains("Night", holdA.Tags);
         var second = host.Session.ReadItemState("hold-b");
@@ -1184,7 +1182,9 @@ public sealed class RefreshPipelineServiceTests
 
     private static void AssertForcedRescansStillPending(RefreshPipelineService service)
     {
-        var settings = service.GetSettings();
+        var field = typeof(RefreshPipelineService).GetField("_coreSettings", BindingFlags.NonPublic | BindingFlags.Instance);
+        Assert.NotNull(field);
+        var settings = ((CoreSettingsService)field!.GetValue(service)!).GetRefreshSettings();
         Assert.True(settings.ForceRescanDuration);
         Assert.True(settings.ForceRescanLoudness);
     }
@@ -1192,13 +1192,12 @@ public sealed class RefreshPipelineServiceTests
     private static RefreshPipelineService CreateService(ServerStateService state, string appDataPathOverride, LibraryCatalogHost? catalog = null)
     {
         var logger = new Microsoft.Extensions.Logging.Abstractions.NullLogger<RefreshPipelineService>();
-        var settingsLogger = new Microsoft.Extensions.Logging.Abstractions.NullLogger<CoreSettingsService>();
         var options = new ServerRuntimeOptions
         {
             AutoRefreshEnabled = true,
             AutoRefreshIntervalMinutes = 15
         };
-        var coreSettings = new CoreSettingsService(settingsLogger, options, appDataPathOverride);
+        var coreSettings = new CoreSettingsService(options, appDataPathOverride);
         return new RefreshPipelineService(state, logger, coreSettings, appDataPathOverride, catalog);
     }
 

@@ -935,18 +935,6 @@ public sealed class LibraryCatalogSession
         });
     }
 
-    public bool SetPlayback(string id, int playCount, DateTime? lastPlayedUtc)
-    {
-        return Commit((connection, transaction) =>
-            LibraryCatalogStore.Execute(
-                connection,
-                transaction,
-                "UPDATE items SET play_count = $plays, last_played_utc = $played WHERE id = $id;",
-                ("$id", id),
-                ("$plays", playCount),
-                ("$played", lastPlayedUtc is null ? DBNull.Value : lastPlayedUtc.Value.ToUniversalTime().Ticks)) > 0);
-    }
-
     public CatalogItemState? RecordPlayback(string identifier)
     {
         if (string.IsNullOrWhiteSpace(identifier))
@@ -1428,93 +1416,6 @@ public sealed class LibraryCatalogSession
                 ("$target", targetId),
                 ("$source", sourceId)) > 0;
             return changed;
-        });
-    }
-
-    public bool AddItemTags(string itemId, IReadOnlyList<string> tags)
-    {
-        var names = DistinctTagNames(tags);
-        if (names.Count == 0)
-        {
-            return false;
-        }
-
-        return Commit((connection, transaction) =>
-        {
-            if (!ItemExists(connection, transaction, itemId))
-            {
-                return false;
-            }
-
-            var changed = false;
-            foreach (var name in names)
-            {
-                changed |= InsertCatalogTagIfMissing(connection, transaction, name);
-                var fold = LibraryCatalogStore.Fold(name);
-                var existing = ScalarInt(
-                    connection,
-                    transaction,
-                    "SELECT position FROM item_tags WHERE item_id = $item AND name_fold = $fold;",
-                    ("$item", itemId),
-                    ("$fold", fold));
-                if (existing != null)
-                {
-                    continue;
-                }
-
-                var position = NextItemTagPosition(connection, transaction, itemId);
-                changed |= LibraryCatalogStore.Execute(
-                    connection,
-                    transaction,
-                    "INSERT INTO item_tags (item_id, position, name, name_fold) VALUES ($item, $position, $name, $fold);",
-                    ("$item", itemId),
-                    ("$position", position),
-                    ("$name", name),
-                    ("$fold", fold)) > 0;
-            }
-
-            return changed;
-        });
-    }
-
-    public bool RemoveItemTags(string itemId, IReadOnlyList<string> tags)
-    {
-        var names = DistinctTagNames(tags);
-        if (names.Count == 0)
-        {
-            return false;
-        }
-
-        return Commit((connection, transaction) =>
-        {
-            var changed = false;
-            foreach (var name in names)
-            {
-                changed |= LibraryCatalogStore.Execute(
-                    connection,
-                    transaction,
-                    "DELETE FROM item_tags WHERE item_id = $item AND name_fold = $fold;",
-                    ("$item", itemId),
-                    ("$fold", LibraryCatalogStore.Fold(name))) > 0;
-            }
-
-            return changed;
-        });
-    }
-
-    public bool ReplaceItemTags(string itemId, IReadOnlyList<string> tags)
-    {
-        var names = DistinctTagNames(tags);
-        return Commit((connection, transaction) =>
-        {
-            if (!ItemExists(connection, transaction, itemId))
-            {
-                return false;
-            }
-
-            LibraryCatalogStore.Execute(connection, transaction, "DELETE FROM item_tags WHERE item_id = $item;", ("$item", itemId));
-            WriteItemTags(connection, transaction, itemId, names);
-            return true;
         });
     }
 
@@ -2079,11 +1980,6 @@ public sealed class LibraryCatalogSession
             ("$name", LibraryCatalogStore.UncategorizedCategoryName),
             ("$sort", int.MaxValue),
             ("$existing", existing)) > 0;
-    }
-
-    private static bool ItemExists(SqliteConnection connection, SqliteTransaction transaction, string itemId)
-    {
-        return ScalarString(connection, transaction, "SELECT id FROM items WHERE id = $id;", ("$id", itemId)) != null;
     }
 
     private static int NextPosition(SqliteConnection connection, SqliteTransaction transaction, string table)

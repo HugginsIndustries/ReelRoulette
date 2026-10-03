@@ -1341,7 +1341,9 @@ public sealed class LibraryOperationsServiceTests
                 path => !path.EndsWith("-wal", StringComparison.Ordinal) &&
                         !path.EndsWith("-shm", StringComparison.Ordinal) &&
                         !path.EndsWith("-journal", StringComparison.Ordinal));
-            Assert.True(ReelRoulette.Core.Library.LibraryCatalogStore.IsUsableDatabase(backup));
+            Assert.Equal(
+                ReelRoulette.Core.Library.LibraryCatalogStore.CatalogFileInspection.Usable,
+                ReelRoulette.Core.Library.LibraryCatalogStore.InspectCatalogFile(backup));
         }
         finally
         {

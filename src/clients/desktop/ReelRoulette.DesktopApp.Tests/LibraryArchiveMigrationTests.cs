@@ -76,7 +76,7 @@ public sealed class LibraryArchiveMigrationTests
                 {"items":[{"id":"item-1","fullPath":"/clips/a.mp4","fileName":"a.mp4"}]}
                 """);
             var opened = OpenCatalog(dest);
-            Assert.Equal("item-1", Assert.Single(opened.Catalog!.Items).Id);
+            Assert.Equal("item-1", Assert.Single(Snapshot(opened).Items).Id);
             File.WriteAllText(source, """
                 {"sources":[{"id":"s1","rootPath":"/from"}],"items":[{"id":"clip","fullPath":"/from/clip.mp4"}]}
                 """);
@@ -93,7 +93,7 @@ public sealed class LibraryArchiveMigrationTests
             Assert.Contains("not a library database", result.Message, StringComparison.Ordinal);
 
             var after = OpenCatalog(dest);
-            Assert.Equal("item-1", Assert.Single(after.Catalog!.Items).Id);
+            Assert.Equal("item-1", Assert.Single(Snapshot(after).Items).Id);
         }
         finally
         {
@@ -133,7 +133,7 @@ public sealed class LibraryArchiveMigrationTests
             Assert.False(File.Exists(Path.Combine(dest, "library.db.previous")));
             Assert.False(File.Exists(Path.Combine(dest, "library.db.incoming")));
             var imported = OpenCatalog(dest);
-            var item = Assert.Single(imported.Catalog!.Items);
+            var item = Assert.Single(Snapshot(imported).Items);
             Assert.Equal("clip", item.Id);
             Assert.EndsWith($"{Path.DirectorySeparatorChar}clip.mp4", item.FullPath, StringComparison.Ordinal);
             Assert.Contains($"{Path.DirectorySeparatorChar}to{Path.DirectorySeparatorChar}", item.FullPath, StringComparison.Ordinal);
@@ -165,7 +165,7 @@ public sealed class LibraryArchiveMigrationTests
             var result = LibraryArchiveMigration.ImportDatabase(checkpoint, remap, skipped, force: true, dest);
             Assert.True(result.Accepted, result.Message);
             var imported = OpenCatalog(dest);
-            Assert.Equal("clip", Assert.Single(imported.Catalog!.Items).Id);
+            Assert.Equal("clip", Assert.Single(Snapshot(imported).Items).Id);
         }
         finally
         {
@@ -241,7 +241,7 @@ public sealed class LibraryArchiveMigrationTests
             Assert.True(result.Accepted);
             Assert.Contains(LibraryArchiveMigration.ImportAlreadyInPlaceMessage, result.Message, StringComparison.Ordinal);
             var imported = OpenCatalog(dest);
-            Assert.Equal("clip", Assert.Single(imported.Catalog!.Items).Id);
+            Assert.Equal("clip", Assert.Single(Snapshot(imported).Items).Id);
         }
         finally
         {
@@ -259,6 +259,11 @@ public sealed class LibraryArchiveMigrationTests
         var checkpoint = Path.Combine(temp, "checkpoint.db");
         ReelRoulette.Core.Library.LibraryCatalogStore.WriteCheckpoint(opened.Session!.DatabasePath, checkpoint);
         return checkpoint;
+    }
+
+    private static ReelRoulette.Core.Library.LibraryCatalogSnapshot Snapshot(ReelRoulette.Core.Library.LibraryCatalogOpenResult opened)
+    {
+        return ReelRoulette.Core.Library.LibraryCatalogStore.Read(opened.Session!.DatabasePath);
     }
 
     private static ReelRoulette.Core.Library.LibraryCatalogOpenResult OpenCatalog(string directory)
