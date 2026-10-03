@@ -125,67 +125,59 @@ public sealed class LibraryPlaybackServiceTests : IDisposable
     }
 
     [Fact]
-    public void TryMatchPreset_ShouldReturnMatchForEquivalentFilterState()
+    public void TrySelectRandom_ResolvesPresetIdByNameWhenNoFilterStateIsSent()
     {
         Directory.CreateDirectory(_tempDir);
+        var favoritePath = Path.Combine(_tempDir, "favorite.mp4");
+        var otherPath = Path.Combine(_tempDir, "other.mp4");
+        File.WriteAllBytes(favoritePath, [0x01, 0x02]);
+        File.WriteAllBytes(otherPath, [0x01, 0x02]);
+        File.WriteAllText(Path.Combine(_tempDir, "library.json"), $$"""
+        {
+          "items": [
+            {
+              "id": "item-fav",
+              "fullPath": "{{favoritePath.Replace("\\", "\\\\")}}",
+              "fileName": "favorite.mp4",
+              "mediaType": 0,
+              "sourceId": "s1",
+              "isFavorite": true,
+              "isBlacklisted": false
+            },
+            {
+              "id": "item-other",
+              "fullPath": "{{otherPath.Replace("\\", "\\\\")}}",
+              "fileName": "other.mp4",
+              "mediaType": 0,
+              "sourceId": "s1",
+              "isFavorite": false,
+              "isBlacklisted": false
+            }
+          ],
+          "sources": [
+            { "id": "s1", "rootPath": "{{_tempDir.Replace("\\", "\\\\")}}", "isEnabled": true }
+          ]
+        }
+        """);
+
         var service = CreateService();
         IReadOnlyList<FilterPresetSnapshot> presets =
         [
-            new FilterPresetSnapshot { Name = "Favorites", FilterState = ParseJson("{\"favoritesOnly\":true,\"selectedTags\":[\"a\",\"b\"]}") }
+            new FilterPresetSnapshot { Name = "Favorites", FilterState = ParseJson("{\"favoritesOnly\":true}") }
         ];
 
-        var ok = service.TryMatchPreset(
-            new PresetMatchRequest { FilterState = ParseJson("{\"favoritesOnly\":true,\"selectedTags\":[\"b\",\"a\"]}") },
-            presets,
-            out var response,
-            out var statusCode,
-            out var error);
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            var ok = service.TrySelectRandom(new RandomRequest { PresetId = "favorites" }, presets, out var response, out var statusCode, out var error);
+            Assert.True(ok, error);
+            Assert.Equal(StatusCodes.Status200OK, statusCode);
+            Assert.Equal(favoritePath, response!.Id);
+        }
 
-        Assert.True(ok);
-        Assert.Equal(StatusCodes.Status200OK, statusCode);
-        Assert.Null(error);
-        Assert.True(response.Matched);
-        Assert.Equal("Favorites", response.PresetName);
-    }
-
-    [Theory]
-    [InlineData("{\"selectedTags\":[\"Ann\",\"Bob\"],\"globalMatchMode\":false,\"tagMatchMode\":1}", "{\"selectedTags\":[\"Ann\",\"Bob\"],\"globalMatchMode\":false}")]
-    [InlineData("{\"selectedTags\":[\"Ann\",\"Bob\"],\"globalMatchMode\":false}", "{\"selectedTags\":[\"Ann\",\"Bob\"],\"globalMatchMode\":false,\"tagMatchMode\":\"Or\"}")]
-    [InlineData("{\"selectedTags\":[\"Ann\",\"Bob\"],\"globalMatchMode\":false,\"tagMatchMode\":0}", "{\"selectedTags\":[\"Ann\",\"Bob\"],\"globalMatchMode\":false,\"tagMatchMode\":1}")]
-    public void TryMatchPreset_IgnoresTagMatchModeInSavedPresetText(string storedPreset, string requested)
-    {
-        AssertPresetMatch(storedPreset, requested, expected: true);
-    }
-
-    [Theory]
-    [InlineData("{\"selectedTags\":[\"Ann\",\"Bob\"]}", "{\"selectedTags\":[\"Ann\",\"Bob\"],\"globalMatchMode\":true}", true)]
-    [InlineData("{\"selectedTags\":[\"Ann\",\"Bob\"],\"globalMatchMode\":null}", "{\"selectedTags\":[\"Ann\",\"Bob\"],\"globalMatchMode\":true}", true)]
-    [InlineData("{\"selectedTags\":[\"Ann\",\"Bob\"],\"globalMatchMode\":true}", "{\"selectedTags\":[\"Ann\",\"Bob\"]}", true)]
-    [InlineData("{\"selectedTags\":[\"Ann\",\"Bob\"]}", "{\"selectedTags\":[\"Ann\",\"Bob\"],\"globalMatchMode\":false}", false)]
-    public void TryMatchPreset_TreatsAnUnsetGlobalModeAsAnd(string storedPreset, string requested, bool expected)
-    {
-        AssertPresetMatch(storedPreset, requested, expected);
-    }
-
-    private void AssertPresetMatch(string storedPreset, string requested, bool expected)
-    {
-        Directory.CreateDirectory(_tempDir);
-        var service = CreateService();
-        IReadOnlyList<FilterPresetSnapshot> presets =
-        [
-            new FilterPresetSnapshot { Name = "Any person", FilterState = ParseJson(storedPreset) }
-        ];
-
-        var ok = service.TryMatchPreset(
-            new PresetMatchRequest { FilterState = ParseJson(requested) },
-            presets,
-            out var response,
-            out _,
-            out var error);
-
-        Assert.True(ok, error);
-        Assert.Equal(expected, response.Matched);
-        Assert.Equal(expected ? "Any person" : null, response.PresetName);
+        var missing = service.TrySelectRandom(new RandomRequest { PresetId = "Unknown" }, presets, out _, out var missingStatus, out var missingError);
+        Assert.False(missing);
+        Assert.Equal(StatusCodes.Status404NotFound, missingStatus);
+        Assert.Equal("Preset 'Unknown' not found.", missingError);
     }
 
     [Fact]

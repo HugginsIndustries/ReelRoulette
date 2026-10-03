@@ -120,19 +120,6 @@ public sealed class CoreServerApiClient
         return await JsonSerializer.DeserializeAsync<List<CorePresetResponse>>(stream, _serializerOptions, cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task<CorePresetMatchResponse?> MatchPresetAsync(string baseUrl, CorePresetMatchRequest request, CancellationToken cancellationToken = default)
-    {
-        using var content = SerializeJson(request);
-        using var response = await _httpClient.PostAsync($"{baseUrl.TrimEnd('/')}/api/presets/match", content, cancellationToken).ConfigureAwait(false);
-        if (!response.IsSuccessStatusCode)
-        {
-            return null;
-        }
-
-        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-        return await JsonSerializer.DeserializeAsync<CorePresetMatchResponse>(stream, _serializerOptions, cancellationToken).ConfigureAwait(false);
-    }
-
     public async Task<List<CoreSourceResponse>?> GetSourcesAsync(string baseUrl, CancellationToken cancellationToken = default)
     {
         using var response = await _httpClient.GetAsync($"{baseUrl.TrimEnd('/')}{LibrarySourcesPath}", cancellationToken).ConfigureAwait(false);
@@ -798,18 +785,6 @@ public sealed class CorePresetResponse
     public string Name { get; set; } = string.Empty;
     public string? Summary { get; set; }
     public JsonElement? FilterState { get; set; }
-}
-
-public sealed class CorePresetMatchRequest
-{
-    public JsonElement? FilterState { get; set; }
-}
-
-public sealed class CorePresetMatchResponse
-{
-    public bool Matched { get; set; }
-    public string? PresetId { get; set; }
-    public string? PresetName { get; set; }
 }
 
 public sealed class CoreSourceResponse

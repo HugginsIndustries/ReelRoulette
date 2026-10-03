@@ -41,6 +41,9 @@ public static class LibraryPresetSelection
 
     /// <summary>
     /// Preset comparison. An unset global match mode means AND, so it equals an explicit AND.
+    /// Tags compare as case-insensitive sets and source IDs as sets; a missing tag or source list
+    /// equals an empty one, and empty names are ignored. Category modes compare by key in any order,
+    /// and an empty map equals none.
     /// </summary>
     public static bool FiltersEqual(FilterState? left, FilterState? right)
     {
@@ -83,7 +86,22 @@ public static class LibraryPresetSelection
     {
         var copy = CopyFilter(filter);
         copy.GlobalMatchMode ??= true;
+        copy.SelectedTags = TagSet(copy.SelectedTags);
+        copy.ExcludedTags = TagSet(copy.ExcludedTags);
+        copy.IncludedSourceIds = (copy.IncludedSourceIds ?? []).Where(id => !string.IsNullOrEmpty(id)).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList();
+        copy.CategoryLocalMatchModes = copy.CategoryLocalMatchModes is { Count: > 0 } modes
+            ? modes.OrderBy(pair => pair.Key, StringComparer.Ordinal).ToDictionary(pair => pair.Key, pair => pair.Value)
+            : null;
+
         return FilterSnapshot(copy);
+    }
+
+    // Tag names compare case-insensitively, as the catalog and filtering treat them.
+    // Matches the WebUI copy only for ASCII names: ToUpperInvariant and JavaScript toUpperCase differ on some
+    // non-ASCII letters, for example "ß".
+    private static List<string> TagSet(List<string>? tags)
+    {
+        return (tags ?? []).Where(tag => !string.IsNullOrEmpty(tag)).Select(tag => tag.ToUpperInvariant()).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList();
     }
 
     /// <summary>

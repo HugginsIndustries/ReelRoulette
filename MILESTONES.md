@@ -103,29 +103,7 @@ Do not use this file for detailed architecture explanation or current capability
 
 ## Active Milestones
 
-Last milestone completed: M10j2
-
-### M10j3 - Remove the Preset Match Route
-
-- **Status**: ⏳ Planned
-- **Goal**: Remove `POST /api/presets/match`, which no client calls, and lock the desktop and WebUI preset comparisons to one shared fixture.
-- **Scope**:
-  - Ships in v0.14.0. Contract change in its own slice.
-  - The desktop `CoreServerApiClient.MatchPresetAsync` is the route's only client method, and only a test calls it. The desktop compares presets with `LibraryPresetSelection.FiltersEqual`, and the WebUI with `filterStatesEqualForPresetMatch`. Neither asks the server.
-  - Remove the route, `PresetMatchRequest` and `PresetMatchResponse` from `ApiContracts.cs` and `shared/api/openapi.yaml`, the regenerated WebUI types, the desktop client method and its request and response types, and the tests that call them.
-  - Remove the server-side preset equality that only the route uses: `LibraryPlaybackService.TryMatchPreset`, `ResolvePresetByFilterState`, `ParseFilterState`, `FilterStateProjection`, and the token and value helpers only `ParseFilterState` calls.
-  - `POST /api/random` still resolves `presetId` by name.
-  - Add a shared fixture under `shared/fixtures/` listing pairs of filter states with whether they are the same preset, covering at least an unset global match mode against an explicit AND, per-category local match modes, include and exclude tags, source inclusion, media type, audio filter, duration bounds, and a saved filter that still carries `tagMatchMode`. Desktop and WebUI preset-equality tests both run against it.
-- **Acceptance criteria**:
-  - The route, its contract types, and its generated WebUI types are gone, and `npm run verify:contracts` passes.
-  - The server has no preset equality code. `POST /api/random` with `presetId` gives the same result as before.
-  - Desktop and WebUI preset-equality tests read the same fixture, and changing an expected result in it fails both.
-  - The desktop filter dialog and library preset list, and the WebUI filter dialog preset heading, behave as before.
-- **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include `dotnet test ReelRoulette.sln`, `npm run verify`, and a check that a flipped fixture entry fails both the desktop and WebUI tests.
-  - Docs evidence must include `docs/api.md` no longer listing the route.
-- **Deferrals / Follow-ups**:
-  - None yet.
+Last milestone completed: M10j3
 
 ### M10j4 - Document Unlisted Server Routes in OpenAPI
 
@@ -248,7 +226,7 @@ Last milestone completed: M10j2
 - **Status**: ⏳ Planned
 - **Goal**: Fix defects left from the move to the server-owned catalog and two places where desktop and WebUI disagree, and close the control plane to unauthenticated LAN callers, one slice per defect, each with a test that fails before the fix.
 - **Scope**:
-  - Ships in v0.14.0. Eight slices, each verified on its own.
+  - Ships in v0.14.0. Nine slices, each verified on its own.
   - Source list after source import (server):
     - Recorded as a deferral on catalog document removal: source import does not refresh the in-memory source list that `GET /api/sources` and source enable/disable read. That list is filled at startup.
     - Confirmed during v0.14.0 planning by a throwaway test: after a successful import, the server's source list still had 0 sources and disabling the new source failed until restart.
@@ -274,6 +252,9 @@ Last milestone completed: M10j2
   - Sort direction labels (desktop and WebUI):
     - Found by the efficiency and divergence report: the two clients label the same sort direction differently. The WebUI shows `Newest → Oldest`, `A–Z`, and `Z–A`; the desktop shows `Newest -> Oldest`, `A-Z`, and `Z-A`.
     - Both clients use the WebUI's labels, with `→` and `–`. Check that the desktop font renders both characters in light and dark themes.
+  - Numeric preset durations on the desktop (desktop):
+    - Found while removing the preset match route: the desktop reads saved preset text with `JsonSerializer.Deserialize<FilterState>`, which throws on a numeric `minDuration` or `maxDuration` (seconds). `ParseCorePresetFilterState` then falls back to the default filter, so that whole preset is read as **None**. The WebUI and server filtering accept seconds, and `docs/api.md` documents them.
+    - The desktop reads a numeric duration as seconds. Add a `"minDuration": 60` against `"00:01:00"` entry with `same: true` to `shared/fixtures/preset-filter-equality.json`; it fails on the desktop until the fix.
   - Control token for non-localhost control requests (server and Operator):
     - Found by the planned-milestones audit and still accurate in `docs/full-audit.md` finding 1 (`/control/*` admin plane unauthenticated when `AdminAuthMode != "TokenRequired"`): with LAN binding on, the admin auth mode defaults to `Off`, so any LAN caller can stop, restart, or update the server, change settings, and run testing scenarios. First start writes that `Off` into `core-settings.json`, so changing the default alone would leave existing installs open.
     - `docs/full-audit.md` finding 19 (`OperatorTestingService` mutations protected only by middleware policy) also still holds: the testing routes check the token themselves and do not exempt localhost, so requiring the token would lock the Operator's own testing panel out on the server machine.
@@ -294,6 +275,7 @@ Last milestone completed: M10j2
   - On another machine, the Operator shows only the token prompt until a valid token is entered, then works; on the server machine it opens directly.
   - The desktop decides photo or video for the playing item from the server's media type, including when that type disagrees with the file extension, and has no extension list of its own.
   - Every sort mode and direction shows the same label on desktop and WebUI, and the desktop renders `→` and `–`.
+  - A saved preset with a numeric `minDuration` or `maxDuration` keeps its other settings on the desktop, and the shared preset equality fixture covers a numeric duration on both clients.
   - Each slice has a test that fails without its fix, or the evidence says why one cannot be written.
 - **Verification evidence**:
   - Evidence placeholders maintained at planned state; completion evidence must include each slice's failing test before the fix and passing after it, and `dotnet test ReelRoulette.sln` with the list-query test that covers a tagged and an untagged item with catalog-only thumbnail dimensions still passing.
@@ -1623,6 +1605,33 @@ Last milestone completed: M10j2
 ## Completed Milestones
 
 Latest completions first:
+
+### M10j3 - Remove the Preset Match Route
+
+- **Status**: ✅ Complete
+- **Goal**: Remove `POST /api/presets/match`, which no client calls, and lock the desktop and WebUI preset comparisons to one shared fixture.
+- **Scope**:
+  - Ships in v0.14.0. Contract change in its own slice.
+  - The desktop `CoreServerApiClient.MatchPresetAsync` is the route's only client method, and only a test calls it. The desktop compares presets with `LibraryPresetSelection.FiltersEqual`, and the WebUI with `filterStatesEqualForPresetMatch`. Neither asks the server.
+  - Remove the route, `PresetMatchRequest` and `PresetMatchResponse` from `ApiContracts.cs` and `shared/api/openapi.yaml`, the regenerated WebUI types, the desktop client method and its request and response types, and the tests that call them.
+  - Remove the server-side preset equality that only the route uses: `LibraryPlaybackService.TryMatchPreset`, `ResolvePresetByFilterState`, `ParseFilterState`, `FilterStateProjection`, and the token and value helpers only `ParseFilterState` calls.
+  - `POST /api/random` still resolves `presetId` by name.
+  - Add a shared fixture under `shared/fixtures/` listing pairs of filter states with whether they are the same preset, covering at least an unset global match mode against an explicit AND, per-category local match modes, include and exclude tags, source inclusion, media type, audio filter, duration bounds, and a saved filter that still carries `tagMatchMode`. Desktop and WebUI preset-equality tests both run against it.
+- **Acceptance criteria**:
+  - The route, its contract types, and its generated WebUI types are gone, and `npm run verify:contracts` passes.
+  - The server has no preset equality code. `POST /api/random` with `presetId` gives the same result as before.
+  - Desktop and WebUI preset-equality tests read the same fixture, and changing an expected result in it fails both.
+  - The desktop filter dialog and library preset list, and the WebUI filter dialog preset heading, behave as before.
+- **Verification evidence**:
+  - Measured before planning with throwaway tests: both clients agreed on 15 of 18 saved-filter pairs. The desktop alone treated a `null` tag list and an empty `categoryLocalMatchModes` as different from none, and threw on a numeric duration. The removed server equality compared tags as case-insensitive sets, which neither client did.
+  - Scope expanded with approval: both clients now compare included and excluded tags as case-insensitive sets and source IDs as case-sensitive sets that ignore order. Category mode maps compare by key regardless of key order, since an older saved preset can list categories in a different order than a filter built after the categories were reordered. The desktop treats a missing tag or source list as empty, ignores empty tag and source names, and treats an empty category mode map as none, matching the WebUI. Tag matching is identical on both clients only for ASCII names, since JavaScript `toUpperCase` and .NET `ToUpperInvariant` differ on some non-ASCII letters such as `ß`; both comparisons and `docs/api.md` say so.
+  - `shared/fixtures/preset-filter-equality.json` has 37 entries, checked both ways round on each client. The category mode key order entry was added before its fix and failed on both the desktop and the WebUI (1 of 36 each) against the comparison without it. Against the old comparison code, 8 desktop and 5 WebUI entries failed, all of them the order, case, duplicate, `null` list, and empty map cases this change targets. Flipping `selected tag order is ignored` to `false` failed exactly that entry on both the desktop and the WebUI (1 of 35 each, before the category entry was added), and both passed again once it was restored. The `empty tag and source names are ignored` entry failed on the desktop alone (1 of 37) before the desktop dropped empty names, and passes on both now.
+  - Removed `LibraryPlaybackService.TryMatchPreset`, `ResolvePresetByFilterState`, `ParseFilterState`, `FilterStateProjection`, and their token, duration, map, and array helpers. `ResolvePreset` stays. No test sent `presetId` without an inline filter, so `TrySelectRandom_ResolvesPresetIdByNameWhenNoFilterStateIsSent` was added: it resolves a differently cased preset name to that preset's filter and returns 404 for an unknown name. It passed against the HEAD server code and passes after the removal.
+  - Removed the client and server tests that called the route or `TryMatchPreset`. The existing desktop and WebUI preset-selection tests still pass unchanged.
+  - `dotnet build ReelRoulette.sln` passed with 0 warnings. `dotnet test ReelRoulette.sln` passed: Core 265, Desktop 167 (+37 fixture cases). `npm run verify` passed, including `verify:contracts`, with 170 tests (+37 fixture cases). `dotnet run --project src/core/ReelRoulette.Core.SystemChecks -- --verbose` passed.
+  - Docs: `docs/api.md` no longer lists the route and describes the client comparison. `CONTEXT.md` and the `docs/migration-cleanup.md` status line are updated. Added `[Unreleased]` Changed and Removed entries and a Release Specific checklist check.
+- **Deferrals / Follow-ups**:
+  - The desktop drops a saved preset with a numeric duration to the default filter -> Post-Migration Fixes.
 
 ### M10j2 - Dead Code Removal Without Contract Changes
 

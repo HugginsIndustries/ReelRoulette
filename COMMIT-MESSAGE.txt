@@ -19,12 +19,11 @@ Instructions:
 
 Commit Message:
 
-M10j2: Remove dead code without contract changes
+M10j3: Remove the preset match route
 
-- Desktop: remove the never-built migration dialog, handlers for the removed list views, uncalled `MainWindow`, API client, and tag-save members, `LibraryConnectReads`, the client-side list sort, and the Auto Tag dialog's local matching fallback.
-- Desktop: hide Manage Sources Rename and Remove and the grid's Remove from Library until the server has routes for them; their handlers and dialogs stay.
-- Core and server: remove the unused runtime-state services, interfaces, and filter DTOs with their placeholder verification check, and unused catalog, session, settings, and refresh members.
-- Catalog open no longer reads the whole catalog; tests read it through the session's database instead.
-- Tests that wrote through removed session methods use the production tag and playback writes.
-- WebUI: remove the unread filter tab variable and the unreachable flat-tag branch; remove `publish-web.ps1` and `verify-web.ps1`.
-- Add a headless Manage Sources test, update docs, the changelog, and a Release Specific checklist check.
+- Server: remove `POST /api/presets/match`, its contract types, and the server-side preset equality only it used; `POST /api/random` still resolves `presetId` by name.
+- Remove the route and schemas from `openapi.yaml`, the regenerated WebUI types, and the desktop client method.
+- Desktop and WebUI compare preset tags as case-insensitive sets and sources as sets, and category modes by key in any order; the desktop treats a missing tag or source list as empty, ignores empty tag and source names, and treats an empty category mode map as none, matching the WebUI.
+- Add `shared/fixtures/preset-filter-equality.json` and lock both clients' preset comparisons to it.
+- Add a test that `POST /api/random` resolves `presetId` without an inline filter.
+- Update the API docs, current-state docs, and the changelog.

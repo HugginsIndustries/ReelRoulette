@@ -14,10 +14,13 @@ Write **[Unreleased]** bullets at the same level as the released sections below.
 ### Changed
 
 - **Desktop hides unavailable source and item removal:** **Rename** and **Remove** in Manage Sources and **Remove from Library** in the library grid menu are hidden, since the server cannot do them yet and they only showed an error. They come back when the server supports them.
+- **Preset matching ignores tag order and case:** Both clients now recognize a saved preset when its included or excluded tags differ only in order or capitalization, or its sources or tag categories are listed in a different order, such as an older preset saved before the categories were reordered. The desktop also stops showing a starred preset when an empty tag category setting, a missing tag list, or an empty tag or source name is all that differs, so it matches presets the same way the WebUI does.
 
 ### Deprecated
 
 ### Removed
+
+- **Preset match API:** `POST /api/presets/match` is gone. No client used it; each client already decides which saved preset the current filter equals.
 
 ### Fixed
 

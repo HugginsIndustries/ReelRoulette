@@ -89,18 +89,6 @@ public sealed class RandomRequest
     public string? RandomizationMode { get; set; }
 }
 
-public sealed class PresetMatchRequest
-{
-    public JsonElement? FilterState { get; set; }
-}
-
-public sealed class PresetMatchResponse
-{
-    public bool Matched { get; set; }
-    public string? PresetId { get; set; }
-    public string? PresetName { get; set; }
-}
-
 public sealed class RandomResponse
 {
     public string Id { get; set; } = string.Empty;

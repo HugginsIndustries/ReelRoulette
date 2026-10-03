@@ -1,5 +1,5 @@
 /**
- * WebUI filter state aligned with desktop FilterState JSON and server ParseFilterState.
+ * WebUI filter state aligned with desktop FilterState JSON and the server list filter parser.
  * Enums use numeric values (System.Text.Json default for C# enums).
  */
 
@@ -440,11 +440,35 @@ export function filterStateFromApiObject(raw: unknown): FilterState {
   return base;
 }
 
-/** Preset comparison. An unset global match mode means AND, so it equals an explicit AND. */
+/** Sorted, de-duplicated values compared by UTF-16 code unit, matching ordinal order in C#. */
+function sortedUnique(values: string[]): string[] {
+  return [...new Set(values)].sort();
+}
+
+function comparablePresetSnapshot(state: FilterState): string {
+  return JSON.stringify(
+    serializeFilterStateForApi({
+      ...state,
+      globalMatchMode: state.globalMatchMode ?? true,
+      // Tag names compare case-insensitively, as the catalog and filtering treat them.
+      // Matches the desktop copy only for ASCII names: toUpperCase and .NET ToUpperInvariant differ on some
+      // non-ASCII letters, for example "ß".
+      selectedTags: sortedUnique(state.selectedTags.map((tag) => tag.toUpperCase())),
+      excludedTags: sortedUnique(state.excludedTags.map((tag) => tag.toUpperCase())),
+      includedSourceIds: sortedUnique(state.includedSourceIds),
+      categoryLocalMatchModes: state.categoryLocalMatchModes
+        ? Object.fromEntries(Object.entries(state.categoryLocalMatchModes).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
+        : null
+    })
+  );
+}
+
+/**
+ * Preset comparison. An unset global match mode means AND, so it equals an explicit AND.
+ * Tags compare as case-insensitive sets, source IDs as sets, and category modes by key in any order.
+ */
 export function filterStatesEqualForPresetMatch(a: FilterState, b: FilterState): boolean {
-  const sa = JSON.stringify(serializeFilterStateForApi({ ...a, globalMatchMode: a.globalMatchMode ?? true }));
-  const sb = JSON.stringify(serializeFilterStateForApi({ ...b, globalMatchMode: b.globalMatchMode ?? true }));
-  return sa === sb;
+  return comparablePresetSnapshot(a) === comparablePresetSnapshot(b);
 }
 
 /** Filter dialog Apply pending: the working filter differs from the one the dialog opened with, or a preset changed. */

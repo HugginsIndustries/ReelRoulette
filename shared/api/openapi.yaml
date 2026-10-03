@@ -730,36 +730,6 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
-  /api/presets/match:
-    post:
-      summary: Match filter state to preset
-      operationId: postPresetMatch
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/PresetMatchRequest"
-      responses:
-        "200":
-          description: Preset match result
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/PresetMatchResponse"
-        "400":
-          description: Invalid request
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "401":
-          description: Unauthorized when auth is required and request is not paired
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-
   /api/random:
     post:
       summary: Request a random media item
@@ -2104,28 +2074,6 @@ components:
           type: boolean
         isBlacklisted:
           type: boolean
-
-    PresetMatchRequest:
-      type: object
-      properties:
-        filterState:
-          type: object
-          nullable: true
-          additionalProperties: true
-
-    PresetMatchResponse:
-      type: object
-      required:
-        - matched
-      properties:
-        matched:
-          type: boolean
-        presetId:
-          type: string
-          nullable: true
-        presetName:
-          type: string
-          nullable: true
 
     FavoriteRequest:
       type: object

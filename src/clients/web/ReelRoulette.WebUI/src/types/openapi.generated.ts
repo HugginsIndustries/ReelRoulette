@@ -435,23 +435,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/presets/match": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Match filter state to preset */
-        post: operations["postPresetMatch"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/random": {
         parameters: {
             query?: never;
@@ -1180,16 +1163,6 @@ export interface components {
             mediaUrl: string;
             isFavorite: boolean;
             isBlacklisted: boolean;
-        };
-        PresetMatchRequest: {
-            filterState?: {
-                [key: string]: unknown;
-            } | null;
-        };
-        PresetMatchResponse: {
-            matched: boolean;
-            presetId?: string | null;
-            presetName?: string | null;
         };
         FavoriteRequest: {
             path: string;
@@ -2509,48 +2482,6 @@ export interface operations {
             };
             /** @description Source not found */
             404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    postPresetMatch: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["PresetMatchRequest"];
-            };
-        };
-        responses: {
-            /** @description Preset match result */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PresetMatchResponse"];
-                };
-            };
-            /** @description Invalid request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Unauthorized when auth is required and request is not paired */
-            401: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -70,39 +70,6 @@ public sealed class CoreServerApiClientTests
     }
 
     [Fact]
-    public async Task MatchPresetAsync_ShouldPostFilterStateAndParseMatchResponse()
-    {
-        HttpRequestMessage? capturedRequest = null;
-        string? capturedJson = null;
-        var handler = new DelegatingStubHandler(async request =>
-        {
-            capturedRequest = request;
-            capturedJson = await request.Content!.ReadAsStringAsync();
-            return new HttpResponseMessage(HttpStatusCode.OK)
-            {
-                Content = new StringContent("{\"matched\":true,\"presetId\":\"Favorites\",\"presetName\":\"Favorites\"}", Encoding.UTF8, "application/json")
-            };
-        });
-        var apiClient = new CoreServerApiClient(new HttpClient(handler));
-
-        var response = await apiClient.MatchPresetAsync("http://localhost:51301", new CorePresetMatchRequest
-        {
-            FilterState = JsonSerializer.SerializeToElement(new { favoritesOnly = true })
-        });
-
-        Assert.NotNull(capturedRequest);
-        Assert.Equal("http://localhost:51301/api/presets/match", capturedRequest!.RequestUri!.ToString());
-        Assert.NotNull(response);
-        Assert.True(response!.Matched);
-        Assert.Equal("Favorites", response.PresetId);
-        Assert.Equal("Favorites", response.PresetName);
-
-        Assert.False(string.IsNullOrWhiteSpace(capturedJson));
-        using var doc = JsonDocument.Parse(capturedJson!);
-        Assert.True(doc.RootElement.GetProperty("filterState").GetProperty("favoritesOnly").GetBoolean());
-    }
-
-    [Fact]
     public async Task RequestRandomAsync_ShouldPostFilterStateWhenProvided()
     {
         HttpRequestMessage? capturedRequest = null;

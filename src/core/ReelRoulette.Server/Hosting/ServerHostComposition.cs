@@ -387,16 +387,6 @@ public static class ServerHostComposition
             return Results.Ok();
         });
 
-        app.MapPost("/api/presets/match", (PresetMatchRequest request, ServerStateService state, LibraryPlaybackService playback) =>
-        {
-            if (!playback.TryMatchPreset(request, state.GetPresetCatalogSnapshot(), out var response, out var statusCode, out var error))
-            {
-                return Results.Json(new { error }, statusCode: statusCode);
-            }
-
-            return Results.Ok(response);
-        });
-
         app.MapPost("/api/random", (RandomRequest request, ServerStateService state, LibraryPlaybackService playback, OperatorTestingService testingService) =>
         {
             request.ClientId = NormalizeOptionalIdentity(request.ClientId);
