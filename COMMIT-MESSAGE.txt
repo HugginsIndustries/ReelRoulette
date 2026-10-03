@@ -19,11 +19,8 @@ Instructions:
 
 Commit Message:
 
-Docs: Plan client event efficiency and a v0.14.1 performance release
+Docs: Plan the Windows tray right-click fix in v0.14.0
 
-- Add Client Event Efficiency to v0.14.0 as M10j9 and renumber the later v0.14.0 milestones to M10j10-M10j14: a patch-or-reload rule locked to a shared fixture, WebUI event stream resume, desktop stats coalescing, and refresh progress throttling.
-- Add desktop media type from the server and matching sort direction labels to the post-migration fixes.
-- Add the desktop Auto Tag local matching fallback and the client-side list sort to dead code removal, and keep the WebUI SSE client it would otherwise remove.
-- Correct the CONTEXT claim that both clients resume their event stream with the last event ID.
-- Plan v0.14.1 Performance: library query, random selection, desktop thumbnail memory and caching, and item IDs in the contract, with the measured costs and the tag filter query plan trap.
-- Add backlog items for shared fixtures of the remaining cross-language rules, WebUI grid rendering, and a desktop and WebUI UI rework.
+- Add a Windows tray right-click slice to M10j12, ordered before the tray shutdown race: start the tray with `ShutdownMode.OnExplicitShutdown`, since the Windows tray menu is a temporary Avalonia window whose close shuts the tray down under the default last-window rule.
+- Log to `last.log` when the tray's UI loop exits without a requested shutdown.
+- Add a Release Specific check for the Windows right-click menu, a README Known Issues update once it is confirmed, and a Windows-only native menu as the fallback.
