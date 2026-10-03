@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 using ReelRoulette.Core.Library;
 using Xunit;
 
@@ -6,30 +5,6 @@ namespace ReelRoulette.Core.Tests;
 
 public sealed class LibraryCatalogSessionTests
 {
-    [Fact]
-    public void Open_StoresLoudnessErrorFromLibraryJson()
-    {
-        using var dir = new TempDirectory();
-        File.WriteAllText(Path.Combine(dir.Path, "library.json"), """
-            {
-              "items": [
-                {
-                  "id": "item-1",
-                  "fullPath": "/clips/a.mp4",
-                  "fileName": "a.mp4",
-                  "loudnessError": "no audio stream"
-                }
-              ]
-            }
-            """);
-
-        var opened = CatalogOpen.Open(dir.Path);
-
-        var item = Assert.Single(opened.Snapshot()!.Items);
-        Assert.Equal("no audio stream", item.LoudnessError);
-        Assert.Equal("2", ReadUserVersion(dir.Path));
-    }
-
     [Fact]
     public void FavoriteAndDurationUpdates_OnTwoConnections_BothRemain()
     {
@@ -697,20 +672,6 @@ public sealed class LibraryCatalogSessionTests
         }
 
         throw new InvalidOperationException($"Add a distinct value for {type.Name} so this test covers the new property.");
-    }
-
-    private static string ReadUserVersion(string directory)
-    {
-        using var connection = new Microsoft.Data.Sqlite.SqliteConnection(new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder
-        {
-            DataSource = Path.Combine(directory, "library.db"),
-            Mode = Microsoft.Data.Sqlite.SqliteOpenMode.ReadOnly,
-            Pooling = false
-        }.ToString());
-        connection.Open();
-        using var command = connection.CreateCommand();
-        command.CommandText = "PRAGMA user_version;";
-        return Convert.ToString(command.ExecuteScalar(), System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty;
     }
 
     private sealed class TempDirectory : IDisposable

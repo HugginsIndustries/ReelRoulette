@@ -338,7 +338,7 @@ public sealed class RefreshPipelineServiceTests
                 }
             ]);
 
-        var host = LibraryCatalogHost.Open(scope.RootPath, Path.Combine(scope.RootPath, "thumbnails"));
+        var host = LibraryCatalogHost.Open(scope.RootPath);
         var service = CreateService(new ServerStateService(), scope.RootPath, host);
         Assert.True(service.TryStartManual().Accepted);
         await WaitForCompletionAsync(service, TimeSpan.FromSeconds(10));
@@ -367,7 +367,7 @@ public sealed class RefreshPipelineServiceTests
                 }
             ]);
 
-        var host = LibraryCatalogHost.Open(scope.RootPath, Path.Combine(scope.RootPath, "thumbnails"));
+        var host = LibraryCatalogHost.Open(scope.RootPath);
         var service = CreateService(new ServerStateService(), scope.RootPath, host);
         Assert.True(service.TryStartManual().Accepted);
         await WaitForCompletionAsync(service, TimeSpan.FromSeconds(10));
@@ -649,7 +649,7 @@ public sealed class RefreshPipelineServiceTests
                 }
             ]);
 
-        var host = LibraryCatalogHost.Open(scope.RootPath, Path.Combine(scope.RootPath, "thumbnails"));
+        var host = LibraryCatalogHost.Open(scope.RootPath);
         var service = CreateService(new ServerStateService(), scope.RootPath, host);
         Assert.True(service.TryStartManual().Accepted);
         var completed = await WaitForCompletionAsync(service, TimeSpan.FromSeconds(90));
@@ -727,7 +727,7 @@ public sealed class RefreshPipelineServiceTests
                 }
             ]);
 
-        var host = LibraryCatalogHost.Open(scope.RootPath, Path.Combine(scope.RootPath, "thumbnails"));
+        var host = LibraryCatalogHost.Open(scope.RootPath);
         var service = CreateService(new ServerStateService(), scope.RootPath, host);
         var hold = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         service.HoldNextFingerprintWrite(hold.Task);
@@ -765,7 +765,7 @@ public sealed class RefreshPipelineServiceTests
                 }
             ]);
 
-        var host = LibraryCatalogHost.Open(scope.RootPath, Path.Combine(scope.RootPath, "thumbnails"));
+        var host = LibraryCatalogHost.Open(scope.RootPath);
         var stored = Assert.Single(host.Session.ReadRefreshItems());
         Assert.NotNull(stored.FileSizeBytes);
         Assert.NotNull(stored.LastWriteTimeUtc);
@@ -804,7 +804,7 @@ public sealed class RefreshPipelineServiceTests
                 }
             ]);
 
-        var host = LibraryCatalogHost.Open(scope.RootPath, Path.Combine(scope.RootPath, "thumbnails"));
+        var host = LibraryCatalogHost.Open(scope.RootPath);
         var stored = Assert.Single(host.Session.ReadRefreshItems());
         var revision = $"{stored.Fingerprint}|{stored.FileSizeBytes}|{stored.LastWriteTimeUtc!.Value.ToString("O", CultureInfo.InvariantCulture)}";
         var service = CreateService(new ServerStateService(), scope.RootPath, host);
@@ -849,7 +849,7 @@ public sealed class RefreshPipelineServiceTests
                 }
             ]);
 
-        var host = LibraryCatalogHost.Open(scope.RootPath, Path.Combine(scope.RootPath, "thumbnails"));
+        var host = LibraryCatalogHost.Open(scope.RootPath);
         var service = CreateService(new ServerStateService(), scope.RootPath, host);
         var keptThumb = service.GetThumbnailPath("kept-thumb");
         var goneThumb = service.GetThumbnailPath("gone-thumb");
@@ -905,7 +905,7 @@ public sealed class RefreshPipelineServiceTests
                 }
             ]);
 
-        var host = LibraryCatalogHost.Open(scope.RootPath, Path.Combine(scope.RootPath, "thumbnails"));
+        var host = LibraryCatalogHost.Open(scope.RootPath);
         var service = CreateService(new ServerStateService(), scope.RootPath, host);
         var hold = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         service.HoldNextThumbnailWrite(hold.Task);
@@ -953,7 +953,7 @@ public sealed class RefreshPipelineServiceTests
                 }
             ]);
 
-        var host = LibraryCatalogHost.Open(scope.RootPath, Path.Combine(scope.RootPath, "thumbnails"));
+        var host = LibraryCatalogHost.Open(scope.RootPath);
         var service = CreateService(new ServerStateService(), scope.RootPath, host);
         var orphan = service.GetThumbnailPath("orphan-cancel");
         Directory.CreateDirectory(Path.GetDirectoryName(orphan)!);

@@ -19,10 +19,12 @@ Instructions:
 
 Commit Message:
 
-M10j5: Seed tests through SQL
+M10j6: Remove library.json library support
 
-- Add a `CatalogSeed` test helper that writes a schema version 2 `library.db` with SQL (sources, categories, tags, items, item tags, presets), shared by the core and desktop test projects. A test keeps its schema (tables, columns with types, indexes, and user version) identical to a catalog the store creates.
-- Move every test that seeded its catalog through `library.json` to the helper, except tests whose subject is `library.json` migration or recognition. A before-and-after dump of each test's first-open catalog shows the moved tests start from the same rows.
-- With startup `library.json` migration switched off, only those 15 migration and recognition tests fail, down from 83.
-- Drop the `catalog ?? LibraryCatalogHost.Open(...)` fallbacks in `LibraryOperationsService`, `LibraryPlaybackService`, `RefreshPipelineService`, and `ServerStateService`. Tests pass the catalog they seed; the server already passed its own.
-- Mark the milestone complete with its evidence.
+- Startup no longer converts `library.json` or rebuilds from `library.json.migrated`. A missing `library.db` is created empty with SQL, and those files, `presets.json`, and the thumbnail index are left in place and not read.
+- Remove the JSON-to-SQLite importer, the schema 1 migration, and the side-file copy. A schema version 1 database is quarantined and refused like any other unrecognized database.
+- Open reads the catalog's revision row after the schema check, so a database with corrupt row pages is still quarantined now that the side-file read is gone.
+- Remove the catalog open options, the server's thumbnail-folder open parameter, the migrated-schema flag, and its startup log line.
+- Desktop import no longer counts `library.json` for overwrite confirmation or renames it after import.
+- Replace the migration tests with tests for empty creation, refusal with and without the JSON files, schema 1 refusal, and desktop import leaving `library.json` untouched.
+- Update current-state docs, the changelog, and the testing checklist; mark the milestone complete and add a backlog item for corruption detection off the startup path.

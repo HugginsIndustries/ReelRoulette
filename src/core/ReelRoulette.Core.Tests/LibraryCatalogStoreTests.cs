@@ -6,348 +6,139 @@ namespace ReelRoulette.Core.Tests;
 
 public sealed class LibraryCatalogStoreTests
 {
-    [Fact]
-    public void Open_MigratesLibraryJson_IncludingStringEnumsNumericDurationAndAvailableTags()
+    public static TheoryData<string[]> LeftoverJsonFiles => new()
+    {
+        Array.Empty<string>(),
+        new[] { "library.json" },
+        new[] { "library.json.migrated" },
+        new[] { "library.json", "library.json.migrated" },
+        new[] { "library.json", "library.json.migrated", "presets.json", "thumbnails/index.json" }
+    };
+
+    [Theory]
+    [MemberData(nameof(LeftoverJsonFiles))]
+    public void Open_MissingDatabase_CreatesEmptySchema2Catalog_AndLeavesJsonFilesUnread(string[] leftovers)
     {
         using var dir = new TempDirectory();
-        var jsonPath = Path.Combine(dir.Path, "library.json");
-        File.WriteAllText(jsonPath, """
-            {
-              "sources": [
-                { "id": "source-1", "rootPath": "/Media/Films", "displayName": "Films", "isEnabled": false }
-              ],
-              "categories": [
-                { "id": "cat-1", "name": "Genre", "sortOrder": 2 }
-              ],
-              "tags": [
-                { "name": "Café", "categoryId": "cat-1" }
-              ],
-              "availableTags": [ "Legacy", "Café" ],
-              "fingerprintIndexVersion": 1,
-              "fingerprintIndex": {
-                "index-only-marker": { "abc": [ "item-1" ] }
-              },
-              "items": [
-                {
-                  "id": "item-1",
-                  "sourceId": "source-1",
-                  "fullPath": "/Media/Films/Café.MP4",
-                  "relativePath": "Café.MP4",
-                  "fileName": "Café.MP4",
-                  "duration": 90.5,
-                  "hasAudio": true,
-                  "integratedLoudness": -14.25,
-                  "peakDb": -1.5,
-                  "isFavorite": true,
-                  "isBlacklisted": false,
-                  "playCount": 4,
-                  "lastPlayedUtc": "2024-05-06T07:08:09Z",
-                  "tags": [ "Café" ],
-                  "mediaType": "Photo",
-                  "fingerprint": "abc",
-                  "fingerprintAlgorithm": "SHA-256",
-                  "fingerprintVersion": 1,
-                  "fileSizeBytes": 42,
-                  "lastWriteTimeUtc": "2024-01-02T03:04:05Z",
-                  "fingerprintLastUtc": "2024-01-02T03:04:06Z",
-                  "fingerprintStatus": "Ready"
-                },
-                {
-                  "sourceId": "source-1",
-                  "fullPath": "/Media/Films/clip.mp4",
-                  "relativePath": "clip.mp4",
-                  "fileName": "clip.mp4",
-                  "duration": "00:01:30",
-                  "mediaType": 0,
-                  "fingerprintStatus": 2,
-                  "isFavorite": false,
-                  "isBlacklisted": true,
-                  "playCount": 1
-                }
-              ]
-            }
-            """);
+        var originals = WriteLeftoverJson(dir.Path, leftovers);
 
-        var opened = CatalogOpen.Open(dir.Path);
+        var result = CatalogOpen.Open(dir.Path);
 
-        Assert.Equal(LibraryCatalogOpenStatus.Opened, opened.Status);
-        Assert.False(File.Exists(jsonPath));
-        Assert.True(File.Exists(Path.Combine(dir.Path, "library.json.migrated")));
-        Assert.True(File.Exists(Path.Combine(dir.Path, "library.db")));
-
-        var catalog = opened.Snapshot()!;
-        var source = Assert.Single(catalog.Sources);
-        Assert.Equal("source-1", source.Id);
-        Assert.Equal("/Media/Films", source.RootPath);
-        Assert.Equal("/media/films", source.RootPathFold);
-        Assert.Equal("Films", source.DisplayName);
-        Assert.False(source.IsEnabled);
-
-        Assert.Equal(2, catalog.Categories.Count);
-        Assert.Equal("cat-1", catalog.Categories[0].Id);
-        Assert.Equal("Genre", catalog.Categories[0].Name);
-        Assert.Equal(2, catalog.Categories[0].SortOrder);
-        Assert.Equal("uncategorized", catalog.Categories[1].Id);
-        Assert.Equal("Uncategorized", catalog.Categories[1].Name);
-        Assert.Equal(int.MaxValue, catalog.Categories[1].SortOrder);
-
-        var tag = Assert.Single(catalog.Tags);
-        Assert.Equal("Café", tag.Name);
-        Assert.Equal("café", tag.NameFold);
-        Assert.Equal("cat-1", tag.CategoryId);
-        Assert.NotEqual("cafe", tag.NameFold);
-        Assert.DoesNotContain(catalog.Tags, item => item.Name == "Legacy");
-
-        Assert.Equal(2, catalog.Items.Count);
-        var photo = catalog.Items[0];
-        Assert.Equal("item-1", photo.Id);
-        Assert.Equal("/Media/Films/Café.MP4", photo.FullPath);
-        Assert.Equal("/media/films/café.mp4", photo.FullPathFold);
-        Assert.Equal("café.mp4", photo.FileNameFold);
-        Assert.Equal(TimeSpan.FromSeconds(90.5).Ticks, photo.DurationTicks);
-        Assert.True(photo.HasAudio);
-        Assert.Equal(-14.25, photo.IntegratedLoudness);
-        Assert.Equal(-1.5, photo.PeakDb);
-        Assert.True(photo.IsFavorite);
-        Assert.False(photo.IsBlacklisted);
-        Assert.Equal(4, photo.PlayCount);
-        Assert.Equal(new DateTime(2024, 5, 6, 7, 8, 9, DateTimeKind.Utc), photo.LastPlayedUtc);
-        Assert.Equal(["Café"], photo.Tags);
-        Assert.Equal(1, photo.MediaType);
-        Assert.Equal("abc", photo.Fingerprint);
-        Assert.Equal(42, photo.FileSizeBytes);
-        Assert.Equal(new DateTime(2024, 1, 2, 3, 4, 5, DateTimeKind.Utc), photo.LastWriteTimeUtc);
-        Assert.Equal(1, photo.FingerprintStatus);
-
-        var video = catalog.Items[1];
-        Assert.Equal("/Media/Films/clip.mp4", video.Id);
-        Assert.Equal(TimeSpan.FromMinutes(1.5).Ticks, video.DurationTicks);
-        Assert.Equal(0, video.MediaType);
-        Assert.Equal(2, video.FingerprintStatus);
-        Assert.True(video.IsBlacklisted);
-        Assert.Equal(1, video.PlayCount);
-
-        var databaseText = File.ReadAllText(Path.Combine(dir.Path, "library.db"));
-        Assert.DoesNotContain("index-only-marker", databaseText, StringComparison.Ordinal);
-        Assert.DoesNotContain("NOCASE", ReadSchema(dir.Path), StringComparison.OrdinalIgnoreCase);
-        Assert.Equal("wal", ReadPragma(dir.Path, "journal_mode"));
+        Assert.Equal(LibraryCatalogOpenStatus.Opened, result.Status);
+        Assert.Null(result.Message);
+        var snapshot = result.Snapshot()!;
+        Assert.Empty(snapshot.Sources);
+        Assert.Empty(snapshot.Items);
+        Assert.Empty(snapshot.Tags);
+        var category = Assert.Single(snapshot.Categories);
+        Assert.Equal("uncategorized", category.Id);
+        Assert.Equal("Uncategorized", category.Name);
+        Assert.Equal(int.MaxValue, category.SortOrder);
+        Assert.Empty(result.Session!.ReadPresets());
+        Assert.Equal(0, result.Session.Revision);
         Assert.Equal("2", ReadPragma(dir.Path, "user_version"));
+        Assert.Equal(LibraryCatalogStore.CatalogFileInspection.Usable, LibraryCatalogStore.InspectCatalogFile(result.Session.DatabasePath));
+        Assert.Equal(["revision"], ReadMetaKeys(dir.Path));
         Assert.DoesNotContain("available_tags", ReadSchema(dir.Path), StringComparison.Ordinal);
+        AssertUnchanged(dir.Path, originals);
+        Assert.Empty(Directory.GetFiles(dir.Path, "*.migrated", SearchOption.AllDirectories)
+            .Where(path => !originals.ContainsKey(Path.GetRelativePath(dir.Path, path).Replace('\\', '/'))));
+        Assert.DoesNotContain(
+            Directory.GetFiles(dir.Path).Select(Path.GetFileName),
+            name => name!.StartsWith("library.db.", StringComparison.Ordinal));
     }
 
     [Fact]
-    public void Open_TimeSpanDuration_IsStoredAsTicks()
+    public void Open_HealthyDatabase_OpensUnchanged_WithJsonFilesPresent()
     {
         using var dir = new TempDirectory();
-        File.WriteAllText(Path.Combine(dir.Path, "library.json"), """
-            {
-              "items": [
-                {
-                  "id": "item-1",
-                  "fullPath": "/clips/a.mp4",
-                  "fileName": "a.mp4",
-                  "duration": "00:00:12.5000000"
-                }
-              ]
-            }
-            """);
+        CatalogSeed.Write(
+            dir.Path,
+            items: [new SeedItem("item-1", "/real.mp4") { PlayCount = 3 }],
+            presets: [new SeedPreset("Kept", """{"favoritesOnly":true}""")]);
+        var originals = WriteLeftoverJson(dir.Path, ["library.json", "library.json.migrated", "presets.json", "thumbnails/index.json"]);
 
         var opened = CatalogOpen.Open(dir.Path);
 
-        var item = Assert.Single(opened.Snapshot()!.Items);
-        Assert.Equal(TimeSpan.Parse("00:00:12.5000000").Ticks, item.DurationTicks);
-        Assert.DoesNotContain("available_tags", ReadSchema(dir.Path), StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void Open_BeforePublish_LeavesLibraryJsonUnmoved()
-    {
-        using var dir = new TempDirectory();
-        var jsonPath = Path.Combine(dir.Path, "library.json");
-        File.WriteAllText(jsonPath, """{ "items": [ { "id": "item-1", "fullPath": "/a.mp4", "fileName": "a.mp4" } ] }""");
-        var original = File.ReadAllBytes(jsonPath);
-
-        var ex = Assert.Throws<InvalidOperationException>(() =>
-            CatalogOpen.Open(dir.Path, new LibraryCatalogOpenOptions
-            {
-                BeforePublish = () => throw new InvalidOperationException("crash before publish")
-            }));
-
-        Assert.Equal("crash before publish", ex.Message);
-        Assert.Equal(original, File.ReadAllBytes(jsonPath));
-        Assert.False(File.Exists(Path.Combine(dir.Path, "library.db")));
-        Assert.False(File.Exists(Path.Combine(dir.Path, "library.json.migrated")));
-    }
-
-    [Fact]
-    public void Open_DirectorySyncFails_LeavesLibraryJsonUnmoved()
-    {
-        using var dir = new TempDirectory();
-        var jsonPath = Path.Combine(dir.Path, "library.json");
-        File.WriteAllText(jsonPath, """{ "items": [ { "id": "item-1", "fullPath": "/a.mp4", "fileName": "a.mp4" } ] }""");
-        var original = File.ReadAllBytes(jsonPath);
-
-        var ex = Assert.Throws<IOException>(() =>
-            CatalogOpen.Open(dir.Path, new LibraryCatalogOpenOptions
-            {
-                DirectorySync = _ => throw new IOException("directory sync failed")
-            }));
-
-        Assert.Equal("directory sync failed", ex.Message);
-        Assert.Equal(original, File.ReadAllBytes(jsonPath));
-        Assert.False(File.Exists(Path.Combine(dir.Path, "library.json.migrated")));
-        Assert.True(File.Exists(Path.Combine(dir.Path, "library.db")));
-    }
-
-    [Fact]
-    public void Open_HealthyDatabase_DoesNotReadEitherJsonFile()
-    {
-        using var dir = new TempDirectory();
-        File.WriteAllText(Path.Combine(dir.Path, "library.json"), """
-            { "items": [ { "id": "from-json", "fullPath": "/real.mp4", "fileName": "real.mp4", "playCount": 3 } ] }
-            """);
-        var first = CatalogOpen.Open(dir.Path);
-        Assert.Equal("from-json", Assert.Single(first.Snapshot()!.Items).Id);
-
-        File.WriteAllText(Path.Combine(dir.Path, "library.json"), "{ not json");
-        File.WriteAllText(Path.Combine(dir.Path, "library.json.migrated"), """
-            { "items": [ { "id": "from-migrated", "fullPath": "/other.mp4", "fileName": "other.mp4", "playCount": 9 } ] }
-            """);
-
-        var second = CatalogOpen.Open(dir.Path);
-
-        Assert.Equal(LibraryCatalogOpenStatus.Opened, second.Status);
-        var item = Assert.Single(second.Snapshot()!.Items);
-        Assert.Equal("from-json", item.Id);
-        Assert.Equal(3, item.PlayCount);
-    }
-
-    [Fact]
-    public void Open_PartialDatabase_QuarantinesAndLaterOpenMigratesPreservedJson()
-    {
-        using var dir = new TempDirectory();
-        var jsonPath = Path.Combine(dir.Path, "library.json");
-        File.WriteAllText(jsonPath, """
-            { "items": [ { "id": "kept", "fullPath": "/kept.mp4", "fileName": "kept.mp4", "mediaType": "Video" } ] }
-            """);
-        var original = File.ReadAllBytes(jsonPath);
-        File.WriteAllText(Path.Combine(dir.Path, "library.db"), "not a database");
-
-        var refused = CatalogOpen.Open(dir.Path);
-
-        Assert.Equal(LibraryCatalogOpenStatus.Refused, refused.Status);
-        Assert.Equal(LibraryCatalogStore.RefusedMessageJsonPreserved, refused.Message);
-        Assert.Null(refused.Snapshot());
-        Assert.Equal(original, File.ReadAllBytes(jsonPath));
-        Assert.False(File.Exists(Path.Combine(dir.Path, "library.db")));
-        Assert.True(File.Exists(Path.Combine(dir.Path, "library.db.refused")));
-
-        var migrated = CatalogOpen.Open(dir.Path);
-
-        Assert.Equal(LibraryCatalogOpenStatus.Opened, migrated.Status);
-        Assert.Equal("kept", Assert.Single(migrated.Snapshot()!.Items).Id);
-        Assert.Equal(0, migrated.Snapshot()!.Items[0].MediaType);
-        Assert.False(File.Exists(jsonPath));
-        Assert.True(File.Exists(Path.Combine(dir.Path, "library.db")));
-    }
-
-    [Fact]
-    public void Open_ExistingSnapshot_DoesNotPublishAndLeavesLibraryJson()
-    {
-        using var dir = new TempDirectory();
-        var jsonPath = Path.Combine(dir.Path, "library.json");
-        var migratedPath = Path.Combine(dir.Path, "library.json.migrated");
-        File.WriteAllText(jsonPath, """{ "items": [ { "id": "live", "fullPath": "/live.mp4", "fileName": "live.mp4" } ] }""");
-        File.WriteAllText(migratedPath, """{ "items": [ { "id": "old", "fullPath": "/old.mp4", "fileName": "old.mp4" } ] }""");
-        var jsonBytes = File.ReadAllBytes(jsonPath);
-        var migratedBytes = File.ReadAllBytes(migratedPath);
-
-        var ex = Assert.Throws<InvalidOperationException>(() => CatalogOpen.Open(dir.Path));
-
-        Assert.Equal(LibraryCatalogStore.SnapshotAlreadyExistsMessage, ex.Message);
-        Assert.Equal(jsonBytes, File.ReadAllBytes(jsonPath));
-        Assert.Equal(migratedBytes, File.ReadAllBytes(migratedPath));
-        Assert.False(File.Exists(Path.Combine(dir.Path, "library.db")));
-        Assert.False(File.Exists(Path.Combine(dir.Path, "library.db.migrating")));
-    }
-
-    [Fact]
-    public void Open_UnversionedDatabaseWithoutJson_RefusesAndDoesNotCreateEmptyCatalog()
-    {
-        using var dir = new TempDirectory();
-        var migratedPath = Path.Combine(dir.Path, "library.json.migrated");
-        File.WriteAllText(migratedPath, """{ "items": [ { "id": "snapshot", "fullPath": "/snap.mp4" } ] }""");
-        CreateEmptyDatabase(Path.Combine(dir.Path, "library.db"));
-
-        var refused = CatalogOpen.Open(dir.Path);
-
-        Assert.Equal(LibraryCatalogOpenStatus.Refused, refused.Status);
-        Assert.Equal(LibraryCatalogStore.RefusedMessageWithSnapshot, refused.Message);
-        Assert.Null(refused.Snapshot());
-        Assert.True(File.Exists(migratedPath));
-        Assert.False(File.Exists(Path.Combine(dir.Path, "library.db")));
-        Assert.True(File.Exists(Path.Combine(dir.Path, "library.db.refused")));
-        Assert.Equal(1, Directory.GetFiles(dir.Path, "library.db*").Count(path => Path.GetFileName(path) == "library.db.refused"));
-    }
-
-    [Fact]
-    public void Open_CorruptRowPage_QuarantinesAndLeavesLibraryJson()
-    {
-        using var dir = new TempDirectory();
-        var jsonPath = Path.Combine(dir.Path, "library.json");
-        var payload = new string('x', 20_000);
-        File.WriteAllText(jsonPath, $$"""
-            { "items": [ { "id": "kept", "fullPath": "/kept.mp4", "fileName": "kept.mp4", "fingerprint": "{{payload}}" } ] }
-            """);
-        var original = File.ReadAllBytes(jsonPath);
-
-        var opened = CatalogOpen.Open(dir.Path);
         Assert.Equal(LibraryCatalogOpenStatus.Opened, opened.Status);
-        File.WriteAllBytes(jsonPath, original);
-        CorruptPagesAfterHeader(Path.Combine(dir.Path, "library.db"));
-
-        var refused = CatalogOpen.Open(dir.Path);
-
-        Assert.Equal(LibraryCatalogOpenStatus.Refused, refused.Status);
-        Assert.Equal(LibraryCatalogStore.RefusedMessageJsonPreserved, refused.Message);
-        Assert.Null(refused.Snapshot());
-        Assert.Equal(original, File.ReadAllBytes(jsonPath));
-        Assert.False(File.Exists(Path.Combine(dir.Path, "library.db")));
-        Assert.True(File.Exists(Path.Combine(dir.Path, "library.db.refused")));
+        var item = Assert.Single(opened.Snapshot()!.Items);
+        Assert.Equal("item-1", item.Id);
+        Assert.Equal(3, item.PlayCount);
+        Assert.Null(item.ThumbnailRevision);
+        Assert.Equal("Kept", Assert.Single(opened.Session!.ReadPresets()).Name);
+        AssertUnchanged(dir.Path, originals);
     }
 
-    [Fact]
-    public void Open_BadDatabaseWithNoJsonFiles_DoesNotNameMissingSnapshot()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Open_DatabaseThatIsNotADatabase_IsQuarantinedAndRefused_WhetherOrNotJsonFilesExist(bool withJson)
     {
         using var dir = new TempDirectory();
         File.WriteAllText(Path.Combine(dir.Path, "library.db"), "not a database");
+        var originals = WriteLeftoverJson(dir.Path, withJson ? ["library.json", "library.json.migrated"] : []);
 
         var refused = CatalogOpen.Open(dir.Path);
 
-        Assert.Equal(LibraryCatalogOpenStatus.Refused, refused.Status);
-        Assert.Equal(LibraryCatalogStore.RefusedMessage, refused.Message);
-        Assert.Null(refused.Snapshot());
-        Assert.False(File.Exists(Path.Combine(dir.Path, "library.db")));
-        Assert.False(File.Exists(Path.Combine(dir.Path, "library.json")));
-        Assert.False(File.Exists(Path.Combine(dir.Path, "library.json.migrated")));
-        Assert.True(File.Exists(Path.Combine(dir.Path, "library.db.refused")));
+        AssertRefusedAndQuarantined(dir.Path, refused);
+        AssertUnchanged(dir.Path, originals);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Open_CorruptRowPage_IsQuarantinedAndRefused_WhetherOrNotJsonFilesExist(bool withJson)
+    {
+        using var dir = new TempDirectory();
+        CatalogSeed.Write(
+            dir.Path,
+            items: [new SeedItem("kept", "/kept.mp4") { Fingerprint = new string('x', 20_000) }]);
+        CorruptPagesAfterHeader(Path.Combine(dir.Path, "library.db"));
+        var originals = WriteLeftoverJson(dir.Path, withJson ? ["library.json", "library.json.migrated"] : []);
+
+        var refused = CatalogOpen.Open(dir.Path);
+
+        AssertRefusedAndQuarantined(dir.Path, refused);
+        AssertUnchanged(dir.Path, originals);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Open_UnversionedDatabase_IsQuarantinedAndRefused_WhetherOrNotJsonFilesExist(bool withJson)
+    {
+        using var dir = new TempDirectory();
+        CreateEmptyDatabase(Path.Combine(dir.Path, "library.db"));
+        var originals = WriteLeftoverJson(dir.Path, withJson ? ["library.json", "library.json.migrated"] : []);
+
+        var refused = CatalogOpen.Open(dir.Path);
+
+        AssertRefusedAndQuarantined(dir.Path, refused);
+        AssertUnchanged(dir.Path, originals);
     }
 
     [Fact]
-    public void Open_MigratedSnapshotOnly_RefusesWithoutCreatingDatabase()
+    public void Open_LeftoverSideFilesCopiedRow_IsKeptAndNotRead()
     {
         using var dir = new TempDirectory();
-        var migratedPath = Path.Combine(dir.Path, "library.json.migrated");
-        File.WriteAllText(migratedPath, """{ "items": [ { "id": "snapshot", "fullPath": "/snap.mp4" } ] }""");
+        CatalogSeed.Write(dir.Path, items: [new SeedItem("item-1", "/clips/a.mp4")]);
+        using (var connection = new SqliteConnection(TestConnectionString(Path.Combine(dir.Path, "library.db"), readOnly: false)))
+        {
+            connection.Open();
+            using var command = connection.CreateCommand();
+            command.CommandText = "INSERT INTO catalog_meta (key, value) VALUES ('side_files_copied', '0');";
+            command.ExecuteNonQuery();
+        }
 
-        var refused = CatalogOpen.Open(dir.Path);
+        var originals = WriteLeftoverJson(dir.Path, ["presets.json", "thumbnails/index.json"]);
 
-        Assert.Equal(LibraryCatalogOpenStatus.Refused, refused.Status);
-        Assert.Equal(LibraryCatalogStore.RefusedMessageWithSnapshot, refused.Message);
-        Assert.Null(refused.Session);
-        Assert.True(File.Exists(migratedPath));
-        Assert.False(File.Exists(Path.Combine(dir.Path, "library.db")));
-        Assert.Empty(Directory.GetFiles(dir.Path, "library.db*"));
+        var opened = CatalogOpen.Open(dir.Path);
+
+        Assert.Equal(LibraryCatalogOpenStatus.Opened, opened.Status);
+        Assert.Equal(["revision", "side_files_copied"], ReadMetaKeys(dir.Path));
+        Assert.Empty(opened.Session!.ReadPresets());
+        Assert.Null(Assert.Single(opened.Snapshot()!.Items).ThumbnailRevision);
+        AssertUnchanged(dir.Path, originals);
     }
 
     [Fact]
@@ -373,156 +164,6 @@ public sealed class LibraryCatalogStoreTests
     public void WindowsPublishMoveFlags_IsWriteThrough()
     {
         Assert.Equal(8u, LibraryCatalogStore.WindowsPublishMoveFlags);
-    }
-
-    [Fact]
-    public void Open_EmptyDirectory_CreatesEmptyDatabase()
-    {
-        using var dir = new TempDirectory();
-
-        var result = CatalogOpen.Open(dir.Path);
-
-        Assert.Equal(LibraryCatalogOpenStatus.Opened, result.Status);
-        Assert.NotNull(result.Session);
-        Assert.Empty(result.Snapshot()!.Sources);
-        Assert.Empty(result.Snapshot()!.Items);
-        Assert.Equal(0, result.Session.Revision);
-        Assert.Equal("2", ReadPragma(dir.Path, "user_version"));
-        Assert.DoesNotContain("available_tags", ReadSchema(dir.Path), StringComparison.Ordinal);
-        Assert.Contains("loudness_error", ReadSchema(dir.Path), StringComparison.Ordinal);
-        Assert.False(File.Exists(Path.Combine(dir.Path, "library.json")));
-    }
-
-    [Fact]
-    public void Open_MissingFingerprintStatus_StaysNull_ExplicitPendingStaysZero()
-    {
-        using var dir = new TempDirectory();
-        File.WriteAllText(Path.Combine(dir.Path, "library.json"), """
-            {
-              "items": [
-                {
-                  "id": "legacy",
-                  "fullPath": "/clips/legacy.mp4",
-                  "fileName": "legacy.mp4",
-                  "fingerprint": "abc",
-                  "fingerprintAlgorithm": "SHA-256",
-                  "fingerprintVersion": 1
-                },
-                {
-                  "id": "pending",
-                  "fullPath": "/clips/pending.mp4",
-                  "fileName": "pending.mp4",
-                  "fingerprint": "def",
-                  "fingerprintStatus": 0
-                }
-              ]
-            }
-            """);
-
-        var opened = CatalogOpen.Open(dir.Path);
-
-        Assert.Null(opened.Snapshot()!.Items[0].FingerprintStatus);
-        Assert.Equal(0, opened.Snapshot()!.Items[1].FingerprintStatus);
-    }
-
-    [Fact]
-    public void Open_BlankCategoryId_BecomesUncategorizedAndSkipsDuplicate()
-    {
-        using var dir = new TempDirectory();
-        File.WriteAllText(Path.Combine(dir.Path, "library.json"), """
-            {
-              "categories": [
-                { "name": "Genre" },
-                { "id": "", "name": "Ignored duplicate" },
-                { "id": "uncategorized", "name": "Also ignored" }
-              ],
-              "tags": [
-                { "name": "Café" },
-                { "name": "Named", "categoryId": "cat-1" }
-              ]
-            }
-            """);
-
-        var opened = CatalogOpen.Open(dir.Path);
-
-        var category = Assert.Single(opened.Snapshot()!.Categories);
-        Assert.Equal("uncategorized", category.Id);
-        Assert.Equal("Uncategorized", category.Name);
-        Assert.Equal(int.MaxValue, category.SortOrder);
-        Assert.Equal("uncategorized", opened.Snapshot()!.Tags[0].CategoryId);
-        Assert.Equal("cat-1", opened.Snapshot()!.Tags[1].CategoryId);
-    }
-
-    [Fact]
-    public void Open_SourceMissingIdOrRootPath_IsOmitted()
-    {
-        using var dir = new TempDirectory();
-        File.WriteAllText(Path.Combine(dir.Path, "library.json"), """
-            {
-              "sources": [
-                { "rootPath": "/only-path", "displayName": "No Id" },
-                { "id": "has-id", "displayName": "No Path" },
-                { "id": "kept", "rootPath": "/kept", "displayName": "Kept", "isEnabled": false }
-              ]
-            }
-            """);
-
-        var opened = CatalogOpen.Open(dir.Path);
-
-        var source = Assert.Single(opened.Snapshot()!.Sources);
-        Assert.Equal("kept", source.Id);
-        Assert.Equal("/kept", source.RootPath);
-        Assert.Equal("Kept", source.DisplayName);
-        Assert.False(source.IsEnabled);
-    }
-
-    [Fact]
-    public void Open_MissingUncategorizedCategory_IsAppended()
-    {
-        using var dir = new TempDirectory();
-        File.WriteAllText(Path.Combine(dir.Path, "library.json"), """
-            {
-              "categories": [
-                { "id": "cat-1", "name": "Genre", "sortOrder": 2 }
-              ],
-              "tags": [
-                { "name": "Loose" }
-              ]
-            }
-            """);
-
-        var opened = CatalogOpen.Open(dir.Path);
-
-        Assert.Equal(2, opened.Snapshot()!.Categories.Count);
-        Assert.Equal("cat-1", opened.Snapshot()!.Categories[0].Id);
-        Assert.Equal("Genre", opened.Snapshot()!.Categories[0].Name);
-        Assert.Equal(2, opened.Snapshot()!.Categories[0].SortOrder);
-        Assert.Equal("uncategorized", opened.Snapshot()!.Categories[1].Id);
-        Assert.Equal("Uncategorized", opened.Snapshot()!.Categories[1].Name);
-        Assert.Equal(int.MaxValue, opened.Snapshot()!.Categories[1].SortOrder);
-        Assert.Equal("uncategorized", Assert.Single(opened.Snapshot()!.Tags).CategoryId);
-    }
-
-    [Fact]
-    public void Open_ItemWithoutFullPath_IsOmitted()
-    {
-        using var dir = new TempDirectory();
-        File.WriteAllText(Path.Combine(dir.Path, "library.json"), """
-            {
-              "items": [
-                { "id": "kept", "fullPath": "/kept.mp4", "fileName": "kept.mp4" },
-                { "id": "pathless" },
-                { },
-                { "id": "blank-path", "fullPath": "  " }
-              ]
-            }
-            """);
-
-        var opened = CatalogOpen.Open(dir.Path);
-
-        var item = Assert.Single(opened.Snapshot()!.Items);
-        Assert.Equal("kept", item.Id);
-        Assert.Equal("/kept.mp4", item.FullPath);
     }
 
     [Fact]
@@ -566,34 +207,6 @@ public sealed class LibraryCatalogStoreTests
     }
 
     [Fact]
-    public void Open_DuplicateTagNames_KeepLastCaseInsensitive()
-    {
-        using var dir = new TempDirectory();
-        File.WriteAllText(Path.Combine(dir.Path, "library.json"), """
-            {
-              "tags": [
-                { "name": "Cafe", "categoryId": "old" },
-                { "name": "Other", "categoryId": "cat-1" },
-                { "name": "cafe", "categoryId": "new" }
-              ]
-            }
-            """);
-
-        var opened = CatalogOpen.Open(dir.Path);
-
-        var category = Assert.Single(opened.Snapshot()!.Categories);
-        Assert.Equal("uncategorized", category.Id);
-        Assert.Equal("Uncategorized", category.Name);
-        Assert.Equal(int.MaxValue, category.SortOrder);
-        Assert.Equal(2, opened.Snapshot()!.Tags.Count);
-        Assert.Equal("Other", opened.Snapshot()!.Tags[0].Name);
-        Assert.Equal("cat-1", opened.Snapshot()!.Tags[0].CategoryId);
-        Assert.Equal("cafe", opened.Snapshot()!.Tags[1].Name);
-        Assert.Equal("cafe", opened.Snapshot()!.Tags[1].NameFold);
-        Assert.Equal("new", opened.Snapshot()!.Tags[1].CategoryId);
-    }
-
-    [Fact]
     public void OpenWrite_UsesWalWithSynchronousNormal()
     {
         using var dir = new TempDirectory();
@@ -613,6 +226,64 @@ public sealed class LibraryCatalogStoreTests
 
         Assert.False(writable.Pooling);
         Assert.False(readOnly.Pooling);
+    }
+
+    private static readonly Dictionary<string, string> LeftoverJsonContent = new(StringComparer.Ordinal)
+    {
+        ["library.json"] = """{ "sources": [ { "id": "s1", "rootPath": "/from-json" } ], "items": [ { "id": "from-json", "fullPath": "/from-json/a.mp4", "fileName": "a.mp4" } ] }""",
+        ["library.json.migrated"] = """{ "items": [ { "id": "from-migrated", "fullPath": "/other.mp4", "fileName": "other.mp4" } ] }""",
+        ["presets.json"] = """[ { "name": "FromJson", "filterState": { "favoritesOnly": true } } ]""",
+        ["thumbnails/index.json"] = """{ "from-json": { "revision": "rev-json", "width": 320, "height": 180 }, "item-1": { "revision": "rev-json", "width": 320, "height": 180 } }"""
+    };
+
+    private static Dictionary<string, byte[]> WriteLeftoverJson(string directory, IEnumerable<string> names)
+    {
+        var written = new Dictionary<string, byte[]>(StringComparer.Ordinal);
+        foreach (var name in names)
+        {
+            var path = Path.Combine(directory, name);
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.WriteAllText(path, LeftoverJsonContent[name]);
+            written[name] = File.ReadAllBytes(path);
+        }
+
+        return written;
+    }
+
+    private static void AssertUnchanged(string directory, IReadOnlyDictionary<string, byte[]> originals)
+    {
+        foreach (var (name, bytes) in originals)
+        {
+            Assert.Equal(bytes, File.ReadAllBytes(Path.Combine(directory, name)));
+        }
+    }
+
+    private static void AssertRefusedAndQuarantined(string directory, LibraryCatalogOpenResult refused)
+    {
+        Assert.Equal(LibraryCatalogOpenStatus.Refused, refused.Status);
+        Assert.Equal(LibraryCatalogStore.RefusedMessage, refused.Message);
+        Assert.DoesNotContain("library.json", refused.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Null(refused.Session);
+        Assert.False(File.Exists(Path.Combine(directory, "library.db")));
+        Assert.True(File.Exists(Path.Combine(directory, "library.db.refused")));
+        Assert.Empty(Directory.GetFiles(directory, "*.migrated", SearchOption.AllDirectories)
+            .Where(path => Path.GetFileName(path) != "library.json.migrated"));
+    }
+
+    private static List<string> ReadMetaKeys(string directory)
+    {
+        using var connection = new SqliteConnection(TestConnectionString(Path.Combine(directory, "library.db"), readOnly: true));
+        connection.Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT key FROM catalog_meta ORDER BY key;";
+        using var reader = command.ExecuteReader();
+        var keys = new List<string>();
+        while (reader.Read())
+        {
+            keys.Add(reader.GetString(0));
+        }
+
+        return keys;
     }
 
     private static string TestConnectionString(string databasePath, bool readOnly)

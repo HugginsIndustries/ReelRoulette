@@ -210,7 +210,7 @@ public sealed class LibraryOperationsServiceTests
                     new SeedItem("item-3", @"C:\media\fresh.mp4")
                 ]);
 
-            var host = LibraryCatalogHost.Open(appDataRoot, Path.Combine(appDataRoot, "thumbnails"));
+            var host = LibraryCatalogHost.Open(appDataRoot);
             var service = new LibraryOperationsService(host, NullLogger<LibraryOperationsService>.Instance, appDataRoot);
             var revision = host.Session.Revision;
 
@@ -468,7 +468,7 @@ public sealed class LibraryOperationsServiceTests
                     new SeedItem("item-2", "/media/two.mp4")
                 ]);
 
-            var host = LibraryCatalogHost.Open(appDataRoot, Path.Combine(appDataRoot, "thumbnails"));
+            var host = LibraryCatalogHost.Open(appDataRoot);
             var service = new LibraryOperationsService(host, NullLogger<LibraryOperationsService>.Instance, appDataRoot);
 
             var changed = service.ApplyItemTags(new ApplyItemTagsRequest
@@ -605,7 +605,7 @@ public sealed class LibraryOperationsServiceTests
                     }
                 ]);
 
-            var host = LibraryCatalogHost.Open(appDataRoot, Path.Combine(appDataRoot, "thumbnails"));
+            var host = LibraryCatalogHost.Open(appDataRoot);
             var service = new LibraryOperationsService(host, NullLogger<LibraryOperationsService>.Instance, appDataRoot);
             var stats = service.GetLibraryStats();
 
@@ -667,7 +667,7 @@ public sealed class LibraryOperationsServiceTests
                     }
                 ]);
 
-            var host = LibraryCatalogHost.Open(appDataRoot, Path.Combine(appDataRoot, "thumbnails"));
+            var host = LibraryCatalogHost.Open(appDataRoot);
             var service = new LibraryOperationsService(host, NullLogger<LibraryOperationsService>.Instance, appDataRoot);
             var json = OpenApiSpec.SerializeAsServer(service.GetLibraryStats());
 
@@ -712,7 +712,7 @@ public sealed class LibraryOperationsServiceTests
                     }
                 ]);
 
-            var host = LibraryCatalogHost.Open(appDataRoot, Path.Combine(appDataRoot, "thumbnails"));
+            var host = LibraryCatalogHost.Open(appDataRoot);
             var service = new LibraryOperationsService(host, NullLogger<LibraryOperationsService>.Instance, appDataRoot);
             var stats = service.GetLibraryStats();
 
@@ -767,7 +767,7 @@ public sealed class LibraryOperationsServiceTests
                     }
                 ]);
 
-            var host = LibraryCatalogHost.Open(appDataRoot, Path.Combine(appDataRoot, "thumbnails"));
+            var host = LibraryCatalogHost.Open(appDataRoot);
             var service = new LibraryOperationsService(host, NullLogger<LibraryOperationsService>.Instance, appDataRoot);
             var stats = service.GetLibraryStats();
 
@@ -1249,7 +1249,7 @@ public sealed class LibraryOperationsServiceTests
                     new SeedItem("missing-1", missingPath)
                 ]);
 
-            var host = LibraryCatalogHost.Open(appDataRoot, Path.Combine(appDataRoot, "thumbnails"));
+            var host = LibraryCatalogHost.Open(appDataRoot);
             var service = new LibraryOperationsService(host, NullLogger<LibraryOperationsService>.Instance, appDataRoot);
             var skipped = service.ApplyDuplicateSelection(new ReelRoulette.Server.Contracts.DuplicateApplyRequest
             {
@@ -1432,7 +1432,7 @@ public sealed class LibraryOperationsServiceTests
                     }
                 ]);
 
-            var host = LibraryCatalogHost.Open(appDataRoot, Path.Combine(appDataRoot, "thumbnails"));
+            var host = LibraryCatalogHost.Open(appDataRoot);
             var service = new LibraryOperationsService(host, NullLogger<LibraryOperationsService>.Instance, appDataRoot);
             var revision = host.Session.Revision;
 
@@ -1531,7 +1531,7 @@ public sealed class LibraryOperationsServiceTests
             Directory.CreateDirectory(mediaRoot);
             SeedCoreSettings(appDataRoot, enabled: true, minimumGapMinutes: 360, numberOfBackups: 8);
             CatalogSeed.Write(appDataRoot);
-            var host = LibraryCatalogHost.Open(appDataRoot, Path.Combine(appDataRoot, "thumbnails"));
+            var host = LibraryCatalogHost.Open(appDataRoot);
             var service = new LibraryOperationsService(
                 host,
                 NullLogger<LibraryOperationsService>.Instance,
@@ -1594,7 +1594,7 @@ public sealed class LibraryOperationsServiceTests
                 appDataRoot,
                 sources: [new SeedSource("src-yt", storedRoot)]);
 
-            var host = LibraryCatalogHost.Open(appDataRoot, Path.Combine(appDataRoot, "thumbnails"));
+            var host = LibraryCatalogHost.Open(appDataRoot);
             var service = new LibraryOperationsService(host, NullLogger<LibraryOperationsService>.Instance, appDataRoot);
             var stats = service.GetLibraryStats();
             var source = Assert.Single(stats.Sources);
@@ -1655,7 +1655,7 @@ public sealed class LibraryOperationsServiceTests
                     }
                 ]);
 
-            var host = LibraryCatalogHost.Open(appDataRoot, Path.Combine(appDataRoot, "thumbnails"));
+            var host = LibraryCatalogHost.Open(appDataRoot);
             var service = new LibraryOperationsService(host, NullLogger<LibraryOperationsService>.Instance, appDataRoot);
             var enabledOnly = service.ScanAutoTags(new AutoTagScanRequest { ScanFullLibrary = false, ItemIds = [] });
             var enabledFiles = Assert.Single(enabledOnly.Rows).Files;
@@ -1720,7 +1720,7 @@ public sealed class LibraryOperationsServiceTests
                     }
                 ]);
 
-            var host = LibraryCatalogHost.Open(appDataRoot, Path.Combine(appDataRoot, "thumbnails"));
+            var host = LibraryCatalogHost.Open(appDataRoot);
             var service = new LibraryOperationsService(host, NullLogger<LibraryOperationsService>.Instance, appDataRoot);
             var response = service.ScanAutoTags(new AutoTagScanRequest { ScanFullLibrary = false, ItemIds = [] });
             Assert.Empty(response.Rows);
@@ -1760,7 +1760,7 @@ public sealed class LibraryOperationsServiceTests
                     Item("unset-b", "/media/unset-b.mp4", "fp-unset", null)
                 ]);
 
-            var host = LibraryCatalogHost.Open(appDataRoot, Path.Combine(appDataRoot, "thumbnails"));
+            var host = LibraryCatalogHost.Open(appDataRoot);
             var service = new LibraryOperationsService(host, NullLogger<LibraryOperationsService>.Instance, appDataRoot);
             var response = service.ScanDuplicates(new DuplicateScanRequest());
 
@@ -1807,7 +1807,7 @@ public sealed class LibraryOperationsServiceTests
                     Item("off-stale", "/media/off/stale.mp4", "fp-stale", 3, "src-off")
                 ]);
 
-            var host = LibraryCatalogHost.Open(appDataRoot, Path.Combine(appDataRoot, "thumbnails"));
+            var host = LibraryCatalogHost.Open(appDataRoot);
             var service = new LibraryOperationsService(host, NullLogger<LibraryOperationsService>.Instance, appDataRoot);
 
             var current = service.ScanDuplicates(new DuplicateScanRequest { Scope = "CurrentSource", SourceId = "SRC-ON" });
@@ -1910,7 +1910,7 @@ public sealed class LibraryOperationsServiceTests
 
     private static (LibraryCatalogHost Host, LibraryOperationsService Service) OpenOperations(string appDataRoot)
     {
-        var host = LibraryCatalogHost.Open(appDataRoot, Path.Combine(appDataRoot, "thumbnails"));
+        var host = LibraryCatalogHost.Open(appDataRoot);
         var service = new LibraryOperationsService(host, NullLogger<LibraryOperationsService>.Instance, appDataRoot);
         return (host, service);
     }

@@ -21,6 +21,7 @@ Write **[Unreleased]** bullets at the same level as the released sections below.
 ### Removed
 
 - **Preset match API:** `POST /api/presets/match` is gone. No client used it; each client already decides which saved preset the current filter equals.
+- **`library.json` libraries:** The server no longer converts a `library.json` library from v0.12.0 or earlier, and a missing `library.db` now starts as an empty library. If you are on v0.12.0 or earlier, start v0.13.0 once before updating so your library is converted. Desktop import no longer counts or renames a leftover `library.json`.
 
 ### Fixed
 

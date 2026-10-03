@@ -15,18 +15,16 @@ public sealed class LibraryArchiveMigrationTests
     }
 
     [Fact]
-    public void LibraryExistsWithContent_IncludesUnmigratedLibraryJson_AndAnUnreadableDatabase()
+    public void LibraryExistsWithContent_IgnoresLibraryJson_AndIncludesAnUnreadableDatabase()
     {
         var temp = Path.Combine(Path.GetTempPath(), "rr-exists-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(temp);
         try
         {
             Assert.False(LibraryArchiveMigration.LibraryExistsWithContentOnDisk(temp));
-            File.WriteAllText(Path.Combine(temp, "library.json"), """{"sources":[],"items":[]}""");
+            File.WriteAllText(Path.Combine(temp, "library.json"), """{"sources":[{"id":"s1","rootPath":"/from"}],"items":[{"id":"kept"}]}""");
+            File.WriteAllText(Path.Combine(temp, "library.json.migrated"), """{"items":[{"id":"old"}]}""");
             Assert.False(LibraryArchiveMigration.LibraryExistsWithContentOnDisk(temp));
-            File.WriteAllText(Path.Combine(temp, "library.json"), """{"items":[{"id":"kept"}]}""");
-            Assert.True(LibraryArchiveMigration.LibraryExistsWithContentOnDisk(temp));
-            File.Delete(Path.Combine(temp, "library.json"));
             File.WriteAllText(Path.Combine(temp, "library.db"), "not a database");
             Assert.True(LibraryArchiveMigration.LibraryExistsWithContentOnDisk(temp));
         }
@@ -73,9 +71,7 @@ public sealed class LibraryArchiveMigrationTests
         Directory.CreateDirectory(dest);
         try
         {
-            File.WriteAllText(Path.Combine(dest, "library.json"), """
-                {"items":[{"id":"item-1","fullPath":"/clips/a.mp4","fileName":"a.mp4"}]}
-                """);
+            CatalogSeed.Write(dest, items: [new SeedItem("item-1", "/clips/a.mp4")]);
             var opened = OpenCatalog(dest);
             Assert.Equal("item-1", Assert.Single(Snapshot(opened).Items).Id);
             File.WriteAllText(source, """
@@ -183,7 +179,7 @@ public sealed class LibraryArchiveMigrationTests
     }
 
     [Fact]
-    public void Import_UnmigratedLibraryJson_RequiresConfirmation_AndIsRetiredOnSuccess()
+    public void Import_IntoAFolderWithOnlyLibraryJson_NeedsNoConfirmation_AndLeavesItUntouched()
     {
         var temp = Path.Combine(Path.GetTempPath(), "rr-import-json-" + Guid.NewGuid().ToString("N"));
         var dest = Path.Combine(temp, "dest");
@@ -192,18 +188,26 @@ public sealed class LibraryArchiveMigrationTests
         Directory.CreateDirectory(source);
         try
         {
-            File.WriteAllText(Path.Combine(dest, "library.json"), """{"items":[{"id":"kept","fullPath":"/clips/kept.mp4","fileName":"kept.mp4"}]}""");
+            var libraryJson = Path.Combine(dest, "library.json");
+            File.WriteAllText(libraryJson, """{"items":[{"id":"kept","fullPath":"/clips/kept.mp4","fileName":"kept.mp4"}]}""");
+            var original = File.ReadAllBytes(libraryJson);
             var checkpoint = CreateCheckpoint(source, temp);
             var remap = new Dictionary<string, string>(StringComparer.Ordinal) { ["/from"] = "/to" };
-            var skipped = new HashSet<string>(StringComparer.Ordinal);
-            var blocked = LibraryArchiveMigration.ImportDatabase(checkpoint, remap, skipped, force: false, dest);
-            Assert.True(blocked.NeedsForceConfirmation);
-            Assert.False(File.Exists(Path.Combine(dest, "library.db")));
 
-            var result = LibraryArchiveMigration.ImportDatabase(checkpoint, remap, skipped, force: true, dest);
+            var result = LibraryArchiveMigration.ImportDatabase(
+                checkpoint,
+                remap,
+                new HashSet<string>(StringComparer.Ordinal),
+                force: false,
+                dest);
+
             Assert.True(result.Accepted, result.Message);
-            Assert.False(File.Exists(Path.Combine(dest, "library.json")));
-            Assert.Contains("kept", File.ReadAllText(Path.Combine(dest, "library.json.migrated")), StringComparison.Ordinal);
+            Assert.False(result.NeedsForceConfirmation);
+            Assert.Equal(original, File.ReadAllBytes(libraryJson));
+            Assert.False(File.Exists(Path.Combine(dest, "library.json.migrated")));
+            var item = Assert.Single(Snapshot(OpenCatalog(dest)).Items);
+            Assert.Equal("clip", item.Id);
+            Assert.Equal(Path.Combine("/to", "clip.mp4"), item.FullPath);
         }
         finally
         {
@@ -282,9 +286,6 @@ public sealed class LibraryArchiveMigrationTests
 
     private static ReelRoulette.Core.Library.LibraryCatalogOpenResult OpenCatalog(string directory)
     {
-        return ReelRoulette.Core.Library.LibraryCatalogStore.Open(directory, new ReelRoulette.Core.Library.LibraryCatalogOpenOptions
-        {
-            ThumbnailDirectory = Path.Combine(directory, "thumbnails")
-        });
+        return ReelRoulette.Core.Library.LibraryCatalogStore.Open(directory);
     }
 }

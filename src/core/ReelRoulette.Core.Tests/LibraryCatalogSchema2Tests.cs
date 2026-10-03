@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 using Microsoft.Data.Sqlite;
 using ReelRoulette.Core.Library;
 using Xunit;
@@ -8,141 +7,45 @@ namespace ReelRoulette.Core.Tests;
 public sealed class LibraryCatalogSchema2Tests
 {
     [Fact]
-    public void Open_Schema1_MigratesPresetsAndThumbnailMetadata()
+    public void Open_Schema1Database_IsQuarantinedAndRefused()
     {
         using var dir = new TempDirectory();
         var thumbs = Path.Combine(dir.Path, "thumbnails");
         Directory.CreateDirectory(thumbs);
         CreateSchema1(dir.Path, "kept-tag");
-        File.WriteAllText(Path.Combine(dir.Path, "presets.json"), """
-            [
-              { "name": " Night ", "filterState": { "selectedTags": ["kept-tag"], "generatedUtc": "ignore-me" } },
-              { "name": " ", "filterState": { "favoritesOnly": true } },
-              { "name": "night", "filterState": { "favoritesOnly": true } }
-            ]
-            """);
-        File.WriteAllText(Path.Combine(thumbs, "index.json"), """
-            {
-              "item-1": { "revision": "rev-1", "width": 320, "height": 180, "generatedUtc": "2020-01-01T00:00:00Z" },
-              "missing-item": { "revision": "nope", "width": 10, "height": 10 },
-              "item-2": { "revision": "rev-2", "width": 0, "height": 15 }
-            }
-            """);
+        var schema1 = File.ReadAllBytes(Path.Combine(dir.Path, "library.db"));
+        var presets = Path.Combine(dir.Path, "presets.json");
+        var index = Path.Combine(thumbs, "index.json");
+        File.WriteAllText(presets, """[{ "name": "Night", "filterState": { "favoritesOnly": true } }]""");
+        File.WriteAllText(index, """{ "item-1": { "revision": "rev-1", "width": 11, "height": 22 } }""");
+        var presetBytes = File.ReadAllBytes(presets);
+        var indexBytes = File.ReadAllBytes(index);
 
-        var opened = CatalogOpen.Open(dir.Path);
+        var refused = CatalogOpen.Open(dir.Path);
 
-        Assert.Equal(LibraryCatalogOpenStatus.Opened, opened.Status);
-        Assert.True(opened.MigratedSchema);
-        Assert.Equal("2", ReadUserVersion(dir.Path));
-        Assert.False(TableExists(dir.Path, "available_tags"));
-        Assert.False(MetaExists(dir.Path, "available_tags_present"));
-        Assert.False(ColumnExists(dir.Path, "items", "generated_utc"));
-        Assert.Equal("kept-tag", Assert.Single(opened.Snapshot()!.Tags).Name);
-        var preset = Assert.Single(opened.Session!.ReadPresets());
-        Assert.Equal("Night", preset.Name);
-        Assert.Contains("kept-tag", preset.FilterStateJson, StringComparison.Ordinal);
-        var item = Assert.Single(opened.Snapshot()!.Items, row => row.Id == "item-1");
-        Assert.Equal("rev-1", item.ThumbnailRevision);
-        Assert.Equal(320, item.ThumbnailWidth);
-        Assert.Equal(180, item.ThumbnailHeight);
-        var zeroWidth = Assert.Single(opened.Snapshot()!.Items, row => row.Id == "item-2");
-        Assert.Equal("rev-2", zeroWidth.ThumbnailRevision);
-        Assert.Null(zeroWidth.ThumbnailWidth);
-        Assert.Equal(15, zeroWidth.ThumbnailHeight);
-        Assert.False(File.Exists(Path.Combine(dir.Path, "presets.json")));
-        Assert.True(File.Exists(Path.Combine(dir.Path, "presets.json.migrated")));
-        Assert.False(File.Exists(Path.Combine(thumbs, "index.json")));
-        Assert.True(File.Exists(Path.Combine(thumbs, "index.json.migrated")));
+        Assert.Equal(LibraryCatalogOpenStatus.Refused, refused.Status);
+        Assert.Equal(LibraryCatalogStore.RefusedMessage, refused.Message);
+        Assert.Null(refused.Session);
+        Assert.False(File.Exists(Path.Combine(dir.Path, "library.db")));
+        Assert.Equal(schema1, File.ReadAllBytes(Path.Combine(dir.Path, "library.db.refused")));
+        Assert.Equal(presetBytes, File.ReadAllBytes(presets));
+        Assert.Equal(indexBytes, File.ReadAllBytes(index));
+        Assert.False(File.Exists(presets + ".migrated"));
+        Assert.False(File.Exists(index + ".migrated"));
     }
 
     [Fact]
-    public void Open_CrashAfterSideFileCopy_DoesNotCopyAgain()
-    {
-        using var dir = new TempDirectory();
-        var thumbs = Path.Combine(dir.Path, "thumbnails");
-        Directory.CreateDirectory(thumbs);
-        CreateSchema1(dir.Path, "kept-tag");
-        File.WriteAllText(Path.Combine(dir.Path, "presets.json"), """[{ "name": "Original", "filterState": { "favoritesOnly": true } }]""");
-        File.WriteAllText(Path.Combine(thumbs, "index.json"), """{ "item-1": { "revision": "rev-1", "width": 11, "height": 22 } }""");
-
-        var ex = Assert.Throws<InvalidOperationException>(() => CatalogOpen.Open(dir.Path, new LibraryCatalogOpenOptions
-        {
-            AfterSideFileCopy = () => throw new InvalidOperationException("crash before rename")
-        }));
-
-        Assert.Equal("crash before rename", ex.Message);
-        Assert.Equal("2", ReadUserVersion(dir.Path));
-        Assert.True(File.Exists(Path.Combine(dir.Path, "presets.json")));
-        Assert.True(File.Exists(Path.Combine(thumbs, "index.json")));
-        File.WriteAllText(Path.Combine(dir.Path, "presets.json"), """[{ "name": "Replacement", "filterState": { "favoritesOnly": false } }]""");
-        File.WriteAllText(Path.Combine(thumbs, "index.json"), """{ "item-1": { "revision": "other", "width": 9, "height": 9 } }""");
-
-        var opened = CatalogOpen.Open(dir.Path);
-
-        Assert.Equal("Original", Assert.Single(opened.Session!.ReadPresets()).Name);
-        var item = Assert.Single(opened.Snapshot()!.Items, row => row.Id == "item-1");
-        Assert.Equal("rev-1", item.ThumbnailRevision);
-        Assert.Equal(11, item.ThumbnailWidth);
-        Assert.False(File.Exists(Path.Combine(dir.Path, "presets.json")));
-        Assert.True(File.Exists(Path.Combine(dir.Path, "presets.json.migrated")));
-        Assert.False(File.Exists(Path.Combine(thumbs, "index.json")));
-    }
-
-    [Fact]
-    public void Open_MissingOrUnreadableSideFiles_DoesNotRefuse()
-    {
-        using var missing = new TempDirectory();
-        CreateSchema1(missing.Path, "kept-tag");
-        var missingOpen = CatalogOpen.Open(missing.Path);
-        Assert.Equal(LibraryCatalogOpenStatus.Opened, missingOpen.Status);
-        Assert.Empty(missingOpen.Session!.ReadPresets());
-        Assert.Null(Assert.Single(missingOpen.Snapshot()!.Items, row => row.Id == "item-1").ThumbnailRevision);
-
-        using var unreadable = new TempDirectory();
-        Directory.CreateDirectory(Path.Combine(unreadable.Path, "thumbnails"));
-        CreateSchema1(unreadable.Path, "kept-tag");
-        File.WriteAllText(Path.Combine(unreadable.Path, "presets.json"), "not json");
-        File.WriteAllText(Path.Combine(unreadable.Path, "thumbnails", "index.json"), "not json");
-        var opened = CatalogOpen.Open(unreadable.Path);
-        Assert.Equal(LibraryCatalogOpenStatus.Opened, opened.Status);
-        Assert.Empty(opened.Session!.ReadPresets());
-        Assert.Null(Assert.Single(opened.Snapshot()!.Items, row => row.Id == "item-1").ThumbnailWidth);
-        Assert.Equal("kept-tag", Assert.Single(opened.Snapshot()!.Tags).Name);
-    }
-
-    [Fact]
-    public void Open_WithoutThumbnailDirectory_LeavesSchema1()
-    {
-        using var dir = new TempDirectory();
-        CreateSchema1(dir.Path, "kept-tag");
-
-        var opened = LibraryCatalogStore.Open(dir.Path);
-
-        Assert.Equal(LibraryCatalogOpenStatus.Opened, opened.Status);
-        Assert.False(opened.MigratedSchema);
-        Assert.Equal("1", ReadUserVersion(dir.Path));
-        Assert.True(TableExists(dir.Path, "available_tags"));
-    }
-
-    [Fact]
-    public void PublishIncoming_LeavesSchema1_UntilTheNextOpen()
+    public void Schema1File_IsNotALibraryDatabase_AndIsNotPrepared()
     {
         using var source = new TempDirectory();
         using var dest = new TempDirectory();
         CreateSchema1(source.Path, "kept-tag");
         var checkpoint = Path.Combine(source.Path, "library.db");
 
-        Assert.Equal(LibraryCatalogStore.CatalogFileInspection.Usable, LibraryCatalogStore.InspectCatalogFile(checkpoint));
-        Assert.Equal(LibraryCatalogStore.DatabaseContentRead.HasContent, LibraryCatalogStore.ReadDatabaseContent(checkpoint));
-        LibraryCatalogStore.PrepareIncomingFromFile(dest.Path, checkpoint);
-        LibraryCatalogStore.PublishIncoming(dest.Path);
-
-        Assert.Equal("1", ReadUserVersion(dest.Path));
-        Assert.True(TableExists(dest.Path, "available_tags"));
-        var migrated = CatalogOpen.Open(dest.Path);
-        Assert.Equal("2", ReadUserVersion(dest.Path));
-        Assert.Equal("kept-tag", Assert.Single(migrated.Snapshot()!.Tags).Name);
-        Assert.False(TableExists(dest.Path, "available_tags"));
+        Assert.Equal(LibraryCatalogStore.CatalogFileInspection.NotADatabase, LibraryCatalogStore.InspectCatalogFile(checkpoint));
+        Assert.Equal(LibraryCatalogStore.DatabaseContentRead.Unreadable, LibraryCatalogStore.ReadDatabaseContent(checkpoint));
+        Assert.Throws<InvalidDataException>(() => LibraryCatalogStore.PrepareIncomingFromFile(dest.Path, checkpoint));
+        Assert.Empty(Directory.GetFiles(dest.Path, "library.db*"));
     }
 
     [Fact]
@@ -299,53 +202,6 @@ public sealed class LibraryCatalogSchema2Tests
         command.Parameters.AddWithValue("$tag", tagName);
         command.Parameters.AddWithValue("$fold", tagName.ToLowerInvariant());
         command.ExecuteNonQuery();
-    }
-
-    private static string ReadUserVersion(string directory)
-    {
-        using var connection = OpenRead(directory);
-        using var command = connection.CreateCommand();
-        command.CommandText = "PRAGMA user_version;";
-        return Convert.ToString(command.ExecuteScalar(), System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty;
-    }
-
-    private static bool TableExists(string directory, string name)
-    {
-        using var connection = OpenRead(directory);
-        using var command = connection.CreateCommand();
-        command.CommandText = "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = $name;";
-        command.Parameters.AddWithValue("$name", name);
-        return command.ExecuteScalar() != null;
-    }
-
-    private static bool ColumnExists(string directory, string table, string column)
-    {
-        using var connection = OpenRead(directory);
-        using var command = connection.CreateCommand();
-        command.CommandText = $"SELECT 1 FROM pragma_table_info('{table}') WHERE name = $name;";
-        command.Parameters.AddWithValue("$name", column);
-        return command.ExecuteScalar() != null;
-    }
-
-    private static bool MetaExists(string directory, string key)
-    {
-        using var connection = OpenRead(directory);
-        using var command = connection.CreateCommand();
-        command.CommandText = "SELECT 1 FROM catalog_meta WHERE key = $key;";
-        command.Parameters.AddWithValue("$key", key);
-        return command.ExecuteScalar() != null;
-    }
-
-    private static SqliteConnection OpenRead(string directory)
-    {
-        var connection = new SqliteConnection(new SqliteConnectionStringBuilder
-        {
-            DataSource = Path.Combine(directory, "library.db"),
-            Mode = SqliteOpenMode.ReadOnly,
-            Pooling = false
-        }.ToString());
-        connection.Open();
-        return connection;
     }
 
     private sealed class TempDirectory : IDisposable

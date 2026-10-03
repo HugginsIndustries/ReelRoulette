@@ -554,7 +554,7 @@ public sealed class LibraryPlaybackServiceTests : IDisposable
         Directory.CreateDirectory(_tempDir);
         var mediaPath = Path.Combine(_tempDir, "kept.mp4");
         File.WriteAllBytes(mediaPath, [0x01]);
-        var host = LibraryCatalogHost.Open(_tempDir, Path.Combine(_tempDir, "thumbnails"));
+        var host = LibraryCatalogHost.Open(_tempDir);
         host.Session.InsertSource("s1", _tempDir, "Media", true);
         host.Session.InsertItem(new LibraryCatalogItem
         {
@@ -609,7 +609,7 @@ public sealed class LibraryPlaybackServiceTests : IDisposable
     public void TrySelectRandom_WeightedRandom_PrefersNeverPlayedItemInTheEligibleSet()
     {
         Directory.CreateDirectory(_tempDir);
-        var host = LibraryCatalogHost.Open(_tempDir, Path.Combine(_tempDir, "thumbnails"));
+        var host = LibraryCatalogHost.Open(_tempDir);
         host.Session.InsertSource("on", "/media", "On", true);
         host.Session.InsertSource("off", "/other", "Off", false);
         host.Session.InsertItem(new LibraryCatalogItem
@@ -694,7 +694,7 @@ public sealed class LibraryPlaybackServiceTests : IDisposable
     public void TrySelectRandom_ShouldReturnNoItem_WhenVideosAndPhotosAreExcluded()
     {
         Directory.CreateDirectory(_tempDir);
-        var host = LibraryCatalogHost.Open(_tempDir, Path.Combine(_tempDir, "thumbnails"));
+        var host = LibraryCatalogHost.Open(_tempDir);
         host.Session.InsertSource("s1", _tempDir, "Media", true);
         host.Session.InsertItem(new LibraryCatalogItem
         {

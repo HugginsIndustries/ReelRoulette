@@ -501,7 +501,7 @@ public sealed class LibraryListQueryTests
         Assert.True(session.SetThumbnail("plain", "r2", 180, 320));
         Assert.False(File.Exists(Path.Combine(dir.Path, "thumbnails", "index.json")));
 
-        var host = LibraryCatalogHost.Open(dir.Path, Path.Combine(dir.Path, "thumbnails"));
+        var host = LibraryCatalogHost.Open(dir.Path);
         var operations = new LibraryOperationsService(host, NullLogger<LibraryOperationsService>.Instance, dir.Path);
         var outcome = operations.QueryLibrary(new LibraryQueryRequest { Limit = 10 });
         Assert.True(outcome.Accepted);
@@ -610,7 +610,7 @@ public sealed class LibraryListQueryTests
         Assert.Equal("keep", byPath!.Id);
         Assert.Null(session.ReadListedItem("missing"));
 
-        var host = LibraryCatalogHost.Open(dir.Path, Path.Combine(dir.Path, "thumbnails"));
+        var host = LibraryCatalogHost.Open(dir.Path);
         var operations = new LibraryOperationsService(host, NullLogger<LibraryOperationsService>.Instance, dir.Path);
         var item = operations.ReadLibraryItem("keep");
         Assert.NotNull(item);

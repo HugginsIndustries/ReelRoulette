@@ -5,33 +5,17 @@ namespace ReelRoulette.Core.Tests;
 
 internal static class CatalogOpen
 {
-    public static LibraryCatalogOpenResult Open(string directory, LibraryCatalogOpenOptions? options = null)
+    public static LibraryCatalogOpenResult Open(string directory)
     {
-        return LibraryCatalogStore.Open(directory, WithThumbnailDirectory(directory, options));
-    }
-
-    public static LibraryCatalogOpenOptions WithThumbnailDirectory(string directory, LibraryCatalogOpenOptions? options)
-    {
-        if (!string.IsNullOrWhiteSpace(options?.ThumbnailDirectory))
-        {
-            return options!;
-        }
-
-        return new LibraryCatalogOpenOptions
-        {
-            BeforePublish = options?.BeforePublish,
-            DirectorySync = options?.DirectorySync,
-            AfterSideFileCopy = options?.AfterSideFileCopy,
-            ThumbnailDirectory = Path.Combine(directory, "thumbnails")
-        };
+        return LibraryCatalogStore.Open(directory);
     }
 
     /// <summary>
-    /// Opens the catalog in a server data folder the way the server does, with thumbnails beside it.
+    /// Opens the catalog in a server data folder the way the server does.
     /// </summary>
     public static LibraryCatalogHost Host(string directory)
     {
-        return LibraryCatalogHost.Open(directory, Path.Combine(directory, "thumbnails"));
+        return LibraryCatalogHost.Open(directory);
     }
 
     /// <summary>

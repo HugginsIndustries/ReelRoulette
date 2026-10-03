@@ -14,7 +14,7 @@ An outline of upcoming releases and the milestones each one ships, in order. v0.
 - **v0.16.0 — Accounts**: Require an account PIN from LAN and remote clients, with HTTPS through a reverse proxy and per-user source access. P28a, P28b, P28c, P28d, P28e, P28f, P28g, P28h, P28i, P28j, P28k, P28l.
 - **v0.17.0 — Structured log migration and Log Viewer**: Move every desktop, server, and WebUI log to the structured API and give the Operator a filterable Log Viewer. P27c, P27d, P27e, P27f, P27g.
 - **v0.18.0 — Playback sessions**: Let the server choose direct, remux, or transcode playback per session for desktop and WebUI. P2a, P2b, P2c, P2d, P2e, P2f, P2g, P2h.
-- **Unscheduled backlog**: P1, P3, P4, P5, P6, P7, P9a, P9b, P10, P20, P30, P31, P32.
+- **Unscheduled backlog**: P1, P3, P4, P5, P6, P7, P9a, P9b, P10, P20, P30, P31, P32, P33.
 
 ## Document Purpose
 
@@ -104,43 +104,7 @@ Do not use this file for detailed architecture explanation or current capability
 
 ## Active Milestones
 
-Last milestone completed: M10j5
-
-### M10j6 - Remove library.json Library Support
-
-- **Status**: ⏳ Planned
-- **Goal**: Remove `library.json` as a library format, the schema 1 catalog migration, and the side-file copy in v0.14.0, so the catalog store only opens or creates a schema version 2 `library.db`.
-- **Scope**:
-  - Depends on: Seed Tests Through SQL.
-  - Ships in v0.14.0.
-  - Startup does not look for `library.json` or `library.json.migrated`. Those files do not change open, refuse, or empty-catalog behavior. A missing `library.db` creates an empty catalog with SQL, not by parsing an empty document, whether or not `library.json` is present. `library.json` is left untouched. A healthy `library.db` opens. A corrupt `library.db` is quarantined and startup refuses with the same result it uses when those files are absent. They are not read, not a restore path, and not deleted. Startup and user-facing strings do not mention either file.
-  - Delete the JSON-to-SQLite importer, including `PrepareIncomingFromJson`. Tests build a catalog in `library.db`. They do not write `library.json` to create one.
-  - Also remove the schema 1 to schema 2 migration and the `presets.json` / `index.json` side-file copy. This overrides the earlier decision to keep the schema 1 migration: no release ever wrote a schema 1 catalog. Release builds before v0.13.0 had no catalog, and the first build after schema 1 was introduced already wrote schema version 2. That removes `LibraryCatalogStore.SideFiles.cs`, `PreviousSchemaVersion`, the schema 1 table list and health branch, the `side_files_copied` key handling, `AfterSideFileCopy`, the open result's migrated-schema flag, and the server's migrated-schema log line. A `library.db` at schema version 1 is treated like any other database with an unrecognized schema. An existing `side_files_copied` row in a catalog is left in place and not read. `presets.json`, `index.json`, and their `.migrated` copies are left untouched.
-  - Remove the desktop `LibraryArchive` JSON helpers: `LibraryJsonHasContent` in the overwrite check and `RetireUnmigratedLibraryJson` after import.
-  - Import already has no `library.json` path and no zip. A file that is not a library database is rejected. A `.db` import still remaps sources. Export and catalog backups stay on `library.db`.
-  - Update current-state docs and the testing checklist to say `library.json` library support is removed, including the checklist item that a v0.12.0 library migrates on first start.
-  - Add a Release Specific checklist item: "On Windows, first start with no data folder, and with a data folder holding only `library.json`, opens an empty library."
-- **Acceptance criteria**:
-  - Startup does not migrate `library.json` and does not rebuild a catalog from `library.json.migrated`.
-  - A missing `library.db` creates an empty healthy `library.db` at schema version 2 with SQL, whether or not `library.json` or `library.json.migrated` is present. Those files are left in place and are not read. No message mentions them.
-  - A healthy `library.db` opens. A corrupt `library.db` is quarantined and startup refuses the same way whether or not those JSON files are present, and it is not repaired from them.
-  - There is no JSON-to-SQLite importer and no `PrepareIncomingFromJson`. There is no schema 1 migration and no side-file copy. A missing database does not read `presets.json` or the thumbnail index, and those files are left in place.
-  - A schema version 1 `library.db` is quarantined and refused like any other unrecognized database.
-  - Desktop import does not read or rename `library.json`. A folder whose only library data is `library.json` does not ask for overwrite confirmation.
-  - There is no `library.json` import path and no deprecation message for that format. A `.db` import still remaps sources.
-  - A file that is not a library database is not imported, including a file that used to be a `library.json` archive. Import does not replace the live catalog.
-  - Startup messages and user-facing copy do not mention `library.json` or `library.json.migrated`.
-  - Docs and the testing checklist describe `library.json` library support as removed in v0.14.0.
-- **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include tests that a missing database creates an empty schema version 2 database with SQL whether or not `library.json` or `library.json.migrated` is present and leaves those files untouched, does not read `presets.json` or the thumbnail index, a healthy database opens with those JSON files present, a corrupt database is refused the same way with or without them, a schema version 1 database is refused, a file that is not a library database is not imported, a `.db` import still remaps sources, and desktop import leaves `library.json` untouched.
-  - Completion evidence must include one quick Linux spot check of first start with a data folder holding only `library.json`. The Windows first-start check is the Release Specific checklist item above, run in the pre-release pass.
-  - Docs evidence must include current-state and checklist updates that `library.json` library support is removed in v0.14.0.
-- **Deferrals / Follow-ups**:
-  - Release notes for v0.14.0 must say: users on v0.12.0 or earlier must start v0.13.0 once before updating to v0.14.0, because v0.14.0 does not convert `library.json`.
-  - Release notes for v0.14.0 must give the recovery steps for anyone who updated straight from v0.12.0 and sees an empty library: delete the new `library.db`, start v0.13.0 once to convert `library.json`, then update to v0.14.0 again.
-  - Scrubbing every remaining `library.json` mention from product code, comments, user-facing copy, tests, and current-state docs is the next milestone.
-  - Operator export and import stay with Operator Library Catalog Transfer. That transfer is a `library.db` checkpoint.
-  - Accounts stay with the Account Store work, in their own store outside `library.db`.
+Last milestone completed: M10j6
 
 ### M10j7 - Scrub library.json From the Product
 
@@ -151,6 +115,7 @@ Last milestone completed: M10j5
   - Ships in v0.14.0.
   - Product code, comments, user-facing copy, tests, and current-state docs do not mention `library.json`, `library.json.migrated`, or a legacy flat tag list.
   - They also do not mention the catalog document (for example "does not load the full catalog document" in `docs/api.md`, `docs/architecture.md`, `CONTEXT.md`, and the description text in `shared/api/openapi.yaml`), schema 1 or a schema 1 migration, `presets.json`, or the thumbnail `index.json`.
+  - Rename the empty-catalog temp file `library.db.migrating`, left from the removed migration, to a name that does not mention migration, and delete a leftover file with the old name when a catalog is created.
   - Remove the `docs/feature-migration.md` §3.17 Tag-Catalog Migration Wizard entry, whose dialog is gone.
   - Fix the other `docs/feature-migration.md` sections the planned-milestones audit found stale:
     - The header says no Operator UI project exists. The Operator page exists, served by the server at `/operator`.
@@ -1568,9 +1533,72 @@ Last milestone completed: M10j5
 
 ---
 
+### P33 - Catalog Corruption Detection Off the Startup Path
+
+- **Status**: ⏳ Planned
+- **Goal**: Detect a corrupt `library.db` anywhere in the file without adding to startup time.
+- **Scope**:
+  - Unscheduled.
+  - Startup reads only the schema and the catalog's `revision` row, so corruption confined to item, tag, or preset pages passes the open and surfaces at the first query that reads those pages. A full check on every open reads the whole file and slows startup on large catalogs.
+  - Candidate: run a full integrity check when a catalog backup is made, and on failure keep the last good backup, log it, and report it on the Operator status. Decide whether a failed check also refuses the next startup.
+  - Startup keeps its revision-row read.
+- **Acceptance criteria**:
+  - A catalog with corrupt item pages is reported without opening it in full at startup.
+  - Startup time does not grow with catalog size because of the check.
+  - A corrupt catalog is not written over the last good backup.
+- **Verification evidence**:
+  - Evidence placeholders maintained at planned state; completion evidence must include a corrupt-item-page test and a startup timing comparison on a large catalog.
+- **Deferrals / Follow-ups**:
+  - None yet.
+
+---
+
 ## Completed Milestones
 
 Latest completions first:
+
+### M10j6 - Remove library.json Library Support
+
+- **Status**: ✅ Complete
+- **Goal**: Remove `library.json` as a library format, the schema 1 catalog migration, and the side-file copy in v0.14.0, so the catalog store only opens or creates a schema version 2 `library.db`.
+- **Scope**:
+  - Depends on: Seed Tests Through SQL.
+  - Ships in v0.14.0.
+  - Startup does not look for `library.json` or `library.json.migrated`. Those files do not change open, refuse, or empty-catalog behavior. A missing `library.db` creates an empty catalog with SQL, not by parsing an empty document, whether or not `library.json` is present. `library.json` is left untouched. A healthy `library.db` opens. A corrupt `library.db` is quarantined and startup refuses with the same result it uses when those files are absent. They are not read, not a restore path, and not deleted. Startup and user-facing strings do not mention either file.
+  - Delete the JSON-to-SQLite importer, including `PrepareIncomingFromJson`. Tests build a catalog in `library.db`. They do not write `library.json` to create one.
+  - Also remove the schema 1 to schema 2 migration and the `presets.json` / `index.json` side-file copy. This overrides the earlier decision to keep the schema 1 migration: no release ever wrote a schema 1 catalog. Release builds before v0.13.0 had no catalog, and the first build after schema 1 was introduced already wrote schema version 2. That removes `LibraryCatalogStore.SideFiles.cs`, `PreviousSchemaVersion`, the schema 1 table list and health branch, the `side_files_copied` key handling, `AfterSideFileCopy`, the open result's migrated-schema flag, and the server's migrated-schema log line. A `library.db` at schema version 1 is treated like any other database with an unrecognized schema. An existing `side_files_copied` row in a catalog is left in place and not read. `presets.json`, `index.json`, and their `.migrated` copies are left untouched.
+  - Remove the desktop `LibraryArchive` JSON helpers: `LibraryJsonHasContent` in the overwrite check and `RetireUnmigratedLibraryJson` after import.
+  - Import already has no `library.json` path and no zip. A file that is not a library database is rejected. A `.db` import still remaps sources. Export and catalog backups stay on `library.db`.
+  - Update current-state docs and the testing checklist to say `library.json` library support is removed, including the checklist item that a v0.12.0 library migrates on first start.
+  - Add a Release Specific checklist item: "On Windows, first start with no data folder, and with a data folder holding only `library.json`, opens an empty library."
+- **Acceptance criteria**:
+  - Startup does not migrate `library.json` and does not rebuild a catalog from `library.json.migrated`.
+  - A missing `library.db` creates an empty healthy `library.db` at schema version 2 with SQL, whether or not `library.json` or `library.json.migrated` is present. Those files are left in place and are not read. No message mentions them.
+  - A healthy `library.db` opens. A corrupt `library.db` is quarantined and startup refuses the same way whether or not those JSON files are present, and it is not repaired from them.
+  - There is no JSON-to-SQLite importer and no `PrepareIncomingFromJson`. There is no schema 1 migration and no side-file copy. A missing database does not read `presets.json` or the thumbnail index, and those files are left in place.
+  - A schema version 1 `library.db` is quarantined and refused like any other unrecognized database.
+  - Desktop import does not read or rename `library.json`. A folder whose only library data is `library.json` does not ask for overwrite confirmation.
+  - There is no `library.json` import path and no deprecation message for that format. A `.db` import still remaps sources.
+  - A file that is not a library database is not imported, including a file that used to be a `library.json` archive. Import does not replace the live catalog.
+  - Startup messages and user-facing copy do not mention `library.json` or `library.json.migrated`.
+  - Docs and the testing checklist describe `library.json` library support as removed in v0.14.0.
+- **Verification evidence**:
+  - Before: `dotnet test ReelRoulette.sln` passed 441 (Core 274, Desktop 167). After: it passes 432 (Core 265, Desktop 167). Deleted: the 13 `library.json` migration tests, the 5 schema 1 and side-file tests, the loudness-error-from-JSON session test (session writes and the seeding helper's test already cover that column), and the refusal and empty-create tests that named `library.json`, which were rewritten.
+  - Added or rewritten: a missing database creates an empty healthy schema version 2 catalog (Uncategorized category, revision 0, no presets, no thumbnail columns, only the `revision` meta row) with nothing present, with `library.json`, with `library.json.migrated`, with both, and with those plus `presets.json` and `thumbnails/index.json` holding data, and every one of those files is byte-identical afterward with no `.migrated` file created. A healthy seeded catalog opens unchanged with all four files present. A file that is not a database, a database with corrupt row pages, and an unversioned database are each quarantined to `library.db.refused` and refused with the same message with and without the JSON files, which stay untouched. A schema version 1 database is quarantined and refused, leaves `presets.json` and `index.json` untouched, and is rejected by catalog inspection and by preparing an import. An existing `side_files_copied` row is kept and not read. A `library.json` document is not imported and leaves the live catalog. Desktop: a folder whose only library data is `library.json` does not count for overwrite confirmation, and import into it needs no confirmation, remaps sources, and leaves `library.json` byte-identical.
+  - Removing the side-file copy also removed the only row read on open, which was what quarantined a database with corrupt row pages. Approved fix: open reads the catalog's `revision` row after the schema check, and both corrupt-row-page cases fail without it. Stronger detection is the Catalog Corruption Detection Off the Startup Path backlog item.
+  - The empty-catalog create path did not use the before-publish or directory-sync hooks, so the open options and the server's thumbnail-folder open parameter were removed with no loss of coverage.
+  - Mutation checks, each restored afterward: removing the revision read failed 2 tests; moving `library.json` aside when creating a catalog failed 3; a JSON-specific refusal message failed 3; accepting schema version 1 failed 2; writing `side_files_copied` on create failed 5; renaming `library.json` after desktop import failed 1; counting `library.json` as library data failed 2.
+  - SystemChecks passes. `dotnet build ReelRoulette.sln` has no warnings or errors.
+  - Linux spot check: the built server, run from an isolated data, config, and XDG folder holding only `library.json`, started with empty library stats and sources, created `library.db` at user version 2, left `library.json` byte-identical with no `.migrated` file, and logged nothing about `library.json`. The server was stopped by its own PID and the folder removed.
+  - Docs: `CONTEXT.md`, `docs/architecture.md`, `docs/dev-setup.md`, and `docs/domain-inventory.md` say `library.json` library support is removed in v0.14.0. `docs/feature-migration.md` says a leftover `library.json` does not count for overwrite confirmation and is left in place. The testing checklist has the Windows first-start item under Release Specific. It no longer had an item saying a v0.12.0 library migrates on first start; the last checklist reset had cleared it.
+- **Deferrals / Follow-ups**:
+  - Release notes for v0.14.0 must say: users on v0.12.0 or earlier must start v0.13.0 once before updating to v0.14.0, because v0.14.0 does not convert `library.json`.
+  - Release notes for v0.14.0 must give the recovery steps for anyone who updated straight from v0.12.0 and sees an empty library: delete the new `library.db`, start v0.13.0 once to convert `library.json`, then update to v0.14.0 again.
+  - Scrubbing every remaining `library.json` mention from product code, comments, user-facing copy, tests, and current-state docs is the next milestone.
+  - Operator export and import stay with Operator Library Catalog Transfer. That transfer is a `library.db` checkpoint.
+  - Accounts stay with the Account Store work, in their own store outside `library.db`.
+  - Stronger corruption detection that does not add to startup time is the Catalog Corruption Detection Off the Startup Path backlog item.
+  - The empty-catalog temp file is still named `library.db.migrating`; the scrub milestone renames it.
 
 ### M10j5 - Seed Tests Through SQL
 

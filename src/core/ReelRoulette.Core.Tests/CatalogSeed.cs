@@ -191,7 +191,6 @@ internal static class CatalogSeed
             }
 
             Execute(connection, "INSERT INTO catalog_meta VALUES ('revision', '0');");
-            Execute(connection, "INSERT INTO catalog_meta VALUES ('side_files_copied', '1');");
 
             Execute(connection, "PRAGMA user_version = 2;");
             Execute(connection, "COMMIT;");

@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 using ReelRoulette.Core.Library;
 
 namespace ReelRoulette.LibraryArchive;
@@ -25,13 +24,8 @@ public static class LibraryArchiveMigration
     public static bool LibraryExistsWithContentOnDisk(string roamingDirectory)
     {
         var databasePath = Path.Combine(roamingDirectory, LibraryCatalogStore.DatabaseFileName);
-        if (File.Exists(databasePath) &&
-            LibraryCatalogStore.ReadDatabaseContent(databasePath) != LibraryCatalogStore.DatabaseContentRead.Empty)
-        {
-            return true;
-        }
-
-        return LibraryJsonHasContent(Path.Combine(roamingDirectory, LibraryCatalogStore.LibraryFileName));
+        return File.Exists(databasePath) &&
+            LibraryCatalogStore.ReadDatabaseContent(databasePath) != LibraryCatalogStore.DatabaseContentRead.Empty;
     }
 
     public static bool TryReadSourceRootPaths(string databasePath, out IReadOnlyList<string> roots, out string? error)
@@ -106,7 +100,6 @@ public static class LibraryArchiveMigration
             importPlaced = true;
             BeforeDiscardingPreviousCatalog?.Invoke(roamingDir);
             LibraryCatalogStore.DiscardPrevious(roamingDir);
-            RetireUnmigratedLibraryJson(roamingDir);
         }
         catch (Exception ex)
         {
@@ -163,49 +156,6 @@ public static class LibraryArchiveMigration
             Message = ImportCompletedMessage,
             RestartRecommended = true
         };
-    }
-
-    private static bool LibraryJsonHasContent(string path)
-    {
-        if (!File.Exists(path))
-        {
-            return false;
-        }
-
-        try
-        {
-            var root = JsonNode.Parse(File.ReadAllText(path)) as JsonObject;
-            if (root == null)
-            {
-                return false;
-            }
-
-            var sources = root["sources"] as JsonArray;
-            var items = root["items"] as JsonArray;
-            return (sources?.Count ?? 0) > 0 || (items?.Count ?? 0) > 0;
-        }
-        catch (System.Text.Json.JsonException)
-        {
-            return false;
-        }
-    }
-
-    private static void RetireUnmigratedLibraryJson(string roamingDirectory)
-    {
-        var libraryPath = Path.Combine(roamingDirectory, LibraryCatalogStore.LibraryFileName);
-        if (!File.Exists(libraryPath))
-        {
-            return;
-        }
-
-        var migratedPath = Path.Combine(roamingDirectory, LibraryCatalogStore.MigratedLibraryFileName);
-        if (File.Exists(migratedPath))
-        {
-            File.Delete(libraryPath);
-            return;
-        }
-
-        File.Move(libraryPath, migratedPath);
     }
 }
 
