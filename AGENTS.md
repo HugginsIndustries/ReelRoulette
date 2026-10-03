@@ -61,4 +61,5 @@ Keep this file short and enforceable. For details, use `CONTEXT.md`, `MILESTONES
 - Do not point verification or smoke servers at the developer's real `%ApplicationData%/ReelRoulette` / `~/.config/ReelRoulette` tree.
 - Dev-run helpers such as `run-server.ps1` intentionally use real settings and must not be isolated.
 - Tests must not read or write the developer's real settings or send logs to a running server. Desktop tests get this from the shared test-isolation initializer; new test projects need the same.
+- Tests that resolve a path with `Path.GetFullPath` or remap it must root it under the test's temp directory with `Path.Combine`, never hard-code Unix-style roots like `/media`. CI runs on Windows, where such paths become drive paths. Literals that are only stored and compared as text are fine.
 - When validating process-lifecycle or smoke-script changes, never send stop signals to processes the task did not start (for example a developer's `run-server.ps1` instance). Confirm liveness and cleanup with non-destructive checks only, such as `kill -0`, `Get-Process` without stopping, or a port/listener query scoped to the verification port.

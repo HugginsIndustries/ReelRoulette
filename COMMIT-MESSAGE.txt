@@ -19,12 +19,13 @@ Instructions:
 
 Commit Message:
 
-M10j6: Remove library.json library support
+M10j7: Scrub library.json from the product
 
-- Startup no longer converts `library.json` or rebuilds from `library.json.migrated`. A missing `library.db` is created empty with SQL, and those files, `presets.json`, and the thumbnail index are left in place and not read.
-- Remove the JSON-to-SQLite importer, the schema 1 migration, and the side-file copy. A schema version 1 database is quarantined and refused like any other unrecognized database.
-- Open reads the catalog's revision row after the schema check, so a database with corrupt row pages is still quarantined now that the side-file read is gone.
-- Remove the catalog open options, the server's thumbnail-folder open parameter, the migrated-schema flag, and its startup log line.
-- Desktop import no longer counts `library.json` for overwrite confirmation or renames it after import.
-- Replace the migration tests with tests for empty creation, refusal with and without the JSON files, schema 1 refusal, and desktop import leaving `library.json` untouched.
-- Update current-state docs, the changelog, and the testing checklist; mark the milestone complete and add a backlog item for corruption detection off the startup path.
+- Rename the empty-catalog temp file to `library.db.creating`.
+- Remove leftover-JSON test cases, rename schema 1 tests to unrecognized schema versions, and give backup trim tests neutral neighbor files.
+- Build source roots that tests remap or resolve under each test's temp folder so they pass on Windows, and add an `AGENTS.md` rule for such paths.
+- Remove the disabled tag migration comment and "removed, now X" tombstone comments from the desktop main window, and the retired portable smoke mention from the Linux server smoke script.
+- Drop `library.json`, catalog document, and thumbnail index wording from current-state docs and the OpenAPI descriptions, and regenerate WebUI contracts.
+- Fix `CONTEXT.md` on Android install over HTTPS and on which client resumes its event stream.
+- Bring `docs/feature-migration.md` up to date with the WebUI, the Operator page, and current routes.
+- List the desktop flows that still run locally in `docs/domain-inventory.md`, reword the Windows first-start checklist item, and mark the milestone complete.

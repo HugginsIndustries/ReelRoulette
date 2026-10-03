@@ -158,7 +158,7 @@ public sealed class ServerStateRegressionTests
     }
 
     [Fact]
-    public void BootstrapFromDisk_ShouldNotLoadPresetsFromLegacySettingsJson()
+    public void BootstrapFromDisk_ShouldNotLoadPresetsFromSettingsJson()
     {
         var appDataPath = Path.Combine(Path.GetTempPath(), "reelroulette-server-state-tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(appDataPath);
@@ -182,7 +182,6 @@ public sealed class ServerStateRegressionTests
             var service = new ServerStateService(catalog: CatalogOpen.Host(appDataPath));
             var presetCatalog = service.GetPresetCatalogSnapshot();
             Assert.Empty(presetCatalog);
-            Assert.False(File.Exists(Path.Combine(appDataPath, "presets.json")));
         }
         finally
         {
@@ -220,7 +219,6 @@ public sealed class ServerStateRegressionTests
             var raw = preset.FilterState.GetRawText();
             Assert.Contains("TagB", raw, StringComparison.Ordinal);
             Assert.DoesNotContain("TagA", raw, StringComparison.Ordinal);
-            Assert.False(File.Exists(Path.Combine(appDataPath, "presets.json")));
             Assert.False(File.Exists(Path.Combine(appDataPath, "desktop-settings.json")));
 
             var reloaded = new ServerStateService(catalog: CatalogOpen.Host(appDataPath));

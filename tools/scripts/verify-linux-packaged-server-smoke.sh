@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Headless HTTP smoke for the Velopack Linux server AppImage (same endpoints as legacy portable smoke).
+# Headless HTTP smoke for the Velopack Linux server AppImage.
 # When FUSE is unavailable (typical CI), --appimage-extract-and-run extracts to a temp dir and runs the payload.
 
 usage() {

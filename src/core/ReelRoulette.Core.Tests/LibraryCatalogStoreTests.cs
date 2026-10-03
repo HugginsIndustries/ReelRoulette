@@ -6,21 +6,10 @@ namespace ReelRoulette.Core.Tests;
 
 public sealed class LibraryCatalogStoreTests
 {
-    public static TheoryData<string[]> LeftoverJsonFiles => new()
-    {
-        Array.Empty<string>(),
-        new[] { "library.json" },
-        new[] { "library.json.migrated" },
-        new[] { "library.json", "library.json.migrated" },
-        new[] { "library.json", "library.json.migrated", "presets.json", "thumbnails/index.json" }
-    };
-
-    [Theory]
-    [MemberData(nameof(LeftoverJsonFiles))]
-    public void Open_MissingDatabase_CreatesEmptySchema2Catalog_AndLeavesJsonFilesUnread(string[] leftovers)
+    [Fact]
+    public void Open_MissingDatabase_CreatesEmptySchema2Catalog()
     {
         using var dir = new TempDirectory();
-        var originals = WriteLeftoverJson(dir.Path, leftovers);
 
         var result = CatalogOpen.Open(dir.Path);
 
@@ -40,23 +29,19 @@ public sealed class LibraryCatalogStoreTests
         Assert.Equal(LibraryCatalogStore.CatalogFileInspection.Usable, LibraryCatalogStore.InspectCatalogFile(result.Session.DatabasePath));
         Assert.Equal(["revision"], ReadMetaKeys(dir.Path));
         Assert.DoesNotContain("available_tags", ReadSchema(dir.Path), StringComparison.Ordinal);
-        AssertUnchanged(dir.Path, originals);
-        Assert.Empty(Directory.GetFiles(dir.Path, "*.migrated", SearchOption.AllDirectories)
-            .Where(path => !originals.ContainsKey(Path.GetRelativePath(dir.Path, path).Replace('\\', '/'))));
         Assert.DoesNotContain(
             Directory.GetFiles(dir.Path).Select(Path.GetFileName),
             name => name!.StartsWith("library.db.", StringComparison.Ordinal));
     }
 
     [Fact]
-    public void Open_HealthyDatabase_OpensUnchanged_WithJsonFilesPresent()
+    public void Open_HealthyDatabase_OpensUnchanged()
     {
         using var dir = new TempDirectory();
         CatalogSeed.Write(
             dir.Path,
             items: [new SeedItem("item-1", "/real.mp4") { PlayCount = 3 }],
             presets: [new SeedPreset("Kept", """{"favoritesOnly":true}""")]);
-        var originals = WriteLeftoverJson(dir.Path, ["library.json", "library.json.migrated", "presets.json", "thumbnails/index.json"]);
 
         var opened = CatalogOpen.Open(dir.Path);
 
@@ -66,59 +51,46 @@ public sealed class LibraryCatalogStoreTests
         Assert.Equal(3, item.PlayCount);
         Assert.Null(item.ThumbnailRevision);
         Assert.Equal("Kept", Assert.Single(opened.Session!.ReadPresets()).Name);
-        AssertUnchanged(dir.Path, originals);
     }
 
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void Open_DatabaseThatIsNotADatabase_IsQuarantinedAndRefused_WhetherOrNotJsonFilesExist(bool withJson)
+    [Fact]
+    public void Open_DatabaseThatIsNotADatabase_IsQuarantinedAndRefused()
     {
         using var dir = new TempDirectory();
         File.WriteAllText(Path.Combine(dir.Path, "library.db"), "not a database");
-        var originals = WriteLeftoverJson(dir.Path, withJson ? ["library.json", "library.json.migrated"] : []);
 
         var refused = CatalogOpen.Open(dir.Path);
 
         AssertRefusedAndQuarantined(dir.Path, refused);
-        AssertUnchanged(dir.Path, originals);
     }
 
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void Open_CorruptRowPage_IsQuarantinedAndRefused_WhetherOrNotJsonFilesExist(bool withJson)
+    [Fact]
+    public void Open_CorruptRowPage_IsQuarantinedAndRefused()
     {
         using var dir = new TempDirectory();
         CatalogSeed.Write(
             dir.Path,
             items: [new SeedItem("kept", "/kept.mp4") { Fingerprint = new string('x', 20_000) }]);
         CorruptPagesAfterHeader(Path.Combine(dir.Path, "library.db"));
-        var originals = WriteLeftoverJson(dir.Path, withJson ? ["library.json", "library.json.migrated"] : []);
 
         var refused = CatalogOpen.Open(dir.Path);
 
         AssertRefusedAndQuarantined(dir.Path, refused);
-        AssertUnchanged(dir.Path, originals);
-    }
-
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void Open_UnversionedDatabase_IsQuarantinedAndRefused_WhetherOrNotJsonFilesExist(bool withJson)
-    {
-        using var dir = new TempDirectory();
-        CreateEmptyDatabase(Path.Combine(dir.Path, "library.db"));
-        var originals = WriteLeftoverJson(dir.Path, withJson ? ["library.json", "library.json.migrated"] : []);
-
-        var refused = CatalogOpen.Open(dir.Path);
-
-        AssertRefusedAndQuarantined(dir.Path, refused);
-        AssertUnchanged(dir.Path, originals);
     }
 
     [Fact]
-    public void Open_LeftoverSideFilesCopiedRow_IsKeptAndNotRead()
+    public void Open_UnversionedDatabase_IsQuarantinedAndRefused()
+    {
+        using var dir = new TempDirectory();
+        CreateEmptyDatabase(Path.Combine(dir.Path, "library.db"));
+
+        var refused = CatalogOpen.Open(dir.Path);
+
+        AssertRefusedAndQuarantined(dir.Path, refused);
+    }
+
+    [Fact]
+    public void Open_UnknownMetaRow_IsKeptAndNotRead()
     {
         using var dir = new TempDirectory();
         CatalogSeed.Write(dir.Path, items: [new SeedItem("item-1", "/clips/a.mp4")]);
@@ -130,15 +102,12 @@ public sealed class LibraryCatalogStoreTests
             command.ExecuteNonQuery();
         }
 
-        var originals = WriteLeftoverJson(dir.Path, ["presets.json", "thumbnails/index.json"]);
-
         var opened = CatalogOpen.Open(dir.Path);
 
         Assert.Equal(LibraryCatalogOpenStatus.Opened, opened.Status);
         Assert.Equal(["revision", "side_files_copied"], ReadMetaKeys(dir.Path));
         Assert.Empty(opened.Session!.ReadPresets());
         Assert.Null(Assert.Single(opened.Snapshot()!.Items).ThumbnailRevision);
-        AssertUnchanged(dir.Path, originals);
     }
 
     [Fact]
@@ -228,46 +197,13 @@ public sealed class LibraryCatalogStoreTests
         Assert.False(readOnly.Pooling);
     }
 
-    private static readonly Dictionary<string, string> LeftoverJsonContent = new(StringComparer.Ordinal)
-    {
-        ["library.json"] = """{ "sources": [ { "id": "s1", "rootPath": "/from-json" } ], "items": [ { "id": "from-json", "fullPath": "/from-json/a.mp4", "fileName": "a.mp4" } ] }""",
-        ["library.json.migrated"] = """{ "items": [ { "id": "from-migrated", "fullPath": "/other.mp4", "fileName": "other.mp4" } ] }""",
-        ["presets.json"] = """[ { "name": "FromJson", "filterState": { "favoritesOnly": true } } ]""",
-        ["thumbnails/index.json"] = """{ "from-json": { "revision": "rev-json", "width": 320, "height": 180 }, "item-1": { "revision": "rev-json", "width": 320, "height": 180 } }"""
-    };
-
-    private static Dictionary<string, byte[]> WriteLeftoverJson(string directory, IEnumerable<string> names)
-    {
-        var written = new Dictionary<string, byte[]>(StringComparer.Ordinal);
-        foreach (var name in names)
-        {
-            var path = Path.Combine(directory, name);
-            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            File.WriteAllText(path, LeftoverJsonContent[name]);
-            written[name] = File.ReadAllBytes(path);
-        }
-
-        return written;
-    }
-
-    private static void AssertUnchanged(string directory, IReadOnlyDictionary<string, byte[]> originals)
-    {
-        foreach (var (name, bytes) in originals)
-        {
-            Assert.Equal(bytes, File.ReadAllBytes(Path.Combine(directory, name)));
-        }
-    }
-
     private static void AssertRefusedAndQuarantined(string directory, LibraryCatalogOpenResult refused)
     {
         Assert.Equal(LibraryCatalogOpenStatus.Refused, refused.Status);
         Assert.Equal(LibraryCatalogStore.RefusedMessage, refused.Message);
-        Assert.DoesNotContain("library.json", refused.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Null(refused.Session);
         Assert.False(File.Exists(Path.Combine(directory, "library.db")));
         Assert.True(File.Exists(Path.Combine(directory, "library.db.refused")));
-        Assert.Empty(Directory.GetFiles(directory, "*.migrated", SearchOption.AllDirectories)
-            .Where(path => Path.GetFileName(path) != "library.json.migrated"));
     }
 
     private static List<string> ReadMetaKeys(string directory)
@@ -477,12 +413,14 @@ public sealed class LibraryCatalogStoreTests
     public void RemapSources_RejectsItemThatResolvesBesideTheDestinationRoot()
     {
         using var dir = new TempDirectory();
+        var root = Path.Combine(dir.Path, "media", "movies");
+        var besideRoot = Path.Combine(dir.Path, "media", "movies-extra", "a.mp4");
         CatalogSeed.Write(
             dir.Path,
-            sources: [new SeedSource("s1", "/media/movies", "Movies")],
+            sources: [new SeedSource("s1", root, "Movies")],
             items:
             [
-                new SeedItem("i1", "/media/movies-extra/a.mp4")
+                new SeedItem("i1", besideRoot)
                 {
                     SourceId = "s1",
                     RelativePath = "../movies-extra/a.mp4"
@@ -491,13 +429,13 @@ public sealed class LibraryCatalogStoreTests
         var opened = CatalogOpen.Open(dir.Path);
         var result = LibraryCatalogStore.RemapSources(
             opened.Session!.DatabasePath,
-            new Dictionary<string, string>(StringComparer.Ordinal) { ["/media/movies"] = "/media/movies" },
+            new Dictionary<string, string>(StringComparer.Ordinal) { [root] = root },
             new HashSet<string>(StringComparer.Ordinal));
 
         Assert.False(result.Success);
         Assert.Contains("escapes the destination root", result.ErrorMessage, StringComparison.Ordinal);
         var stored = LibraryCatalogStore.Read(opened.Session.DatabasePath);
-        Assert.Equal("/media/movies-extra/a.mp4", Assert.Single(stored.Items).FullPath);
+        Assert.Equal(besideRoot, Assert.Single(stored.Items).FullPath);
     }
 
     [Fact]
@@ -510,10 +448,10 @@ public sealed class LibraryCatalogStoreTests
     }
 
     [Fact]
-    public void InspectCatalogFile_RejectsALibraryJsonDocument()
+    public void InspectCatalogFile_RejectsAJsonDocument()
     {
         using var dir = new TempDirectory();
-        var path = Path.Combine(dir.Path, "library.json");
+        var path = Path.Combine(dir.Path, "export.json");
         File.WriteAllText(path, """{"sources":[{"id":"s1","rootPath":"/from"}],"items":[{"id":"clip","fullPath":"/from/clip.mp4"}]}""");
         Assert.Equal(LibraryCatalogStore.CatalogFileInspection.NotADatabase, LibraryCatalogStore.InspectCatalogFile(path));
         Assert.Equal(LibraryCatalogStore.DatabaseContentRead.Unreadable, LibraryCatalogStore.ReadDatabaseContent(path));

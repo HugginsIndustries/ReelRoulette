@@ -11,19 +11,15 @@ public sealed class LibraryArchiveMigrationTests
     {
         Assert.Contains("library catalog", LibraryArchiveMigration.OverwriteConfirmationMessage, StringComparison.Ordinal);
         Assert.DoesNotContain("presets", LibraryArchiveMigration.OverwriteConfirmationMessage, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("library.json", LibraryArchiveMigration.OverwriteConfirmationMessage, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
-    public void LibraryExistsWithContent_IgnoresLibraryJson_AndIncludesAnUnreadableDatabase()
+    public void LibraryExistsWithContent_IsFalseForAnEmptyFolder_AndTrueForAnUnreadableDatabase()
     {
         var temp = Path.Combine(Path.GetTempPath(), "rr-exists-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(temp);
         try
         {
-            Assert.False(LibraryArchiveMigration.LibraryExistsWithContentOnDisk(temp));
-            File.WriteAllText(Path.Combine(temp, "library.json"), """{"sources":[{"id":"s1","rootPath":"/from"}],"items":[{"id":"kept"}]}""");
-            File.WriteAllText(Path.Combine(temp, "library.json.migrated"), """{"items":[{"id":"old"}]}""");
             Assert.False(LibraryArchiveMigration.LibraryExistsWithContentOnDisk(temp));
             File.WriteAllText(Path.Combine(temp, "library.db"), "not a database");
             Assert.True(LibraryArchiveMigration.LibraryExistsWithContentOnDisk(temp));
@@ -63,7 +59,7 @@ public sealed class LibraryArchiveMigrationTests
     }
 
     [Fact]
-    public void Import_RejectsALibraryJsonDocument_AndLeavesTheLiveCatalog()
+    public void Import_RejectsAJsonDocument_AndLeavesTheLiveCatalog()
     {
         var temp = Path.Combine(Path.GetTempPath(), "rr-json-archive-" + Guid.NewGuid().ToString("N"));
         var dest = Path.Combine(temp, "dest");
@@ -108,12 +104,14 @@ public sealed class LibraryArchiveMigrationTests
         Directory.CreateDirectory(source);
         try
         {
+            var fromRoot = Path.Combine(temp, "from");
+            var toRoot = Path.Combine(temp, "to");
             CatalogSeed.Write(
                 source,
-                sources: [new SeedSource("s1", "/from", "x")],
+                sources: [new SeedSource("s1", fromRoot, "x")],
                 items:
                 [
-                    new SeedItem("clip", "/from/clip.mp4")
+                    new SeedItem("clip", Path.Combine(fromRoot, "clip.mp4"))
                     {
                         SourceId = "s1",
                         RelativePath = "nested/../clip.mp4"
@@ -124,9 +122,9 @@ public sealed class LibraryArchiveMigrationTests
             ReelRoulette.Core.Library.LibraryCatalogStore.WriteCheckpoint(opened.Session!.DatabasePath, checkpoint);
 
             Assert.True(LibraryArchiveMigration.TryReadSourceRootPaths(checkpoint, out var roots, out var error), error);
-            Assert.Equal("/from", Assert.Single(roots));
+            Assert.Equal(fromRoot, Assert.Single(roots));
 
-            var remap = new Dictionary<string, string>(StringComparer.Ordinal) { ["/from"] = "/to" };
+            var remap = new Dictionary<string, string>(StringComparer.Ordinal) { [fromRoot] = toRoot };
             var result = LibraryArchiveMigration.ImportDatabase(
                 checkpoint,
                 remap,
@@ -140,8 +138,7 @@ public sealed class LibraryArchiveMigrationTests
             var imported = OpenCatalog(dest);
             var item = Assert.Single(Snapshot(imported).Items);
             Assert.Equal("clip", item.Id);
-            Assert.EndsWith($"{Path.DirectorySeparatorChar}clip.mp4", item.FullPath, StringComparison.Ordinal);
-            Assert.Contains($"{Path.DirectorySeparatorChar}to{Path.DirectorySeparatorChar}", item.FullPath, StringComparison.Ordinal);
+            Assert.Equal(Path.Combine(toRoot, "clip.mp4"), item.FullPath);
         }
         finally
         {
@@ -160,8 +157,10 @@ public sealed class LibraryArchiveMigrationTests
         try
         {
             File.WriteAllText(Path.Combine(dest, "library.db"), "not a database");
-            var checkpoint = CreateCheckpoint(source, temp);
-            var remap = new Dictionary<string, string>(StringComparer.Ordinal) { ["/from"] = "/to" };
+            var fromRoot = Path.Combine(temp, "from");
+            var toRoot = Path.Combine(temp, "to");
+            var checkpoint = CreateCheckpoint(source, temp, fromRoot);
+            var remap = new Dictionary<string, string>(StringComparer.Ordinal) { [fromRoot] = toRoot };
             var skipped = new HashSet<string>(StringComparer.Ordinal);
             var blocked = LibraryArchiveMigration.ImportDatabase(checkpoint, remap, skipped, force: false, dest);
             Assert.True(blocked.NeedsForceConfirmation);
@@ -179,20 +178,19 @@ public sealed class LibraryArchiveMigrationTests
     }
 
     [Fact]
-    public void Import_IntoAFolderWithOnlyLibraryJson_NeedsNoConfirmation_AndLeavesItUntouched()
+    public void Import_IntoAnEmptyFolder_NeedsNoConfirmation_AndRemaps()
     {
-        var temp = Path.Combine(Path.GetTempPath(), "rr-import-json-" + Guid.NewGuid().ToString("N"));
+        var temp = Path.Combine(Path.GetTempPath(), "rr-import-empty-" + Guid.NewGuid().ToString("N"));
         var dest = Path.Combine(temp, "dest");
         var source = Path.Combine(temp, "source");
         Directory.CreateDirectory(dest);
         Directory.CreateDirectory(source);
         try
         {
-            var libraryJson = Path.Combine(dest, "library.json");
-            File.WriteAllText(libraryJson, """{"items":[{"id":"kept","fullPath":"/clips/kept.mp4","fileName":"kept.mp4"}]}""");
-            var original = File.ReadAllBytes(libraryJson);
-            var checkpoint = CreateCheckpoint(source, temp);
-            var remap = new Dictionary<string, string>(StringComparer.Ordinal) { ["/from"] = "/to" };
+            var fromRoot = Path.Combine(temp, "from");
+            var toRoot = Path.Combine(temp, "to");
+            var checkpoint = CreateCheckpoint(source, temp, fromRoot);
+            var remap = new Dictionary<string, string>(StringComparer.Ordinal) { [fromRoot] = toRoot };
 
             var result = LibraryArchiveMigration.ImportDatabase(
                 checkpoint,
@@ -203,11 +201,9 @@ public sealed class LibraryArchiveMigrationTests
 
             Assert.True(result.Accepted, result.Message);
             Assert.False(result.NeedsForceConfirmation);
-            Assert.Equal(original, File.ReadAllBytes(libraryJson));
-            Assert.False(File.Exists(Path.Combine(dest, "library.json.migrated")));
             var item = Assert.Single(Snapshot(OpenCatalog(dest)).Items);
             Assert.Equal("clip", item.Id);
-            Assert.Equal(Path.Combine("/to", "clip.mp4"), item.FullPath);
+            Assert.Equal(Path.Combine(toRoot, "clip.mp4"), item.FullPath);
         }
         finally
         {
@@ -230,8 +226,10 @@ public sealed class LibraryArchiveMigrationTests
                 items: [new SeedItem("kept", "/clips/kept.mp4")]);
             Assert.NotNull(OpenCatalog(dest).Session);
 
-            var checkpoint = CreateCheckpoint(source, temp);
-            var remap = new Dictionary<string, string>(StringComparer.Ordinal) { ["/from"] = "/to" };
+            var fromRoot = Path.Combine(temp, "from");
+            var toRoot = Path.Combine(temp, "to");
+            var checkpoint = CreateCheckpoint(source, temp, fromRoot);
+            var remap = new Dictionary<string, string>(StringComparer.Ordinal) { [fromRoot] = toRoot };
             LibraryArchiveMigration.BeforeDiscardingPreviousCatalog = _ => throw new IOException("previous catalog is in use");
             LibraryArchiveImportResult result;
             try
@@ -260,14 +258,14 @@ public sealed class LibraryArchiveMigrationTests
         }
     }
 
-    private static string CreateCheckpoint(string sourceDirectory, string temp)
+    private static string CreateCheckpoint(string sourceDirectory, string temp, string fromRoot)
     {
         CatalogSeed.Write(
             sourceDirectory,
-            sources: [new SeedSource("s1", "/from", "x")],
+            sources: [new SeedSource("s1", fromRoot, "x")],
             items:
             [
-                new SeedItem("clip", "/from/clip.mp4")
+                new SeedItem("clip", Path.Combine(fromRoot, "clip.mp4"))
                 {
                     SourceId = "s1",
                     RelativePath = "clip.mp4"

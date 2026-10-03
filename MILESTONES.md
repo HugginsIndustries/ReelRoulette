@@ -104,49 +104,7 @@ Do not use this file for detailed architecture explanation or current capability
 
 ## Active Milestones
 
-Last milestone completed: M10j6
-
-### M10j7 - Scrub library.json From the Product
-
-- **Status**: ⏳ Planned
-- **Goal**: Make product code, comments, user-facing copy, tests, and current-state docs read as if a JSON library, a schema 1 catalog, and a catalog document never existed.
-- **Scope**:
-  - Depends on: Remove library.json Library Support.
-  - Ships in v0.14.0.
-  - Product code, comments, user-facing copy, tests, and current-state docs do not mention `library.json`, `library.json.migrated`, or a legacy flat tag list.
-  - They also do not mention the catalog document (for example "does not load the full catalog document" in `docs/api.md`, `docs/architecture.md`, `CONTEXT.md`, and the description text in `shared/api/openapi.yaml`), schema 1 or a schema 1 migration, `presets.json`, or the thumbnail `index.json`.
-  - Rename the empty-catalog temp file `library.db.migrating`, left from the removed migration, to a name that does not mention migration, and delete a leftover file with the old name when a catalog is created.
-  - Remove the `docs/feature-migration.md` §3.17 Tag-Catalog Migration Wizard entry, whose dialog is gone.
-  - Fix the other `docs/feature-migration.md` sections the planned-milestones audit found stale:
-    - The header says no Operator UI project exists. The Operator page exists, served by the server at `/operator`.
-    - §3.1 says WebUI click-to-play is not implemented and describes a projection refetch on open. The WebUI library overlay plays on click and browses through the list query.
-    - §3.2 says the WebUI lacks the category, tag, duration, and source filter UI. The WebUI filter overlay has it.
-    - §3.9 says Manage Sources calls `/api/sources/*` for every action. There are no rename or remove routes.
-    - §3.11 says Auto Tag has no web equivalent. The WebUI tag overlay has an Auto Tag tab.
-    - §3.12 says tag rename has no web equivalent. The WebUI tag editor renames tags.
-    - §3.16 says item removal is backed by a server API. There is no item removal route.
-    - §3.18 names `/control/log`. The route is `/control/logs/server`.
-  - Fix three `CONTEXT.md` claims the audits found wrong:
-    - It says the service worker lets Android Chrome install the WebUI. The worker registers only in a secure context and the server serves plain HTTP, so on a LAN address Chrome offers only a shortcut. Say that installing on Android needs HTTPS, for example through a reverse proxy.
-    - It lists remove among the desktop grid's working bulk actions. Remove from Library has no server route and is hidden by the dead code removal milestone.
-    - It lists reconnect recovery with `Last-Event-ID` as an SSE capability without naming a client. Found by the efficiency and divergence report: only the desktop resumes with the last event ID. The WebUI opens a new event stream with no last event ID after an error, so it gets neither the missed events nor `resyncRequired`. Say that only the desktop resumes; the client event efficiency milestone updates it when the WebUI does.
-  - Remove leftover comments that describe removed or "legacy" paths, such as the disabled legacy tag migration dialog and legacy local-authority comments in `MainWindow.axaml.cs` and the legacy view-model comment in `FilterDialog.axaml.cs`. Code that is still live keeps its name; `AllowLegacyTokenAuth` stays with the auth cutover.
-  - Add the desktop flows that still run locally to `docs/domain-inventory.md`, which `AGENTS.md` says it records: library database import writing the server's `library.db` from the desktop process, whole-list preset writes, preset-match heading comparison, refresh status summary parsing, and the client-owned flows that stay local by design (local-first playback, loudness baseline choice, desktop settings backups, Show in File Manager).
-  - Core settings and desktop settings stay JSON. Presets and thumbnail revision, width, and height stay in the catalog. JPEG files stay in the local thumbnail directory.
-  - Do not rewrite released changelog sections, completed milestone entries, `docs/full-audit.md`, `docs/velopack-migration-audit.md`, or `docs/migration-cleanup.md`. The unreleased changelog may record that the format was removed.
-  - Update the testing checklist so it does not mention those names.
-- **Acceptance criteria**:
-  - Product code, comments, user-facing copy, tests, and current-state docs do not mention `library.json`, `library.json.migrated`, a legacy flat tag list, the catalog document, schema 1, `presets.json`, or the thumbnail `index.json`.
-  - `docs/feature-migration.md` has no Tag-Catalog Migration Wizard entry, and its header and §3.1, §3.2, §3.9, §3.11, §3.12, §3.16, and §3.18 match the current WebUI, Operator, and routes.
-  - `CONTEXT.md` does not claim Android install works over plain HTTP, that the desktop can remove items from the library, or that the WebUI resumes its event stream with the last event ID.
-  - `docs/domain-inventory.md` lists the desktop flows that still run locally and says which are local by design.
-  - Core settings and desktop settings stay JSON. Presets and thumbnail metadata stay in the catalog. JPEG files stay local.
-  - Released changelog sections, completed milestone entries, and the historical audit and migration notes named above are left as written.
-- **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include a search of product code, comments, user-facing copy, tests, and current-state docs that finds none of those names, plus a build, tests, and `npm run verify` after the scrub.
-  - Released changelog sections, completed milestone entries, `docs/full-audit.md`, `docs/velopack-migration-audit.md`, and `docs/migration-cleanup.md` are left as written.
-- **Deferrals / Follow-ups**:
-  - Accounts stay with the Account Store work, in their own store outside `library.db`.
+Last milestone completed: M10j7
 
 ### M10j8 - Post-Migration Fixes
 
@@ -1556,6 +1514,58 @@ Last milestone completed: M10j6
 ## Completed Milestones
 
 Latest completions first:
+
+### M10j7 - Scrub library.json From the Product
+
+- **Status**: ✅ Complete
+- **Goal**: Make product code, comments, user-facing copy, tests, and current-state docs read as if a JSON library, a schema 1 catalog, and a catalog document never existed.
+- **Scope**:
+  - Depends on: Remove library.json Library Support.
+  - Ships in v0.14.0.
+  - Product code, comments, user-facing copy, tests, and current-state docs do not mention `library.json`, `library.json.migrated`, or a legacy flat tag list.
+  - They also do not mention the catalog document (for example "does not load the full catalog document" in `docs/api.md`, `docs/architecture.md`, `CONTEXT.md`, and the description text in `shared/api/openapi.yaml`), schema 1 or a schema 1 migration, `presets.json`, or the thumbnail `index.json`.
+  - Rename the empty-catalog temp file `library.db.migrating`, left from the removed migration, to a name that does not mention migration. A leftover file with the old name is not cleaned up, so the old name does not stay in the code.
+  - Remove the `docs/feature-migration.md` §3.17 Tag-Catalog Migration Wizard entry, whose dialog is gone.
+  - Fix the other `docs/feature-migration.md` sections the planned-milestones audit found stale:
+    - The header says no Operator UI project exists. The Operator page exists, served by the server at `/operator`.
+    - §3.1 says WebUI click-to-play is not implemented and describes a projection refetch on open. The WebUI library overlay plays on click and browses through the list query.
+    - §3.2 says the WebUI lacks the category, tag, duration, and source filter UI. The WebUI filter overlay has it.
+    - §3.9 says Manage Sources calls `/api/sources/*` for every action. There are no rename or remove routes.
+    - §3.11 says Auto Tag has no web equivalent. The WebUI tag overlay has an Auto Tag tab.
+    - §3.12 says tag rename has no web equivalent. The WebUI tag editor renames tags.
+    - §3.16 says item removal is backed by a server API. There is no item removal route.
+    - §3.18 names `/control/log`. The route is `/control/logs/server`.
+  - Fix three `CONTEXT.md` claims the audits found wrong:
+    - It says the service worker lets Android Chrome install the WebUI. The worker registers only in a secure context and the server serves plain HTTP, so on a LAN address Chrome offers only a shortcut. Say that installing on Android needs HTTPS, for example through a reverse proxy.
+    - It lists remove among the desktop grid's working bulk actions. Remove from Library has no server route and is hidden by the dead code removal milestone.
+    - It lists reconnect recovery with `Last-Event-ID` as an SSE capability without naming a client. Found by the efficiency and divergence report: only the desktop resumes with the last event ID. The WebUI opens a new event stream with no last event ID after an error, so it gets neither the missed events nor `resyncRequired`. Say that only the desktop resumes; the client event efficiency milestone updates it when the WebUI does.
+  - Remove leftover comments that describe removed or "legacy" paths, such as the disabled legacy tag migration dialog and legacy local-authority comments in `MainWindow.axaml.cs` and the legacy view-model comment in `FilterDialog.axaml.cs`. Code that is still live keeps its name; `AllowLegacyTokenAuth` stays with the auth cutover.
+  - Add the desktop flows that still run locally to `docs/domain-inventory.md`, which `AGENTS.md` says it records: library database import writing the server's `library.db` from the desktop process, whole-list preset writes, preset-match heading comparison, refresh status summary parsing, and the client-owned flows that stay local by design (local-first playback, loudness baseline choice, desktop settings backups, Show in File Manager).
+  - Core settings and desktop settings stay JSON. Presets and thumbnail revision, width, and height stay in the catalog. JPEG files stay in the local thumbnail directory.
+  - Do not rewrite released changelog sections, completed milestone entries, `docs/full-audit.md`, `docs/velopack-migration-audit.md`, or `docs/migration-cleanup.md`. The unreleased changelog may record that the format was removed.
+  - Update the testing checklist so it does not mention those names.
+- **Acceptance criteria**:
+  - Product code, comments, user-facing copy, tests, and current-state docs do not mention `library.json`, `library.json.migrated`, a legacy flat tag list, the catalog document, schema 1, `presets.json`, the thumbnail `index.json`, or `library.db.migrating`. A search for those names outside the historical files named below finds nothing, with no exceptions.
+  - `docs/feature-migration.md` has no Tag-Catalog Migration Wizard entry, and its header and §3.1, §3.2, §3.9, §3.11, §3.12, §3.16, and §3.18 match the current WebUI, Operator, and routes.
+  - `CONTEXT.md` does not claim Android install works over plain HTTP, that the desktop can remove items from the library, or that the WebUI resumes its event stream with the last event ID.
+  - `docs/domain-inventory.md` lists the desktop flows that still run locally and says which are local by design.
+  - Core settings and desktop settings stay JSON. Presets and thumbnail metadata stay in the catalog. JPEG files stay local.
+  - Released changelog sections, completed milestone entries, and the historical audit and migration notes named above are left as written.
+- **Verification evidence**:
+  - A case-insensitive `git grep` for `library.json`, a flat tag list, the catalog document (including the shorter "full document"), schema 1 (including `Schema1` identifiers), `presets.json`, `index.json`, `library.db.migrating`, the thumbnail index, the tag-catalog migration wizard, and `/control/log` finds nothing outside `CHANGELOG.md`, `MILESTONES.md`, `RELEASE-NOTES.md`, `COMMIT-MESSAGE.txt`, `docs/full-audit.md`, `docs/velopack-migration-audit.md`, and `docs/migration-cleanup.md`, with no exceptions.
+  - The empty-catalog temp file is `library.db.creating`. A leftover `library.db.migrating` is not cleaned up, by decision, so the old name is not in the code.
+  - Tests: the leftover-file cases for `library.json`, `library.json.migrated`, `presets.json`, and `thumbnails/index.json` were dropped, by decision, and the behavior tests kept: empty create, healthy open, and quarantine and refusal for a file that is not a database, corrupt row pages, an unversioned database, and an unrecognized schema version. Backup trim tests plant neutrally named backups beside the catalog backups. Desktop import into an empty folder needs no confirmation and remaps. `dotnet test ReelRoulette.sln` passes 425 (Core 258, Desktop 167). Core went from 265 because four parameterized tests became single cases.
+  - Mutation check, restored afterward: widening the catalog backup trim to `*.backup.*` failed both backup trim tests.
+  - Tests that remap source roots build those roots under the test's temp folder and assert the exact combined path, so they pass on Windows, where an unrooted `/to` resolves onto the current drive. That covers the desktop import tests, the remap rejection test, and the three `CombineRootAndRelative` tests, which resolve their root with `Path.GetFullPath`. No other test resolves or remaps a Unix-style rooted literal; the rest are stored and compared as strings. `AGENTS.md` now requires this for paths a test resolves or remaps. Mutation check, restored afterward: remapping onto the old root failed both desktop remap tests.
+  - `dotnet build ReelRoulette.sln` has no warnings or errors. `npm run verify` passes after regenerating contracts. SystemChecks passes.
+  - Comments: the disabled tag migration dialog comment and the "removed, now X" tombstone comments in `MainWindow.axaml.cs` are gone. The legacy view-model comment in `FilterDialog.axaml.cs` had already been removed. The Linux packaged server smoke script no longer mentions the retired portable smoke.
+  - `docs/feature-migration.md`: the Tag-Catalog Migration Wizard entry had already been removed, so the FFmpeg log entry is §3.17 and names `/control/logs/server`. The header names the Operator page at `/operator`. §3.1, §3.2, §3.9, §3.11, §3.12, and §3.16 were rewritten in place with their numbers kept, by decision.
+  - `CONTEXT.md`: Android install needs HTTPS, and only the desktop resumes its event stream with the last event ID, confirmed from `app.js`, which opens a new `EventSource` with no last event ID. It already said Remove from Library is hidden.
+  - `docs/domain-inventory.md` lists the desktop flows that still run locally, split into server-owned work still on the desktop and client-owned flows local by design.
+  - The testing checklist's Windows first-start item now says a data folder from v0.12.0 or earlier that has no `library.db`.
+  - Released changelog sections, completed milestone entries, `docs/full-audit.md`, `docs/velopack-migration-audit.md`, and `docs/migration-cleanup.md` are left as written.
+- **Deferrals / Follow-ups**:
+  - Accounts stay with the Account Store work, in their own store outside `library.db`.
 
 ### M10j6 - Remove library.json Library Support
 

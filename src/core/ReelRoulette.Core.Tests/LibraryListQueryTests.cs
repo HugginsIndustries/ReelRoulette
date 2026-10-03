@@ -499,7 +499,6 @@ public sealed class LibraryListQueryTests
         Add(session, "plain", "on", "b.mp4", "b.mp4");
         Assert.True(session.SetThumbnail("tagged", "r1", 320, 180));
         Assert.True(session.SetThumbnail("plain", "r2", 180, 320));
-        Assert.False(File.Exists(Path.Combine(dir.Path, "thumbnails", "index.json")));
 
         var host = LibraryCatalogHost.Open(dir.Path);
         var operations = new LibraryOperationsService(host, NullLogger<LibraryOperationsService>.Instance, dir.Path);

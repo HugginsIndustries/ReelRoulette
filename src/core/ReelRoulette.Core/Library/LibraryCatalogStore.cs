@@ -123,7 +123,7 @@ public static class LibraryCatalogStore
     private const int SqliteNotADatabase = 26;
     private const int SqliteCorrupt = 11;
 
-    private const string MigratingFileName = "library.db.migrating";
+    private const string CreatingFileName = "library.db.creating";
     private const string RefusedFileName = "library.db.refused";
     internal const string UncategorizedCategoryId = "uncategorized";
     internal const string UncategorizedCategoryName = "Uncategorized";
@@ -591,7 +591,7 @@ public static class LibraryCatalogStore
 
     private static void CreateEmpty(string directory, string databasePath)
     {
-        var tempPath = Path.Combine(directory, MigratingFileName);
+        var tempPath = Path.Combine(directory, CreatingFileName);
         DeleteSidecars(tempPath);
         var published = false;
         try

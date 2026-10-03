@@ -7,19 +7,11 @@ namespace ReelRoulette.Core.Tests;
 public sealed class LibraryCatalogSchema2Tests
 {
     [Fact]
-    public void Open_Schema1Database_IsQuarantinedAndRefused()
+    public void Open_UnrecognizedSchemaVersion_IsQuarantinedAndRefused()
     {
         using var dir = new TempDirectory();
-        var thumbs = Path.Combine(dir.Path, "thumbnails");
-        Directory.CreateDirectory(thumbs);
-        CreateSchema1(dir.Path, "kept-tag");
-        var schema1 = File.ReadAllBytes(Path.Combine(dir.Path, "library.db"));
-        var presets = Path.Combine(dir.Path, "presets.json");
-        var index = Path.Combine(thumbs, "index.json");
-        File.WriteAllText(presets, """[{ "name": "Night", "filterState": { "favoritesOnly": true } }]""");
-        File.WriteAllText(index, """{ "item-1": { "revision": "rev-1", "width": 11, "height": 22 } }""");
-        var presetBytes = File.ReadAllBytes(presets);
-        var indexBytes = File.ReadAllBytes(index);
+        CreateUnrecognizedSchema(dir.Path, "kept-tag");
+        var original = File.ReadAllBytes(Path.Combine(dir.Path, "library.db"));
 
         var refused = CatalogOpen.Open(dir.Path);
 
@@ -27,19 +19,15 @@ public sealed class LibraryCatalogSchema2Tests
         Assert.Equal(LibraryCatalogStore.RefusedMessage, refused.Message);
         Assert.Null(refused.Session);
         Assert.False(File.Exists(Path.Combine(dir.Path, "library.db")));
-        Assert.Equal(schema1, File.ReadAllBytes(Path.Combine(dir.Path, "library.db.refused")));
-        Assert.Equal(presetBytes, File.ReadAllBytes(presets));
-        Assert.Equal(indexBytes, File.ReadAllBytes(index));
-        Assert.False(File.Exists(presets + ".migrated"));
-        Assert.False(File.Exists(index + ".migrated"));
+        Assert.Equal(original, File.ReadAllBytes(Path.Combine(dir.Path, "library.db.refused")));
     }
 
     [Fact]
-    public void Schema1File_IsNotALibraryDatabase_AndIsNotPrepared()
+    public void UnrecognizedSchemaFile_IsNotALibraryDatabase_AndIsNotPrepared()
     {
         using var source = new TempDirectory();
         using var dest = new TempDirectory();
-        CreateSchema1(source.Path, "kept-tag");
+        CreateUnrecognizedSchema(source.Path, "kept-tag");
         var checkpoint = Path.Combine(source.Path, "library.db");
 
         Assert.Equal(LibraryCatalogStore.CatalogFileInspection.NotADatabase, LibraryCatalogStore.InspectCatalogFile(checkpoint));
@@ -106,7 +94,7 @@ public sealed class LibraryCatalogSchema2Tests
         Assert.Equal(34, reader.GetInt32(2));
     }
 
-    private static void CreateSchema1(string directory, string tagName)
+    private static void CreateUnrecognizedSchema(string directory, string tagName)
     {
         var path = Path.Combine(directory, "library.db");
         using var connection = new SqliteConnection(new SqliteConnectionStringBuilder
@@ -184,7 +172,7 @@ public sealed class LibraryCatalogSchema2Tests
             );
             INSERT INTO categories (id, position, name, sort_order) VALUES ('uncategorized', 0, 'Uncategorized', 2147483647);
             INSERT INTO tags (position, name, name_fold, category_id) VALUES (0, $tag, $fold, 'uncategorized');
-            INSERT INTO available_tags (position, name, name_fold) VALUES (0, 'LegacyOnly', 'legacyonly');
+            INSERT INTO available_tags (position, name, name_fold) VALUES (0, 'OldOnly', 'oldonly');
             INSERT INTO catalog_meta (key, value) VALUES ('available_tags_present', '1');
             INSERT INTO catalog_meta (key, value) VALUES ('revision', '0');
             INSERT INTO items (

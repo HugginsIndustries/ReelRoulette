@@ -160,7 +160,7 @@ An agent runs these and ticks them.
 - [ ] `verify-web-deploy.ps1` on Windows leaves the real data and thumbnail folders unchanged.
 - [ ] Desktop hides **Rename** and **Remove** in Manage Sources and **Remove from Library** in the library grid menu; the other Manage Sources actions and grid menu items still show and work.
 - [ ] On desktop and WebUI, a saved preset stays selected (not starred) after its tags are re-selected in a different order, and a different tag set still shows it starred.
-- [ ] On Windows, first start with no data folder, and with a data folder holding only `library.json`, opens an empty library.
+- [ ] On Windows, first start with no data folder, and with a data folder from v0.12.0 or earlier that has no `library.db`, opens an empty library.
 
 ## Release Flow
 

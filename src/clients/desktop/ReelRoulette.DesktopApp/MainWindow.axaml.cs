@@ -993,9 +993,6 @@ namespace ReelRoulette
             LoadSettings();
             UpdateMuteButtonGlyph();
             
-            // Restore last folder if enabled and path exists
-            // Folder restoration removed - library system is now the primary method
-
             // Sync menu/check states with defaults
             SyncMenuStates();
             ApplyViewPreferences();
@@ -1013,8 +1010,6 @@ namespace ReelRoulette
                     Log("MainWindow Loaded event: Initializing Library panel...");
                     InitializeLibraryPanel();
                     Log("MainWindow Loaded event: Library panel initialized successfully.");
-                    
-                    // Legacy local tag migration dialog is disabled.
                     
                     // Apply saved library panel width if panel is visible on startup
                     // This ensures the width is applied after the Grid is fully initialized
@@ -1133,8 +1128,6 @@ namespace ReelRoulette
                     }
                 }
             };
-
-            // FolderTextBox.TextChanged handler removed - library system is now the primary method
 
             Log("MainWindow constructor: All initialization complete.");
             }
@@ -8197,8 +8190,6 @@ namespace ReelRoulette
 
         #region UI Event Handlers
 
-        // Browse_Click method removed - users should use "Library → Import Folder..." menu item instead
-
         private async void ImportFolderMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
             Log("UI ACTION: ImportFolderMenuItem clicked");
@@ -8568,8 +8559,6 @@ namespace ReelRoulette
             SaveSettings();
             ApplyViewPreferences();
         }
-
-        // Old panel menu handlers removed - panels are now unified in Library panel
 
         private void ShowStatsMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
@@ -9838,8 +9827,6 @@ namespace ReelRoulette
             });
         }
 
-        // DurationFilter_Changed handler removed - now using FilterDialog
-
         #endregion
 
         #region Menu helpers
@@ -9896,12 +9883,9 @@ namespace ReelRoulette
         private void SyncMenuStates()
         {
             KeepPlayingMenuItem.IsChecked = _isKeepPlayingActive;
-            // OnlyFavoritesMenuItem removed - now using FilterDialog
             FavoriteToggle.IsEnabled = !string.IsNullOrEmpty(_currentVideoPath);
             BlacklistToggle.IsEnabled = !string.IsNullOrEmpty(_currentVideoPath);
             ManageTagsButton.IsEnabled = true;
-            
-            // Audio filter menu items removed - now using FilterDialog
         }
 
         private void KeepPlayingMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -9963,8 +9947,6 @@ namespace ReelRoulette
             await dialog.ShowDialog<bool?>(this);
         }
 
-
-        // OnlyFavoritesMenuItem removed - now using FilterDialog
 
         private async void FilterMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
@@ -10132,8 +10114,6 @@ namespace ReelRoulette
             await EnsureCoreRuntimeAvailableAsync();
             UpdatePerVideoToggleStates();
         }
-
-        // ShowDurationFilterDialogAsync and related duration filter methods removed - now using FilterDialog
 
         #endregion
 
@@ -10873,8 +10853,6 @@ namespace ReelRoulette
 
         #endregion
 
-        // Seek step, volume step, and volume normalization handlers removed - now in Settings dialog
-
         private void VideoView_PointerWheelChanged(object? sender, Avalonia.Input.PointerWheelEventArgs e)
         {
             e.Handled = true;
@@ -11138,15 +11116,15 @@ namespace ReelRoulette
                     e.Handled = true;
                     break;
 
-                case Key.D6: // Number 6 - (removed - was Favorites panel, now use Library panel)
+                case Key.D6: // Number 6 - no action
                     e.Handled = true;
                     break;
 
-                case Key.D7: // Number 7 - (removed - was Recently Played panel, now use Library panel)
+                case Key.D7: // Number 7 - no action
                     e.Handled = true;
                     break;
 
-                case Key.D8: // Number 8 - (removed - was Stats panel, now D5)
+                case Key.D8: // Number 8 - no action
                     e.Handled = true;
                     break;
 
@@ -11239,7 +11217,6 @@ namespace ReelRoulette
 
         private void HandleBrowseShortcut()
         {
-            // Browse functionality removed - use ImportFolderMenuItem_Click instead
             ImportFolderMenuItem_Click(this, new RoutedEventArgs());
         }
 

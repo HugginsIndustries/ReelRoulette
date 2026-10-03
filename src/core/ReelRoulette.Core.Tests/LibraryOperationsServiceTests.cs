@@ -9,7 +9,7 @@ namespace ReelRoulette.Core.Tests;
 public sealed class LibraryOperationsServiceTests
 {
     [Fact]
-    public void Constructor_DoesNotCreateLibraryJsonBackup()
+    public void Constructor_CreatesACatalogBackup()
     {
         var appDataRoot = CreateTempAppDataRoot();
         try
@@ -20,14 +20,8 @@ public sealed class LibraryOperationsServiceTests
             _ = new LibraryOperationsService(CatalogOpen.Host(appDataRoot), NullLogger<LibraryOperationsService>.Instance, appDataRoot);
 
             var backupDir = Path.Combine(appDataRoot, "backups");
-            if (Directory.Exists(backupDir))
-            {
-                Assert.Empty(Directory.GetFiles(backupDir, "library.json.backup.*"));
-            }
-
-            Assert.False(File.Exists(Path.Combine(appDataRoot, "library.json")));
             Assert.True(File.Exists(Path.Combine(appDataRoot, "library.db")));
-            Assert.NotEmpty(Directory.GetFiles(Path.Combine(appDataRoot, "backups"), "library.db.backup.*"));
+            Assert.NotEmpty(Directory.GetFiles(backupDir, "library.db.backup.*"));
         }
         finally
         {
@@ -40,7 +34,7 @@ public sealed class LibraryOperationsServiceTests
     }
 
     [Fact]
-    public void RecordPlayback_DoesNotCopyOrTrimLibraryJsonBackups()
+    public void RecordPlayback_DoesNotCopyOrTrimOtherBackups()
     {
         var appDataRoot = CreateTempAppDataRoot();
         try
@@ -58,17 +52,16 @@ public sealed class LibraryOperationsServiceTests
 
             var backupDir = Path.Combine(appDataRoot, "backups");
             Directory.CreateDirectory(backupDir);
-            var leftover = Path.Combine(backupDir, "library.json.backup.leftover");
+            var leftover = Path.Combine(backupDir, "other.backup.leftover");
             File.WriteAllText(leftover, "{\"items\":[]}");
             SetBackupTimestampUtc(leftover, DateTime.UtcNow.AddHours(-12));
 
             var service = new LibraryOperationsService(CatalogOpen.Host(appDataRoot), NullLogger<LibraryOperationsService>.Instance, appDataRoot);
             Assert.True(service.RecordPlayback(@"C:\media\movie.mp4").Found);
 
-            var backupFiles = Directory.GetFiles(backupDir, "library.json.backup.*");
+            var backupFiles = Directory.GetFiles(backupDir, "other.backup.*");
             Assert.Equal(leftover, Assert.Single(backupFiles));
             Assert.Equal("{\"items\":[]}", File.ReadAllText(leftover));
-            Assert.False(File.Exists(Path.Combine(appDataRoot, "library.json")));
         }
         finally
         {
@@ -840,9 +833,9 @@ public sealed class LibraryOperationsServiceTests
 
             var backupDir = Path.Combine(appDataRoot, "backups");
             Directory.CreateDirectory(backupDir);
-            var backupA = Path.Combine(backupDir, "library.json.backup.a");
-            var backupB = Path.Combine(backupDir, "library.json.backup.b");
-            var backupC = Path.Combine(backupDir, "library.json.backup.c");
+            var backupA = Path.Combine(backupDir, "other.backup.a");
+            var backupB = Path.Combine(backupDir, "other.backup.b");
+            var backupC = Path.Combine(backupDir, "other.backup.c");
             File.WriteAllText(backupA, "{}");
             File.WriteAllText(backupB, "{}");
             File.WriteAllText(backupC, "{}");
@@ -851,9 +844,9 @@ public sealed class LibraryOperationsServiceTests
             SetBackupTimestampUtc(backupC, DateTime.UtcNow.AddMinutes(-10));
 
             var service = new LibraryOperationsService(CatalogOpen.Host(appDataRoot), NullLogger<LibraryOperationsService>.Instance, appDataRoot);
-            var before = Directory.GetFiles(backupDir, "library.json.backup.*").OrderBy(path => path).ToArray();
+            var before = Directory.GetFiles(backupDir, "other.backup.*").OrderBy(path => path).ToArray();
             _ = service.RecordPlayback(@"C:\media\movie.mp4");
-            var after = Directory.GetFiles(backupDir, "library.json.backup.*").OrderBy(path => path).ToArray();
+            var after = Directory.GetFiles(backupDir, "other.backup.*").OrderBy(path => path).ToArray();
 
             Assert.Equal(before, after);
         }
@@ -905,7 +898,7 @@ public sealed class LibraryOperationsServiceTests
     }
 
     [Fact]
-    public void RecordPlayback_WhenBackupGapIsSatisfied_DoesNotTrimOrCreateJsonBackups()
+    public void RecordPlayback_WhenBackupGapIsSatisfied_DoesNotTrimOtherBackups()
     {
         var appDataRoot = CreateTempAppDataRoot();
         try
@@ -923,9 +916,9 @@ public sealed class LibraryOperationsServiceTests
 
             var backupDir = Path.Combine(appDataRoot, "backups");
             Directory.CreateDirectory(backupDir);
-            var backupA = Path.Combine(backupDir, "library.json.backup.a");
-            var backupB = Path.Combine(backupDir, "library.json.backup.b");
-            var backupC = Path.Combine(backupDir, "library.json.backup.c");
+            var backupA = Path.Combine(backupDir, "other.backup.a");
+            var backupB = Path.Combine(backupDir, "other.backup.b");
+            var backupC = Path.Combine(backupDir, "other.backup.c");
             File.WriteAllText(backupA, "{}");
             File.WriteAllText(backupB, "{}");
             File.WriteAllText(backupC, "{}");
@@ -941,10 +934,9 @@ public sealed class LibraryOperationsServiceTests
 
             _ = service.RecordPlayback(@"C:\media\movie.mp4");
             LibraryCatalogBackup.WaitForPending();
-            var after = Directory.GetFiles(backupDir, "library.json.backup.*").OrderBy(path => path).ToArray();
+            var after = Directory.GetFiles(backupDir, "other.backup.*").OrderBy(path => path).ToArray();
 
             Assert.Equal([backupA, backupB, backupC], after);
-            Assert.False(File.Exists(Path.Combine(appDataRoot, "library.json")));
             var checkpoint = Directory.GetFiles(backupDir, "library.db.backup.*")
                 .OrderBy(File.GetLastWriteTimeUtc)
                 .Last();

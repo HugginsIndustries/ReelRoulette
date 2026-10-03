@@ -406,7 +406,7 @@ export interface paths {
          * Read one library item
          * @description Returns one catalog item by id or full path. The body matches a list-query item, including tags,
          *     favorite, blacklist, playback stats, duration, and loudness. Thumbnail layout fields stay on
-         *     `POST /api/library/query`. This read does not build the full catalog document.
+         *     `POST /api/library/query`.
          */
         post: operations["postLibraryItem"];
         delete?: never;
@@ -426,7 +426,6 @@ export interface paths {
          * Get library statistics
          * @description Returns global totals and per-source totals from SQL aggregates, plus `baselineLoudnessLufs`, the
          *     75th percentile of integrated loudness for videos that have audio (−18 LUFS when none qualify).
-         *     This read does not build the full catalog document.
          */
         get: operations["getLibraryStats"];
         put?: never;
@@ -1223,12 +1222,12 @@ export interface components {
             hasThumbnail?: boolean;
             /**
              * Format: int32
-             * @description Generated thumbnail width in pixels when available from the server thumbnail index.
+             * @description Generated thumbnail width in pixels when the catalog has it.
              */
             thumbnailWidth?: number | null;
             /**
              * Format: int32
-             * @description Generated thumbnail height in pixels when available from the server thumbnail index.
+             * @description Generated thumbnail height in pixels when the catalog has it.
              */
             thumbnailHeight?: number | null;
         } & {

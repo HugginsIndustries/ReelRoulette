@@ -284,17 +284,6 @@ public sealed class RefreshPipelineServiceTests
         var thumbsDir = Path.Combine(scope.RootPath, "thumbnails");
         Directory.CreateDirectory(thumbsDir);
         File.WriteAllBytes(Path.Combine(thumbsDir, "item-1.jpg"), TinyPngBytes);
-        File.WriteAllText(
-            Path.Combine(thumbsDir, "index.json"),
-            new JsonObject
-            {
-                ["item-1"] = new JsonObject
-                {
-                    ["width"] = 1,
-                    ["height"] = 1,
-                    ["revision"] = "from-index"
-                }
-            }.ToJsonString());
 
         var service = CreateService(new ServerStateService(), scope.RootPath);
         var items = new JsonArray
@@ -322,7 +311,7 @@ public sealed class RefreshPipelineServiceTests
     }
 
     [Fact]
-    public async Task ThumbnailStage_ShouldWriteIndexMetadataObject()
+    public async Task ThumbnailStage_ShouldWriteRowMetadata()
     {
         using var scope = new DataFolderScope();
         var mediaPath = Path.Combine(scope.RootPath, "thumb-source-metadata.png");
@@ -347,23 +336,25 @@ public sealed class RefreshPipelineServiceTests
         Assert.StartsWith("fp-meta-a|", stored.ThumbnailRevision, StringComparison.Ordinal);
         Assert.True(stored.ThumbnailWidth is > 0);
         Assert.True(stored.ThumbnailHeight is > 0);
-        Assert.False(File.Exists(Path.Combine(scope.RootPath, "thumbnails", "index.json")));
+        Assert.All(
+            Directory.GetFiles(Path.Combine(scope.RootPath, "thumbnails")),
+            path => Assert.Equal(".jpg", Path.GetExtension(path)));
     }
 
     [Fact]
-    public async Task ThumbnailStage_ShouldBackfillLegacyStringIndexEntry()
+    public async Task ThumbnailStage_ShouldBackfillMissingDimensions()
     {
         using var scope = new DataFolderScope();
-        var mediaPath = Path.Combine(scope.RootPath, "thumb-source-legacy.png");
+        var mediaPath = Path.Combine(scope.RootPath, "thumb-source-backfill.png");
         await WriteTinyPngAsync(mediaPath);
         CatalogSeed.Write(
             scope.RootPath,
             items:
             [
-                new SeedItem("thumb-legacy-1", mediaPath)
+                new SeedItem("thumb-backfill-1", mediaPath)
                 {
                     MediaType = 1,
-                    Fingerprint = "fp-legacy-a"
+                    Fingerprint = "fp-backfill-a"
                 }
             ]);
 
@@ -856,16 +847,8 @@ public sealed class RefreshPipelineServiceTests
         Directory.CreateDirectory(Path.GetDirectoryName(keptThumb)!);
         await File.WriteAllBytesAsync(keptThumb, TinyPngBytes);
         await File.WriteAllBytesAsync(goneThumb, TinyPngBytes);
-        var orphanThumb = service.GetThumbnailPath("never-indexed");
+        var orphanThumb = service.GetThumbnailPath("never-in-catalog");
         await File.WriteAllBytesAsync(orphanThumb, TinyPngBytes);
-        var indexPath = Path.Combine(scope.RootPath, "thumbnails", "index.json");
-        await File.WriteAllTextAsync(
-            indexPath,
-            new JsonObject
-            {
-                ["kept-thumb"] = new JsonObject { ["revision"] = "fp-kept|1|2020-01-01T00:00:00.0000000Z", ["width"] = 1, ["height"] = 1 },
-                ["gone-thumb"] = new JsonObject { ["revision"] = "old", ["width"] = 1, ["height"] = 1 }
-            }.ToJsonString());
         Assert.True(service.TryStartManual().Accepted);
         var completed = await WaitForCompletionAsync(service, TimeSpan.FromSeconds(30));
 
@@ -875,10 +858,6 @@ public sealed class RefreshPipelineServiceTests
         Assert.True(File.Exists(keptThumb));
         Assert.False(File.Exists(goneThumb));
         Assert.False(File.Exists(orphanThumb));
-        Assert.True(File.Exists(indexPath));
-        var index = JsonNode.Parse(await File.ReadAllTextAsync(indexPath))!.AsObject();
-        Assert.True(index.ContainsKey("gone-thumb"));
-        Assert.True(index.ContainsKey("kept-thumb"));
         var stage = completed.Stages.Single(item => item.Stage == "thumbnailGeneration");
         Assert.DoesNotContain("evicted", stage.Message, StringComparison.OrdinalIgnoreCase);
     }

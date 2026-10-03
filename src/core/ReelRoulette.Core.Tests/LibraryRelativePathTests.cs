@@ -149,27 +149,34 @@ public sealed class LibraryRelativePathTests
     [Fact]
     public void CombineRootAndRelative_RejectsSiblingWhoseNameExtendsTheRoot()
     {
+        var root = CombineTestRoot();
         var ex = Assert.Throws<ArgumentException>(() =>
-            LibraryRelativePath.CombineRootAndRelative("/media/movies", "../movies-extra/a.mp4"));
+            LibraryRelativePath.CombineRootAndRelative(root, "../movies-extra/a.mp4"));
         Assert.Contains("escapes the destination root", ex.Message, StringComparison.Ordinal);
 
-        var inside = LibraryRelativePath.CombineRootAndRelative("/media/movies", "a.mp4");
-        Assert.Equal(Path.GetFullPath(Path.Combine("/media/movies", "a.mp4")), inside);
+        var inside = LibraryRelativePath.CombineRootAndRelative(root, "a.mp4");
+        Assert.Equal(Path.Combine(root, "a.mp4"), inside);
     }
 
     [Fact]
     public void CombineRootAndRelative_RejectsParentSegmentThatDoesNotStartThePath()
     {
+        var root = CombineTestRoot();
         Assert.Throws<ArgumentException>(() =>
-            LibraryRelativePath.CombineRootAndRelative("/media/movies", "nested/../../movies-extra/a.mp4"));
+            LibraryRelativePath.CombineRootAndRelative(root, "nested/../../movies-extra/a.mp4"));
     }
 
     [Fact]
     public void CombineRootAndRelative_AllowsParentSegmentThatStaysInsideTheRoot()
     {
-        var combined = LibraryRelativePath.CombineRootAndRelative("/media/movies", "nested/../clip.mp4");
-        Assert.Equal(Path.GetFullPath(Path.Combine("/media/movies", "clip.mp4")), combined);
+        var root = CombineTestRoot();
+        var combined = LibraryRelativePath.CombineRootAndRelative(root, "nested/../clip.mp4");
+        Assert.Equal(Path.Combine(root, "clip.mp4"), combined);
     }
+
+    // CombineRootAndRelative only resolves paths, so the folder is never created.
+    private static string CombineTestRoot() =>
+        Path.Combine(Path.GetTempPath(), "rr-lib-combine-" + Guid.NewGuid().ToString("N"), "media", "movies");
 
     private static void TryDeleteDir(string path)
     {

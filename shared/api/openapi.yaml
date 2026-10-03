@@ -706,7 +706,7 @@ paths:
       description: |
         Returns one catalog item by id or full path. The body matches a list-query item, including tags,
         favorite, blacklist, playback stats, duration, and loudness. Thumbnail layout fields stay on
-        `POST /api/library/query`. This read does not build the full catalog document.
+        `POST /api/library/query`.
       operationId: postLibraryItem
       requestBody:
         required: true
@@ -740,7 +740,6 @@ paths:
       description: |
         Returns global totals and per-source totals from SQL aggregates, plus `baselineLoudnessLufs`, the
         75th percentile of integrated loudness for videos that have audio (−18 LUFS when none qualify).
-        This read does not build the full catalog document.
       operationId: getLibraryStats
       responses:
         "200":
@@ -2169,12 +2168,12 @@ components:
           type: integer
           format: int32
           nullable: true
-          description: Generated thumbnail width in pixels when available from the server thumbnail index.
+          description: Generated thumbnail width in pixels when the catalog has it.
         thumbnailHeight:
           type: integer
           format: int32
           nullable: true
-          description: Generated thumbnail height in pixels when available from the server thumbnail index.
+          description: Generated thumbnail height in pixels when the catalog has it.
 
     RandomRequest:
       type: object

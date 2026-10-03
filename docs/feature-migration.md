@@ -4,7 +4,7 @@ Functionality present in `src/clients/desktop/` that has no equivalent in the We
 
 Each entry notes where the feature lives in the desktop codebase and which web surface it belongs in:
 - **WebUI** — media viewing/playback experience (`src/clients/web/ReelRoulette.WebUI/`)
-- **Operator UI** — server management, configuration, or diagnostics (no dedicated project exists yet)
+- **Operator UI** — server management, configuration, or diagnostics (the Operator page the server serves at `/operator`)
 
 Report only — no changes have been made.
 
@@ -20,7 +20,7 @@ Browsable thumbnail-grid library panel with sort (name, last-played, play-count,
 
 **Target surface:** WebUI
 
-WebUI has a playback-focused player with tag and filter overlays plus a **library overlay** with projection refetch on open, playback FilterState narrowing, search, sort, virtualized justified thumbnail grid (API metadata + `GET /api/thumbnail/{itemId}`), and SSE live sync of favorite/blacklist/playback stats while open. Click-to-play is not yet implemented.
+WebUI has a playback-focused player with tag and filter overlays plus a **library overlay** that browses through `POST /api/library/query` (applied filter, search, the same five sorts, fill-on-scroll), renders a virtualized justified thumbnail grid (`GET /api/thumbnail/{itemId}`), keeps tiles current from SSE favorite, blacklist, playback, and tag updates, and plays an item on click through `POST /api/play/{itemId}`. The remaining gap is the desktop grid's multi-select and bulk context-menu actions.
 
 ---
 
@@ -32,7 +32,7 @@ Full compound filter UI: favorites-only, blacklist exclusion, never-played, audi
 
 **Target surface:** WebUI
 
-WebUI has basic filtering but is missing the category/tag/duration/source compound filter UI.
+The WebUI filter overlay has the same compound filter: basic flags, media type, source inclusion, audio, duration, per-category and global tag match modes with include and exclude chips, and preset save, rename, and delete. No functional gap remains.
 
 ---
 
@@ -118,7 +118,7 @@ Enable/disable library sources; per-source item and duration statistics; trigger
 
 **Target surface:** Operator UI
 
-Sources live on the server. This dialog calls `/api/sources/*` and is a server-management action with no web equivalent.
+Sources live on the server. The dialog reads `GET /api/sources` and toggles a source with `POST /api/sources/{sourceId}/enabled`. There are no source rename or remove routes. Neither the WebUI nor the Operator page manages sources.
 
 ---
 
@@ -142,7 +142,7 @@ Scans the full library or a selection for filename-to-tag matches; previews per-
 
 **Target surface:** Operator UI
 
-Backed by `/api/autotag/scan` and `/api/autotag/apply`; no web equivalent exists.
+Backed by `/api/autotag/scan` and `/api/autotag/apply`. The WebUI tag overlay has an **Auto Tag** tab that uses the same routes. The Operator page has no equivalent.
 
 ---
 
@@ -154,7 +154,7 @@ Rename a tag globally across all items or move it to a different category, with 
 
 **Target surface:** Operator UI
 
-Administrative tag catalog management; the desktop calls `/api/tag-editor/rename-tag` and `/api/tag-editor/upsert-tag`.
+Administrative tag catalog management; the desktop calls `/api/tag-editor/rename-tag` and `/api/tag-editor/upsert-tag`. The WebUI tag editor renames tags and moves them between categories through the same routes. The Operator page has no equivalent.
 
 ---
 
@@ -186,7 +186,7 @@ All settings are core-owned and synced via API (`/api/refresh/settings`, `/api/b
 
 **Desktop location:** `LibraryImportRemapDialog.axaml` / `LibraryImportRemapDialog.axaml.cs`, `LibraryOverwriteConfirmDialog.axaml` / `LibraryOverwriteConfirmDialog.axaml.cs`; backed by `src/clients/desktop/ReelRoulette.LibraryArchive/LibraryArchiveMigration.cs`
 
-`Library → Export Library…` asks for a destination, then downloads a server checkpoint into that `library.db` file. `Import Library…` replaces the live catalog after the server-stopped acknowledgment, including presets and thumbnail revision and dimensions. Settings and backups stay where they are. JPEG files stay in the local thumbnail directory until the next thumbnail stage completes. Run a refresh after import so those thumbnails are generated and JPEG files that are not in the imported catalog are removed. A leftover `library.json` does not count for overwrite confirmation and is left in place. A `library.json` archive is not imported. Operator export and import remain the later transfer surface.
+`Library → Export Library…` asks for a destination, then downloads a server checkpoint into that `library.db` file. `Import Library…` replaces the live catalog after the server-stopped acknowledgment, including presets and thumbnail revision and dimensions. Settings and backups stay where they are. JPEG files stay in the local thumbnail directory until the next thumbnail stage completes. Run a refresh after import so those thumbnails are generated and JPEG files that are not in the imported catalog are removed. Operator export and import remain the later transfer surface.
 
 **Target surface:** Operator UI
 
@@ -202,7 +202,7 @@ Confirmation dialog for removing selected items from the library index only or a
 
 **Target surface:** Operator UI
 
-Library mutation action; no web equivalent.
+Library mutation action. There is no item removal route, so neither the desktop nor a web surface can remove items yet.
 
 ---
 
@@ -214,4 +214,4 @@ Secondary window that displays FFmpeg log entries buffered during a refresh run,
 
 **Target surface:** Operator UI
 
-The server log is accessible via `/control/log`. An Operator UI log viewer (covering both server and FFmpeg output) would subsume this window.
+The server log is accessible via `/control/logs/server`. An Operator UI log viewer (covering both server and FFmpeg output) would subsume this window.
