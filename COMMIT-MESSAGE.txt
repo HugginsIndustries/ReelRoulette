@@ -19,12 +19,8 @@ Instructions:
 
 Commit Message:
 
-M10j8: Require the control token for non-localhost control requests
+Bugfix: Stop the desktop Settings dialog hanging on reopen
 
-- Every non-localhost `/control/*` request needs the control token, whatever the WebUI auth mode or a saved `adminAuthMode` says; localhost stays trusted, testing routes included.
-- Generate and save a control token on start when none is set, and rewrite a saved `Off` to `TokenRequired`; `adminAuthMode` is read-only.
-- The Operator on another machine shows only a control token prompt until `POST /control/pair` accepts the token; a control session also covers the API reads the Operator makes.
-- Changing the control token ends every control session and gives a non-localhost caller a fresh one, and a failed pairing attempt logs a warning with the remote address.
-- The control token is accepted as a cookie or bearer header, never a query parameter, and `/control/pair` is POST-only.
-- `LibraryOperationsService` writes its server log lines through `ServerLogService.Append`, which never throws.
-- `verify-web-deploy.ps1` checks the generated token, a settings save with it, and a localhost `/control/testing/reset`.
+- Opening Settings a second time no longer freezes the desktop: the Baseline Loudness radios change the mode only when one is checked, like the other radio groups, so a closed dialog's radios left in Avalonia's shared group can no longer flip each other forever.
+- Add a headless test that opens, closes, and reopens Settings for both baseline modes, with a timeout so the hang fails instead of stalling the test run; after a timeout, every other headless test, including any already waiting, fails at once naming the test that timed out.
+- Record in the UI rework backlog that desktop dialogs should become panels or overlays in the main window.

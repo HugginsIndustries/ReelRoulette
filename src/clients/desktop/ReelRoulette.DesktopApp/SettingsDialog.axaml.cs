@@ -401,9 +401,11 @@ namespace ReelRoulette
             get => _baselineAutoMode;
             set
             {
-                if (_baselineAutoMode != value)
+                // Like the other radio groups, only the radio being checked changes the mode. Acting on an
+                // uncheck lets a closed dialog's radios, still in Avalonia's shared group, flip each other forever.
+                if (value && !_baselineAutoMode)
                 {
-                    _baselineAutoMode = value;
+                    _baselineAutoMode = true;
                     OnPropertyChanged();
                     OnPropertyChanged(nameof(BaselineManualMode));
                 }
@@ -415,9 +417,9 @@ namespace ReelRoulette
             get => !_baselineAutoMode;
             set
             {
-                if (_baselineAutoMode == value) // inverted logic
+                if (value && _baselineAutoMode)
                 {
-                    _baselineAutoMode = !value;
+                    _baselineAutoMode = false;
                     OnPropertyChanged();
                     OnPropertyChanged(nameof(BaselineAutoMode));
                 }

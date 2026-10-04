@@ -28,6 +28,7 @@ Write **[Unreleased]** bullets at the same level as the released sections below.
 - **Server sources and refresh settings:** A folder you import now shows up in the source list right away and can be enabled or disabled without restarting the server. Changing the auto-refresh interval or turning auto-refresh on now schedules the next refresh from the new setting. A forced duration or loudness rescan no longer resets the fingerprint scan parallelism to its default.
 - **Desktop filter dialog presets:** Deleting a preset, renaming one, or moving the selected one up or down no longer throws away your unsaved filter changes or turns off **Update Preset**. A saved preset whose minimum or maximum duration is stored in seconds keeps its settings on the desktop instead of loading as **None**.
 - **Desktop playback and sort labels:** The desktop shows a file as a photo or video based on what the server reports, as the WebUI does, and its library sort labels use the same arrows and dashes as the WebUI.
+- **Desktop Settings reopen hang:** Opening Settings a second time no longer freezes the desktop app so that it has to be force-closed.
 
 ### Security
 

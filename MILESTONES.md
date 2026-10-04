@@ -1423,6 +1423,7 @@ Last milestone completed: M10j8
   - Unscheduled. Scope is not set yet; changes to user-facing UX need explicit approval.
   - Deliberate differences found by the efficiency and divergence report, which stay unless this milestone changes them: single-click play in the WebUI and double-click play on the desktop, and loudness normalization and local-first playback on the desktop only.
   - Decided here: whether the desktop keeps its filter summary line, and whether the WebUI gets one.
+  - The desktop stops opening separate windows: every dialog becomes a panel or overlay in the main window. This should also stop closed dialogs, such as Settings, staying in memory and in Avalonia's shared radio button groups.
 - **Acceptance criteria**:
   - Set when the scope is decided.
 - **Verification evidence**:
