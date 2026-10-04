@@ -1,9 +1,23 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   createDefaultBrowseControls,
   getSortDirectionLabel,
-  isDefaultDescendingForSortMode
+  isDefaultDescendingForSortMode,
+  LIBRARY_SORT_MODES,
+  type LibrarySortMode
 } from "../library/libraryBrowseModel";
+
+interface SortDirectionLabelCase {
+  sortMode: LibrarySortMode;
+  descending: boolean;
+  label: string;
+}
+
+// The desktop sort labels read the same fixture.
+const sortLabelCases: SortDirectionLabelCase[] = JSON.parse(
+  readFileSync(new URL("../../../../../../shared/fixtures/sort-direction-labels.json", import.meta.url), "utf8")
+);
 
 describe("libraryBrowseModel", () => {
   it("defaults to Name ascending", () => {
@@ -14,8 +28,15 @@ describe("libraryBrowseModel", () => {
     expect(isDefaultDescendingForSortMode("Name")).toBe(false);
   });
 
-  it("getSortDirectionLabel matches desktop labels", () => {
-    expect(getSortDirectionLabel("Name", false)).toBe("A–Z");
-    expect(getSortDirectionLabel("DateAdded", true)).toBe("Newest → Oldest");
+  it.each(sortLabelCases)("labels $sortMode descending=$descending as $label", ({ sortMode, descending, label }) => {
+    expect(getSortDirectionLabel(sortMode, descending)).toBe(label);
+  });
+
+  it("the sort label fixture covers every sort mode in both directions", () => {
+    const covered = new Set(sortLabelCases.map((c) => `${c.sortMode}:${c.descending}`));
+    for (const mode of LIBRARY_SORT_MODES) {
+      expect(covered.has(`${mode}:true`)).toBe(true);
+      expect(covered.has(`${mode}:false`)).toBe(true);
+    }
   });
 });

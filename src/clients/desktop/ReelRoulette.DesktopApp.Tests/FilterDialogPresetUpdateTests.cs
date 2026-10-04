@@ -2,6 +2,7 @@ using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.LogicalTree;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using ReelRoulette;
 using Xunit;
 
@@ -144,6 +145,86 @@ public sealed class FilterDialogPresetUpdateTests
         Assert.False(canUpdate);
     }
 
+    [Fact]
+    public void DeletingTheActiveStarredPreset_DisablesUpdateAndClearsTheHeading()
+    {
+        var steps = Run(() =>
+        {
+            var dialog = Open(Filter(true), Presets(false));
+            var opened = (dialog.HeaderText, UpdatePresetButton(dialog).IsEnabled);
+            ClickPresetRowButton(dialog, "P", "Delete");
+            var deleted = (dialog.HeaderText, UpdatePresetButton(dialog).IsEnabled);
+            return (opened, deleted);
+        });
+
+        Assert.Equal(("Preset: P*", true), steps.opened);
+        Assert.Contains(steps.deleted.HeaderText, new[] { "Preset: None", "Preset: None*" });
+        Assert.False(steps.deleted.IsEnabled);
+    }
+
+    [Fact]
+    public void DeletingAPresetThatIsNotActive_LeavesUpdateAsItWas()
+    {
+        var steps = Run(() =>
+        {
+            var presets = Presets(false);
+            presets.Add(new FilterPreset { Name = "Q", FilterState = new FilterState { FavoritesOnly = true } });
+            var dialog = Open(Filter(true), presets);
+            var opened = (dialog.HeaderText, UpdatePresetButton(dialog).IsEnabled);
+            ClickPresetRowButton(dialog, "Q", "Delete");
+            var deleted = (dialog.HeaderText, UpdatePresetButton(dialog).IsEnabled, dialog.FilterState.GlobalMatchMode);
+            return (opened, deleted);
+        });
+
+        Assert.Equal(("Preset: P*", true), steps.opened);
+        Assert.Equal(("Preset: P*", true, (bool?)true), steps.deleted);
+    }
+
+    [Theory]
+    [InlineData("↑")]
+    [InlineData("↓")]
+    public void MovingTheActiveStarredPreset_KeepsTheUnsavedFilterAndUpdate(string label)
+    {
+        var steps = Run(() =>
+        {
+            var presets = Presets(false);
+            presets.Insert(0, new FilterPreset { Name = "Q0", FilterState = new FilterState { FavoritesOnly = true } });
+            presets.Add(new FilterPreset { Name = "Q1", FilterState = new FilterState { OnlyNeverPlayed = true } });
+            var dialog = Open(Filter(true), presets);
+            var opened = (dialog.HeaderText, UpdatePresetButton(dialog).IsEnabled);
+            ClickPresetRowButton(dialog, "P", label);
+            var moved = (dialog.HeaderText, UpdatePresetButton(dialog).IsEnabled, dialog.FilterState.GlobalMatchMode);
+            var order = string.Join(",", dialog.Presets.Select(p => p.Name));
+            return (opened, moved, order);
+        });
+
+        Assert.Equal(("Preset: P*", true), steps.opened);
+        Assert.Equal(("Preset: P*", true, (bool?)true), steps.moved);
+        Assert.Equal(label == "↑" ? "P,Q0,Q1" : "Q0,Q1,P", steps.order);
+    }
+
+    [Fact]
+    public void RenamingTheActiveStarredPreset_KeepsTheUnsavedFilterAndUpdate()
+    {
+        var steps = Run(() =>
+        {
+            var dialog = Open(Filter(true), Presets(false));
+            var opened = (dialog.HeaderText, UpdatePresetButton(dialog).IsEnabled);
+            ClickPresetRowButton(dialog, "P", "Rename");
+            var rename = dialog.OwnedWindows.OfType<RenamePresetDialog>().Single();
+            rename.GetVisualDescendants().OfType<TextBox>().Single().Text = "R";
+            rename.GetVisualDescendants().OfType<Button>().Single(b => Equals(b.Content, "OK"))
+                .RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Dispatcher.UIThread.RunJobs();
+            var renamed = (dialog.HeaderText, UpdatePresetButton(dialog).IsEnabled, dialog.FilterState.GlobalMatchMode);
+            return (opened, renamed, dialog.SelectedPresetName);
+        });
+
+        Assert.Equal(("Preset: P*", true), steps.opened);
+        Assert.Equal(("Preset: R*", true, (bool?)true), steps.renamed);
+        Assert.Equal("R", steps.SelectedPresetName);
+    }
+
     private static T Run<T>(Func<T> action)
     {
         return HeadlessTestSession.Run(action);
@@ -173,10 +254,26 @@ public sealed class FilterDialogPresetUpdateTests
         Dispatcher.UIThread.RunJobs();
     }
 
-    private static void ClickUpdatePreset(FilterDialog dialog)
+    private static Button UpdatePresetButton(FilterDialog dialog)
     {
         // The button has no x:Name, so find it by its label.
-        var button = dialog.GetLogicalDescendants().OfType<Button>().Single(b => Equals(b.Content, "Update Preset"));
+        return dialog.GetLogicalDescendants().OfType<Button>().Distinct().Single(b => Equals(b.Content, "Update Preset"));
+    }
+
+    private static void ClickPresetRowButton(FilterDialog dialog, string name, string label)
+    {
+        // Open the Presets tab so the row buttons are realized, then click the button on that preset's row.
+        dialog.GetLogicalDescendants().OfType<TabControl>().Single().SelectedIndex = 2;
+        Dispatcher.UIThread.RunJobs();
+        var button = dialog.GetVisualDescendants().OfType<Button>()
+            .Single(b => Equals(b.Content, label) && b.Tag is FilterPreset preset && preset.Name == name);
+        button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Dispatcher.UIThread.RunJobs();
+    }
+
+    private static void ClickUpdatePreset(FilterDialog dialog)
+    {
+        var button = UpdatePresetButton(dialog);
         Assert.True(button.IsEnabled);
         button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         Dispatcher.UIThread.RunJobs();

@@ -37,12 +37,14 @@ namespace ReelRoulette
         /// Minimum duration filter. Null means no minimum.
         /// </summary>
         [JsonPropertyName("minDuration")]
+        [JsonConverter(typeof(FilterDurationJsonConverter))]
         public TimeSpan? MinDuration { get; set; }
 
         /// <summary>
         /// Maximum duration filter. Null means no maximum.
         /// </summary>
         [JsonPropertyName("maxDuration")]
+        [JsonConverter(typeof(FilterDurationJsonConverter))]
         public TimeSpan? MaxDuration { get; set; }
 
         /// <summary>

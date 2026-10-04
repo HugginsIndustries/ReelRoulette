@@ -1,0 +1,12 @@
+[
+  { "sortMode": "Name", "descending": false, "label": "A–Z" },
+  { "sortMode": "Name", "descending": true, "label": "Z–A" },
+  { "sortMode": "LastPlayed", "descending": true, "label": "Newest → Oldest" },
+  { "sortMode": "LastPlayed", "descending": false, "label": "Oldest → Newest" },
+  { "sortMode": "DateAdded", "descending": true, "label": "Newest → Oldest" },
+  { "sortMode": "DateAdded", "descending": false, "label": "Oldest → Newest" },
+  { "sortMode": "PlayCount", "descending": true, "label": "Most Plays → Least Plays" },
+  { "sortMode": "PlayCount", "descending": false, "label": "Least Plays → Most Plays" },
+  { "sortMode": "Duration", "descending": true, "label": "Longest → Shortest" },
+  { "sortMode": "Duration", "descending": false, "label": "Shortest → Longest" }
+]

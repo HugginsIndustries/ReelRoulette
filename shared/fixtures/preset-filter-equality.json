@@ -30,6 +30,8 @@
   { "name": "default audio filter written out equals unset", "left": { "audioFilter": 0 }, "right": {}, "same": true },
   { "name": "with audio differs from without audio", "left": { "audioFilter": 1 }, "right": { "audioFilter": 2 }, "same": false },
   { "name": "equal minimum durations", "left": { "minDuration": "00:01:00" }, "right": { "minDuration": "00:01:00.0000000" }, "same": true },
+  { "name": "numeric minimum duration is seconds", "left": { "minDuration": 60 }, "right": { "minDuration": "00:01:00" }, "same": true },
+  { "name": "numeric maximum duration is seconds", "left": { "maxDuration": 5400 }, "right": { "maxDuration": "01:30:00" }, "same": true },
   { "name": "different minimum durations", "left": { "minDuration": "00:01:00" }, "right": { "minDuration": "00:02:00" }, "same": false },
   { "name": "maximum duration differs from none", "left": { "maxDuration": "01:30:00" }, "right": {}, "same": false },
   { "name": "null duration equals none", "left": { "minDuration": null, "maxDuration": null }, "right": {}, "same": true },

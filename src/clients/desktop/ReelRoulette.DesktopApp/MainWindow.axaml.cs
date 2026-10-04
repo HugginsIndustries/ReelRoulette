@@ -45,13 +45,6 @@ namespace ReelRoulette
 
     public partial class MainWindow : Window, INotifyPropertyChanged, ITagMutationClient
     {
-        private readonly string[] _photoExtensions =
-        {
-            // Primary formats (VLC native)
-            ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp",
-            // Extended formats (bonus support)
-            ".tiff", ".tif", ".heic", ".heif", ".avif", ".ico", ".svg", ".raw", ".cr2", ".nef", ".orf", ".sr2"
-        };
         private System.Timers.Timer? _autoPlayTimer;
         private bool _isKeepPlayingActive = false;
 
@@ -827,14 +820,6 @@ namespace ReelRoulette
         private List<string> _playbackTimeline = new();
         private int _timelineIndex = -1;
         private bool _isNavigatingTimeline = false; // Flag to prevent adding to timeline when navigating
-
-        private sealed record PlaybackTarget(
-            string StatsPath,
-            string PlaybackSource,
-            FromType PlaybackSourceType,
-            bool IsLocallyAccessible,
-            bool UsedApiPath,
-            bool SkipRecordPlayback = false);
 
         // Volume and mute
         private int _lastNonZeroVolume = 100;
@@ -4546,9 +4531,7 @@ namespace ReelRoulette
 
             if (!manualTarget.IsLocallyAccessible && !manualTarget.UsedApiPath)
             {
-                var extension = Path.GetExtension(videoPath).ToLowerInvariant();
-                var isPhoto = _photoExtensions.Contains(extension);
-                SetStatusMessage(isPhoto ? "Photo file not found." : "Video file not found.");
+                SetStatusMessage(manualTarget.IsPhoto ? "Photo file not found." : "Video file not found.");
                 _isNavigatingTimeline = false;
                 return;
             }
@@ -4565,6 +4548,7 @@ namespace ReelRoulette
                 return null;
             }
 
+            var isPhoto = item.MediaType == MediaType.Photo;
             var localAccessible = IsLocalMediaReadable(videoPath);
             var shouldUseApiPath = _forceApiPlayback || !localAccessible;
             if (!shouldUseApiPath)
@@ -4574,7 +4558,8 @@ namespace ReelRoulette
                     PlaybackSource: videoPath,
                     PlaybackSourceType: FromType.FromPath,
                     IsLocallyAccessible: true,
-                    UsedApiPath: false);
+                    UsedApiPath: false,
+                    IsPhoto: isPhoto);
             }
 
             if (!TryBuildApiMediaUrl(item.Id, out var apiMediaUrl))
@@ -4587,25 +4572,13 @@ namespace ReelRoulette
                 PlaybackSource: apiMediaUrl,
                 PlaybackSourceType: FromType.FromLocation,
                 IsLocallyAccessible: localAccessible,
-                UsedApiPath: true);
+                UsedApiPath: true,
+                IsPhoto: isPhoto);
         }
 
         private bool TryBuildApiMediaUrl(string idOrToken, out string apiMediaUrl)
         {
-            apiMediaUrl = string.Empty;
-            if (string.IsNullOrWhiteSpace(idOrToken))
-            {
-                return false;
-            }
-
-            if (!Uri.TryCreate(_coreServerBaseUrl, UriKind.Absolute, out var baseUri))
-            {
-                return false;
-            }
-
-            var escaped = Uri.EscapeDataString(idOrToken.Trim());
-            apiMediaUrl = new Uri(baseUri, $"/api/media/{escaped}").ToString();
-            return true;
+            return PlaybackTargetResolver.TryBuildApiMediaUrl(_coreServerBaseUrl, idOrToken, out apiMediaUrl);
         }
 
         private bool IsLocalMediaReadable(string? path)
@@ -4806,11 +4779,10 @@ namespace ReelRoulette
                 Log($"PlayMedia: Current video path set - Previous: {previousPath ?? "null"}, New: {statsPath ?? "null"}");
                 UpdateCurrentFileStatsUi();
 
-                // Determine if this is a photo or video
-                var extension = Path.GetExtension(statsPath ?? string.Empty).ToLowerInvariant();
-                var isPhoto = _photoExtensions.Contains(extension);
+                // The server's media type decides photo or video
+                var isPhoto = target.IsPhoto;
                 _isCurrentlyPlayingPhoto = isPhoto;
-                Log($"PlayMedia: Detected media type - Extension: {extension}, IsPhoto: {isPhoto}");
+                Log($"PlayMedia: Media type from server - IsPhoto: {isPhoto}");
 
                 if (isPhoto)
                 {
@@ -7284,46 +7256,9 @@ namespace ReelRoulette
 
         private PlaybackTarget? ResolvePlaybackTargetFromApiRandomResponse(CoreRandomResponse response)
         {
-            if (response == null)
-            {
-                return null;
-            }
-
-            var statsPath = response.Id?.Trim();
-            if (string.IsNullOrWhiteSpace(statsPath))
-            {
-                return null;
-            }
-
-            var localAccessible = IsLocalMediaReadable(statsPath);
-            var shouldUseApiPath = _forceApiPlayback || !localAccessible;
-            if (!shouldUseApiPath)
-            {
-                return new PlaybackTarget(
-                    StatsPath: statsPath,
-                    PlaybackSource: statsPath,
-                    PlaybackSourceType: FromType.FromPath,
-                    IsLocallyAccessible: true,
-                    UsedApiPath: false);
-            }
-
-            var absoluteMediaUrl = PlaybackMediaUrlResolver.ResolveAbsoluteMediaUrl(response.MediaUrl, _coreServerBaseUrl);
-            if (string.IsNullOrWhiteSpace(absoluteMediaUrl))
-            {
-                if (!TryBuildApiMediaUrl(statsPath, out var builtApiMediaUrl))
-                {
-                    return null;
-                }
-
-                absoluteMediaUrl = builtApiMediaUrl;
-            }
-
-            return new PlaybackTarget(
-                StatsPath: statsPath,
-                PlaybackSource: absoluteMediaUrl!,
-                PlaybackSourceType: FromType.FromLocation,
-                IsLocallyAccessible: localAccessible,
-                UsedApiPath: true);
+            var statsPath = response?.Id?.Trim();
+            var localAccessible = !string.IsNullOrWhiteSpace(statsPath) && IsLocalMediaReadable(statsPath);
+            return PlaybackTargetResolver.FromServerResponse(response, localAccessible, _forceApiPlayback, _coreServerBaseUrl);
         }
 
         private async Task SyncPresetsToCoreAsync()
@@ -9652,179 +9587,6 @@ namespace ReelRoulette
             {
                 SaveSettings();
             }
-        }
-
-        private void ScanDurations_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-        {
-            Log("UI ACTION: ScanDurations button clicked");
-            // Scan entire library
-            if (!_libraryStatsApplied || GlobalTotalMediaKnown == 0)
-            {
-                Log("  ERROR: No library available");
-                StatusTextBlock.Text = "No library available. Import a folder first (Library → Import Folder).";
-                return;
-            }
-            
-            // Get all unique source root paths from library
-            var sourceRoots = (_libraryIndex?.Sources ?? [])
-                .Where(s => s.IsEnabled && Directory.Exists(s.RootPath))
-                .Select(s => s.RootPath)
-                .Distinct()
-                .ToList();
-            
-            if (sourceRoots.Count == 0)
-            {
-                Log("  ERROR: No enabled sources with valid paths found");
-                StatusTextBlock.Text = "No valid source folders found in library.";
-                return;
-            }
-            
-            Log($"  Starting duration scan for {sourceRoots.Count} source(s) in library");
-            StatusTextBlock.Text = $"Starting duration scan for {sourceRoots.Count} source(s)...";
-            
-            Log($"ScanDurations_Click: Delegating duration scan request to core refresh pipeline for folder: {sourceRoots[0]}");
-            _ = Task.Run(async () =>
-            {
-                var accepted = await RequestCoreRefreshAsync();
-                if (!accepted)
-                {
-                    SetStatusMessage("Duration scan request deferred: core refresh unavailable or already running.", 0);
-                }
-            });
-        }
-
-        private async void ScanLoudness_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-        {
-            Log("UI ACTION: ScanLoudness button clicked");
-            // Scan entire library
-            if (!_libraryStatsApplied || GlobalTotalMediaKnown == 0)
-            {
-                Log("  ERROR: No library available");
-                StatusTextBlock.Text = "No library available. Import a folder first (Library → Import Folder).";
-                return;
-            }
-            
-            // Get all unique source root paths from library
-            var sourceRoots = (_libraryIndex?.Sources ?? [])
-                .Where(s => s.IsEnabled && Directory.Exists(s.RootPath))
-                .Select(s => s.RootPath)
-                .Distinct()
-                .ToList();
-            
-            if (sourceRoots.Count == 0)
-            {
-                Log("  ERROR: No enabled sources with valid paths found");
-                StatusTextBlock.Text = "No valid source folders found in library.";
-                return;
-            }
-            
-            // Show dialog to choose scan mode
-            var dialog = new Window
-            {
-                Title = "Scan Loudness",
-                Width = 450,
-                Height = 250,
-                WindowStartupLocation = WindowStartupLocation.CenterOwner,
-                CanResize = false
-            };
-
-            var panel = new StackPanel { Margin = new Thickness(20), Spacing = 15 };
-            
-            panel.Children.Add(new TextBlock 
-            { 
-                Text = "Choose scan mode:",
-                FontSize = 14,
-                FontWeight = Avalonia.Media.FontWeight.SemiBold
-            });
-            
-            var onlyNewRadio = new RadioButton 
-            { 
-                Content = "Only scan new files (files without loudness data)",
-                IsChecked = true,
-                GroupName = "ScanMode"
-            };
-            panel.Children.Add(onlyNewRadio);
-            
-            var rescanAllRadio = new RadioButton 
-            { 
-                Content = "Rescan all files (update all loudness data with improved accuracy)",
-                GroupName = "ScanMode"
-            };
-            panel.Children.Add(rescanAllRadio);
-            
-            panel.Children.Add(new TextBlock
-            {
-                Text = "Note: Rescanning uses the new EBU R128 standard for more accurate loudness measurement.",
-                FontSize = 11,
-                Foreground = Avalonia.Media.Brushes.Gray,
-                TextWrapping = Avalonia.Media.TextWrapping.Wrap,
-                Margin = new Thickness(20, 5, 0, 0)
-            });
-            
-            var buttonPanel = new StackPanel 
-            { 
-                Orientation = Avalonia.Layout.Orientation.Horizontal,
-                HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
-                Spacing = 10,
-                Margin = new Thickness(0, 20, 0, 0)
-            };
-            
-            var okButton = new Button { Content = "Start Scan", MinWidth = 100 };
-            var cancelButton = new Button { Content = "Cancel", MinWidth = 100 };
-            
-            buttonPanel.Children.Add(okButton);
-            buttonPanel.Children.Add(cancelButton);
-            panel.Children.Add(buttonPanel);
-            
-            dialog.Content = panel;
-            
-            bool? result = null;
-            bool rescanAll = false;
-            
-            EventHandler<Avalonia.Interactivity.RoutedEventArgs>? okHandler = null;
-            EventHandler<Avalonia.Interactivity.RoutedEventArgs>? cancelHandler = null;
-            
-            okHandler = (s, args) => 
-            { 
-                result = true;
-                rescanAll = rescanAllRadio.IsChecked == true;
-                dialog.Close();
-                // Unsubscribe to allow garbage collection
-                if (okHandler != null) okButton.Click -= okHandler;
-                if (cancelHandler != null) cancelButton.Click -= cancelHandler;
-            };
-            cancelHandler = (s, args) => 
-            { 
-                result = false;
-                dialog.Close();
-                // Unsubscribe to allow garbage collection
-                if (okHandler != null) okButton.Click -= okHandler;
-                if (cancelHandler != null) cancelButton.Click -= cancelHandler;
-            };
-            
-            okButton.Click += okHandler;
-            cancelButton.Click += cancelHandler;
-            
-            await dialog.ShowDialog(this);
-            
-            if (result != true)
-            {
-                Log("  User cancelled loudness scan");
-                return;
-            }
-            
-            Log($"  Starting loudness scan for {sourceRoots.Count} source(s) in library - Mode: {(rescanAll ? "Rescan All" : "Only New Files")}");
-            StatusTextBlock.Text = $"Starting loudness scan ({(rescanAll ? "all files" : "new files only")})...";
-            
-            Log($"ScanLoudness_Click: Delegating loudness scan request to core refresh pipeline for folder: {sourceRoots[0]}, RescanAll: {rescanAll}");
-            _ = Task.Run(async () =>
-            {
-                var accepted = await RequestCoreRefreshAsync();
-                if (!accepted)
-                {
-                    SetStatusMessage("Loudness scan request deferred: core refresh unavailable or already running.", 0);
-                }
-            });
         }
 
         #endregion

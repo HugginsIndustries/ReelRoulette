@@ -14,11 +14,11 @@ public static class LibraryPanelSort
     {
         return sortMode switch
         {
-            "LastPlayed" => descending ? "Newest -> Oldest" : "Oldest -> Newest",
-            "DateAdded" => descending ? "Newest -> Oldest" : "Oldest -> Newest",
-            "PlayCount" => descending ? "Most Plays -> Least Plays" : "Least Plays -> Most Plays",
-            "Duration" => descending ? "Longest -> Shortest" : "Shortest -> Longest",
-            _ => descending ? "Z-A" : "A-Z"
+            "LastPlayed" => descending ? "Newest → Oldest" : "Oldest → Newest",
+            "DateAdded" => descending ? "Newest → Oldest" : "Oldest → Newest",
+            "PlayCount" => descending ? "Most Plays → Least Plays" : "Least Plays → Most Plays",
+            "Duration" => descending ? "Longest → Shortest" : "Shortest → Longest",
+            _ => descending ? "Z–A" : "A–Z"
         };
     }
 }

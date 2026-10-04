@@ -595,8 +595,10 @@ namespace ReelRoulette
         /// <summary>
         /// Loads presets into the UI collections, always including "None" as the first option.
         /// </summary>
-        private void LoadPresets()
+        /// <param name="alreadySelected">The preset that counts as already selected; defaults to the current selection.</param>
+        private void LoadPresets(string? alreadySelected = null)
         {
+            var previousSelection = alreadySelected ?? SelectedPresetName;
             PresetNames.Clear();
             Presets.Clear();
             
@@ -610,15 +612,22 @@ namespace ReelRoulette
             }
             
             // Select active preset if it exists, otherwise select "None"
-            if (!string.IsNullOrEmpty(_activePresetName) && PresetNames.Contains(_activePresetName))
+            var selection = !string.IsNullOrEmpty(_activePresetName) && PresetNames.Contains(_activePresetName)
+                ? _activePresetName
+                : NonePresetName;
+
+            // Putting back the preset that was already selected must not load its saved filter over unsaved edits.
+            var wasInitializing = _isInitializing;
+            _isInitializing = wasInitializing || selection == previousSelection;
+            try
             {
-                SelectedPresetName = _activePresetName;
+                SelectedPresetName = selection;
             }
-            else
+            finally
             {
-                SelectedPresetName = NonePresetName;
+                _isInitializing = wasInitializing;
             }
-            
+
             Log($"FilterDialog: Loaded {_presets.Count} presets into UI, selected: {SelectedPresetName}");
             RefreshPendingState();
         }
@@ -1149,6 +1158,7 @@ namespace ReelRoulette
                 }
                 
                 var oldName = preset.Name;
+                var wasSelected = SelectedPresetName == oldName;
                 preset.Name = newName;
                 
                 // Update active preset name if this was the active preset
@@ -1158,13 +1168,8 @@ namespace ReelRoulette
                     OnPropertyChanged(nameof(HeaderText));
                 }
                 
-                // Update selected preset name if this was selected
-                if (SelectedPresetName == oldName)
-                {
-                    SelectedPresetName = newName;
-                }
-                
-                LoadPresets();
+                // A renamed selected preset is still the selected one, so the reload keeps unsaved edits
+                LoadPresets(wasSelected ? newName : null);
                 RefreshPendingState();
                 Log($"FilterDialog: Preset renamed from '{oldName}' to '{newName}'");
             }
@@ -1188,6 +1193,7 @@ namespace ReelRoulette
                     _activePresetName = null;
                     SelectedPresetName = NonePresetName;
                     OnPropertyChanged(nameof(HeaderText));
+                    OnPropertyChanged(nameof(CanUpdatePreset));
                     Log($"FilterDialog: Cleared active preset after deletion");
                 }
                 

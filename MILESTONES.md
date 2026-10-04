@@ -14,7 +14,7 @@ An outline of upcoming releases and the milestones each one ships, in order. v0.
 - **v0.16.0 — Accounts**: Require an account PIN from LAN and remote clients, with HTTPS through a reverse proxy and per-user source access. P28a, P28b, P28c, P28d, P28e, P28f, P28g, P28h, P28i, P28j, P28k, P28l.
 - **v0.17.0 — Structured log migration and Log Viewer**: Move every desktop, server, and WebUI log to the structured API and give the Operator a filterable Log Viewer. P27c, P27d, P27e, P27f, P27g.
 - **v0.18.0 — Playback sessions**: Let the server choose direct, remux, or transcode playback per session for desktop and WebUI. P2a, P2b, P2c, P2d, P2e, P2f, P2g, P2h.
-- **Unscheduled backlog**: P1, P3, P4, P5, P6, P7, P9a, P9b, P10, P20, P30, P31, P32, P33.
+- **Unscheduled backlog**: P1, P3, P4, P5, P6, P7, P9a, P9b, P10, P20, P30, P31, P32, P33, P34.
 
 ## Document Purpose
 
@@ -175,11 +175,20 @@ Last milestone completed: M10j7
     - Fingerprint parallelism: `ForceRescan_ClearingItsFlag_KeepsFingerprintParallelism` (duration and loudness cases) failed before the fix (expected 8, got 4) and passes, and also checks auto-refresh enabled and interval are kept.
     - Catalog item tags: `CopyWithTags` and its reflection test are removed and `AttachTags` sets tags in place. `InsertItem` already wrote tags; it now also writes thumbnail revision, width, and height. `InsertItem_WritesThumbnailFieldsAndTags_ListAndSingleReadsAgree` failed before the fix (thumbnail revision read back null) and passes, comparing the list query and single-item read for a tagged and an untagged item. The existing list-query test with catalog-only thumbnail dimensions still passes.
     - `dotnet build ReelRoulette.sln` clean; `dotnet test ReelRoulette.sln` 262 core and 167 desktop tests pass; SystemChecks pass.
+  - Desktop part:
+    - Update Preset after preset delete: the recorded symptom did not reproduce. Deleting the active starred preset already disabled **Update Preset** and showed `Preset: None`, because the preset list reload switched the preset dropdown to None and that path raises the change notification. `DeletingTheActiveStarredPreset_DisablesUpdateAndClearsTheHeading` clicks the real Delete button on the Presets tab and passed before any fix; it stays as a regression test, and the delete handler now raises the notification itself. The actual bug: deleting any other preset, or moving the selected one up or down, reloaded the list, reselected the active preset in the dropdown, and loaded that preset's saved filter over the unsaved one, so `P*` became `P` and **Update Preset** turned off. The reload no longer loads the saved filter when it puts back the preset that was already selected. `DeletingAPresetThatIsNotActive_LeavesUpdateAsItWas` and `MovingTheActiveStarredPreset_KeepsTheUnsavedFilterAndUpdate` (up and down) failed before the fix (`Preset: P`, disabled, saved filter loaded) and pass. Renaming the selected starred preset, found in the user's spot check, did the same: the rename handler set the new name before the reload, the dropdown cleared it because the list did not have that name yet, and the reload then loaded the saved filter. The rename handler now tells the reload that the renamed preset is the one already selected. `RenamingTheActiveStarredPreset_KeepsTheUnsavedFilterAndUpdate` drives the real rename dialog and failed before the fix (`Preset: R`, disabled, saved filter loaded) and passes.
+    - Scan menu items: the slice turned out to be dead code and was removed rather than fixed. The **Scan Durations** and **Scan Loudness** menu items left the desktop XAML when refresh moved to the server (commit `1657dbe`), and nothing else called `ScanDurations_Click` or `ScanLoudness_Click`, so neither the local folder check nor the ignored **Rescan all files** choice could run. Both handlers are deleted; everything they used has other callers. Refresh and forced rescans go only through the refresh pipeline and its settings. No test applies to removed code.
+    - Media type: `PlaybackTarget` carries the server's media type (`mediaType == "photo"` on random and play-item responses, the item's media type for manual play), and `PlayMedia` and the file-not-found message use it. `_photoExtensions` is removed; the desktop had no video list. `PlaybackTargetResolverTests` covers `.mp4` reported as a photo and `.jpg` reported as a video, local and API; with extension detection put back, 4 of 8 cases fail.
+    - Sort labels: `shared/fixtures/sort-direction-labels.json` lists every mode and direction. The desktop test failed on all 10 entries before the fix and passes; the WebUI test reads the same fixture and also checks it covers every sort mode. Changing one label in the fixture fails both. The theme spot check of `→` and `–` is the user's.
+    - Numeric preset durations: the fixture's numeric `minDuration` and `maxDuration` entries failed on the desktop and pass after a property converter that reads durations the way the server's filter parser does; the WebUI already passed them. `FilterDurationJsonTests` checks a preset with numeric durations keeps its other settings and that durations are still written as `HH:MM:SS` text.
+    - `dotnet build ReelRoulette.sln` clean; `dotnet test ReelRoulette.sln` 262 core and 201 desktop tests pass; `npm run verify` passes.
   - The control token slice's tests must cover a non-localhost request with `Off` saved, a localhost testing-route request, token generation on start, and `POST /control/pair` setting the admin cookie. The cross-machine pass is the Release Specific checklist item above.
   - The media type slice's test must cover a playback response whose `mediaType` disagrees with the file extension. The sort label slice's tests must check every mode and direction on both clients against the same expected labels, plus one quick spot check of the desktop label in each theme.
 - **Deferrals / Follow-ups**:
   - WebUI reaction to `sourceStateChanged` stays with WebUI Source State Sync.
-  - Found while planning: **Scan Loudness** asks whether to rescan every file, but only logs that choice and never sends a forced loudness rescan to the server. To be decided with the desktop scan menu slice.
+  - Found while planning: **Scan Loudness** asked whether to rescan every file, but only logged that choice. Moot: the handler was unreachable and was removed with the scan menu slice.
+  - Found in the numeric duration slice: the server's filter parser, and now the desktop, read duration strings with `TimeSpan` rules first, so `"75"` is 75 days and `"1:30"` is 1 hour 30 minutes, while the WebUI reads them as 75 and 90 seconds. Both clients only write `HH:MM:SS`, so only hand-written or API-written presets differ. Not changed here; it needs a backlog item if those forms should agree.
+  - Found during the desktop part's spot checks: the WebUI uses the browser's native prompt, confirm, and alert dialogs, such as for preset rename -> WebUI In-App Dialogs backlog item.
   - Release notes for v0.14.0 must say that opening the Operator from another machine now asks for the control token, and where to find it.
 
 ### M10j9 - Client Event Efficiency
@@ -1514,6 +1523,27 @@ Last milestone completed: M10j7
   - A corrupt catalog is not written over the last good backup.
 - **Verification evidence**:
   - Evidence placeholders maintained at planned state; completion evidence must include a corrupt-item-page test and a startup timing comparison on a large catalog.
+- **Deferrals / Follow-ups**:
+  - None yet.
+
+---
+
+### P34 - WebUI In-App Dialogs
+
+- **Status**: ⏳ Planned
+- **Goal**: The WebUI asks for names and confirmations in its own dialogs, styled like the rest of the WebUI, instead of the browser's `prompt`, `confirm`, and `alert`.
+- **Scope**:
+  - Unscheduled. May fit inside Desktop and WebUI UI Rework instead of standing alone.
+  - Found during the post-migration fixes desktop spot checks: preset rename in the WebUI opens the browser's native prompt, which does not match the WebUI's styling and does not suit the WebUI when it runs as an installed web app.
+  - `app.js` uses native dialogs in nine places today: preset delete and rename; tag editor category rename, duplicate-name alert, and category delete; tag delete; two **Discard changes?** confirmations; and new category name.
+  - One reusable in-app dialog for text input, confirmation, and notice, with keyboard support (Enter confirms, Escape cancels) and focus returning to where it was.
+  - Keep each dialog's wording and outcome as it is today; only how it is shown changes. Changes to user-facing UX need explicit approval.
+- **Acceptance criteria**:
+  - The WebUI calls no `prompt`, `confirm`, or `alert`.
+  - Each replaced dialog keeps its wording, and confirming or canceling does what it does today.
+  - The dialogs match the WebUI's theme and work in an installed web app on desktop and mobile.
+- **Verification evidence**:
+  - Evidence placeholders maintained at planned state; completion evidence must include WebUI tests for confirm and cancel on the shared dialog, a check that no native dialog calls remain, `npm run verify`, and a spot check in an installed web app.
 - **Deferrals / Follow-ups**:
   - None yet.
 

@@ -19,9 +19,10 @@ Instructions:
 
 Commit Message:
 
-M10j8: Fix source list, refresh settings, and catalog tag reads
+M10j8: Fix desktop presets, media type, and sort labels
 
-- Read the server source list and source enable and disable from catalog rows, so an imported source is listed and can be toggled without a restart.
-- Save refresh settings through the refresh pipeline so a new interval or enabling auto-refresh reschedules the next run.
-- Keep every other refresh setting, including fingerprint parallelism, when a forced duration or loudness rescan clears its flag.
-- Set catalog item tags in place instead of copying every item field, and have `InsertItem` write thumbnail revision, width, and height.
+- Keep unsaved filter changes and Update Preset when a preset is deleted, renamed, or moved in the desktop filter dialog.
+- Remove the unreachable Scan Durations and Scan Loudness handlers; their menu items were removed long ago and refresh runs through the refresh pipeline.
+- Decide photo or video for the playing item from the server's media type and remove the desktop's extension list.
+- Use the WebUI's sort direction labels on the desktop, locked by a shared fixture both clients test.
+- Read numeric preset durations as seconds on the desktop, covered by the shared preset equality fixture.
