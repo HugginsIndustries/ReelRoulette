@@ -19,10 +19,9 @@ Instructions:
 
 Commit Message:
 
-M10j8: Fix desktop presets, media type, and sort labels
+Docs: Retire one-off audit and report docs
 
-- Keep unsaved filter changes and Update Preset when a preset is deleted, renamed, or moved in the desktop filter dialog.
-- Remove the unreachable Scan Durations and Scan Loudness handlers; their menu items were removed long ago and refresh runs through the refresh pipeline.
-- Decide photo or video for the playing item from the server's media type and remove the desktop's extension list.
-- Use the WebUI's sort direction labels on the desktop, locked by a shared fixture both clients test.
-- Read numeric preset durations as seconds on the desktop, covered by the shared preset equality fixture.
+- Delete the eight report-only docs under `docs/`: the full repository audit, desktop feature and cleanup reports, the settings persistence investigation, and the LibVLC, Linux dependency, update integration, and Velopack audits.
+- Move what is still open into the backlog: new Server Robustness Findings, Client Robustness Findings, and Remaining Desktop-Only Features items, each finding with its file, problem, and fix.
+- List the pairing leftovers in the auth cutover milestone so they go with pairing.
+- Rewrite active and planned milestone references to the audit so they stand without it.

@@ -14,7 +14,7 @@ An outline of upcoming releases and the milestones each one ships, in order. v0.
 - **v0.16.0 — Accounts**: Require an account PIN from LAN and remote clients, with HTTPS through a reverse proxy and per-user source access. P28a, P28b, P28c, P28d, P28e, P28f, P28g, P28h, P28i, P28j, P28k, P28l.
 - **v0.17.0 — Structured log migration and Log Viewer**: Move every desktop, server, and WebUI log to the structured API and give the Operator a filterable Log Viewer. P27c, P27d, P27e, P27f, P27g.
 - **v0.18.0 — Playback sessions**: Let the server choose direct, remux, or transcode playback per session for desktop and WebUI. P2a, P2b, P2c, P2d, P2e, P2f, P2g, P2h.
-- **Unscheduled backlog**: P1, P3, P4, P5, P6, P7, P9a, P9b, P10, P20, P30, P31, P32, P33, P34.
+- **Unscheduled backlog**: P1, P3, P4, P5, P6, P7, P9a, P9b, P10, P20, P30, P31, P32, P33, P34, P35, P36, P37.
 
 ## Document Purpose
 
@@ -145,8 +145,8 @@ Last milestone completed: M10j7
     - Found by code reading while documenting the refresh settings: `RefreshPipelineService.ConsumeRefreshRescanFlags` clears a force flag by building a new `RefreshSettingsSnapshot` from auto-refresh enabled, interval, and the two force flags only. `FingerprintScanMaxDegreeOfParallelism` falls back to its default of 4, so a forced duration or loudness rescan resets a saved value such as 8.
     - Clearing a force flag keeps every other refresh setting.
   - Control token for non-localhost control requests (server and Operator):
-    - Found by the planned-milestones audit and still accurate in `docs/full-audit.md` finding 1 (`/control/*` admin plane unauthenticated when `AdminAuthMode != "TokenRequired"`): with LAN binding on, the admin auth mode defaults to `Off`, so any LAN caller can stop, restart, or update the server, change settings, and run testing scenarios. First start writes that `Off` into `core-settings.json`, so changing the default alone would leave existing installs open.
-    - `docs/full-audit.md` finding 19 (`OperatorTestingService` mutations protected only by middleware policy) also still holds: the testing routes check the token themselves and do not exempt localhost, so requiring the token would lock the Operator's own testing panel out on the server machine.
+    - Found by the repository audit and confirmed by the planned-milestones audit: `ServerPairingAuthMiddleware.AuthorizeControlPlaneAsync` enforces the control token only when `AdminAuthMode` is `TokenRequired`. With LAN binding on, the admin auth mode defaults to `Off`, so any LAN caller can stop, restart, or update the server, change settings, and run testing scenarios. First start writes that `Off` into `core-settings.json`, so changing the default alone would leave existing installs open.
+    - The testing routes are open the same way: `IsTestingControlAuthorized` in `ServerHostComposition.cs` also checks the token only in `TokenRequired` mode. They check it themselves and do not exempt localhost, so requiring the token would lock the Operator's own testing panel out on the server machine.
     - Every non-localhost control request needs the control token. There is no `Off` for non-localhost requests: a persisted `Off` no longer opens the control plane to the LAN, and the Operator settings no longer offer it. Whether the admin auth mode field leaves `/control/settings` or stays read-only is decided here; removing it is its own contract slice.
     - Localhost stays trusted for every control route, including the testing routes.
     - A server with no control token generates one on start and saves it.
@@ -470,7 +470,7 @@ Last milestone completed: M10j7
 - **Scope**:
   - Planned for v0.18.0.
   - Already in place: `POST /api/random` and `POST /api/play/{itemId}` issue a media token, and `GET /api/media/{idOrToken}` streams it with range requests.
-  - `docs/full-audit.md` finding 11 (`ServerMediaTokenStore` has no expiry or eviction) still holds: every play adds a token that is never removed and stays valid until the server stops.
+  - Found by the repository audit: `ServerMediaTokenStore` has no expiry or eviction; every play adds a token that is never removed and stays valid until the server stops.
   - Give tokens a time to live and a size cap, tie them to the playback session, and clean expired sessions up.
   - `GET /api/media/{idOrToken}` also accepts a raw item id. The source access policy covers that path; decide here whether raw ids stay accepted once sessions exist.
 - **Acceptance criteria**:
@@ -806,7 +806,7 @@ Last milestone completed: M10j7
   - The Operator page is about 780 lines of HTML, CSS, and JavaScript inside a raw string in `src/core/ReelRoulette.ServerApp/Program.cs`, and no test covers `/operator`.
   - Where it lives is decided here. The first candidate is a second entry in the WebUI Vite project, which already has `npm run verify`, type checking, and tests, and is already staged into server builds by `stage-webui-assets.ps1`.
   - The page stays at `/operator`, calls the same control routes, and keeps its sections, labels, and behavior.
-  - Replace `innerHTML` with escaped rendering where the page inserts settings and status text (`docs/full-audit.md` finding 43, Operator HTML page interpolates user input via `innerHTML`).
+  - Replace `innerHTML` with escaped rendering where the page inserts settings and status text (found by the repository audit: Operator HTML page interpolates user input via `innerHTML`).
   - Packaged server builds serve the extracted page.
 - **Acceptance criteria**:
   - `/operator` shows the same sections and controls and calls the same routes as before.
@@ -928,7 +928,7 @@ Last milestone completed: M10j7
     - `clientOpId` is an optional client operation id, kept when provided,
     - request-scoped HTTP and event stream logs carry W3C `traceId` and `spanId` when trace context is active; background and client-local events may omit them,
     - `srcIp` and `userAgent` are added by the server, never by clients.
-  - Strict ingestion at `POST /api/logs/client`: keep valid fields as sent without inferring `lvl`, `comp`, or `op` from the message; reject missing required fields, invalid `lvl` or `svc`, invalid or oversized `data`, and unknown fields; return a `400` listing every error with `code`, `field` (dotted path such as `data.error.code`), and `reason`. JSON serialization also closes the forged-line problem in `docs/full-audit.md` finding 21 (`AppendClientLog` does not sanitize newlines or control characters).
+  - Strict ingestion at `POST /api/logs/client`: keep valid fields as sent without inferring `lvl`, `comp`, or `op` from the message; reject missing required fields, invalid `lvl` or `svc`, invalid or oversized `data`, and unknown fields; return a `400` listing every error with `code`, `field` (dotted path such as `data.error.code`), and `reason`. JSON serialization also closes a forged-line problem found by the repository audit: `LibraryOperationsService.AppendClientLog` writes client messages without escaping newlines or control characters.
   - Rotation: rotate at 25 MB, keep the current file plus 10 uncompressed archives, enforce retention at startup before writing, and define what happens to a single oversized entry and to concurrent appends.
   - Human-readable rendering is a view over the fields (Operator, console), not what is stored.
   - Contract change for `POST /api/logs/client` in OpenAPI and the generated WebUI types.
@@ -1048,7 +1048,7 @@ Last milestone completed: M10j7
   - The route stays read-only; logs are still written directly to `last.log`.
   - Server-side filters: `svc`, `lvl`, `clientId`, `sessionId`, `traceId`, `ingestReqId`, `clientOpId`, `comp`, `op`, `evt`, message text, and a time window. Client-side filtering only refines results already fetched.
   - Newest first by `ts`, tie-broken by `ingestReqId` and then a stable row sequence, with a versioned cursor and defined `from` and `to` bounds, so paging never repeats or skips rows.
-  - Read from the end of the file and across rotated archives instead of walking every line on each request (`docs/full-audit.md` finding 12, `ServerLogService.Read` walks the entire log on every request).
+  - Read from the end of the file and across rotated archives instead of walking every line on each request (found by the repository audit: `ServerLogService.Read` walks the entire log on every request).
   - Operator view: controls collapsed by default with active-filter chips, readable rows with expandable raw JSON, and auto-refresh that pauses while scrolled away from the newest rows, with a resume control.
 - **Acceptance criteria**:
   - The Operator Log Viewer filters by every listed field, text, and time window.
@@ -1087,9 +1087,9 @@ Last milestone completed: M10j7
   - Document reverse proxy setup in `README.md` and `docs/dev-setup.md`: a general proxy example and `tailscale serve`, with the headers the server needs.
   - Server fixes so it behaves correctly behind a proxy:
     - Honor forwarded headers only from configured proxies. A request that came through a proxy is not a localhost request, even when the proxy runs on the server machine, so localhost trust applies only to direct loopback connections. Check during this milestone which forwarding headers `tailscale serve` sends; if a proxy sends none, document that it must, or how the server is told the proxy address.
-    - Treat a missing remote address as not local (`docs/full-audit.md` finding 8, `RemoteIpAddress == null` treated as local).
-    - Mark cookies `Secure` when the original request was HTTPS, and never send `SameSite=None` without `Secure` (`docs/full-audit.md` finding 9, `SameSite=None` allowed without `Secure`).
-    - Accept `https` origins for CORS and build LAN origins with the scheme clients actually use (`docs/full-audit.md` finding 10, CORS hard-coded to HTTP only).
+    - Treat a missing remote address as not local (found by the repository audit: `RemoteIpAddress == null` treated as local).
+    - Mark cookies `Secure` when the original request was HTTPS, and never send `SameSite=None` without `Secure` (found by the repository audit: `SameSite=None` allowed without `Secure`).
+    - Accept `https` origins for CORS and build LAN origins with the scheme clients actually use (found by the repository audit: CORS hard-coded to HTTP only).
     - Links the server builds (Operator links, runtime config) use the proxied scheme and host.
   - Android PWA install, folded in from the backlog: found in the v0.12.0 manual regression pass on a Google Pixel 8 Pro, Add to Home Screen only creates a shortcut that opens in Chrome. Likely cause, not confirmed on a device: the WebUI registers its service worker only in a secure context, and a plain-HTTP LAN address is not one, so Chrome has no service worker and does not offer Install app. iOS installs from its home-screen meta tags without one. Over HTTPS through a proxy, Install app should open the WebUI standalone; check the manifest fields Chrome requires if it does not.
   - Add Release Specific checklist items: "Behind `tailscale serve` and one other HTTPS proxy, desktop, WebUI, and Operator connect, log in, browse, and play, and the server treats them as remote," and "On Android Chrome over HTTPS, Install app opens the WebUI standalone with its icon; iOS Add to Home Screen and desktop browser install still open standalone."
@@ -1165,8 +1165,8 @@ Last milestone completed: M10j7
   - Define logout, session invalidation, and how account identity reaches HTTP and event stream handlers.
   - Localhost trust: a direct localhost connection is trusted as admin and needs no PIN. A request through a reverse proxy is not localhost.
   - There is no general auth-off mode once accounts exist: the API `AuthMode` `Off` setting and running without a shared token no longer open the API to LAN clients.
-  - Remove pairing and the shared pairing token, with no migration; old pairing cookies and tokens fail. Remove query-string tokens (`docs/full-audit.md` finding 2, `AllowLegacyTokenAuth` defaults to `true`, accepting tokens via query string).
-  - Compare session tokens in constant time (`docs/full-audit.md` finding 7, non-constant-time comparison of secrets).
+  - Remove pairing and the shared pairing token, with no migration; old pairing cookies and tokens fail. Remove query-string tokens (found by the repository audit: `AllowLegacyTokenAuth` defaults to `true`, accepting tokens via query string).
+  - Compare session tokens in constant time (found by the repository audit: non-constant-time comparison of secrets).
 - **Acceptance criteria**:
   - A correct PIN returns a session tied to the account, client, and device.
   - Failed PINs count per account and device, lock out for one hour after 10 failures, and return lockout details.
@@ -1188,9 +1188,15 @@ Last milestone completed: M10j7
   - Planned for v0.16.0. Depends on: PIN Login API and Sessions.
   - Require a session on every API and control route and on the event stream for non-localhost requests.
   - The Operator uses admin account sessions and no longer accepts the control token added in v0.14.0. Remove the control token, its setting, and its prompt.
-  - Admin-only operations (control plane, source and item management, catalog transfer, account administration, testing routes) reject user-level accounts. Testing routes use the same check as the rest of the control plane (`docs/full-audit.md` finding 19, `OperatorTestingService` mutations protected only by middleware policy).
-  - Settings reads no longer return secrets (`docs/full-audit.md` finding 20, auth and secret fields in DTOs encourage credential leakage; `GET /control/settings` returns the admin token today).
-  - Remove pairing and control-token flows from clients, docs, and contracts.
+  - Admin-only operations (control plane, source and item management, catalog transfer, account administration, testing routes) reject user-level accounts. Testing routes use the same check as the rest of the control plane (found by the repository audit: `OperatorTestingService` mutations protected only by middleware policy).
+  - Settings reads no longer return secrets (found by the repository audit: auth and secret fields in DTOs encourage credential leakage; `GET /control/settings` returns the admin token today).
+  - Remove pairing and control-token flows from clients, docs, and contracts. Found by the repository audit, these go with them:
+    - Two pairing secrets that drift apart: `/api/pair` checks `ServerRuntimeOptions.PairingToken`, while the Operator saves `WebRuntimeSettings.SharedToken`, and `src/core/ReelRoulette.ServerApp/Program.cs` starts with `SharedToken ?? PairingToken` and passes that to a restarted server. Editing the shared token has no effect until a restart, then silently changes the pairing token.
+    - `WebRuntimeSettings.AuthMode` is saved by `CoreSettingsService.UpdateWebRuntimeSettings` but `ServerPairingAuthMiddleware` reads only `RequireAuth`, so setting it to `Off` changes nothing.
+    - `RestartCoordinator.TryLaunchReplacementProcess` in `Program.cs` passes the token to the child as the `CoreServer__PairingToken` environment variable, which other local users can read from `/proc/<pid>/environ` on Linux. Session secrets that replace it must not be passed this way.
+    - The WebUI ships `"pairToken": "reelroulette-dev-token"` in `public/runtime-config.json`, which any browser can fetch, and `src/config/runtimeConfig.ts` parses `pairToken` as a config field. Remove both and the example in the WebUI `README.md`.
+    - The same `reelroulette-dev-token` default is in `src/core/ReelRoulette.ServerApp/appsettings.json` and the `-PairingToken` parameter of `tools/scripts/run-server.ps1` and `run-server-rebuild.ps1`.
+    - `src/auth/authBootstrap.ts` lets errors from `pairWithToken` and `getVersionJson` throw instead of returning the `{ authorized: false, message }` result it uses elsewhere. The login flow that replaces it returns a typed result on every failure.
   - External programmatic API access stays out of scope.
 - **Acceptance criteria**:
   - LAN and remote requests without a valid session get a deterministic auth error on every API and control route and on the event stream.
@@ -1544,6 +1550,109 @@ Last milestone completed: M10j7
   - The dialogs match the WebUI's theme and work in an installed web app on desktop and mobile.
 - **Verification evidence**:
   - Evidence placeholders maintained at planned state; completion evidence must include WebUI tests for confirm and cancel on the shared dialog, a check that no native dialog calls remain, `npm run verify`, and a spot check in an installed web app.
+- **Deferrals / Follow-ups**:
+  - None yet.
+
+---
+
+### P35 - Server Robustness Findings
+
+- **Status**: ⏳ Planned
+- **Goal**: Close the server and Core robustness findings that no other milestone owns, so bad input, partial requests, and crashes cannot lose settings or grow memory without bound.
+- **Scope**:
+  - Unscheduled. Found by the repository audit and the settings persistence investigation, and checked against the code when they were moved here. Each line names the file, the problem, and the fix; split this item if it grows past one milestone.
+  - Settings:
+    - Partial settings POSTs reset omitted fields: `CoreSettingsService.UpdateRefreshSettings`, `UpdateBackupSettings`, and `UpdateWebRuntimeSettings` assign every field from the posted snapshot, and the contract fields are not nullable, so a POST that leaves out a field writes its default (for example `fingerprintScanMaxDegreeOfParallelism` back to 4). Make those request fields nullable, with an omitted field left unchanged as `devChannelEnabled` already is, and add tests that a partial POST leaves the other fields and the other three sections unchanged on disk. This is an OpenAPI contract change.
+    - Non-atomic settings write: `CoreSettingsService.PersistSettings` writes `core-settings.json` in place with `File.WriteAllText`, so a crash mid-write leaves it truncated. Write a temporary file in the same folder and rename it over the original.
+    - Silent settings load failure: `CoreSettingsService.LoadSettings` ends in an empty `catch` and falls back to defaults, so an unreadable or corrupt `core-settings.json` looks like a fresh install and the next persist overwrites it. Log a warning, move the unreadable file aside before anything is written, and report it on the Operator status.
+    - Corrupt JSON replaced by defaults: `JsonFileStorageService.Load` (used for `desktop-settings.json`) returns the default object on any read or parse error, and the next `Save` overwrites the file. Tell a missing file from an unreadable one, and move an unreadable file aside before returning defaults.
+    - Non-atomic save fallback: when `File.Replace` throws, `JsonFileStorageService.Save` falls back to `File.Copy` over the original and then `File.Delete`, which can leave a truncated file after a crash. Use `File.Move(temp, path, overwrite: true)` as the fallback.
+  - Paths and processes:
+    - Thumbnail path from an unchecked id: `RefreshPipelineService.GetThumbnailPath` builds `Path.Combine(_thumbnailDir, $"{itemId}.jpg")` from the catalog item id, and an imported `library.db` can hold any id, including `..` segments, so a thumbnail write or delete could land outside the thumbnail folder. Accept only the id format the server generates and check that the full path stays under the thumbnail folder.
+    - Unread process output: `RefreshPipelineService.VerifyFfmpegAsync` redirects ffmpeg's standard output and error, reads neither, and waits for exit; enough output would fill a pipe and hang the check. Read both streams or stop redirecting them. The other ffmpeg and ffprobe calls already read stderr.
+    - Shell launch: on Linux, `RestartCoordinator.TryLaunchReplacementProcess` in `src/core/ReelRoulette.ServerApp/Program.cs` builds one `/bin/bash -lc` script with the process path, assembly path, host, and port interpolated, so a path containing `"` or `\` breaks it. Wait for the port in managed code and start the process with `ProcessStartInfo.ArgumentList`, with no shell.
+    - Stuck restart flag: `RestartCoordinator.TryRestartAsync` and `TryStopAsync` set `_restartInProgress` and clear it only when the request is not accepted. If the scheduled stop fails or the process does not exit, every later restart or stop answers "already in progress". Clear the flag when the scheduled stop fails, or track Idle, Pending, Stopping, and Failed states.
+    - Autostart entry quoting: `LinuxXdgStartupLaunchService.BuildDesktopEntryContent` writes `Exec="<path>"` without escaping, while the Desktop Entry spec requires `"`, `` ` ``, `$`, and `\` inside a quoted argument to be backslash-escaped and `%` to be written `%%`. Escape the path to the spec.
+    - Autostart status: `LinuxXdgStartupLaunchService.GetStatusAsync` reports enabled whenever the file lacks `Hidden=true`, ignoring `X-GNOME-Autostart-enabled=false` and a missing `Exec` target. Parse both keys and check that the `Exec` path exists.
+    - Uncancellable hashing: `FileFingerprintService.ComputeFingerprint` hashes the whole file synchronously with no cancellation, and the refresh fingerprint stage calls it, so stopping the server during a large file waits for the hash to finish. Hash asynchronously with a `CancellationToken`.
+  - Memory and selection:
+    - Unbounded randomization state: `LibraryPlaybackService._clientRandomizationStates` keeps one shuffle state per client and session key and never removes any, and the ids come from requests. Cap the count, evict the least recently used, and limit id length.
+    - Weak eligible-set signature: `RandomSelectionEngineCore.ComputeEligibleSignature` uses a 32-bit `HashCode`, so two different eligible sets can collide and reuse the wrong shuffle state. Compare the count plus a SHA-256 over the ordered paths.
+    - Quadratic smart shuffle: `RandomSelectionEngineCore.SelectSmartShuffle` runs `eligibleItems.Any(...)` for every dequeued path, which is O(n) per pick. Build a `HashSet` of eligible paths once per call. Check against Random Selection Performance first, which may replace this path.
+    - Telemetry reads: `ApiTelemetryService.GetIncoming` and `GetOutgoing` call `Reverse()` over the whole queue on every control status poll. Keep a ring buffer that reads newest first.
+    - Session list under lock: `ServerSessionStore.GetActiveSessions` filters, sorts, and projects inside the session lock. Copy the records under the lock and sort outside it.
+    - Dead write-back: `DynamicCorsOriginRegistry.RebuildAllowedOrigins` writes the rebuilt list back into the shared `ServerRuntimeOptions.CorsAllowedOrigins`, which nothing reads after the registry's constructor. Keep the list only in the registry.
+  - Decision needed: the audio filter's handling of unscanned videos. `LibraryCatalogListQuery` matches **With audio** on `has_audio = 1` and **Without audio** on `has_audio = 0`, so a video whose audio has not been scanned (`has_audio` NULL) is hidden by both. Decide whether NULL counts as one of them or neither, then align `docs/api.md`, both clients' labels, and tests. This changes what users see, so it needs approval.
+- **Acceptance criteria**:
+  - A partial settings POST changes only the fields it names, in every section.
+  - Killing the server or desktop during a settings write leaves the previous or the new file, never a truncated one.
+  - An unreadable settings file is kept aside and reported, not overwritten with defaults.
+  - A catalog item id that would resolve outside the thumbnail folder is refused.
+  - No server process launch goes through a shell.
+  - Randomization state stays within its cap under many client and session ids.
+  - Each finding above is fixed or explicitly declined with a reason in this entry.
+- **Verification evidence**:
+  - Evidence placeholders maintained at planned state; completion evidence must include a test per fixed finding, `dotnet test ReelRoulette.sln`, and `npm run verify` for the settings contract change.
+- **Deferrals / Follow-ups**:
+  - None yet.
+
+---
+
+### P36 - Client Robustness Findings
+
+- **Status**: ⏳ Planned
+- **Goal**: Close the desktop, WebUI, and dev-script robustness findings that no other milestone owns.
+- **Scope**:
+  - Unscheduled. Found by the repository audit and the Linux dependency investigation, and checked against the code when they were moved here. Each line names the file, the problem, and the fix.
+  - Desktop:
+    - Unbounded event payload: `CoreServerApiClient.ListenToEventsAsync` appends every `data:` line to a `StringBuilder` until a blank line, with no limit, so a broken or hostile server can exhaust memory. Cap one event (for example 4 MB), and on overflow drop the event, clear the builder, and log it.
+    - Ambiguous results: about ten mutation methods in `CoreServerApiClient` (such as `SetFavoriteAsync`, `SetBlacklistAsync`, `ApplyItemTagsAsync`) return `bool`, and most reads return `null` on any failure, so callers cannot tell a network error from a `401`, `404`, or `409`. Return a result that carries the failure kind, and use it where the UI reports or retries.
+    - Undisposed cancellation source: `MainWindow.RequestLibraryBrowse` cancels `_updateLibraryPanelCancellationSource` without disposing it, while the other cancel path disposes. Dispose after cancelling on both paths.
+    - Timers after close: `MainWindow.OnClosed` stops the seek and autoplay timers but not `_updateLibraryPanelDebounceTimer`, `_libraryGridResizeDebounceTimer`, or `_volumeSliderDebounceTimer`, so their `Tick` can run after the window closes. Stop them and unsubscribe `Tick` in `OnClosed`.
+    - Plain HTTP to another machine: the desktop accepts any server URL from Settings (`SettingsDialog` saves `CoreServerBaseUrl`) and talks plain HTTP to it with no notice. Once HTTPS through a reverse proxy exists, warn when a non-loopback URL uses `http`. This is a UX change and needs approval.
+    - Black video goes undetected: on a Fedora 43 KDE VM, LibVLC loaded from distro `vlc-libs` and `vlc-plugin*` packages, the app showed no dependency dialog, and video stayed black until RPM Fusion was enabled and `ffmpeg-free` was swapped for `ffmpeg`, because VLC's ffmpeg plugin could not decode with `ffmpeg-free`. The dependency dialog only catches a LibVLC load failure. Candidate signals, not yet tested against the failing state: `MediaPlayer.Vout` and `VoutCount` staying at 0 after `Playing`, `MediaPlayer.EncounteredError`, and LibVLC log lines from `avcodec` or `vout_display` (the desktop creates `LibVLC` with `enableDebugLogs: false` in `MainWindow.axaml.cs` and does not subscribe to `LibVLC.Log`). First reproduce the black-video state and record which signals fire, then decide what to show the user.
+  - WebUI:
+    - Startup error markup: `renderStartupError` in `src/shell.ts` interpolates the error message into `innerHTML`. Set the message with `textContent`.
+    - Overlapping resyncs: `src/events/sseClient.ts` calls `void handleResyncRequired(...)` for every `resyncRequired` event, so several authoritative reloads can run at once and finish out of order. Keep one in flight and coalesce events that arrive meanwhile.
+    - Unchecked JSON: `src/api/coreApi.ts` calls `response.json()` for pair, refresh status, version, and random responses without checking the content type or catching parse errors, so an HTML error page from a proxy surfaces as a `SyntaxError`. Read through one helper that checks the content type and reports a clear error.
+    - Client and session ids: `src/api/coreApi.ts` keeps the client id in `localStorage` and the session id in `sessionStorage`, and `sseClient.ts` puts both in the event stream URL, where proxy access logs record them. They identify a randomization scope and are not credentials today. Once login sessions exist, decide whether the server derives them from the session instead, and keep them from ever becoming an auth secret.
+    - Weak build check: `scripts/verify-build-output.mjs` only checks that `apiBaseUrl` in `dist/runtime-config.json` is a non-empty string, while `parseRuntimeConfig` rejects more. Validate with the same rules the app uses at runtime.
+  - Dev scripts:
+    - Missing install: `tools/scripts/run-server-rebuild.ps1` runs `npm run build` without installing packages, so a clean clone or a changed lockfile builds stale or fails. Run `npm ci` when `node_modules` is missing or older than `package-lock.json`, with a `-SkipInstall` switch.
+- **Acceptance criteria**:
+  - An oversized event payload is dropped without growing desktop memory past the cap.
+  - Desktop callers can tell transport, auth, not-found, and conflict failures apart.
+  - No desktop timer fires after the main window closes.
+  - The WebUI renders no server or config text through `innerHTML` at startup, and overlapping resync events cause one reload at a time.
+  - The black-video signals are recorded from a reproduced failing state, with a decision on what to show.
+  - Each finding above is fixed or explicitly declined with a reason in this entry.
+- **Verification evidence**:
+  - Evidence placeholders maintained at planned state; completion evidence must include a test per fixed finding, `dotnet test ReelRoulette.sln`, and `npm run verify`. Add Release Specific checklist items for anything that needs a VM, such as the Fedora black-video reproduction.
+- **Deferrals / Follow-ups**:
+  - None yet.
+
+---
+
+### P37 - Remaining Desktop-Only Features
+
+- **Status**: ⏳ Planned
+- **Goal**: Decide, feature by feature, whether the desktop features that the WebUI and Operator still lack get a web equivalent, and build the ones that do.
+- **Scope**:
+  - Unscheduled. From the desktop-versus-web feature comparison, checked against the code when moved here. Each is a candidate; adding one changes user-facing UX and needs approval.
+  - WebUI:
+    - Multi-select and bulk actions: the desktop library grid selects several items and acts on them from its context menu; the WebUI library overlay plays one item per click and has no selection.
+    - Tag edits on several items: the desktop `ItemTagsDialog` adds and removes tags across all selected items at once; the WebUI tag editor works on the current item only. Depends on multi-select above.
+    - Reveal in file manager: the desktop `OpenFileLocation` opens the system file browser at the playing file. A browser cannot do that; a copy-path action is the candidate equivalent.
+  - Operator:
+    - Refresh and backup controls: only the desktop Settings dialog can start a refresh (`POST /api/refresh/start`) or edit refresh settings (`/api/refresh/settings`) and backup settings (`/api/backup/settings`). Neither the Operator nor the WebUI calls these routes, so a server plus WebUI install has no way to change them. This fits the Operator administration release.
+    - FFmpeg log: the desktop's **Help → Show FFmpeg Logs** opens `FFmpegLogWindow`, which shows FFmpeg output buffered during a refresh and can clear it. Operator Log Viewer does not mention FFmpeg output; decide whether the Log Viewer takes it over so the desktop window can go.
+    - Auto-tag and tag rename or recategorize: the desktop and the WebUI both have these, through `/api/autotag/*` and `/api/tag-editor/*`. The Operator does not; decide whether it needs them or whether the WebUI is enough.
+  - Already covered elsewhere, not part of this item: source management, duplicates, and item removal (Operator Source and Item Management); catalog export and import (Operator Library Catalog Transfer); loudness normalization (kept as a deliberate desktop difference in Desktop and WebUI UI Rework); always-on-top and saved window geometry (native only).
+- **Acceptance criteria**:
+  - Each candidate above is built or explicitly declined with a reason in this entry.
+  - A server plus WebUI install can start a refresh and edit refresh and backup settings without the desktop app.
+- **Verification evidence**:
+  - Evidence placeholders maintained at planned state; completion evidence must include tests for each feature built and `npm run verify`.
 - **Deferrals / Follow-ups**:
   - None yet.
 
