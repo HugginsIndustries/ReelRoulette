@@ -19,13 +19,9 @@ Instructions:
 
 Commit Message:
 
-M10j7: Scrub library.json from the product
+M10j8: Fix source list, refresh settings, and catalog tag reads
 
-- Rename the empty-catalog temp file to `library.db.creating`.
-- Remove leftover-JSON test cases, rename schema 1 tests to unrecognized schema versions, and give backup trim tests neutral neighbor files.
-- Build source roots that tests remap or resolve under each test's temp folder so they pass on Windows, and add an `AGENTS.md` rule for such paths.
-- Remove the disabled tag migration comment and "removed, now X" tombstone comments from the desktop main window, and the retired portable smoke mention from the Linux server smoke script.
-- Drop `library.json`, catalog document, and thumbnail index wording from current-state docs and the OpenAPI descriptions, and regenerate WebUI contracts.
-- Fix `CONTEXT.md` on Android install over HTTPS and on which client resumes its event stream.
-- Bring `docs/feature-migration.md` up to date with the WebUI, the Operator page, and current routes.
-- List the desktop flows that still run locally in `docs/domain-inventory.md`, reword the Windows first-start checklist item, and mark the milestone complete.
+- Read the server source list and source enable and disable from catalog rows, so an imported source is listed and can be toggled without a restart.
+- Save refresh settings through the refresh pipeline so a new interval or enabling auto-refresh reschedules the next run.
+- Keep every other refresh setting, including fingerprint parallelism, when a forced duration or loudness rescan clears its flag.
+- Set catalog item tags in place instead of copying every item field, and have `InsertItem` write thumbnail revision, width, and height.

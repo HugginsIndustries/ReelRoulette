@@ -108,10 +108,11 @@ Last milestone completed: M10j7
 
 ### M10j8 - Post-Migration Fixes
 
-- **Status**: ⏳ Planned
+- **Status**: 🚧 In Progress
 - **Goal**: Fix defects left from the move to the server-owned catalog and two places where desktop and WebUI disagree, and close the control plane to unauthenticated LAN callers, one slice per defect, each with a test that fails before the fix.
 - **Scope**:
   - Ships in v0.14.0. Ten slices, each verified on its own.
+  - Landed in three parts, each with its own commit: server and Core (source list after import, auto-refresh reschedule, catalog item tags, fingerprint parallelism), then desktop (Update Preset after delete, scan menu items, media type, sort labels, numeric preset durations), then the control token.
   - Source list after source import (server):
     - Recorded as a deferral on catalog document removal: source import does not refresh the in-memory source list that `GET /api/sources` and source enable/disable read. That list is filled at startup.
     - Confirmed during v0.14.0 planning by a throwaway test: after a successful import, the server's source list still had 0 sources and disabling the new source failed until restart.
@@ -167,11 +168,18 @@ Last milestone completed: M10j7
   - A saved preset with a numeric `minDuration` or `maxDuration` keeps its other settings on the desktop, and the shared preset equality fixture covers a numeric duration on both clients.
   - Each slice has a test that fails without its fix, or the evidence says why one cannot be written.
 - **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include each slice's failing test before the fix and passing after it, and `dotnet test ReelRoulette.sln` with the list-query test that covers a tagged and an untagged item with catalog-only thumbnail dimensions still passing.
+  - Completion evidence must include each slice's failing test before the fix and passing after it, and `dotnet test ReelRoulette.sln` with the list-query test that covers a tagged and an untagged item with catalog-only thumbnail dimensions still passing.
+  - Server and Core part:
+    - Source list after import: `ImportedSource_IsListedAndToggles_WithoutRestart` failed before the fix (no source listed after import) and passes. The source list and enable and disable read catalog rows; setting the flag a source already has neither writes nor publishes.
+    - Auto-refresh reschedule: `RefreshSettingsRoute_SchedulesTheNextRunFromTheNewInterval` failed against the old route body (next run still 15 minutes out after saving 120) and passes. It calls the route's named handler, so the mapping of `POST /api/refresh/settings` to that handler is checked by reading, not by a test: the core tests share one data folder, so a test cannot start an isolated server host.
+    - Fingerprint parallelism: `ForceRescan_ClearingItsFlag_KeepsFingerprintParallelism` (duration and loudness cases) failed before the fix (expected 8, got 4) and passes, and also checks auto-refresh enabled and interval are kept.
+    - Catalog item tags: `CopyWithTags` and its reflection test are removed and `AttachTags` sets tags in place. `InsertItem` already wrote tags; it now also writes thumbnail revision, width, and height. `InsertItem_WritesThumbnailFieldsAndTags_ListAndSingleReadsAgree` failed before the fix (thumbnail revision read back null) and passes, comparing the list query and single-item read for a tagged and an untagged item. The existing list-query test with catalog-only thumbnail dimensions still passes.
+    - `dotnet build ReelRoulette.sln` clean; `dotnet test ReelRoulette.sln` 262 core and 167 desktop tests pass; SystemChecks pass.
   - The control token slice's tests must cover a non-localhost request with `Off` saved, a localhost testing-route request, token generation on start, and `POST /control/pair` setting the admin cookie. The cross-machine pass is the Release Specific checklist item above.
   - The media type slice's test must cover a playback response whose `mediaType` disagrees with the file extension. The sort label slice's tests must check every mode and direction on both clients against the same expected labels, plus one quick spot check of the desktop label in each theme.
 - **Deferrals / Follow-ups**:
   - WebUI reaction to `sourceStateChanged` stays with WebUI Source State Sync.
+  - Found while planning: **Scan Loudness** asks whether to rescan every file, but only logs that choice and never sends a forced loudness rescan to the server. To be decided with the desktop scan menu slice.
   - Release notes for v0.14.0 must say that opening the Operator from another machine now asks for the control token, and where to find it.
 
 ### M10j9 - Client Event Efficiency

@@ -100,7 +100,7 @@ public sealed class LibraryCatalogItem
     public string? ThumbnailRevision { get; init; }
     public int? ThumbnailWidth { get; init; }
     public int? ThumbnailHeight { get; init; }
-    public IReadOnlyList<string> Tags { get; init; } = [];
+    public IReadOnlyList<string> Tags { get; internal set; } = [];
 }
 
 public sealed class LibraryCatalogPreset

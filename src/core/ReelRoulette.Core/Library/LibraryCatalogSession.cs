@@ -174,9 +174,8 @@ public sealed class LibraryCatalogSession
             return null;
         }
 
-        var tagged = new List<LibraryCatalogItem> { item };
-        AttachTags(connection, tagged);
-        return tagged[0];
+        AttachTags(connection, [item]);
+        return item;
     }
 
     public int CountItems()
@@ -451,7 +450,7 @@ public sealed class LibraryCatalogSession
         return sources;
     }
 
-    public IReadOnlyList<LibraryCatalogSource> ReadStartupSources()
+    public IReadOnlyList<LibraryCatalogSource> ReadSources()
     {
         using var connection = LibraryCatalogStore.OpenWrite(_databasePath);
         using var command = connection.CreateCommand();
@@ -710,12 +709,14 @@ public sealed class LibraryCatalogSession
                     file_name, file_name_fold, duration_ticks, has_audio, integrated_loudness, peak_db,
                     is_favorite, is_blacklisted, play_count, last_played_utc, media_type, fingerprint,
                     fingerprint_algorithm, fingerprint_version, file_size_bytes, last_write_time_utc,
-                    fingerprint_last_utc, fingerprint_status, loudness_error)
+                    fingerprint_last_utc, fingerprint_status, loudness_error,
+                    thumbnail_revision, thumbnail_width, thumbnail_height)
                 VALUES (
                     $id, $position, $source, $full, $fullFold, $relative, $relativeFold,
                     $file, $fileFold, $duration, $audio, $loudness, $peak,
                     $favorite, $blacklisted, $plays, $played, $media, $fingerprint,
-                    $algorithm, $fpVersion, $size, $write, $fpLast, $fpStatus, $loudnessError);
+                    $algorithm, $fpVersion, $size, $write, $fpLast, $fpStatus, $loudnessError,
+                    $thumbRevision, $thumbWidth, $thumbHeight);
                 """,
                 ("$id", item.Id),
                 ("$position", position),
@@ -742,7 +743,10 @@ public sealed class LibraryCatalogSession
                 ("$write", item.LastWriteTimeUtc is null ? DBNull.Value : item.LastWriteTimeUtc.Value.ToUniversalTime().Ticks),
                 ("$fpLast", item.FingerprintLastUtc is null ? DBNull.Value : item.FingerprintLastUtc.Value.ToUniversalTime().Ticks),
                 ("$fpStatus", (object?)item.FingerprintStatus ?? DBNull.Value),
-                ("$loudnessError", (object?)item.LoudnessError ?? DBNull.Value)) > 0;
+                ("$loudnessError", (object?)item.LoudnessError ?? DBNull.Value),
+                ("$thumbRevision", (object?)item.ThumbnailRevision ?? DBNull.Value),
+                ("$thumbWidth", (object?)item.ThumbnailWidth ?? DBNull.Value),
+                ("$thumbHeight", (object?)item.ThumbnailHeight ?? DBNull.Value)) > 0;
             if (!inserted)
             {
                 return false;
@@ -2270,7 +2274,7 @@ public sealed class LibraryCatalogSession
         };
     }
 
-    private static void AttachTags(SqliteConnection connection, List<LibraryCatalogItem> items)
+    private static void AttachTags(SqliteConnection connection, IReadOnlyList<LibraryCatalogItem> items)
     {
         if (items.Count == 0)
         {
@@ -2303,51 +2307,13 @@ public sealed class LibraryCatalogSession
             }
         }
 
-        for (var i = 0; i < items.Count; i++)
+        foreach (var item in items)
         {
-            if (!tagsByItem.TryGetValue(items[i].Id, out var tags))
+            if (tagsByItem.TryGetValue(item.Id, out var tags))
             {
-                continue;
+                item.Tags = tags;
             }
-
-            items[i] = CopyWithTags(items[i], tags);
         }
-    }
-
-    internal static LibraryCatalogItem CopyWithTags(LibraryCatalogItem item, IReadOnlyList<string> tags)
-    {
-        return new LibraryCatalogItem
-        {
-            Id = item.Id,
-            SourceId = item.SourceId,
-            FullPath = item.FullPath,
-            FullPathFold = item.FullPathFold,
-            RelativePath = item.RelativePath,
-            RelativePathFold = item.RelativePathFold,
-            FileName = item.FileName,
-            FileNameFold = item.FileNameFold,
-            DurationTicks = item.DurationTicks,
-            HasAudio = item.HasAudio,
-            IntegratedLoudness = item.IntegratedLoudness,
-            PeakDb = item.PeakDb,
-            IsFavorite = item.IsFavorite,
-            IsBlacklisted = item.IsBlacklisted,
-            PlayCount = item.PlayCount,
-            LastPlayedUtc = item.LastPlayedUtc,
-            MediaType = item.MediaType,
-            Fingerprint = item.Fingerprint,
-            FingerprintAlgorithm = item.FingerprintAlgorithm,
-            FingerprintVersion = item.FingerprintVersion,
-            FileSizeBytes = item.FileSizeBytes,
-            LastWriteTimeUtc = item.LastWriteTimeUtc,
-            FingerprintLastUtc = item.FingerprintLastUtc,
-            FingerprintStatus = item.FingerprintStatus,
-            LoudnessError = item.LoudnessError,
-            ThumbnailRevision = item.ThumbnailRevision,
-            ThumbnailWidth = item.ThumbnailWidth,
-            ThumbnailHeight = item.ThumbnailHeight,
-            Tags = tags
-        };
     }
 
     private static JsonObject ToItem(LibraryCatalogItem item)

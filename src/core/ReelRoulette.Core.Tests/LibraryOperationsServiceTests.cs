@@ -1872,6 +1872,51 @@ public sealed class LibraryOperationsServiceTests
     }
 
     [Fact]
+    public void ImportedSource_IsListedAndToggles_WithoutRestart()
+    {
+        var appDataRoot = CreateTempAppDataRoot();
+        var mediaRoot = Path.Combine(appDataRoot, "media", "Clips");
+        try
+        {
+            Directory.CreateDirectory(mediaRoot);
+            File.WriteAllText(Path.Combine(mediaRoot, "clip.mp4"), "x");
+            CatalogSeed.Write(appDataRoot);
+            var (host, service) = OpenOperations(appDataRoot);
+            var state = new ServerStateService(catalog: host);
+            Assert.Empty(state.GetSourcesSnapshot());
+
+            Assert.True(service.ImportSource(new SourceImportRequest { RootPath = mediaRoot }).Accepted);
+
+            var imported = Assert.Single(state.GetSourcesSnapshot());
+            Assert.Equal(mediaRoot, imported.RootPath);
+            Assert.True(imported.IsEnabled);
+
+            var revision = state.GetCurrentRevision();
+            Assert.True(state.TrySetSourceEnabled(imported.Id, false, out var disabled));
+            Assert.False(disabled!.IsEnabled);
+            Assert.False(Assert.Single(state.GetSourcesSnapshot()).IsEnabled);
+            Assert.True(state.TrySetSourceEnabled(imported.Id, true, out var enabled));
+            Assert.True(enabled!.IsEnabled);
+            Assert.True(Assert.Single(state.GetSourcesSnapshot()).IsEnabled);
+            Assert.Equal(
+                ["sourceStateChanged", "sourceStateChanged"],
+                state.GetReplayAfter(revision).Events.Select(e => e.EventType).ToArray());
+
+            // Setting the flag it already has neither writes nor publishes.
+            revision = state.GetCurrentRevision();
+            var catalogRevision = host.Session.Revision;
+            Assert.True(state.TrySetSourceEnabled(imported.Id, true, out _));
+            Assert.Equal(catalogRevision, host.Session.Revision);
+            Assert.Empty(state.GetReplayAfter(revision).Events);
+            Assert.False(state.TrySetSourceEnabled("missing", false, out _));
+        }
+        finally
+        {
+            Cleanup(appDataRoot);
+        }
+    }
+
+    [Fact]
     public void EveryCatalogWritePath_KeepsUncategorized()
     {
         var appDataRoot = CreateTempAppDataRoot();

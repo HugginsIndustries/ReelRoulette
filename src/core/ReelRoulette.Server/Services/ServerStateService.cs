@@ -46,7 +46,6 @@ public sealed class ServerStateService
     private readonly Queue<ServerEventEnvelope> _eventHistory = new();
     private const int EventHistoryCapacity = 256;
     private List<FilterPresetSnapshot> _presetCatalog = [];
-    private readonly List<SourceRecord> _sources = [];
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         WriteIndented = true,
@@ -157,48 +156,70 @@ public sealed class ServerStateService
 
     public IReadOnlyList<SourceResponse> GetSourcesSnapshot()
     {
-        lock (_sourceLock)
+        if (_catalog == null)
         {
-            return _sources
-                .Select(source => ApiContractMapper.MapSource(source.Id, source.RootPath, source.DisplayName, source.IsEnabled))
-                .OrderBy(source => source.DisplayName ?? source.RootPath, StringComparer.OrdinalIgnoreCase)
-                .ToList();
+            return [];
         }
+
+        IReadOnlyList<ReelRoulette.Core.Library.LibraryCatalogSource> stored;
+        try
+        {
+            stored = _catalog.Session.ReadSources();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to read sources from '{Path}'.", _catalog.Session.DatabasePath);
+            throw;
+        }
+
+        return stored
+            .Select(MapSource)
+            .OfType<SourceResponse>()
+            .OrderBy(source => source.DisplayName ?? source.RootPath, StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
 
     public bool TrySetSourceEnabled(string sourceId, bool isEnabled, out SourceResponse? source)
     {
         source = null;
-        if (string.IsNullOrWhiteSpace(sourceId))
+        if (_catalog == null || string.IsNullOrWhiteSpace(sourceId))
         {
             return false;
         }
 
-        SourceRecord? updated = null;
-        var changed = false;
+        var id = sourceId.Trim();
+        SourceResponse updated;
+        bool changed;
         lock (_sourceLock)
         {
-            updated = _sources.FirstOrDefault(s => string.Equals(s.Id, sourceId.Trim(), StringComparison.OrdinalIgnoreCase));
-            if (updated == null)
+            try
             {
-                return false;
-            }
+                var stored = _catalog.Session.ReadSources()
+                    .FirstOrDefault(s => string.Equals(s.Id.Trim(), id, StringComparison.OrdinalIgnoreCase));
+                var mapped = stored == null ? null : MapSource(stored);
+                if (stored == null || mapped == null)
+                {
+                    return false;
+                }
 
-            if (updated.IsEnabled != isEnabled)
+                changed = mapped.IsEnabled != isEnabled;
+                if (changed)
+                {
+                    _catalog.Session.SetSourceEnabled(stored.Id, isEnabled);
+                    mapped.IsEnabled = isEnabled;
+                }
+
+                updated = mapped;
+            }
+            catch (Exception ex)
             {
-                updated.IsEnabled = isEnabled;
-                changed = true;
+                _logger.LogWarning(ex, "Failed to set source '{SourceId}' enabled to {IsEnabled} in '{Path}'.", id, isEnabled, _catalog.Session.DatabasePath);
+                throw;
             }
         }
 
-        if (updated == null)
+        if (changed)
         {
-            return false;
-        }
-
-            if (changed)
-            {
-                PersistSourceEnabled(updated.Id, updated.IsEnabled);
             Publish("sourceStateChanged", new SourceStateChangedPayload
             {
                 SourceId = updated.Id,
@@ -206,8 +227,21 @@ public sealed class ServerStateService
             });
         }
 
-        source = ApiContractMapper.MapSource(updated.Id, updated.RootPath, updated.DisplayName, updated.IsEnabled);
+        source = updated;
         return true;
+    }
+
+    private static SourceResponse? MapSource(ReelRoulette.Core.Library.LibraryCatalogSource source)
+    {
+        var id = source.Id.Trim();
+        var rootPath = source.RootPath.Trim();
+        if (string.IsNullOrWhiteSpace(id) || string.IsNullOrWhiteSpace(rootPath))
+        {
+            return null;
+        }
+
+        var displayName = string.IsNullOrWhiteSpace(source.DisplayName) ? null : source.DisplayName.Trim();
+        return ApiContractMapper.MapSource(id, rootPath, displayName, source.IsEnabled);
     }
 
     public ChannelReader<ServerEventEnvelope> Subscribe(CancellationToken cancellationToken)
@@ -489,66 +523,6 @@ public sealed class ServerStateService
         {
             _logger.LogWarning(ex, "Failed to bootstrap preset catalog.");
         }
-
-        try
-        {
-            if (_catalog == null)
-            {
-                return;
-            }
-
-            var loaded = _catalog.Session.ReadStartupSources();
-            lock (_sourceLock)
-            {
-                _sources.Clear();
-                foreach (var source in loaded)
-                {
-                    var id = source.Id.Trim();
-                    var rootPath = source.RootPath.Trim();
-                    if (string.IsNullOrWhiteSpace(id) || string.IsNullOrWhiteSpace(rootPath))
-                    {
-                        continue;
-                    }
-
-                    _sources.Add(new SourceRecord
-                    {
-                        Id = id,
-                        RootPath = rootPath,
-                        DisplayName = string.IsNullOrWhiteSpace(source.DisplayName) ? null : source.DisplayName.Trim(),
-                        IsEnabled = source.IsEnabled
-                    });
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to bootstrap server state from '{Path}'.", _catalog?.Session.DatabasePath);
-        }
-    }
-
-    private void PersistSourceEnabled(string sourceId, bool isEnabled)
-    {
-        try
-        {
-            if (_catalog == null)
-            {
-                return;
-            }
-
-            _catalog.Session.SetSourceEnabled(sourceId, isEnabled);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to persist source enabled state to '{Path}'.", _catalog?.Session.DatabasePath);
-        }
-    }
-
-    private sealed class SourceRecord
-    {
-        public string Id { get; set; } = string.Empty;
-        public string RootPath { get; set; } = string.Empty;
-        public string? DisplayName { get; set; }
-        public bool IsEnabled { get; set; } = true;
     }
 }
 

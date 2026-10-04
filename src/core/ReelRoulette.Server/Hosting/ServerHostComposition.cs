@@ -798,10 +798,7 @@ public static class ServerHostComposition
             return Results.Ok(settings.GetRefreshSettings());
         });
 
-        app.MapPost("/api/refresh/settings", (RefreshSettingsSnapshot snapshot, CoreSettingsService settings) =>
-        {
-            return Results.Ok(settings.UpdateRefreshSettings(snapshot));
-        });
+        app.MapPost("/api/refresh/settings", UpdateRefreshSettings);
 
         app.MapGet("/api/backup/settings", (CoreSettingsService settings) =>
         {
@@ -1129,5 +1126,13 @@ public static class ServerHostComposition
         var queryToken = context.Request.Query["token"].ToString();
         return !string.IsNullOrWhiteSpace(queryToken) &&
                string.Equals(queryToken, control.AdminSharedToken, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Saves refresh settings through the pipeline so the next automatic run follows the new interval.
+    /// </summary>
+    internal static IResult UpdateRefreshSettings(RefreshSettingsSnapshot snapshot, RefreshPipelineService refresh)
+    {
+        return Results.Ok(refresh.UpdateSettings(snapshot));
     }
 }

@@ -393,6 +393,28 @@ public sealed class RefreshPipelineServiceTests
     }
 
     [Fact]
+    public void RefreshSettingsRoute_SchedulesTheNextRunFromTheNewInterval()
+    {
+        using var scope = new DataFolderScope();
+        var options = new ServerRuntimeOptions { AutoRefreshEnabled = false, AutoRefreshIntervalMinutes = 15 };
+        var coreSettings = new CoreSettingsService(options, scope.RootPath);
+        var service = new RefreshPipelineService(
+            new ServerStateService(),
+            new Microsoft.Extensions.Logging.Abstractions.NullLogger<RefreshPipelineService>(),
+            coreSettings,
+            CatalogOpen.Host(scope.RootPath),
+            scope.RootPath);
+
+        var before = DateTimeOffset.UtcNow;
+        ServerHostComposition.UpdateRefreshSettings(
+            new RefreshSettingsSnapshot { AutoRefreshEnabled = true, AutoRefreshIntervalMinutes = 120 },
+            service);
+
+        Assert.True(coreSettings.GetRefreshSettings().AutoRefreshEnabled);
+        Assert.InRange(service.NextAutoRunUtc, before.AddMinutes(120), DateTimeOffset.UtcNow.AddMinutes(120));
+    }
+
+    [Fact]
     public async Task DurationForceRescan_ShouldBeOneShot_AndShowForcedHint()
     {
         using var scope = new DataFolderScope();
@@ -426,6 +448,40 @@ public sealed class RefreshPipelineServiceTests
         var settingsAfterRun = coreSettings.GetRefreshSettings();
         Assert.False(settingsAfterRun.ForceRescanDuration);
         Assert.False(settingsAfterRun.ForceRescanLoudness);
+    }
+
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task ForceRescan_ClearingItsFlag_KeepsFingerprintParallelism(bool forceDuration, bool forceLoudness)
+    {
+        using var scope = new DataFolderScope();
+        CatalogSeed.Write(scope.RootPath);
+        var options = new ServerRuntimeOptions
+        {
+            AutoRefreshEnabled = false,
+            AutoRefreshIntervalMinutes = 45,
+            ForceRescanDuration = forceDuration,
+            ForceRescanLoudness = forceLoudness,
+            FingerprintScanMaxDegreeOfParallelism = 8
+        };
+        var coreSettings = new CoreSettingsService(options, scope.RootPath);
+        var service = new RefreshPipelineService(
+            new ServerStateService(),
+            new Microsoft.Extensions.Logging.Abstractions.NullLogger<RefreshPipelineService>(),
+            coreSettings,
+            CatalogOpen.Host(scope.RootPath),
+            scope.RootPath);
+
+        Assert.True(service.TryStartManual().Accepted);
+        await WaitForCompletionAsync(service, TimeSpan.FromSeconds(10));
+
+        var after = coreSettings.GetRefreshSettings();
+        Assert.False(after.ForceRescanDuration);
+        Assert.False(after.ForceRescanLoudness);
+        Assert.Equal(8, after.FingerprintScanMaxDegreeOfParallelism);
+        Assert.False(after.AutoRefreshEnabled);
+        Assert.Equal(45, after.AutoRefreshIntervalMinutes);
     }
 
     [Fact]

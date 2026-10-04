@@ -615,63 +615,42 @@ public sealed class LibraryCatalogSessionTests
     }
 
     [Fact]
-    public void CopyWithTags_KeepsEveryItemPropertyExceptTags()
+    public void InsertItem_WritesThumbnailFieldsAndTags_ListAndSingleReadsAgree()
     {
-        var properties = typeof(LibraryCatalogItem).GetProperties()
-            .Where(property => property.Name != nameof(LibraryCatalogItem.Tags))
-            .ToList();
-        var source = new LibraryCatalogItem { Tags = ["old"] };
-        for (var i = 0; i < properties.Count; i++)
+        using var dir = new TempDirectory();
+        var session = CatalogOpen.Open(dir.Path).Session!;
+        Assert.True(session.InsertSource("source-1", "/clips", "Clips", true));
+        foreach (var (id, tags) in new[] { ("tagged", new[] { "Night" }), ("plain", Array.Empty<string>()) })
         {
-            properties[i].SetValue(source, DistinctValue(properties[i].PropertyType, i + 1));
+            Assert.True(session.InsertItem(new LibraryCatalogItem
+            {
+                Id = id,
+                SourceId = "source-1",
+                FullPath = $"/clips/{id}.mp4",
+                FileName = $"{id}.mp4",
+                ThumbnailRevision = $"rev-{id}",
+                ThumbnailWidth = 320,
+                ThumbnailHeight = 180,
+                Tags = tags
+            }));
         }
 
-        var copy = LibraryCatalogSession.CopyWithTags(source, ["new"]);
-
-        foreach (var property in properties)
+        var listed = session.QueryList(new LibraryListRequest()).Items.ToDictionary(item => item.Id);
+        foreach (var id in new[] { "tagged", "plain" })
         {
-            Assert.True(
-                Equals(property.GetValue(source), property.GetValue(copy)),
-                $"CopyWithTags did not copy {property.Name}.");
+            var single = session.ReadListedItem(id)!;
+            foreach (var item in new[] { listed[id], single })
+            {
+                Assert.Equal($"rev-{id}", item.ThumbnailRevision);
+                Assert.Equal(320, item.ThumbnailWidth);
+                Assert.Equal(180, item.ThumbnailHeight);
+            }
+
+            Assert.Equal(listed[id].Tags, single.Tags);
         }
 
-        Assert.Equal(["new"], copy.Tags);
-    }
-
-    private static object DistinctValue(Type type, int seed)
-    {
-        var target = Nullable.GetUnderlyingType(type) ?? type;
-        if (target == typeof(string))
-        {
-            return "value-" + seed;
-        }
-
-        if (target == typeof(int))
-        {
-            return seed;
-        }
-
-        if (target == typeof(long))
-        {
-            return (long)seed * 1000;
-        }
-
-        if (target == typeof(double))
-        {
-            return seed + 0.5;
-        }
-
-        if (target == typeof(bool))
-        {
-            return true;
-        }
-
-        if (target == typeof(DateTime))
-        {
-            return new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddMinutes(seed);
-        }
-
-        throw new InvalidOperationException($"Add a distinct value for {type.Name} so this test covers the new property.");
+        Assert.Equal(["Night"], listed["tagged"].Tags);
+        Assert.Empty(listed["plain"].Tags);
     }
 
     private sealed class TempDirectory : IDisposable

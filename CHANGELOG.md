@@ -25,6 +25,8 @@ Write **[Unreleased]** bullets at the same level as the released sections below.
 
 ### Fixed
 
+- **Server sources and refresh settings:** A folder you import now shows up in the source list right away and can be enabled or disabled without restarting the server. Changing the auto-refresh interval or turning auto-refresh on now schedules the next refresh from the new setting. A forced duration or loudness rescan no longer resets the fingerprint scan parallelism to its default.
+
 ### Security
 
 ---

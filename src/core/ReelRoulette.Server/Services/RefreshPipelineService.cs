@@ -77,6 +77,17 @@ public sealed class RefreshPipelineService : BackgroundService
         }
     }
 
+    internal DateTimeOffset NextAutoRunUtc
+    {
+        get
+        {
+            lock (_runLock)
+            {
+                return _nextAutoRunUtc;
+            }
+        }
+    }
+
     public RefreshSettingsSnapshot UpdateSettings(RefreshSettingsSnapshot snapshot)
     {
         lock (_runLock)
@@ -1969,14 +1980,10 @@ public sealed class RefreshPipelineService : BackgroundService
     {
         try
         {
-            var current = _coreSettings.GetRefreshSettings();
-            var updated = new RefreshSettingsSnapshot
-            {
-                AutoRefreshEnabled = current.AutoRefreshEnabled,
-                AutoRefreshIntervalMinutes = current.AutoRefreshIntervalMinutes,
-                ForceRescanDuration = clearDuration ? false : current.ForceRescanDuration,
-                ForceRescanLoudness = clearLoudness ? false : current.ForceRescanLoudness
-            };
+            // Start from every saved setting so clearing a flag changes nothing else.
+            var updated = _coreSettings.GetRefreshSettings();
+            updated.ForceRescanDuration = !clearDuration && updated.ForceRescanDuration;
+            updated.ForceRescanLoudness = !clearLoudness && updated.ForceRescanLoudness;
             _coreSettings.UpdateRefreshSettings(updated);
         }
         catch (Exception ex)
