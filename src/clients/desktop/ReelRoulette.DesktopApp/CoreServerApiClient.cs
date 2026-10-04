@@ -620,7 +620,7 @@ public sealed class CoreServerApiClient
             endpointBuilder.Append("&deviceName=").Append(Uri.EscapeDataString(deviceName));
         }
 
-        if (lastEventId.HasValue && lastEventId.Value > 0)
+        if (lastEventId is >= 0)
         {
             endpointBuilder.Append("&lastEventId=").Append(lastEventId.Value);
         }
@@ -628,7 +628,7 @@ public sealed class CoreServerApiClient
         var endpoint = endpointBuilder.ToString();
         using var request = new HttpRequestMessage(HttpMethod.Get, endpoint);
         request.Headers.Accept.ParseAdd("text/event-stream");
-        if (lastEventId.HasValue && lastEventId.Value > 0)
+        if (lastEventId is >= 0)
         {
             request.Headers.TryAddWithoutValidation("Last-Event-ID", lastEventId.Value.ToString());
         }

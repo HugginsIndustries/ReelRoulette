@@ -86,14 +86,16 @@ public sealed class ServerStateService
                 return new ReplayResult
                 {
                     CurrentRevision = currentRevision,
-                    GapDetected = revision > 0 && currentRevision > revision,
+                    GapDetected = currentRevision != revision,
                     Events = []
                 };
             }
 
             var snapshot = _eventHistory.ToArray();
             var oldestRevision = snapshot[0].Revision;
-            var gapDetected = revision > 0 && currentRevision > revision && revision < oldestRevision - 1;
+            // A last event ID ahead of the current revision comes from before a server restart. A last event ID of 0
+            // is a client that opened its stream before any event, and replays from the first one.
+            var gapDetected = revision > currentRevision || (currentRevision > revision && revision < oldestRevision - 1);
             var replay = snapshot.Where(e => e.Revision > revision).ToList();
             return new ReplayResult
             {
@@ -295,6 +297,22 @@ public sealed class ServerStateService
             EventType = eventType,
             Timestamp = DateTimeOffset.UtcNow,
             Payload = payload
+        };
+    }
+
+    /// <summary>
+    /// The first event on a stream opened without a last event ID. It carries the current revision and does not
+    /// take a new one, so a client that receives no other event can still resume from it after a reconnect.
+    /// </summary>
+    public ServerEventEnvelope CreateStreamOpenedEnvelope()
+    {
+        var revision = GetCurrentRevision();
+        return new ServerEventEnvelope
+        {
+            Revision = revision,
+            EventType = "streamOpened",
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = new StreamOpenedPayload { CurrentRevision = revision }
         };
     }
 

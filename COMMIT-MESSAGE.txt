@@ -19,8 +19,12 @@ Instructions:
 
 Commit Message:
 
-Bugfix: Stop the desktop Settings dialog hanging on reopen
+M10j9: Cut redundant library reloads, stats fetches, and refresh events
 
-- Opening Settings a second time no longer freezes the desktop: the Baseline Loudness radios change the mode only when one is checked, like the other radio groups, so a closed dialog's radios left in Avalonia's shared group can no longer flip each other forever.
-- Add a headless test that opens, closes, and reopens Settings for both baseline modes, with a timeout so the hang fails instead of stalling the test run; after a timeout, every other headless test, including any already waiting, fails at once naming the test that timed out.
-- Record in the UI rework backlog that desktop dialogs should become panels or overlays in the main window.
+- Desktop and WebUI reload the loaded library window only when a favorite, blacklist, playback, or tag change can alter what it shows or its order, and patch the tile otherwise; both are locked to the shared `library-tile-effect.json` fixture.
+- The WebUI uses one event stream client that resumes with the last event ID after an error, so it applies the events it missed or gets `resyncRequired`; the duplicate stream code in `app.js` and the idle watchdog are gone.
+- A stream opened without a last event ID now starts with a new `streamOpened` event carrying the server's current revision, so a client that has received nothing else can still resume, from 0 if need be.
+- The server sends `resyncRequired` for a last event ID ahead of its revision, as after a restart, and both clients take a resync's revision, locked to the shared `event-revision.json` fixture.
+- The desktop coalesces library stats refreshes: one request per burst, at most one in flight, and one more for requests made during it.
+- Duration and loudness refresh progress is throttled to one event per 500 ms plus the stage completion.
+- Record the previous favorite and blacklist follow-up on item IDs in the contract, and restart revision reuse in the server robustness findings.

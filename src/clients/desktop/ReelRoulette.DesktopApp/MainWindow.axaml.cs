@@ -131,7 +131,7 @@ namespace ReelRoulette
         private string _independentWebUiBaseUrl = "http://localhost:51302";
         private string _coreClientId = Guid.NewGuid().ToString("N");
         private readonly string _coreSessionId = Guid.NewGuid().ToString("N");
-        private long _coreLastEventRevision;
+        private long? _coreLastEventRevision; // Null until the first event, including streamOpened.
         private readonly CoreServerApiClient _coreServerApiClient;
         private readonly CoreServerApiClient _coreServerLongRunningApiClient;
         private CancellationTokenSource? _coreEventsCancellationSource;
@@ -213,6 +213,7 @@ namespace ReelRoulette
         private int _currentFileReadId;
         private string? _currentFileReadPath;
         private bool _libraryStatsApplied;
+        private readonly LibraryStatsRefresh _libraryStatsRefresh;
         private double _serverBaselineLoudnessLufs = -18.0;
         private FilterState? _currentFilterState;
         private string? _activePresetName; // Base preset for the library list. Null is None.
@@ -868,6 +869,10 @@ namespace ReelRoulette
                 Log("MainWindow constructor: InitializeComponent completed.");
                 _coreServerApiClient = new CoreServerApiClient(_coreServerHttpClient);
                 _coreServerLongRunningApiClient = new CoreServerApiClient(_coreServerLongRunningHttpClient);
+                _libraryStatsRefresh = new LibraryStatsRefresh(
+                    FetchLibraryStatsViaCoreAsync,
+                    stats => Dispatcher.UIThread.InvokeAsync(() => ApplyGlobalStats(stats)).GetTask(),
+                    log: Log);
             
             // Initialize window size tracking for aspect ratio locking
             _lastWindowSize = new Size(this.Width, this.Height);
@@ -1389,6 +1394,13 @@ namespace ReelRoulette
 
             var boundItem = FindLoadedLibraryItem(fullPath);
             var cachedItem = CurrentFileCacheMatches(fullPath) ? _currentFileItem : null;
+            var change = new LibraryTileChange
+            {
+                Kind = LibraryPanelBrowseEvent.FavoriteOrBlacklist,
+                Loaded = boundItem != null,
+                Before = boundItem == null ? null : new LibraryTileFlags(boundItem.IsFavorite, boundItem.IsBlacklisted),
+                After = new LibraryTileFlags(isFavorite, isBlacklisted)
+            };
             if (boundItem == null && cachedItem == null)
             {
                 if (IsCurrentVideoPath(fullPath) &&
@@ -1401,7 +1413,7 @@ namespace ReelRoulette
                 }
 
                 Log($"CoreEvents: Projection has no loaded tile for {Path.GetFileName(fullPath)}.");
-                ApplyLibraryBrowseEvent(LibraryPanelBrowseEvent.FavoriteOrBlacklist);
+                ApplyLibraryBrowseEvent(change);
                 return;
             }
 
@@ -1432,7 +1444,7 @@ namespace ReelRoulette
                     UpdateCurrentFileStatsUi();
                 }
 
-                ApplyLibraryBrowseEvent(LibraryPanelBrowseEvent.FavoriteOrBlacklist);
+                ApplyLibraryBrowseEvent(change);
 
                 _ = RefreshGlobalStatsFromCoreAsync();
                 StatusTextBlock.Text = statusMessage;
@@ -1561,10 +1573,11 @@ namespace ReelRoulette
 
             var loaded = FindLoadedLibraryItem(playback.Path);
             var item = CurrentFileCacheMatches(playback.Path) ? _currentFileItem : null;
+            var change = new LibraryTileChange { Kind = LibraryPanelBrowseEvent.Playback, Loaded = loaded != null };
             if (item == null && loaded == null)
             {
                 ApplyPlaybackPrevious(playback);
-                ApplyLibraryBrowseEvent(LibraryPanelBrowseEvent.Playback);
+                ApplyLibraryBrowseEvent(change);
                 _ = RefreshGlobalStatsFromCoreAsync();
                 return !IsCurrentVideoPath(playback.Path);
             }
@@ -1607,7 +1620,7 @@ namespace ReelRoulette
 
             ApplyPlaybackPrevious(playback);
             _ = RefreshGlobalStatsFromCoreAsync();
-            ApplyLibraryBrowseEvent(LibraryPanelBrowseEvent.Playback);
+            ApplyLibraryBrowseEvent(change);
             if (LibraryPanelBrowse.ReadCurrentFileAfterPlayback(loaded != null, IsCurrentVideoPath(playback.Path)))
             {
                 _ = SyncCurrentFileItemAsync();
@@ -1647,10 +1660,9 @@ namespace ReelRoulette
             _ = RefreshGlobalStatsFromCoreAsync();
         }
 
-        private async Task RefreshGlobalStatsFromCoreAsync()
+        private Task RefreshGlobalStatsFromCoreAsync()
         {
-            var stats = await FetchLibraryStatsViaCoreAsync();
-            await Dispatcher.UIThread.InvokeAsync(() => ApplyGlobalStats(stats));
+            return _libraryStatsRefresh.RequestAsync();
         }
 
         private void ApplyGlobalStats(CoreLibraryStatsResponse? stats)
@@ -2470,7 +2482,12 @@ namespace ReelRoulette
             ApplyLibrarySelectionUiState();
         }
 
-        private void ApplyLibraryBrowseEvent(LibraryPanelBrowseEvent kind)
+        private void ApplyLibraryBrowseEvent(LibraryTileChange change)
+        {
+            ApplyLibraryBrowseEffect(LibraryPanelBrowse.EffectFor(change, _currentFilterState, _librarySortMode));
+        }
+
+        private void ApplyLibraryBrowseEffect(LibraryPanelBrowseEffect effect)
         {
             var queryOpen = LibraryPanelBrowse.IsBrowseQueryOpen(_libraryBrowseQueryOpen, _libraryBrowseInFlight);
             if (!_libraryBrowseHasResult && !queryOpen)
@@ -2478,13 +2495,6 @@ namespace ReelRoulette
                 return;
             }
 
-            var effect = LibraryPanelBrowse.EffectFor(
-                kind,
-                _currentFilterState?.FavoritesOnly ?? false,
-                _currentFilterState?.ExcludeBlacklisted ?? false,
-                _currentFilterState?.OnlyNeverPlayed ?? false,
-                ((_currentFilterState?.SelectedTags?.Count ?? 0) > 0) || ((_currentFilterState?.ExcludedTags?.Count ?? 0) > 0),
-                _librarySortMode);
             if (LibraryPanelBrowse.ShouldReplayBrowse(queryOpen, effect))
             {
                 ReloadLibraryBrowseWindow();
@@ -5579,14 +5589,7 @@ namespace ReelRoulette
 
         private bool TagReloadOnLand()
         {
-            var hasTagFilter = TagFilterCanChangeMembership();
-            var effect = LibraryPanelBrowse.EffectFor(
-                LibraryPanelBrowseEvent.ItemTags,
-                _currentFilterState?.FavoritesOnly ?? false,
-                _currentFilterState?.ExcludeBlacklisted ?? false,
-                _currentFilterState?.OnlyNeverPlayed ?? false,
-                hasTagFilter,
-                _librarySortMode);
+            var effect = LibraryPanelBrowse.TagSaveEffect(TagFilterCanChangeMembership());
             var queryOpen = LibraryPanelBrowse.IsBrowseQueryOpen(_libraryBrowseQueryOpen, _libraryBrowseInFlight);
             return LibraryPanelBrowse.ShouldReplayBrowse(queryOpen, effect);
         }
@@ -5878,15 +5881,30 @@ namespace ReelRoulette
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
-            var hasTagFilters = ((_currentFilterState?.SelectedTags?.Count ?? 0) > 0)
-                || ((_currentFilterState?.ExcludedTags?.Count ?? 0) > 0);
-            var reloadLoadedForUnknownTag = false;
+            // A catalog rename or delete also retargets the filter, so it keeps reloading under any tag filter.
+            var effect = string.IsNullOrWhiteSpace(payload.CatalogReplacedTag)
+                ? LibraryPanelBrowseEffect.Patch
+                : LibraryPanelBrowse.TagSaveEffect(TagFilterCanChangeMembership());
             var currentFileTileUpdated = false;
             var readCurrentFile = false;
             var updatedCount = 0;
             foreach (var identifier in identifiers)
             {
                 var loaded = FindLoadedLibraryItemByIdOrPath(identifier);
+                if (LibraryPanelBrowse.EffectFor(
+                        new LibraryTileChange
+                        {
+                            Kind = LibraryPanelBrowseEvent.ItemTags,
+                            Loaded = loaded != null,
+                            AddedTags = addTags,
+                            RemovedTags = removeTags
+                        },
+                        _currentFilterState,
+                        _librarySortMode) == LibraryPanelBrowseEffect.ReloadLoaded)
+                {
+                    effect = LibraryPanelBrowseEffect.ReloadLoaded;
+                }
+
                 if (loaded != null)
                 {
                     loaded.Item.Tags = MergeItemTags(loaded.Item.Tags, addTags, removeTags);
@@ -5926,24 +5944,15 @@ namespace ReelRoulette
                     LibraryPanelBrowse.NeedsCurrentFileRead(loadedHasItem: false, cachedItemMatches: false))
                 {
                     readCurrentFile = true;
-                    continue;
-                }
-
-                if (LibraryPanelBrowse.UnknownTagItem(hasTagFilters) == LibraryPanelBrowseUnknownTag.ReloadLoadedAfterBatch)
-                {
-                    reloadLoadedForUnknownTag = true;
                 }
             }
 
-            if (reloadLoadedForUnknownTag)
+            if (effect == LibraryPanelBrowseEffect.ReloadLoaded)
             {
-                Log("CoreEvents: itemTagsChanged reloads the loaded library window (unknown item under a tag filter).");
-                RefreshLibraryBrowseKeepingScroll();
+                Log("CoreEvents: itemTagsChanged reloads the loaded library window (a tag filter can change what it shows).");
             }
-            else
-            {
-                ApplyLibraryBrowseEvent(LibraryPanelBrowseEvent.ItemTags);
-            }
+
+            ApplyLibraryBrowseEffect(effect);
 
             if (currentFileTileUpdated)
             {
@@ -6446,7 +6455,7 @@ namespace ReelRoulette
             {
                 while (!token.IsCancellationRequested)
                 {
-                    Log($"CoreEvents: Connecting SSE stream (lastEventId={_coreLastEventRevision})...");
+                    Log($"CoreEvents: Connecting SSE stream (lastEventId={_coreLastEventRevision?.ToString() ?? "none"})...");
                     SetStatusMessage("Core events connecting...", 0);
                     try
                     {
@@ -6456,7 +6465,7 @@ namespace ReelRoulette
                             _coreSessionId,
                             "desktop",
                             Environment.MachineName,
-                            _coreLastEventRevision > 0 ? _coreLastEventRevision : null,
+                            _coreLastEventRevision,
                             HandleCoreServerEnvelopeAsync,
                             Log,
                             token);
@@ -6519,7 +6528,7 @@ namespace ReelRoulette
                 _coreEventsReconnectPending = false;
                 SetStatusMessage("Core events reconnected.", 0);
             }
-            _coreLastEventRevision = Math.Max(_coreLastEventRevision, envelope.Revision);
+            _coreLastEventRevision = CoreEventRevision.Next(_coreLastEventRevision, envelope.EventType, envelope.Revision);
             var eventPayloadOptions = new JsonSerializerOptions
             {
                 PropertyNameCaseInsensitive = true
@@ -9383,7 +9392,7 @@ namespace ReelRoulette
                 $"Core server base URL: {_coreServerBaseUrl}\n" +
                 $"Core client ID: {_coreClientId}\n" +
                 $"Core session ID: {_coreSessionId}\n" +
-                $"Last SSE revision: {_coreLastEventRevision}\n" +
+                $"Last SSE revision: {_coreLastEventRevision ?? 0}\n" +
                 $"Core API reachable: {_isCoreApiReachable}";
 
             var dialog = new Window

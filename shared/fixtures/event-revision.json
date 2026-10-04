@@ -1,0 +1,58 @@
+[
+  {
+    "name": "an ordinary event moves the revision forward",
+    "lastRevision": 10,
+    "eventType": "itemStateChanged",
+    "revision": 12,
+    "expected": 12
+  },
+  {
+    "name": "an ordinary event never moves the revision back",
+    "lastRevision": 12,
+    "eventType": "playbackRecorded",
+    "revision": 11,
+    "expected": 12
+  },
+  {
+    "name": "a resync after a server restart takes its lower revision",
+    "lastRevision": 500,
+    "eventType": "resyncRequired",
+    "revision": 4,
+    "expected": 4
+  },
+  {
+    "name": "a resync after a replay gap takes its revision",
+    "lastRevision": 10,
+    "eventType": "resyncRequired",
+    "revision": 300,
+    "expected": 300
+  },
+  {
+    "name": "streamOpened gives a client with no revision the server's revision, even 0",
+    "lastRevision": null,
+    "eventType": "streamOpened",
+    "revision": 0,
+    "expected": 0
+  },
+  {
+    "name": "streamOpened gives a client with no revision the server's current revision",
+    "lastRevision": null,
+    "eventType": "streamOpened",
+    "revision": 7,
+    "expected": 7
+  },
+  {
+    "name": "streamOpened never moves a revision the client already holds",
+    "lastRevision": 5,
+    "eventType": "streamOpened",
+    "revision": 9,
+    "expected": 5
+  },
+  {
+    "name": "an ordinary event gives a client with no revision its revision",
+    "lastRevision": null,
+    "eventType": "itemTagsChanged",
+    "revision": 3,
+    "expected": 3
+  }
+]

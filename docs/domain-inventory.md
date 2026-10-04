@@ -103,9 +103,11 @@ Desktop is orchestration/render for migrated flows.
 - `src/clients/desktop/ReelRoulette.DesktopApp.Tests/`
   - xUnit tests for `ReelRoulette.LibraryArchive` migration helpers, export→import round-trip, library-panel browse window decisions, and tag-save local apply (immediate tiles, a confirmed tag kept when the save fails, failed-tail undo that keeps a tag which arrived during the save, filter retarget, own-echo skip, and a rename event for a wider set of files that still applies).
 - `src/clients/desktop/ReelRoulette.DesktopApp/LibraryPanelBrowse.cs`
-  - pure decisions for infinite-scroll fill, append reflow, whether a catalog event patches tiles or reloads the loaded window, whether an open query or a further page still in flight is read again, whether a deferred refresh keeps that query open, where a query page reflows, how an unknown tag id is handled, the committed loaded span a reload uses after a splice stops halfway, which copy supplies now-playing stats, when a file that is not on screen is read again, when that read replaces the copy already shown, and when a playback event paints the current-file section.
+  - pure decisions for infinite-scroll fill, append reflow, whether a catalog event patches tiles or reloads the loaded window (shared fixture `library-tile-effect.json`), whether an open query or a further page still in flight is read again, whether a deferred refresh keeps that query open, where a query page reflows, the committed loaded span a reload uses after a splice stops halfway, which copy supplies now-playing stats, when a file that is not on screen is read again, when that read replaces the copy already shown, and when a playback event paints the current-file section.
 - `src/clients/desktop/ReelRoulette.DesktopApp/MainWindow.axaml.cs`
   - API/SSE lifecycle orchestration, reconnect/resync guidance, compatibility gating, playback orchestration (library grid click-to-play via `POST /api/play/{itemId}`); grid-only library panel that browses through `POST /api/library/query`. Connect and resync use library stats, sources, and the tag catalog.
+- `src/clients/desktop/ReelRoulette.DesktopApp/LibraryStatsRefresh.cs`
+  - coalesces library stats refreshes: a short wait gathers a burst, one request in flight, and one more for requests made during it.
 - `src/clients/desktop/ReelRoulette.DesktopApp/CoreServerApiClient.cs`
   - typed desktop API adapter (commands/queries/SSE wiring), including `QueryLibraryAsync` and `RequestPlayItemAsync`.
 - `src/clients/desktop/ReelRoulette.DesktopApp/ManageSourcesDialog.axaml.cs`
@@ -183,7 +185,7 @@ WebUI is runtime-config-driven API/SSE client orchestration.
 - `src/clients/web/ReelRoulette.WebUI/src/auth/authBootstrap.ts`
   - startup auth/version/capability checks.
 - `src/clients/web/ReelRoulette.WebUI/src/events/sseClient.ts`
-  - SSE connect/reconnect behavior.
+  - the WebUI's one event stream: resume with the last event ID after an error, revision tracking, and handler dispatch for each event type.
 - `src/clients/web/ReelRoulette.WebUI/src/events/eventEnvelope.ts`
   - event envelope parsing/building utilities.
 - `src/clients/web/ReelRoulette.WebUI/src/config/runtimeConfig.ts`

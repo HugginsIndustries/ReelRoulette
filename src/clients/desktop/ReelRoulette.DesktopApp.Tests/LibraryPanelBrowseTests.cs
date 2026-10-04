@@ -53,54 +53,6 @@ public sealed class LibraryPanelBrowseTests
     }
 
     [Fact]
-    public void EffectFor_PatchesWhenTheOpenGridCannotChangeMembershipOrOrder()
-    {
-        Assert.Equal(
-            LibraryPanelBrowseEffect.Patch,
-            LibraryPanelBrowse.EffectFor(LibraryPanelBrowseEvent.FavoriteOrBlacklist, false, false, false, false, "Name"));
-        Assert.Equal(
-            LibraryPanelBrowseEffect.Patch,
-            LibraryPanelBrowse.EffectFor(LibraryPanelBrowseEvent.Playback, false, false, false, false, "Name"));
-        Assert.Equal(
-            LibraryPanelBrowseEffect.Patch,
-            LibraryPanelBrowse.EffectFor(LibraryPanelBrowseEvent.ItemTags, false, false, false, false, "Name"));
-    }
-
-    [Fact]
-    public void EffectFor_ReloadsWhenMembershipOrOrderCanChange()
-    {
-        Assert.Equal(
-            LibraryPanelBrowseEffect.ReloadLoaded,
-            LibraryPanelBrowse.EffectFor(LibraryPanelBrowseEvent.FavoriteOrBlacklist, true, false, false, false, "Name"));
-        Assert.Equal(
-            LibraryPanelBrowseEffect.ReloadLoaded,
-            LibraryPanelBrowse.EffectFor(LibraryPanelBrowseEvent.FavoriteOrBlacklist, false, true, false, false, "Duration"));
-        Assert.Equal(
-            LibraryPanelBrowseEffect.ReloadLoaded,
-            LibraryPanelBrowse.EffectFor(LibraryPanelBrowseEvent.Playback, false, false, true, false, "Name"));
-        Assert.Equal(
-            LibraryPanelBrowseEffect.ReloadLoaded,
-            LibraryPanelBrowse.EffectFor(LibraryPanelBrowseEvent.Playback, false, false, false, false, "LastPlayed"));
-        Assert.Equal(
-            LibraryPanelBrowseEffect.ReloadLoaded,
-            LibraryPanelBrowse.EffectFor(LibraryPanelBrowseEvent.Playback, false, false, false, false, "PlayCount"));
-        Assert.Equal(
-            LibraryPanelBrowseEffect.ReloadLoaded,
-            LibraryPanelBrowse.EffectFor(LibraryPanelBrowseEvent.ItemTags, false, false, false, true, "Name"));
-    }
-
-    [Fact]
-    public void EffectFor_PatchesAFavoriteWhenTheSortDoesNotDependOnIt()
-    {
-        Assert.Equal(
-            LibraryPanelBrowseEffect.Patch,
-            LibraryPanelBrowse.EffectFor(LibraryPanelBrowseEvent.FavoriteOrBlacklist, false, false, false, false, "LastPlayed"));
-        Assert.Equal(
-            LibraryPanelBrowseEffect.Patch,
-            LibraryPanelBrowse.EffectFor(LibraryPanelBrowseEvent.Playback, false, false, false, false, "Duration"));
-    }
-
-    [Fact]
     public void QueryReflowIndex_ReflowsAnUnchangedPageWhenTheAspectChanges()
     {
         Assert.Equal(0, LibraryPanelBrowse.QueryReflowIndex(reset: true, firstChangedIndex: -1, firstLayoutIndex: -1));
@@ -353,16 +305,6 @@ public sealed class LibraryPanelBrowseTests
         Assert.True(otherStart.ClearPending);
     }
 
-    [Fact]
-    public void UnknownTagItem_ReloadsAfterTheBatchOnlyWhenATagFilterIsActive()
-    {
-        Assert.Equal(
-            LibraryPanelBrowseUnknownTag.Skip,
-            LibraryPanelBrowse.UnknownTagItem(hasTagFilter: false));
-        Assert.Equal(
-            LibraryPanelBrowseUnknownTag.ReloadLoadedAfterBatch,
-            LibraryPanelBrowse.UnknownTagItem(hasTagFilter: true));
-    }
 
 }
 

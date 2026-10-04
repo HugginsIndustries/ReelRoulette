@@ -36,7 +36,7 @@ import {
   LIBRARY_QUERY_SEARCH_DEBOUNCE_MS,
   createAutoTagScanRequest,
   createLibraryQuerySession,
-  libraryQueryTileEffect
+  libraryQueryTagSaveEffect
 } from "./library/libraryQuerySession.ts";
 import {
   createTagSaveSession,
@@ -46,6 +46,7 @@ import {
   runTagEditorSave
 } from "./library/tagSave.ts";
 import { requestPlayItem } from "./api/coreApi.ts";
+import { createSseClient } from "./events/sseClient.ts";
 
 const CLIENT_ID_KEY = "rr_clientId";
 const SESSION_ID_KEY = "rr_sessionId";
@@ -144,19 +145,6 @@ function absolutizeMediaUrl(apiBaseUrl, mediaUrl) {
   } catch {
     return mediaUrl;
   }
-}
-
-function parseEnvelopePayload(raw) {
-  try {
-    const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed === "object" && parsed.payload) {
-      return parsed.payload;
-    }
-  } catch {
-    // ignored
-  }
-
-  return null;
 }
 
 function getElement(id) {
@@ -1469,8 +1457,7 @@ export function startApp(config) {
   }
 
   let photoTimerId = null;
-  let eventSource = null;
-  let reconnectTimer = null;
+  let eventStream = null;
   let touchStartX = 0;
   let touchStartY = 0;
   let touchWasSwipe = false;
@@ -1541,18 +1528,7 @@ export function startApp(config) {
 
   function blockForCompatibility(message) {
     state.compatibilityBlocked = true;
-    if (eventSource) {
-      try {
-        eventSource.close();
-      } catch {
-        // ignored
-      }
-      eventSource = null;
-    }
-    if (reconnectTimer) {
-      clearTimeout(reconnectTimer);
-      reconnectTimer = null;
-    }
+    eventStream?.stop();
     setStatus(message);
   }
 
@@ -2458,7 +2434,7 @@ export function startApp(config) {
   }
 
   function tagSaveReloadOnLand() {
-    const effect = libraryQueryTileEffect("tags", state.appliedFilterState, libraryBrowseControls.sortMode);
+    const effect = libraryQueryTagSaveEffect(state.appliedFilterState);
     return librarySession.snapshot().inFlight || effect === "reload";
   }
 
@@ -3005,102 +2981,100 @@ export function startApp(config) {
       return;
     }
 
-    if (eventSource) {
-      try {
-        eventSource.close();
-      } catch {
-        // ignored
-      }
-      eventSource = null;
-    }
-    if (reconnectTimer) {
-      clearTimeout(reconnectTimer);
-      reconnectTimer = null;
-    }
+    eventStream ??= createEventStream();
+    eventStream.connect();
+  }
 
-    const streamUrl = new URL(sseUrl);
-    streamUrl.searchParams.set("clientId", state.clientId);
-    streamUrl.searchParams.set("sessionId", state.sessionId);
-    streamUrl.searchParams.set("clientType", getClientType());
-    streamUrl.searchParams.set("deviceName", getDeviceName());
-    eventSource = new EventSource(streamUrl.toString(), { withCredentials: true });
-    eventSource.onopen = () => {
-      setStatus("SSE connected");
-    };
-    eventSource.onerror = () => {
-      setStatus("SSE reconnecting...");
-      reconnectTimer = setTimeout(connectEvents, 1000);
-    };
-    eventSource.addEventListener("itemStateChanged", (event) => {
-      const payload = parseEnvelopePayload(event.data);
-      const itemPath = payload?.path || payload?.itemId;
-      if (!itemPath) return;
-      cacheItemState(itemPath, payload.isFavorite, payload.isBlacklisted);
-      if (state.current && normalizePath(state.current.id) === normalizePath(itemPath)) {
-        state.current.isFavorite = !!payload.isFavorite;
-        state.current.isBlacklisted = !!payload.isBlacklisted;
-        updateToggleButtons();
-      }
-      void librarySession.applyFavorite(payload);
-      const fileName = basenameFromPath(itemPath);
-      if (payload.isBlacklisted) {
-        setStatus(`Synced: Blacklisted: ${fileName}`);
-      } else if (payload.isFavorite) {
-        setStatus(`Synced: Added to favorites: ${fileName}`);
-      } else {
-        setStatus(`Synced: Removed from favorites: ${fileName}`);
-      }
-    });
-    eventSource.addEventListener("playbackRecorded", (event) => {
-      const payload = parseEnvelopePayload(event.data);
-      void librarySession.applyPlayback(payload);
-    });
-    eventSource.addEventListener("itemTagsChanged", (event) => {
-      const payload = parseEnvelopePayload(event.data);
-      if (!payload) return;
-      const echo = {
-        itemIds: payload.itemIds || payload.ItemIds || [],
-        addedTags: payload.addedTags || payload.AddedTags || [],
-        removedTags: payload.removedTags || payload.RemovedTags || []
-      };
-      handleIncomingItemTags({
-        itemIds: echo.itemIds,
-        addedTags: echo.addedTags,
-        removedTags: echo.removedTags,
-        catalogReplacedTag: payload.catalogReplacedTag || payload.CatalogReplacedTag || null,
-        catalogReplacementTag: payload.catalogReplacementTag || payload.CatalogReplacementTag || null
-      }, {
-        tagFilterCanChangeMembership,
-        retarget(step) {
-          retargetLiveTagFilters(step);
+  function createEventStream() {
+    return createSseClient({
+      sseUrl,
+      identity: {
+        clientId: state.clientId,
+        sessionId: state.sessionId,
+        clientType: getClientType(),
+        deviceName: getDeviceName()
+      },
+      onOpen() {
+        setStatus("SSE connected");
+      },
+      onError() {
+        setStatus("SSE reconnecting...");
+      },
+      handlers: {
+        itemStateChanged: applyItemStateEvent,
+        playbackRecorded(payload) {
+          void librarySession.applyPlayback(payload);
         },
-        afterRetarget(handling) {
-          const decision = tagSaveSession.onEcho(echo, handling.hadTagFilter || tagSaveReloadOnLand());
-          if (decision.skipPatch) {
-            projectLoadedTagItems();
-            tagSaveSession.sweep();
-            if (decision.reload) {
-              void librarySession.reloadLoaded();
-            }
-            return;
-          }
+        itemTagsChanged: applyItemTagsEvent,
+        refreshStatusChanged(payload) {
+          const raw = payload?.snapshot || payload?.Snapshot;
+          if (!raw) return;
+          setStatus(buildRefreshStatusMessage(coerceRefreshSnapshot(raw)));
+        },
+        resyncRequired() {
+          void loadPresets();
+          void librarySession.resync();
+        }
+      }
+    });
+  }
+
+  function applyItemStateEvent(payload) {
+    const itemPath = payload?.path || payload?.itemId;
+    if (!itemPath) return;
+    cacheItemState(itemPath, payload.isFavorite, payload.isBlacklisted);
+    if (state.current && normalizePath(state.current.id) === normalizePath(itemPath)) {
+      state.current.isFavorite = !!payload.isFavorite;
+      state.current.isBlacklisted = !!payload.isBlacklisted;
+      updateToggleButtons();
+    }
+    void librarySession.applyFavorite(payload);
+    const fileName = basenameFromPath(itemPath);
+    if (payload.isBlacklisted) {
+      setStatus(`Synced: Blacklisted: ${fileName}`);
+    } else if (payload.isFavorite) {
+      setStatus(`Synced: Added to favorites: ${fileName}`);
+    } else {
+      setStatus(`Synced: Removed from favorites: ${fileName}`);
+    }
+  }
+
+  function applyItemTagsEvent(payload) {
+    const echo = {
+      itemIds: payload.itemIds || payload.ItemIds || [],
+      addedTags: payload.addedTags || payload.AddedTags || [],
+      removedTags: payload.removedTags || payload.RemovedTags || []
+    };
+    handleIncomingItemTags({
+      itemIds: echo.itemIds,
+      addedTags: echo.addedTags,
+      removedTags: echo.removedTags,
+      catalogReplacedTag: payload.catalogReplacedTag || payload.CatalogReplacedTag || null,
+      catalogReplacementTag: payload.catalogReplacementTag || payload.CatalogReplacementTag || null
+    }, {
+      tagFilterCanChangeMembership,
+      retarget(step) {
+        retargetLiveTagFilters(step);
+      },
+      afterRetarget(handling) {
+        const decision = tagSaveSession.onEcho(echo, handling.hadTagFilter || tagSaveReloadOnLand());
+        if (decision.skipPatch) {
+          projectLoadedTagItems();
           tagSaveSession.sweep();
-          void librarySession.applyTags(echo);
-          if (handling.reloadBecauseFilterCleared) {
+          if (decision.reload) {
             void librarySession.reloadLoaded();
           }
+          return;
         }
-      });
-    });
-    eventSource.addEventListener("refreshStatusChanged", (event) => {
-      const payload = parseEnvelopePayload(event.data);
-      const raw = payload?.snapshot || payload?.Snapshot;
-      if (!raw) return;
-      setStatus(buildRefreshStatusMessage(coerceRefreshSnapshot(raw)));
-    });
-    eventSource.addEventListener("resyncRequired", async () => {
-      void loadPresets();
-      await librarySession.resync();
+        tagSaveSession.sweep();
+        void librarySession.applyTags({
+          ...echo,
+          catalogReplacedTag: payload.catalogReplacedTag || payload.CatalogReplacedTag || null
+        });
+        if (handling.reloadBecauseFilterCleared) {
+          void librarySession.reloadLoaded();
+        }
+      }
     });
   }
 

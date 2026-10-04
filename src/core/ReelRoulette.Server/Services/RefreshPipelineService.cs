@@ -15,6 +15,7 @@ namespace ReelRoulette.Server.Services;
 public sealed class RefreshPipelineService : BackgroundService
 {
     private const int ThumbnailMaxEdge = 480;
+    private static readonly TimeSpan ScanProgressInterval = TimeSpan.FromMilliseconds(500);
 
     private static SemaphoreSlim? _ffprobeSemaphore;
     private static readonly object FfprobeSemaphoreLock = new();
@@ -50,6 +51,8 @@ public sealed class RefreshPipelineService : BackgroundService
     private readonly CancellationTokenSource _shutdown = new();
     private readonly TaskCompletionSource _ffmpegCheckEntered = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private Task? _ffmpegCheckHold;
+    private Func<DateTimeOffset> _progressClock = () => DateTimeOffset.UtcNow;
+    private bool _assumeFfmpegAvailable;
 
     public RefreshPipelineService(
         ServerStateService state,
@@ -176,6 +179,22 @@ public sealed class RefreshPipelineService : BackgroundService
     }
 
     internal Task FfmpegCheckEntered => _ffmpegCheckEntered.Task;
+
+    /// <summary>
+    /// The clock the duration and loudness progress throttles read.
+    /// </summary>
+    internal void SetProgressClock(Func<DateTimeOffset> clock)
+    {
+        _progressClock = clock ?? throw new ArgumentNullException(nameof(clock));
+    }
+
+    /// <summary>
+    /// Skips the ffmpeg process check, so the loudness stage runs on a machine without ffmpeg.
+    /// </summary>
+    internal void AssumeFfmpegAvailable()
+    {
+        _assumeFfmpegAvailable = true;
+    }
 
     internal void HoldNextFingerprintWrite(Task hold)
     {
@@ -855,6 +874,7 @@ public sealed class RefreshPipelineService : BackgroundService
         var updated = 0;
         var processedLock = new object();
         var forcedSuffix = forceFullRescan ? " (forced full rescan)" : string.Empty;
+        var progressThrottle = new RefreshProgressThrottle(ScanProgressInterval, _progressClock);
 
         if (filesToScan.Count == 0)
         {
@@ -878,7 +898,7 @@ public sealed class RefreshPipelineService : BackgroundService
                     skippedProcessed = processed;
                 }
 
-                TryUpdateDurationProgress(skippedProcessed, total, forceFullRescan);
+                TryUpdateDurationProgress(progressThrottle, skippedProcessed, total, forceFullRescan);
                 return;
             }
 
@@ -904,7 +924,7 @@ public sealed class RefreshPipelineService : BackgroundService
                 currentProcessed = processed;
             }
 
-            TryUpdateDurationProgress(currentProcessed, total, forceFullRescan);
+            TryUpdateDurationProgress(progressThrottle, currentProcessed, total, forceFullRescan);
         });
 
         await Task.WhenAll(scanTasks);
@@ -950,6 +970,7 @@ public sealed class RefreshPipelineService : BackgroundService
         var updated = 0;
         var processedLock = new object();
         var forcedSuffix = forceFullRescan ? " (forced full rescan)" : string.Empty;
+        var progressThrottle = new RefreshProgressThrottle(ScanProgressInterval, _progressClock);
 
         if (filesToScan.Count == 0)
         {
@@ -957,7 +978,7 @@ public sealed class RefreshPipelineService : BackgroundService
             return;
         }
 
-        TryUpdateLoudnessProgress(processed, total, noAudioCount, errorCount, forceFullRescan);
+        TryUpdateLoudnessProgress(progressThrottle, processed, total, noAudioCount, errorCount, forceFullRescan);
 
         var scanTasks = filesToScan.Select(async item =>
         {
@@ -975,7 +996,7 @@ public sealed class RefreshPipelineService : BackgroundService
                     skippedProcessed = processed;
                 }
 
-                TryUpdateLoudnessProgress(skippedProcessed, total, Volatile.Read(ref noAudioCount), Volatile.Read(ref errorCount), forceFullRescan);
+                TryUpdateLoudnessProgress(progressThrottle, skippedProcessed, total, Volatile.Read(ref noAudioCount), Volatile.Read(ref errorCount), forceFullRescan);
                 return;
             }
 
@@ -1011,7 +1032,7 @@ public sealed class RefreshPipelineService : BackgroundService
                 currentErrors = errorCount;
             }
 
-            TryUpdateLoudnessProgress(currentProcessed, total, currentNoAudio, currentErrors, forceFullRescan);
+            TryUpdateLoudnessProgress(progressThrottle, currentProcessed, total, currentNoAudio, currentErrors, forceFullRescan);
         });
 
         await Task.WhenAll(scanTasks);
@@ -1960,15 +1981,25 @@ public sealed class RefreshPipelineService : BackgroundService
     }
 
 
-    private void TryUpdateDurationProgress(int processed, int total, bool forceFullRescan)
+    private void TryUpdateDurationProgress(RefreshProgressThrottle throttle, int processed, int total, bool forceFullRescan)
     {
+        if (!throttle.TryEnter())
+        {
+            return;
+        }
+
         var pct = Math.Clamp((int)Math.Round((processed / (double)Math.Max(1, total)) * 100.0), 0, 100);
         var forcedSuffix = forceFullRescan ? " (forced full rescan)" : string.Empty;
         UpdateStage("durationScan", pct, $"Duration scan {processed}/{total}{forcedSuffix}");
     }
 
-    private void TryUpdateLoudnessProgress(int processed, int total, int noAudioCount, int errorCount, bool forceFullRescan)
+    private void TryUpdateLoudnessProgress(RefreshProgressThrottle throttle, int processed, int total, int noAudioCount, int errorCount, bool forceFullRescan)
     {
+        if (!throttle.TryEnter())
+        {
+            return;
+        }
+
         var pct = Math.Clamp((int)Math.Round((processed / (double)Math.Max(1, total)) * 100.0), 0, 100);
         var noAudioText = noAudioCount > 0 ? $", {noAudioCount} without audio" : string.Empty;
         var errorText = errorCount > 0 ? $", {errorCount} errors" : string.Empty;
@@ -2157,6 +2188,11 @@ public sealed class RefreshPipelineService : BackgroundService
                 _ffmpegCheckHold = null;
                 _ffmpegCheckEntered.TrySetResult();
                 await hold.WaitAsync(cancellationToken);
+            }
+
+            if (_assumeFfmpegAvailable)
+            {
+                return true;
             }
 
             var testStartInfo = new ProcessStartInfo

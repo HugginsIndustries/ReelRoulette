@@ -57,7 +57,32 @@ export interface ItemTagsChangedPayload {
   itemIds?: readonly string[] | null;
   addedTags?: readonly string[] | null;
   removedTags?: readonly string[] | null;
+  /** Set when a catalog rename or delete caused the change. */
+  catalogReplacedTag?: string | null;
 }
+
+export interface LibraryTileFlags {
+  isFavorite: boolean;
+  isBlacklisted: boolean;
+}
+
+/**
+ * One item's change from a favorite, blacklist, playback, or tag event. `before` is the loaded tile's
+ * favorite and blacklist before the event, and is unknown for an item that is not loaded.
+ */
+export interface LibraryTileChange {
+  kind: LibraryQueryTileEvent;
+  loaded: boolean;
+  before?: LibraryTileFlags | null;
+  after?: LibraryTileFlags | null;
+  addedTags?: readonly string[] | null;
+  removedTags?: readonly string[] | null;
+}
+
+export type LibraryTileEffectFilter = Pick<
+  FilterState,
+  "favoritesOnly" | "excludeBlacklisted" | "onlyNeverPlayed" | "selectedTags" | "excludedTags"
+>;
 
 export type LibraryQueryFn = (request: LibraryQueryRequest, signal: AbortSignal) => Promise<LibraryQueryPage>;
 
@@ -116,21 +141,68 @@ export function libraryQueryReloadWindows(loadedCount: number): Array<{ offset: 
   return windows;
 }
 
+/**
+ * Reload the loaded window only when the change can alter what it shows or its order. A loaded tile reloads
+ * when a changed field is in the filter or sort and can take it out or move it. An item that is not loaded
+ * reloads only when the change could bring it into the window. Locked to shared/fixtures/library-tile-effect.json.
+ */
 export function libraryQueryTileEffect(
-  kind: LibraryQueryTileEvent,
-  filter: FilterState,
-  sortMode: LibrarySortMode
+  change: LibraryTileChange,
+  filter: LibraryTileEffectFilter,
+  sortMode: string
 ): LibraryQueryTileEffect {
-  switch (kind) {
+  let reload = false;
+  switch (change.kind) {
     case "favorite":
-      return filter.favoritesOnly || filter.excludeBlacklisted ? "reload" : "patch";
+      reload = flagChangeReloads(change, filter);
+      break;
     case "playback":
-      return filter.onlyNeverPlayed || sortMode === "LastPlayed" || sortMode === "PlayCount" ? "reload" : "patch";
+      reload = sortMode === "LastPlayed" || sortMode === "PlayCount" || (change.loaded && filter.onlyNeverPlayed);
+      break;
     case "tags":
-      return filter.selectedTags.length > 0 || filter.excludedTags.length > 0 ? "reload" : "patch";
-    default:
-      return "patch";
+      reload = tagChangeReloads(change, filter);
+      break;
   }
+  return reload ? "reload" : "patch";
+}
+
+/** A tag save made here can rename or delete a tag the filter holds, so it reloads under any tag filter. */
+export function libraryQueryTagSaveEffect(filter: LibraryTileEffectFilter): LibraryQueryTileEffect {
+  return filter.selectedTags.length > 0 || filter.excludedTags.length > 0 ? "reload" : "patch";
+}
+
+function flagChangeReloads(change: LibraryTileChange, filter: LibraryTileEffectFilter): boolean {
+  const { favoritesOnly, excludeBlacklisted } = filter;
+  if (!favoritesOnly && !excludeBlacklisted) {
+    return false;
+  }
+  const after = change.after;
+  if (!after) {
+    return true;
+  }
+  const before = change.before;
+  if (change.loaded && before) {
+    return (
+      (favoritesOnly && before.isFavorite !== after.isFavorite) ||
+      (excludeBlacklisted && before.isBlacklisted !== after.isBlacklisted)
+    );
+  }
+  return (!favoritesOnly || after.isFavorite) && (!excludeBlacklisted || !after.isBlacklisted);
+}
+
+/** Adding a selected tag or removing an excluded one can only bring an item in; the reverse can only take it out. */
+function tagChangeReloads(change: LibraryTileChange, filter: LibraryTileEffectFilter): boolean {
+  const selected = new Set(filter.selectedTags.map((tag) => tag.toLowerCase()));
+  const excluded = new Set(filter.excludedTags.map((tag) => tag.toLowerCase()));
+  if (selected.size === 0 && excluded.size === 0) {
+    return false;
+  }
+  const hits = (tags: readonly string[] | null | undefined, set: Set<string>) =>
+    (tags ?? []).some((tag) => set.has(tag.toLowerCase()));
+  if (change.loaded) {
+    return hits(change.removedTags, selected) || hits(change.addedTags, excluded);
+  }
+  return hits(change.addedTags, selected) || hits(change.removedTags, excluded);
 }
 
 /** An in-flight reset stays a reset. Any other open query, or a reload effect, reads the loaded window again. */
@@ -385,10 +457,17 @@ export function createLibraryQuerySession(query: LibraryQueryFn): LibraryQuerySe
       await run("append");
     },
     async applyFavorite(payload) {
-      const replay = libraryQueryReplayKind(inFlight, libraryQueryTileEffect("favorite", filterState, controls.sortMode));
       if (!hasResult && !inFlight) {
         return;
       }
+      const loaded = findProjectionItem(items, { itemId: payload.itemId, path: payload.path });
+      const change: LibraryTileChange = {
+        kind: "favorite",
+        loaded: loaded != null,
+        before: loaded ? { isFavorite: !!loaded.isFavorite, isBlacklisted: !!loaded.isBlacklisted } : null,
+        after: { isFavorite: !!payload.isFavorite, isBlacklisted: !!payload.isBlacklisted }
+      };
+      const replay = libraryQueryReplayKind(inFlight, libraryQueryTileEffect(change, filterState, controls.sortMode));
       if (replay) {
         await run(replay);
         return;
@@ -399,10 +478,14 @@ export function createLibraryQuerySession(query: LibraryQueryFn): LibraryQuerySe
       }
     },
     async applyPlayback(payload) {
-      const replay = libraryQueryReplayKind(inFlight, libraryQueryTileEffect("playback", filterState, controls.sortMode));
       if (!hasResult && !inFlight) {
         return;
       }
+      const change: LibraryTileChange = {
+        kind: "playback",
+        loaded: findProjectionItem(items, { path: payload.path }) != null
+      };
+      const replay = libraryQueryReplayKind(inFlight, libraryQueryTileEffect(change, filterState, controls.sortMode));
       if (replay) {
         await run(replay);
         return;
@@ -440,13 +523,28 @@ export function createLibraryQuerySession(query: LibraryQueryFn): LibraryQuerySe
       if (ids.length === 0 || (!hasResult && !inFlight)) {
         return;
       }
-      const replay = libraryQueryReplayKind(inFlight, libraryQueryTileEffect("tags", filterState, controls.sortMode));
+      const added = payload.addedTags ?? [];
+      const removed = payload.removedTags ?? [];
+      // A catalog rename or delete also retargets the filter, so it keeps reloading under any tag filter.
+      let effect: LibraryQueryTileEffect = String(payload.catalogReplacedTag ?? "").trim()
+        ? libraryQueryTagSaveEffect(filterState)
+        : "patch";
+      for (const id of ids) {
+        const change: LibraryTileChange = {
+          kind: "tags",
+          loaded: findProjectionItem(items, { itemId: id }) != null,
+          addedTags: added,
+          removedTags: removed
+        };
+        if (libraryQueryTileEffect(change, filterState, controls.sortMode) === "reload") {
+          effect = "reload";
+        }
+      }
+      const replay = libraryQueryReplayKind(inFlight, effect);
       if (replay) {
         await run(replay);
         return;
       }
-      const added = payload.addedTags ?? [];
-      const removed = payload.removedTags ?? [];
       let changed = false;
       for (const id of ids) {
         const item = findProjectionItem(items, { itemId: id });

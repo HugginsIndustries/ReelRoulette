@@ -255,6 +255,47 @@ public sealed class CoreServerApiClientTests
         Assert.Equal("42", Assert.Single(capturedRequest.Headers.GetValues("Last-Event-ID")));
     }
 
+    [Theory]
+    [InlineData(0L, "0")]
+    [InlineData(null, null)]
+    public async Task ListenToEventsAsync_SendsALastEventIdOfZeroAndNoneWithoutARevision(long? lastEventId, string? expected)
+    {
+        HttpRequestMessage? capturedRequest = null;
+        var handler = new DelegatingStubHandler(request =>
+        {
+            capturedRequest = request;
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(string.Empty, Encoding.UTF8, "text/event-stream")
+            });
+        });
+        var apiClient = new CoreServerApiClient(new HttpClient(handler));
+
+        await apiClient.ListenToEventsAsync(
+            "http://localhost:51301",
+            "desktop-client",
+            "desktop-session",
+            "desktop",
+            "MyDesktop",
+            lastEventId,
+            _ => Task.CompletedTask,
+            log: null,
+            CancellationToken.None);
+
+        Assert.NotNull(capturedRequest);
+        var query = capturedRequest!.RequestUri!.Query;
+        if (expected == null)
+        {
+            Assert.DoesNotContain("lastEventId", query, StringComparison.Ordinal);
+            Assert.False(capturedRequest.Headers.Contains("Last-Event-ID"));
+        }
+        else
+        {
+            Assert.Contains($"lastEventId={expected}", query, StringComparison.Ordinal);
+            Assert.Equal(expected, Assert.Single(capturedRequest.Headers.GetValues("Last-Event-ID")));
+        }
+    }
+
     [Fact]
     public async Task ListenToEventsAsync_ShouldHandleMalformedPayloadAndContinue()
     {

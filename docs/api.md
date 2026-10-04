@@ -110,10 +110,12 @@ Validation behavior:
 
 Reconnect/resync behavior:
 
-- Client reconnects with `Last-Event-ID` (or `lastEventId` query fallback).
+- A stream opened without a last event ID starts with `streamOpened` (payload `currentRevision`), whose envelope revision is the server's current revision and is not a new one. It is sent only on such a stream, before any other event.
+- Client reconnects with `Last-Event-ID` (or `lastEventId` query fallback), including 0. Desktop and WebUI both resume with the last event ID, and a client takes the revision of a `resyncRequired` it receives. A client with no revision yet takes the `streamOpened` revision; `streamOpened` never moves a revision the client already holds.
 - Optional `clientId` / `sessionId` hints support continuity and self-event suppression.
 - Server replays buffered events newer than last revision when available.
-- If replay gap exceeds retention, server emits `resyncRequired`.
+- If replay gap exceeds retention, server emits `resyncRequired`. A last event ID ahead of the current revision, as after a server restart, also gets `resyncRequired` with reason `revisionGap`.
+- `refreshStatusChanged` progress for each refresh stage is published at most every 400–500 ms; each stage's completion event is always published.
 - WebUI reloads the loaded library list and does not post an item-state read with an empty path list. Desktop still requests favorite and blacklist for a specific path via `POST /api/library-states`.
 - WebUI library overlay: `resyncRequired` reloads the loaded list-query window whether the overlay is shown or hidden. It does not post an empty item-state read. Favorite, blacklist, playback, and tag updates patch that window or reload it the same way.
 - `playbackRecorded` includes `playCount`, `lastPlayedUtc`, and `previousLastPlayedUtc`. `previousLastPlayedUtc` is the last-played time from before this play, and is null when the file had never been played. Clients copy `playCount` and `lastPlayedUtc` onto a loaded tile when those fields are present. Desktop shows `previousLastPlayedUtc` on the current file.

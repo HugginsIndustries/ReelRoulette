@@ -1,183 +1,130 @@
-import { getClientId, getClientType, getDeviceName, getRefreshStatus, getSessionId } from "../api/coreApi";
 import { buildEventsUrl, parseEventEnvelope } from "./eventEnvelope";
-import { buildRefreshStatusMessage } from "./refreshStatusProjection";
-import type { RuntimeConfig } from "../types/runtimeConfig";
-import type { RefreshStatusChangedPayload, ResyncRequiredPayload } from "../types/serverContracts";
+import type { ServerEventEnvelope } from "../types/serverContracts";
 
-const RECONNECT_DELAY_MS = 1200;
-const WATCHDOG_INTERVAL_MS = 5000;
-const STALE_STREAM_MS = 30000;
+export const SSE_RECONNECT_DELAY_MS = 1000;
 
-export interface SseUiBindings {
-  setConnectionStatus: (message: string) => void;
-  setRefreshStatus: (message: string) => void;
+export interface SseIdentity {
+  clientId: string;
+  sessionId: string;
+  clientType: string;
+  deviceName: string;
 }
 
-export interface SseClient {
-  connect: (reason: string) => void;
-  stop: () => void;
-}
+export type SseEventHandler = (payload: any, envelope: ServerEventEnvelope<unknown>) => void;
 
-interface EventSourceLike {
+export interface EventSourceLike {
   onopen: ((ev: Event) => unknown) | null;
   onerror: ((ev: Event) => unknown) | null;
   addEventListener: (type: string, listener: (event: MessageEvent<string>) => void) => void;
   close: () => void;
 }
 
-interface SseClientDependencies {
+export interface SseClientOptions {
+  sseUrl: string;
+  identity: SseIdentity;
+  handlers: Record<string, SseEventHandler>;
+  onOpen?: () => void;
+  onError?: () => void;
   createEventSource?: (url: string) => EventSourceLike;
-  getRefreshStatus?: typeof getRefreshStatus;
+  reconnectDelayMs?: number;
 }
 
-export function createSseClient(
-  config: RuntimeConfig,
-  ui: SseUiBindings,
-  fetchImpl: typeof fetch = fetch,
-  dependencies: SseClientDependencies = {}
-): SseClient {
+export interface SseClient {
+  /** Opens a new stream that resumes after the last revision received. */
+  connect: () => void;
+  stop: () => void;
+  /** Null until the first event, including `streamOpened`, arrives. */
+  lastRevision: () => number | null;
+}
+
+/**
+ * The revision to resume from. A resync takes its own revision, which can be lower after a server restart.
+ * `streamOpened` gives a client with no revision the server's revision, even 0, and never moves one it holds.
+ * Locked to shared/fixtures/event-revision.json.
+ */
+export function nextEventRevision(lastRevision: number | null, eventType: string, revision: number): number {
+  if (eventType === "resyncRequired" || lastRevision == null) {
+    return revision;
+  }
+  if (eventType === "streamOpened") {
+    return lastRevision;
+  }
+  return Math.max(lastRevision, revision);
+}
+
+/**
+ * The WebUI's one event stream. It reconnects after an error with the last event ID, so the server
+ * replays the events published in between or sends `resyncRequired`. The server's `streamOpened` gives
+ * it a revision before any other event, so it can resume even when nothing else arrived. An idle stream stays open.
+ */
+export function createSseClient(options: SseClientOptions): SseClient {
   const createEventSource =
-    dependencies.createEventSource ??
+    options.createEventSource ??
     ((url: string): EventSourceLike => new EventSource(url, { withCredentials: true }));
-  const getRefreshStatusFn = dependencies.getRefreshStatus ?? getRefreshStatus;
+  const reconnectDelayMs = options.reconnectDelayMs ?? SSE_RECONNECT_DELAY_MS;
 
   let source: EventSourceLike | null = null;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-  let watchdogTimer: ReturnType<typeof setInterval> | null = null;
-  let lastEventTimestamp = 0;
-  let lastRevision = 0;
-  const clientId = getClientId();
-  const sessionId = getSessionId();
-  const clientType = getClientType();
-  const deviceName = getDeviceName();
+  let lastRevision: number | null = null;
 
-  function clearReconnectTimer(): void {
+  function closeSource(): void {
     if (reconnectTimer) {
       clearTimeout(reconnectTimer);
       reconnectTimer = null;
     }
+    if (source) {
+      try {
+        source.close();
+      } catch {
+        // ignored
+      }
+      source = null;
+    }
   }
 
-  function startWatchdog(): void {
-    if (watchdogTimer) {
-      clearInterval(watchdogTimer);
-    }
+  function connect(): void {
+    closeSource();
+    const url = buildEventsUrl(options.sseUrl, lastRevision, options.identity);
+    const opened = createEventSource(url);
+    source = opened;
 
-    watchdogTimer = setInterval(() => {
-      if (!source) {
+    opened.onopen = () => {
+      options.onOpen?.();
+    };
+
+    opened.onerror = () => {
+      if (source !== opened) {
         return;
       }
-
-      if (Date.now() - lastEventTimestamp > STALE_STREAM_MS) {
-        ui.setConnectionStatus("SSE stale, reconnecting...");
-        reconnect("watchdog");
-      }
-    }, WATCHDOG_INTERVAL_MS);
-  }
-
-  function stopWatchdog(): void {
-    if (watchdogTimer) {
-      clearInterval(watchdogTimer);
-      watchdogTimer = null;
-    }
-  }
-
-  async function syncRefreshStatus(): Promise<void> {
-    try {
-      const status = await getRefreshStatusFn(config, fetchImpl);
-      ui.setRefreshStatus(buildRefreshStatusMessage(status));
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown refresh sync error";
-      ui.setRefreshStatus(`Refresh status sync failed: ${message}`);
-    }
-  }
-
-  async function handleResyncRequired(payload: ResyncRequiredPayload): Promise<void> {
-    ui.setConnectionStatus(
-      `SSE resync requested (${payload.reason}, last=${payload.lastEventId}, current=${payload.currentRevision}).`
-    );
-
-    try {
-      await syncRefreshStatus();
-      ui.setConnectionStatus("SSE resync completed.");
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown resync error";
-      ui.setConnectionStatus(`SSE resync failed: ${message}`);
-    }
-  }
-
-  function reconnect(reason: string): void {
-    clearReconnectTimer();
-    if (source) {
-      source.close();
-      source = null;
-    }
-
-    reconnectTimer = setTimeout(() => {
-      connect(reason);
-    }, RECONNECT_DELAY_MS);
-  }
-
-  function connect(reason: string): void {
-    clearReconnectTimer();
-    if (source) {
-      source.close();
-      source = null;
-    }
-
-    const url = buildEventsUrl(config.sseUrl, lastRevision, { clientId, sessionId, clientType, deviceName });
-    ui.setConnectionStatus(`Connecting SSE (${reason})...`);
-    source = createEventSource(url);
-    lastEventTimestamp = Date.now();
-    startWatchdog();
-
-    source.onopen = () => {
-      ui.setConnectionStatus(`SSE connected (${reason}).`);
-      lastEventTimestamp = Date.now();
-      void syncRefreshStatus();
+      options.onError?.();
+      closeSource();
+      reconnectTimer = setTimeout(connect, reconnectDelayMs);
     };
 
-    source.onerror = () => {
-      ui.setConnectionStatus("SSE connection error; reconnecting...");
-      reconnect("error");
-    };
-
-    source.addEventListener("refreshStatusChanged", (event) => {
-      lastEventTimestamp = Date.now();
-      try {
-        const envelope = parseEventEnvelope<RefreshStatusChangedPayload>(event.data);
-        lastRevision = Math.max(lastRevision, envelope.revision);
-        ui.setRefreshStatus(buildRefreshStatusMessage(envelope.payload.snapshot));
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Invalid refresh event payload";
-        ui.setRefreshStatus(`Refresh event parse failed: ${message}`);
-      }
-    });
-
-    source.addEventListener("resyncRequired", (event) => {
-      lastEventTimestamp = Date.now();
-      try {
-        const envelope = parseEventEnvelope<ResyncRequiredPayload>(event.data);
-        lastRevision = Math.max(lastRevision, envelope.revision);
-        void handleResyncRequired(envelope.payload);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Invalid resync payload";
-        ui.setConnectionStatus(`resyncRequired parse failed: ${message}`);
-      }
-    });
-  }
-
-  function stop(): void {
-    clearReconnectTimer();
-    stopWatchdog();
-    if (source) {
-      source.close();
-      source = null;
+    const handlers: Record<string, SseEventHandler | undefined> = { streamOpened: undefined, ...options.handlers };
+    for (const [eventType, handler] of Object.entries(handlers)) {
+      opened.addEventListener(eventType, (event) => {
+        if (source !== opened) {
+          return;
+        }
+        let envelope: ServerEventEnvelope<unknown>;
+        try {
+          envelope = parseEventEnvelope<unknown>(event.data);
+        } catch {
+          return;
+        }
+        lastRevision = nextEventRevision(lastRevision, envelope.eventType, envelope.revision);
+        if (envelope.payload == null || !handler) {
+          return;
+        }
+        handler(envelope.payload, envelope);
+      });
     }
   }
 
   return {
     connect,
-    stop
+    stop: closeSource,
+    lastRevision: () => lastRevision
   };
 }

@@ -949,7 +949,10 @@ export interface paths {
          * Stream server events
          * @description SSE stream with monotonic `id` values matching envelope `revision`.
          *     Reconnect behavior:
-         *     - Client reconnects with `Last-Event-ID`.
+         *     - A stream opened without a last event ID starts with a `streamOpened`
+         *       event whose revision is the server's current revision, so a client
+         *       that receives no other event can still resume from it.
+         *     - Client reconnects with `Last-Event-ID`, including 0.
          *     - Server replays buffered events newer than that revision when available.
          *     - If the revision gap exceeds replay buffer retention, server emits a
          *       `resyncRequired` event. Clients requery the state they still show.
@@ -1290,7 +1293,7 @@ export interface components {
             eventType: string;
             /** Format: date-time */
             timestamp: string;
-            payload: components["schemas"]["ItemStateChangedPayload"] | components["schemas"]["PlaybackRecordedPayload"] | components["schemas"]["ResyncRequiredPayload"] | components["schemas"]["ItemTagsChangedPayload"] | components["schemas"]["TagCatalogChangedPayload"] | components["schemas"]["SourceStateChangedPayload"] | components["schemas"]["RefreshStatusChangedPayload"];
+            payload: components["schemas"]["ItemStateChangedPayload"] | components["schemas"]["PlaybackRecordedPayload"] | components["schemas"]["ResyncRequiredPayload"] | components["schemas"]["ItemTagsChangedPayload"] | components["schemas"]["TagCatalogChangedPayload"] | components["schemas"]["SourceStateChangedPayload"] | components["schemas"]["RefreshStatusChangedPayload"] | components["schemas"]["StreamOpenedPayload"];
         };
         ItemStateChangedPayload: {
             itemId: string;
@@ -1323,6 +1326,11 @@ export interface components {
             reason: string;
             /** Format: int64 */
             lastEventId: number;
+            /** Format: int64 */
+            currentRevision: number;
+        };
+        /** @description First event on a stream opened without a last event ID. Its envelope revision is the server's current revision, so a client can resume from it after a reconnect even when no other event arrived. */
+        StreamOpenedPayload: {
             /** Format: int64 */
             currentRevision: number;
         };

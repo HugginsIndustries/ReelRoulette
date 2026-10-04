@@ -826,89 +826,102 @@ public static class ServerHostComposition
             return Results.File(path, "image/jpeg");
         });
 
-        app.MapGet("/api/events", async (HttpContext context, ServerStateService state, ConnectedClientTracker clients, OperatorTestingService testingService) =>
+        app.MapGet("/api/events", (HttpContext context, ServerStateService state, ConnectedClientTracker clients, OperatorTestingService testingService) =>
+            StreamEventsAsync(context, state, clients, testingService));
+    }
+
+    internal static async Task StreamEventsAsync(
+        HttpContext context,
+        ServerStateService state,
+        ConnectedClientTracker clients,
+        OperatorTestingService testingService)
+    {
+        var testing = testingService.GetSnapshot();
+        if (testing.TestingModeEnabled && testing.ForceSseDisconnect)
         {
-            var testing = testingService.GetSnapshot();
-            if (testing.TestingModeEnabled && testing.ForceSseDisconnect)
+            context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+            await context.Response.WriteAsJsonAsync(new { error = "Testing mode: SSE disconnect simulation active." }, context.RequestAborted);
+            return;
+        }
+
+        context.Response.Headers.Append("Content-Type", "text/event-stream");
+        context.Response.Headers.Append("Cache-Control", "no-cache");
+        context.Response.Headers.Append("Connection", "keep-alive");
+
+        var cancellationToken = context.RequestAborted;
+        var serializerOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        var lastEventHeader = context.Request.Headers["Last-Event-ID"].ToString();
+        var lastEventQuery = context.Request.Query["lastEventId"].ToString();
+        var clientId = NormalizeOptionalIdentity(context.Request.Query["clientId"].ToString());
+        var sessionId = NormalizeOptionalIdentity(context.Request.Query["sessionId"].ToString());
+        var clientType = NormalizeOptionalIdentity(context.Request.Query["clientType"].ToString());
+        var deviceName = NormalizeOptionalIdentity(context.Request.Query["deviceName"].ToString());
+        var userAgent = context.Request.Headers["User-Agent"].ToString();
+        var connectionId = clients.RegisterSseClient(
+            clientId,
+            sessionId,
+            clientType,
+            deviceName,
+            userAgent,
+            context.Connection.RemoteIpAddress?.ToString());
+        var hasLastEvent = long.TryParse(lastEventHeader, out var lastEventRevision) ||
+                           long.TryParse(lastEventQuery, out lastEventRevision);
+        long lastDeliveredRevision = 0;
+
+        try
+        {
+            await context.Response.WriteAsync("retry: 1000\n\n", cancellationToken);
+            await context.Response.Body.FlushAsync(cancellationToken);
+
+            var reader = state.Subscribe(cancellationToken);
+            if (!hasLastEvent)
             {
-                context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
-                await context.Response.WriteAsJsonAsync(new { error = "Testing mode: SSE disconnect simulation active." }, context.RequestAborted);
-                return;
+                // Sent before anything else so a client that receives no other event can still resume after a reconnect.
+                // It does not move lastDeliveredRevision: an event already queued for this stream is still sent.
+                await WriteSseEnvelopeAsync(context, state.CreateStreamOpenedEnvelope(), serializerOptions, cancellationToken);
             }
-
-            context.Response.Headers.Append("Content-Type", "text/event-stream");
-            context.Response.Headers.Append("Cache-Control", "no-cache");
-            context.Response.Headers.Append("Connection", "keep-alive");
-
-            var cancellationToken = context.RequestAborted;
-            var serializerOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
-            var lastEventHeader = context.Request.Headers["Last-Event-ID"].ToString();
-            var lastEventQuery = context.Request.Query["lastEventId"].ToString();
-            var clientId = NormalizeOptionalIdentity(context.Request.Query["clientId"].ToString());
-            var sessionId = NormalizeOptionalIdentity(context.Request.Query["sessionId"].ToString());
-            var clientType = NormalizeOptionalIdentity(context.Request.Query["clientType"].ToString());
-            var deviceName = NormalizeOptionalIdentity(context.Request.Query["deviceName"].ToString());
-            var userAgent = context.Request.Headers["User-Agent"].ToString();
-            var connectionId = clients.RegisterSseClient(
-                clientId,
-                sessionId,
-                clientType,
-                deviceName,
-                userAgent,
-                context.Connection.RemoteIpAddress?.ToString());
-            var hasLastEvent = long.TryParse(lastEventHeader, out var lastEventRevision) ||
-                               long.TryParse(lastEventQuery, out lastEventRevision);
-            long lastDeliveredRevision = 0;
-
-            try
+            else
             {
-                await context.Response.WriteAsync("retry: 1000\n\n", cancellationToken);
-                await context.Response.Body.FlushAsync(cancellationToken);
-
-                var reader = state.Subscribe(cancellationToken);
-                if (hasLastEvent)
+                var replay = state.GetReplayAfter(lastEventRevision);
+                if (replay.GapDetected)
                 {
-                    var replay = state.GetReplayAfter(lastEventRevision);
-                    if (replay.GapDetected)
-                    {
-                        var resyncEnvelope = state.CreateEnvelope(
-                            "resyncRequired",
-                            new
-                            {
-                                reason = "revisionGap",
-                                lastEventId = lastEventRevision,
-                                currentRevision = replay.CurrentRevision
-                            });
-                        await WriteSseEnvelopeAsync(context, resyncEnvelope, serializerOptions, cancellationToken);
-                        lastDeliveredRevision = resyncEnvelope.Revision;
-                    }
-
-                    foreach (var missedEvent in replay.Events)
-                    {
-                        await WriteSseEnvelopeAsync(context, missedEvent, serializerOptions, cancellationToken);
-                        lastDeliveredRevision = Math.Max(lastDeliveredRevision, missedEvent.Revision);
-                    }
-                }
-
-                while (await reader.WaitToReadAsync(cancellationToken))
-                {
-                    while (reader.TryRead(out var envelope))
-                    {
-                        if (envelope.Revision <= lastDeliveredRevision)
+                    var resyncEnvelope = state.CreateEnvelope(
+                        "resyncRequired",
+                        new
                         {
-                            continue;
-                        }
+                            reason = "revisionGap",
+                            lastEventId = lastEventRevision,
+                            currentRevision = replay.CurrentRevision
+                        });
+                    await WriteSseEnvelopeAsync(context, resyncEnvelope, serializerOptions, cancellationToken);
+                    lastDeliveredRevision = resyncEnvelope.Revision;
+                }
 
-                        await WriteSseEnvelopeAsync(context, envelope, serializerOptions, cancellationToken);
-                        lastDeliveredRevision = envelope.Revision;
-                    }
+                foreach (var missedEvent in replay.Events)
+                {
+                    await WriteSseEnvelopeAsync(context, missedEvent, serializerOptions, cancellationToken);
+                    lastDeliveredRevision = Math.Max(lastDeliveredRevision, missedEvent.Revision);
                 }
             }
-            finally
+
+            while (await reader.WaitToReadAsync(cancellationToken))
             {
-                clients.UnregisterSseClient(connectionId);
+                while (reader.TryRead(out var envelope))
+                {
+                    if (envelope.Revision <= lastDeliveredRevision)
+                    {
+                        continue;
+                    }
+
+                    await WriteSseEnvelopeAsync(context, envelope, serializerOptions, cancellationToken);
+                    lastDeliveredRevision = envelope.Revision;
+                }
             }
-        });
+        }
+        finally
+        {
+            clients.UnregisterSseClient(connectionId);
+        }
     }
 
     private static IResult HandlePairRequest(

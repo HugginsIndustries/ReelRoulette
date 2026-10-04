@@ -45,7 +45,7 @@ serverState.PublishExternal("itemStateChanged", new ReelRoulette.Server.Contract
     IsFavorite = false,
     IsBlacklisted = true
 });
-var replay = serverState.GetReplayAfter(0);
+var replay = serverState.GetReplayAfter(eventB.Revision);
 if (replay.Events.Count < 2 || replay.GapDetected)
 {
     Console.WriteLine("Server replay check failed.");

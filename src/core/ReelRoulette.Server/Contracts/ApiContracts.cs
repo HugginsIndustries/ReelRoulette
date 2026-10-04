@@ -458,6 +458,11 @@ public sealed class RefreshStatusChangedPayload
     public RefreshStatusSnapshot Snapshot { get; set; } = new();
 }
 
+public sealed class StreamOpenedPayload
+{
+    public long CurrentRevision { get; set; }
+}
+
 public sealed class SourceImportRequest
 {
     public string RootPath { get; set; } = string.Empty;

@@ -451,6 +451,63 @@ public sealed class RefreshPipelineServiceTests
     }
 
     [Theory]
+    [InlineData("RunDurationStageAsync", "durationScan", "Duration scan complete (200 files, 0 updated)")]
+    [InlineData("RunLoudnessStageAsync", "loudnessScan", "Loudness scan complete (200 files, 0 updated)")]
+    public async Task ScanStage_PublishesOneProgressEventPerIntervalAndItsCompletion(
+        string methodName,
+        string stage,
+        string completionMessage)
+    {
+        using var scope = new DataFolderScope();
+        var items = Enumerable.Range(0, 200)
+            .Select(i => new SeedItem($"scan-{i}", Path.Combine(scope.RootPath, $"missing-{i}.mp4")))
+            .ToArray();
+        CatalogSeed.Write(scope.RootPath, items: items);
+
+        var state = new ServerStateService();
+        var service = CreateService(state, scope.RootPath);
+        var frozen = DateTimeOffset.UtcNow;
+        service.SetProgressClock(() => frozen);
+        service.AssumeFfmpegAvailable();
+        using var subscription = new CancellationTokenSource();
+        var reader = state.Subscribe(subscription.Token);
+
+        var method = typeof(RefreshPipelineService).GetMethod(methodName, BindingFlags.NonPublic | BindingFlags.Instance);
+        Assert.NotNull(method);
+        await (Task)method!.Invoke(service, [CancellationToken.None, false])!;
+
+        var stageEvents = new List<RefreshStageProgress>();
+        while (reader.TryRead(out var envelope))
+        {
+            if (envelope.EventType == "refreshStatusChanged" &&
+                envelope.Payload is RefreshStatusChangedPayload payload)
+            {
+                stageEvents.Add(payload.Snapshot.Stages.Single(s => s.Stage == stage));
+            }
+        }
+
+        Assert.Equal(2, stageEvents.Count);
+        Assert.False(stageEvents[0].IsComplete);
+        Assert.True(stageEvents[1].IsComplete);
+        Assert.Equal(completionMessage, stageEvents[1].Message);
+    }
+
+    [Fact]
+    public void ProgressThrottle_LetsOneUpdateThroughPerInterval()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var throttle = new RefreshProgressThrottle(TimeSpan.FromMilliseconds(500), () => now);
+
+        Assert.True(throttle.TryEnter());
+        Assert.False(throttle.TryEnter());
+        now = now.AddMilliseconds(499);
+        Assert.False(throttle.TryEnter());
+        now = now.AddMilliseconds(1);
+        Assert.True(throttle.TryEnter());
+        Assert.False(throttle.TryEnter());
+    }
+
+    [Theory]
     [InlineData(true, false)]
     [InlineData(false, true)]
     public async Task ForceRescan_ClearingItsFlag_KeepsFingerprintParallelism(bool forceDuration, bool forceLoudness)

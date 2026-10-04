@@ -104,51 +104,7 @@ Do not use this file for detailed architecture explanation or current capability
 
 ## Active Milestones
 
-Last milestone completed: M10j8
-
-### M10j9 - Client Event Efficiency
-
-- **Status**: ⏳ Planned
-- **Goal**: Library events cost the clients and server only the work they need: a loaded window reloads only when an event can change what it shows, the WebUI resumes its event stream without losing events, the desktop does not refetch library stats once per event, and refresh progress does not send one event per file.
-- **Scope**:
-  - Ships in v0.14.0, right after the post-migration fixes. Four slices, each verified on its own.
-  - Found and measured by the efficiency and divergence report on a copy of a 48,938-item catalog and 13 hours of `last.log`.
-  - Patch-or-reload rule (desktop and WebUI, shared fixture):
-    - Both clients reload every loaded window on a favorite or blacklist event while the filter has `favoritesOnly` or `excludeBlacklisted` (on by default), on a playback event while sorted by last played or play count or filtered to never played, and on a tag event while any tag filter is set. A reload re-reads the window in 200-item pages, one after another. Measured: reloading 5,000 loaded tiles sorted by last played takes 2.45 s and allocates 1.1 GB on the server, per event and per client. In one minute of real use, 31 WebUI plays caused 37 play-count-sorted library queries.
-    - Reload the loaded window only when a field the event changed affects the current filter or sort; otherwise patch the tile. For example, a favorite on a loaded tile whose blacklist flag does not change patches under `excludeBlacklisted`, and a playback event under name sort patches. An event for an item that is not loaded reloads only when the change could bring it into the window.
-    - Both clients implement the rule today in `LibraryPanelBrowse.EffectFor` and `libraryQueryTileEffect`, identically but with no shared fixture. Add a fixture under `shared/fixtures/` listing event kind, the fields that changed with before and after values, whether the tile is loaded, filter, and sort, with the expected patch or reload. Desktop and WebUI tests both run against it.
-  - WebUI event stream resume (WebUI, with one server fix):
-    - The WebUI's live event stream in `app.js` opens a new `EventSource` on every error, with no last event ID. It receives neither the events published while it was away nor `resyncRequired`, so it shows stale favorites, tags, and playback until something else reloads. The desktop resumes with the last event ID.
-    - `events/sseClient.ts` already tracks the last revision and builds the stream URL with it, but only its test uses it. Wire it into the WebUI and remove the duplicate `EventSource`, reconnect timer, and stream URL code in `app.js`.
-    - `sseClient.ts` listens only for `refreshStatusChanged` and `resyncRequired`. It needs to carry every event type `app.js` handles today, with the same handling.
-    - `sseClient.ts` has its own connection status wording. The WebUI keeps the connection messages `app.js` shows today; the client status line overhaul defines them.
-    - `sseClient.ts` reconnects when no event arrives for 30 seconds, and the server sends no keepalive, so an idle stream would reconnect every 30 seconds. Decided here: add a periodic keepalive comment to the server's event stream, or drop the watchdog.
-    - Server fix found while planning this slice, from code reading: the server's revision counter starts over when it restarts, and a reconnect whose last event ID is ahead of the current revision gets no replay and no `resyncRequired`. Treat a last event ID ahead of the current revision as a gap and send `resyncRequired`.
-    - Update `CONTEXT.md` to say both clients resume with the last event ID.
-  - Desktop library stats coalescing (desktop):
-    - The desktop refetches `GET /api/library/stats` from the playback, favorite, and blacklist event handlers, from the current-file read, and after other actions, once per call. Measured: 1,723 stats fetches in 13 hours, and 116 fetches for 31 WebUI plays in one minute, about 3.7 per play. Each fetch costs about 138 ms of server time under the lock the list query and item updates also take.
-    - Coalesce them: at most one stats request in flight, a short delay to gather a burst of events, and one more request when events arrived while a request was in flight. Totals stay server-computed; the desktop does not add play counts or favorite counts itself.
-  - Refresh progress throttling (server):
-    - The fingerprint and thumbnail stages publish progress at most every 400–500 ms. The duration and loudness stages publish one `refreshStatusChanged` event per file they scan. A forced rescan of the 17,307 videos in the measured catalog sends about 17,000 events per stage, which overflows the server's 256-event replay history, so a client that reconnects during the scan gets `resyncRequired` and reloads its window.
-    - Throttle duration and loudness progress the same way as the fingerprint and thumbnail stages, and keep the stage completion event and its final counts.
-  - Add a Release Specific checklist item: "With the WebUI open, stop and restart the server, change a favorite and a tag on the desktop while the WebUI reconnects, and the WebUI shows both."
-- **Acceptance criteria**:
-  - Desktop and WebUI patch-or-reload tests read the same fixture, and changing an expected result in it fails both.
-  - Under the default filter and name sort, a favorite on a loaded tile and a playback event patch the tile and do not query the library.
-  - An event that can change which items are shown or their order still reloads the loaded window, keeping the scroll position.
-  - After the WebUI's event stream drops and reconnects, the events published in between are applied, or the WebUI receives `resyncRequired` and reloads.
-  - After a server restart, a reconnecting client whose last event ID is ahead of the server's revision receives `resyncRequired`.
-  - The WebUI has one event stream implementation, and an idle stream does not reconnect on its own.
-  - A burst of playback events on any client causes at most two desktop stats requests, and the desktop header totals match `GET /api/library/stats` once the burst settles.
-  - A duration or loudness stage over N files publishes at most one progress event per throttle interval plus its completion event, and the completion message reports the same counts as before.
-  - `CONTEXT.md` says both clients resume their event stream with the last event ID.
-- **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include `dotnet test ReelRoulette.sln`, `npm run verify`, a check that a flipped fixture entry fails both the desktop and WebUI tests, a WebUI test that a reconnect sends the last event ID and applies replayed events, a server test for a last event ID ahead of the current revision, a desktop test counting stats requests for a burst of events, and a server test counting progress events for a duration and a loudness stage.
-  - Completion evidence must include the stats fetch count from `last.log` for the same kind of WebUI playback burst, before and after, and one quick spot check of a WebUI reconnect.
-  - The full outage pass is the Release Specific checklist item above, run in the pre-release pass.
-- **Deferrals / Follow-ups**:
-  - Making each reload cheaper (one request for the loaded window, indexed sort, no counts on later pages) is the library query performance milestone.
-  - Matching event items by ID instead of by path is the item IDs in the contract milestone.
+Last milestone completed: M10j9
 
 ### M10j10 - Desktop Player View and Fullscreen Fixes
 
@@ -1375,6 +1331,7 @@ Last milestone completed: M10j8
   - Docs evidence must include `docs/api.md` for the changed events and responses.
 - **Deferrals / Follow-ups**:
   - The server still treats paths that differ only by case as one path on Linux until Ordinal Path Identity on Linux. Matching by id on the clients removes their part of that problem.
+  - Add the previous favorite and blacklist values to item-state events. Today a favorite on an item that is not in the loaded window reloads that window under the default filter, because the client cannot tell whether the item was blacklisted before; with the previous values it can patch. Recorded by the client event efficiency milestone. This is a contract change.
 
 ### P30 - Shared Fixtures for Cross-Language Rules
 
@@ -1501,6 +1458,8 @@ Last milestone completed: M10j8
     - Telemetry reads: `ApiTelemetryService.GetIncoming` and `GetOutgoing` call `Reverse()` over the whole queue on every control status poll. Keep a ring buffer that reads newest first.
     - Session list under lock: `ServerSessionStore.GetActiveSessions` filters, sorts, and projects inside the session lock. Copy the records under the lock and sort outside it.
     - Dead write-back: `DynamicCorsOriginRegistry.RebuildAllowedOrigins` writes the rebuilt list back into the shared `ServerRuntimeOptions.CorsAllowedOrigins`, which nothing reads after the registry's constructor. Keep the list only in the registry.
+  - Events:
+    - Revision reuse after a restart: `ServerStateService` starts its revision counter at zero on every start. A client that reconnects after the restarted server has published past that client's last event ID, but no further than its replay history, gets a partial replay from the new server and no `resyncRequired`. Give each server start an instance id that clients send back with the last event ID, or start revisions from a value that cannot repeat, and send `resyncRequired` on a mismatch. This is a contract change.
   - Decision needed: the audio filter's handling of unscanned videos. `LibraryCatalogListQuery` matches **With audio** on `has_audio = 1` and **Without audio** on `has_audio = 0`, so a video whose audio has not been scanned (`has_audio` NULL) is hidden by both. Decide whether NULL counts as one of them or neither, then align `docs/api.md`, both clients' labels, and tests. This changes what users see, so it needs approval.
 - **Acceptance criteria**:
   - A partial settings POST changes only the fields it names, in every section.
@@ -1580,6 +1539,62 @@ Last milestone completed: M10j8
 ## Completed Milestones
 
 Latest completions first:
+
+### M10j9 - Client Event Efficiency
+
+- **Status**: ✅ Complete
+- **Goal**: Library events cost the clients and server only the work they need: a loaded window reloads only when an event can change what it shows, the WebUI resumes its event stream without losing events, the desktop does not refetch library stats once per event, and refresh progress does not send one event per file.
+- **Scope**:
+  - Ships in v0.14.0, right after the post-migration fixes. Four slices, each verified on its own.
+  - Found and measured by the efficiency and divergence report on a copy of a 48,938-item catalog and 13 hours of `last.log`.
+  - Patch-or-reload rule (desktop and WebUI, shared fixture):
+    - Both clients reload every loaded window on a favorite or blacklist event while the filter has `favoritesOnly` or `excludeBlacklisted` (on by default), on a playback event while sorted by last played or play count or filtered to never played, and on a tag event while any tag filter is set. A reload re-reads the window in 200-item pages, one after another. Measured: reloading 5,000 loaded tiles sorted by last played takes 2.45 s and allocates 1.1 GB on the server, per event and per client. In one minute of real use, 31 WebUI plays caused 37 play-count-sorted library queries.
+    - Reload the loaded window only when a field the event changed affects the current filter or sort; otherwise patch the tile. For example, a favorite on a loaded tile whose blacklist flag does not change patches under `excludeBlacklisted`, and a playback event under name sort patches. An event for an item that is not loaded reloads only when the change could bring it into the window.
+    - Both clients implement the rule today in `LibraryPanelBrowse.EffectFor` and `libraryQueryTileEffect`, identically but with no shared fixture. Add a fixture under `shared/fixtures/` listing event kind, the fields that changed with before and after values, whether the tile is loaded, filter, and sort, with the expected patch or reload. Desktop and WebUI tests both run against it.
+    - Decided here: an item that is not loaded and leaves the result (for example blacklisted under `excludeBlacklisted`, or played under `onlyNeverPlayed`) does not reload, so the header total stays one too high until the next query. A favorite on an item that is not loaded still reloads under `excludeBlacklisted`, because the event does not carry its previous blacklist flag. Playback under a last played or play count sort reloads in either direction. A tag change reloads a loaded tile when it removes a selected tag or adds an excluded one, and an item that is not loaded when it adds a selected tag or removes an excluded one. A tag save made on that client, and a catalog tag rename or delete, still reload under any tag filter, because they can change the filter itself.
+  - WebUI event stream resume (WebUI, with one server fix):
+    - The WebUI's live event stream in `app.js` opens a new `EventSource` on every error, with no last event ID. It receives neither the events published while it was away nor `resyncRequired`, so it shows stale favorites, tags, and playback until something else reloads. The desktop resumes with the last event ID.
+    - `events/sseClient.ts` already tracks the last revision and builds the stream URL with it, but only its test uses it. Wire it into the WebUI and remove the duplicate `EventSource`, reconnect timer, and stream URL code in `app.js`.
+    - `sseClient.ts` listens only for `refreshStatusChanged` and `resyncRequired`. It needs to carry every event type `app.js` handles today, with the same handling.
+    - `sseClient.ts` has its own connection status wording. The WebUI keeps the connection messages `app.js` shows today; the client status line overhaul defines them.
+    - `sseClient.ts` reconnects when no event arrives for 30 seconds, and the server sends no keepalive, so an idle stream would reconnect every 30 seconds. Decided here: drop the watchdog. A keepalive comment never reaches the page through `EventSource`, so it could not reset the watchdog; error events and the focus, visibility, and online reconnects cover a dropped stream, as they did before.
+    - Server fix found while planning this slice, from code reading: the server's revision counter starts over when it restarts, and a reconnect whose last event ID is ahead of the current revision gets no replay and no `resyncRequired`. Treat a last event ID ahead of the current revision as a gap and send `resyncRequired`.
+    - Both clients kept the highest revision they had seen, so after a restart they would keep resuming from the old one and get `resyncRequired` on every reconnect. Decided here: a client takes the revision of a `resyncRequired` it receives.
+    - A client that had received no event yet reconnected with no last event ID, so it got neither the missed events nor `resyncRequired`. Decided here: a stream opened without a last event ID starts with a new `streamOpened` event carrying the server's current revision. An SSE `id:` line alone could not be used, because a browser `EventSource` does not hand an event with no data to the page and the desktop reader ignores it. This adds an event type to the contract.
+    - Update `CONTEXT.md` to say both clients resume with the last event ID.
+  - Desktop library stats coalescing (desktop):
+    - The desktop refetches `GET /api/library/stats` from the playback, favorite, and blacklist event handlers, from the current-file read, and after other actions, once per call. Measured: 1,723 stats fetches in 13 hours, and 116 fetches for 31 WebUI plays in one minute, about 3.7 per play. Each fetch costs about 138 ms of server time under the lock the list query and item updates also take.
+    - Coalesce them: at most one stats request in flight, a short delay to gather a burst of events, and one more request when events arrived while a request was in flight. Totals stay server-computed; the desktop does not add play counts or favorite counts itself.
+  - Refresh progress throttling (server):
+    - The fingerprint and thumbnail stages publish progress at most every 400–500 ms. The duration and loudness stages publish one `refreshStatusChanged` event per file they scan. A forced rescan of the 17,307 videos in the measured catalog sends about 17,000 events per stage, which overflows the server's 256-event replay history, so a client that reconnects during the scan gets `resyncRequired` and reloads its window.
+    - Throttle duration and loudness progress the same way as the fingerprint and thumbnail stages, and keep the stage completion event and its final counts.
+  - Add a Release Specific checklist item: "With the WebUI open, stop and restart the server, change a favorite and a tag on the desktop while the WebUI reconnects, and the WebUI shows both."
+- **Acceptance criteria**:
+  - Desktop and WebUI patch-or-reload tests read the same fixture, and changing an expected result in it fails both.
+  - Under the default filter and name sort, a favorite on a loaded tile and a playback event patch the tile and do not query the library.
+  - An event that can change which items are shown or their order still reloads the loaded window, keeping the scroll position.
+  - After the WebUI's event stream drops and reconnects, the events published in between are applied, or the WebUI receives `resyncRequired` and reloads.
+  - After a server restart, a reconnecting client whose last event ID is ahead of the server's revision receives `resyncRequired`.
+  - The WebUI has one event stream implementation, and an idle stream does not reconnect on its own.
+  - A burst of playback events on any client causes at most two desktop stats requests, and the desktop header totals match `GET /api/library/stats` once the burst settles.
+  - A duration or loudness stage over N files publishes at most one progress event per throttle interval plus its completion event, and the completion message reports the same counts as before.
+  - `CONTEXT.md` says both clients resume their event stream with the last event ID.
+- **Verification evidence**:
+  - `dotnet build ReelRoulette.sln` (0 warnings), `dotnet test ReelRoulette.sln` (desktop 244, Core 293 passed), `npm run verify` (228 WebUI tests passed, contracts fresh, build output verified), and SystemChecks passed.
+  - Patch-or-reload: `shared/fixtures/library-tile-effect.json` (28 cases) is read by `LibraryTileEffectFixtureTests` and the WebUI library session tests. Flipping the expected result of "favorite on a loaded tile under the default filter patches" to `reload` failed that case in both, and restoring it passed both. WebUI session tests show a favorite on a loaded tile and a playback event under the default filter and name sort make no library query, and that a blacklist on a loaded tile reloads and keeps the scroll position.
+  - Event stream resume: WebUI `sseClient` tests cover a reconnect that sends the last event ID and applies the replayed events, taking the resync revision after a server restart, every event type reaching its handler, and an idle stream left open for 10 minutes with no reconnect. Building the stream URL without the last revision failed both resume tests. `ReplayAfter_TreatsALastEventIdAheadOfTheCurrentRevisionAsAGap` fails without the server fix. The resync-revision rule is locked to `shared/fixtures/event-revision.json`, read by `CoreEventRevisionTests` and the WebUI `sseClient` tests; flipping the expected result of "streamOpened never moves a revision the client already holds" failed that case in both, and restoring it passed both.
+  - Quiet-server restart: a stream opened without a last event ID starts with `streamOpened` carrying the current revision, so a client that received no other event resumes from it, from 0 if need be. `EventStreamTests` runs the server's event stream with no events before a restart and a favorite after it, and the reconnecting client gets that favorite; it and the `streamOpened` test failed before the change. WebUI `sseClient` and desktop `CoreServerApiClient` tests show a reconnect sending a last event ID of 0.
+  - Stats coalescing: `LibraryStatsRefreshTests` show 30 requests during the gather wait make one fetch, requests during a fetch make exactly one more, and the last applied stats are from the last fetch. Fetching on every request, as before, failed three of the four tests.
+  - Refresh progress: a duration and a loudness stage over 200 files with the clock held publish one progress event and one completion event each, with completion messages `Duration scan complete (200 files, 0 updated)` and `Loudness scan complete (200 files, 0 updated)`. Without the throttle they published 201 and 202 events.
+  - Stats fetches from `last.log` for a WebUI playback burst: before, 116 fetches for 31 plays in one minute (about 3.7 per play), from the efficiency and divergence report; after, 30 fetches for about 30 plays (about 1 per play), with the `LibraryStats: Fetching stats for N refresh request(s).` lines showing several requests collapsed into one fetch. Plays spaced further apart than the gather wait still get one fetch each; the at-most-two-per-burst bound is shown by `LibraryStatsRefreshTests`.
+  - WebUI reconnect spot check: PASS. After the server was stopped and started again, a favorite changed on the desktop showed in the WebUI without a page reload.
+  - Docs updated: `CONTEXT.md`, `docs/api.md`, `docs/architecture.md`, `docs/domain-inventory.md`, and the Release Specific checklist item.
+  - The full outage pass is the Release Specific checklist item above, run in the pre-release pass.
+- **Deferrals / Follow-ups**:
+  - Making each reload cheaper (one request for the loaded window, indexed sort, no counts on later pages) is the library query performance milestone.
+  - Matching event items by ID instead of by path is the item IDs in the contract milestone.
+  - Previous favorite and blacklist values in item-state events, so a favorite on an item that is not loaded can patch under the default filter, is a follow-up on the item IDs in the contract milestone.
+  - Revision reuse after a restart is recorded in the server robustness findings: a client whose last event ID is below a restarted server's revision gets a partial replay with no `resyncRequired`, which revisions alone cannot detect.
 
 ### M10j8 - Post-Migration Fixes
 

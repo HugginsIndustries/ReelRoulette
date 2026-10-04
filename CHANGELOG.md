@@ -14,6 +14,7 @@ Write **[Unreleased]** bullets at the same level as the released sections below.
 ### Changed
 
 - **Desktop hides unavailable source and item removal:** **Rename** and **Remove** in Manage Sources and **Remove from Library** in the library grid menu are hidden, since the server cannot do them yet and they only showed an error. They come back when the server supports them.
+- **Less reloading on library changes:** On desktop and in the WebUI, a favorite, play, or tag change now updates that tile in place unless it can change which files the library shows or their order, instead of reloading every loaded tile. With thousands of tiles loaded and the library sorted by name, playing a file no longer reloads the whole library view on every client. The desktop also refreshes its library totals once per burst of changes instead of once per change, and duration and loudness scans update refresh progress at most twice a second instead of once per file.
 - **Preset matching ignores tag order and case:** Both clients now recognize a saved preset when its included or excluded tags differ only in order or capitalization, or its sources or tag categories are listed in a different order, such as an older preset saved before the categories were reordered. The desktop also stops showing a starred preset when an empty tag category setting, a missing tag list, or an empty tag or source name is all that differs, so it matches presets the same way the WebUI does.
 
 ### Deprecated
@@ -28,6 +29,7 @@ Write **[Unreleased]** bullets at the same level as the released sections below.
 - **Server sources and refresh settings:** A folder you import now shows up in the source list right away and can be enabled or disabled without restarting the server. Changing the auto-refresh interval or turning auto-refresh on now schedules the next refresh from the new setting. A forced duration or loudness rescan no longer resets the fingerprint scan parallelism to its default.
 - **Desktop filter dialog presets:** Deleting a preset, renaming one, or moving the selected one up or down no longer throws away your unsaved filter changes or turns off **Update Preset**. A saved preset whose minimum or maximum duration is stored in seconds keeps its settings on the desktop instead of loading as **None**.
 - **Desktop playback and sort labels:** The desktop shows a file as a photo or video based on what the server reports, as the WebUI does, and its library sort labels use the same arrows and dashes as the WebUI.
+- **WebUI catches up after a lost connection:** When the WebUI's connection to the server drops, for example while the server restarts, it now picks up the favorite, tag, and playback changes made in the meantime, or reloads if it missed too many. It used to keep showing the old state until something else reloaded. After a server restart, both clients now catch up or reload instead of missing changes, including when nothing had changed since they connected.
 - **Desktop Settings reopen hang:** Opening Settings a second time no longer freezes the desktop app so that it has to be force-closed.
 
 ### Security

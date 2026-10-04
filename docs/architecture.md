@@ -97,9 +97,9 @@ Envelope fields:
 
 Reconnect and recovery:
 
-- Clients reconnect with revision continuity hints (`Last-Event-ID` and fallback query semantics where applicable).
+- Clients reconnect with revision continuity hints (`Last-Event-ID` and fallback query semantics where applicable). Desktop and WebUI both resume with the last event ID, and take the revision of a `resyncRequired` they receive. A stream opened without a last event ID starts with `streamOpened`, which gives the client the server's current revision to resume from.
 - Server replays retained events when available.
-- On replay gaps, server emits `resyncRequired`. WebUI reloads the loaded library list and does not post an empty item-state read. An item-state read returns only the requested paths.
+- On replay gaps, and for a last event ID ahead of the current revision (as after a server restart), server emits `resyncRequired`. WebUI reloads the loaded library list and does not post an empty item-state read. An item-state read returns only the requested paths.
 
 ## Auth and Access Model
 

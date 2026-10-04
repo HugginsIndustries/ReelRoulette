@@ -11,11 +11,11 @@ export function parseEventEnvelope<TPayload>(raw: string): ServerEventEnvelope<T
 
 export function buildEventsUrl(
   sseUrl: string,
-  lastRevision: number,
+  lastRevision: number | null,
   options?: { clientId?: string; sessionId?: string; clientType?: string; deviceName?: string }
 ): string {
   const url = new URL(sseUrl);
-  if (lastRevision > 0) {
+  if (lastRevision != null && lastRevision >= 0) {
     url.searchParams.set("lastEventId", String(lastRevision));
   }
   if (options?.clientId) {

@@ -162,6 +162,7 @@ An agent runs these and ticks them.
 - [ ] On desktop and WebUI, a saved preset stays selected (not starred) after its tags are re-selected in a different order, and a different tag set still shows it starred.
 - [ ] On Windows, first start with no data folder, and with a data folder from v0.12.0 or earlier that has no `library.db`, opens an empty library.
 - [ ] From another machine, the Operator asks for the control token, works after it is entered, and refuses a wrong one; on the server machine it opens without one, testing panel included. Run on Linux and Windows.
+- [ ] With the WebUI open, stop and restart the server, change a favorite and a tag on the desktop while the WebUI reconnects, and the WebUI shows both.
 
 ## Release Flow
 

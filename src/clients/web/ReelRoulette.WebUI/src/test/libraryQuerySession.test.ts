@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { createDefaultFilterState } from "../filter/filterStateModel";
 import { createDefaultBrowseControls, type LibraryBrowseControls } from "../library/libraryBrowseModel";
@@ -8,10 +9,30 @@ import {
   createLibraryQuerySession,
   libraryQueryReloadWindows,
   libraryQueryShouldFill,
+  libraryQueryTagSaveEffect,
   libraryQueryTileEffect,
   type LibraryQueryPage,
-  type LibraryQueryRequest
+  type LibraryQueryRequest,
+  type LibraryTileChange,
+  type LibraryTileEffectFilter
 } from "../library/libraryQuerySession";
+
+interface TileEffectCase {
+  name: string;
+  event: LibraryTileChange["kind"];
+  loaded: boolean;
+  before?: LibraryTileChange["before"];
+  after?: LibraryTileChange["after"];
+  addedTags?: string[];
+  removedTags?: string[];
+  filter: LibraryTileEffectFilter;
+  sortMode: string;
+  expected: "patch" | "reload";
+}
+
+const tileEffectCases = JSON.parse(
+  readFileSync(new URL("../../../../../../shared/fixtures/library-tile-effect.json", import.meta.url), "utf8")
+) as TileEffectCase[];
 
 function item(id: string, overrides: Partial<LibraryProjectionItem> = {}): LibraryProjectionItem {
   return {
@@ -164,21 +185,52 @@ describe("libraryQuerySession", () => {
     expect(session.snapshot().items[0]?.isFavorite).toBe(true);
   });
 
-  it("reloads the saved window for a favorite while hidden when the default blacklist filter is on", async () => {
+  it("patches a favorite on a loaded tile under the default filter and name sort without a query", async () => {
+    let calls = 0;
+    const session = createLibraryQuerySession(async () => {
+      calls += 1;
+      return page([item("a"), item("b")], 2, 2);
+    });
+    await session.ensureLoaded(createDefaultFilterState(), controls());
+
+    await session.applyFavorite({ itemId: "a", path: "/media/a.mp4", isFavorite: true, isBlacklisted: false });
+    await session.applyPlayback({ path: "/media/b.mp4", playCount: 1 });
+
+    expect(calls).toBe(1);
+    expect(session.snapshot().items[0]?.isFavorite).toBe(true);
+    expect(session.snapshot().items[1]?.playCount).toBe(1);
+  });
+
+  it("reloads the saved window while hidden when a loaded tile is blacklisted under the default filter", async () => {
     const calls: number[] = [];
     const session = createLibraryQuerySession(async (request) => {
       calls.push(request.offset);
-      return page([item("a", { isFavorite: calls.length > 1 })], 1, 1);
+      return page(calls.length > 1 ? [item("b")] : [item("a"), item("b")], calls.length > 1 ? 1 : 2, 2);
     });
     await session.ensureLoaded(createDefaultFilterState(), controls());
     session.setOverlayVisible(false);
     session.noteScroll(80);
 
-    await session.applyFavorite({ itemId: "a", isFavorite: true, isBlacklisted: false });
+    await session.applyFavorite({ itemId: "a", isFavorite: false, isBlacklisted: true });
 
     expect(calls).toEqual([0, 0]);
-    expect(session.snapshot().items[0]?.isFavorite).toBe(true);
+    expect(session.snapshot().items.map((entry) => entry.id)).toEqual(["b"]);
     expect(session.snapshot().scrollTop).toBe(80);
+  });
+
+  it("reloads for a favorite on an item that is not loaded only when it could enter the window", async () => {
+    let calls = 0;
+    const session = createLibraryQuerySession(async () => {
+      calls += 1;
+      return page([item("a")], 1, 1);
+    });
+    await session.ensureLoaded(createDefaultFilterState(), controls());
+
+    await session.applyFavorite({ itemId: "other", isFavorite: false, isBlacklisted: true });
+    expect(calls).toBe(1);
+
+    await session.applyFavorite({ itemId: "other", isFavorite: true, isBlacklisted: false });
+    expect(calls).toBe(2);
   });
 
   it("patches playback while hidden and reloads when the sort can change order", async () => {
@@ -325,6 +377,26 @@ describe("libraryQuerySession", () => {
     await session.resetQuery({ ...createDefaultFilterState(), selectedTags: ["Night"] }, controls());
     await session.applyTags({ itemIds: ["other"], addedTags: ["Night"], removedTags: [] });
     expect(calls).toHaveLength(3);
+
+    await session.applyTags({ itemIds: ["a"], addedTags: ["Beach"], removedTags: [] });
+    expect(calls).toHaveLength(3);
+    expect(session.snapshot().items[0]?.tags).toEqual(["Night", "Beach"]);
+
+    await session.applyTags({ itemIds: ["a"], addedTags: [], removedTags: ["Night"] });
+    expect(calls).toHaveLength(4);
+  });
+
+  it("reloads a catalog rename or delete under any tag filter", async () => {
+    let calls = 0;
+    const session = createLibraryQuerySession(async () => {
+      calls += 1;
+      return page([item("a", { tags: ["Day"] })], 1, 1);
+    });
+    await session.ensureLoaded({ ...createDefaultFilterState(), selectedTags: ["Beach"] }, controls());
+
+    await session.applyTags({ itemIds: ["a"], addedTags: ["Dawn"], removedTags: ["Day"], catalogReplacedTag: "Day" });
+
+    expect(calls).toBe(2);
   });
 
   it("reloads with a tag name revised on the stored filter", async () => {
@@ -343,15 +415,22 @@ describe("libraryQuerySession", () => {
 });
 
 describe("library query decisions", () => {
-  it("reloads when a favorite, playback, or tag update can change membership or order", () => {
+  it.each(tileEffectCases.map((entry) => [entry.name, entry] as const))("matches the shared fixture: %s", (_name, entry) => {
+    const change: LibraryTileChange = {
+      kind: entry.event,
+      loaded: entry.loaded,
+      before: entry.before ?? null,
+      after: entry.after ?? null,
+      addedTags: entry.addedTags ?? [],
+      removedTags: entry.removedTags ?? []
+    };
+    expect(libraryQueryTileEffect(change, entry.filter, entry.sortMode)).toBe(entry.expected);
+  });
+
+  it("reloads a tag save made here under any tag filter", () => {
     const open = createDefaultFilterState();
-    expect(libraryQueryTileEffect("favorite", open, "Name")).toBe("reload");
-    expect(libraryQueryTileEffect("favorite", { ...open, excludeBlacklisted: false }, "Name")).toBe("patch");
-    expect(libraryQueryTileEffect("playback", open, "Name")).toBe("patch");
-    expect(libraryQueryTileEffect("playback", open, "LastPlayed")).toBe("reload");
-    expect(libraryQueryTileEffect("playback", { ...open, onlyNeverPlayed: true }, "Name")).toBe("reload");
-    expect(libraryQueryTileEffect("tags", open, "Name")).toBe("patch");
-    expect(libraryQueryTileEffect("tags", { ...open, excludedTags: ["Skip"] }, "Name")).toBe("reload");
+    expect(libraryQueryTagSaveEffect(open)).toBe("patch");
+    expect(libraryQueryTagSaveEffect({ ...open, excludedTags: ["Skip"] })).toBe("reload");
   });
 
   it("sizes a reload to the loaded count", () => {

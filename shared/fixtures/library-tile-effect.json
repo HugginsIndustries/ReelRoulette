@@ -1,0 +1,261 @@
+[
+  {
+    "name": "favorite on a loaded tile under the default filter patches",
+    "event": "favorite",
+    "loaded": true,
+    "before": { "isFavorite": false, "isBlacklisted": false },
+    "after": { "isFavorite": true, "isBlacklisted": false },
+    "filter": { "favoritesOnly": false, "excludeBlacklisted": true, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
+    "sortMode": "Name",
+    "expected": "patch"
+  },
+  {
+    "name": "unfavorite on a loaded tile under the default filter patches",
+    "event": "favorite",
+    "loaded": true,
+    "before": { "isFavorite": true, "isBlacklisted": false },
+    "after": { "isFavorite": false, "isBlacklisted": false },
+    "filter": { "favoritesOnly": false, "excludeBlacklisted": true, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
+    "sortMode": "LastPlayed",
+    "expected": "patch"
+  },
+  {
+    "name": "blacklist on a loaded tile under excludeBlacklisted reloads",
+    "event": "favorite",
+    "loaded": true,
+    "before": { "isFavorite": true, "isBlacklisted": false },
+    "after": { "isFavorite": false, "isBlacklisted": true },
+    "filter": { "favoritesOnly": false, "excludeBlacklisted": true, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
+    "sortMode": "Name",
+    "expected": "reload"
+  },
+  {
+    "name": "blacklist on a loaded tile without excludeBlacklisted patches",
+    "event": "favorite",
+    "loaded": true,
+    "before": { "isFavorite": false, "isBlacklisted": false },
+    "after": { "isFavorite": false, "isBlacklisted": true },
+    "filter": { "favoritesOnly": false, "excludeBlacklisted": false, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
+    "sortMode": "Name",
+    "expected": "patch"
+  },
+  {
+    "name": "unfavorite on a loaded tile under favoritesOnly reloads",
+    "event": "favorite",
+    "loaded": true,
+    "before": { "isFavorite": true, "isBlacklisted": false },
+    "after": { "isFavorite": false, "isBlacklisted": false },
+    "filter": { "favoritesOnly": true, "excludeBlacklisted": true, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
+    "sortMode": "Name",
+    "expected": "reload"
+  },
+  {
+    "name": "an unchanged echo on a loaded tile under favoritesOnly patches",
+    "event": "favorite",
+    "loaded": true,
+    "before": { "isFavorite": true, "isBlacklisted": false },
+    "after": { "isFavorite": true, "isBlacklisted": false },
+    "filter": { "favoritesOnly": true, "excludeBlacklisted": true, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
+    "sortMode": "Name",
+    "expected": "patch"
+  },
+  {
+    "name": "favorite on an unloaded item without flag filters patches",
+    "event": "favorite",
+    "loaded": false,
+    "after": { "isFavorite": true, "isBlacklisted": false },
+    "filter": { "favoritesOnly": false, "excludeBlacklisted": false, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
+    "sortMode": "Name",
+    "expected": "patch"
+  },
+  {
+    "name": "favorite on an unloaded item under excludeBlacklisted reloads because it may have been blacklisted",
+    "event": "favorite",
+    "loaded": false,
+    "after": { "isFavorite": true, "isBlacklisted": false },
+    "filter": { "favoritesOnly": false, "excludeBlacklisted": true, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
+    "sortMode": "Name",
+    "expected": "reload"
+  },
+  {
+    "name": "blacklist on an unloaded item under excludeBlacklisted patches because it cannot enter",
+    "event": "favorite",
+    "loaded": false,
+    "after": { "isFavorite": false, "isBlacklisted": true },
+    "filter": { "favoritesOnly": false, "excludeBlacklisted": true, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
+    "sortMode": "Name",
+    "expected": "patch"
+  },
+  {
+    "name": "favorite on an unloaded item under favoritesOnly reloads",
+    "event": "favorite",
+    "loaded": false,
+    "after": { "isFavorite": true, "isBlacklisted": false },
+    "filter": { "favoritesOnly": true, "excludeBlacklisted": false, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
+    "sortMode": "Name",
+    "expected": "reload"
+  },
+  {
+    "name": "unfavorite on an unloaded item under favoritesOnly patches",
+    "event": "favorite",
+    "loaded": false,
+    "after": { "isFavorite": false, "isBlacklisted": false },
+    "filter": { "favoritesOnly": true, "excludeBlacklisted": true, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
+    "sortMode": "Name",
+    "expected": "patch"
+  },
+  {
+    "name": "playback on a loaded tile under name sort patches",
+    "event": "playback",
+    "loaded": true,
+    "filter": { "favoritesOnly": false, "excludeBlacklisted": true, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
+    "sortMode": "Name",
+    "expected": "patch"
+  },
+  {
+    "name": "playback on a loaded tile under duration sort patches",
+    "event": "playback",
+    "loaded": true,
+    "filter": { "favoritesOnly": false, "excludeBlacklisted": true, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
+    "sortMode": "Duration",
+    "expected": "patch"
+  },
+  {
+    "name": "playback on a loaded tile under last played sort reloads",
+    "event": "playback",
+    "loaded": true,
+    "filter": { "favoritesOnly": false, "excludeBlacklisted": true, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
+    "sortMode": "LastPlayed",
+    "expected": "reload"
+  },
+  {
+    "name": "playback on a loaded tile under play count sort reloads",
+    "event": "playback",
+    "loaded": true,
+    "filter": { "favoritesOnly": false, "excludeBlacklisted": true, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
+    "sortMode": "PlayCount",
+    "expected": "reload"
+  },
+  {
+    "name": "playback on a loaded tile under onlyNeverPlayed reloads",
+    "event": "playback",
+    "loaded": true,
+    "filter": { "favoritesOnly": false, "excludeBlacklisted": true, "onlyNeverPlayed": true, "selectedTags": [], "excludedTags": [] },
+    "sortMode": "Name",
+    "expected": "reload"
+  },
+  {
+    "name": "playback on an unloaded item under name sort patches",
+    "event": "playback",
+    "loaded": false,
+    "filter": { "favoritesOnly": false, "excludeBlacklisted": true, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
+    "sortMode": "Name",
+    "expected": "patch"
+  },
+  {
+    "name": "playback on an unloaded item under onlyNeverPlayed patches because it cannot enter",
+    "event": "playback",
+    "loaded": false,
+    "filter": { "favoritesOnly": false, "excludeBlacklisted": true, "onlyNeverPlayed": true, "selectedTags": [], "excludedTags": [] },
+    "sortMode": "Name",
+    "expected": "patch"
+  },
+  {
+    "name": "playback on an unloaded item under last played sort reloads because it can move into the window",
+    "event": "playback",
+    "loaded": false,
+    "filter": { "favoritesOnly": false, "excludeBlacklisted": true, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
+    "sortMode": "LastPlayed",
+    "expected": "reload"
+  },
+  {
+    "name": "tag change on a loaded tile without tag filters patches",
+    "event": "tags",
+    "loaded": true,
+    "addedTags": ["Beach"],
+    "removedTags": ["City"],
+    "filter": { "favoritesOnly": false, "excludeBlacklisted": true, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
+    "sortMode": "Name",
+    "expected": "patch"
+  },
+  {
+    "name": "adding an unrelated tag to a loaded tile under a tag filter patches",
+    "event": "tags",
+    "loaded": true,
+    "addedTags": ["Night"],
+    "removedTags": [],
+    "filter": { "favoritesOnly": false, "excludeBlacklisted": true, "onlyNeverPlayed": false, "selectedTags": ["Beach"], "excludedTags": ["Skip"] },
+    "sortMode": "Name",
+    "expected": "patch"
+  },
+  {
+    "name": "adding a selected tag to a loaded tile patches because it still matches",
+    "event": "tags",
+    "loaded": true,
+    "addedTags": ["beach"],
+    "removedTags": [],
+    "filter": { "favoritesOnly": false, "excludeBlacklisted": true, "onlyNeverPlayed": false, "selectedTags": ["Beach"], "excludedTags": [] },
+    "sortMode": "Name",
+    "expected": "patch"
+  },
+  {
+    "name": "removing a selected tag from a loaded tile reloads, ignoring case",
+    "event": "tags",
+    "loaded": true,
+    "addedTags": [],
+    "removedTags": ["BEACH"],
+    "filter": { "favoritesOnly": false, "excludeBlacklisted": true, "onlyNeverPlayed": false, "selectedTags": ["Beach"], "excludedTags": [] },
+    "sortMode": "Name",
+    "expected": "reload"
+  },
+  {
+    "name": "adding an excluded tag to a loaded tile reloads",
+    "event": "tags",
+    "loaded": true,
+    "addedTags": ["Skip"],
+    "removedTags": [],
+    "filter": { "favoritesOnly": false, "excludeBlacklisted": true, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": ["Skip"] },
+    "sortMode": "Name",
+    "expected": "reload"
+  },
+  {
+    "name": "adding a selected tag to an unloaded item reloads",
+    "event": "tags",
+    "loaded": false,
+    "addedTags": ["Beach"],
+    "removedTags": [],
+    "filter": { "favoritesOnly": false, "excludeBlacklisted": true, "onlyNeverPlayed": false, "selectedTags": ["Beach"], "excludedTags": [] },
+    "sortMode": "Name",
+    "expected": "reload"
+  },
+  {
+    "name": "removing an excluded tag from an unloaded item reloads",
+    "event": "tags",
+    "loaded": false,
+    "addedTags": [],
+    "removedTags": ["skip"],
+    "filter": { "favoritesOnly": false, "excludeBlacklisted": true, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": ["Skip"] },
+    "sortMode": "Name",
+    "expected": "reload"
+  },
+  {
+    "name": "removing a selected tag from an unloaded item patches because it cannot enter",
+    "event": "tags",
+    "loaded": false,
+    "addedTags": [],
+    "removedTags": ["Beach"],
+    "filter": { "favoritesOnly": false, "excludeBlacklisted": true, "onlyNeverPlayed": false, "selectedTags": ["Beach"], "excludedTags": [] },
+    "sortMode": "Name",
+    "expected": "patch"
+  },
+  {
+    "name": "adding an excluded tag to an unloaded item patches because it cannot enter",
+    "event": "tags",
+    "loaded": false,
+    "addedTags": ["Skip"],
+    "removedTags": [],
+    "filter": { "favoritesOnly": false, "excludeBlacklisted": true, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": ["Skip"] },
+    "sortMode": "Name",
+    "expected": "patch"
+  }
+]

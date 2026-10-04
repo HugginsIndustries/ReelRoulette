@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace ReelRoulette;
 
@@ -17,11 +18,21 @@ public enum LibraryPanelBrowseEffect
     ReloadLoaded
 }
 
-public enum LibraryPanelBrowseUnknownTag
+/// <summary>
+/// One item's change from a favorite, blacklist, playback, or tag event.
+/// <see cref="Before"/> is the loaded tile's favorite and blacklist before the event, and is unknown for an item that is not loaded.
+/// </summary>
+public sealed class LibraryTileChange
 {
-    Skip,
-    ReloadLoadedAfterBatch
+    public LibraryPanelBrowseEvent Kind { get; init; }
+    public bool Loaded { get; init; }
+    public LibraryTileFlags? Before { get; init; }
+    public LibraryTileFlags? After { get; init; }
+    public IReadOnlyList<string> AddedTags { get; init; } = [];
+    public IReadOnlyList<string> RemovedTags { get; init; } = [];
 }
+
+public readonly record struct LibraryTileFlags(bool IsFavorite, bool IsBlacklisted);
 
 public enum LibraryPanelBrowseRequest
 {
@@ -225,44 +236,72 @@ public static class LibraryPanelBrowse
     }
 
     /// <summary>
-    /// An id that is neither in the catalog snapshot nor the loaded tiles. A tag filter can change
-    /// membership for an item the grid has not loaded, so that case reloads after the rest of the event.
+    /// Reload the loaded window only when the change can alter what it shows or its order. A loaded tile reloads
+    /// when a changed field is in the filter or sort and can take it out or move it. An item that is not loaded
+    /// reloads only when the change could bring it into the window. Locked to shared/fixtures/library-tile-effect.json.
     /// </summary>
-    public static LibraryPanelBrowseUnknownTag UnknownTagItem(bool hasTagFilter)
+    public static LibraryPanelBrowseEffect EffectFor(LibraryTileChange change, FilterState? filter, string? sortMode)
     {
-        if (hasTagFilter)
+        var favoritesOnly = filter?.FavoritesOnly ?? false;
+        var excludeBlacklisted = filter?.ExcludeBlacklisted ?? false;
+        var reload = change.Kind switch
         {
-            return LibraryPanelBrowseUnknownTag.ReloadLoadedAfterBatch;
-        }
-
-        return LibraryPanelBrowseUnknownTag.Skip;
+            LibraryPanelBrowseEvent.FavoriteOrBlacklist => FlagChangeReloads(change, favoritesOnly, excludeBlacklisted),
+            LibraryPanelBrowseEvent.Playback => IsPlaybackOrderSort(sortMode) ||
+                                                (change.Loaded && (filter?.OnlyNeverPlayed ?? false)),
+            LibraryPanelBrowseEvent.ItemTags => TagChangeReloads(change, filter),
+            _ => false
+        };
+        return reload ? LibraryPanelBrowseEffect.ReloadLoaded : LibraryPanelBrowseEffect.Patch;
     }
 
-    public static LibraryPanelBrowseEffect EffectFor(
-        LibraryPanelBrowseEvent kind,
-        bool favoritesOnly,
-        bool excludeBlacklisted,
-        bool onlyNeverPlayed,
-        bool hasTagFilter,
-        string? sortMode)
+    /// <summary>
+    /// A tag save made here can rename or delete a tag the filter holds, so it reloads under any tag filter.
+    /// </summary>
+    public static LibraryPanelBrowseEffect TagSaveEffect(bool hasTagFilter)
     {
-        switch (kind)
+        return hasTagFilter ? LibraryPanelBrowseEffect.ReloadLoaded : LibraryPanelBrowseEffect.Patch;
+    }
+
+    private static bool FlagChangeReloads(LibraryTileChange change, bool favoritesOnly, bool excludeBlacklisted)
+    {
+        if (!favoritesOnly && !excludeBlacklisted)
         {
-            case LibraryPanelBrowseEvent.FavoriteOrBlacklist:
-                return favoritesOnly || excludeBlacklisted
-                    ? LibraryPanelBrowseEffect.ReloadLoaded
-                    : LibraryPanelBrowseEffect.Patch;
-            case LibraryPanelBrowseEvent.Playback:
-                return onlyNeverPlayed || IsPlaybackOrderSort(sortMode)
-                    ? LibraryPanelBrowseEffect.ReloadLoaded
-                    : LibraryPanelBrowseEffect.Patch;
-            case LibraryPanelBrowseEvent.ItemTags:
-                return hasTagFilter
-                    ? LibraryPanelBrowseEffect.ReloadLoaded
-                    : LibraryPanelBrowseEffect.Patch;
-            default:
-                return LibraryPanelBrowseEffect.None;
+            return false;
         }
+
+        if (change.After is not LibraryTileFlags after)
+        {
+            return true;
+        }
+
+        if (change.Loaded && change.Before is LibraryTileFlags before)
+        {
+            return (favoritesOnly && before.IsFavorite != after.IsFavorite) ||
+                   (excludeBlacklisted && before.IsBlacklisted != after.IsBlacklisted);
+        }
+
+        return (!favoritesOnly || after.IsFavorite) && (!excludeBlacklisted || !after.IsBlacklisted);
+    }
+
+    /// <summary>
+    /// Adding a selected tag or removing an excluded one can only bring an item in; the reverse can only take it out.
+    /// </summary>
+    private static bool TagChangeReloads(LibraryTileChange change, FilterState? filter)
+    {
+        var selected = new HashSet<string>(filter?.SelectedTags ?? [], StringComparer.OrdinalIgnoreCase);
+        var excluded = new HashSet<string>(filter?.ExcludedTags ?? [], StringComparer.OrdinalIgnoreCase);
+        if (selected.Count == 0 && excluded.Count == 0)
+        {
+            return false;
+        }
+
+        if (change.Loaded)
+        {
+            return change.RemovedTags.Any(selected.Contains) || change.AddedTags.Any(excluded.Contains);
+        }
+
+        return change.AddedTags.Any(selected.Contains) || change.RemovedTags.Any(excluded.Contains);
     }
 
     /// <summary>

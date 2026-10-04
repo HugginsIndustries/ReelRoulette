@@ -29,6 +29,31 @@ public sealed class ServerStateRegressionTests
     }
 
     [Fact]
+    public void ReplayAfter_TreatsALastEventIdAheadOfTheCurrentRevisionAsAGap()
+    {
+        var restarted = new ServerStateService();
+        Assert.True(restarted.GetReplayAfter(500).GapDetected);
+
+        for (var i = 0; i < 3; i++)
+        {
+            restarted.PublishExternal("itemStateChanged", new ItemStateChangedPayload
+            {
+                ItemId = $"clip-{i}",
+                Path = $"clip-{i}.mp4",
+                IsFavorite = true,
+                IsBlacklisted = false
+            });
+        }
+
+        var replay = restarted.GetReplayAfter(500);
+        Assert.True(replay.GapDetected);
+        Assert.Empty(replay.Events);
+        Assert.Equal(3, replay.CurrentRevision);
+        Assert.False(restarted.GetReplayAfter(3).GapDetected);
+        Assert.False(restarted.GetReplayAfter(2).GapDetected);
+    }
+
+    [Fact]
     public void RecordPlayback_ShouldPublishPlaybackRecordedPayloadWithClientId()
     {
         var service = new ServerStateService();

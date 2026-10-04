@@ -1470,7 +1470,10 @@ paths:
       description: |
         SSE stream with monotonic `id` values matching envelope `revision`.
         Reconnect behavior:
-        - Client reconnects with `Last-Event-ID`.
+        - A stream opened without a last event ID starts with a `streamOpened`
+          event whose revision is the server's current revision, so a client
+          that receives no other event can still resume from it.
+        - Client reconnects with `Last-Event-ID`, including 0.
         - Server replays buffered events newer than that revision when available.
         - If the revision gap exceeds replay buffer retention, server emits a
           `resyncRequired` event. Clients requery the state they still show.
@@ -2297,6 +2300,7 @@ components:
             - $ref: "#/components/schemas/TagCatalogChangedPayload"
             - $ref: "#/components/schemas/SourceStateChangedPayload"
             - $ref: "#/components/schemas/RefreshStatusChangedPayload"
+            - $ref: "#/components/schemas/StreamOpenedPayload"
 
     ItemStateChangedPayload:
       type: object
@@ -2357,6 +2361,16 @@ components:
         lastEventId:
           type: integer
           format: int64
+        currentRevision:
+          type: integer
+          format: int64
+
+    StreamOpenedPayload:
+      type: object
+      description: First event on a stream opened without a last event ID. Its envelope revision is the server's current revision, so a client can resume from it after a reconnect even when no other event arrived.
+      required:
+        - currentRevision
+      properties:
         currentRevision:
           type: integer
           format: int64
