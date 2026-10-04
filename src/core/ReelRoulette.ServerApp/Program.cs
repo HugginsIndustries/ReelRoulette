@@ -521,7 +521,22 @@ static void MapOperatorUi(WebApplication app, ServerAppOptions options, bool web
   </style>
 </head>
 <body>
-  <div class="container">
+  <div id="tokenGate" class="container" style="display:none;">
+    <div class="card two-col">
+      <h1>ReelRoulette Server</h1>
+      <h2>Control token required</h2>
+      <p>This Operator is open from another machine. Enter the control token to continue.</p>
+      <p>The token is shown under Control Settings when the Operator is opened on the server machine. On a server with no browser, it is <code>controlRuntime.adminSharedToken</code> in <code>core-settings.json</code> in the server's data folder.</p>
+      <form id="tokenGateForm">
+        <label for="tokenGateInput">Control token</label>
+        <input id="tokenGateInput" type="password" autocomplete="off" />
+        <button id="tokenGateSubmit" type="submit" class="btn-block">Continue</button>
+      </form>
+      <div id="tokenGateStatus" class="status-note"></div>
+    </div>
+  </div>
+
+  <div id="operatorSections" class="container">
     <div class="card two-col">
       <h1>ReelRoulette Server</h1>
       <p>Control-plane operator surface for runtime status, settings, telemetry, and lifecycle actions.</p>
@@ -574,13 +589,9 @@ static void MapOperatorUi(WebApplication app, ServerAppOptions options, bool web
 
     <div class="card two-col">
       <h2>Control Settings</h2>
-      <label for="adminAuthMode">Admin Auth Mode</label>
-      <select id="adminAuthMode">
-        <option value="Off">Off</option>
-        <option value="TokenRequired">TokenRequired</option>
-      </select>
-      <label for="adminSharedToken">Admin Shared Token</label>
+      <label for="adminSharedToken">Control Token</label>
       <input id="adminSharedToken" type="text" />
+      <p class="muted">Other machines need this token to open the Operator. Changing it signs them out.</p>
       <div class="inline">
         <input id="devChannelEnabled" type="checkbox" />
         <label for="devChannelEnabled" style="margin-top:0;">Dev (pre-release) update channel — triggers an immediate update check when changed (unchecked = stable)</label>
@@ -590,9 +601,6 @@ static void MapOperatorUi(WebApplication app, ServerAppOptions options, bool web
         <label for="launchServerOnStartup" style="margin-top:0;">Launch Server on Startup</label>
       </div>
       <button id="saveControlSettings">Apply control settings</button>
-      <label for="pairToken">Pair Token (for /control/pair)</label>
-      <input id="pairToken" type="text" />
-      <button id="pairControl">Pair control session</button>
       <div id="controlStatus" class="status-note"></div>
     </div>
 
@@ -603,7 +611,6 @@ static void MapOperatorUi(WebApplication app, ServerAppOptions options, bool web
         <input id="testingModeEnabled" type="checkbox" />
         <label for="testingModeEnabled" style="margin-top:0;">Testing Mode (required for scenario/fault actions)</label>
       </div>
-      <p class="muted">When control admin auth is required, testing actions also require control auth.</p>
       <div class="row-actions">
         <button id="saveTestingState">Apply testing state</button>
         <button id="resetTestingState">Reset scenario flags</button>
@@ -665,13 +672,68 @@ static void MapOperatorUi(WebApplication app, ServerAppOptions options, bool web
     let latestConnectedClients = null;
     const webUiEnabledAtStartup = __WEBUI_ENABLED_AT_STARTUP__;
 
+    let operatorStarted = false;
+
     async function getJson(url, init) {
       const response = await fetch(url, init);
       if (!response.ok) {
+        if (response.status === 401 && url.startsWith("/control")) {
+          showTokenGate();
+        }
         const body = await response.text();
         throw new Error(url + " -> HTTP " + response.status + "\\n" + body);
       }
       return response.json();
+    }
+
+    function showTokenGate() {
+      document.getElementById("operatorSections").style.display = "none";
+      document.getElementById("tokenGate").style.display = "";
+    }
+
+    function hideTokenGate() {
+      document.getElementById("tokenGate").style.display = "none";
+      document.getElementById("operatorSections").style.display = "";
+    }
+
+    function setTokenGateStatus(message, isError = false) {
+      const node = document.getElementById("tokenGateStatus");
+      node.className = isError ? "status-note error" : "status-note";
+      node.textContent = message;
+    }
+
+    async function submitControlToken(event) {
+      event.preventDefault();
+      const input = document.getElementById("tokenGateInput");
+      const response = await fetch("/control/pair", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: input.value || "" })
+      });
+      if (response.status === 401) {
+        setTokenGateStatus("Wrong control token.", true);
+        input.select();
+        return;
+      }
+      if (!response.ok) {
+        setTokenGateStatus("Pairing failed: HTTP " + response.status, true);
+        return;
+      }
+      input.value = "";
+      setTokenGateStatus("");
+      hideTokenGate();
+      startOperator();
+    }
+
+    function startOperator() {
+      Promise.all([refreshUpdateStatus(), refreshStatus(), loadWebRuntimeSettings(), loadControlSettings(), loadStartupLaunchSetting(), refreshLogs(), loadTestingState()]).catch(err => setStatus(err.message));
+      if (operatorStarted) {
+        return;
+      }
+      operatorStarted = true;
+      setInterval(() => refreshUpdateStatus().catch(() => {}), 15000);
+      setInterval(() => refreshStatus().catch(() => {}), 3000);
+      setInterval(() => refreshLogs().catch(() => {}), 5000);
     }
 
     function setStatus(text) {
@@ -1014,7 +1076,6 @@ static void MapOperatorUi(WebApplication app, ServerAppOptions options, bool web
     async function loadControlSettings() {
       const settings = await getJson("/control/settings");
       lastLoadedControlSettings = settings;
-      document.getElementById("adminAuthMode").value = settings.adminAuthMode ?? "Off";
       document.getElementById("adminSharedToken").value = settings.adminSharedToken ?? "";
       document.getElementById("devChannelEnabled").checked = !!settings.devChannelEnabled;
     }
@@ -1028,7 +1089,7 @@ static void MapOperatorUi(WebApplication app, ServerAppOptions options, bool web
 
     async function saveControlSettings() {
       const payload = {
-        adminAuthMode: document.getElementById("adminAuthMode").value || "Off",
+        adminAuthMode: "TokenRequired",
         adminSharedToken: document.getElementById("adminSharedToken").value || null,
         devChannelEnabled: document.getElementById("devChannelEnabled").checked
       };
@@ -1062,17 +1123,6 @@ static void MapOperatorUi(WebApplication app, ServerAppOptions options, bool web
       setControlStatus(`${controlMessage}<br />${startupMessage}`);
     }
 
-    async function pairControl() {
-      const token = document.getElementById("pairToken").value || "";
-      const response = await getJson("/control/pair", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token })
-      });
-      setControlStatus(response.message || "Control pairing complete.");
-      await refreshStatus();
-    }
-
     async function restartRuntime() {
       const result = await getJson("/control/restart", { method: "POST" });
       setStatus("restart requested:\\n" + JSON.stringify(result, null, 2));
@@ -1095,7 +1145,7 @@ static void MapOperatorUi(WebApplication app, ServerAppOptions options, bool web
     document.getElementById("refreshStatus").addEventListener("click", () => refreshStatus().catch(err => setStatus(err.message)));
     document.getElementById("saveWebSettings").addEventListener("click", () => saveWebRuntimeSettings().catch(err => setSettingsStatus(err.message, true)));
     document.getElementById("saveControlSettings").addEventListener("click", () => saveControlSettings().catch(err => setControlStatus(err.message, true)));
-    document.getElementById("pairControl").addEventListener("click", () => pairControl().catch(err => setControlStatus(err.message, true)));
+    document.getElementById("tokenGateForm").addEventListener("submit", event => submitControlToken(event).catch(err => setTokenGateStatus(err.message || String(err), true)));
     document.getElementById("restartRuntime").addEventListener("click", () => restartRuntime().catch(err => setStatus(err.message)));
     document.getElementById("stopRuntime").addEventListener("click", () => stopRuntime().catch(err => setStatus(err.message)));
     document.getElementById("refreshLogs").addEventListener("click", () => refreshLogs().catch(err => setLogsStatus(err.message, true)));
@@ -1118,10 +1168,14 @@ static void MapOperatorUi(WebApplication app, ServerAppOptions options, bool web
     });
     document.getElementById("saveTestingState").addEventListener("click", () => saveTestingState().catch(err => setTestingStatus(err.message, true)));
     document.getElementById("resetTestingState").addEventListener("click", () => resetTestingState().catch(err => setTestingStatus(err.message, true)));
-    Promise.all([refreshUpdateStatus(), refreshStatus(), loadWebRuntimeSettings(), loadControlSettings(), loadStartupLaunchSetting(), refreshLogs(), loadTestingState()]).catch(err => setStatus(err.message));
-    setInterval(() => refreshUpdateStatus().catch(() => {}), 15000);
-    setInterval(() => refreshStatus().catch(() => {}), 3000);
-    setInterval(() => refreshLogs().catch(() => {}), 5000);
+    // The first control read decides whether this browser needs the control token first.
+    fetch("/control/status").then(response => {
+      if (response.status === 401) {
+        showTokenGate();
+        return;
+      }
+      startOperator();
+    }).catch(() => startOperator());
   </script>
 </body>
 </html>

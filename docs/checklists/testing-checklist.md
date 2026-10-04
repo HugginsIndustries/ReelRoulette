@@ -65,7 +65,7 @@ An agent runs these and ticks them.
 - Skipped: the Operator Testing Suite needs an overhaul to work properly; see the Operator Testing Suite overhaul backlog item.
 
 - [ ] Testing Mode off blocks scenario and fault actions; on enables them.
-- [ ] Admin auth Off allows unauthenticated access; TokenRequired asks for auth.
+- [ ] From another machine, testing actions need the control token; on the server machine they work without it.
 - [ ] API version mismatch shows a clear message in both clients.
 - [ ] Capability mismatch shows a clear message in both clients.
 - [ ] API unavailable recovers when the server comes back.
@@ -161,6 +161,7 @@ An agent runs these and ticks them.
 - [ ] Desktop hides **Rename** and **Remove** in Manage Sources and **Remove from Library** in the library grid menu; the other Manage Sources actions and grid menu items still show and work.
 - [ ] On desktop and WebUI, a saved preset stays selected (not starred) after its tags are re-selected in a different order, and a different tag set still shows it starred.
 - [ ] On Windows, first start with no data folder, and with a data folder from v0.12.0 or earlier that has no `library.db`, opens an empty library.
+- [ ] From another machine, the Operator asks for the control token, works after it is entered, and refuses a wrong one; on the server machine it opens without one, testing panel included. Run on Linux and Windows.
 
 ## Release Flow
 

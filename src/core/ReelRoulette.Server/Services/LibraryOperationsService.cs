@@ -32,6 +32,7 @@ public sealed class LibraryOperationsService
 
     private readonly object _lock = new();
     private readonly string _logPath;
+    private readonly ServerLogService _serverLog;
     private readonly ILogger<LibraryOperationsService> _logger;
     private readonly LibraryCatalogHost _catalog;
     private readonly Func<string, IReadOnlyList<string>> _enumerateFiles;
@@ -46,6 +47,7 @@ public sealed class LibraryOperationsService
         var appData = appDataPathOverride ?? ServerDataPaths.DataDirectory();
         Directory.CreateDirectory(appData);
         _logPath = Path.Combine(appData, "last.log");
+        _serverLog = new ServerLogService(appData, _logger);
         _catalog = catalog;
         _enumerateFiles = enumerateMediaFiles ?? EnumerateAllFiles;
         LibraryCatalogBackup.Attach(_catalog.Session, appData, _logger);
@@ -60,7 +62,7 @@ public sealed class LibraryOperationsService
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Catalog checkpoint failed.");
-            AppendServerLog("error", "Catalog checkpoint failed: " + ex.Message);
+            _serverLog.Append("error", "Catalog checkpoint failed: " + ex.Message);
             throw;
         }
     }
@@ -99,7 +101,7 @@ public sealed class LibraryOperationsService
             imported = _catalog.Session.ImportSourceFolder(rootPath, request.DisplayName, files);
         }
 
-        AppendServerLog(
+        _serverLog.Append(
             "info",
             $"Source import root={rootPath} imported={imported.ImportedCount} updated={imported.UpdatedCount}.");
         return new SourceImportResponse
@@ -180,7 +182,7 @@ public sealed class LibraryOperationsService
             items.Add(node);
         }
 
-        AppendServerLog(
+        _serverLog.Append(
             "info",
             $"Library query offset={offset} limit={limit} sort={sort} descending={request.SortDescending ?? false} total={page.TotalCount} baseline={page.SearchBaselineCount} returned={page.Items.Count}.");
         return LibraryQueryOutcome.Ok(new JsonObject
@@ -747,18 +749,6 @@ public sealed class LibraryOperationsService
         sort = LibraryListSort.Name;
         error = "sortMode must be Name, LastPlayed, PlayCount, Duration, or DateAdded";
         return false;
-    }
-
-    private void AppendServerLog(string level, string message)
-    {
-        try
-        {
-            File.AppendAllText(_logPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] [server] [{level}] {message}{Environment.NewLine}");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to append library query log.");
-        }
     }
 
     private static IReadOnlyList<string> EnumerateAllFiles(string rootPath) =>

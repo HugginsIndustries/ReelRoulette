@@ -19,9 +19,12 @@ Instructions:
 
 Commit Message:
 
-Docs: Retire one-off audit and report docs
+M10j8: Require the control token for non-localhost control requests
 
-- Delete the eight report-only docs under `docs/`: the full repository audit, desktop feature and cleanup reports, the settings persistence investigation, and the LibVLC, Linux dependency, update integration, and Velopack audits.
-- Move what is still open into the backlog: new Server Robustness Findings, Client Robustness Findings, and Remaining Desktop-Only Features items, each finding with its file, problem, and fix.
-- List the pairing leftovers in the auth cutover milestone so they go with pairing.
-- Rewrite active and planned milestone references to the audit so they stand without it.
+- Every non-localhost `/control/*` request needs the control token, whatever the WebUI auth mode or a saved `adminAuthMode` says; localhost stays trusted, testing routes included.
+- Generate and save a control token on start when none is set, and rewrite a saved `Off` to `TokenRequired`; `adminAuthMode` is read-only.
+- The Operator on another machine shows only a control token prompt until `POST /control/pair` accepts the token; a control session also covers the API reads the Operator makes.
+- Changing the control token ends every control session and gives a non-localhost caller a fresh one, and a failed pairing attempt logs a warning with the remote address.
+- The control token is accepted as a cookie or bearer header, never a query parameter, and `/control/pair` is POST-only.
+- `LibraryOperationsService` writes its server log lines through `ServerLogService.Append`, which never throws.
+- `verify-web-deploy.ps1` checks the generated token, a settings save with it, and a localhost `/control/testing/reset`.

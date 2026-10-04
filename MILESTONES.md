@@ -104,92 +104,7 @@ Do not use this file for detailed architecture explanation or current capability
 
 ## Active Milestones
 
-Last milestone completed: M10j7
-
-### M10j8 - Post-Migration Fixes
-
-- **Status**: 🚧 In Progress
-- **Goal**: Fix defects left from the move to the server-owned catalog and two places where desktop and WebUI disagree, and close the control plane to unauthenticated LAN callers, one slice per defect, each with a test that fails before the fix.
-- **Scope**:
-  - Ships in v0.14.0. Ten slices, each verified on its own.
-  - Landed in three parts, each with its own commit: server and Core (source list after import, auto-refresh reschedule, catalog item tags, fingerprint parallelism), then desktop (Update Preset after delete, scan menu items, media type, sort labels, numeric preset durations), then the control token.
-  - Source list after source import (server):
-    - Recorded as a deferral on catalog document removal: source import does not refresh the in-memory source list that `GET /api/sources` and source enable/disable read. That list is filled at startup.
-    - Confirmed during v0.14.0 planning by a throwaway test: after a successful import, the server's source list still had 0 sources and disabling the new source failed until restart.
-    - A newly imported source appears in `GET /api/sources` and can be enabled and disabled without a restart. Whether the list is refreshed after import or read from catalog rows is decided here.
-  - Auto-refresh interval reschedule (server):
-    - `POST /api/refresh/settings` writes through `CoreSettingsService` and skips `RefreshPipelineService.UpdateSettings`, so changing the auto-refresh interval or enabling auto-refresh does not reschedule the next run. Found by code reading and git history during v0.14.0 planning: the route has gone around the pipeline since the change that also split web runtime settings onto their own route.
-    - Changing auto-refresh settings through the API schedules the next run from the new settings.
-  - Catalog item tag assignment without field copy (Core):
-    - `LibraryCatalogSession.AttachTags` replaces each tagged item with `CopyWithTags`, which lists every `LibraryCatalogItem` property by hand because `Tags` is init-only. Thumbnail revision, width, and height were added to the item without being added to that copy, so the list query returned no thumbnail dimensions for tagged items until the copy was fixed.
-    - Let tags be assigned on an existing item (for example a settable `Tags`), have `AttachTags` set them in place, and remove `CopyWithTags` and its reflection test.
-    - Related trap to check while there: `InsertItem` writes neither thumbnail columns nor tags from the item it is given. Every caller passes a new item today and thumbnails arrive later through `SetThumbnail`, so nothing is lost, but an item passed in with those fields set would silently drop them.
-  - Desktop filter dialog Update Preset after preset delete (desktop):
-    - In the desktop filter dialog, **Update Preset** can stay enabled after the active preset is deleted from the preset list, although no saved preset is left to update.
-    - Found during review of the client-authority sync routes removal. The behavior existed before that work.
-    - Likely cause, not confirmed: `DeletePresetButton_Click` clears the active preset name and refreshes the heading and pending state, but does not raise the `CanUpdatePreset` change notification.
-    - The WebUI filter dialog has no Update Preset gate, so it is out of scope.
-  - Desktop scan menu items (desktop):
-    - **Scan Durations** and **Scan Loudness** check `Directory.Exists` on each source root on the desktop's own disk before asking the server to refresh. When the server runs on another machine, that check uses the wrong disk. The server decides which sources it can read.
-    - Both items request the server refresh without a local folder check, and their status and log text no longer names a single source folder.
-  - Desktop media type from the server (desktop):
-    - Found by the efficiency and divergence report: the desktop decides whether the playing file is a photo or a video from its file extension, in `PlayMedia` and in the file-not-found message in `PlayFromPath`, using its own copy of the photo extension list. The playback response already carries the server's `mediaType`, and the WebUI uses it.
-    - The desktop uses the server's media type for the playing item, and its photo and video extension lists are removed. The server keeps the only extension lists.
-  - Sort direction labels (desktop and WebUI):
-    - Found by the efficiency and divergence report: the two clients label the same sort direction differently. The WebUI shows `Newest → Oldest`, `A–Z`, and `Z–A`; the desktop shows `Newest -> Oldest`, `A-Z`, and `Z-A`.
-    - Both clients use the WebUI's labels, with `→` and `–`. Check that the desktop font renders both characters in light and dark themes.
-  - Numeric preset durations on the desktop (desktop):
-    - Found while removing the preset match route: the desktop reads saved preset text with `JsonSerializer.Deserialize<FilterState>`, which throws on a numeric `minDuration` or `maxDuration` (seconds). `ParseCorePresetFilterState` then falls back to the default filter, so that whole preset is read as **None**. The WebUI and server filtering accept seconds, and `docs/api.md` documents them.
-    - The desktop reads a numeric duration as seconds. Add a `"minDuration": 60` against `"00:01:00"` entry with `same: true` to `shared/fixtures/preset-filter-equality.json`; it fails on the desktop until the fix.
-  - Fingerprint parallelism after a forced rescan (server):
-    - Found by code reading while documenting the refresh settings: `RefreshPipelineService.ConsumeRefreshRescanFlags` clears a force flag by building a new `RefreshSettingsSnapshot` from auto-refresh enabled, interval, and the two force flags only. `FingerprintScanMaxDegreeOfParallelism` falls back to its default of 4, so a forced duration or loudness rescan resets a saved value such as 8.
-    - Clearing a force flag keeps every other refresh setting.
-  - Control token for non-localhost control requests (server and Operator):
-    - Found by the repository audit and confirmed by the planned-milestones audit: `ServerPairingAuthMiddleware.AuthorizeControlPlaneAsync` enforces the control token only when `AdminAuthMode` is `TokenRequired`. With LAN binding on, the admin auth mode defaults to `Off`, so any LAN caller can stop, restart, or update the server, change settings, and run testing scenarios. First start writes that `Off` into `core-settings.json`, so changing the default alone would leave existing installs open.
-    - The testing routes are open the same way: `IsTestingControlAuthorized` in `ServerHostComposition.cs` also checks the token only in `TokenRequired` mode. They check it themselves and do not exempt localhost, so requiring the token would lock the Operator's own testing panel out on the server machine.
-    - Every non-localhost control request needs the control token. There is no `Off` for non-localhost requests: a persisted `Off` no longer opens the control plane to the LAN, and the Operator settings no longer offer it. Whether the admin auth mode field leaves `/control/settings` or stays read-only is decided here; removing it is its own contract slice.
-    - Localhost stays trusted for every control route, including the testing routes.
-    - A server with no control token generates one on start and saves it.
-    - How a browser on another machine gets in: `/operator` still loads, and when its first control read returns `401`, the page shows only a control token prompt in place of the other sections. Submitting it posts to `POST /control/pair`, which sets the admin cookie, and the page then loads normally. The token is shown in the Operator settings opened on the server machine. For a headless server with no local browser, the docs say where `core-settings.json` keeps it. The page does not put the token in the URL.
-    - A reverse proxy on the server machine still looks like localhost; that is fixed with reverse proxy support in the accounts release.
-    - Add a Release Specific checklist item: "From another machine, the Operator asks for the control token, works after it is entered, and refuses a wrong one; on the server machine it opens without one, testing panel included," on Linux and Windows.
-- **Acceptance criteria**:
-  - A source imported through `POST /api/sources/import` appears in `GET /api/sources` and can be enabled and disabled before a restart.
-  - Changing auto-refresh enabled or interval through `POST /api/refresh/settings` moves the next scheduled run to match the new settings.
-  - No code rebuilds a `LibraryCatalogItem` from another one field by field. The list query and single-item read return the same item fields for tagged and untagged items, including thumbnail revision, width, and height. `InsertItem` either writes every field it is given or its contract says which fields it ignores.
-  - After deleting the active preset while the heading shows a starred preset, **Update Preset** is disabled and the heading shows **None** or `None*`. Deleting a preset that is not active leaves **Update Preset** as it was. A headless desktop filter dialog test covers deleting the active starred preset and fails without the fix.
-  - Scan Durations and Scan Loudness do not read source folders on the desktop's disk and start a server refresh when the server is reachable.
-  - After a forced duration or loudness rescan clears its flag, `fingerprintScanMaxDegreeOfParallelism` keeps its saved value.
-  - A non-localhost control request without the control token gets `401`, including with `Off` saved in `core-settings.json`. Localhost control requests, including the testing routes, work without it.
-  - A server that has no control token creates and saves one on start.
-  - On another machine, the Operator shows only the token prompt until a valid token is entered, then works; on the server machine it opens directly.
-  - The desktop decides photo or video for the playing item from the server's media type, including when that type disagrees with the file extension, and has no extension list of its own.
-  - Every sort mode and direction shows the same label on desktop and WebUI, and the desktop renders `→` and `–`.
-  - A saved preset with a numeric `minDuration` or `maxDuration` keeps its other settings on the desktop, and the shared preset equality fixture covers a numeric duration on both clients.
-  - Each slice has a test that fails without its fix, or the evidence says why one cannot be written.
-- **Verification evidence**:
-  - Completion evidence must include each slice's failing test before the fix and passing after it, and `dotnet test ReelRoulette.sln` with the list-query test that covers a tagged and an untagged item with catalog-only thumbnail dimensions still passing.
-  - Server and Core part:
-    - Source list after import: `ImportedSource_IsListedAndToggles_WithoutRestart` failed before the fix (no source listed after import) and passes. The source list and enable and disable read catalog rows; setting the flag a source already has neither writes nor publishes.
-    - Auto-refresh reschedule: `RefreshSettingsRoute_SchedulesTheNextRunFromTheNewInterval` failed against the old route body (next run still 15 minutes out after saving 120) and passes. It calls the route's named handler, so the mapping of `POST /api/refresh/settings` to that handler is checked by reading, not by a test: the core tests share one data folder, so a test cannot start an isolated server host.
-    - Fingerprint parallelism: `ForceRescan_ClearingItsFlag_KeepsFingerprintParallelism` (duration and loudness cases) failed before the fix (expected 8, got 4) and passes, and also checks auto-refresh enabled and interval are kept.
-    - Catalog item tags: `CopyWithTags` and its reflection test are removed and `AttachTags` sets tags in place. `InsertItem` already wrote tags; it now also writes thumbnail revision, width, and height. `InsertItem_WritesThumbnailFieldsAndTags_ListAndSingleReadsAgree` failed before the fix (thumbnail revision read back null) and passes, comparing the list query and single-item read for a tagged and an untagged item. The existing list-query test with catalog-only thumbnail dimensions still passes.
-    - `dotnet build ReelRoulette.sln` clean; `dotnet test ReelRoulette.sln` 262 core and 167 desktop tests pass; SystemChecks pass.
-  - Desktop part:
-    - Update Preset after preset delete: the recorded symptom did not reproduce. Deleting the active starred preset already disabled **Update Preset** and showed `Preset: None`, because the preset list reload switched the preset dropdown to None and that path raises the change notification. `DeletingTheActiveStarredPreset_DisablesUpdateAndClearsTheHeading` clicks the real Delete button on the Presets tab and passed before any fix; it stays as a regression test, and the delete handler now raises the notification itself. The actual bug: deleting any other preset, or moving the selected one up or down, reloaded the list, reselected the active preset in the dropdown, and loaded that preset's saved filter over the unsaved one, so `P*` became `P` and **Update Preset** turned off. The reload no longer loads the saved filter when it puts back the preset that was already selected. `DeletingAPresetThatIsNotActive_LeavesUpdateAsItWas` and `MovingTheActiveStarredPreset_KeepsTheUnsavedFilterAndUpdate` (up and down) failed before the fix (`Preset: P`, disabled, saved filter loaded) and pass. Renaming the selected starred preset, found in the user's spot check, did the same: the rename handler set the new name before the reload, the dropdown cleared it because the list did not have that name yet, and the reload then loaded the saved filter. The rename handler now tells the reload that the renamed preset is the one already selected. `RenamingTheActiveStarredPreset_KeepsTheUnsavedFilterAndUpdate` drives the real rename dialog and failed before the fix (`Preset: R`, disabled, saved filter loaded) and passes.
-    - Scan menu items: the slice turned out to be dead code and was removed rather than fixed. The **Scan Durations** and **Scan Loudness** menu items left the desktop XAML when refresh moved to the server (commit `1657dbe`), and nothing else called `ScanDurations_Click` or `ScanLoudness_Click`, so neither the local folder check nor the ignored **Rescan all files** choice could run. Both handlers are deleted; everything they used has other callers. Refresh and forced rescans go only through the refresh pipeline and its settings. No test applies to removed code.
-    - Media type: `PlaybackTarget` carries the server's media type (`mediaType == "photo"` on random and play-item responses, the item's media type for manual play), and `PlayMedia` and the file-not-found message use it. `_photoExtensions` is removed; the desktop had no video list. `PlaybackTargetResolverTests` covers `.mp4` reported as a photo and `.jpg` reported as a video, local and API; with extension detection put back, 4 of 8 cases fail.
-    - Sort labels: `shared/fixtures/sort-direction-labels.json` lists every mode and direction. The desktop test failed on all 10 entries before the fix and passes; the WebUI test reads the same fixture and also checks it covers every sort mode. Changing one label in the fixture fails both. The theme spot check of `→` and `–` is the user's.
-    - Numeric preset durations: the fixture's numeric `minDuration` and `maxDuration` entries failed on the desktop and pass after a property converter that reads durations the way the server's filter parser does; the WebUI already passed them. `FilterDurationJsonTests` checks a preset with numeric durations keeps its other settings and that durations are still written as `HH:MM:SS` text.
-    - `dotnet build ReelRoulette.sln` clean; `dotnet test ReelRoulette.sln` 262 core and 201 desktop tests pass; `npm run verify` passes.
-  - The control token slice's tests must cover a non-localhost request with `Off` saved, a localhost testing-route request, token generation on start, and `POST /control/pair` setting the admin cookie. The cross-machine pass is the Release Specific checklist item above.
-  - The media type slice's test must cover a playback response whose `mediaType` disagrees with the file extension. The sort label slice's tests must check every mode and direction on both clients against the same expected labels, plus one quick spot check of the desktop label in each theme.
-- **Deferrals / Follow-ups**:
-  - WebUI reaction to `sourceStateChanged` stays with WebUI Source State Sync.
-  - Found while planning: **Scan Loudness** asked whether to rescan every file, but only logged that choice. Moot: the handler was unreachable and was removed with the scan menu slice.
-  - Found in the numeric duration slice: the server's filter parser, and now the desktop, read duration strings with `TimeSpan` rules first, so `"75"` is 75 days and `"1:30"` is 1 hour 30 minutes, while the WebUI reads them as 75 and 90 seconds. Both clients only write `HH:MM:SS`, so only hand-written or API-written presets differ. Not changed here; it needs a backlog item if those forms should agree.
-  - Found during the desktop part's spot checks: the WebUI uses the browser's native prompt, confirm, and alert dialogs, such as for preset rename -> WebUI In-App Dialogs backlog item.
-  - Release notes for v0.14.0 must say that opening the Operator from another machine now asks for the control token, and where to find it.
+Last milestone completed: M10j8
 
 ### M10j9 - Client Event Efficiency
 
@@ -1187,7 +1102,9 @@ Last milestone completed: M10j7
 - **Scope**:
   - Planned for v0.16.0. Depends on: PIN Login API and Sessions.
   - Require a session on every API and control route and on the event stream for non-localhost requests.
-  - The Operator uses admin account sessions and no longer accepts the control token added in v0.14.0. Remove the control token, its setting, and its prompt.
+  - The Operator uses admin account sessions and no longer accepts the control token added in v0.14.0. Remove the control token, its setting, and its prompt, including the `adminAuthMode` field on `/control/settings` and in `core-settings.json`. v0.14.0 kept that field read-only (always `TokenRequired`, posted values ignored) so the contract changes only once.
+  - No session or token is accepted as a query parameter. Found while adding the control token: `/api` routes still accept the API pairing token as a `token` query, and `GET /api/pair?token=` pairs with it, which puts the token in URLs and in the default request log. v0.14.0 stopped accepting the control token in a query and made `/control/pair` POST-only, but left `/api` for this cutover.
+  - `GET` and `POST /api/web-runtime/settings` become admin-only. Found while adding the control token: the route is on the API plane, so any LAN caller with the API pairing token, which `/runtime-config.json` hands to every browser, can turn WebUI auth off, change the port or LAN binding, and read the shared token. The desktop calls it from other machines, so v0.14.0 did not move it behind the control token.
   - Admin-only operations (control plane, source and item management, catalog transfer, account administration, testing routes) reject user-level accounts. Testing routes use the same check as the rest of the control plane (found by the repository audit: `OperatorTestingService` mutations protected only by middleware policy).
   - Settings reads no longer return secrets (found by the repository audit: auth and secret fields in DTOs encourage credential leakage; `GET /control/settings` returns the admin token today).
   - Remove pairing and control-token flows from clients, docs, and contracts. Found by the repository audit, these go with them:
@@ -1202,6 +1119,7 @@ Last milestone completed: M10j7
   - LAN and remote requests without a valid session get a deterministic auth error on every API and control route and on the event stream.
   - The Operator uses account sessions, and no control token is accepted anywhere.
   - User-level accounts are refused on admin-only operations.
+  - LAN and remote requests to web runtime settings without an admin session are refused.
   - No settings response contains a secret.
   - Active docs no longer describe pairing or control tokens.
 - **Verification evidence**:
@@ -1661,6 +1579,102 @@ Last milestone completed: M10j7
 ## Completed Milestones
 
 Latest completions first:
+
+### M10j8 - Post-Migration Fixes
+
+- **Status**: ✅ Complete
+- **Goal**: Fix defects left from the move to the server-owned catalog and two places where desktop and WebUI disagree, and close the control plane to unauthenticated LAN callers, one slice per defect, each with a test that fails before the fix.
+- **Scope**:
+  - Ships in v0.14.0. Ten slices, each verified on its own.
+  - Landed in three parts, each with its own commit: server and Core (source list after import, auto-refresh reschedule, catalog item tags, fingerprint parallelism), then desktop (Update Preset after delete, scan menu items, media type, sort labels, numeric preset durations), then the control token.
+  - Source list after source import (server):
+    - Recorded as a deferral on catalog document removal: source import does not refresh the in-memory source list that `GET /api/sources` and source enable/disable read. That list is filled at startup.
+    - Confirmed during v0.14.0 planning by a throwaway test: after a successful import, the server's source list still had 0 sources and disabling the new source failed until restart.
+    - A newly imported source appears in `GET /api/sources` and can be enabled and disabled without a restart. Whether the list is refreshed after import or read from catalog rows is decided here.
+  - Auto-refresh interval reschedule (server):
+    - `POST /api/refresh/settings` writes through `CoreSettingsService` and skips `RefreshPipelineService.UpdateSettings`, so changing the auto-refresh interval or enabling auto-refresh does not reschedule the next run. Found by code reading and git history during v0.14.0 planning: the route has gone around the pipeline since the change that also split web runtime settings onto their own route.
+    - Changing auto-refresh settings through the API schedules the next run from the new settings.
+  - Catalog item tag assignment without field copy (Core):
+    - `LibraryCatalogSession.AttachTags` replaces each tagged item with `CopyWithTags`, which lists every `LibraryCatalogItem` property by hand because `Tags` is init-only. Thumbnail revision, width, and height were added to the item without being added to that copy, so the list query returned no thumbnail dimensions for tagged items until the copy was fixed.
+    - Let tags be assigned on an existing item (for example a settable `Tags`), have `AttachTags` set them in place, and remove `CopyWithTags` and its reflection test.
+    - Related trap to check while there: `InsertItem` writes neither thumbnail columns nor tags from the item it is given. Every caller passes a new item today and thumbnails arrive later through `SetThumbnail`, so nothing is lost, but an item passed in with those fields set would silently drop them.
+  - Desktop filter dialog Update Preset after preset delete (desktop):
+    - In the desktop filter dialog, **Update Preset** can stay enabled after the active preset is deleted from the preset list, although no saved preset is left to update.
+    - Found during review of the client-authority sync routes removal. The behavior existed before that work.
+    - Likely cause, not confirmed: `DeletePresetButton_Click` clears the active preset name and refreshes the heading and pending state, but does not raise the `CanUpdatePreset` change notification.
+    - The WebUI filter dialog has no Update Preset gate, so it is out of scope.
+  - Desktop scan menu items (desktop):
+    - **Scan Durations** and **Scan Loudness** check `Directory.Exists` on each source root on the desktop's own disk before asking the server to refresh. When the server runs on another machine, that check uses the wrong disk. The server decides which sources it can read.
+    - Both items request the server refresh without a local folder check, and their status and log text no longer names a single source folder.
+  - Desktop media type from the server (desktop):
+    - Found by the efficiency and divergence report: the desktop decides whether the playing file is a photo or a video from its file extension, in `PlayMedia` and in the file-not-found message in `PlayFromPath`, using its own copy of the photo extension list. The playback response already carries the server's `mediaType`, and the WebUI uses it.
+    - The desktop uses the server's media type for the playing item, and its photo and video extension lists are removed. The server keeps the only extension lists.
+  - Sort direction labels (desktop and WebUI):
+    - Found by the efficiency and divergence report: the two clients label the same sort direction differently. The WebUI shows `Newest → Oldest`, `A–Z`, and `Z–A`; the desktop shows `Newest -> Oldest`, `A-Z`, and `Z-A`.
+    - Both clients use the WebUI's labels, with `→` and `–`. Check that the desktop font renders both characters in light and dark themes.
+  - Numeric preset durations on the desktop (desktop):
+    - Found while removing the preset match route: the desktop reads saved preset text with `JsonSerializer.Deserialize<FilterState>`, which throws on a numeric `minDuration` or `maxDuration` (seconds). `ParseCorePresetFilterState` then falls back to the default filter, so that whole preset is read as **None**. The WebUI and server filtering accept seconds, and `docs/api.md` documents them.
+    - The desktop reads a numeric duration as seconds. Add a `"minDuration": 60` against `"00:01:00"` entry with `same: true` to `shared/fixtures/preset-filter-equality.json`; it fails on the desktop until the fix.
+  - Fingerprint parallelism after a forced rescan (server):
+    - Found by code reading while documenting the refresh settings: `RefreshPipelineService.ConsumeRefreshRescanFlags` clears a force flag by building a new `RefreshSettingsSnapshot` from auto-refresh enabled, interval, and the two force flags only. `FingerprintScanMaxDegreeOfParallelism` falls back to its default of 4, so a forced duration or loudness rescan resets a saved value such as 8.
+    - Clearing a force flag keeps every other refresh setting.
+  - Control token for non-localhost control requests (server and Operator):
+    - Found by the repository audit and confirmed by the planned-milestones audit: `ServerPairingAuthMiddleware.AuthorizeControlPlaneAsync` enforces the control token only when `AdminAuthMode` is `TokenRequired`. With LAN binding on, the admin auth mode defaults to `Off`, so any LAN caller can stop, restart, or update the server, change settings, and run testing scenarios. First start writes that `Off` into `core-settings.json`, so changing the default alone would leave existing installs open.
+    - The testing routes are open the same way: `IsTestingControlAuthorized` in `ServerHostComposition.cs` also checks the token only in `TokenRequired` mode. They check it themselves and do not exempt localhost, so requiring the token would lock the Operator's own testing panel out on the server machine.
+    - Every non-localhost control request needs the control token. There is no `Off` for non-localhost requests: a persisted `Off` no longer opens the control plane to the LAN, and the Operator settings no longer offer it. Whether the admin auth mode field leaves `/control/settings` or stays read-only is decided here; removing it is its own contract slice.
+    - Localhost stays trusted for every control route, including the testing routes.
+    - A server with no control token generates one on start and saves it.
+    - How a browser on another machine gets in: `/operator` still loads, and when its first control read returns `401`, the page shows only a control token prompt in place of the other sections. Submitting it posts to `POST /control/pair`, which sets the admin cookie, and the page then loads normally. The token is shown in the Operator settings opened on the server machine. For a headless server with no local browser, the docs say where `core-settings.json` keeps it. The page does not put the token in the URL.
+    - A reverse proxy on the server machine still looks like localhost; that is fixed with reverse proxy support in the accounts release.
+    - Add a Release Specific checklist item: "From another machine, the Operator asks for the control token, works after it is entered, and refuses a wrong one; on the server machine it opens without one, testing panel included," on Linux and Windows.
+- **Acceptance criteria**:
+  - A source imported through `POST /api/sources/import` appears in `GET /api/sources` and can be enabled and disabled before a restart.
+  - Changing auto-refresh enabled or interval through `POST /api/refresh/settings` moves the next scheduled run to match the new settings.
+  - No code rebuilds a `LibraryCatalogItem` from another one field by field. The list query and single-item read return the same item fields for tagged and untagged items, including thumbnail revision, width, and height. `InsertItem` either writes every field it is given or its contract says which fields it ignores.
+  - After deleting the active preset while the heading shows a starred preset, **Update Preset** is disabled and the heading shows **None** or `None*`. Deleting a preset that is not active leaves **Update Preset** as it was. A headless desktop filter dialog test covers deleting the active starred preset and fails without the fix.
+  - Scan Durations and Scan Loudness do not read source folders on the desktop's disk and start a server refresh when the server is reachable.
+  - After a forced duration or loudness rescan clears its flag, `fingerprintScanMaxDegreeOfParallelism` keeps its saved value.
+  - A non-localhost control request without the control token gets `401`, including with `Off` saved in `core-settings.json`. Localhost control requests, including the testing routes, work without it.
+  - A server that has no control token creates and saves one on start.
+  - On another machine, the Operator shows only the token prompt until a valid token is entered, then works; on the server machine it opens directly.
+  - The desktop decides photo or video for the playing item from the server's media type, including when that type disagrees with the file extension, and has no extension list of its own.
+  - Every sort mode and direction shows the same label on desktop and WebUI, and the desktop renders `→` and `–`.
+  - A saved preset with a numeric `minDuration` or `maxDuration` keeps its other settings on the desktop, and the shared preset equality fixture covers a numeric duration on both clients.
+  - Each slice has a test that fails without its fix, or the evidence says why one cannot be written.
+- **Verification evidence**:
+  - Completion evidence must include each slice's failing test before the fix and passing after it, and `dotnet test ReelRoulette.sln` with the list-query test that covers a tagged and an untagged item with catalog-only thumbnail dimensions still passing.
+  - Server and Core part:
+    - Source list after import: `ImportedSource_IsListedAndToggles_WithoutRestart` failed before the fix (no source listed after import) and passes. The source list and enable and disable read catalog rows; setting the flag a source already has neither writes nor publishes.
+    - Auto-refresh reschedule: `RefreshSettingsRoute_SchedulesTheNextRunFromTheNewInterval` failed against the old route body (next run still 15 minutes out after saving 120) and passes. It calls the route's named handler, so the mapping of `POST /api/refresh/settings` to that handler is checked by reading, not by a test: the core tests share one data folder, so a test cannot start an isolated server host.
+    - Fingerprint parallelism: `ForceRescan_ClearingItsFlag_KeepsFingerprintParallelism` (duration and loudness cases) failed before the fix (expected 8, got 4) and passes, and also checks auto-refresh enabled and interval are kept.
+    - Catalog item tags: `CopyWithTags` and its reflection test are removed and `AttachTags` sets tags in place. `InsertItem` already wrote tags; it now also writes thumbnail revision, width, and height. `InsertItem_WritesThumbnailFieldsAndTags_ListAndSingleReadsAgree` failed before the fix (thumbnail revision read back null) and passes, comparing the list query and single-item read for a tagged and an untagged item. The existing list-query test with catalog-only thumbnail dimensions still passes.
+    - `dotnet build ReelRoulette.sln` clean; `dotnet test ReelRoulette.sln` 262 core and 167 desktop tests pass; SystemChecks pass.
+  - Desktop part:
+    - Update Preset after preset delete: the recorded symptom did not reproduce. Deleting the active starred preset already disabled **Update Preset** and showed `Preset: None`, because the preset list reload switched the preset dropdown to None and that path raises the change notification. `DeletingTheActiveStarredPreset_DisablesUpdateAndClearsTheHeading` clicks the real Delete button on the Presets tab and passed before any fix; it stays as a regression test, and the delete handler now raises the notification itself. The actual bug: deleting any other preset, or moving the selected one up or down, reloaded the list, reselected the active preset in the dropdown, and loaded that preset's saved filter over the unsaved one, so `P*` became `P` and **Update Preset** turned off. The reload no longer loads the saved filter when it puts back the preset that was already selected. `DeletingAPresetThatIsNotActive_LeavesUpdateAsItWas` and `MovingTheActiveStarredPreset_KeepsTheUnsavedFilterAndUpdate` (up and down) failed before the fix (`Preset: P`, disabled, saved filter loaded) and pass. Renaming the selected starred preset, found in the user's spot check, did the same: the rename handler set the new name before the reload, the dropdown cleared it because the list did not have that name yet, and the reload then loaded the saved filter. The rename handler now tells the reload that the renamed preset is the one already selected. `RenamingTheActiveStarredPreset_KeepsTheUnsavedFilterAndUpdate` drives the real rename dialog and failed before the fix (`Preset: R`, disabled, saved filter loaded) and passes.
+    - Scan menu items: the slice turned out to be dead code and was removed rather than fixed. The **Scan Durations** and **Scan Loudness** menu items left the desktop XAML when refresh moved to the server (commit `1657dbe`), and nothing else called `ScanDurations_Click` or `ScanLoudness_Click`, so neither the local folder check nor the ignored **Rescan all files** choice could run. Both handlers are deleted; everything they used has other callers. Refresh and forced rescans go only through the refresh pipeline and its settings. No test applies to removed code.
+    - Media type: `PlaybackTarget` carries the server's media type (`mediaType == "photo"` on random and play-item responses, the item's media type for manual play), and `PlayMedia` and the file-not-found message use it. `_photoExtensions` is removed; the desktop had no video list. `PlaybackTargetResolverTests` covers `.mp4` reported as a photo and `.jpg` reported as a video, local and API; with extension detection put back, 4 of 8 cases fail.
+    - Sort labels: `shared/fixtures/sort-direction-labels.json` lists every mode and direction. The desktop test failed on all 10 entries before the fix and passes; the WebUI test reads the same fixture and also checks it covers every sort mode. Changing one label in the fixture fails both. The theme spot check of `→` and `–` is the user's.
+    - Numeric preset durations: the fixture's numeric `minDuration` and `maxDuration` entries failed on the desktop and pass after a property converter that reads durations the way the server's filter parser does; the WebUI already passed them. `FilterDurationJsonTests` checks a preset with numeric durations keeps its other settings and that durations are still written as `HH:MM:SS` text.
+    - `dotnet build ReelRoulette.sln` clean; `dotnet test ReelRoulette.sln` 262 core and 201 desktop tests pass; `npm run verify` passes.
+  - Control token part:
+    - Found while planning: the auth middleware was installed only when API pairing was required, so with WebUI auth `Off` the control plane had no check at all, not even the 403 for LAN binding off. It is now always installed; its API branch still passes every request when pairing is not required. Checked by reading: the core tests cannot start an isolated server host with a non-local caller.
+    - Throwaway checks against an export of the previous commit: a non-localhost `/control/stop` with `Off` saved passed through, no control token was generated, and an in-process host on loopback with `TokenRequired` saved returned 401 for `/control/testing/reset` and `/control/testing/update` without a cookie. Against this change: 401, a 32-character token saved, and 200 for both.
+    - `ControlTokenTests` (21 tests): a non-localhost control request with `Off` saved gets 401; a control cookie or the bearer token passes and a wrong bearer token does not; localhost testing routes pass the middleware and their handlers return 200 without a token; a non-localhost testing route gets 401; a token is generated on start, saved, and kept on reload, and a saved `Off` is rewritten; `POST /control/pair` with the token sets `rr_admin` with a valid session, and a wrong token gets 401 with no cookie and logs `Control pairing failed from 192.168.1.90` without either token; a changed token ends both control sessions and keeps the API session, and saving the same token keeps them; a control session authorizes a non-localhost `/api/version` when pairing is required; a non-localhost token change ends every earlier control session and sets one fresh `rr_admin` session for the caller, and a localhost change sets no cookie; the control token as a `token` query gets 401 on a control route and on `POST /control/pair`, while the API pairing token as a query still passes on `/api`; a failed `last.log` append does not throw.
+    - Review fixes: a remote Operator that changed the token got a 401 on the startup setting saved right after it, so the caller now gets a fresh control cookie; the control token is no longer accepted as a query parameter and `GET /control/pair` is removed; `LibraryOperationsService` writes its server log lines through `ServerLogService.Append`, which now catches every exception. The fresh cookie, query-token, and query-pair tests failed before their fixes, and the append test failed with the old `IOException`-only catch.
+    - Mutation checks: letting every control request through, skipping token generation, skipping the session end, refusing control sessions on API routes, dropping the failed-pair log, skipping the `Off` rewrite, and skipping the cookie each failed at least one of those tests.
+    - `adminAuthMode` stays in the contract, read-only. Because a token is now always required, `POST /control/settings` rejects an empty token, so three dev channel tests that posted `Off` with no token now post the current token. A token change reports `restartRequired: false`, since the middleware reads the token on every request.
+    - `verify-web-deploy.ps1` now checks the generated token, an accepted settings save with it, and a 200 from a localhost `/control/testing/reset`; it passes. The cross-machine pass is the Release Specific checklist item above.
+    - `dotnet build ReelRoulette.sln` clean; `dotnet test ReelRoulette.sln` 283 core and 201 desktop tests pass; `npm run verify` passes; SystemChecks pass; the Operator page script passes `node --check`.
+  - The media type slice's test must cover a playback response whose `mediaType` disagrees with the file extension. The sort label slice's tests must check every mode and direction on both clients against the same expected labels, plus one quick spot check of the desktop label in each theme.
+- **Deferrals / Follow-ups**:
+  - WebUI reaction to `sourceStateChanged` stays with WebUI Source State Sync.
+  - Found while planning: **Scan Loudness** asked whether to rescan every file, but only logged that choice. Moot: the handler was unreachable and was removed with the scan menu slice.
+  - Found in the numeric duration slice: the server's filter parser, and now the desktop, read duration strings with `TimeSpan` rules first, so `"75"` is 75 days and `"1:30"` is 1 hour 30 minutes, while the WebUI reads them as 75 and 90 seconds. Both clients only write `HH:MM:SS`, so only hand-written or API-written presets differ. Not changed here; it needs a backlog item if those forms should agree.
+  - Found during the desktop part's spot checks: the WebUI uses the browser's native prompt, confirm, and alert dialogs, such as for preset rename -> WebUI In-App Dialogs backlog item.
+  - Release notes for v0.14.0 must say that opening the Operator from another machine now asks for the control token, and where to find it.
+  - Found in the control token slice: removing the now read-only `adminAuthMode` field -> Auth Cutover for API and Operator, which removes the control token and its setting.
+  - Found in the control token slice: `/api` routes and `GET /api/pair` still accept the API pairing token as a query parameter -> Auth Cutover for API and Operator.
+  - Found in the control token slice: `/api/web-runtime/settings` is open to any LAN caller with the API pairing token, which `/runtime-config.json` serves to every browser -> Auth Cutover for API and Operator.
 
 ### M10j7 - Scrub library.json From the Product
 

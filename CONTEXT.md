@@ -16,6 +16,7 @@ ReelRoulette is migrating from a monolithic desktop app to a thin-client, API-fi
 - **Server host (`src/core/ReelRoulette.ServerApp`)**
   - Default single-process runtime serving API, SSE, media, WebUI assets, and Operator UI.
   - Control-plane surfaces under `/control/*` for runtime status/settings/pairing/lifecycle/testing/logs.
+  - Localhost control requests are trusted, testing routes included. Every non-localhost control request needs the control token, through a `POST /control/pair` admin cookie or the token as a bearer header, never a query parameter, and there is no setting that turns this off. The server generates and saves a control token on start when none is set. Changing the token ends every control session and gives a non-localhost caller that changed it a fresh one, and a failed pairing attempt logs a warning with the remote address. A control session also authorizes API requests. On another machine the Operator shows only a control token prompt until a valid token is entered.
   - Operator testing mode supports deterministic fault simulation (version/capability mismatch, API unavailable, media missing, SSE disconnect).
   - mDNS LAN hostname advertisement for WebUI when enabled.
   - `REELROULETTE_DATA_DIR` moves the server's settings, catalog, backups, `last.log`, and thumbnails (`<folder>/thumbnails`) to one folder on every OS; unset, the server uses `ApplicationData/ReelRoulette` and `LocalApplicationData/ReelRoulette/thumbnails`. Server-starting verification scripts and the core test run set it to a temporary folder.

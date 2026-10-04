@@ -31,6 +31,8 @@ Write **[Unreleased]** bullets at the same level as the released sections below.
 
 ### Security
 
+- **Control token for the Operator from other machines:** Stopping, restarting, or updating the server, changing its settings, and running testing scenarios from another machine now always need the control token, even on installs that had admin auth set to `Off`, and the server creates a token on first start if it has none. The Operator on another machine asks for the token, which is shown in the Operator on the server machine or in `core-settings.json`; the server machine still opens it without one. Changing the token signs out every other machine.
+
 ---
 
 ## [0.13.0] — Moving Day (2026-10-01)

@@ -15,7 +15,6 @@ public sealed class ServerRuntimeOptionsTests
             ["CoreServer:PairingToken"] = "token",
             ["CoreServer:PairingCookieSameSite"] = "none",
             ["CoreServer:PairingCookieSecureMode"] = "always",
-            ["CoreServer:ControlAdminAuthMode"] = "tokenrequired",
             ["CoreServer:ControlAdminSharedToken"] = "",
             ["CoreServer:ControlAdminCookieName"] = "",
             ["CoreServer:CorsAllowedOrigins:0"] = "http://localhost:5173",
@@ -27,8 +26,7 @@ public sealed class ServerRuntimeOptionsTests
         var options = ServerRuntimeOptions.FromConfiguration(config);
         Assert.Equal("None", options.PairingCookieSameSite);
         Assert.Equal("Always", options.PairingCookieSecureMode);
-        Assert.Equal("TokenRequired", options.ControlAdminAuthMode);
-        Assert.False(string.IsNullOrWhiteSpace(options.ControlAdminSharedToken));
+        Assert.Null(options.ControlAdminSharedToken);
         Assert.Equal("rr_admin", options.ControlAdminCookieName);
         Assert.Equal(2, options.CorsAllowedOrigins.Length);
     }

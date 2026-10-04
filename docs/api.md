@@ -55,6 +55,15 @@ Session/cookie behavior:
 - Cookie policy is runtime-configurable (same-site, secure mode, session duration).
 - Auth middleware validates session cookie first; optional legacy fallback paths can be enabled.
 
+Control-plane auth (`/control/*`):
+
+- Localhost requests are trusted on every control route, including the testing routes. A request to the server's own LAN address from the server machine counts as localhost, and so does a request forwarded by a reverse proxy on the server machine.
+- A non-localhost request returns `403` while LAN binding is off. Otherwise it needs a control session cookie (`rr_admin`) from `POST /control/pair`, or the control token as a `Bearer` header when legacy token auth is allowed, and returns `401` without one. A `token` query parameter is never accepted on control routes, so the control token stays out of URLs and request logs. There is no setting that turns this off.
+- The server generates a control token on start when none is set and saves it as `controlRuntime.adminSharedToken` in `core-settings.json` in the server data folder. The Operator shows it under Control Settings.
+- `POST /control/pair` with the token in its JSON body returns `200` and sets the admin cookie; there is no `GET` form. A wrong or missing token returns `401` and logs a warning with the remote address to `last.log`, never the token.
+- Changing the token through `POST /control/settings` ends every control session. A non-localhost caller gets a fresh admin cookie in the same response, so the rest of its save goes through.
+- A control session also authorizes `/api` requests.
+
 ## CORS and Cookie Runtime Policy
 
 Runtime controls include:
@@ -210,7 +219,7 @@ Reconnect/resync behavior:
 
 ### Control plane (operator/runtime)
 
-- `GET /control/settings` / `POST /control/settings` — `ControlRuntimeSettingsSnapshot` includes `adminAuthMode`, optional `adminSharedToken`, and optional `devChannelEnabled` (defaults to `false` / stable update channel; when toggled, the server runs an immediate Velopack **check** against the persisted value and continues periodic **check-only** background polls on schedule).
+- `GET /control/settings` / `POST /control/settings` — `ControlRuntimeSettingsSnapshot` includes `adminAuthMode` (read-only: always `TokenRequired`, and a posted value is ignored), `adminSharedToken` (the control token; `POST` rejects an empty value and `restartRequired` is always `false`), and optional `devChannelEnabled` (defaults to `false` / stable update channel; when toggled, the server runs an immediate Velopack **check** against the persisted value and continues periodic **check-only** background polls on schedule).
 
 - `GET /control/startup` / `POST /control/startup` — Launch Server on Startup. `GET` returns `supported`, `launchServerOnStartup`, and `message`. `POST` takes `{ launchServerOnStartup }` and returns `accepted`, `supported`, `launchServerOnStartup`, and `message`, with **409** and the same body when the change is not applied (for example, an unsupported platform, or a server run through `dotnet` rather than its app binary on Linux).
 
@@ -224,7 +233,6 @@ Reconnect/resync behavior:
 - `POST /control/settings`
 - `GET /control/startup`
 - `POST /control/startup`
-- `GET /control/pair`
 - `POST /control/pair`
 - `POST /control/restart`
 - `POST /control/stop`

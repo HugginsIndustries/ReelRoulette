@@ -284,7 +284,8 @@ public sealed class WebRuntimeSettingsSnapshot
 
 public sealed class ControlRuntimeSettingsSnapshot
 {
-    public string AdminAuthMode { get; set; } = "Off";
+    /// <summary>Read-only: always <c>TokenRequired</c>. A posted value is ignored.</summary>
+    public string AdminAuthMode { get; set; } = "TokenRequired";
     public string? AdminSharedToken { get; set; }
     public bool? DevChannelEnabled { get; set; }
 }

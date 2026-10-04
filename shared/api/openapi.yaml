@@ -113,7 +113,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/RestartResponse"
         "401":
-          description: Unauthorized when control admin auth is required and request is not paired
+          description: Unauthorized when a non-local request has no control session or control token
           content:
             application/json:
               schema:
@@ -143,7 +143,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/RestartResponse"
         "401":
-          description: Unauthorized when control admin auth is required and request is not paired
+          description: Unauthorized when a non-local request has no control session or control token
           content:
             application/json:
               schema:
@@ -173,7 +173,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ServerUpdateStatusResponse"
         "401":
-          description: Unauthorized when control admin auth is required and request is not paired
+          description: Unauthorized when a non-local request has no control session or control token
           content:
             application/json:
               schema:
@@ -197,7 +197,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ServerUpdateActionResponse"
         "401":
-          description: Unauthorized when control admin auth is required and request is not paired
+          description: Unauthorized when a non-local request has no control session or control token
           content:
             application/json:
               schema:
@@ -221,7 +221,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ServerUpdateActionResponse"
         "401":
-          description: Unauthorized when control admin auth is required and request is not paired
+          description: Unauthorized when a non-local request has no control session or control token
           content:
             application/json:
               schema:
@@ -245,7 +245,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ServerUpdateActionResponse"
         "401":
-          description: Unauthorized when control admin auth is required and request is not paired
+          description: Unauthorized when a non-local request has no control session or control token
           content:
             application/json:
               schema:
@@ -269,7 +269,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ControlStatusResponse"
         "401":
-          description: Unauthorized when control admin auth is required and request is not paired
+          description: Unauthorized when a non-local request has no control session or control token
           content:
             application/json:
               schema:
@@ -293,7 +293,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ControlRuntimeSettingsSnapshot"
         "401":
-          description: Unauthorized when control admin auth is required and request is not paired
+          description: Unauthorized when a non-local request has no control session or control token
           content:
             application/json:
               schema:
@@ -321,7 +321,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ControlSettingsApplyResponse"
         "401":
-          description: Unauthorized when control admin auth is required and request is not paired
+          description: Unauthorized when a non-local request has no control session or control token
           content:
             application/json:
               schema:
@@ -345,7 +345,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/StartupLaunchStatus"
         "401":
-          description: Unauthorized when control admin auth is required and request is not paired
+          description: Unauthorized when a non-local request has no control session or control token
           content:
             application/json:
               schema:
@@ -379,7 +379,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/StartupLaunchResult"
         "401":
-          description: Unauthorized when control admin auth is required and request is not paired
+          description: Unauthorized when a non-local request has no control session or control token
           content:
             application/json:
               schema:
@@ -427,7 +427,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ServerLogResponse"
         "401":
-          description: Unauthorized when control admin auth is required and request is not paired
+          description: Unauthorized when a non-local request has no control session or control token
           content:
             application/json:
               schema:
@@ -451,7 +451,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/OperatorTestingStateSnapshot"
         "401":
-          description: Unauthorized when control admin auth is required and request is not paired
+          description: Unauthorized when a non-local request has no control session or control token
           content:
             application/json:
               schema:
@@ -481,7 +481,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/OperatorTestingActionResponse"
         "401":
-          description: Unauthorized for testing actions while control admin auth is required
+          description: Unauthorized when a non-local request has no control session or control token
           content:
             application/json:
               schema:
@@ -511,7 +511,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/OperatorTestingActionResponse"
         "401":
-          description: Unauthorized for testing actions while control admin auth is required
+          description: Unauthorized when a non-local request has no control session or control token
           content:
             application/json:
               schema:
@@ -524,34 +524,6 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
 
   /control/pair:
-    get:
-      summary: Pair control-plane session and issue admin cookie
-      operationId: getControlPair
-      parameters:
-        - name: token
-          in: query
-          required: false
-          schema:
-            type: string
-      responses:
-        "200":
-          description: Control pairing succeeded or admin auth disabled
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/PairResponse"
-        "401":
-          description: Invalid token
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "403":
-          description: Control LAN access disabled
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
     post:
       summary: Pair control-plane session and issue admin cookie
       operationId: postControlPair
@@ -563,7 +535,7 @@ paths:
               $ref: "#/components/schemas/PairRequest"
       responses:
         "200":
-          description: Control pairing succeeded or admin auth disabled
+          description: Control pairing succeeded and the admin cookie is set
           content:
             application/json:
               schema:
@@ -1717,9 +1689,15 @@ components:
           enum:
             - Off
             - TokenRequired
+          description: >
+            Read-only. GET always returns TokenRequired, and a posted value is ignored:
+            every non-local control request needs the control token.
         adminSharedToken:
           type: string
           nullable: true
+          description: >
+            The control token. The server generates and saves one on start when none is set.
+            POST rejects an empty value, and a changed token ends every control session.
         devChannelEnabled:
           type: boolean
           nullable: true

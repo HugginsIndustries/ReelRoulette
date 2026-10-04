@@ -58,7 +58,14 @@ public sealed class ServerPairingAuthMiddleware
             return;
         }
 
-        if (IsAuthorized(context, _options.PairingCookieName, _options.PairingToken, ServerSessionStore.ApiScope))
+        if (IsAuthorized(context, _options.PairingCookieName, _options.PairingToken, ServerSessionStore.ApiScope, allowQueryToken: true))
+        {
+            await _next(context);
+            return;
+        }
+
+        // A control session also covers API requests, so the Operator can read them from another machine.
+        if (HasValidSession(context, _options.ControlAdminCookieName, ServerSessionStore.ControlScope))
         {
             await _next(context);
             return;
@@ -95,15 +102,10 @@ public sealed class ServerPairingAuthMiddleware
             return;
         }
 
+        // Every non-localhost control request needs the control token; there is no off switch for the LAN.
         var controlSettings = _settings.GetControlRuntimeSettings();
-        var authMode = NormalizeControlAuthMode(controlSettings.AdminAuthMode);
-        if (!string.Equals(authMode, "TokenRequired", StringComparison.Ordinal))
-        {
-            await _next(context);
-            return;
-        }
-
-        if (IsAuthorized(context, _options.ControlAdminCookieName, controlSettings.AdminSharedToken, ServerSessionStore.ControlScope))
+        // The control token is never accepted in a query, so it stays out of URLs and request logs.
+        if (IsAuthorized(context, _options.ControlAdminCookieName, controlSettings.AdminSharedToken, ServerSessionStore.ControlScope, allowQueryToken: false))
         {
             await _next(context);
             return;
@@ -113,10 +115,15 @@ public sealed class ServerPairingAuthMiddleware
         await context.Response.WriteAsJsonAsync(new { error = "Unauthorized" });
     }
 
-    private bool IsAuthorized(HttpContext context, string cookieName, string? expectedToken, string scope)
+    private bool HasValidSession(HttpContext context, string cookieName, string scope)
     {
-        if (context.Request.Cookies.TryGetValue(cookieName, out var cookieValue) &&
-            _sessions.IsSessionValid(scope, cookieValue, DateTimeOffset.UtcNow))
+        return context.Request.Cookies.TryGetValue(cookieName, out var cookieValue) &&
+               _sessions.IsSessionValid(scope, cookieValue, DateTimeOffset.UtcNow);
+    }
+
+    private bool IsAuthorized(HttpContext context, string cookieName, string? expectedToken, string scope, bool allowQueryToken)
+    {
+        if (HasValidSession(context, cookieName, scope))
         {
             return true;
         }
@@ -141,6 +148,11 @@ public sealed class ServerPairingAuthMiddleware
             }
         }
 
+        if (!allowQueryToken)
+        {
+            return false;
+        }
+
         var queryToken = context.Request.Query["token"].ToString();
         return !string.IsNullOrEmpty(queryToken) &&
                string.Equals(queryToken, expectedToken, StringComparison.Ordinal);
@@ -156,12 +168,5 @@ public sealed class ServerPairingAuthMiddleware
 
         return IPAddress.IsLoopback(remote) ||
                remote.Equals(context.Connection.LocalIpAddress);
-    }
-
-    private static string NormalizeControlAuthMode(string? value)
-    {
-        return string.Equals(value, "TokenRequired", StringComparison.OrdinalIgnoreCase)
-            ? "TokenRequired"
-            : "Off";
     }
 }

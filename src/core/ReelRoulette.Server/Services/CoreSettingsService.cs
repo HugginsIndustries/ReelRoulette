@@ -14,6 +14,9 @@ public sealed class CoreSettingsService
         PropertyNameCaseInsensitive = true
     };
 
+    /// <summary>The only control auth mode: non-localhost control requests always need the control token.</summary>
+    public const string ControlAuthMode = "TokenRequired";
+
     private readonly object _lock = new();
     private readonly string _settingsPath;
     private readonly string _backupDirectory;
@@ -33,7 +36,21 @@ public sealed class CoreSettingsService
         _backupDirectory = Path.Combine(roamingAppData, "backups");
         var loaded = LoadSettings(options);
         (_refreshSettings, _backupSettings, _webRuntimeSettings, _controlRuntimeSettings) = loaded.Settings;
-        if (loaded.NeedsStartupBackfillPersist)
+        var needsPersist = loaded.NeedsStartupBackfillPersist;
+        if (!string.Equals(_controlRuntimeSettings.AdminAuthMode, ControlAuthMode, StringComparison.Ordinal))
+        {
+            // A saved "Off" from an older version is rewritten so a downgrade stays closed to the LAN too.
+            _controlRuntimeSettings.AdminAuthMode = ControlAuthMode;
+            needsPersist = true;
+        }
+
+        if (string.IsNullOrWhiteSpace(_controlRuntimeSettings.AdminSharedToken))
+        {
+            _controlRuntimeSettings.AdminSharedToken = Guid.NewGuid().ToString("N");
+            needsPersist = true;
+        }
+
+        if (needsPersist)
         {
             PersistSettings(createBackup: false);
         }
@@ -171,24 +188,17 @@ public sealed class CoreSettingsService
     {
         lock (_lock)
         {
-            var normalizedAuthMode = NormalizeAuthMode(snapshot.AdminAuthMode);
+            // adminAuthMode is read-only: the posted value is ignored.
             var normalizedSharedToken = string.IsNullOrWhiteSpace(snapshot.AdminSharedToken) ? null : snapshot.AdminSharedToken.Trim();
             var errors = new List<string>();
-            var restartRequired = false;
 
-            if (string.Equals(normalizedAuthMode, "TokenRequired", StringComparison.OrdinalIgnoreCase) &&
-                string.IsNullOrWhiteSpace(normalizedSharedToken))
+            if (string.IsNullOrWhiteSpace(normalizedSharedToken))
             {
-                errors.Add("adminSharedToken is required when adminAuthMode is TokenRequired.");
+                errors.Add("adminSharedToken is required.");
             }
 
             if (errors.Count == 0)
             {
-                restartRequired =
-                    !string.Equals(_controlRuntimeSettings.AdminAuthMode, normalizedAuthMode, StringComparison.Ordinal) ||
-                    !string.Equals(_controlRuntimeSettings.AdminSharedToken, normalizedSharedToken, StringComparison.Ordinal);
-
-                _controlRuntimeSettings.AdminAuthMode = normalizedAuthMode;
                 _controlRuntimeSettings.AdminSharedToken = normalizedSharedToken;
                 if (snapshot.DevChannelEnabled.HasValue)
                 {
@@ -203,10 +213,8 @@ public sealed class CoreSettingsService
                 new ControlApplyResult
                 {
                     Accepted = errors.Count == 0,
-                    RestartRequired = restartRequired,
-                    Message = errors.Count == 0
-                        ? (restartRequired ? "Applied. Restart required to take effect." : "Applied. No restart required.")
-                        : "Validation failed.",
+                    RestartRequired = false,
+                    Message = errors.Count == 0 ? "Applied. No restart required." : "Validation failed.",
                     Errors = errors
                 });
         }
@@ -231,7 +239,7 @@ public sealed class CoreSettingsService
         var webRuntime = new WebRuntimeSettingsSnapshot();
         var controlRuntime = new ControlRuntimeSettingsSnapshot
         {
-            AdminAuthMode = NormalizeAuthMode(options.ControlAdminAuthMode),
+            AdminAuthMode = ControlAuthMode,
             AdminSharedToken = string.IsNullOrWhiteSpace(options.ControlAdminSharedToken) ? null : options.ControlAdminSharedToken.Trim()
         };
         var needsStartupBackfillPersist = !File.Exists(_settingsPath);
@@ -281,7 +289,7 @@ public sealed class CoreSettingsService
 
                     if (parsed.ControlRuntime != null)
                     {
-                        controlRuntime.AdminAuthMode = NormalizeAuthMode(parsed.ControlRuntime.AdminAuthMode);
+                        controlRuntime.AdminAuthMode = parsed.ControlRuntime.AdminAuthMode ?? string.Empty;
                         controlRuntime.AdminSharedToken = string.IsNullOrWhiteSpace(parsed.ControlRuntime.AdminSharedToken)
                             ? null
                             : parsed.ControlRuntime.AdminSharedToken.Trim();
@@ -440,16 +448,6 @@ public sealed class CoreSettingsService
             filesAfterCreate[0].Delete();
             filesAfterCreate.RemoveAt(0);
         }
-    }
-
-    private static string NormalizeAuthMode(string? value)
-    {
-        if (string.Equals(value, "TokenRequired", StringComparison.OrdinalIgnoreCase))
-        {
-            return "TokenRequired";
-        }
-
-        return "Off";
     }
 
     private sealed class CoreSettingsDocument

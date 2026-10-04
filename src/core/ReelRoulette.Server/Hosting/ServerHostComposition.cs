@@ -46,7 +46,7 @@ public static class ServerHostComposition
         services.AddSingleton<ApiTelemetryService>();
         services.AddSingleton<ConnectedClientTracker>();
         services.AddSingleton<OperatorTestingService>();
-        services.AddSingleton<ServerLogService>();
+        services.AddSingleton(_ => new ServerLogService());
         services.AddHostedService(sp => sp.GetRequiredService<RefreshPipelineService>());
     }
 
@@ -103,15 +103,13 @@ public static class ServerHostComposition
             app.UseCors(WebClientCorsPolicyName);
         }
 
-        if (options.RequireAuth)
+        // Installed whether or not API pairing is required: the control plane always needs it.
+        app.Use((context, next) =>
         {
-            app.Use((context, next) =>
-            {
-                var sessions = context.RequestServices.GetRequiredService<ServerSessionStore>();
-                var settings = context.RequestServices.GetRequiredService<CoreSettingsService>();
-                return new ServerPairingAuthMiddleware(next, options, sessions, settings).InvokeAsync(context);
-            });
-        }
+            var sessions = context.RequestServices.GetRequiredService<ServerSessionStore>();
+            var settings = context.RequestServices.GetRequiredService<CoreSettingsService>();
+            return new ServerPairingAuthMiddleware(next, options, sessions, settings).InvokeAsync(context);
+        });
 
         app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
@@ -125,14 +123,9 @@ public static class ServerHostComposition
             return HandlePairRequest(context, request?.Token, options, sessions);
         });
 
-        app.MapGet("/control/pair", (HttpContext context, string? token, ServerSessionStore sessions, CoreSettingsService settings) =>
+        app.MapPost("/control/pair", (HttpContext context, PairRequest? request, ServerSessionStore sessions, CoreSettingsService settings, ServerLogService logs) =>
         {
-            return HandleControlPairRequest(context, token, options, settings, sessions);
-        });
-
-        app.MapPost("/control/pair", (HttpContext context, PairRequest? request, ServerSessionStore sessions, CoreSettingsService settings) =>
-        {
-            return HandleControlPairRequest(context, request?.Token, options, settings, sessions);
+            return HandleControlPairRequest(context, request?.Token, options, settings, sessions, logs);
         });
 
         app.MapGet("/api/version", (ServerStateService state, OperatorTestingService testingService) =>
@@ -207,24 +200,9 @@ public static class ServerHostComposition
             return Results.Ok(settings.GetControlRuntimeSettings());
         });
 
-        app.MapPost("/control/settings", (HttpContext context, ControlRuntimeSettingsSnapshot snapshot, CoreSettingsService settings) =>
+        app.MapPost("/control/settings", (HttpContext context, ControlRuntimeSettingsSnapshot snapshot, CoreSettingsService settings, ServerSessionStore sessions) =>
         {
-            var devChannelBefore = settings.GetControlRuntimeSettings().DevChannelEnabled;
-            var (appliedSettings, applyResult) = settings.UpdateControlRuntimeSettings(snapshot);
-            if (applyResult.Accepted)
-            {
-                var devChannelAfter = settings.GetControlRuntimeSettings().DevChannelEnabled;
-                if (devChannelBefore != devChannelAfter)
-                {
-                    context.RequestServices.GetService<IServerUpdateChannelCoordinator>()?.NotifyDevChannelChanged();
-                }
-            }
-
-            return Results.Ok(new
-            {
-                settings = appliedSettings,
-                result = applyResult
-            });
+            return UpdateControlSettings(context, snapshot, options, settings, sessions);
         });
 
         app.MapGet("/control/logs/server", (int? tail, string? contains, string? level, ServerLogService logs) =>
@@ -238,50 +216,9 @@ public static class ServerHostComposition
             return Results.Ok(testingService.GetSnapshot());
         });
 
-        app.MapPost("/control/testing/update", (HttpContext context, OperatorTestingUpdateRequest request, OperatorTestingService testingService, CoreSettingsService settings, ServerSessionStore sessions) =>
-        {
-            if (!IsTestingControlAuthorized(context, settings, options, sessions))
-            {
-                return Results.Json(new { error = "Unauthorized. Control testing actions require admin auth when AdminAuthMode=TokenRequired." }, statusCode: StatusCodes.Status401Unauthorized);
-            }
+        app.MapPost("/control/testing/update", UpdateTesting);
 
-            var current = testingService.GetSnapshot();
-            var mutatesFaultFlags =
-                request.ForceApiVersionMismatch.HasValue ||
-                request.ForceCapabilityMismatch.HasValue ||
-                request.ForceApiUnavailable.HasValue ||
-                request.ForceMediaMissing.HasValue ||
-                request.ForceSseDisconnect.HasValue;
-            var enablingTestingMode = request.TestingModeEnabled == true;
-            if (mutatesFaultFlags && !current.TestingModeEnabled && !enablingTestingMode)
-            {
-                return Results.Json(new { error = "Testing mode is required before enabling scenario/fault flags." }, statusCode: StatusCodes.Status409Conflict);
-            }
-
-            var updated = testingService.Apply(request);
-            return Results.Ok(new OperatorTestingActionResponse
-            {
-                Accepted = true,
-                Message = "Testing state updated.",
-                State = updated
-            });
-        });
-
-        app.MapPost("/control/testing/reset", (HttpContext context, OperatorTestingService testingService, CoreSettingsService settings, ServerSessionStore sessions) =>
-        {
-            if (!IsTestingControlAuthorized(context, settings, options, sessions))
-            {
-                return Results.Json(new { error = "Unauthorized. Control testing actions require admin auth when AdminAuthMode=TokenRequired." }, statusCode: StatusCodes.Status401Unauthorized);
-            }
-
-            var updated = testingService.Reset();
-            return Results.Ok(new OperatorTestingActionResponse
-            {
-                Accepted = true,
-                Message = "Testing scenario flags reset.",
-                State = updated
-            });
-        });
+        app.MapPost("/control/testing/reset", ResetTesting);
 
         app.MapGet("/api/presets", (ServerStateService state, LibraryPlaybackService playback) =>
         {
@@ -1004,12 +941,13 @@ public static class ServerHostComposition
         return Results.Ok(new { paired = true, message = "Paired successfully" });
     }
 
-    private static IResult HandleControlPairRequest(
+    internal static IResult HandleControlPairRequest(
         HttpContext context,
         string? token,
         ServerRuntimeOptions options,
         CoreSettingsService settings,
-        ServerSessionStore sessions)
+        ServerSessionStore sessions,
+        ServerLogService logs)
     {
         if (!IsLocalRequest(context) && !settings.GetWebRuntimeSettings().BindOnLan)
         {
@@ -1017,19 +955,21 @@ public static class ServerHostComposition
         }
 
         var control = settings.GetControlRuntimeSettings();
-        if (!string.Equals(control.AdminAuthMode, "TokenRequired", StringComparison.OrdinalIgnoreCase))
-        {
-            return Results.Ok(new { paired = true, message = "Control admin auth disabled" });
-        }
-
-        var effectiveToken = token ?? context.Request.Query["token"].ToString();
         if (string.IsNullOrWhiteSpace(control.AdminSharedToken) ||
-            string.IsNullOrWhiteSpace(effectiveToken) ||
-            !string.Equals(control.AdminSharedToken, effectiveToken, StringComparison.Ordinal))
+            string.IsNullOrWhiteSpace(token) ||
+            !string.Equals(control.AdminSharedToken, token, StringComparison.Ordinal))
         {
+            var remote = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+            logs.Append("warn", $"Control pairing failed from {remote}: wrong or missing control token.");
             return Results.Json(new { error = "Unauthorized" }, statusCode: StatusCodes.Status401Unauthorized);
         }
 
+        IssueControlSession(context, options, sessions);
+        return Results.Ok(new { paired = true, message = "Control paired successfully" });
+    }
+
+    private static void IssueControlSession(HttpContext context, ServerRuntimeOptions options, ServerSessionStore sessions)
+    {
         var sessionId = sessions.CreateSession(
             ServerSessionStore.ControlScope,
             DateTimeOffset.UtcNow,
@@ -1039,8 +979,6 @@ public static class ServerHostComposition
             options.ControlAdminCookieName,
             sessionId,
             PairingCookiePolicy.BuildCookieOptions(options, context.Request.IsHttps));
-
-        return Results.Ok(new { paired = true, message = "Control paired successfully" });
     }
 
     private static async Task WriteSseEnvelopeAsync(
@@ -1090,47 +1028,80 @@ public static class ServerHostComposition
         };
     }
 
-    private static bool IsTestingControlAuthorized(
+    internal static IResult UpdateControlSettings(
         HttpContext context,
-        CoreSettingsService settings,
+        ControlRuntimeSettingsSnapshot snapshot,
         ServerRuntimeOptions options,
+        CoreSettingsService settings,
         ServerSessionStore sessions)
     {
-        var control = settings.GetControlRuntimeSettings();
-        if (!string.Equals(control.AdminAuthMode, "TokenRequired", StringComparison.OrdinalIgnoreCase))
+        var before = settings.GetControlRuntimeSettings();
+        var (appliedSettings, applyResult) = settings.UpdateControlRuntimeSettings(snapshot);
+        if (applyResult.Accepted)
         {
-            return true;
-        }
-
-        if (context.Request.Cookies.TryGetValue(options.ControlAdminCookieName, out var cookieValue) &&
-            sessions.IsSessionValid(ServerSessionStore.ControlScope, cookieValue, DateTimeOffset.UtcNow))
-        {
-            return true;
-        }
-
-        if (string.IsNullOrWhiteSpace(control.AdminSharedToken) || !options.AllowLegacyTokenAuth)
-        {
-            return false;
-        }
-
-        var authHeader = context.Request.Headers.Authorization.ToString();
-        if (authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
-        {
-            var token = authHeader["Bearer ".Length..].Trim();
-            if (string.Equals(token, control.AdminSharedToken, StringComparison.Ordinal))
+            if (!string.Equals(before.AdminSharedToken, appliedSettings.AdminSharedToken, StringComparison.Ordinal))
             {
-                return true;
+                // A new control token ends every control session, so a leaked token stops working everywhere.
+                var ended = sessions.EndSessions(ServerSessionStore.ControlScope);
+                context.RequestServices.GetService<ServerLogService>()?.Append(
+                    "info",
+                    $"Control token changed; ended {ended} control session(s).");
+
+                // A non-local caller gets a fresh session so the rest of its save still goes through.
+                if (!IsLocalRequest(context))
+                {
+                    IssueControlSession(context, options, sessions);
+                }
+            }
+
+            if (before.DevChannelEnabled != appliedSettings.DevChannelEnabled)
+            {
+                context.RequestServices.GetService<IServerUpdateChannelCoordinator>()?.NotifyDevChannelChanged();
             }
         }
 
-        var queryToken = context.Request.Query["token"].ToString();
-        return !string.IsNullOrWhiteSpace(queryToken) &&
-               string.Equals(queryToken, control.AdminSharedToken, StringComparison.Ordinal);
+        return Results.Ok(new
+        {
+            settings = appliedSettings,
+            result = applyResult
+        });
     }
 
-    /// <summary>
-    /// Saves refresh settings through the pipeline so the next automatic run follows the new interval.
-    /// </summary>
+    internal static IResult UpdateTesting(OperatorTestingUpdateRequest request, OperatorTestingService testingService)
+    {
+        var current = testingService.GetSnapshot();
+        var mutatesFaultFlags =
+            request.ForceApiVersionMismatch.HasValue ||
+            request.ForceCapabilityMismatch.HasValue ||
+            request.ForceApiUnavailable.HasValue ||
+            request.ForceMediaMissing.HasValue ||
+            request.ForceSseDisconnect.HasValue;
+        var enablingTestingMode = request.TestingModeEnabled == true;
+        if (mutatesFaultFlags && !current.TestingModeEnabled && !enablingTestingMode)
+        {
+            return Results.Json(new { error = "Testing mode is required before enabling scenario/fault flags." }, statusCode: StatusCodes.Status409Conflict);
+        }
+
+        var updated = testingService.Apply(request);
+        return Results.Ok(new OperatorTestingActionResponse
+        {
+            Accepted = true,
+            Message = "Testing state updated.",
+            State = updated
+        });
+    }
+
+    internal static IResult ResetTesting(OperatorTestingService testingService)
+    {
+        var updated = testingService.Reset();
+        return Results.Ok(new OperatorTestingActionResponse
+        {
+            Accepted = true,
+            Message = "Testing scenario flags reset.",
+            State = updated
+        });
+    }
+
     internal static IResult UpdateRefreshSettings(RefreshSettingsSnapshot snapshot, RefreshPipelineService refresh)
     {
         return Results.Ok(refresh.UpdateSettings(snapshot));

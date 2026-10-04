@@ -59,6 +59,24 @@ public sealed class ServerSessionStore
         }
     }
 
+    public int EndSessions(string scope)
+    {
+        var normalizedScope = NormalizeScope(scope);
+        lock (_lock)
+        {
+            var ended = _sessions
+                .Where(kvp => string.Equals(kvp.Value.Scope, normalizedScope, StringComparison.Ordinal))
+                .Select(kvp => kvp.Key)
+                .ToList();
+            foreach (var sessionId in ended)
+            {
+                _sessions.Remove(sessionId);
+            }
+
+            return ended.Count;
+        }
+    }
+
     public IReadOnlyList<SessionSnapshot> GetActiveSessions(string scope, DateTimeOffset nowUtc, int maxCount = 100)
     {
         var normalizedScope = NormalizeScope(scope);

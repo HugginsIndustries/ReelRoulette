@@ -35,8 +35,8 @@ public sealed class CoreSettingsServiceTests : IDisposable
         Assert.Equal("reel", web.LanHostname);
         Assert.Equal("TokenRequired", web.AuthMode);
         Assert.Null(web.SharedToken);
-        Assert.Equal("Off", control.AdminAuthMode);
-        Assert.Null(control.AdminSharedToken);
+        Assert.Equal("TokenRequired", control.AdminAuthMode);
+        Assert.False(string.IsNullOrWhiteSpace(control.AdminSharedToken));
         Assert.False(control.DevChannelEnabled.GetValueOrDefault());
     }
 
@@ -186,8 +186,8 @@ public sealed class CoreSettingsServiceTests : IDisposable
 
         var result = service.UpdateControlRuntimeSettings(new ReelRoulette.Server.Contracts.ControlRuntimeSettingsSnapshot
         {
-            AdminAuthMode = "Off",
-            AdminSharedToken = null,
+            AdminAuthMode = "TokenRequired",
+            AdminSharedToken = service.GetControlRuntimeSettings().AdminSharedToken,
             DevChannelEnabled = true
         });
 
@@ -203,15 +203,15 @@ public sealed class CoreSettingsServiceTests : IDisposable
 
         service.UpdateControlRuntimeSettings(new ReelRoulette.Server.Contracts.ControlRuntimeSettingsSnapshot
         {
-            AdminAuthMode = "Off",
-            AdminSharedToken = null,
+            AdminAuthMode = "TokenRequired",
+            AdminSharedToken = service.GetControlRuntimeSettings().AdminSharedToken,
             DevChannelEnabled = true
         });
 
         var result = service.UpdateControlRuntimeSettings(new ReelRoulette.Server.Contracts.ControlRuntimeSettingsSnapshot
         {
-            AdminAuthMode = "Off",
-            AdminSharedToken = null,
+            AdminAuthMode = "TokenRequired",
+            AdminSharedToken = service.GetControlRuntimeSettings().AdminSharedToken,
             DevChannelEnabled = null
         });
 
@@ -230,8 +230,8 @@ public sealed class CoreSettingsServiceTests : IDisposable
 
         service.UpdateControlRuntimeSettings(new ReelRoulette.Server.Contracts.ControlRuntimeSettingsSnapshot
         {
-            AdminAuthMode = "Off",
-            AdminSharedToken = null,
+            AdminAuthMode = "TokenRequired",
+            AdminSharedToken = service.GetControlRuntimeSettings().AdminSharedToken,
             DevChannelEnabled = true
         });
 

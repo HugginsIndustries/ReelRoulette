@@ -27,7 +27,6 @@ public sealed class ServerRuntimeOptions
     public bool BackupEnabled { get; set; } = true;
     public int MinimumBackupGapMinutes { get; set; } = 360;
     public int NumberOfBackups { get; set; } = 8;
-    public string ControlAdminAuthMode { get; set; } = "Off";
     public string? ControlAdminSharedToken { get; set; }
     public string ControlAdminCookieName { get; set; } = "rr_admin";
 
@@ -68,16 +67,9 @@ public sealed class ServerRuntimeOptions
         options.FingerprintScanMaxDegreeOfParallelism = Math.Clamp(options.FingerprintScanMaxDegreeOfParallelism, 1, 16);
         options.MinimumBackupGapMinutes = Math.Clamp(options.MinimumBackupGapMinutes, 1, 10080);
         options.NumberOfBackups = Math.Clamp(options.NumberOfBackups, 1, 100);
-        options.ControlAdminAuthMode = NormalizeControlAuthMode(options.ControlAdminAuthMode);
         if (string.IsNullOrWhiteSpace(options.ControlAdminSharedToken))
         {
             options.ControlAdminSharedToken = null;
-        }
-
-        if (string.Equals(options.ControlAdminAuthMode, "TokenRequired", StringComparison.Ordinal) &&
-            string.IsNullOrWhiteSpace(options.ControlAdminSharedToken))
-        {
-            options.ControlAdminSharedToken = Guid.NewGuid().ToString("N");
         }
 
         if (string.IsNullOrWhiteSpace(options.ControlAdminCookieName))
@@ -126,15 +118,5 @@ public sealed class ServerRuntimeOptions
         }
 
         return "Request";
-    }
-
-    private static string NormalizeControlAuthMode(string? value)
-    {
-        if (string.Equals(value, "TokenRequired", StringComparison.OrdinalIgnoreCase))
-        {
-            return "TokenRequired";
-        }
-
-        return "Off";
     }
 }

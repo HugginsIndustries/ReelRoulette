@@ -307,8 +307,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Pair control-plane session and issue admin cookie */
-        get: operations["getControlPair"];
+        get?: never;
         put?: never;
         /** Pair control-plane session and issue admin cookie */
         post: operations["postControlPair"];
@@ -1022,8 +1021,12 @@ export interface components {
             velopackInstalled: boolean;
         };
         ControlRuntimeSettingsSnapshot: {
-            /** @enum {string} */
+            /**
+             * @description Read-only. GET always returns TokenRequired, and a posted value is ignored: every non-local control request needs the control token.
+             * @enum {string}
+             */
             adminAuthMode: "Off" | "TokenRequired";
+            /** @description The control token. The server generates and saves one on start when none is set. POST rejects an empty value, and a changed token ends every control session. */
             adminSharedToken?: string | null;
             /** @description When omitted or null on POST, the persisted dev-channel preference is left unchanged. GET always returns the current boolean value (stable or dev update channel). */
             devChannelEnabled?: boolean | null;
@@ -1796,7 +1799,7 @@ export interface operations {
                     "application/json": components["schemas"]["RestartResponse"];
                 };
             };
-            /** @description Unauthorized when control admin auth is required and request is not paired */
+            /** @description Unauthorized when a non-local request has no control session or control token */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -1843,7 +1846,7 @@ export interface operations {
                     "application/json": components["schemas"]["RestartResponse"];
                 };
             };
-            /** @description Unauthorized when control admin auth is required and request is not paired */
+            /** @description Unauthorized when a non-local request has no control session or control token */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -1890,7 +1893,7 @@ export interface operations {
                     "application/json": components["schemas"]["ServerUpdateStatusResponse"];
                 };
             };
-            /** @description Unauthorized when control admin auth is required and request is not paired */
+            /** @description Unauthorized when a non-local request has no control session or control token */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -1928,7 +1931,7 @@ export interface operations {
                     "application/json": components["schemas"]["ServerUpdateActionResponse"];
                 };
             };
-            /** @description Unauthorized when control admin auth is required and request is not paired */
+            /** @description Unauthorized when a non-local request has no control session or control token */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -1966,7 +1969,7 @@ export interface operations {
                     "application/json": components["schemas"]["ServerUpdateActionResponse"];
                 };
             };
-            /** @description Unauthorized when control admin auth is required and request is not paired */
+            /** @description Unauthorized when a non-local request has no control session or control token */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -2004,7 +2007,7 @@ export interface operations {
                     "application/json": components["schemas"]["ServerUpdateActionResponse"];
                 };
             };
-            /** @description Unauthorized when control admin auth is required and request is not paired */
+            /** @description Unauthorized when a non-local request has no control session or control token */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -2042,7 +2045,7 @@ export interface operations {
                     "application/json": components["schemas"]["ControlStatusResponse"];
                 };
             };
-            /** @description Unauthorized when control admin auth is required and request is not paired */
+            /** @description Unauthorized when a non-local request has no control session or control token */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -2080,7 +2083,7 @@ export interface operations {
                     "application/json": components["schemas"]["ControlRuntimeSettingsSnapshot"];
                 };
             };
-            /** @description Unauthorized when control admin auth is required and request is not paired */
+            /** @description Unauthorized when a non-local request has no control session or control token */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -2122,7 +2125,7 @@ export interface operations {
                     "application/json": components["schemas"]["ControlSettingsApplyResponse"];
                 };
             };
-            /** @description Unauthorized when control admin auth is required and request is not paired */
+            /** @description Unauthorized when a non-local request has no control session or control token */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -2160,7 +2163,7 @@ export interface operations {
                     "application/json": components["schemas"]["StartupLaunchStatus"];
                 };
             };
-            /** @description Unauthorized when control admin auth is required and request is not paired */
+            /** @description Unauthorized when a non-local request has no control session or control token */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -2202,7 +2205,7 @@ export interface operations {
                     "application/json": components["schemas"]["StartupLaunchResult"];
                 };
             };
-            /** @description Unauthorized when control admin auth is required and request is not paired */
+            /** @description Unauthorized when a non-local request has no control session or control token */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -2256,7 +2259,7 @@ export interface operations {
                     "application/json": components["schemas"]["ServerLogResponse"];
                 };
             };
-            /** @description Unauthorized when control admin auth is required and request is not paired */
+            /** @description Unauthorized when a non-local request has no control session or control token */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -2294,7 +2297,7 @@ export interface operations {
                     "application/json": components["schemas"]["OperatorTestingStateSnapshot"];
                 };
             };
-            /** @description Unauthorized when control admin auth is required and request is not paired */
+            /** @description Unauthorized when a non-local request has no control session or control token */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -2336,7 +2339,7 @@ export interface operations {
                     "application/json": components["schemas"]["OperatorTestingActionResponse"];
                 };
             };
-            /** @description Unauthorized for testing actions while control admin auth is required */
+            /** @description Unauthorized when a non-local request has no control session or control token */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -2383,7 +2386,7 @@ export interface operations {
                     "application/json": components["schemas"]["OperatorTestingActionResponse"];
                 };
             };
-            /** @description Unauthorized for testing actions while control admin auth is required */
+            /** @description Unauthorized when a non-local request has no control session or control token */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -2393,46 +2396,6 @@ export interface operations {
                 };
             };
             /** @description Forbidden when request is non-local and LAN control access is disabled */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    getControlPair: {
-        parameters: {
-            query?: {
-                token?: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Control pairing succeeded or admin auth disabled */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PairResponse"];
-                };
-            };
-            /** @description Invalid token */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Control LAN access disabled */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2456,7 +2419,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Control pairing succeeded or admin auth disabled */
+            /** @description Control pairing succeeded and the admin cookie is set */
             200: {
                 headers: {
                     [name: string]: unknown;

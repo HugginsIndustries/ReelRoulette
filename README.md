@@ -12,6 +12,7 @@ ReelRoulette is a server-first media randomizer with thin desktop and web client
   - WebUI static assets
   - Operator UI (`/operator`)
 - Control-plane/admin operations are exposed under `/control/*` (status, settings, pair, restart, stop, testing, logs).
+- The Operator opens directly on the server machine. From another machine it first asks for the control token, which is shown under Control Settings in the Operator on the server machine. On a server with no browser, the token is `controlRuntime.adminSharedToken` in `core-settings.json` in the server data folder (see [docs/dev-setup.md](docs/dev-setup.md#user-data-locations)). Requests that a proxy on the server machine forwards, such as Tailscale Serve, arrive from localhost and do not ask for it.
 - Desktop and WebUI act as API/SSE clients; server/core owns authoritative domain state.
 
 ## Prerequisites

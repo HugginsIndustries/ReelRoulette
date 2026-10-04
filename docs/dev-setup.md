@@ -110,6 +110,7 @@ For broader manual passes, use `docs/checklists/testing-checklist.md` and `pwsh 
 ## Auth, CORS, and Runtime Settings Notes
 
 - Pairing/auth is server enforced via `/api/pair` and runtime policy.
+- Control routes trust localhost and need the control token from any other address; see the control-plane auth rules in `docs/api.md`. The token is `controlRuntime.adminSharedToken` in `core-settings.json` under the data folder below, generated on first start when none is set.
 - Browser-client CORS and cookie behavior is controlled by `CoreServer` settings.
 - Some settings changes require restart to fully apply (for example listen/auth/WebUI availability changes); use `/control/restart` or restart the process.
 - `FormOptions.MultipartBodyLengthLimit` is set to **512 MB** in `src/core/ReelRoulette.ServerApp/Program.cs` for any future multipart endpoints; **no shipped API route currently uses multipart uploads**, so this is host-level configuration only for now.

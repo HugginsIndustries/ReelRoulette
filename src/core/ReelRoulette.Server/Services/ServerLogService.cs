@@ -5,12 +5,31 @@ namespace ReelRoulette.Server.Services;
 public sealed class ServerLogService
 {
     private readonly string _logPath;
+    private readonly ILogger? _logger;
 
     public ServerLogService()
+        : this(ServerDataPaths.DataDirectory())
     {
-        var appData = ServerDataPaths.DataDirectory();
-        Directory.CreateDirectory(appData);
-        _logPath = Path.Combine(appData, "last.log");
+    }
+
+    public ServerLogService(string appDataDirectory, ILogger? logger = null)
+    {
+        Directory.CreateDirectory(appDataDirectory);
+        _logPath = Path.Combine(appDataDirectory, "last.log");
+        _logger = logger;
+    }
+
+    public void Append(string level, string message)
+    {
+        try
+        {
+            File.AppendAllText(_logPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] [server] [{level}] {message}{Environment.NewLine}");
+        }
+        catch (Exception ex)
+        {
+            // Logging must not fail the request that wrote it.
+            _logger?.LogWarning(ex, "Failed to append to last.log.");
+        }
     }
 
     public ServerLogResponse Read(int tail, string? contains, string? level)

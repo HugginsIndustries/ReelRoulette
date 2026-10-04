@@ -88,6 +88,7 @@ Boundary:
 Includes:
 
 - control-plane surfaces (`/control/status`, `/control/settings`, `/control/pair`, `/control/restart`, `/control/stop`, `/control/update/*`, testing/log endpoints),
+- control-plane auth in `src/core/ReelRoulette.Server/Auth/ServerPairingAuthMiddleware.cs` (localhost trusted; every other address needs the control token) and control token generation in `CoreSettingsService`,
 - startup-launch control surface (`/control/startup`),
 - operator diagnostics and manual testing controls.
 

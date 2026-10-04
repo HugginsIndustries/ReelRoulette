@@ -228,9 +228,24 @@ try {
             throw "Expected /control/settings GET to return 200."
         }
 
-        $controlSettingsPost = Invoke-WebRequest -Uri "$listenUrl/control/settings" -UseBasicParsing -TimeoutSec 5 -Method Post -ContentType "application/json" -Body '{"adminAuthMode":"Off","adminSharedToken":null}'
+        $controlSettings = $controlSettingsGet.Content | ConvertFrom-Json
+        if ($controlSettings.adminAuthMode -ne "TokenRequired" -or [string]::IsNullOrWhiteSpace($controlSettings.adminSharedToken)) {
+            throw "Expected /control/settings to report TokenRequired and a generated control token."
+        }
+
+        $controlSettingsBody = @{ adminAuthMode = "TokenRequired"; adminSharedToken = $controlSettings.adminSharedToken } | ConvertTo-Json -Compress
+        $controlSettingsPost = Invoke-WebRequest -Uri "$listenUrl/control/settings" -UseBasicParsing -TimeoutSec 5 -Method Post -ContentType "application/json" -Body $controlSettingsBody
         if ($controlSettingsPost.StatusCode -ne 200) {
             throw "Expected /control/settings POST to return 200."
+        }
+        if (-not ($controlSettingsPost.Content | ConvertFrom-Json).result.accepted) {
+            throw "Expected /control/settings POST with the current control token to be accepted."
+        }
+
+        # Localhost is trusted for every control route, including the testing routes.
+        $testingReset = Invoke-WebRequest -Uri "$listenUrl/control/testing/reset" -UseBasicParsing -TimeoutSec 5 -Method Post
+        if ($testingReset.StatusCode -ne 200) {
+            throw "Expected localhost /control/testing/reset to return 200 without the control token."
         }
 
         if ($serverProcess.HasExited) {
