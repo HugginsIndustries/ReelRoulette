@@ -23,6 +23,7 @@ ReelRoulette is migrating from a monolithic desktop app to a thin-client, API-fi
   - When the server starts stopping, it ends open event streams and cuts media responses still being sent, so stop, restart, and update apply do not wait for connected clients.
   - Host-UI abstraction keeps server runtime tray-agnostic:
     - Uses a cross-platform Avalonia tray host when available (lifecycle/refresh/operator shortcuts). The tray runs until the server shuts it down, always on the tray's UI thread. If the tray ends without that, `last.log` records it and the server keeps running.
+    - The tray loads the Fluent theme, since on Windows Avalonia draws the tray menu as its own window. `last.log` records tray icon clicks, each time the Windows tray menu opens (with its size and item count) and closes, failed or rejected tray menu actions, tray UI errors, and Avalonia warnings and errors, each written once per run.
     - Falls back to a deterministic headless host when a tray cannot be created.
   - Startup-launch registration is host-managed with immediate toggle support through tray and Operator control settings:
     - Windows: user-scoped `HKCU` registration.
@@ -82,7 +83,7 @@ ReelRoulette is migrating from a monolithic desktop app to a thin-client, API-fi
   - `ReelRoulette.Core`: domain + storage/state logic.
   - `ReelRoulette.Server`: thin transport/composition layer.
   - `ReelRoulette.ServerApp`: default host/runtime + operator surfaces.
-  - `ReelRoulette.Core.Tests` and `ReelRoulette.Core.SystemChecks`.
+  - `ReelRoulette.Core.Tests`, `ReelRoulette.ServerApp.Tests`, and `ReelRoulette.Core.SystemChecks`.
 - `src/clients/`:
   - `web/ReelRoulette.WebUI`: active web client.
   - `desktop/ReelRoulette.DesktopApp`: shipping Desktop client location (Avalonia).

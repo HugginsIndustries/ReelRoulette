@@ -19,10 +19,9 @@ Instructions:
 
 Commit Message:
 
-Chore: Replace milestone deferrals with backlog items and Not included lines
+Bugfix: Render the Windows tray menu and log tray problems to last.log
 
-- Remove the Deferrals / Follow-ups section from active and planned milestones and from the milestone template; completed milestones keep theirs as history.
-- Move future work into the milestones that will do it: WebUI recovery after a mid-video server restart into resume position, previous favorite and blacklist values into item IDs in the contract, and keyset paging as a fallback slice in library query performance, with acceptance criteria where needed.
-- Turn scope boundaries into `Not included:` lines in Scope, and drop two entries already recorded in the milestones they pointed to.
-- Check in `check-milestones.ps1` that a `Not included:` line names an existing milestone after "which is", with fixture cases.
-- Update the maintenance rules, `AGENTS.md`, the implement, plan-from-report, and review-fix skills, the testing checklist rule, and `docs/dev-setup.md` to match.
+- Load the Fluent theme in the tray app. On Windows, Avalonia draws the tray menu as its own window, and without a theme it opened at zero size with no items, so right-clicking showed nothing.
+- Write tray icon clicks, each Windows tray menu open (size and item count) and close, failed or rejected tray menu actions, tray UI errors, and Avalonia warnings and errors (each once per run) to `last.log`, so the next Windows check shows where the menu fails if it still does.
+- Add a server host test project with a headless test that opens Avalonia's Windows tray menu window in the tray app and checks it shows every menu item and logs the open.
+- Update `CONTEXT.md`, `docs/dev-setup.md`, `docs/domain-inventory.md`, and the Windows tray menu checklist item.

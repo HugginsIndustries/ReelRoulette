@@ -3,13 +3,19 @@ using System.Threading;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Logging;
+using Avalonia.Themes.Fluent;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using ReelRoulette.Server.Services;
 
 namespace ReelRoulette.ServerApp.Hosting;
 
 internal sealed class AvaloniaTrayHostUi : IHostUi
 {
+    // Avalonia names the window it opens for the tray menu on Windows with this prefix.
+    internal const string MenuWindowNamePrefix = "AvaloniaTrayPopupRoot_";
+
     private readonly ILogger _logger;
     private readonly ServerLogService _serverLog;
     private readonly string _operatorUrl;
@@ -139,12 +145,12 @@ internal sealed class AvaloniaTrayHostUi : IHostUi
         try
         {
             TrayApp.Owner = this;
+            Logger.Sink = new AvaloniaLastLogSink(_serverLog);
             // On Windows the tray menu is a temporary window, so the default last-window rule would end the tray
             // when the menu closes. Every intended exit shuts the tray down explicitly.
             AppBuilder
                 .Configure<TrayApp>()
                 .UsePlatformDetect()
-                .LogToTrace()
                 .StartWithClassicDesktopLifetime(Array.Empty<string>(), ShutdownMode.OnExplicitShutdown);
         }
         catch (Exception ex)
@@ -239,6 +245,13 @@ internal sealed class AvaloniaTrayHostUi : IHostUi
         _desktopLifetime = desktopLifetime;
         try
         {
+            Dispatcher.UIThread.UnhandledException += (_, e) =>
+            {
+                _logger.LogError(e.Exception, "Tray UI error.");
+                _serverLog.Append("error", $"Tray UI error: {e.Exception.GetType().Name}: {e.Exception.Message}");
+            };
+            RegisterMenuProbe();
+
             var menu = CreateMenu();
             var icon = new TrayIcon
             {
@@ -246,6 +259,7 @@ internal sealed class AvaloniaTrayHostUi : IHostUi
                 Menu = menu,
                 IsVisible = true
             };
+            icon.Clicked += (_, _) => _serverLog.Append("info", "Tray icon clicked.");
 
             var trayIcon = LoadTrayIcon();
             if (trayIcon is not null)
@@ -269,7 +283,49 @@ internal sealed class AvaloniaTrayHostUi : IHostUi
         }
     }
 
-    private NativeMenu CreateMenu()
+    /// <summary>
+    /// Writes to <c>last.log</c> when the tray menu window opens, with its size and item count, and when it closes.
+    /// The window exists only on Windows, where Avalonia draws the tray menu itself.
+    /// </summary>
+    internal void RegisterMenuProbe()
+    {
+        Window.WindowOpenedEvent.AddClassHandler<Window>((window, _) => OnWindowOpened(window));
+    }
+
+    private void OnWindowOpened(Window window)
+    {
+        if (window.Name?.StartsWith(MenuWindowNamePrefix, StringComparison.Ordinal) != true)
+        {
+            return;
+        }
+
+        var openTime = Stopwatch.StartNew();
+        var closing = false;
+        var lostFocus = false;
+        window.Closing += (_, _) => closing = true;
+        window.Deactivated += (_, _) => lostFocus |= !closing;
+        window.Closed += (_, _) => _serverLog.Append(
+            "info",
+            $"Tray menu closed after {openTime.ElapsedMilliseconds} ms{(lostFocus ? " (lost focus)" : "")}.");
+
+        // Layout runs after the window opens, so report the size once it has settled.
+        Dispatcher.UIThread.Post(() =>
+        {
+            var size = window.ClientSize;
+            var itemCount = window.GetVisualDescendants().OfType<MenuItem>().Count();
+            var empty = size.Width < 1 || size.Height < 1 || itemCount == 0;
+            _serverLog.Append(
+                empty ? "warn" : "info",
+                $"Tray menu opened ({size.Width:0}x{size.Height:0}, {itemCount} items){(empty ? "; nothing is visible" : "")}.");
+        }, DispatcherPriority.Background);
+    }
+
+    private void AppendTrayWarning(string message, Exception? ex = null)
+    {
+        _serverLog.Append("warn", ex is null ? message : $"{message}: {ex.Message}");
+    }
+
+    internal NativeMenu CreateMenu()
     {
         var menu = new NativeMenu();
 
@@ -339,6 +395,7 @@ internal sealed class AvaloniaTrayHostUi : IHostUi
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to open operator UI URL {OperatorUrl}.", _operatorUrl);
+            AppendTrayWarning($"Tray could not open the Operator UI at {_operatorUrl}", ex);
         }
     }
 
@@ -357,6 +414,7 @@ internal sealed class AvaloniaTrayHostUi : IHostUi
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Tray menu action failed ({Action}).", actionName);
+            AppendTrayWarning($"Tray menu action failed ({actionName})", ex);
         }
     }
 
@@ -376,6 +434,7 @@ internal sealed class AvaloniaTrayHostUi : IHostUi
             if (!result.Accepted)
             {
                 _logger.LogWarning("Tray menu action was rejected ({Action}): {Message}", actionName, result.Message);
+                AppendTrayWarning($"Tray menu action was rejected ({actionName}): {result.Message}");
                 return;
             }
 
@@ -388,6 +447,7 @@ internal sealed class AvaloniaTrayHostUi : IHostUi
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Tray menu action failed ({Action}).", actionName);
+            AppendTrayWarning($"Tray menu action failed ({actionName})", ex);
         }
     }
 
@@ -401,6 +461,7 @@ internal sealed class AvaloniaTrayHostUi : IHostUi
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to load startup-launch status for tray menu.");
+            AppendTrayWarning("Tray could not load the Launch Server on Startup state", ex);
             await SetStartupMenuStateAsync(supported: true, enabled: false).ConfigureAwait(false);
         }
     }
@@ -435,6 +496,7 @@ internal sealed class AvaloniaTrayHostUi : IHostUi
             if (!result.Accepted)
             {
                 _logger.LogWarning("Tray startup-launch toggle was rejected: {Message}", result.Message);
+                AppendTrayWarning($"Tray Launch Server on Startup toggle was rejected: {result.Message}");
                 return;
             }
 
@@ -444,6 +506,7 @@ internal sealed class AvaloniaTrayHostUi : IHostUi
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Tray startup-launch toggle failed.");
+            AppendTrayWarning("Tray Launch Server on Startup toggle failed", ex);
         }
         finally
         {
@@ -472,9 +535,16 @@ internal sealed class AvaloniaTrayHostUi : IHostUi
         });
     }
 
-    private sealed class TrayApp : Application
+    internal sealed class TrayApp : Application
     {
         public static AvaloniaTrayHostUi? Owner { get; set; }
+
+        public override void Initialize()
+        {
+            // On Windows, Avalonia draws the tray menu as its own window, and without a theme that menu has no
+            // template, so it opens at zero size with no items. Linux draws the menu in the desktop shell.
+            Styles.Add(new FluentTheme());
+        }
 
         public override void OnFrameworkInitializationCompleted()
         {

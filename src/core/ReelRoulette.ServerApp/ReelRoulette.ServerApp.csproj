@@ -17,6 +17,9 @@
     <ProjectReference Include="..\ReelRoulette.Server\ReelRoulette.Server.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <InternalsVisibleTo Include="ReelRoulette.ServerApp.Tests" />
+  </ItemGroup>
+  <ItemGroup>
     <None Include="..\..\..\assets\HI.ico" Link="HI.ico" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\..\assets\HI-256.png" Link="HI-256.png" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\..\assets\HI-512.png" Link="HI-512.png" CopyToOutputDirectory="PreserveNewest" />
@@ -24,6 +27,7 @@
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="12.0.0" />
     <PackageReference Include="Avalonia.Desktop" Version="12.0.0" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.0.0" />
     <PackageReference Include="Tmds.DBus.Protocol" Version="0.92.0" />
     <PackageReference Include="Makaretu.Dns.Multicast">
       <Version>0.27.0</Version>

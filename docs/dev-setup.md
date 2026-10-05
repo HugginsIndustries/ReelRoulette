@@ -19,6 +19,7 @@ This guide covers local setup, run paths, verification gates, packaging, and rel
 - Default runtime host: `src/core/ReelRoulette.ServerApp/ReelRoulette.ServerApp.csproj`
 - WebUI client: `src/clients/web/ReelRoulette.WebUI/ReelRoulette.WebUI.csproj`
 - Core tests: `src/core/ReelRoulette.Core.Tests/ReelRoulette.Core.Tests.csproj`
+- Server host tests: `src/core/ReelRoulette.ServerApp.Tests/ReelRoulette.ServerApp.Tests.csproj`
 - System-check harness: `src/core/ReelRoulette.Core.SystemChecks/ReelRoulette.Core.SystemChecks.csproj`
 
 ## Recommended Local Run Paths
@@ -83,7 +84,8 @@ Desktop behavior notes:
 - `dotnet build ReelRoulette.sln`
 - `dotnet test ReelRoulette.sln`
 - Desktop tests use a temporary settings folder, removed when the run ends, and do not send log lines to a server, so they leave your desktop settings and a running server alone. Filter dialog tests run the real dialog headlessly with `Avalonia.Headless`.
-- Core and server tests set `REELROULETTE_DATA_DIR` to a temporary folder, removed when the run ends, so server code they run never falls back to your real data folders. On Linux they also point `XDG_CONFIG_HOME` and `XDG_DATA_HOME` at temporary folders.
+- Server host tests open the tray menu window Avalonia uses on Windows, headlessly with `Avalonia.Headless`, and check that it shows every menu item.
+- Core, server, and server host tests set `REELROULETTE_DATA_DIR` to a temporary folder, removed when the run ends, so server code they run never falls back to your real data folders. On Linux they also point `XDG_CONFIG_HOME` and `XDG_DATA_HOME` at temporary folders.
 
 ### WebUI verification
 
