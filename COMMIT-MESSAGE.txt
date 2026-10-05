@@ -19,8 +19,9 @@ Instructions:
 
 Commit Message:
 
-M10j12: Drop the old milestones layout from the checker
+Docs: Promote the v0.14.1 Performance release to active milestones
 
-- `check-milestones.ps1` reads a base's completed history only from its `MILESTONES-COMPLETED.md`, and refuses a base without one, including a `-BasePath` given without `-BaseCompletedPath`.
-- Remove the `legacy.md` fixture and its two base tests; the leftover Completed Milestones section test now uses a copy of `valid.md` with that section added, and a new test covers the `-BasePath` refusal.
-- Remove the old-layout note from `docs/dev-setup.md`, note that a base without `MILESTONES-COMPLETED.md` is refused, and move the completed milestone to `MILESTONES-COMPLETED.md`.
+- Promote Library Query Performance, Random Selection Performance, Thumbnail Caching, and Item IDs in the Contract as M11a through M11d, in the Planned Releases order.
+- Library query counts are cached on the server by catalog revision, search, and filter instead of skipped on later pages, because both clients read the totals from every page.
+- Random selection builds a cheap id-based signature instead of caching it by revision, which every recorded play raises.
+- Thumbnail caching first checks what browsers already cache, and item IDs in the contract records what the WebUI already matches by id.

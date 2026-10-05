@@ -10,7 +10,7 @@ An outline of upcoming releases and the milestones each one ships, in order. v0.
 The WebUI becomes the only client on every device. The desktop client is frozen to bug fixes (crashes, data loss, broken playback, security) until the desktop removal release, and until then server contract changes only add fields, so the last desktop build keeps working. The native Android client is dropped.
 
 - **v0.14.0 — Cleanup and polish**: Finish the SQLite migration cleanup, fix the defects found since, cut redundant client and refresh event work, and close the control plane to the LAN without a token. M10j1, M10j2, M10j3, M10j4, M10j5, M10j6, M10j7, M10j8, M10j9, M10j10, M10j11, M10j12.
-- **v0.14.1 — Performance**: Make library browse, window reloads, and random selection cheap on large catalogs, cache thumbnails until they change, and identify items by ID in every event and response. P29a, P29b, P29c, P29d.
+- **v0.14.1 — Performance**: Make library browse, window reloads, and random selection cheap on large catalogs, cache thumbnails until they change, and identify items by ID in every event and response. M11a, M11b, M11c, M11d.
 - **v0.15.0 — WebUI overhaul**: Serve the WebUI over HTTPS so it installs as an app, move it to Preact, give it a responsive layout with side panels and phone overlays, and add keyboard shortcuts, stats, settings, an admin section that replaces the Operator page, duplicate review, and Show in File Manager. P28a, P38, P39, P34, P20, P26a, P40, P41, P42, P43, P44, P45, P31.
 - **v0.15.1 — Desktop parity**: Give the WebUI everything else the desktop does, including source management, catalog transfer, multi-select, and a browser-playable filter, while the desktop still ships as a fallback. P26b, P26c, P26d, P37, P46, P47.
 - **v0.16.0 — Desktop removal**: Remove the desktop client, its packaging, and its tests, then move preset writes to per-preset routes. P48, P25.
@@ -110,6 +110,96 @@ Do not use this file for detailed architecture explanation or current capability
 ## Active Milestones
 
 Last milestone completed: M10j12
+
+### M11a - Library Query Performance
+
+- **Status**: ⏳ Planned
+- **Goal**: Library browse pages and loaded-window reloads cost about the same at any scroll depth, and a reload of the loaded window is one request.
+- **Scope**:
+  - Ships in v0.14.1, first in the series.
+  - Measured by the efficiency and divergence report on a copy of a 48,938-item catalog, through the real list query in a Release build: the first 200-item page takes about 50 ms and allocates about 11 MB. The page at offset 10,000 takes 177 ms and 104 MB, and at offset 40,000 takes 221 ms and 154 MB. Reloading 5,000 loaded tiles takes 2.45 s and 1.1 GB.
+  - Causes measured in the same run:
+    - Name order uses `COLLATE ORDINAL_IGNORE_CASE`, a managed collation callback with no index, so every page sorts the whole filtered set. The same page ordered by an indexed binary column takes 0.1 ms, against 19.9 ms with the callback.
+    - Every page also runs two `COUNT(*)` queries of about 13.5 ms each, including on later pages of the same query.
+  - The measurements were not re-run when this milestone was promoted. The code paths they measured are unchanged since the report. The client event efficiency milestone made reloads rarer, but each reload costs the same.
+    - A reload re-reads the window in 200-item pages, one request each, and the query limit is 500.
+  - Add a stored, indexed sort key for file name whose order matches today's `OrdinalIgnoreCase` order, and order name sorts and name tie-breaks by it. A `ToLowerInvariant` key such as the existing `file_name_fold` would change today's order for names containing `_`, `[`, `\`, `]`, `^`, or `` ` ``, which sort after letters today and would sort before them. An uppercase-invariant key should keep it; the sort order tests confirm it. This is a catalog schema change with its own migration.
+  - Cache both counts on the server, keyed by catalog revision, search, and filter, so later pages, appends, and reloads at the same revision do not count again. No contract change. Neither client keeps the totals from the first page: both read `totalCount` from every page and stop a reload once they have that many items, so a later page without counts would end a desktop reload after its second page with a total of 0. Every page keeps returning both counts, and their meaning does not change.
+  - Reload the loaded window in one request. Whether that raises the query limit or adds a reload request with its own bound is decided here; either is a contract change in its own slice.
+  - Library stats: the per-source figures join items to sources by path prefix and re-derive video or photo from the file extension in SQL. Measured: about 90 ms in `sqlite3` and 138 ms through the service. Every item in the measured catalog has a source id and a media type of 0 or 1. Group by source id and media type instead, with the same results.
+  - Drop `idx_item_tags_item_id`, which duplicates the leading `item_id` column of the `item_tags` primary key.
+  - Fallback if deep offsets still cost much more than the first page after the sort key: add a keyset cursor (the last row's sort values) beside offset paging, and move the WebUI to it. Offset paging stays until Desktop Client Removal, so the frozen desktop keeps working. This is a contract change in its own slice and only adds fields.
+  - Measured trap for the tag filter: the tag filter compares `item_tags.name` with the managed collation inside a correlated `EXISTS`, which the planner runs through `idx_item_tags_item_id` and which takes 45 ms for a 22,476-item tag. Rewriting it as `item_tags.name_fold = ?` inside the same `EXISTS` makes the planner use `idx_item_tags_name_fold` for every item, and the same filter took 55 s. The form `items.id IN (SELECT item_id FROM item_tags WHERE name_fold = ?)` takes 35 ms. Any tag filter change keeps a plan of that shape, and after `idx_item_tags_item_id` is dropped the filter still looks up tags by item id through the primary key, both checked with `EXPLAIN QUERY PLAN`.
+- **Acceptance criteria**:
+  - Name, last played, play count, duration, and date added sorts return the same items in the same order as before, including names that differ only by case and names containing `_`, `[`, `\`, `]`, `^`, or `` ` ``.
+  - A page at offset 40,000 of the measured catalog costs within a small factor of the first page, measured.
+  - A repeat query with the same search and filter at the same catalog revision runs no count queries and returns the same totals, and a write that changes the revision counts again.
+  - A reload of the loaded window is one request.
+  - Library stats return the same global and per-source figures as before on the measured catalog.
+  - Tag filters return the same items as before, and none takes longer than the current form on the measured catalog.
+  - `item_tags` has one index on `item_id`.
+- **Verification evidence**:
+  - Completion evidence must include before-and-after timings and allocations, on a copy of a large catalog in a temp folder, for the first page, offset 10,000, offset 40,000, a 5,000-tile reload, a common-tag filter, a search, and library stats, plus `EXPLAIN QUERY PLAN` for the list, count, and tag filter queries.
+  - Completion evidence must include tests that each sort order matches the previous order on a fixture with case-only and punctuation differences, the schema migration tests, `dotnet test ReelRoulette.sln`, and `npm run verify` after any contract change.
+
+### M11b - Random Selection Performance
+
+- **Status**: ⏳ Planned
+- **Goal**: A random pick over the whole library reads only what selection needs and costs a few tens of milliseconds.
+- **Scope**:
+  - Ships in v0.14.1, after the library query performance milestone.
+  - Measured by the efficiency and divergence report on a copy of a 48,938-item catalog: `POST /api/random` selection with the default filter takes about 240 ms and allocates about 105 MB per request, in every randomization mode. Reading the eligible items with all 28 columns takes 207 ms and 91 MB; the eligible-set signature, which lowercases and sorts every path on every request, takes 23 ms. Reading only the four columns selection needs takes 12 ms in `sqlite3`. A selective preset takes 35 ms.
+  - Read only the columns selection and the response need: id, full path, play count, and last played for the eligible set, then the selected item's response fields.
+  - Make the eligible-set signature cheap: build it from item ids read in id order instead of lowercasing and sorting every path, and compute it once per request. Today rebuilding the selection state computes it twice, once to compare and again to store. The shuffle bag must still notice an item whose path changed, so either the signature covers paths or the bag holds item ids.
+  - Trap, inferred from code: caching the signature by catalog revision would miss on almost every pick. Every committed write, including the play that follows each pick, raises the revision.
+  - Replace the linear scans: the smart shuffle check of each dequeued path against the eligible list, and the final lookup of the selected item.
+  - Selection results stay the same: the same modes, weights, shuffle-bag behavior, and folder spread.
+- **Acceptance criteria**:
+  - Each randomization mode picks from the same eligible set with the same weighting as before.
+  - Smart shuffle still plays every eligible item once before repeating, and rebuilds its bag when the eligible set changes.
+  - A random pick over the measured catalog with the default filter takes a few tens of milliseconds, measured before and after.
+- **Verification evidence**:
+  - Completion evidence must include before-and-after timings and allocations per randomization mode on a copy of a large catalog in a temp folder, tests that the selection rules are unchanged, and `dotnet test ReelRoulette.sln`.
+
+### M11c - Thumbnail Caching
+
+- **Status**: ⏳ Planned
+- **Goal**: Thumbnails are fetched again only when they change.
+- **Scope**:
+  - Ships in v0.14.1, after the random selection performance milestone. Can be cut to a later release if v0.14.1 runs long.
+  - Found by the efficiency and divergence report from code reading, not measured: `GET /api/thumbnail/{itemId}` sends no cache headers, and its URL has no revision, so the WebUI and the desktop fetch a thumbnail again every time a tile shows it.
+  - Inferred, not checked: the route serves the file with `Results.File` from a physical path, which probably sends `Last-Modified`, so browsers may already cache thumbnails heuristically for a while, and a regenerated thumbnail could then show stale. Before changing anything, check in a browser network panel which thumbnail requests reach the server today.
+  - Add cache headers to thumbnail responses, or a revision to the thumbnail URL so it can be cached until the thumbnail changes. A revision in the URL needs the thumbnail revision in the list query page, which is a contract change in its own slice and only adds a field.
+  - The desktop's own thumbnail problems found by the same report are not fixed, because the desktop is frozen to bug fixes: decoded bitmaps kept after tiles scroll out of view (about 645 KB each at the measured average of 370×436, so about 3 GB for 5,000 tiles, inferred), full-size decoding, and overlapping fetch loops.
+  - Not included: WebUI grid rendering, which is WebUI Grid Rendering, in the WebUI overhaul release.
+- **Acceptance criteria**:
+  - A thumbnail the WebUI has shown is not fetched again while it stays unchanged, including after it scrolls back into view.
+  - A regenerated thumbnail is shown without a restart.
+  - Grid layout and placeholders behave as before.
+- **Verification evidence**:
+  - Completion evidence must include a server test for the thumbnail cache headers or revision, a WebUI test or browser network check that an unchanged thumbnail is not fetched again, `dotnet test ReelRoulette.sln`, and `npm run verify` after any contract change.
+
+### M11d - Item IDs in the Contract
+
+- **Status**: ⏳ Planned
+- **Goal**: Every event and response that refers to a library item carries its item id, and the WebUI matches items by id instead of by path.
+- **Scope**:
+  - Ships in v0.14.1, last in the series. Contract change in its own slice. It only adds fields, so the frozen desktop keeps working.
+  - Found by the efficiency and divergence report and checked against the code at promotion: `playbackRecorded` carries only a path, and the random and play responses put the full path in `id`. Item-state events already carry the catalog `itemId` beside `path`, and item tag events and `POST /api/play/{itemId}` use item ids. The WebUI's loaded-tile lookup already tries the item id first and falls back to a folded path. Its current item, its item-state cache, and playback events still match by path, ignoring case and treating `/` and `\` as the same. The desktop matches by path, ignoring case.
+  - Add the item id to every event and response that refers to an item that lacks it, including `playbackRecorded` and the random and play responses. The item id is a new field beside the random and play responses' `id`, which keeps the full path the frozen desktop reads.
+  - Return duration in seconds on library items, next to the `duration` string the WebUI parses back into seconds. The random and play responses already carry `durationSeconds`.
+  - The WebUI matches loaded tiles, the current item, its item-state cache, and pending tag saves by item id, and drops the folded-path fallback. The frozen desktop keeps matching by path.
+  - Add the previous favorite and blacklist values to item-state events. Today a favorite on an item that is not in the loaded window reloads that window under the default filter, because the client cannot tell whether the item was blacklisted before; with the previous values it can patch. Recorded by the client event efficiency milestone.
+  - Not included: the server treating paths that differ only by case as one path on Linux, which is Ordinal Path Identity on Linux. Matching by id in the WebUI removes its part of that problem.
+- **Acceptance criteria**:
+  - Every item-related event and response in `shared/api/openapi.yaml` has an item id, existing fields keep their meaning, and `npm run verify:contracts` passes.
+  - The WebUI applies favorite, blacklist, playback, and tag events to the right tile by item id, including for two items whose paths differ only by case.
+  - The WebUI does not normalize paths to match items.
+  - Library item duration reaches the WebUI as a number of seconds.
+  - Item-state events carry the previous favorite and blacklist values, and a favorite on an item outside the loaded window patches the window under the default filter instead of reloading it.
+- **Verification evidence**:
+  - Completion evidence must include contract tests for each changed event and response, WebUI tests that match by id with two paths that differ only by case, a WebUI test that a favorite on an item outside the loaded window patches the window from the previous favorite and blacklist values instead of reloading it, `dotnet test ReelRoulette.sln`, and `npm run verify`.
+  - Docs evidence must include `docs/api.md` for the changed events and responses.
 
 ## Planned Milestones
 
@@ -908,93 +998,6 @@ Last milestone completed: M10j12
   - Users without admin rights do not see the admin section.
 - **Verification evidence**:
   - Completion evidence must include WebUI tests for hidden sources, inaccessible items, and the admin section's visibility.
-
-### P29a - Library Query Performance
-
-- **Status**: ⏳ Planned
-- **Goal**: Library browse pages and loaded-window reloads cost about the same at any scroll depth, and a reload of the loaded window is one request.
-- **Scope**:
-  - Planned for v0.14.1.
-  - Measured by the efficiency and divergence report on a copy of a 48,938-item catalog, through the real list query in a Release build: the first 200-item page takes about 50 ms and allocates about 11 MB. The page at offset 10,000 takes 177 ms and 104 MB, and at offset 40,000 takes 221 ms and 154 MB. Reloading 5,000 loaded tiles takes 2.45 s and 1.1 GB.
-  - Causes measured in the same run:
-    - Name order uses `COLLATE ORDINAL_IGNORE_CASE`, a managed collation callback with no index, so every page sorts the whole filtered set. The same page ordered by an indexed binary column takes 0.1 ms, against 19.9 ms with the callback.
-    - Every page also runs two `COUNT(*)` queries of about 13.5 ms each, including on later pages of the same query.
-    - A reload re-reads the window in 200-item pages, one request each, and the query limit is 500.
-  - Add a stored, indexed sort key for file name whose order matches today's `OrdinalIgnoreCase` order, and order name sorts and name tie-breaks by it. A `ToLowerInvariant` key such as the existing `file_name_fold` would change today's order for names containing `_`, `[`, `\`, `]`, `^`, or `` ` ``, which sort after letters today and would sort before them. An uppercase-invariant key should keep it; the sort order tests confirm it. This is a catalog schema change with its own migration.
-  - Skip both counts when the offset is above 0. The clients keep the totals from the first page.
-  - Reload the loaded window in one request. Whether that raises the query limit or adds a reload request with its own bound is decided here; either is a contract change in its own slice.
-  - Library stats: the per-source figures join items to sources by path prefix and re-derive video or photo from the file extension in SQL. Measured: about 90 ms in `sqlite3` and 138 ms through the service. Every item in the measured catalog has a source id and a media type of 0 or 1. Group by source id and media type instead, with the same results.
-  - Drop `idx_item_tags_item_id`, which duplicates the leading `item_id` column of the `item_tags` primary key.
-  - Fallback if deep offsets still cost much more than the first page after the sort key: add a keyset cursor (the last row's sort values) beside offset paging, and move the WebUI to it. Offset paging stays until Desktop Client Removal, so the frozen desktop keeps working. This is a contract change in its own slice and only adds fields.
-  - Measured trap for the tag filter: the tag filter compares `item_tags.name` with the managed collation inside a correlated `EXISTS`, which the planner runs through `idx_item_tags_item_id` and which takes 45 ms for a 22,476-item tag. Rewriting it as `item_tags.name_fold = ?` inside the same `EXISTS` makes the planner use `idx_item_tags_name_fold` for every item, and the same filter took 55 s. The form `items.id IN (SELECT item_id FROM item_tags WHERE name_fold = ?)` takes 35 ms. Any tag filter change keeps a plan of that shape, and after `idx_item_tags_item_id` is dropped the filter still looks up tags by item id through the primary key, both checked with `EXPLAIN QUERY PLAN`.
-- **Acceptance criteria**:
-  - Name, last played, play count, duration, and date added sorts return the same items in the same order as before, including names that differ only by case and names containing `_`, `[`, `\`, `]`, `^`, or `` ` ``.
-  - A page at offset 40,000 of the measured catalog costs within a small factor of the first page, measured.
-  - Pages after the first do not run count queries, and the clients still show the totals from the first page.
-  - A reload of the loaded window is one request.
-  - Library stats return the same global and per-source figures as before on the measured catalog.
-  - Tag filters return the same items as before, and none takes longer than the current form on the measured catalog.
-  - `item_tags` has one index on `item_id`.
-- **Verification evidence**:
-  - Completion evidence must include before-and-after timings and allocations, on a copy of a large catalog in a temp folder, for the first page, offset 10,000, offset 40,000, a 5,000-tile reload, a common-tag filter, a search, and library stats, plus `EXPLAIN QUERY PLAN` for the list, count, and tag filter queries.
-  - Completion evidence must include tests that each sort order matches the previous order on a fixture with case-only and punctuation differences, the schema migration tests, `dotnet test ReelRoulette.sln`, and `npm run verify` after any contract change.
-
-### P29b - Random Selection Performance
-
-- **Status**: ⏳ Planned
-- **Goal**: A random pick over the whole library reads only what selection needs and costs a few tens of milliseconds.
-- **Scope**:
-  - Planned for v0.14.1.
-  - Measured by the efficiency and divergence report on a copy of a 48,938-item catalog: `POST /api/random` selection with the default filter takes about 240 ms and allocates about 105 MB per request, in every randomization mode. Reading the eligible items with all 28 columns takes 207 ms and 91 MB; the eligible-set signature, which lowercases and sorts every path on every request, takes 23 ms. Reading only the four columns selection needs takes 12 ms in `sqlite3`. A selective preset takes 35 ms.
-  - Read only the columns selection and the response need: id, full path, play count, and last played for the eligible set, then the selected item's response fields.
-  - Cache the eligible-set signature by catalog revision and filter, so an unchanged library and filter do not recompute it.
-  - Replace the linear scans: the smart shuffle check of each dequeued path against the eligible list, and the final lookup of the selected item.
-  - Selection results stay the same: the same modes, weights, shuffle-bag behavior, and folder spread.
-- **Acceptance criteria**:
-  - Each randomization mode picks from the same eligible set with the same weighting as before.
-  - Smart shuffle still plays every eligible item once before repeating, and rebuilds its bag when the eligible set changes.
-  - A random pick over the measured catalog with the default filter takes a few tens of milliseconds, measured before and after.
-- **Verification evidence**:
-  - Completion evidence must include before-and-after timings and allocations per randomization mode on a copy of a large catalog in a temp folder, tests that the selection rules are unchanged, and `dotnet test ReelRoulette.sln`.
-
-### P29c - Thumbnail Caching
-
-- **Status**: ⏳ Planned
-- **Goal**: Thumbnails are fetched again only when they change.
-- **Scope**:
-  - Planned for v0.14.1.
-  - Found by the efficiency and divergence report from code reading, not measured: `GET /api/thumbnail/{itemId}` sends no cache headers, and its URL has no revision, so the WebUI and the desktop fetch a thumbnail again every time a tile shows it.
-  - Add cache headers to thumbnail responses, or a revision to the thumbnail URL so it can be cached until the thumbnail changes. A revision in the URL needs the thumbnail revision in the list query page, which is a contract change in its own slice and only adds a field.
-  - The desktop's own thumbnail problems found by the same report are not fixed, because the desktop is frozen to bug fixes: decoded bitmaps kept after tiles scroll out of view (about 645 KB each at the measured average of 370×436, so about 3 GB for 5,000 tiles, inferred), full-size decoding, and overlapping fetch loops.
-  - Not included: WebUI grid rendering, which is WebUI Grid Rendering, in the WebUI overhaul release.
-- **Acceptance criteria**:
-  - A thumbnail the WebUI has shown is not fetched again while it stays unchanged, including after it scrolls back into view.
-  - A regenerated thumbnail is shown without a restart.
-  - Grid layout and placeholders behave as before.
-- **Verification evidence**:
-  - Completion evidence must include a server test for the thumbnail cache headers or revision, a WebUI test or browser network check that an unchanged thumbnail is not fetched again, `dotnet test ReelRoulette.sln`, and `npm run verify` after any contract change.
-
-### P29d - Item IDs in the Contract
-
-- **Status**: ⏳ Planned
-- **Goal**: Every event and response that refers to a library item carries its item id, and the WebUI matches items by id instead of by path.
-- **Scope**:
-  - Planned for v0.14.1. Contract change in its own slice. It only adds fields, so the frozen desktop keeps working.
-  - Found by the efficiency and divergence report: `playbackRecorded` carries only a path, the random and play responses put the full path in `id`, while item tag events and `POST /api/play/{itemId}` use item ids. Both clients therefore match event items by path: the desktop ignoring case, and the WebUI ignoring case and treating `/` and `\` as the same.
-  - Add the item id to every event and response that refers to an item, including `playbackRecorded` and the random and play responses. The item id is a new field beside the random and play responses' `id`, which keeps the full path the frozen desktop reads.
-  - Return duration in seconds next to the `hh:mm:ss` string the WebUI parses back into seconds.
-  - The WebUI matches loaded tiles, the current item, and pending tag saves by item id, and stops folding paths to match them. The frozen desktop keeps matching by path.
-  - Add the previous favorite and blacklist values to item-state events. Today a favorite on an item that is not in the loaded window reloads that window under the default filter, because the client cannot tell whether the item was blacklisted before; with the previous values it can patch. Recorded by the client event efficiency milestone.
-  - Not included: the server treating paths that differ only by case as one path on Linux, which is Ordinal Path Identity on Linux. Matching by id in the WebUI removes its part of that problem.
-- **Acceptance criteria**:
-  - Every item-related event and response in `shared/api/openapi.yaml` has an item id, and `npm run verify:contracts` passes.
-  - The WebUI applies favorite, blacklist, playback, and tag events to the right tile by item id, including for two items whose paths differ only by case.
-  - The WebUI does not normalize paths to match items.
-  - Duration reaches the WebUI as a number of seconds.
-  - Item-state events carry the previous favorite and blacklist values, and a favorite on an item outside the loaded window patches the window under the default filter instead of reloading it.
-- **Verification evidence**:
-  - Completion evidence must include contract tests for each changed event and response, WebUI tests that match by id with two paths that differ only by case, a WebUI test that a favorite on an item outside the loaded window patches the window from the previous favorite and blacklist values instead of reloading it, `dotnet test ReelRoulette.sln`, and `npm run verify`.
-  - Docs evidence must include `docs/api.md` for the changed events and responses.
 
 ### P31 - WebUI Grid Rendering
 
