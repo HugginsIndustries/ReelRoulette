@@ -1,4 +1,3 @@
-using Avalonia.Controls;
 using Avalonia.Logging;
 using ReelRoulette.Core.Tests;
 using ReelRoulette.Server.Services;
@@ -15,13 +14,15 @@ public sealed class AvaloniaLastLogSinkTests
         var (sink, readLines) = CreateSink();
 
         // Each tray menu opening builds new controls, so the same warning arrives from a new source each time.
+        // Plain objects stand in for the controls: creating a control here would claim Avalonia's UI thread outside
+        // the headless session and break the tray tests running alongside.
         for (var i = 0; i < 3; i++)
         {
-            sink.Log(LogEventLevel.Warning, LogArea.Binding, new Border(), "Could not bind {Property} on {Target}", "Width", i);
+            sink.Log(LogEventLevel.Warning, LogArea.Binding, new object(), "Could not bind {Property} on {Target}", "Width", i);
         }
 
         var line = Assert.Single(readLines());
-        Assert.Contains("[warn] Tray UI (Avalonia) [Binding]: Could not bind 'Width' on '0' (Border).", line);
+        Assert.Contains("[warn] Tray UI (Avalonia) [Binding]: Could not bind 'Width' on '0' (Object).", line);
     }
 
     [Fact]
