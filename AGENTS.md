@@ -14,7 +14,7 @@ Keep this file short and enforceable. For details, use `CONTEXT.md`, `MILESTONES
 - Keep desktop and WebUI as orchestration and render layers; keep domain logic in `ReelRoulette.Core` and server services. `docs/domain-inventory.md` records which desktop flows are still local.
 - Server-backed flows stay API-first: do not add client-local mutation or fallback authority.
 - Random selection and playback eligibility are decided by the server.
-- Keep desktop and WebUI behavior consistent with each other, and don't change user-facing UX without explicit approval.
+- The desktop client is frozen to bug fixes until its removal; new UX lands in the WebUI only. Don't change user-facing UX without explicit approval.
 - When a rule must behave identically in C# and the WebUI (ordering, comparison, normalization), implement it once per language next to its counterpart and lock both to one shared fixture under `shared/fixtures/`.
 - Add `last.log`-based logging where appropriate.
 - Fix lints introduced by your changes.

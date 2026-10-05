@@ -19,12 +19,13 @@ Instructions:
 
 Commit Message:
 
-M10j9: Cut redundant library reloads, stats fetches, and refresh events
+Docs: Plan the desktop client's retirement and the WebUI overhaul
 
-- Desktop and WebUI reload the loaded library window only when a favorite, blacklist, playback, or tag change can alter what it shows or its order, and patch the tile otherwise; both are locked to the shared `library-tile-effect.json` fixture.
-- The WebUI uses one event stream client that resumes with the last event ID after an error, so it applies the events it missed or gets `resyncRequired`; the duplicate stream code in `app.js` and the idle watchdog are gone.
-- A stream opened without a last event ID now starts with a new `streamOpened` event carrying the server's current revision, so a client that has received nothing else can still resume, from 0 if need be.
-- The server sends `resyncRequired` for a last event ID ahead of its revision, as after a restart, and both clients take a resync's revision, locked to the shared `event-revision.json` fixture.
-- The desktop coalesces library stats refreshes: one request per burst, at most one in flight, and one more for requests made during it.
-- Duration and loudness refresh progress is throttled to one event per 500 ms plus the stage completion.
-- Record the previous favorite and blacklist follow-up on item IDs in the contract, and restart revision reuse in the server robustness findings.
+- Freeze the desktop client to bug fixes and make the WebUI the only client on every device; drop the native Android client.
+- Add a v0.15.0 WebUI overhaul release: HTTPS first, a screen-by-screen Preact migration with `happy-dom` tests, a responsive layout with side panels and phone overlays, keyboard shortcuts, stats and settings panels, duplicate review, and Show in File Manager.
+- Fold the Operator page into an admin section of WebUI Settings, gated by the control token and later by admin accounts, with a minimal built-in recovery page for restart, stop, logs, and updates.
+- Add a v0.15.1 desktop parity release (source management, catalog transfer, multi-select, a browser-playable filter that also fixes the misleading "file not found" message) and a v0.16.0 desktop removal release.
+- Shrink the remaining v0.14.0 desktop milestones to the silent-start fix and the WebUI light-mode slice, and move the status line and testing suite work into the overhaul for the WebUI only.
+- Drop or shrink every later milestone that existed only because there were two clients, and shift the log, accounts, and playback session releases to v0.16.1 through v0.19.0.
+- Record the duplicate localhost checks under reverse proxy and HTTPS access, and point the testing checklist's stale backlog references at the current milestones.
+- AGENTS.md: replace the desktop and WebUI consistency rule with the desktop freeze.

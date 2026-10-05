@@ -77,7 +77,7 @@ An agent runs these and ticks them.
 
 - [x] WebUI loads from another device on the LAN.
 - [ ] Over HTTPS, Add to Home Screen / Install app opens a standalone app with the app icon.
-  - Failed: Android install still creates a shortcut; see the Android PWA install backlog item.
+  - Failed: Android install still creates a shortcut; see the reverse proxy and HTTPS access milestone.
 - [x] Pairing or sign-in works for the current auth mode.
 - [x] Controls are usable on touch.
 - [x] Random play follows the current filter, including after editing a selected preset without saving.
@@ -110,7 +110,7 @@ An agent runs these and ticks them.
 - [x] Playing a library item starts that item; a missing or unsupported file shows a clear error.
 - [x] Previous, next, loop, autoplay, volume, and mute work.
 - [ ] Fullscreen and player view switch correctly.
-  - Failed: combined fullscreen and player view traps keyboard input; see the desktop player view and fullscreen backlog item.
+  - Failed: combined fullscreen and player view traps keyboard input; not fixed while the desktop is frozen, see the desktop sound on video start milestone's deferrals.
 - [x] Status text stays correct after playback actions.
 - [x] **View → Diagnostics** shows the client and session ids.
 - [x] Import folder adds new files, names the source after the folder, and keeps tags, favorites, and stats on files already imported.
@@ -129,11 +129,11 @@ An agent runs these and ticks them.
 ### Cross-Client
 
 - [ ] Desktop and WebUI look and behave alike for the same features.
-  - Failed: several parity gaps found this pass; see the backlog items for status lines, the Auto Tag busy indicator, the filter dialog collapse toggle, and the WebUI settings page.
+  - Failed: several parity gaps found this pass; the desktop is frozen, so only the WebUI side is planned, in the WebUI status line overhaul and settings panel milestones.
 - [x] Favorite and blacklist changes show in the other client.
 - [x] Tag edits show in the other client.
 - [ ] Refresh status matches in both clients.
-  - Failed: refresh status differs between desktop and WebUI; see the client status line overhaul backlog item.
+  - Failed: refresh status differs between desktop and WebUI; see the WebUI status line overhaul milestone.
 
 ### Logging
 

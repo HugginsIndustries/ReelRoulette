@@ -7,14 +7,18 @@ It tracks scope, sequencing, acceptance criteria, and evidence by milestone.
 
 An outline of upcoming releases and the milestones each one ships, in order. v0.14.0 closes the M10 series; each later release becomes a new `M*` series when it is promoted.
 
-- **v0.14.0 — Cleanup and polish**: Finish the SQLite migration cleanup, fix the defects found since, cut redundant client and refresh event work, and close the control plane to the LAN without a token. M10j1, M10j2, M10j3, M10j4, M10j5, M10j6, M10j7, M10j8, M10j9, M10j10, M10j11, M10j12, M10j13, M10j14.
-- **v0.14.1 — Performance**: Make library browse, window reloads, and random selection cheap on large catalogs, keep desktop thumbnail memory bounded, and identify items by ID in every event and response. P29a, P29b, P29c, P29d.
-- **v0.15.0 — Operator administration**: Move source, item, and catalog administration into a tested Operator so a server plus WebUI install does not need the desktop app. P26a, P26b, P26c, P26d, P26e, P25.
-- **v0.15.1 — Structured log foundation**: Write `last.log` as structured JSON Lines through one server writer and give both clients a typed, privacy-safe log API. P27a, P27b.
-- **v0.16.0 — Accounts**: Require an account PIN from LAN and remote clients, with HTTPS through a reverse proxy and per-user source access. P28a, P28b, P28c, P28d, P28e, P28f, P28g, P28h, P28i, P28j, P28k, P28l.
-- **v0.17.0 — Structured log migration and Log Viewer**: Move every desktop, server, and WebUI log to the structured API and give the Operator a filterable Log Viewer. P27c, P27d, P27e, P27f, P27g.
-- **v0.18.0 — Playback sessions**: Let the server choose direct, remux, or transcode playback per session for desktop and WebUI. P2a, P2b, P2c, P2d, P2e, P2f, P2g, P2h.
-- **Unscheduled backlog**: P1, P3, P4, P5, P6, P7, P9a, P9b, P10, P20, P30, P31, P32, P33, P34, P35, P36, P37.
+The WebUI becomes the only client on every device. The desktop client is frozen to bug fixes (crashes, data loss, broken playback, security) until the desktop removal release, and until then server contract changes only add fields, so the last desktop build keeps working. The native Android client is dropped.
+
+- **v0.14.0 — Cleanup and polish**: Finish the SQLite migration cleanup, fix the defects found since, cut redundant client and refresh event work, and close the control plane to the LAN without a token. M10j1, M10j2, M10j3, M10j4, M10j5, M10j6, M10j7, M10j8, M10j9, M10j10, M10j11, M10j12.
+- **v0.14.1 — Performance**: Make library browse, window reloads, and random selection cheap on large catalogs, cache thumbnails until they change, and identify items by ID in every event and response. P29a, P29b, P29c, P29d.
+- **v0.15.0 — WebUI overhaul**: Serve the WebUI over HTTPS so it installs as an app, move it to Preact, give it a responsive layout with side panels and phone overlays, and add keyboard shortcuts, stats, settings, an admin section that replaces the Operator page, duplicate review, and Show in File Manager. P28a, P38, P39, P34, P20, P26a, P40, P41, P42, P43, P44, P45, P31.
+- **v0.15.1 — Desktop parity**: Give the WebUI everything else the desktop does, including source management, catalog transfer, multi-select, and a browser-playable filter, while the desktop still ships as a fallback. P26b, P26c, P26d, P37, P46, P47.
+- **v0.16.0 — Desktop removal**: Remove the desktop client, its packaging, and its tests, then move preset writes to per-preset routes. P48, P25.
+- **v0.16.1 — Structured log foundation**: Write `last.log` as structured JSON Lines through one server writer and give the WebUI a typed, privacy-safe log API. P27a, P27b.
+- **v0.17.0 — Accounts**: Require an account PIN from LAN and remote clients, with per-user source access. P28b, P28c, P28d, P28e, P28f, P28g, P28h, P28j, P28k, P28l.
+- **v0.18.0 — Structured log migration and Log Viewer**: Move every server and WebUI log to the structured API and give the admin section a filterable Log Viewer. P27d, P27e, P27f, P27g.
+- **v0.19.0 — Playback sessions**: Let the server choose direct, remux, or transcode playback per session for the WebUI. P2a, P2b, P2c, P2d, P2f, P2g, P2h.
+- **Unscheduled backlog**: P1, P4, P5, P6, P9a, P9b, P10, P33, P35, P36.
 
 ## Document Purpose
 
@@ -106,72 +110,48 @@ Do not use this file for detailed architecture explanation or current capability
 
 Last milestone completed: M10j9
 
-### M10j10 - Desktop Player View and Fullscreen Fixes
+### M10j10 - Desktop Sound on Video Start
 
 - **Status**: ⏳ Planned
-- **Goal**: Desktop keyboard shortcuts work in player view and fullscreen, the video fills the screen without leftover layout, and every video starts with the sound the mute button shows.
+- **Goal**: Every desktop video starts with the sound the mute button shows.
 - **Scope**:
-  - Ships in v0.14.0. Two slices, each verified on its own: player view and fullscreen, then sound on video start.
-  - Player view and fullscreen slice:
-    - Three related problems, all existing behavior, not regressions. Found in the v0.13.0 manual regression pass.
-    - Keyboard shortcuts (**P**, **F11**, and the rest) stop working while the pointer is over the video. With player view and fullscreen combined, the video fills the screen, so neither can be exited from the keyboard.
-      - Likely cause, not confirmed: the embedded VLC video surface takes keyboard input. The desktop never sets LibVLC's `EnableKeyInput` or `EnableMouseInput`, so both are on by default. Try turning them off so input reaches the app.
-    - Player view leaves a thin divider line from the normal layout at the top of the screen.
-      - Moving the pointer onto that line is currently the only way to make shortcuts work again in fullscreen player view, so fix the keyboard problem first or together with this one, never after.
-    - The video does not always resize to fill the screen in fullscreen or player view.
-    - Add a Release Specific checklist item: "With the pointer over the video, every shortcut works and the video fills the screen in normal, player view, fullscreen, and both combined," on Linux and Windows.
-  - Sound on video start slice:
-    - Videos sometimes start with no sound on desktop after random play, next, or previous, while the mute button shows unmuted. Muting and unmuting restores sound. The WebUI, which plays through the browser's own video element, is unaffected. Existing behavior: the volume and mute code is unchanged since v0.12.0.
-    - Likely cause, not confirmed: `PlayMedia` sets volume and mute only before LibVLC creates the new audio output (before and right after `Play()`, which returns before the output exists), and never after playback starts. LibVLC documents that mute may not apply when no audio stream is active. The desktop does not listen to LibVLC's mute or volume events, so the button never learns the player is muted.
-    - Log LibVLC's `Muted`, `Unmuted`, and `VolumeChanged` events, and the player's mute and volume just before reapplying, so `last.log` shows whether a new file's audio output came up muted.
-    - Reapply volume and mute once playback has actually started: on `Playing`, and again on the first seek-timer tick where playback time advances, once per new media and not on resume from pause. Cover the loop-toggle media rebuild and the other player rebuild path, which do not reapply mute today.
-    - Fix the first-video volume check in `PlayMedia`, which reads the player's volume after `Play()`, before an audio output exists.
-    - Add a Release Specific checklist item: "Switching videos repeatedly with random, next, and previous never starts a video silently, and the mute button matches what you hear," on Linux and Windows.
+  - Ships in v0.14.0. The desktop is frozen to bug fixes, so this milestone keeps only the silent-start fix; the player view and fullscreen problems are recorded under Deferrals.
+  - Videos sometimes start with no sound on desktop after random play, next, or previous, while the mute button shows unmuted. Muting and unmuting restores sound. The WebUI, which plays through the browser's own video element, is unaffected. Existing behavior: the volume and mute code is unchanged since v0.12.0.
+  - Likely cause, not confirmed: `PlayMedia` sets volume and mute only before LibVLC creates the new audio output (before and right after `Play()`, which returns before the output exists), and never after playback starts. LibVLC documents that mute may not apply when no audio stream is active. The desktop does not listen to LibVLC's mute or volume events, so the button never learns the player is muted.
+  - Log LibVLC's `Muted`, `Unmuted`, and `VolumeChanged` events, and the player's mute and volume just before reapplying, so `last.log` shows whether a new file's audio output came up muted.
+  - Reapply volume and mute once playback has actually started: on `Playing`, and again on the first seek-timer tick where playback time advances, once per new media and not on resume from pause. Cover the loop-toggle media rebuild and the other player rebuild path, which do not reapply mute today.
+  - Fix the first-video volume check in `PlayMedia`, which reads the player's volume after `Play()`, before an audio output exists.
+  - Add a Release Specific checklist item: "Switching videos repeatedly with random, next, and previous never starts a video silently, and the mute button matches what you hear," on Linux and Windows.
 - **Acceptance criteria**:
-  - With the pointer over the video, every keyboard shortcut works in normal, player view, fullscreen, and combined player view and fullscreen.
-  - Combined player view and fullscreen can be exited from the keyboard.
-  - Player view shows no divider line or other leftover layout.
-  - The video fills the screen in fullscreen and player view, including after switching between them and after the window is resized.
-  - Existing mouse interaction on the video, such as the scroll wheel, still works.
   - After random play, next, previous, autoplay, and the loop-toggle rebuild, volume and mute are reapplied once playback has started, and not again on resume from pause.
   - `last.log` records LibVLC mute and volume events and the player's mute and volume before each reapply.
   - The first-video volume check does not read the player's volume before an audio output exists.
   - A saved mute still applies: with the app muted, switching videos stays silent and the button shows muted.
 - **Verification evidence**:
-  - Completion evidence must include automated tests where they reach the behavior (for example the LibVLC input options, the player view layout in a headless window, and the once-per-media reapply rule), `dotnet build ReelRoulette.sln`, `dotnet test ReelRoulette.sln`, and one quick Linux spot check per slice: shortcuts with the pointer over the video in fullscreen player view, and a few video switches with sound.
-  - The Linux and Windows passes of every view combination and of repeated video switching are the two Release Specific checklist items above, run in the pre-release pass.
+  - Completion evidence must include automated tests where they reach the behavior (for example the once-per-media reapply rule), `dotnet build ReelRoulette.sln`, `dotnet test ReelRoulette.sln`, and one quick Linux spot check of a few video switches with sound.
+  - The Linux and Windows pass of repeated video switching is the Release Specific checklist item above, run in the pre-release pass.
 - **Deferrals / Follow-ups**:
-  - None yet.
+  - Not fixed, because the desktop is frozen to bug fixes and is being retired. All existing behavior, found in the v0.13.0 manual regression pass:
+    - Keyboard shortcuts (**P**, **F11**, and the rest) stop working while the pointer is over the video. With player view and fullscreen combined, the video fills the screen, so neither can be exited from the keyboard. Likely cause, not confirmed: the desktop never sets LibVLC's `EnableKeyInput` or `EnableMouseInput`, so the embedded video surface takes keyboard input.
+    - Player view leaves a thin divider line from the normal layout at the top of the screen. Moving the pointer onto that line is the only way to make shortcuts work again in fullscreen player view.
+    - The video does not always resize to fill the screen in fullscreen or player view.
 
-### M10j11 - Tag UI Polish
+### M10j11 - WebUI Light Mode Tag Colors
 
 - **Status**: ⏳ Planned
-- **Goal**: Tag chips, tag editor controls, and the Auto Tag dialog look and respond the same on desktop and WebUI.
+- **Goal**: In WebUI light mode, tag chips and tag editor buttons use readable light-theme colors.
 - **Scope**:
-  - Ships in v0.14.0. Four slices, one per surface change, each verified on its own.
-  - WebUI light mode tag chips and tag editor buttons:
-    - Found in the v0.12.0 manual regression pass: in light mode, tag chip text in the filter Tags tab and the tag editor is black, and the tag editor buttons outside the tag grid stay white instead of switching to dark.
-    - Dark mode stays as it is.
-  - Desktop tag chip toggle state:
-    - Found in the v0.12.0 manual regression pass: in the desktop tag editor, a tag chip's toggle state does not change when the tag is added or removed, so there is no visual feedback. The chip should change to the accent color (HugginsOrange) when applied.
-    - The WebUI tag editor is the reference for the toggle states.
-  - Desktop Auto Tag busy indicator:
-    - While an Auto Tag scan runs, the WebUI shows an in-progress indicator, but the desktop shows nothing until results arrive.
-    - Add an indeterminate busy indicator to the desktop Auto Tag dialog during the scan, matching the WebUI.
-  - Desktop filter dialog collapse toggle styling:
-    - In the desktop filter dialog's Tags tab, the per-category collapse toggle's arrow icon sits in the top-left of its button instead of centered, and the toggle is styled differently from the desktop tag editor's.
-    - Make it match the tag editor's collapse toggle, as the WebUI's filter Tags tab and tag editor already do.
-  - Add a Release Specific checklist item: "Tag chips, tag editor buttons, the Auto Tag busy indicator, and the filter collapse toggle look and respond the same on desktop and WebUI in light and dark themes."
+  - Ships in v0.14.0.
+  - Found in the v0.12.0 manual regression pass: in light mode, tag chip text in the filter Tags tab and the tag editor is black, and the tag editor buttons outside the tag grid stay white instead of switching to dark.
+  - Dark mode stays as it is.
+  - Add a Release Specific checklist item: "In WebUI light and dark themes, tag chips in the filter Tags tab and the tag editor are readable, and the tag editor buttons match the theme."
 - **Acceptance criteria**:
   - In WebUI light mode, tag chip text in the filter Tags tab and the tag editor is readable on every chip state, and the tag editor buttons outside the tag grid use light-theme colors. Switching the system theme while the tag editor is open updates both.
-  - Adding a tag in the desktop tag editor shows that chip in the accent color right away, and removing it returns the chip to its normal state. Chips show the correct state when the editor opens, in both themes.
-  - The desktop Auto Tag dialog shows an indeterminate busy indicator from the start of a scan until results arrive or the scan fails. The indicator matches the WebUI's in-progress indicator in placement and wording, and clears on success, failure, and closing the dialog.
-  - The desktop filter dialog's collapse toggle arrow is centered in its button and matches the tag editor's collapse toggle in size, icon, and styling, collapsed and expanded, in both themes.
 - **Verification evidence**:
-  - Completion evidence must include automated tests where they reach the behavior (for example light-theme chip and button styles in the WebUI, the desktop chip state after add and remove, and the desktop Auto Tag busy indicator from scan start to result, failure, and close in a headless window), `dotnet test ReelRoulette.sln`, `npm run verify`, and one quick spot check per slice in one theme.
-  - The side-by-side desktop and WebUI pass in both themes is the Release Specific checklist item above, run in the pre-release pass.
+  - Completion evidence must include automated tests where they reach the behavior (for example light-theme chip and button styles), `npm run verify`, and one quick spot check in light mode.
+  - The pass in both themes is the Release Specific checklist item above, run in the pre-release pass.
 - **Deferrals / Follow-ups**:
-  - None yet.
+  - Dropped when the desktop was frozen to bug fixes: the desktop tag chip toggle state, the desktop Auto Tag busy indicator, and the desktop filter dialog collapse toggle styling, found in the v0.12.0 and v0.13.0 manual regression passes.
 
 ### M10j12 - Server Shutdown Fixes
 
@@ -216,55 +196,6 @@ Last milestone completed: M10j9
 - **Deferrals / Follow-ups**:
   - If the Windows tray icon survives right-click but the menu still closes instantly, the menu window is losing focus as it opens, which ServerApp cannot change inside Avalonia. The fallback is a Windows-only native menu, such as the WinForms `NotifyIcon` tray that passed Windows verification before the move to Avalonia.
 
-### M10j13 - Client Status Line Overhaul
-
-- **Status**: ⏳ Planned
-- **Goal**: Each client's status line shows one stable message per situation, and desktop and WebUI show the same message for the same event.
-- **Scope**:
-  - Ships in v0.14.0. Can be cut from the release if it runs long; the Operator Testing Suite overhaul is then cut with it.
-  - Both clients' status lines can alternate between competing messages, and they often show different messages for the same event.
-  - Observed in the v0.13.0 manual regression pass: with the server stopped, the desktop alternates between "core runtime unavailable" and "core runtime is required to browse the library", and the WebUI shows "library load failed: HTTP 503" only briefly before "SSE reconnecting...". Refresh status also differs between desktop and WebUI for the same refresh.
-  - Refresh status is in scope: the same refresh stage, progress, and result read the same on both clients. Refresh summary parsing is implemented separately in each client today. If the refresh text moves to the server, that contract change is its own slice.
-  - Define one rule per client for which message wins when several apply, so the status line never alternates.
-  - Define the message for each event once and use it on both desktop and WebUI.
-  - Add a Release Specific checklist item: "With the server stopped, unavailable, or mismatched, and during a refresh, desktop and WebUI each settle on the same status message."
-- **Acceptance criteria**:
-  - With the server stopped, unavailable, or mismatched, each client's status line settles on one message and does not alternate.
-  - Desktop and WebUI show the same message for the same event.
-  - During and after a refresh, desktop and WebUI show the same refresh status.
-  - The precedence rule and the per-event messages are documented.
-- **Verification evidence**:
-  - Completion evidence must include desktop and WebUI tests of the precedence rule and the per-event messages, locked to one shared fixture under `shared/fixtures/` if the rule is implemented in both languages, covering the server stopped, the API unavailable, a version or capability mismatch, and refresh progress and results, plus one quick spot check of each client with the server stopped.
-  - The full side-by-side pass is the Release Specific checklist item above, run in the pre-release pass.
-- **Deferrals / Follow-ups**:
-  - The Operator Testing Suite overhaul checks these messages in its scenarios once they are defined.
-
-### M10j14 - Operator Testing Suite Overhaul
-
-- **Status**: ⏳ Planned
-- **Goal**: The Operator Testing Suite produces clear results that match current client connection and status handling.
-- **Scope**:
-  - Depends on: the client status line overhaul, which defines the messages these scenarios check, and the server shutdown fixes, which change how event streams close.
-  - This is the last milestone in the v0.14.0 release. It can be cut from the release if the release runs long.
-  - The suite predates the current client connection and status handling and no longer produces clear results.
-  - Observed in the v0.13.0 manual regression pass:
-    - With an API version mismatch or capability mismatch, the desktop alternates between "core runtime is required" and the mismatch warning too fast to read. The WebUI is fine.
-    - With the API unavailable, the desktop flickers between disconnected and reconnecting messages, and the WebUI shows "library load failed: HTTP 503" only briefly before settling on "SSE reconnecting...".
-    - SSE disconnect behaves inconsistently and may need redesigning.
-  - Redesign the scenarios against current client behavior.
-  - Define the expected message per client for each scenario.
-  - Verify client interactions as part of the suite.
-  - Add a Release Specific checklist item: "Every Operator Testing Suite scenario shows its expected desktop and WebUI message, and resetting it leaves both clients connected."
-- **Acceptance criteria**:
-  - Each scenario lists the expected desktop and WebUI message, and both clients show it while the scenario is active.
-  - SSE disconnect behaves the same way on every run.
-  - Running and resetting each scenario leaves both clients connected and working.
-- **Verification evidence**:
-  - Completion evidence must include automated tests that each scenario sets and resets the server state it describes, and that SSE disconnect closes and reconnects the same way on repeated runs, plus one quick spot check of one scenario on desktop and WebUI.
-  - The pass of every scenario is the Release Specific checklist item above, run in the pre-release pass.
-- **Deferrals / Follow-ups**:
-  - None yet.
-
 ## Planned Milestones
 
 ### P1 - End-User README and Contributor Dev Documentation
@@ -276,9 +207,10 @@ Last milestone completed: M10j9
   - `README.md` (end users and operators):
     - Installation and day-to-day use only, with a pointer to `docs/dev-setup.md` for building from source.
     - A table of contents after the introduction.
-    - Install through the Velopack releases: the Windows per-user `Setup.exe` and the Linux AppImage, first launch, application menu registration on Linux, and in-app updates through Operator and desktop Settings.
-    - Runtime prerequisites only (FFmpeg with `ffprobe`, LibVLC, FUSE 2 for the AppImage), with package commands for Debian/Ubuntu, Fedora, and Arch-based distributions (CachyOS as the Arch example).
-    - A user manual covering playback, library browse, tags, presets, filters, Operator and WebUI access, account setup and login, reverse proxy access, Library Export and Import or the Operator catalog transfer (whichever has shipped), Launch Server on Startup, and tray versus headless behavior.
+    - Install through the Velopack releases: the Windows per-user `Setup.exe` and the Linux AppImage, first launch, application menu registration on Linux, and in-app updates through the WebUI admin section.
+    - Installing the WebUI as an app on phones and desktops over HTTPS.
+    - Runtime prerequisites only (FFmpeg with `ffprobe`, FUSE 2 for the AppImage), with package commands for Debian/Ubuntu, Fedora, and Arch-based distributions (CachyOS as the Arch example).
+    - A user manual covering playback, library browse, tags, presets, filters, WebUI access, the admin section and the recovery page, account setup and login, reverse proxy access, catalog transfer from the admin section, Launch Server on Startup, and tray versus headless behavior.
     - Troubleshooting: native dependencies, permissions, display and audio, missing tray, autostart conflicts.
     - Keep the Documentation Map and Third-Party Components sections.
   - `docs/dev-setup.md` (contributors):
@@ -287,7 +219,7 @@ Last milestone completed: M10j9
     - A full list near the top of every `tools/scripts/*` entry point and recurring `dotnet` and `npm` command, with a short explanation each.
   - Bring `CONTEXT.md`, `docs/architecture.md`, `docs/domain-inventory.md`, `docs/api.md`, and the testing checklist in line with the README and dev-setup split.
 - **Acceptance criteria**:
-  - A non-developer can follow `README.md` alone to install and run the server and desktop client on Windows and on each listed Linux family, and reach the Operator and WebUI.
+  - A non-developer can follow `README.md` alone to install and run the server on Windows and on each listed Linux family, and reach the WebUI and its admin section.
   - A contributor can rely on `docs/dev-setup.md` for setup, build, test, and release workflows, and its script list matches `tools/scripts/`.
   - No current-state doc names retired packaging (Inno Setup, portable archives, install scripts, `appimagetool`).
 - **Verification evidence**:
@@ -301,15 +233,15 @@ Last milestone completed: M10j9
 - **Status**: ⏳ Planned
 - **Goal**: Establish contract-first playback-session APIs and capability signaling.
 - **Scope**:
-  - First milestone of the playback sessions release, planned for v0.18.0. Depends on: Per-User Source Permissions, so every stream session is checked against the user's sources from the start.
+  - First milestone of the playback sessions release, planned for v0.19.0. Depends on: Per-User Source Permissions, so every stream session is checked against the user's sources from the start.
   - Keep each slice of this series independently verifiable and shippable, and keep thin-client boundaries while adding server-side playback decisions.
   - Define OpenAPI contracts for playback-session create and read and the stream URL.
   - Add playback-session and transcode capability markers to the capability list served by `/api/version` and `/api/capabilities`.
-  - Regenerate the WebUI types and update the desktop client contracts.
+  - Regenerate the WebUI types.
 - **Acceptance criteria**:
   - OpenAPI includes the playback-session surfaces and validates.
-  - Generated WebUI types and desktop contracts match OpenAPI.
-  - Clients detect a server without playback sessions from the capability list.
+  - Generated WebUI types match OpenAPI.
+  - The WebUI detects a server without playback sessions from the capability list.
 - **Verification evidence**:
   - Completion evidence must include contract tests, `npm run verify:contracts`, and a capability check against a server without the feature.
 - **Deferrals / Follow-ups**:
@@ -320,7 +252,7 @@ Last milestone completed: M10j9
 - **Status**: ⏳ Planned
 - **Goal**: Make the server the only place that chooses direct, remux, or transcode playback.
 - **Scope**:
-  - Planned for v0.18.0.
+  - Planned for v0.19.0.
   - Implement a playback-session decision service from media probe metadata and client capability hints.
   - Cache probe results by file path and modification time to avoid repeated `ffprobe` runs.
   - Decision output: playback mode (`direct`, `remux`, `transcode`), delivery type (`progressive` or `hls-fmp4`), and a reason for troubleshooting.
@@ -339,7 +271,7 @@ Last milestone completed: M10j9
 - **Status**: ⏳ Planned
 - **Goal**: Direct-stream URLs are session tokens with a lifetime, and an expired or unknown token cannot stream anything.
 - **Scope**:
-  - Planned for v0.18.0.
+  - Planned for v0.19.0.
   - Already in place: `POST /api/random` and `POST /api/play/{itemId}` issue a media token, and `GET /api/media/{idOrToken}` streams it with range requests.
   - Found by the repository audit: `ServerMediaTokenStore` has no expiry or eviction; every play adds a token that is never removed and stays valid until the server stops.
   - Give tokens a time to live and a size cap, tie them to the playback session, and clean expired sessions up.
@@ -358,10 +290,11 @@ Last milestone completed: M10j9
 - **Status**: ⏳ Planned
 - **Goal**: Add compatibility streaming for unsupported formats and long-form playback.
 - **Scope**:
-  - Planned for v0.18.0.
+  - Planned for v0.19.0.
   - Implement remux and transcode with ffmpeg.
   - Segmented streaming uses HLS with fMP4 segments as the single baseline profile.
   - Clean up ffmpeg workers and temporary segment and transcode files.
+  - Once this lands, revisit the Browser-Playable Filter: files the server can remux or transcode play in every browser.
 - **Acceptance criteria**:
   - With API playback, incompatible media is served through remux or transcode, with no client-side format workarounds.
   - Segmented streaming is HLS with fMP4 segments.
@@ -371,34 +304,12 @@ Last milestone completed: M10j9
 - **Deferrals / Follow-ups**:
   - None yet.
 
-### P2e - Desktop Thin-Client Playback Cutover
-
-- **Status**: ⏳ Planned
-- **Goal**: Desktop API playback uses playback sessions, while local-first playback stays as it is.
-- **Scope**:
-  - Planned for v0.18.0.
-  - Keep local-first playback with automatic API fallback, and `ForceApiPlayback` for validating the API path.
-  - Add playback-session orchestration for desktop API playback.
-  - Define "locally accessible": the file exists at the expected path, the desktop can read it, the path is not a server-issued token, and a quick open-read succeeds.
-  - Fall back to API playback when the local path is not accessible, and always use API playback with `ForceApiPlayback=true`.
-  - Loop toggle without reload is new work, not existing behavior: toggling loop today stops playback, rebuilds the LibVLC media with the new repeat option, and seeks back. In this series, toggling loop does not reload media, loop transitions stay gapless, and loop iterations do not count as plays.
-  - Keep reconnect and status behavior consistent across local and API playback.
-- **Acceptance criteria**:
-  - Local playback when the file is locally accessible and `ForceApiPlayback=false`; API playback otherwise.
-  - Desktop API playback uses the playback-session contract.
-  - No new local file authority beyond `desktop-settings.json` and reading media for playback.
-  - Toggling loop does not reload media or count a play, and loop transitions are gapless.
-- **Verification evidence**:
-  - Completion evidence must include path-selection tests and a loop-toggle test that the media is not rebuilt.
-- **Deferrals / Follow-ups**:
-  - None yet.
-
 ### P2f - WebUI Playback Cutover and Format Resilience
 
 - **Status**: ⏳ Planned
 - **Goal**: WebUI playback starts through playback sessions and handles formats the browser cannot play.
 - **Scope**:
-  - Planned for v0.18.0.
+  - Planned for v0.19.0.
   - Route WebUI playback start through the playback-session API.
   - Prefer direct playback when supported; fall back to the HLS fMP4 stream when needed.
   - Keep the WebUI's seamless loop on both progressive and HLS playback.
@@ -416,9 +327,9 @@ Last milestone completed: M10j9
 ### P2g - Resume Position and Session Continuity
 
 - **Status**: ⏳ Planned
-- **Goal**: The server remembers playback position for desktop and WebUI.
+- **Goal**: The server remembers playback position for the WebUI on every device.
 - **Scope**:
-  - Planned for v0.18.0.
+  - Planned for v0.19.0.
   - Add a server-owned resume-position contract and storage, with throttled writes and clear completion and reset rules.
   - Add resume-position query and clear APIs.
   - Add resume settings (on or off, threshold windows, retention) through server settings.
@@ -426,8 +337,8 @@ Last milestone completed: M10j9
   - Decide whether resume positions are per account.
 - **Acceptance criteria**:
   - Resume position survives reconnects and restarts through server state.
-  - Desktop and WebUI resume the same way on API playback.
-  - Clearing a resume position works and is visible to both clients.
+  - The WebUI resumes from the server's position on every device.
+  - Clearing a resume position works and is visible on every device.
   - Resume settings are documented, stored, and enforced by the server.
 - **Verification evidence**:
   - Completion evidence must include server tests for recording, clearing, and the loop rule, and client tests for resume.
@@ -437,37 +348,18 @@ Last milestone completed: M10j9
 ### P2h - Playback Concurrency, Diagnostics, and Hardening
 
 - **Status**: ⏳ Planned
-- **Goal**: Keep the playback pipeline stable with several clients and make failures diagnosable from the Operator.
+- **Goal**: Keep the playback pipeline stable with several clients and make failures diagnosable from the admin section.
 - **Scope**:
-  - Last milestone of the playback sessions release, planned for v0.18.0.
+  - Last milestone of the playback sessions release, planned for v0.19.0.
   - Limit concurrent transcodes, with a queueing policy, as a server setting with a safe default. This takes over the transcode-concurrency part of the removed advanced runtime and cache controls backlog item; the rest of that item was overtaken when refresh stopped trimming thumbnails to a count or size limit.
-  - Add Operator diagnostics for active sessions, mode decisions, and failure reasons.
+  - Add admin section diagnostics for active sessions, mode decisions, and failure reasons.
   - Add Release Specific checklist items for the multi-client playback matrix on Linux and Windows.
 - **Acceptance criteria**:
   - Multi-client playback stays stable when transcode capacity is limited.
-  - The Operator shows enough to troubleshoot a playback failure.
+  - The admin section shows enough to troubleshoot a playback failure.
   - After the server stops, no ffmpeg worker remains, and temporary playback and transcode folders are cleaned or expire.
 - **Verification evidence**:
   - Completion evidence must include concurrency-limit and queueing tests and a shutdown cleanup test. The multi-client matrix is the Release Specific checklist item above.
-- **Deferrals / Follow-ups**:
-  - None yet.
-
-### P3 - Android Client Bootstrap
-
-- **Status**: ⏳ Planned
-- **Goal**: Start an Android app on the API once accounts and playback sessions exist.
-- **Scope**:
-  - Unscheduled. Depends on: PIN Login API and Sessions, and Playback Concurrency, Diagnostics, and Hardening.
-  - Create `src/clients/android/ReelRoulette.Android` as a Gradle project.
-  - Basic API connectivity and event stream use.
-  - Find the server through mDNS, which the server already advertises, and log in with an account PIN like the other LAN clients.
-  - Optional: generate a Kotlin API client from OpenAPI.
-- **Acceptance criteria**:
-  - The app can find the server, log in, list presets, request random media, and stream it.
-  - Favorite, blacklist, and tag events update the app.
-  - Returning from background and event stream reconnects keep working within the session rules.
-- **Verification evidence**:
-  - Completion evidence must include Android tests for API and event envelope handling and reconnect behavior.
 - **Deferrals / Follow-ups**:
   - None yet.
 
@@ -490,73 +382,52 @@ Last milestone completed: M10j9
   - Metadata import and export run only through server APIs.
   - The supported formats and field mappings are documented and tested.
   - The merge policy gives the same result for the same inputs.
-  - Extended metadata is stored by the server and behaves the same on desktop and WebUI.
+  - Extended metadata is stored by the server and shown and edited in the WebUI.
   - Batch operations follow the conflict and error policy and report success and failure counts with reasons.
 - **Verification evidence**:
   - Completion evidence must include schema migration tests, format mapping tests, and merge-policy tests.
 - **Deferrals / Follow-ups**:
   - None yet.
 
-### P5 - Customizable Keyboard Shortcuts (Desktop)
+### P5 - Customizable Keyboard Shortcuts
 
 - **Status**: ⏳ Planned
-- **Goal**: Let desktop users rebind keyboard shortcuts while keeping input handling reliable and the current defaults.
+- **Goal**: Let WebUI users rebind keyboard shortcuts on each device while keeping the defaults.
 - **Scope**:
-  - Unscheduled. Depends on: Desktop Player View and Fullscreen Fixes, which changes how keyboard input reaches the app over the video.
-  - Today 31 hard-coded key cases in the desktop decide what each key does.
-  - Shortcuts editor dialog from the menu: list actions and bindings, capture keys with `Ctrl`, `Shift`, and `Alt`, detect conflicts, and reset one or all bindings.
-  - Read-only shortcut reference in the Help menu.
-  - Store bindings in `desktop-settings.json` only.
-  - Resolve keys through a binding map instead of hard-coded checks.
-  - Define reserved system keys and menu-accelerator conflicts.
+  - Unscheduled. Depends on: WebUI Keyboard Shortcuts and Player Controls, which adds the default bindings and the shortcut reference.
+  - A shortcut editor in the WebUI settings panel: list actions and bindings, capture keys with `Ctrl`, `Shift`, and `Alt`, detect conflicts, and reset one or all bindings.
+  - Store bindings per device with the other WebUI preferences.
+  - Resolve keys through a binding map instead of fixed checks.
+  - Keys the browser keeps for itself cannot be bound.
 - **Acceptance criteria**:
-  - Rebound actions work and survive a restart.
+  - Rebound actions work and survive a reload on that device.
   - Conflicts cannot leave two actions on one binding.
   - Defaults can be restored.
-  - Reserved system shortcuts cannot be overridden.
-  - Playback and controls work with default and custom bindings.
+  - Browser-reserved keys cannot be bound.
 - **Verification evidence**:
-  - Completion evidence must include binding-map, conflict, and reset tests.
+  - Completion evidence must include binding-map, conflict, and reset tests, and `npm run verify`.
 - **Deferrals / Follow-ups**:
   - None yet.
 
 ### P6 - Playback History and Analytics
 
 - **Status**: ⏳ Planned
-- **Goal**: Record playback history on the server and show analytics from it on desktop and WebUI.
+- **Goal**: Record playback history on the server and show analytics from it in the WebUI.
 - **Scope**:
   - Unscheduled.
   - The catalog keeps only a play count and last-played time per item, so there is no history to chart yet. Start with a server-owned playback events table (catalog schema change) written when the server records a play, with a retention setting.
   - Server analytics queries over that history and library stats: plays per day, week, and month; top-played items; favorites ratio; duration, source, and time-of-day distributions; tag usage.
   - Date ranges (`7d`, `30d`, `90d`, `1y`, `all`) and optional grouping.
-  - Client charts and summary panels (desktop first, then WebUI), a date-range selector, and image and CSV or JSON export.
+  - Charts and summary panels in the WebUI stats panel, a date-range selector, and image and CSV or JSON export.
   - The server computes analytics; clients only render.
   - Decide whether history is per account.
 - **Acceptance criteria**:
   - Each recorded play adds a history row, and retention removes old rows.
-  - Analytics come only from server APIs and match across clients for the same range.
+  - Analytics come only from server APIs and match across devices for the same range.
   - Date ranges change the aggregates correctly.
   - Exports match the current query.
 - **Verification evidence**:
   - Completion evidence must include schema migration tests, history write and retention tests, and aggregate tests per range.
-- **Deferrals / Follow-ups**:
-  - None yet.
-
-### P7 - Desktop Confirmation Dialog Standardization
-
-- **Status**: ⏳ Planned
-- **Goal**: Replace the desktop's ad-hoc confirmation windows with one reusable dialog.
-- **Scope**:
-  - Unscheduled. Best done after Desktop Source Management Link, which removes the Manage Sources dialog and its five ad-hoc windows. The desktop builds 23 ad-hoc windows today.
-  - A reusable `ConfirmDialog` with title, message, button sets (`OK/Cancel`, `Yes/No`, `Remove/Cancel`), and default and cancel actions.
-  - Move the existing confirmations to it one at a time, keeping wording, destructive-action emphasis, and default buttons.
-  - Remove each old dialog only after its replacement behaves the same.
-- **Acceptance criteria**:
-  - The dialog supports every button pattern the desktop uses.
-  - Moved confirmations behave and end the same as before.
-  - Duplicate confirmation code is gone with no regressions.
-- **Verification evidence**:
-  - Completion evidence must include headless dialog tests for destructive and non-destructive confirmations.
 - **Deferrals / Follow-ups**:
   - None yet.
 
@@ -576,7 +447,7 @@ Last milestone completed: M10j9
   - Off by default, run in the background, and reuse cached results with a clear invalidation rule.
 - **Acceptance criteria**:
   - Face detection results are produced and owned by the server.
-  - Desktop and WebUI read face metadata through APIs.
+  - The WebUI reads face metadata through APIs.
   - Photo detection runs in the background and does not block playback or import.
   - Overlays and filters work for detected photo faces.
   - Performance impact is bounded and documented.
@@ -599,7 +470,7 @@ Last milestone completed: M10j9
 - **Acceptance criteria**:
   - Video detection runs within its resource limits and does not disturb playback or transcodes.
   - Results come through server APIs in the same shape as photo results where possible.
-  - Long media processing can resume and retry and is visible to the operator.
+  - Long media processing can resume and retry and is visible in the admin section.
 - **Verification evidence**:
   - Completion evidence must include sampling, resume, and resource-limit tests.
 - **Deferrals / Follow-ups**:
@@ -628,64 +499,71 @@ Last milestone completed: M10j9
 - **Deferrals / Follow-ups**:
   - Deferred past v0.14.0: Windows enumeration casing has not been measured, an ordinal compare there risks removing and re-adding items, and a v0.14.0 planning query of a real 48,938-item catalog found no case-only path collisions.
 
-### P20 - WebUI Settings Page
+### P20 - WebUI Settings Panel
 
 - **Status**: ⏳ Planned
-- **Goal**: The WebUI has a settings page for per-device preferences and diagnostics, as the desktop has its settings dialog and Diagnostics view.
+- **Goal**: The WebUI has a settings panel for per-device preferences and diagnostics.
 - **Scope**:
-  - Unscheduled.
-  - Add a settings page to the WebUI.
-  - Move the diagnostics information to the settings page and remove the diagnostics panel from below the main page's status line. That panel is currently shown only on mobile browsers by design; in the v0.13.0 manual regression pass it appeared only on the phone in Firefox.
-  - Add client-side preferences, starting with an option to remember filter settings across sessions.
-  - Where the desktop has an equivalent option, match its name and behavior. The desktop has no option for remembering filter settings: it always saves the filter state with its other saved data. Whether the desktop gains a matching option is decided in this item.
+  - Planned for v0.15.0. Depends on: WebUI Responsive Layout and Panels.
+  - A settings panel in the panel layout. The admin section joins it in Admin Section in WebUI Settings.
+  - Move the diagnostics information to the settings panel and remove the diagnostics panel from below the main page's status line. That panel is currently shown only on mobile browsers by design; in the v0.13.0 manual regression pass it appeared only on the phone in Firefox.
+  - Per-device preferences: photo duration and randomization mode (in the top bar today), autoplay and loop defaults, and an option to remember filter settings across sessions. The option is off by default, so the WebUI keeps opening with default filters unless the user turns it on.
+  - Changes to user-facing UX need explicit approval.
 - **Acceptance criteria**:
-  - The settings page shows the diagnostics information on desktop and mobile browsers, and the main page no longer shows the diagnostics panel.
+  - The settings panel shows the diagnostics information on desktop and mobile browsers, and the main page no longer shows the diagnostics panel.
   - With the remember option on, filter settings survive closing and reopening the WebUI on that device. With it off, the WebUI opens with default filter settings.
-  - Preferences are stored per device and do not change other devices or the desktop.
-  - Every option with a desktop equivalent has the same name and behavior on both clients.
+  - Preferences are stored per device and do not change other devices.
 - **Verification evidence**:
-  - Completion evidence must include a desktop browser and phone pass of the settings page, and the remember option checked across a browser restart.
+  - Completion evidence must include WebUI tests for preference storage and the remember option, `npm run verify`, and one quick spot check on a phone.
+  - A desktop browser and phone pass, with the remember option checked across a browser restart, is a Release Specific checklist item.
 - **Deferrals / Follow-ups**:
-  - Deferred past v0.14.0: the remember-filter option and whether the desktop gains a matching option need UX decisions first.
+  - None yet.
 
 ### P25 - Per-Preset Preset Writes
 
 - **Status**: ⏳ Planned
-- **Goal**: Saving, renaming, reordering, or deleting a preset on one client changes only that preset on the server, so two clients editing presets do not overwrite each other.
+- **Goal**: Saving, renaming, reordering, or deleting a preset on one device changes only that preset on the server, so two devices editing presets do not overwrite each other.
 - **Scope**:
-  - Planned for v0.15.0, last in the Operator administration release. Builds on the shared preset-equality fixture from Remove the Preset Match Route.
-  - Found during v0.14.0 planning: the desktop and the WebUI both post the whole preset list to `POST /api/presets`, which replaces the server's preset catalog. The last writer wins, so a preset saved on one client can be lost when the other client saves its older list. This is the same client-held whole-catalog pattern as the tag sync routes removed in v0.13.0.
-  - Add per-preset write routes (save, rename, reorder, delete) and move both clients to them. Remove the whole-list replace once no client uses it.
+  - Planned for v0.16.0, after the desktop is removed. Depends on: Desktop Client Removal, so only the WebUI moves to per-preset writes and the whole-list replace goes in the same change. Builds on the preset-equality fixture from Remove the Preset Match Route.
+  - Found during v0.14.0 planning: the desktop and the WebUI both post the whole preset list to `POST /api/presets`, which replaces the server's preset catalog. The last writer wins, so a preset saved on one client can be lost when the other client saves its older list. This is the same client-held whole-catalog pattern as the tag sync routes removed in v0.13.0. With the WebUI as the only client, two devices still overwrite each other the same way.
+  - Add per-preset write routes (save, rename, reorder, delete) and move the WebUI to them. Remove the whole-list replace.
   - Tag rename and delete keep updating presets on the server.
-  - Contract change, crossing server, OpenAPI, generated WebUI types, desktop, and WebUI.
+  - Contract change, crossing server, OpenAPI, generated WebUI types, and WebUI.
 - **Acceptance criteria**:
-  - A preset saved on one client while the other client has its preset list open is still present after the other client saves a different preset.
+  - A preset saved on one device while another device has its preset list open is still present after the other device saves a different preset.
   - Rename, reorder, and delete change only the named preset.
-  - Desktop and WebUI show the same preset list after either client changes it.
-  - No client posts the whole preset list.
+  - Every open WebUI shows the same preset list after any device changes it.
+  - The WebUI never posts the whole preset list, and the whole-list replace route is gone.
 - **Verification evidence**:
-  - Completion evidence must include server tests for each write, a two-client test of concurrent saves, and `npm run verify`.
+  - Completion evidence must include server tests for each write, a two-session test of concurrent saves, and `npm run verify`.
 - **Deferrals / Follow-ups**:
   - None yet.
 
-### P26a - Operator UI Extraction
+### P26a - Admin Section in WebUI Settings
 
 - **Status**: ⏳ Planned
-- **Goal**: Move the Operator page out of `Program.cs` into a frontend with automated tests, without changing what it does.
+- **Goal**: Everything the Operator page does moves into an admin section of the WebUI settings panel, and the server keeps a minimal recovery page for when the WebUI's files are broken.
 - **Scope**:
-  - First milestone of the Operator administration release, planned for v0.15.0. Every later Operator milestone needs Operator UI tests, and there is nowhere to write them today.
+  - Planned for v0.15.0. Depends on: WebUI Settings Panel.
   - The Operator page is about 780 lines of HTML, CSS, and JavaScript inside a raw string in `src/core/ReelRoulette.ServerApp/Program.cs`, and no test covers `/operator`.
-  - Where it lives is decided here. The first candidate is a second entry in the WebUI Vite project, which already has `npm run verify`, type checking, and tests, and is already staged into server builds by `stage-webui-assets.ps1`.
-  - The page stays at `/operator`, calls the same control routes, and keeps its sections, labels, and behavior.
-  - Replace `innerHTML` with escaped rendering where the page inserts settings and status text (found by the repository audit: Operator HTML page interpolates user input via `innerHTML`).
-  - Packaged server builds serve the extracted page.
+  - Admin section slice:
+    - Move every Operator section into the admin section as Preact screens: server updates, runtime status with restart and stop, web runtime settings, control settings (control token, dev channel, Launch Server on Startup), the testing suite, connected clients, server logs, and incoming and outgoing API events. They call the same control routes, so there is no contract change.
+    - Gating: localhost is trusted. From another machine, the admin section shows nothing until the control token is entered through `POST /control/pair`. The accounts release replaces the token with admin accounts.
+    - Later admin work lands here: refresh, backup, and duplicate review, source and item management, catalog transfer, the Log Viewer, and account administration.
+  - Recovery page slice:
+    - The server keeps a minimal built-in page with restart, stop, a log tail, and updates, at a fixed path such as `/recovery` (decided here). It does not load the WebUI's files, so it works when they are missing or broken, and it has the same control-token gating.
+    - It renders settings and status text without `innerHTML` interpolation (found by the repository audit: Operator HTML page interpolates user input via `innerHTML`).
+    - Retire the Operator page: `/operator` redirects to the admin section, the tray's Operator shortcut opens the admin section, and `verify-linux-packaged-server-smoke.sh` checks the recovery page and the admin section entry instead of `/operator`.
+    - Update the README Known Issues entry that points to `/operator` when the tray is missing.
 - **Acceptance criteria**:
-  - `/operator` shows the same sections and controls and calls the same routes as before.
-  - Operator UI tests run in `npm run verify`.
-  - The page renders settings and status text without `innerHTML` interpolation.
-  - The packaged Linux server smoke still reaches `/operator`.
+  - The admin section offers every action and setting the Operator page offers today and calls the same routes.
+  - From another machine, nothing in the admin section is shown until a valid control token is entered; on localhost it opens without one.
+  - With the WebUI's files removed, the recovery page restarts, stops, shows logs, and checks, downloads, and applies updates.
+  - The recovery page renders settings, status, and log text without `innerHTML` interpolation.
+  - `/operator` reaches the admin section, and the packaged Linux server smoke passes against the recovery page.
 - **Verification evidence**:
-  - Completion evidence must include Operator UI tests for loading status and settings, saving settings, and the testing panel, `npm run verify`, `dotnet test ReelRoulette.sln`, and `./tools/scripts/verify-linux-packaged-server-smoke.sh`.
+  - Completion evidence must include admin section UI tests for loading status and settings, saving settings, the testing panel, and control-token gating in `npm run verify`, server tests that the recovery page is served without WebUI assets and keeps control-token gating, `dotnet test ReelRoulette.sln`, and `./tools/scripts/verify-linux-packaged-server-smoke.sh`.
+  - Add a Release Specific checklist item: "From another machine, the admin section asks for the control token and works after it is entered; with the WebUI files removed, the recovery page restarts, stops, shows logs, and applies an update, on Linux and Windows."
 - **Deferrals / Follow-ups**:
   - None yet.
 
@@ -694,86 +572,67 @@ Last milestone completed: M10j9
 - **Status**: ⏳ Planned
 - **Goal**: The WebUI updates its library window and filter source list when a source is enabled, disabled, added, or removed elsewhere.
 - **Scope**:
-  - Planned for v0.15.0.
+  - Planned for v0.15.1.
   - The server already applies source state: list query, random selection, and item play only use enabled sources. The WebUI keeps no source authority of its own; its source checkboxes are a filter choice.
   - What is missing: the WebUI ignores `sourceStateChanged`, and it reads `GET /api/sources` only when the filter dialog opens.
   - On `sourceStateChanged`, reload the loaded library window (keeping the scroll position, as the desktop does) and refresh the filter source list.
-  - Do not add source administration to the WebUI.
+  - Source administration is Admin Source and Item Management; this milestone only makes the library window and filter react to it.
 - **Acceptance criteria**:
-  - Enabling or disabling a source from the desktop or the Operator updates the WebUI library window and filter source list without a reload.
+  - Enabling or disabling a source from the admin section or the desktop updates the WebUI library window and filter source list without a reload.
   - A source imported elsewhere appears in the WebUI filter source list.
-  - No WebUI source administration is added.
 - **Verification evidence**:
-  - Completion evidence must include WebUI tests for `sourceStateChanged` handling and `npm run verify`, plus one quick spot check of a desktop source toggle seen in the WebUI.
+  - Completion evidence must include WebUI tests for `sourceStateChanged` handling and `npm run verify`, plus one quick spot check of an admin section source toggle seen in another WebUI tab.
 - **Deferrals / Follow-ups**:
   - None yet.
 
-### P26c - Operator Source and Item Management
+### P26c - Admin Source and Item Management
 
 - **Status**: ⏳ Planned
-- **Goal**: Manage sources and remove library items from the Operator, with server routes for what the desktop cannot do today.
+- **Goal**: Manage sources and remove library items from the WebUI admin section, with server routes for what no client can do today.
 - **Scope**:
-  - Planned for v0.15.0. Depends on: Operator UI Extraction.
-  - Gated by the control plane: localhost, or the control token from other machines. The accounts release later moves this behind admin accounts.
-  - Today the desktop Manage Sources dialog shows Rename and Remove buttons and the grid shows Remove from Library, but none of them has a server route; v0.14.0 hides them until this milestone.
-  - Add server routes to rename a source, remove a source (its items leave the catalog; files stay on disk), and remove items from the library, with the delete-from-disk option the desktop remove dialog offers.
-  - Add a Manage Sources section to the Operator: list sources with item and duration statistics, add a folder, rename, remove, enable and disable, refresh, and duplicate scan and apply. Folder import, enable and disable, refresh, and the duplicate routes already exist.
-  - Bring back the desktop grid's Remove from Library on the new item route.
+  - Planned for v0.15.1. Depends on: Admin Section in WebUI Settings.
+  - Gated like the rest of the admin section: localhost, or the control token from other machines. The accounts release later moves this behind admin accounts.
+  - Today the desktop Manage Sources dialog shows Rename and Remove buttons and the grid shows Remove from Library, but none of them has a server route; v0.14.0 hides them, and the frozen desktop keeps them hidden.
+  - Contract slice: server routes to rename a source, remove a source (its items leave the catalog; files stay on disk), and remove items from the library, with the delete-from-disk option the desktop remove dialog offers. OpenAPI and generated WebUI types.
+  - Manage Sources slice: list sources with the statistics the desktop dialog shows (total media, videos, photos, total duration, and videos with and without audio), add a folder, rename, remove, enable and disable, and refresh. Folder import, enable and disable, and refresh routes already exist. Duplicate review is Admin Refresh, Backup, and Duplicate Review.
+  - Adding a folder takes a path on the server machine. A browser folder picker returns paths on the browser's machine (inferred), and the desktop's Import Folder has the same flaw today: it sends its own folder picker path to the server (read from code), so it only works on the server machine. Whether the admin section takes a typed path that the server checks, or browses the server's folders through a new admin-only route, is decided here; a browse route is a contract change in its own slice.
+  - The item removal route also serves bulk removal in WebUI Multi-Select and Remaining Desktop Features.
   - Source and item changes publish events so connected clients update.
 - **Acceptance criteria**:
-  - From the Operator, sources can be added, renamed, removed, enabled, and disabled, and duplicates scanned and applied.
+  - From the admin section, sources can be added by server path, renamed, removed, enabled, disabled, and refreshed, with per-source statistics.
   - Removing a source removes its items from the catalog and leaves its files.
-  - The desktop Remove from Library removes the selected items through the server, with and without deleting from disk.
-  - Connected desktop and WebUI clients update through events and list requery.
+  - The item removal route removes items with and without deleting from disk.
+  - Connected WebUI sessions update through events and list requery.
   - New routes are in OpenAPI, and `npm run verify:contracts` passes.
 - **Verification evidence**:
-  - Completion evidence must include server tests for each new route, Operator UI tests for the Manage Sources section, a desktop test for Remove from Library, `dotnet test ReelRoulette.sln`, and `npm run verify`.
-  - Add a Release Specific checklist item: "From the Operator, add, rename, disable, and remove a source, and scan and apply duplicates; desktop and WebUI update without a restart."
+  - Completion evidence must include server tests for each new route, admin section UI tests for Manage Sources, `dotnet test ReelRoulette.sln`, and `npm run verify`.
+  - Add a Release Specific checklist item: "From the admin section, add, rename, disable, refresh, and remove a source, and other open WebUI sessions update without a reload."
 - **Deferrals / Follow-ups**:
   - Per-user source visibility is Per-User Source Permissions.
 
-### P26d - Operator Library Catalog Transfer
+### P26d - Admin Library Catalog Transfer
 
 - **Status**: ⏳ Planned
-- **Goal**: Export and import the library from the Operator, with the server applying the catalog, so a server plus WebUI install does not need the desktop app.
+- **Goal**: Export and import the library from the WebUI admin section, with the server applying the catalog, so catalog transfer does not need the desktop app.
 - **Scope**:
-  - Planned for v0.15.0. Depends on: Operator UI Extraction, and Remove library.json Library Support.
-  - Gated by the control plane, like Operator source management.
+  - Planned for v0.15.1. Depends on: Admin Section in WebUI Settings, and Remove library.json Library Support.
+  - Gated like the rest of the admin section.
+  - Today import is desktop-only and needs the server stopped: `LibraryArchiveMigration.ImportDatabase` writes the server's `library.db` from the desktop process (read from code). This is the main blocker for removing the desktop.
   - Move the `library.db` checkpoint transfer onto server operations. The server writes the checkpoint while it has `library.db` open. Settings and backups are not part of the transfer. Presets and thumbnail revision and dimensions travel with `library.db`. JPEG files stay in the local thumbnail directory.
   - Reuse the replace-and-recover protocol already in `LibraryCatalogStore` (incoming file, finished-file rename, recovery), which the desktop import uses today with the server stopped. What is new is replacing the database while the server's catalog session is open.
   - Import runs while the server is up. The previous database stays aside until the new file is in place and opens. A crash between those renames restores the previous file, or promotes the finished temporary file if that is the one that landed. A file that is not a library database is rejected.
   - Import keeps the source folder remap the desktop import offers.
-  - Add export and import actions to the Operator.
-  - Remove the desktop Library Export and Import menus.
+  - Add export and import actions to the admin section. Desktop Client Removal removes the desktop's Library Export and Import menus.
+  - Trap: measured on the developer's catalog, `library.db` is 70.5 MB for 49,050 items, larger than ASP.NET Core's default request body limit of about 30 MB (the framework default, not tested here). The import upload needs its own limit and should stream to the incoming file rather than buffer in memory.
 - **Acceptance criteria**:
-  - The Operator can export a server-produced checkpoint and import a `library.db` while the server is running.
+  - The admin section can export a server-produced checkpoint and import a `library.db` while the server is running.
   - An interrupted import leaves the previous catalog or the finished incoming file, never a partial database or an empty catalog.
   - Import rejects a file that is not a library database and does not replace the live catalog.
   - Import replaces the catalog, including presets and thumbnail revision and dimensions. Settings and backups stay where they are. JPEG files stay in the local thumbnail directory.
   - Connected clients resync after an import.
-  - The desktop client no longer has Library Export or Import.
 - **Verification evidence**:
-  - Completion evidence must include server tests for checkpoint export, running-server import, rejection of a file that is not a library database, and interrupted-replace recovery, plus Operator UI tests for export and import.
-  - Add a Release Specific checklist item: "With no desktop app, export the library from the Operator and import it into a fresh server, on Linux and Windows."
-- **Deferrals / Follow-ups**:
-  - None yet.
-
-### P26e - Desktop Source Management Link
-
-- **Status**: ⏳ Planned
-- **Goal**: The desktop's Manage Sources dialog is replaced by a link that opens source management in the Operator.
-- **Scope**:
-  - Planned for v0.15.0. Depends on: Operator Source and Item Management.
-  - Replace the **Manage Sources** dialog with a **Manage Sources** menu item that opens the Operator's Manage Sources section in the browser, for the server the desktop is connected to.
-  - Remove `ManageSourcesDialog`, its rename dialog, and its duplicate-scope prompt. Duplicate review moves to the Operator with source management.
-  - **Import Folder** stays in the desktop Library menu.
-  - Update the testing checklist and docs for the moved workflow.
-- **Acceptance criteria**:
-  - **Manage Sources** opens the Operator's source section for the connected server and no longer opens a desktop dialog.
-  - The desktop has no source rename, remove, enable, or duplicate workflow of its own.
-  - **Import Folder** still works from the desktop.
-- **Verification evidence**:
-  - Completion evidence must include a desktop test that the menu item opens the expected Operator URL, `dotnet test ReelRoulette.sln`, and one quick spot check.
+  - Completion evidence must include server tests for checkpoint export, running-server import, rejection of a file that is not a library database, and interrupted-replace recovery, plus admin section UI tests for export and import, including an upload larger than 30 MB.
+  - Add a Release Specific checklist item: "With no desktop app, export the library from the admin section and import it into a fresh server, on Linux and Windows."
 - **Deferrals / Follow-ups**:
   - None yet.
 
@@ -782,17 +641,17 @@ Last milestone completed: M10j9
 - **Status**: ⏳ Planned
 - **Goal**: `last.log` is JSON Lines written by one server writer, for server logs and ingested client logs alike, with correlation fields and deterministic rotation.
 - **Scope**:
-  - First milestone of the structured log foundation release, planned for v0.15.1. Depends on: Server Data Folder Override, whose folder helper resolves the log path.
+  - First milestone of the structured log foundation release, planned for v0.16.1. Depends on: Server Data Folder Override, whose folder helper resolves the log path.
   - Today `last.log` is free text: a few server paths append bracketed lines by hand, the server's `ILogger` output goes only to the console, client logs arrive through `POST /api/logs/client` as source, level, and message, and startup empties the file. Decide here whether startup still empties it once rotation exists.
   - Schema, one JSON object per line:
     - required on every entry: `ts`, `lvl`, `svc`, `comp`, `op`, `msg`, and the writer-assigned `ingestReqId`,
     - `lvl` is one of lowercase `trace|debug|info|warn|error|fatal`,
-    - `svc` is one of `server|desktop|webui`; `android|ios` are reserved and not emitted,
+    - `svc` is one of `server|webui`,
     - optional fields in canonical order: `evt`, `data`, `ingestReqId`, `clientOpId`, `traceId`, `spanId`, `clientId`, `sessionId`, `ver`, `build`, `clientTs`, `srcIp`, `userAgent`; `evt` sits right after `op` and `data` right after `msg`,
     - `evt` is optional, dot-delimited, lowercase, stable, and low-cardinality, used only when it adds something `op` does not,
     - `data` is bounded: safe primitives, short allowlisted strings, and small objects, with no arbitrary object dumps,
     - `ex` is accepted on input only and normalized into `data.error` (`type`, `code`, `messageSafe`, optional bounded stack fingerprint); it is never a top-level field.
-    - example: `{"ts":"...","lvl":"info","svc":"desktop","comp":"ui.main-window","op":"UpdateLibraryPanel","evt":"ui.library.panel.updated","msg":"Library panel updated.","data":{"totalCount":38833,"eligibleCount":163},"ingestReqId":"...","clientOpId":"...","traceId":"...","spanId":"...","clientId":"...","sessionId":"...","ver":"...","build":"...","clientTs":"...","srcIp":"...","userAgent":"..."}`
+    - example: `{"ts":"...","lvl":"info","svc":"webui","comp":"web.library","op":"UpdateLibraryPanel","evt":"web.library.panel.updated","msg":"Library panel updated.","data":{"totalCount":38833,"eligibleCount":163},"ingestReqId":"...","clientOpId":"...","traceId":"...","spanId":"...","clientId":"...","sessionId":"...","ver":"...","build":"...","clientTs":"...","srcIp":"...","userAgent":"..."}`
   - One writer for the server's `ILogger` pipeline (a logging provider) and for `POST /api/logs/client`. The hand-written appends go through it.
   - Time and correlation:
     - `ts` is the server write time and decides order; `clientTs` is the client's event time, kept for context,
@@ -801,7 +660,7 @@ Last milestone completed: M10j9
     - `srcIp` and `userAgent` are added by the server, never by clients.
   - Strict ingestion at `POST /api/logs/client`: keep valid fields as sent without inferring `lvl`, `comp`, or `op` from the message; reject missing required fields, invalid `lvl` or `svc`, invalid or oversized `data`, and unknown fields; return a `400` listing every error with `code`, `field` (dotted path such as `data.error.code`), and `reason`. JSON serialization also closes a forged-line problem found by the repository audit: `LibraryOperationsService.AppendClientLog` writes client messages without escaping newlines or control characters.
   - Rotation: rotate at 25 MB, keep the current file plus 10 uncompressed archives, enforce retention at startup before writing, and define what happens to a single oversized entry and to concurrent appends.
-  - Human-readable rendering is a view over the fields (Operator, console), not what is stored.
+  - Human-readable rendering is a view over the fields (admin section, console), not what is stored.
   - Contract change for `POST /api/logs/client` in OpenAPI and the generated WebUI types.
 - **Acceptance criteria**:
   - Every `last.log` line is a JSON object with the required fields and canonical field order.
@@ -815,15 +674,15 @@ Last milestone completed: M10j9
   - Completion evidence must include schema and order tests, rejection tests for each invalid case, correlation and time-field tests, rotation and retention edge-case tests, `dotnet test ReelRoulette.sln`, and `npm run verify:contracts`.
   - Docs evidence must include the schema, ingestion contract, and rotation rules in `docs/api.md` and `docs/architecture.md`.
 - **Deferrals / Follow-ups**:
-  - The Operator log view keeps reading the file through its current route until Operator Log Viewer.
+  - The admin section's log view keeps reading the file through its current route until Admin Log Viewer.
 
 ### P27b - Structured Log API and Privacy Rules
 
 - **Status**: ⏳ Planned
-- **Goal**: Desktop and WebUI log through a typed structured API that requires explicit metadata and makes privacy-safe entries the only kind it can emit.
+- **Goal**: The WebUI logs through a typed structured API that requires explicit metadata and makes privacy-safe entries the only kind it can emit.
 - **Scope**:
-  - Last milestone of the structured log foundation release, planned for v0.15.1. Depends on: Structured Log Schema, Writer, and Ingestion.
-  - Level-typed methods for desktop and WebUI, each with explicit `comp` and `op`:
+  - Last milestone of the structured log foundation release, planned for v0.16.1. Depends on: Structured Log Schema, Writer, and Ingestion.
+  - Level-typed methods for the WebUI, each with explicit `comp` and `op`:
     - `LogTrace(comp, op, evt? = null, msg, data? = null, context? = null)`
     - `LogDebug(comp, op, evt? = null, msg, data? = null, context? = null)`
     - `LogInfo(comp, op, evt? = null, msg, data? = null, context? = null)`
@@ -832,15 +691,15 @@ Last milestone completed: M10j9
     - `LogFatal(comp, op, evt? = null, msg, data? = null, ex? = null, context? = null)`
   - `lvl` comes from the method; there is no parsing of `comp` or `op` from the message.
   - `LogContext = { clientOpId?, traceId?, spanId?, clientId?, sessionId?, ver?, build?, clientTs? }`; `ingestReqId`, `srcIp`, and `userAgent` are never client-supplied.
-  - Baseline `comp` names: desktop `ui.main-window`, `ui.player`, `ui.settings`, `core.client`, `playback.vlc`, `library.panel`; server `api`, `auth`, `sse`, `playback`, `refresh.pipeline`, `storage`; WebUI `web.app`, `web.player`, `web.api`, `web.sse`.
+  - Baseline `comp` names: server `api`, `auth`, `sse`, `playback`, `refresh.pipeline`, `storage`; WebUI `web.app`, `web.player`, `web.library`, `web.api`, `web.sse`.
   - Privacy by construction, enforced by the API rather than by rewriting entries afterwards:
     - `msg` and `data` never carry file names or paths, tag or category names, preset or source names, search text, tokens, cookies, PINs or other secrets, or raw media identifiers that reveal content. The one exception is the one-time first-run setup code from Admin First-Run Setup, which the server logs only while no account exists,
-    - prefer fixed templates with counts, booleans, and durations, for example `"Saved desktop settings."` with `data: { wroteBackup: true }`, or `"API request failed."` with `data: { endpoint: "SetFavorite" }` and no URL,
+    - prefer fixed templates with counts, booleans, and durations, for example `"Saved preferences."` with `data: { wroteBackup: true }`, or `"API request failed."` with `data: { endpoint: "SetFavorite" }` and no URL,
     - `ex` on `LogError` and `LogFatal` becomes `data.error` with `type`, `code`, `messageSafe`, and an optional fingerprint; raw stack traces, local paths, and payload fragments are not emitted,
     - `data` is checked for size and shape before serialization.
-  - Until the migration milestones, the existing desktop `Log(string)` calls and the WebUI status relay keep working by emitting through the new API as `comp` `legacy`, `op` `unmigrated`, level `info`. This is the only inferred path, and the migration milestones remove it.
+  - Until WebUI Instrumentation, the WebUI status relay keeps working by emitting through the new API as `comp` `legacy`, `op` `unmigrated`, level `info`. This is the only inferred path, and that milestone removes it.
 - **Acceptance criteria**:
-  - Desktop and WebUI have the level-typed API with explicit `comp` and `op`, optional `evt`, and typed context.
+  - The WebUI has the level-typed API with explicit `comp` and `op`, optional `evt`, and typed context.
   - `ex` is always written as privacy-safe `data.error`, never as a top-level field.
   - Oversized or arbitrary `data` is rejected before it is written.
   - The legacy path is the only one that emits `comp` `legacy`, and it is documented as temporary.
@@ -848,35 +707,14 @@ Last milestone completed: M10j9
 - **Verification evidence**:
   - Completion evidence must include API tests per level, `ex` normalization tests, context mapping tests, negative tests that paths, names, and secrets in the shapes above are refused, `dotnet test ReelRoulette.sln`, and `npm run verify`.
 - **Deferrals / Follow-ups**:
-  - Migrating desktop call sites is Desktop Log Migration; WebUI call sites are WebUI Instrumentation.
-
-### P27c - Desktop Log Migration
-
-- **Status**: ⏳ Planned
-- **Goal**: Every desktop log call uses the structured API, and the legacy `Log(string)` path is gone and cannot come back.
-- **Scope**:
-  - First milestone of the structured log migration release, planned for v0.17.0. Depends on: Structured Log API and Privacy Rules.
-  - The desktop has about 660 `Log(` call sites, most of them in `MainWindow.axaml.cs`.
-  - Move every call site to the structured API with a fitting level: `trace` or `debug` for noisy detail, `info` for state changes, `warn` for recoverable problems, `error` for failures, `fatal` for unrecoverable ones.
-  - Rewrite messages that carry file names, paths, tag names, or other content to fixed templates.
-  - Delete `Log(string)` and the `legacy` path on the desktop, and add a test or analyzer rule that fails if a string-only log path or message parsing comes back.
-  - Example: `LogInfo(comp: "ui.main-window", op: "UpdateLibraryPanel", evt: "ui.library.panel.updated", msg: "Library panel updated.", data: { totalCount: 38833, eligibleCount: 163 })`.
-- **Acceptance criteria**:
-  - No desktop `Log(string)` call or `legacy` entry remains.
-  - Desktop entries have explicit `comp` and `op` and fitting levels.
-  - A reintroduced string-only log call fails the build or tests.
-  - Desktop entries contain no file names, paths, or tag names.
-- **Verification evidence**:
-  - Completion evidence must include a before and after call-site inventory, the guard test failing on a reintroduced call, a scan of a captured desktop `last.log` for paths and names, and `dotnet test ReelRoulette.sln`.
-- **Deferrals / Follow-ups**:
-  - None yet.
+  - Migrating WebUI call sites is WebUI Instrumentation.
 
 ### P27d - Server Instrumentation
 
 - **Status**: ⏳ Planned
 - **Goal**: The server logs its meaningful decisions and failures as structured entries, not only transport events.
 - **Scope**:
-  - Planned for v0.17.0. Depends on: Structured Log Schema, Writer, and Ingestion.
+  - Planned for v0.18.0. Depends on: Structured Log Schema, Writer, and Ingestion.
   - Structured logs for: API handlers and login and session outcomes, event stream connect and disconnect, refresh pipeline stages and outcomes, catalog open, import, backup, and replace, and settings changes and their errors. Playback decisions are logged by the playback sessions release.
   - Favor state changes, decisions, degradations, and failures over repetitive noise.
   - Move the remaining hand-built server log lines to `ILogger` with structured fields.
@@ -894,7 +732,7 @@ Last milestone completed: M10j9
 - **Status**: ⏳ Planned
 - **Goal**: The WebUI logs its key flows as structured entries instead of relaying status-line text.
 - **Scope**:
-  - Planned for v0.17.0. Depends on: Structured Log API and Privacy Rules, and WebUI Login Gate.
+  - Planned for v0.18.0. Depends on: Structured Log API and Privacy Rules, and WebUI Login Gate.
   - Today the WebUI logs mainly by relaying each status-line message as free text.
   - Structured logs for app startup and compatibility checks, login, event stream connect and retry, API request failures, and major user actions and error states.
   - Five flows with stable operation names: `BootstrapSession` (startup and compatibility gating), `LoginSession` (account tile, PIN, and session start), `SseLifecycle`, `RandomPickAndPlay`, and `MutateItemState` (favorite, blacklist, and tag-edit apply).
@@ -909,26 +747,26 @@ Last milestone completed: M10j9
 - **Deferrals / Follow-ups**:
   - None yet.
 
-### P27f - Operator Log Viewer
+### P27f - Admin Log Viewer
 
 - **Status**: ⏳ Planned
-- **Goal**: The Operator can filter and page structured logs by field, text, and time without shell access.
+- **Goal**: The admin section can filter and page structured logs by field, text, and time without shell access.
 - **Scope**:
-  - Planned for v0.17.0. Depends on: Structured Log Schema, Writer, and Ingestion, and Operator UI Extraction.
-  - Rename **Server Logs** to **Log Viewer** across the Operator, API, tests, and docs, and rename `GET /control/logs/server` to `GET /control/log-viewer` in one step. There is no alias period: the bundled Operator page is the route's only caller and ships in the same binary.
+  - Planned for v0.18.0. Depends on: Structured Log Schema, Writer, and Ingestion, and Admin Section in WebUI Settings.
+  - Rename **Server Logs** to **Log Viewer** across the admin section, the recovery page, API, tests, and docs, and rename `GET /control/logs/server` to `GET /control/log-viewer` in one step. There is no alias period: the admin section and the recovery page are the route's only callers and ship in the same binary.
   - The route stays read-only; logs are still written directly to `last.log`.
   - Server-side filters: `svc`, `lvl`, `clientId`, `sessionId`, `traceId`, `ingestReqId`, `clientOpId`, `comp`, `op`, `evt`, message text, and a time window. Client-side filtering only refines results already fetched.
   - Newest first by `ts`, tie-broken by `ingestReqId` and then a stable row sequence, with a versioned cursor and defined `from` and `to` bounds, so paging never repeats or skips rows.
   - Read from the end of the file and across rotated archives instead of walking every line on each request (found by the repository audit: `ServerLogService.Read` walks the entire log on every request).
-  - Operator view: controls collapsed by default with active-filter chips, readable rows with expandable raw JSON, and auto-refresh that pauses while scrolled away from the newest rows, with a resume control.
+  - Admin section view: controls collapsed by default with active-filter chips, readable rows with expandable raw JSON, and auto-refresh that pauses while scrolled away from the newest rows, with a resume control.
 - **Acceptance criteria**:
-  - The Operator Log Viewer filters by every listed field, text, and time window.
+  - The admin section's Log Viewer filters by every listed field, text, and time window.
   - `/control/logs/server` is gone and `/control/log-viewer` is in OpenAPI and `docs/api.md`.
   - The same filters and cursor return the same rows, and paging never repeats or skips a row.
   - A request reads only as much of the log as its page needs.
   - Controls start collapsed and show active filters; rows expand to raw JSON; auto-refresh pauses and resumes as described.
 - **Verification evidence**:
-  - Completion evidence must include paging tests across page and archive boundaries, replay tests for identical filters, a read-cost test on a large log, Operator UI tests for the view, and `npm run verify`.
+  - Completion evidence must include paging tests across page and archive boundaries, replay tests for identical filters, a read-cost test on a large log, admin section UI tests for the view, and `npm run verify`.
 - **Deferrals / Follow-ups**:
   - None yet.
 
@@ -937,15 +775,15 @@ Last milestone completed: M10j9
 - **Status**: ⏳ Planned
 - **Goal**: Client log relay never blocks or interrupts user actions, and its retries are bounded and predictable.
 - **Scope**:
-  - Last milestone of the structured log migration release, planned for v0.17.0.
-  - Desktop and WebUI relay asynchronously with bounded retries and a bounded queue; a failing log endpoint drops entries after the bound instead of slowing the client.
-  - Add Release Specific checklist items for a combined trace across server and both clients for one end-to-end flow, and for a simulated log endpoint failure during normal use.
+  - Last milestone of the structured log migration release, planned for v0.18.0.
+  - The WebUI relays asynchronously with bounded retries and a bounded queue; a failing log endpoint drops entries after the bound instead of slowing it.
+  - Add Release Specific checklist items for a combined trace across the server and the WebUI for one end-to-end flow, and for a simulated log endpoint failure during normal use.
 - **Acceptance criteria**:
-  - A failing or slow `POST /api/logs/client` does not delay or interrupt any user action on either client.
+  - A failing or slow `POST /api/logs/client` does not delay or interrupt any user action in the WebUI.
   - Retry and drop behavior matches its documented bounds.
-  - `last.log` holds server and both clients' entries through the same writer.
+  - `last.log` holds server and WebUI entries through the same writer.
 - **Verification evidence**:
-  - Completion evidence must include relay tests with a failing and a slow endpoint on both clients, `dotnet test ReelRoulette.sln`, and `npm run verify`. The end-to-end trace and failure simulation are the Release Specific checklist items above.
+  - Completion evidence must include relay tests with a failing and a slow endpoint in the WebUI, `dotnet test ReelRoulette.sln`, and `npm run verify`. The end-to-end trace and failure simulation are the Release Specific checklist items above.
 - **Deferrals / Follow-ups**:
   - None yet.
 
@@ -954,25 +792,27 @@ Last milestone completed: M10j9
 - **Status**: ⏳ Planned
 - **Goal**: The server works correctly behind an HTTPS reverse proxy, and the docs show how to set one up, including `tailscale serve`.
 - **Scope**:
-  - First milestone of the accounts release, planned for v0.16.0. HTTPS comes before PIN login so LAN and remote logins do not send PINs in clear text. The server does not serve HTTPS itself.
+  - First milestone of the WebUI overhaul release, planned for v0.15.0, moved there from the accounts release: with the WebUI as the only client on phones, installing it as an app needs HTTPS, and the overhaul is designed and tested as an installed app. It still lands before PIN login, so LAN and remote logins do not send PINs in clear text, and behind a proxy today's pairing token stops crossing the LAN in clear text. The server does not serve HTTPS itself.
   - Document reverse proxy setup in `README.md` and `docs/dev-setup.md`: a general proxy example and `tailscale serve`, with the headers the server needs.
   - Server fixes so it behaves correctly behind a proxy:
     - Honor forwarded headers only from configured proxies. A request that came through a proxy is not a localhost request, even when the proxy runs on the server machine, so localhost trust applies only to direct loopback connections. Check during this milestone which forwarding headers `tailscale serve` sends; if a proxy sends none, document that it must, or how the server is told the proxy address.
     - Treat a missing remote address as not local (found by the repository audit: `RemoteIpAddress == null` treated as local).
+    - Merge the two identical localhost checks into one helper that every localhost decision uses: `IsLocalRequest` in `src/core/ReelRoulette.Server/Auth/ServerPairingAuthMiddleware.cs` and in `src/core/ReelRoulette.Server/Hosting/ServerHostComposition.cs`. Both treat a missing remote address as local, and a request to the server's own LAN address as local. Treating a request to the server's own address as local is intended: it comes from the server machine. Show in File Manager from the WebUI uses the same helper.
     - Mark cookies `Secure` when the original request was HTTPS, and never send `SameSite=None` without `Secure` (found by the repository audit: `SameSite=None` allowed without `Secure`).
     - Accept `https` origins for CORS and build LAN origins with the scheme clients actually use (found by the repository audit: CORS hard-coded to HTTP only).
-    - Links the server builds (Operator links, runtime config) use the proxied scheme and host.
+    - Links the server builds (admin links, runtime config) use the proxied scheme and host.
   - Android PWA install, folded in from the backlog: found in the v0.12.0 manual regression pass on a Google Pixel 8 Pro, Add to Home Screen only creates a shortcut that opens in Chrome. Likely cause, not confirmed on a device: the WebUI registers its service worker only in a secure context, and a plain-HTTP LAN address is not one, so Chrome has no service worker and does not offer Install app. iOS installs from its home-screen meta tags without one. Over HTTPS through a proxy, Install app should open the WebUI standalone; check the manifest fields Chrome requires if it does not.
-  - Add Release Specific checklist items: "Behind `tailscale serve` and one other HTTPS proxy, desktop, WebUI, and Operator connect, log in, browse, and play, and the server treats them as remote," and "On Android Chrome over HTTPS, Install app opens the WebUI standalone with its icon; iOS Add to Home Screen and desktop browser install still open standalone."
+  - Add Release Specific checklist items: "Behind `tailscale serve` and one other HTTPS proxy, the WebUI and its admin pages connect, pair, browse, and play, and the server treats them as remote," and "On Android Chrome over HTTPS, Install app opens the WebUI standalone with its icon; iOS Add to Home Screen and desktop browser install still open standalone."
 - **Acceptance criteria**:
-  - Behind an HTTPS reverse proxy, desktop, WebUI, Operator, the event stream, and media range requests work.
+  - Behind an HTTPS reverse proxy, the WebUI, its admin pages, the event stream, and media range requests work.
   - A request through a proxy on the server machine is not treated as localhost.
   - Cookies are `Secure` for HTTPS clients, and CORS accepts the HTTPS origin.
   - A request with no remote address is not treated as local.
+  - Every localhost decision goes through one helper.
   - On Android Chrome over HTTPS, Install app opens the WebUI as a standalone app, and iOS and desktop browser installs still do.
   - The docs give working `tailscale serve` and general proxy setups.
 - **Verification evidence**:
-  - Completion evidence must include server tests for forwarded-header trust, proxied-localhost handling, missing remote address, cookie flags, and HTTPS CORS origins, plus one quick spot check through `tailscale serve`. The proxy matrix and the Android and iOS install pass are the Release Specific checklist items above.
+  - Completion evidence must include server tests for forwarded-header trust, proxied-localhost handling, missing remote address, the merged localhost helper, cookie flags, and HTTPS CORS origins, plus one quick spot check through `tailscale serve`. The proxy matrix and the Android and iOS install pass are the Release Specific checklist items above.
 - **Deferrals / Follow-ups**:
   - None yet.
 
@@ -981,7 +821,7 @@ Last milestone completed: M10j9
 - **Status**: ⏳ Planned
 - **Goal**: Every path that reads or serves library items asks one server-side source access policy, which allows everything until per-user permissions exist.
 - **Scope**:
-  - Planned for v0.16.0.
+  - Planned for v0.17.0.
   - Today source enabled state is applied by separate SQL conditions in list query, random selection, and item play, and some paths skip it: `GET /api/media/{idOrToken}` streams any item by its raw id regardless of its source.
   - Add one policy that takes the request's session context and returns the sources it may see, and apply it on every item path: library list query, random selection, item play, `GET /api/media/{idOrToken}` (tokens and raw ids), `GET /api/thumbnail/{itemId}`, `POST /api/library/item`, `POST /api/library-states`, the tag-editor model, auto-tag and duplicate scans, library stats, and `GET /api/sources`.
   - The default policy allows every enabled source, so behavior does not change, except that a raw item id of a disabled source no longer streams.
@@ -1000,7 +840,7 @@ Last milestone completed: M10j9
 - **Status**: ⏳ Planned
 - **Goal**: Accounts live in their own server store, separate from the library catalog.
 - **Scope**:
-  - Planned for v0.16.0.
+  - Planned for v0.17.0.
   - Accounts are not stored in `library.db`. Catalog export, import, and backups copy or replace that whole file, so accounts there would ship PIN hashes inside every export and be replaced by every import.
   - Store accounts in their own SQLite database in the server data folder (for example `accounts.db`), resolved through the server data folder helper.
   - What catalog transfer does with accounts:
@@ -1029,7 +869,7 @@ Last milestone completed: M10j9
 - **Status**: ⏳ Planned
 - **Goal**: LAN and remote clients log in with an account PIN and get a session; localhost stays trusted.
 - **Scope**:
-  - Planned for v0.16.0. Depends on: Account Store, and Reverse Proxy and HTTPS Access.
+  - Planned for v0.17.0. Depends on: Account Store, and Reverse Proxy and HTTPS Access.
   - Add a login route: the client sends account id, device id, and PIN, and gets a per-client session token on success.
   - Sessions are not persisted; clients log in again after a restart.
   - Enforce lockout on the server and return lockout state and remaining time.
@@ -1051,20 +891,20 @@ Last milestone completed: M10j9
 - **Deferrals / Follow-ups**:
   - None yet.
 
-### P28e - Auth Cutover for API and Operator
+### P28e - Auth Cutover for API and Admin
 
 - **Status**: ⏳ Planned
-- **Goal**: Every API route, the event stream, and the Operator require an account session from LAN and remote clients, and the separate control token is gone.
+- **Goal**: Every API route, the event stream, the admin section, and the recovery page require an account session from LAN and remote clients, and the separate control token is gone.
 - **Scope**:
-  - Planned for v0.16.0. Depends on: PIN Login API and Sessions.
+  - Planned for v0.17.0. Depends on: PIN Login API and Sessions.
   - Require a session on every API and control route and on the event stream for non-localhost requests.
-  - The Operator uses admin account sessions and no longer accepts the control token added in v0.14.0. Remove the control token, its setting, and its prompt, including the `adminAuthMode` field on `/control/settings` and in `core-settings.json`. v0.14.0 kept that field read-only (always `TokenRequired`, posted values ignored) so the contract changes only once.
+  - The admin section and the recovery page use admin account sessions and no longer accept the control token added in v0.14.0. Remove the control token, its setting, and its prompt, including the `adminAuthMode` field on `/control/settings` and in `core-settings.json`. v0.14.0 kept that field read-only (always `TokenRequired`, posted values ignored) so the contract changes only once.
   - No session or token is accepted as a query parameter. Found while adding the control token: `/api` routes still accept the API pairing token as a `token` query, and `GET /api/pair?token=` pairs with it, which puts the token in URLs and in the default request log. v0.14.0 stopped accepting the control token in a query and made `/control/pair` POST-only, but left `/api` for this cutover.
-  - `GET` and `POST /api/web-runtime/settings` become admin-only. Found while adding the control token: the route is on the API plane, so any LAN caller with the API pairing token, which `/runtime-config.json` hands to every browser, can turn WebUI auth off, change the port or LAN binding, and read the shared token. The desktop calls it from other machines, so v0.14.0 did not move it behind the control token.
+  - `GET` and `POST /api/web-runtime/settings` become admin-only. Found while adding the control token: the route is on the API plane, so any LAN caller with the API pairing token, which `/runtime-config.json` hands to every browser, can turn WebUI auth off, change the port or LAN binding, and read the shared token. The desktop called it from other machines, so v0.14.0 did not move it behind the control token; the desktop is gone by this release.
   - Admin-only operations (control plane, source and item management, catalog transfer, account administration, testing routes) reject user-level accounts. Testing routes use the same check as the rest of the control plane (found by the repository audit: `OperatorTestingService` mutations protected only by middleware policy).
   - Settings reads no longer return secrets (found by the repository audit: auth and secret fields in DTOs encourage credential leakage; `GET /control/settings` returns the admin token today).
   - Remove pairing and control-token flows from clients, docs, and contracts. Found by the repository audit, these go with them:
-    - Two pairing secrets that drift apart: `/api/pair` checks `ServerRuntimeOptions.PairingToken`, while the Operator saves `WebRuntimeSettings.SharedToken`, and `src/core/ReelRoulette.ServerApp/Program.cs` starts with `SharedToken ?? PairingToken` and passes that to a restarted server. Editing the shared token has no effect until a restart, then silently changes the pairing token.
+    - Two pairing secrets that drift apart: `/api/pair` checks `ServerRuntimeOptions.PairingToken`, while the Operator page, and later the admin section, saves `WebRuntimeSettings.SharedToken`, and `src/core/ReelRoulette.ServerApp/Program.cs` starts with `SharedToken ?? PairingToken` and passes that to a restarted server. Editing the shared token has no effect until a restart, then silently changes the pairing token.
     - `WebRuntimeSettings.AuthMode` is saved by `CoreSettingsService.UpdateWebRuntimeSettings` but `ServerPairingAuthMiddleware` reads only `RequireAuth`, so setting it to `Off` changes nothing.
     - `RestartCoordinator.TryLaunchReplacementProcess` in `Program.cs` passes the token to the child as the `CoreServer__PairingToken` environment variable, which other local users can read from `/proc/<pid>/environ` on Linux. Session secrets that replace it must not be passed this way.
     - The WebUI ships `"pairToken": "reelroulette-dev-token"` in `public/runtime-config.json`, which any browser can fetch, and `src/config/runtimeConfig.ts` parses `pairToken` as a config field. Remove both and the example in the WebUI `README.md`.
@@ -1073,48 +913,48 @@ Last milestone completed: M10j9
   - External programmatic API access stays out of scope.
 - **Acceptance criteria**:
   - LAN and remote requests without a valid session get a deterministic auth error on every API and control route and on the event stream.
-  - The Operator uses account sessions, and no control token is accepted anywhere.
+  - The admin section and the recovery page use account sessions, and no control token is accepted anywhere.
   - User-level accounts are refused on admin-only operations.
   - LAN and remote requests to web runtime settings without an admin session are refused.
   - No settings response contains a secret.
   - Active docs no longer describe pairing or control tokens.
 - **Verification evidence**:
-  - Completion evidence must include authorization tests across library, playback, source, event stream, Operator, and testing routes for localhost, admin, user, and no session.
+  - Completion evidence must include authorization tests across library, playback, source, event stream, admin, and testing routes for localhost, admin, user, and no session.
 - **Deferrals / Follow-ups**:
   - None yet.
 
 ### P28f - Admin First-Run Setup
 
 - **Status**: ⏳ Planned
-- **Goal**: The first admin account is created in the Operator, from localhost directly or from another machine with a one-time setup code, before any LAN or remote client can log in.
+- **Goal**: The first admin account is created in the admin section, from localhost directly or from another machine with a one-time setup code, before any LAN or remote client can log in.
 - **Scope**:
-  - Planned for v0.16.0. Depends on: Auth Cutover for API and Operator.
+  - Planned for v0.17.0. Depends on: Auth Cutover for API and Admin.
   - There is no default account and no default PIN. First-run setup state is an account store with no accounts.
-  - In that state, the server generates a random one-time setup code from a cryptographic random source on start, writes it to the server log, and shows it in the Operator opened on localhost. Each start without accounts makes a new code, and the previous one stops working.
+  - In that state, the server generates a random one-time setup code from a cryptographic random source on start, writes it to the server log, and shows it in the admin section opened on localhost. Each start without accounts makes a new code, and the previous one stops working.
   - The setup code is the only secret the server writes to its log, and only while no account exists. The structured log privacy rules carry it as their one documented exception.
-  - From localhost, the Operator opens straight into setup and needs no code. From another machine, the Operator shows only a setup code prompt, and only the setup route accepts LAN or remote requests until setup finishes.
+  - From localhost, the admin section opens straight into setup and needs no code. From another machine, the admin section shows only a setup code prompt, and only the setup route accepts LAN or remote requests until setup finishes.
   - Setup creates the first admin account with a name and a PIN.
   - The code stops working as soon as the first admin account exists, and the server no longer generates or logs one.
   - Failed code attempts count per device with the same one-hour lockout after 10 failures as PIN login, the code is compared in constant time, and it never appears in a URL.
-  - Desktop and WebUI login from LAN or remote clients is blocked until setup is done, with a message pointing to the Operator. Localhost clients keep working.
+  - WebUI login from LAN or remote devices is blocked until setup is done, with a message pointing to setup in the admin section. Localhost keeps working.
   - Add a Release Specific checklist item: "On a fresh install, LAN login is blocked until the first admin is created: from localhost without a code, and from another machine only with the setup code from the server log; the code is refused afterwards."
 - **Acceptance criteria**:
   - Setup state is detected from the account store and ends when the first admin account exists.
-  - On start with no accounts, a new setup code is written to the server log and shown in the Operator on localhost, and the previous code is refused.
+  - On start with no accounts, a new setup code is written to the server log and shown in the admin section on localhost, and the previous code is refused.
   - Localhost setup needs no code. Setup from another machine needs the current code, and wrong codes lock that device out after 10 failures.
   - Once the first admin exists, the code is refused and no new code is generated or logged.
-  - LAN and remote desktop and WebUI logins report setup-incomplete and are refused until setup finishes.
+  - LAN and remote WebUI logins report setup-incomplete and are refused until setup finishes.
 - **Verification evidence**:
-  - Completion evidence must include server tests for code generation, logging, replacement on restart, constant-time comparison, lockout, refusal after the first admin exists, and setup-only access before setup, plus Operator UI tests for setup from localhost and from another machine with the code.
+  - Completion evidence must include server tests for code generation, logging, replacement on restart, constant-time comparison, lockout, refusal after the first admin exists, and setup-only access before setup, plus admin section UI tests for setup from localhost and from another machine with the code.
 - **Deferrals / Follow-ups**:
   - None yet.
 
-### P28g - Operator Account Administration
+### P28g - Account Administration
 
 - **Status**: ⏳ Planned
-- **Goal**: Admins create and maintain accounts in the Operator.
+- **Goal**: Admins create and maintain accounts in the admin section.
 - **Scope**:
-  - Planned for v0.16.0. Depends on: Admin First-Run Setup.
+  - Planned for v0.17.0. Depends on: Admin First-Run Setup.
   - An admin-only Access Control section: list accounts with name and level, add accounts with name, level, and initial PIN, edit name and level, reset a PIN, and remove accounts.
   - The last admin cannot be removed or demoted.
   - Admins change their own name and PIN through the same self-service flow as users.
@@ -1124,60 +964,38 @@ Last milestone completed: M10j9
   - The last admin cannot be deleted or demoted.
   - Changes persist across restart and apply to later logins.
 - **Verification evidence**:
-  - Completion evidence must include server tests for account changes, last-admin protection, level changes, and PIN resets, and Operator UI tests for the section and its errors.
+  - Completion evidence must include server tests for account changes, last-admin protection, level changes, and PIN resets, and admin section UI tests for the section and its errors.
 - **Deferrals / Follow-ups**:
   - None yet.
 
 ### P28h - Self-Service PIN Change
 
 - **Status**: ⏳ Planned
-- **Goal**: Logged-in users change their own PIN from every client.
+- **Goal**: Logged-in users change their own PIN from the WebUI.
 - **Scope**:
-  - Planned for v0.16.0. Depends on: Operator Account Administration.
+  - Planned for v0.17.0. Depends on: Account Administration.
   - A PIN change route that needs the old PIN, the new PIN, and a confirmation.
-  - The flow in the Operator, desktop, and WebUI for admins and users.
+  - The flow in the WebUI settings panel for admins and users.
   - Reuse server hashing, validation, and lockout, and never return a PIN.
   - Define what happens to the current session after a change.
 - **Acceptance criteria**:
   - Admins and users can change their own PIN with the old PIN, a new PIN, and a matching confirmation.
   - Wrong old PIN, mismatched confirmation, invalid new PIN, and lockout return clear errors.
   - The next login needs the new PIN.
-  - The flow is available in all three clients without admin rights.
+  - The flow is available in the WebUI without admin rights.
 - **Verification evidence**:
   - Completion evidence must include server tests for each success and failure path and client tests for the validation messages.
 - **Deferrals / Follow-ups**:
   - Profile editing beyond name and PIN stays out of scope.
-
-### P28i - Desktop Login Gate
-
-- **Status**: ⏳ Planned
-- **Goal**: The desktop asks for a PIN before the main window loads when its server is not on the same machine.
-- **Scope**:
-  - Planned for v0.16.0. Depends on: Self-Service PIN Change.
-  - A desktop connected to a localhost server is trusted and shows no login.
-  - Otherwise, show a login window before the main window: an account tile grid with `admin_panel_settings` for admins and `account_circle` for users, names below; a PIN prompt on selecting a tile.
-  - Server-unavailable and setup-incomplete messages with retry or a pointer to the Operator.
-  - No persisted session: log in each time the app opens.
-  - Add a Release Specific checklist item: "A desktop on another machine needs a PIN on every launch and after a server restart; a desktop on the server machine does not."
-- **Acceptance criteria**:
-  - With a non-localhost server, the main window is unreachable until a PIN login succeeds; with a localhost server, no login is shown.
-  - Server-unavailable and setup-incomplete states block login with clear messages.
-  - Tiles use the required icons and account names.
-  - Failed PINs and lockouts show clear errors, including the remaining lockout time.
-  - Restarting the desktop needs a new login.
-- **Verification evidence**:
-  - Completion evidence must include desktop tests for login, server unavailable, setup incomplete, wrong PIN, lockout, localhost trust, and no session reuse.
-- **Deferrals / Follow-ups**:
-  - Remembered accounts, biometrics, and offline login are out of scope.
 
 ### P28j - WebUI Login Gate
 
 - **Status**: ⏳ Planned
 - **Goal**: The WebUI asks for a PIN before any library or player surface when it is not opened from the server machine.
 - **Scope**:
-  - Planned for v0.16.0. Depends on: Desktop Login Gate.
+  - Planned for v0.17.0. Depends on: Self-Service PIN Change.
   - Opened from localhost, the WebUI is trusted and shows no login.
-  - Otherwise, show the account tile grid before the shell, library, player, or random controls, with the same icons as the desktop.
+  - Otherwise, show an account tile grid before the shell, library, player, or random controls: `admin_panel_settings` for admins and `account_circle` for users, names below, and a PIN prompt on selecting a tile. Server-unavailable messages offer a retry.
   - PIN prompt, setup-incomplete message, and no persisted session: log in on every open or reload.
   - API and event stream calls carry the session after login.
   - Add a Release Specific checklist item: "The WebUI from another device needs a PIN on every open and reload, on desktop and phone browsers; from the server machine it does not."
@@ -1190,48 +1008,48 @@ Last milestone completed: M10j9
 - **Verification evidence**:
   - Completion evidence must include WebUI tests for gating, login, setup incomplete, wrong PIN, lockout, session use, and reload, and `npm run verify`.
 - **Deferrals / Follow-ups**:
-  - Offline PWA login and remember-me sessions are out of scope.
+  - Offline PWA login, remember-me sessions, remembered accounts, and biometrics are out of scope.
 
 ### P28k - Per-User Source Permissions
 
 - **Status**: ⏳ Planned
 - **Goal**: Admins choose which sources each user sees, and the source access policy enforces it.
 - **Scope**:
-  - Planned for v0.16.0. Depends on: Source Access Policy, Operator Account Administration, and Operator Source and Item Management.
-  - Per-source, per-user access in the Operator's Manage Sources section.
-  - Grants are stored in the account store against account ids and catalog source ids. A grant for a source id that is not in the catalog (for example after a catalog import) is ignored and shown as stale in the Operator.
+  - Planned for v0.17.0. Depends on: Source Access Policy, Account Administration, and Admin Source and Item Management.
+  - Per-source, per-user access in the admin section's Manage Sources.
+  - Grants are stored in the account store against account ids and catalog source ids. A grant for a source id that is not in the catalog (for example after a catalog import) is ignored and shown as stale in the admin section.
   - Enforce denied sources through the source access policy on every path it covers, including `GET /api/media/{idOrToken}`, `GET /api/thumbnail/{itemId}`, and `POST /api/play/{itemId}`.
   - Admins and localhost connections see every source.
   - Groups, invitations, and audit reporting stay out of scope.
 - **Acceptance criteria**:
-  - Admins can grant or deny each user each source in the Operator.
+  - Admins can grant or deny each user each source in the admin section.
   - Denied sources and their items are invisible to that user on every policy path.
   - A denied item cannot be streamed, played, or have its thumbnail read, even by a client that knows its id.
   - Permission changes reach active sessions through events or requery.
   - Grants survive account and source renames, and a catalog import leaves grants for missing sources inert.
 - **Verification evidence**:
-  - Completion evidence must include policy tests for every path with a denied source, direct-id bypass tests, a catalog-import test for stale grants, and Operator UI tests for permission editing.
+  - Completion evidence must include policy tests for every path with a denied source, direct-id bypass tests, a catalog-import test for stale grants, and admin section UI tests for permission editing.
 - **Deferrals / Follow-ups**:
   - None yet.
 
-### P28l - Permission-Aware Clients
+### P28l - Permission-Aware WebUI
 
 - **Status**: ⏳ Planned
-- **Goal**: Desktop and WebUI show only what the server allows the logged-in user, with clear empty and denied states.
+- **Goal**: The WebUI shows only what the server allows the logged-in user, with clear empty and denied states.
 - **Scope**:
-  - Last milestone of the accounts release, planned for v0.16.0. Depends on: Per-User Source Permissions, and Desktop Source Management Link.
-  - Desktop and WebUI source lists, library browse, random playback, and item playback rely only on what the server returns for the session.
-  - The desktop **Manage Sources** link is shown only to admins and localhost.
+  - Last milestone of the accounts release, planned for v0.17.0. Depends on: Per-User Source Permissions.
+  - WebUI source lists, library browse, random playback, and item playback rely only on what the server returns for the session.
+  - The admin section is shown only to admins and localhost.
   - Messages for a user with no visible sources and for an item that becomes inaccessible.
   - Update docs and the testing checklist for per-user source visibility.
-  - Add a Release Specific checklist item: "An admin and a user account on desktop and WebUI see only their allowed sources, and a permission change in the Operator reaches both clients without a restart."
+  - Add a Release Specific checklist item: "An admin and a user account in the WebUI on two devices see only their allowed sources, and a permission change in the admin section reaches both without a reload."
 - **Acceptance criteria**:
-  - Desktop and WebUI never show denied sources or play denied items.
-  - Permission changes made in the Operator reach both clients through events or requery.
+  - The WebUI never shows denied sources or plays denied items.
+  - Permission changes made in the admin section reach open WebUI sessions through events or requery.
   - Client filtering cannot widen what the server returns.
-  - Users without admin rights do not see the Manage Sources link.
+  - Users without admin rights do not see the admin section.
 - **Verification evidence**:
-  - Completion evidence must include desktop and WebUI tests for hidden sources, inaccessible items, and the link's visibility.
+  - Completion evidence must include WebUI tests for hidden sources, inaccessible items, and the admin section's visibility.
 - **Deferrals / Follow-ups**:
   - Client requests for source access, approval workflows, and external sharing remain out of scope.
 
@@ -1286,79 +1104,52 @@ Last milestone completed: M10j9
 - **Deferrals / Follow-ups**:
   - None yet.
 
-### P29c - Desktop Thumbnail Memory and Caching
+### P29c - Thumbnail Caching
 
 - **Status**: ⏳ Planned
-- **Goal**: Desktop grid thumbnail memory stays bounded however far the user scrolls, and thumbnails are fetched again only when they change.
+- **Goal**: Thumbnails are fetched again only when they change.
 - **Scope**:
   - Planned for v0.14.1.
-  - Found by the efficiency and divergence report from code reading, not measured:
-    - Each tile keeps its decoded bitmap until its item changes or leaves the loaded window, including after it scrolls out of view. Thumbnails average 370×436 in the measured catalog, about 645 KB decoded each, so scrolling through 5,000 tiles could hold about 3 GB.
-    - Each JPEG is decoded at full size, not at the tile's display size.
-    - Every change of visible rows starts a new fetch loop over the visible tiles with no cancellation, so loops overlap during scrolling and can fetch the same thumbnail twice.
-    - `GET /api/thumbnail/{itemId}` sends no cache headers, its URL has no revision, and the desktop keeps no cache of its own.
-  - Release decoded bitmaps for tiles that leave the visible rows plus overscan, and load them again when they return.
-  - Decode at the tile's display size.
-  - Cancel a fetch loop when a newer one replaces it, and fetch each thumbnail once.
-  - Add cache headers to thumbnail responses, or a revision to the thumbnail URL so it can be cached until the thumbnail changes. A revision in the URL needs the thumbnail revision in the list query page, which is a contract change in its own slice. The WebUI uses the same URLs and benefits from the same change.
+  - Found by the efficiency and divergence report from code reading, not measured: `GET /api/thumbnail/{itemId}` sends no cache headers, and its URL has no revision, so the WebUI and the desktop fetch a thumbnail again every time a tile shows it.
+  - Add cache headers to thumbnail responses, or a revision to the thumbnail URL so it can be cached until the thumbnail changes. A revision in the URL needs the thumbnail revision in the list query page, which is a contract change in its own slice and only adds a field.
+  - The desktop's own thumbnail problems found by the same report are not fixed, because the desktop is frozen to bug fixes: decoded bitmaps kept after tiles scroll out of view (about 645 KB each at the measured average of 370×436, so about 3 GB for 5,000 tiles, inferred), full-size decoding, and overlapping fetch loops.
 - **Acceptance criteria**:
-  - Scrolling the desktop grid through thousands of tiles and back keeps decoded thumbnail memory bounded by the visible rows plus overscan, measured.
-  - A thumbnail is fetched once while it stays unchanged and is shown again after it scrolls back into view.
-  - A regenerated thumbnail is shown on both clients without a restart.
+  - A thumbnail the WebUI has shown is not fetched again while it stays unchanged, including after it scrolls back into view.
+  - A regenerated thumbnail is shown without a restart.
   - Grid layout and placeholders behave as before.
 - **Verification evidence**:
-  - Completion evidence must include desktop tests for bitmap release and fetch cancellation, the process memory after scrolling a large catalog before and after, a server test for the thumbnail cache headers or revision, `dotnet test ReelRoulette.sln`, and `npm run verify` after any contract change.
+  - Completion evidence must include a server test for the thumbnail cache headers or revision, a WebUI test or browser network check that an unchanged thumbnail is not fetched again, `dotnet test ReelRoulette.sln`, and `npm run verify` after any contract change.
 - **Deferrals / Follow-ups**:
-  - WebUI grid rendering is its own backlog item.
+  - WebUI grid rendering is WebUI Grid Rendering, in the WebUI overhaul release.
 
 ### P29d - Item IDs in the Contract
 
 - **Status**: ⏳ Planned
-- **Goal**: Every event and response that refers to a library item carries its item id, and desktop and WebUI match items by id instead of by path.
+- **Goal**: Every event and response that refers to a library item carries its item id, and the WebUI matches items by id instead of by path.
 - **Scope**:
-  - Planned for v0.14.1. Contract change in its own slice.
+  - Planned for v0.14.1. Contract change in its own slice. It only adds fields, so the frozen desktop keeps working.
   - Found by the efficiency and divergence report: `playbackRecorded` carries only a path, the random and play responses put the full path in `id`, while item tag events and `POST /api/play/{itemId}` use item ids. Both clients therefore match event items by path: the desktop ignoring case, and the WebUI ignoring case and treating `/` and `\` as the same.
-  - Add the item id to every event and response that refers to an item, including `playbackRecorded` and the random and play responses. Whether the random response's `id` becomes the item id, or the item id is a new field beside it, is decided here.
-  - Return duration in seconds next to, or in place of, the `hh:mm:ss` string the WebUI parses back into seconds. Which one is decided here.
-  - Desktop and WebUI match loaded tiles, the current item, and pending tag saves by item id, and stop folding paths to match them.
+  - Add the item id to every event and response that refers to an item, including `playbackRecorded` and the random and play responses. The item id is a new field beside the random and play responses' `id`, which keeps the full path the frozen desktop reads.
+  - Return duration in seconds next to the `hh:mm:ss` string the WebUI parses back into seconds.
+  - The WebUI matches loaded tiles, the current item, and pending tag saves by item id, and stops folding paths to match them. The frozen desktop keeps matching by path.
 - **Acceptance criteria**:
   - Every item-related event and response in `shared/api/openapi.yaml` has an item id, and `npm run verify:contracts` passes.
-  - Desktop and WebUI apply favorite, blacklist, playback, and tag events to the right tile by item id, including for two items whose paths differ only by case.
-  - Neither client normalizes paths to match items.
-  - Duration reaches both clients as a number of seconds.
+  - The WebUI applies favorite, blacklist, playback, and tag events to the right tile by item id, including for two items whose paths differ only by case.
+  - The WebUI does not normalize paths to match items.
+  - Duration reaches the WebUI as a number of seconds.
 - **Verification evidence**:
-  - Completion evidence must include contract tests for each changed event and response, desktop and WebUI tests that match by id with two paths that differ only by case, `dotnet test ReelRoulette.sln`, and `npm run verify`.
+  - Completion evidence must include contract tests for each changed event and response, WebUI tests that match by id with two paths that differ only by case, `dotnet test ReelRoulette.sln`, and `npm run verify`.
   - Docs evidence must include `docs/api.md` for the changed events and responses.
 - **Deferrals / Follow-ups**:
-  - The server still treats paths that differ only by case as one path on Linux until Ordinal Path Identity on Linux. Matching by id on the clients removes their part of that problem.
+  - The server still treats paths that differ only by case as one path on Linux until Ordinal Path Identity on Linux. Matching by id in the WebUI removes its part of that problem.
   - Add the previous favorite and blacklist values to item-state events. Today a favorite on an item that is not in the loaded window reloads that window under the default filter, because the client cannot tell whether the item was blacklisted before; with the previous values it can patch. Recorded by the client event efficiency milestone. This is a contract change.
-
-### P30 - Shared Fixtures for Cross-Language Rules
-
-- **Status**: ⏳ Planned
-- **Goal**: Every rule implemented in both C# and the WebUI is locked to one shared fixture under `shared/fixtures/`.
-- **Scope**:
-  - Unscheduled. Add each fixture the next time its rule is touched, not all at once.
-  - Found by the efficiency and divergence report: only tag name order is locked today. Preset equality, the status line messages, and the patch-or-reload rule get fixtures in their own milestones.
-  - Rules still implemented in both languages with no shared fixture:
-    - Justified grid layout: `ReelRoulette.Core.Library.LibraryGridLayout` and the WebUI `libraryGridLayout` port.
-    - Tag save reconciliation: `TagSaveApply.cs` and `tagSave.ts`.
-    - Filter duration text: the desktop filter dialog's duration labels and the WebUI's duration parse and format.
-    - Path normalization for matching items, until item ids replace it.
-  - Each fixture follows the existing tag name order pattern: one file under `shared/fixtures/`, read by a desktop or Core test and a WebUI test.
-- **Acceptance criteria**:
-  - Each listed rule has a fixture that both its C# and WebUI tests read, and changing an expected result in it fails both.
-- **Verification evidence**:
-  - Completion evidence per fixture must include a check that a flipped fixture entry fails both tests, `dotnet test ReelRoulette.sln`, and `npm run verify`.
-- **Deferrals / Follow-ups**:
-  - A rule that moves to the server no longer needs a fixture.
 
 ### P31 - WebUI Grid Rendering
 
 - **Status**: ⏳ Planned
 - **Goal**: The WebUI library grid updates only the rows and tiles that change.
 - **Scope**:
-  - Unscheduled.
+  - Planned for v0.15.0, last in the release; can be cut if the release runs long. Depends on: WebUI Responsive Layout and Panels, so it is built in the Preact library panel, which the side panel layout resizes often.
   - Found by the efficiency and divergence report from code reading, not measured: each change of visible rows replaces the rows' HTML, which recreates every tile image. Each patch and each appended page rebuilds the layout and virtualizer for every loaded item, so loading a window page by page costs time that grows with the square of its size.
   - Keep row elements that stay visible, add and remove only the rows that enter or leave, update a patched tile in place, and extend the layout for appended items instead of rebuilding it.
   - Grid layout, scrolling, focus, and tile behavior stay as they are.
@@ -1372,22 +1163,6 @@ Last milestone completed: M10j9
 - **Deferrals / Follow-ups**:
   - None yet.
 
-### P32 - Desktop and WebUI UI Rework
-
-- **Status**: ⏳ Planned
-- **Goal**: Rework the desktop and WebUI interfaces together so the same features look and read the same on both, keeping platform differences that are deliberate.
-- **Scope**:
-  - Unscheduled. Scope is not set yet; changes to user-facing UX need explicit approval.
-  - Deliberate differences found by the efficiency and divergence report, which stay unless this milestone changes them: single-click play in the WebUI and double-click play on the desktop, and loudness normalization and local-first playback on the desktop only.
-  - Decided here: whether the desktop keeps its filter summary line, and whether the WebUI gets one.
-  - The desktop stops opening separate windows: every dialog becomes a panel or overlay in the main window. This should also stop closed dialogs, such as Settings, staying in memory and in Avalonia's shared radio button groups.
-- **Acceptance criteria**:
-  - Set when the scope is decided.
-- **Verification evidence**:
-  - Set when the scope is decided.
-- **Deferrals / Follow-ups**:
-  - None yet.
-
 ---
 
 ### P33 - Catalog Corruption Detection Off the Startup Path
@@ -1397,7 +1172,7 @@ Last milestone completed: M10j9
 - **Scope**:
   - Unscheduled.
   - Startup reads only the schema and the catalog's `revision` row, so corruption confined to item, tag, or preset pages passes the open and surfaces at the first query that reads those pages. A full check on every open reads the whole file and slows startup on large catalogs.
-  - Candidate: run a full integrity check when a catalog backup is made, and on failure keep the last good backup, log it, and report it on the Operator status. Decide whether a failed check also refuses the next startup.
+  - Candidate: run a full integrity check when a catalog backup is made, and on failure keep the last good backup, log it, and report it on the admin section's status. Decide whether a failed check also refuses the next startup.
   - Startup keeps its revision-row read.
 - **Acceptance criteria**:
   - A catalog with corrupt item pages is reported without opening it in full at startup.
@@ -1415,7 +1190,7 @@ Last milestone completed: M10j9
 - **Status**: ⏳ Planned
 - **Goal**: The WebUI asks for names and confirmations in its own dialogs, styled like the rest of the WebUI, instead of the browser's `prompt`, `confirm`, and `alert`.
 - **Scope**:
-  - Unscheduled. May fit inside Desktop and WebUI UI Rework instead of standing alone.
+  - Planned for v0.15.0. Depends on: WebUI Preact Migration, so the dialog is a Preact component the migrated screens use.
   - Found during the post-migration fixes desktop spot checks: preset rename in the WebUI opens the browser's native prompt, which does not match the WebUI's styling and does not suit the WebUI when it runs as an installed web app.
   - `app.js` uses native dialogs in nine places today: preset delete and rename; tag editor category rename, duplicate-name alert, and category delete; tag delete; two **Discard changes?** confirmations; and new category name.
   - One reusable in-app dialog for text input, confirmation, and notice, with keyboard support (Enter confirms, Escape cancels) and focus returning to where it was.
@@ -1440,9 +1215,10 @@ Last milestone completed: M10j9
   - Settings:
     - Partial settings POSTs reset omitted fields: `CoreSettingsService.UpdateRefreshSettings`, `UpdateBackupSettings`, and `UpdateWebRuntimeSettings` assign every field from the posted snapshot, and the contract fields are not nullable, so a POST that leaves out a field writes its default (for example `fingerprintScanMaxDegreeOfParallelism` back to 4). Make those request fields nullable, with an omitted field left unchanged as `devChannelEnabled` already is, and add tests that a partial POST leaves the other fields and the other three sections unchanged on disk. This is an OpenAPI contract change.
     - Non-atomic settings write: `CoreSettingsService.PersistSettings` writes `core-settings.json` in place with `File.WriteAllText`, so a crash mid-write leaves it truncated. Write a temporary file in the same folder and rename it over the original.
-    - Silent settings load failure: `CoreSettingsService.LoadSettings` ends in an empty `catch` and falls back to defaults, so an unreadable or corrupt `core-settings.json` looks like a fresh install and the next persist overwrites it. Log a warning, move the unreadable file aside before anything is written, and report it on the Operator status.
+    - Silent settings load failure: `CoreSettingsService.LoadSettings` ends in an empty `catch` and falls back to defaults, so an unreadable or corrupt `core-settings.json` looks like a fresh install and the next persist overwrites it. Log a warning, move the unreadable file aside before anything is written, and report it on the admin section's status.
     - Corrupt JSON replaced by defaults: `JsonFileStorageService.Load` (used for `desktop-settings.json`) returns the default object on any read or parse error, and the next `Save` overwrites the file. Tell a missing file from an unreadable one, and move an unreadable file aside before returning defaults.
     - Non-atomic save fallback: when `File.Replace` throws, `JsonFileStorageService.Save` falls back to `File.Copy` over the original and then `File.Delete`, which can leave a truncated file after a crash. Use `File.Move(temp, path, overwrite: true)` as the fallback.
+    - The two `JsonFileStorageService` findings above affect only the desktop's `desktop-settings.json`: no server or ServerApp code references the class (measured with `git grep`). Desktop Client Removal deletes the class if it is still unused, which closes them.
   - Paths and processes:
     - Thumbnail path from an unchecked id: `RefreshPipelineService.GetThumbnailPath` builds `Path.Combine(_thumbnailDir, $"{itemId}.jpg")` from the catalog item id, and an imported `library.db` can hold any id, including `..` segments, so a thumbnail write or delete could land outside the thumbnail folder. Accept only the id format the server generates and check that the full path stays under the thumbnail folder.
     - Unread process output: `RefreshPipelineService.VerifyFfmpegAsync` redirects ffmpeg's standard output and error, reads neither, and waits for exit; enough output would fill a pipe and hang the check. Read both streams or stop redirecting them. The other ffmpeg and ffprobe calls already read stderr.
@@ -1463,7 +1239,7 @@ Last milestone completed: M10j9
   - Decision needed: the audio filter's handling of unscanned videos. `LibraryCatalogListQuery` matches **With audio** on `has_audio = 1` and **Without audio** on `has_audio = 0`, so a video whose audio has not been scanned (`has_audio` NULL) is hidden by both. Decide whether NULL counts as one of them or neither, then align `docs/api.md`, both clients' labels, and tests. This changes what users see, so it needs approval.
 - **Acceptance criteria**:
   - A partial settings POST changes only the fields it names, in every section.
-  - Killing the server or desktop during a settings write leaves the previous or the new file, never a truncated one.
+  - Killing the server during a settings write leaves the previous or the new file, never a truncated one.
   - An unreadable settings file is kept aside and reported, not overwritten with defaults.
   - A catalog item id that would resolve outside the thumbnail folder is refused.
   - No server process launch goes through a shell.
@@ -1479,18 +1255,11 @@ Last milestone completed: M10j9
 ### P36 - Client Robustness Findings
 
 - **Status**: ⏳ Planned
-- **Goal**: Close the desktop, WebUI, and dev-script robustness findings that no other milestone owns.
+- **Goal**: Close the WebUI and dev-script robustness findings that no other milestone owns.
 - **Scope**:
   - Unscheduled. Found by the repository audit and the Linux dependency investigation, and checked against the code when they were moved here. Each line names the file, the problem, and the fix.
-  - Desktop:
-    - Unbounded event payload: `CoreServerApiClient.ListenToEventsAsync` appends every `data:` line to a `StringBuilder` until a blank line, with no limit, so a broken or hostile server can exhaust memory. Cap one event (for example 4 MB), and on overflow drop the event, clear the builder, and log it.
-    - Ambiguous results: about ten mutation methods in `CoreServerApiClient` (such as `SetFavoriteAsync`, `SetBlacklistAsync`, `ApplyItemTagsAsync`) return `bool`, and most reads return `null` on any failure, so callers cannot tell a network error from a `401`, `404`, or `409`. Return a result that carries the failure kind, and use it where the UI reports or retries.
-    - Undisposed cancellation source: `MainWindow.RequestLibraryBrowse` cancels `_updateLibraryPanelCancellationSource` without disposing it, while the other cancel path disposes. Dispose after cancelling on both paths.
-    - Timers after close: `MainWindow.OnClosed` stops the seek and autoplay timers but not `_updateLibraryPanelDebounceTimer`, `_libraryGridResizeDebounceTimer`, or `_volumeSliderDebounceTimer`, so their `Tick` can run after the window closes. Stop them and unsubscribe `Tick` in `OnClosed`.
-    - Plain HTTP to another machine: the desktop accepts any server URL from Settings (`SettingsDialog` saves `CoreServerBaseUrl`) and talks plain HTTP to it with no notice. Once HTTPS through a reverse proxy exists, warn when a non-loopback URL uses `http`. This is a UX change and needs approval.
-    - Black video goes undetected: on a Fedora 43 KDE VM, LibVLC loaded from distro `vlc-libs` and `vlc-plugin*` packages, the app showed no dependency dialog, and video stayed black until RPM Fusion was enabled and `ffmpeg-free` was swapped for `ffmpeg`, because VLC's ffmpeg plugin could not decode with `ffmpeg-free`. The dependency dialog only catches a LibVLC load failure. Candidate signals, not yet tested against the failing state: `MediaPlayer.Vout` and `VoutCount` staying at 0 after `Playing`, `MediaPlayer.EncounteredError`, and LibVLC log lines from `avcodec` or `vout_display` (the desktop creates `LibVLC` with `enableDebugLogs: false` in `MainWindow.axaml.cs` and does not subscribe to `LibVLC.Log`). First reproduce the black-video state and record which signals fire, then decide what to show the user.
+  - The desktop findings from the same audit (unbounded event payload, ambiguous API results, an undisposed cancellation source, timers after close, plain HTTP to another machine, and undetected black video on Fedora) were dropped, because the desktop is frozen to bug fixes. The startup error markup finding moved to WebUI Preact Migration.
   - WebUI:
-    - Startup error markup: `renderStartupError` in `src/shell.ts` interpolates the error message into `innerHTML`. Set the message with `textContent`.
     - Overlapping resyncs: `src/events/sseClient.ts` calls `void handleResyncRequired(...)` for every `resyncRequired` event, so several authoritative reloads can run at once and finish out of order. Keep one in flight and coalesce events that arrive meanwhile.
     - Unchecked JSON: `src/api/coreApi.ts` calls `response.json()` for pair, refresh status, version, and random responses without checking the content type or catching parse errors, so an HTML error page from a proxy surfaces as a `SyntaxError`. Read through one helper that checks the content type and reports a clear error.
     - Client and session ids: `src/api/coreApi.ts` keeps the client id in `localStorage` and the session id in `sessionStorage`, and `sseClient.ts` puts both in the event stream URL, where proxy access logs record them. They identify a randomization scope and are not credentials today. Once login sessions exist, decide whether the server derives them from the session instead, and keep them from ever becoming an auth secret.
@@ -1498,41 +1267,290 @@ Last milestone completed: M10j9
   - Dev scripts:
     - Missing install: `tools/scripts/run-server-rebuild.ps1` runs `npm run build` without installing packages, so a clean clone or a changed lockfile builds stale or fails. Run `npm ci` when `node_modules` is missing or older than `package-lock.json`, with a `-SkipInstall` switch.
 - **Acceptance criteria**:
-  - An oversized event payload is dropped without growing desktop memory past the cap.
-  - Desktop callers can tell transport, auth, not-found, and conflict failures apart.
-  - No desktop timer fires after the main window closes.
-  - The WebUI renders no server or config text through `innerHTML` at startup, and overlapping resync events cause one reload at a time.
-  - The black-video signals are recorded from a reproduced failing state, with a decision on what to show.
+  - Overlapping resync events cause one reload at a time.
   - Each finding above is fixed or explicitly declined with a reason in this entry.
 - **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include a test per fixed finding, `dotnet test ReelRoulette.sln`, and `npm run verify`. Add Release Specific checklist items for anything that needs a VM, such as the Fedora black-video reproduction.
+  - Evidence placeholders maintained at planned state; completion evidence must include a test per fixed finding and `npm run verify`.
 - **Deferrals / Follow-ups**:
   - None yet.
 
 ---
 
-### P37 - Remaining Desktop-Only Features
+### P37 - WebUI Multi-Select and Remaining Desktop Features
 
 - **Status**: ⏳ Planned
-- **Goal**: Decide, feature by feature, whether the desktop features that the WebUI and Operator still lack get a web equivalent, and build the ones that do.
+- **Goal**: The WebUI gains the remaining desktop features it lacks, and each candidate is built or explicitly declined.
 - **Scope**:
-  - Unscheduled. From the desktop-versus-web feature comparison, checked against the code when moved here. Each is a candidate; adding one changes user-facing UX and needs approval.
-  - WebUI:
-    - Multi-select and bulk actions: the desktop library grid selects several items and acts on them from its context menu; the WebUI library overlay plays one item per click and has no selection.
-    - Tag edits on several items: the desktop `ItemTagsDialog` adds and removes tags across all selected items at once; the WebUI tag editor works on the current item only. Depends on multi-select above.
-    - Reveal in file manager: the desktop `OpenFileLocation` opens the system file browser at the playing file. A browser cannot do that; a copy-path action is the candidate equivalent.
-  - Operator:
-    - Refresh and backup controls: only the desktop Settings dialog can start a refresh (`POST /api/refresh/start`) or edit refresh settings (`/api/refresh/settings`) and backup settings (`/api/backup/settings`). Neither the Operator nor the WebUI calls these routes, so a server plus WebUI install has no way to change them. This fits the Operator administration release.
-    - FFmpeg log: the desktop's **Help → Show FFmpeg Logs** opens `FFmpegLogWindow`, which shows FFmpeg output buffered during a refresh and can clear it. Operator Log Viewer does not mention FFmpeg output; decide whether the Log Viewer takes it over so the desktop window can go.
-    - Auto-tag and tag rename or recategorize: the desktop and the WebUI both have these, through `/api/autotag/*` and `/api/tag-editor/*`. The Operator does not; decide whether it needs them or whether the WebUI is enough.
-  - Already covered elsewhere, not part of this item: source management, duplicates, and item removal (Operator Source and Item Management); catalog export and import (Operator Library Catalog Transfer); loudness normalization (kept as a deliberate desktop difference in Desktop and WebUI UI Rework); always-on-top and saved window geometry (native only).
+  - Planned for v0.15.1. Depends on: Admin Source and Item Management, whose item removal route bulk removal uses, and WebUI Responsive Layout and Panels.
+  - From the desktop-versus-web feature comparison and the desktop retirement report, checked against the code. Adding a feature changes user-facing UX and needs approval.
+  - Multi-select and bulk actions: the desktop library grid selects several items (click, Ctrl+click, Shift+click) and acts on them from its context menu: add to or remove from favorites and the blacklist, add or remove tags, clear playback stats, and remove from library. The WebUI library plays one item per click and has no selection. How selection works on touch is decided here. Remove from library is an admin action.
+  - Tag edits on several items: the desktop `ItemTagsDialog` adds and removes tags across all selected items at once; the WebUI tag editor works on the current item only.
+  - Clear playback stats for the whole library, which the desktop offers from its Playback menu through `POST /api/playback/clear-stats` (measured: the WebUI never calls it). Whether it is an admin action is decided here.
+  - Build or decline:
+    - Keep Playing: the desktop plays a random item every N seconds until stopped.
+    - Loudness normalization: the desktop adjusts volume from the server's per-item loudness and the library baseline. The WebUI could apply a gain through the Web Audio API; behavior on iOS is not verified.
+    - The desktop's filter summary line, and whether the WebUI shows one.
+    - FFmpeg log: the desktop's **Help → Show FFmpeg Logs** opens `FFmpegLogWindow`, which shows FFmpeg output buffered during a refresh and can clear it. Decide whether Admin Log Viewer takes it over.
+  - Declined, because a browser cannot do them: always-on-top (the closest is picture-in-picture, which the WebUI turns off today with `disablepictureinpicture`), desktop self-update, and the desktop's Linux dependency dialog and application menu registration.
+  - Already covered elsewhere, not part of this item: keyboard shortcuts, volume, and seek (WebUI Keyboard Shortcuts and Player Controls); stats (WebUI Stats Panel); refresh, backup, and duplicates (Admin Refresh, Backup, and Duplicate Review); Show in File Manager (Show in File Manager from the WebUI); sources and item removal (Admin Source and Item Management); catalog transfer (Admin Library Catalog Transfer); files the browser cannot play (Browser-Playable Filter).
 - **Acceptance criteria**:
-  - Each candidate above is built or explicitly declined with a reason in this entry.
-  - A server plus WebUI install can start a refresh and edit refresh and backup settings without the desktop app.
+  - The WebUI selects several library items and applies favorite, blacklist, tag add and remove, clear stats, and, for admins, remove from library to all of them.
+  - Tag edits apply across all selected items.
+  - The whole library's playback stats can be cleared from the WebUI.
+  - Each build-or-decline candidate is built or explicitly declined with a reason in this entry.
 - **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include tests for each feature built and `npm run verify`.
+  - Completion evidence must include WebUI tests for selection and each bulk action, and `npm run verify`.
+  - Add a Release Specific checklist item: "In the WebUI on a desktop browser and a phone, select several items, apply each bulk action, and the tiles update."
 - **Deferrals / Follow-ups**:
   - None yet.
+
+### P38 - WebUI Preact Migration
+
+- **Status**: ⏳ Planned
+- **Goal**: The WebUI's screens are Preact components with tests, built on the existing typed modules, with no visible change.
+- **Scope**:
+  - Planned for v0.15.0.
+  - Measured: `src/app.js` is 3,619 lines. `startApp` runs from line 180 to the end as one untyped function with 139 nested functions, and no test imports it. It has 16 `innerHTML` assignments and 9 native dialog calls. The 143 WebUI tests cover only the typed modules, and they run with `environment: "node"`, so there is no DOM to test screens against.
+  - Add Preact and `happy-dom` for component tests; installing the packages needs approval when this milestone starts. Model tests keep running as they do.
+  - Keep the typed modules (library query session, grid layout and virtualizer, tag save, filter state model, events, API) and call them from the components rather than rewriting them.
+  - Migrate screen by screen. Each slice ships with no visible change and removes its code from `app.js`:
+    - Foundation: the Preact root, one shared state store, connection, pairing, event stream, status line, and startup error. `renderStartupError` in `src/shell.ts` interpolates the error message into `innerHTML` (found by the repository audit, moved here from Client Robustness Findings); render it as text.
+    - Player and overlay controls.
+    - Library overlay.
+    - Filter dialog.
+    - Tag editor and Auto Tag.
+  - Delete `app.js` after the last slice.
+  - Trap, inferred, not measured: moving a `<video>` element to another place in the page can interrupt or reload playback. The player component owns one video element that is never moved.
+- **Acceptance criteria**:
+  - After each slice, the migrated screen looks and behaves as before, and the WebUI section of the testing checklist still passes.
+  - Component tests for each migrated screen run in `npm run verify` under `happy-dom`.
+  - `src/app.js` no longer exists.
+  - No screen renders server or config text through `innerHTML`.
+  - Playback continues uninterrupted while overlays open and close.
+- **Verification evidence**:
+  - Completion evidence must include component tests per slice, `npm run verify`, and one quick spot check per slice on a desktop browser and a phone.
+- **Deferrals / Follow-ups**:
+  - None yet.
+
+### P39 - WebUI Responsive Layout and Panels
+
+- **Status**: ⏳ Planned
+- **Goal**: The WebUI layout adapts to the viewport: side panels on tablets and desktops keep the player playing in view while tagging, browsing, or viewing stats, and phones use overlays.
+- **Scope**:
+  - Planned for v0.15.0. Depends on: WebUI Preact Migration.
+  - This changes user-facing UX: mockups for phone, tablet, and desktop widths are approved before code.
+  - Measured today: the tag editor, filter, and library overlays are each `position: fixed; inset: 0` with `z-index: 1000`, so they cover the player while it keeps playing underneath. The stylesheet has two `@media (max-width: 600px)` rules, and mobile browsers are detected by user agent (`isMobileBrowser` in `app.js`).
+  - A panel host: the player region plus a resizable side panel at tablet and desktop widths, and full-screen overlays at phone widths. Breakpoints use viewport width and pointer type, not the user agent.
+  - The library, filter, and tag editor become panels. Later panels (settings, stats, admin, duplicate review) use the same host.
+  - The top-bar controls (preset, randomization mode, photo duration) move into panels or the settings panel.
+  - Panels stay inside the fullscreen stage, so they work in fullscreen as the overlays do today, including iOS pseudo-fullscreen.
+  - Phone layouts work in an installed app (standalone display, safe-area insets).
+  - Add a Release Specific checklist item: "On a phone, a tablet, and a desktop browser, and as an installed app on Android and iOS, panels open beside the player or as overlays by width, and playback keeps going while each is open."
+- **Acceptance criteria**:
+  - At tablet and desktop widths, the library, filter, and tag editor open beside the player, and the video stays visible and playing.
+  - At phone widths, they open as full-screen overlays, and closing one returns to the player without interrupting playback.
+  - Resizing the window across a breakpoint moves an open panel between side panel and overlay without losing its state.
+  - Panels work in fullscreen.
+  - The layout does not depend on the user agent.
+- **Verification evidence**:
+  - Completion evidence must include component tests for panel host breakpoints and panel state, `npm run verify`, and one quick spot check on a phone and a desktop browser.
+- **Deferrals / Follow-ups**:
+  - None yet.
+
+### P40 - Admin Refresh, Backup, and Duplicate Review
+
+- **Status**: ⏳ Planned
+- **Goal**: The admin section starts a refresh, edits refresh and backup settings, and reviews and applies duplicates, so none of these needs the desktop.
+- **Scope**:
+  - Planned for v0.15.0. Depends on: Admin Section in WebUI Settings.
+  - Measured: only the desktop calls `POST /api/refresh/start`, `/api/refresh/settings`, `/api/backup/settings`, `/api/duplicates/scan`, and `/api/duplicates/apply`. The routes exist, so this needs no contract change. The tray can also start a refresh.
+  - Gated like the rest of the admin section.
+  - Refresh slice: Refresh Now with the refresh status, and the refresh settings the desktop Settings dialog shows: auto-refresh and its interval, forced loudness and duration rescans on the next refresh, and fingerprint scan parallelism.
+  - Backup slice: server backups on or off, the time between backups, and the number kept.
+  - Trap: the refresh and backup settings routes assign every field from the posted snapshot, so a partial post writes defaults (Server Robustness Findings). Until that is fixed, the admin section posts the full settings it read.
+  - Duplicate review slice: scan the whole library or one source, show each group with thumbnails and the comparison details the desktop shows (file name, plays, tags, favorite, blacklisted), choose Keep All or a file to keep per group, default to Keep All or Select Best from a per-device preference, and confirm counts before deleting. It uses the panel layout.
+  - Add a Release Specific checklist item: "From the admin section, start a refresh, change refresh and backup settings, and scan and apply duplicates with Keep All and with a chosen file, and the library updates."
+- **Acceptance criteria**:
+  - Refresh Now starts a refresh, and the status line shows its progress and result.
+  - Refresh and backup settings load and save, and saving one field leaves the others as they were on the server.
+  - Duplicate apply deletes only the files not kept, after confirming counts, and Keep All deletes nothing in that group.
+  - The duplicate default is a per-device preference.
+- **Verification evidence**:
+  - Completion evidence must include admin section UI tests for each slice, `npm run verify`, and one quick spot check of a refresh and a duplicate scan.
+- **Deferrals / Follow-ups**:
+  - None yet.
+
+### P41 - WebUI Stats Panel
+
+- **Status**: ⏳ Planned
+- **Goal**: The WebUI shows library and playback statistics and details of the current file, as the desktop stats panel does.
+- **Scope**:
+  - Planned for v0.15.0. Depends on: WebUI Responsive Layout and Panels.
+  - Measured: the WebUI never calls `GET /api/library/stats`, and its now-playing line shows only the file name and duration.
+  - Library stats: total videos, photos, and media, favorites, blacklisted, total plays, unique media played, never played, videos with and without audio, and baseline loudness.
+  - Current file: file name and full path, plays, last played (the time before this play, or Never), favorite, blacklisted, duration, has audio, loudness, adjustment, peak, and tags.
+  - Refresh after events and actions is coalesced as the desktop does it: a short wait gathers a burst, one request is in flight at a time, and requests during it get one more.
+  - No contract change.
+- **Acceptance criteria**:
+  - The library stats match the library stats response.
+  - The current file section updates on play, favorite, blacklist, tag, and playback events.
+  - A burst of events causes one stats request, plus at most one more for events during it.
+- **Verification evidence**:
+  - Completion evidence must include component tests for both sections, coalescing tests, `npm run verify`, and one quick spot check.
+- **Deferrals / Follow-ups**:
+  - Playback history charts are Playback History and Analytics.
+
+### P42 - WebUI Keyboard Shortcuts and Player Controls
+
+- **Status**: ⏳ Planned
+- **Goal**: The WebUI has the desktop's keyboard shortcuts wherever a browser allows them, plus volume and seek-step controls.
+- **Scope**:
+  - Planned for v0.15.0. Depends on: WebUI Responsive Layout and Panels, and WebUI Settings Panel.
+  - Measured: the WebUI handles only Escape, which closes overlays, and Enter or Space on a focused library tile. The desktop binds K play or pause, J and L seek, Left and Right previous and next, R random, F favorite, B blacklist, A autoplay, M mute, comma and period volume, T tags, P player view, S settings, O import folder, Q quit, F11 fullscreen, and 1 to 5 to show or hide parts of the window.
+  - Use the desktop keys. Keys the browser keeps (Ctrl+Q, Ctrl+O, and F11 for the browser's own fullscreen; inferred) are not bound, and Q quit and O import folder have no WebUI equivalent. Number keys toggle panels; which panel each opens, and which key enters fullscreen, are decided here.
+  - Shortcuts do nothing while focus is in a text field.
+  - A shortcut reference in the settings panel.
+  - A volume control where the browser lets a page set volume (not on iOS, where it is read-only; inferred), with comma and period stepping by a volume step preference.
+  - J and L seek by a seek step preference in seconds. Frame stepping, which the desktop offers through LibVLC, is only approximate in a browser (inferred); build or decline it here.
+  - Changes to user-facing UX need approval.
+  - Add a Release Specific checklist item: "In Chrome, Firefox, and Safari on a desktop, every listed shortcut works in normal view, with a panel open, and in fullscreen, and does nothing while typing in a text field."
+- **Acceptance criteria**:
+  - Each bound shortcut does what the desktop's does.
+  - Shortcuts are ignored while a text field has focus.
+  - The volume control and seek step work and are saved per device.
+  - The shortcut reference matches the bindings.
+- **Verification evidence**:
+  - Completion evidence must include keyboard tests per binding under `happy-dom`, `npm run verify`, and one quick spot check.
+- **Deferrals / Follow-ups**:
+  - Rebinding is Customizable Keyboard Shortcuts.
+
+### P43 - Show in File Manager from the WebUI
+
+- **Status**: ⏳ Planned
+- **Goal**: A WebUI on the server machine opens the system file manager at the playing file, and elsewhere copies its path.
+- **Scope**:
+  - Planned for v0.15.0. Depends on: Reverse Proxy and HTTPS Access, and WebUI Preact Migration.
+  - It uses the single localhost check that Reverse Proxy and HTTPS Access adds.
+  - The desktop's `OpenFileLocation` opens Explorer with the file selected on Windows and opens the folder with `xdg-open` on Linux. A browser cannot do this itself; the server can when the browser runs on the server machine, and the tray already launches programs (`AvaloniaTrayHostUi.cs`).
+  - Contract slice: a route that takes an item id, never a path, accepted only from the server machine, meaning a direct connection from loopback or from the server's own address as the merged localhost helper decides, and a capability the WebUI reads to decide whether to offer the action. A request through a reverse proxy is not localhost, so the action is not offered there, even on the server machine.
+  - Server slice: on Windows `explorer.exe /select,<path>`; on Linux the `org.freedesktop.FileManager1` `ShowItems` D-Bus call, which selects the file, falling back to `xdg-open` on its folder. Start processes with `ProcessStartInfo.ArgumentList` and no shell. A headless server with no desktop session reports the action as unavailable.
+  - WebUI slice: a Show in File Manager action for the current file where the server offers it, and Copy Path everywhere else.
+  - Add a Release Specific checklist item: "On the server machine at `http://localhost`, Show in File Manager opens the file manager at the playing file on Linux and Windows; from another device, Copy Path copies it."
+- **Acceptance criteria**:
+  - A direct request from loopback or from the server's own address opens the file manager with the file selected, or its folder where selection is not available.
+  - Requests from other addresses, proxied requests, and unknown ids are refused, and a headless server reports the action as unavailable.
+  - The WebUI shows the action only when the server offers it, and Copy Path otherwise.
+  - No process is started through a shell.
+- **Verification evidence**:
+  - Completion evidence must include server tests for loopback, the server's own address, another LAN address, proxied, unknown-id, and headless requests with the launcher faked, contract tests, `npm run verify`, and one quick Linux spot check.
+- **Deferrals / Follow-ups**:
+  - None yet.
+
+### P44 - WebUI Status Line Overhaul
+
+- **Status**: ⏳ Planned
+- **Goal**: The WebUI status line shows one stable message per situation.
+- **Scope**:
+  - Planned for v0.15.0. Depends on: WebUI Responsive Layout and Panels.
+  - Can be cut from the release if it runs long; Testing Suite Overhaul is then cut with it.
+  - Moved here from v0.14.0 when the desktop was frozen. The desktop half and the shared fixture are dropped, and the status line moves with the panel layout.
+  - Observed in the v0.13.0 manual regression pass: with the server stopped, the WebUI shows "library load failed: HTTP 503" only briefly before "SSE reconnecting...". The desktop alternates between "core runtime unavailable" and "core runtime is required to browse the library", and stays as it is.
+  - Define one precedence rule for which message wins when several apply, so the status line never alternates.
+  - Define the message for each event once: server stopped, API unavailable, version or capability mismatch, and refresh progress and results.
+  - Add a Release Specific checklist item: "With the server stopped, unavailable, or mismatched, and during a refresh, the WebUI settles on one status message."
+- **Acceptance criteria**:
+  - With the server stopped, unavailable, or mismatched, the status line settles on one message and does not alternate.
+  - Refresh status reads the same during and after each refresh.
+  - The precedence rule and the per-event messages are documented.
+- **Verification evidence**:
+  - Completion evidence must include WebUI tests of the precedence rule and the per-event messages, covering the server stopped, the API unavailable, a version or capability mismatch, and refresh progress and results, plus one quick spot check with the server stopped.
+- **Deferrals / Follow-ups**:
+  - Testing Suite Overhaul checks these messages in its scenarios.
+
+### P45 - Testing Suite Overhaul
+
+- **Status**: ⏳ Planned
+- **Goal**: The testing suite produces clear results that match the WebUI's connection and status handling.
+- **Scope**:
+  - Planned for v0.15.0. Depends on: WebUI Status Line Overhaul, Server Shutdown Fixes, and Admin Section in WebUI Settings.
+  - The status line overhaul defines the messages these scenarios check, the shutdown fixes change how event streams close, and the suite runs from the admin section. Can be cut from the release if it runs long.
+  - Moved here from v0.14.0 when the desktop was frozen; the desktop's expected messages are dropped.
+  - The suite predates the current client connection and status handling and no longer produces clear results. Observed in the v0.13.0 manual regression pass: with the API unavailable, the WebUI shows "library load failed: HTTP 503" only briefly before settling on "SSE reconnecting...", and SSE disconnect behaves inconsistently and may need redesigning.
+  - Redesign the scenarios against current WebUI behavior, define the expected WebUI message for each, and verify the WebUI's behavior as part of the suite.
+  - Add a Release Specific checklist item: "Every testing suite scenario shows its expected WebUI message, and resetting it leaves the WebUI connected."
+- **Acceptance criteria**:
+  - Each scenario lists the expected WebUI message, and the WebUI shows it while the scenario is active.
+  - SSE disconnect behaves the same way on every run.
+  - Running and resetting each scenario leaves the WebUI connected and working.
+- **Verification evidence**:
+  - Completion evidence must include automated tests that each scenario sets and resets the server state it describes, and that SSE disconnect closes and reconnects the same way on repeated runs, plus one quick spot check of one scenario.
+- **Deferrals / Follow-ups**:
+  - None yet.
+
+### P46 - Browser-Playable Filter
+
+- **Status**: ⏳ Planned
+- **Goal**: Browse and random play can be limited to files a browser can play, and a file the browser cannot play says so instead of "not found".
+- **Scope**:
+  - Planned for v0.15.1. Depends on: WebUI Preact Migration.
+  - Accepted gap until playback sessions: browsers cannot play every format LibVLC plays on the desktop. Measured on the developer's catalog of 17,419 videos: 16,607 mp4, 533 mkv (3.1%), 225 avi, and 54 wmv. The codecs inside the files were not measured. Tested by the user: avi and wmv files from that library fail in the WebUI. mkv plays in Chrome and Firefox with common codecs but not in Safari or on iOS (inferred), and counts as browser-playable.
+  - The server decides playability from one documented container profile, so browse, random play, and counts agree. The profile lists the playable video containers, starting with mp4, m4v, webm, and mkv; any other video container, including avi and wmv, is not browser-playable. Photos are always playable. Codec-level detection waits for the probe in Server Playback Decision Engine.
+  - Contract slice: a browser-playable option in the filter state, applied by the server in the list query, its counts, and random selection. OpenAPI and generated WebUI types; it only adds a field.
+  - WebUI slice: the option in the filter General tab and in presets, off by default so current behavior does not change. Turning it on by default needs approval.
+  - Error message slice: when the browser cannot play a file, the WebUI says "Video file not found." (`video.onerror` in `app.js`, and "Photo file not found." for photos) whatever the cause, though the file exists (reported by the user). Say that the format is not supported in this browser when that is the cause, and "not found" only when the file is missing.
+  - Trap, inferred: a browser reports a missing file (a `404` from `/api/media`) and an unsupported format with the same `MEDIA_ERR_SRC_NOT_SUPPORTED` code, so the error code alone cannot tell them apart. Use the item's container against the profile, or ask the server whether the file exists.
+  - Trap, inferred from how presets are saved: until Per-Preset Preset Writes, the desktop posts the whole preset list, and the frozen desktop does not know the new field, so a desktop preset save drops the option from every preset. Decide here whether the server keeps a stored option the desktop did not send, or documents the loss.
+  - Preset equality is locked to `preset-filter-equality.json`, which the desktop tests also read. New cases for the option must pass there too, or go in a WebUI-only fixture until the desktop is removed.
+  - Add a Release Specific checklist item: "With the browser-playable filter on, browse and random play show no avi or wmv files; with it off, playing one says its format is not supported in this browser, and a deleted file says not found."
+- **Acceptance criteria**:
+  - With the option on, the list query, its counts, and random selection exclude videos outside the profile; with it off, results are unchanged.
+  - The option is saved in presets and compared in preset matching.
+  - A file the browser cannot play shows a format-not-supported message, and a missing file shows not found.
+  - The profile is documented in `docs/api.md`.
+- **Verification evidence**:
+  - Completion evidence must include server tests for the option in the list query, counts, and random selection, contract tests, WebUI tests for the option and both error messages, `dotnet test ReelRoulette.sln`, and `npm run verify`.
+- **Deferrals / Follow-ups**:
+  - Revisit when Remux/Transcode and Segmented Streaming (HLS fMP4 Baseline) lands: files the server can remux or transcode play in every browser.
+
+### P47 - Desktop Retirement Notice
+
+- **Status**: ⏳ Planned
+- **Goal**: The last desktop build tells users the desktop app is retired and points them to the WebUI.
+- **Scope**:
+  - Planned for v0.15.1, last in the release. Can be cut if the release runs long. The only desktop change outside bug fixes.
+  - After Desktop Client Removal no desktop update is published, so installed desktops stay on their last version (inferred: the Velopack desktop feed stops getting releases). Later servers stop working with it, starting with the accounts release, which removes pairing.
+  - On start, show a notice once per installed version: the desktop app is retired; use the WebUI. It offers the existing Open Web UI action. The wording needs approval.
+  - Add a Release Specific checklist item: "After updating, the desktop shows the retirement notice once, and Open Web UI opens the WebUI."
+- **Acceptance criteria**:
+  - The notice appears on the first start of this version and not again after it is dismissed.
+  - Open Web UI from the notice opens the WebUI in the browser.
+- **Verification evidence**:
+  - Completion evidence must include a headless desktop test that the notice shows once per version, `dotnet test ReelRoulette.sln`, and one quick spot check.
+- **Deferrals / Follow-ups**:
+  - None yet.
+
+### P48 - Desktop Client Removal
+
+- **Status**: ⏳ Planned
+- **Goal**: The desktop client, its packaging, and its tests are gone, and the WebUI is the only client.
+- **Scope**:
+  - First milestone of the desktop removal release, planned for v0.16.0. Depends on: WebUI Keyboard Shortcuts and Player Controls, WebUI Stats Panel, WebUI Settings Panel, Admin Refresh, Backup, and Duplicate Review, Show in File Manager from the WebUI, Admin Source and Item Management, Admin Library Catalog Transfer, WebUI Multi-Select and Remaining Desktop Features, and Browser-Playable Filter.
+  - Code and tests slice, measured: remove `ReelRoulette.DesktopApp`, `ReelRoulette.LibraryArchive`, and `ReelRoulette.DesktopApp.Tests` from the solution and the repository, about 30,300 lines of C# and AXAML including 3,267 test lines and 134 tests. Remove Core's `LibraryGridLayout` and its tests, which only the desktop uses, and `JsonFileStorageService` and `CoreStorageServices` if nothing else uses them.
+  - Packaging slice: remove the `desktop` component from the `release.yml` matrix, including the Windows LibVLC relocation step, stop publishing the desktop update feed, and remove the desktop references in `set-release-version.ps1` and `verify-linux-packaged-server-smoke.sh`. CI has no desktop job: desktop tests run inside the solution test on the Ubuntu and Windows jobs, so `ci.yml` needs no change.
+  - Contract slice: remove routes and fields that no remaining caller uses, each checked against the WebUI and the admin section. Candidates: `/api/library-states`, `/api/library/item`, `/api/library/catalog-checkpoint` if Admin Library Catalog Transfer replaced it, and the full path kept in the random and play responses' `id` for the desktop. OpenAPI and generated WebUI types.
+  - Fixture slice: `event-revision.json`, `library-tile-effect.json`, `preset-filter-equality.json`, and `sort-direction-labels.json` lose their C# readers and stay as WebUI test data. `tag-name-order.json` stays, read by Core and the WebUI.
+  - Docs slice: `CONTEXT.md`, `docs/architecture.md`, `docs/domain-inventory.md`, `docs/api.md`, `docs/dev-setup.md`, `README.md` (desktop install and the LibVLC prerequisite), the testing checklist's Desktop and Cross-Client sections and desktop Packaging items, and `AGENTS.md`: remove the desktop freeze rule and the desktop test-isolation note, and keep the shared-fixture rule for rules implemented in server C# and the WebUI.
+  - Add a Release Specific checklist item: "On Linux and Windows, the release publishes only the server, every former desktop workflow works in the WebUI, and an existing desktop install keeps its last version."
+- **Acceptance criteria**:
+  - The solution has no desktop projects, and `dotnet build ReelRoulette.sln`, `dotnet test ReelRoulette.sln`, and `npm run verify` pass.
+  - A release builds and publishes only server packages and feeds.
+  - OpenAPI has no route or field that only the desktop used.
+  - No current-state doc describes the desktop client as current.
+  - The four former desktop fixtures are read by WebUI tests.
+- **Verification evidence**:
+  - Completion evidence must include the build, test, and verify runs, `./tools/scripts/verify-linux-packaged-server-smoke.sh`, a dev-channel release run of `release.yml`, and a search of current-state docs for the desktop client.
+- **Deferrals / Follow-ups**:
+  - Historical `CHANGELOG.md` sections and completed milestones keep their desktop references.
 
 ---
 
