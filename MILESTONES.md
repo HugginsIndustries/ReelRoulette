@@ -126,6 +126,7 @@ Last milestone completed: M10j12
   - Add a stored, indexed sort key for file name whose order matches today's `OrdinalIgnoreCase` order, and order name sorts and name tie-breaks by it. A `ToLowerInvariant` key such as the existing `file_name_fold` would change today's order for names containing `_`, `[`, `\`, `]`, `^`, or `` ` ``, which sort after letters today and would sort before them. An uppercase-invariant key should keep it; the sort order tests confirm it. This is a catalog schema change with its own migration.
   - Cache both counts on the server, keyed by catalog revision, search, and filter, so later pages, appends, and reloads at the same revision do not count again. No contract change. Neither client keeps the totals from the first page: both read `totalCount` from every page and stop a reload once they have that many items, so a later page without counts would end a desktop reload after its second page with a total of 0. Every page keeps returning both counts, and their meaning does not change.
   - Reload the loaded window in one request. Whether that raises the query limit or adds a reload request with its own bound is decided here; either is a contract change in its own slice.
+  - Library query logging: the server writes one `info` line per library query request (`Library query offset=… limit=… …`), so today a reload writes one line per page; in the v0.14.0 manual pass, a reload of six pages from two WebUI clients wrote twelve near-identical lines. Keep one line per request and add the request's elapsed time to it. Once a reload is a single request, a multi-page reload writes one line.
   - Library stats: the per-source figures join items to sources by path prefix and re-derive video or photo from the file extension in SQL. Measured: about 90 ms in `sqlite3` and 138 ms through the service. Every item in the measured catalog has a source id and a media type of 0 or 1. Group by source id and media type instead, with the same results.
   - Drop `idx_item_tags_item_id`, which duplicates the leading `item_id` column of the `item_tags` primary key.
   - Fallback if deep offsets still cost much more than the first page after the sort key: add a keyset cursor (the last row's sort values) beside offset paging, and move the WebUI to it. Offset paging stays until Desktop Client Removal, so the frozen desktop keeps working. This is a contract change in its own slice and only adds fields.
@@ -135,6 +136,7 @@ Last milestone completed: M10j12
   - A page at offset 40,000 of the measured catalog costs within a small factor of the first page, measured.
   - A repeat query with the same search and filter at the same catalog revision runs no count queries and returns the same totals, and a write that changes the revision counts again.
   - A reload of the loaded window is one request.
+  - A reload of several pages writes exactly one library query line to `last.log`, with its elapsed time.
   - Library stats return the same global and per-source figures as before on the measured catalog.
   - Tag filters return the same items as before, and none takes longer than the current form on the measured catalog.
   - `item_tags` has one index on `item_id`.
@@ -618,51 +620,61 @@ Last milestone completed: M10j12
   - First milestone of the structured log foundation release, planned for v0.16.1. Depends on: Server Data Folder Override, whose folder helper resolves the log path.
   - Today `last.log` is free text: server code and `POST /api/logs/client` append bracketed lines through `ServerLogService`, which writes under one process-wide lock and turns line breaks into a literal `\n`; the server's `ILogger` output goes only to the console, client logs arrive through `POST /api/logs/client` as source, level, and message, and startup empties the file. Decide here whether startup still empties it once rotation exists.
   - Schema, one JSON object per line:
-    - required on every entry: `ts`, `lvl`, `svc`, `comp`, `op`, `msg`, and the writer-assigned `ingestReqId`,
+    - required on every entry: `ts`, `lvl`, `cat`, `svc`, `comp`, `op`, `msg`, and the writer-assigned `ingestReqId`,
     - `lvl` is one of lowercase `trace|debug|info|warn|error|fatal`,
+    - `cat` is the entry's category, separate from `lvl` and `comp`, and one of:
+      - `action`: user interactions, such as tag edits, preset changes, playback, favorite and blacklist changes, and settings changes,
+      - `access`: pairing, control token, login, and permission outcomes,
+      - `job`: refresh, scans, backups, and duplicate scans,
+      - `lifecycle`: startup, shutdown, restart, updates, and the tray,
+      - `connection`: event streams opening, closing, and resyncing,
+      - `general`: everything else. The writer sets `general` when an entry does not give a `cat`,
     - `svc` is one of `server|webui`,
     - optional fields in canonical order: `evt`, `data`, `ingestReqId`, `clientOpId`, `traceId`, `spanId`, `clientId`, `sessionId`, `ver`, `build`, `clientTs`, `srcIp`, `userAgent`; `evt` sits right after `op` and `data` right after `msg`,
     - `evt` is optional, dot-delimited, lowercase, stable, and low-cardinality, used only when it adds something `op` does not,
     - `data` is bounded: safe primitives, short allowlisted strings, and small objects, with no arbitrary object dumps,
     - `ex` is accepted on input only and normalized into `data.error` (`type`, `code`, `messageSafe`, optional bounded stack fingerprint); it is never a top-level field.
-    - example: `{"ts":"...","lvl":"info","svc":"webui","comp":"web.library","op":"UpdateLibraryPanel","evt":"web.library.panel.updated","msg":"Library panel updated.","data":{"totalCount":38833,"eligibleCount":163},"ingestReqId":"...","clientOpId":"...","traceId":"...","spanId":"...","clientId":"...","sessionId":"...","ver":"...","build":"...","clientTs":"...","srcIp":"...","userAgent":"..."}`
+    - example: `{"ts":"...","lvl":"info","cat":"general","svc":"webui","comp":"web.library","op":"UpdateLibraryPanel","evt":"web.library.panel.updated","msg":"Library panel updated.","data":{"totalCount":38833,"eligibleCount":163},"ingestReqId":"...","clientOpId":"...","traceId":"...","spanId":"...","clientId":"...","sessionId":"...","ver":"...","build":"...","clientTs":"...","srcIp":"...","userAgent":"..."}`
   - One writer for the server's `ILogger` pipeline (a logging provider) and for `POST /api/logs/client`. The hand-written appends go through it.
+  - Minimum level: the writer drops entries below a configurable minimum level, set in the server's core settings and `info` by default, for server and client entries alike. A client entry below the minimum is accepted and not written.
   - Time and correlation:
     - `ts` is the server write time and decides order; `clientTs` is the client's event time, kept for context,
     - `clientOpId` is an optional client operation id, kept when provided,
     - request-scoped HTTP and event stream logs carry W3C `traceId` and `spanId` when trace context is active; background and client-local events may omit them,
     - `srcIp` and `userAgent` are added by the server, never by clients.
-  - Strict ingestion at `POST /api/logs/client`: keep valid fields as sent without inferring `lvl`, `comp`, or `op` from the message; reject missing required fields, invalid `lvl` or `svc`, invalid or oversized `data`, and unknown fields; return a `400` listing every error with `code`, `field` (dotted path such as `data.error.code`), and `reason`. JSON serialization also escapes the control characters other than line breaks that `ServerLogService` still writes as sent.
+  - Strict ingestion at `POST /api/logs/client`: keep valid fields as sent without inferring `lvl`, `cat`, `comp`, or `op` from the message; reject missing required fields other than `cat`, invalid `lvl`, `cat`, or `svc`, invalid or oversized `data`, and unknown fields; return a `400` listing every error with `code`, `field` (dotted path such as `data.error.code`), and `reason`. JSON serialization also escapes the control characters other than line breaks that `ServerLogService` still writes as sent.
   - Rotation: rotate at 25 MB, keep the current file plus 10 uncompressed archives, enforce retention at startup before writing, and define what happens to a single oversized entry and to concurrent appends.
   - Human-readable rendering is a view over the fields (admin section, console), not what is stored.
   - Contract change for `POST /api/logs/client` in OpenAPI and the generated WebUI types.
   - Not included: moving the admin section's log view off its current route, which is Admin Log Viewer.
 - **Acceptance criteria**:
   - Every `last.log` line is a JSON object with the required fields and canonical field order.
-  - `lvl` and `svc` values are always from their fixed lists.
+  - `lvl`, `cat`, and `svc` values are always from their fixed lists, and an entry written without a `cat` gets `general`.
+  - Entries below the configured minimum level are not written, and with no setting the minimum is `info`.
   - Server `ILogger` logs and ingested client logs go through the same writer, and every persisted entry has a writer-assigned `ingestReqId`.
   - Client entries keep `clientTs`, `clientOpId`, and trace fields as sent, and `ts` is the write time.
   - Invalid client payloads get a `400` with every error listed and are not written.
   - A client message with line breaks or control characters cannot produce a second log line.
   - Rotation, retention, oversized entries, and concurrent appends behave as documented.
 - **Verification evidence**:
-  - Completion evidence must include schema and order tests, rejection tests for each invalid case, correlation and time-field tests, rotation and retention edge-case tests, `dotnet test ReelRoulette.sln`, and `npm run verify:contracts`.
+  - Completion evidence must include schema and order tests, rejection tests for each invalid case, category default and minimum level tests, correlation and time-field tests, rotation and retention edge-case tests, `dotnet test ReelRoulette.sln`, and `npm run verify:contracts`.
   - Docs evidence must include the schema, ingestion contract, and rotation rules in `docs/api.md` and `docs/architecture.md`.
 
 ### P27b - Structured Log API and Privacy Rules
 
 - **Status**: ⏳ Planned
-- **Goal**: The WebUI logs through a typed structured API that requires explicit metadata and makes privacy-safe entries the only kind it can emit.
+- **Goal**: The WebUI logs through a typed structured API that requires explicit metadata and makes privacy-safe entries the only kind it can emit, and both the WebUI and server code can give each entry a category.
 - **Scope**:
   - Last milestone of the structured log foundation release, planned for v0.16.1. Depends on: Structured Log Schema, Writer, and Ingestion.
   - Level-typed methods for the WebUI, each with explicit `comp` and `op`:
-    - `LogTrace(comp, op, evt? = null, msg, data? = null, context? = null)`
-    - `LogDebug(comp, op, evt? = null, msg, data? = null, context? = null)`
-    - `LogInfo(comp, op, evt? = null, msg, data? = null, context? = null)`
-    - `LogWarn(comp, op, evt? = null, msg, data? = null, context? = null)`
-    - `LogError(comp, op, evt? = null, msg, data? = null, ex? = null, context? = null)`
-    - `LogFatal(comp, op, evt? = null, msg, data? = null, ex? = null, context? = null)`
+    - `LogTrace(comp, op, evt? = null, msg, data? = null, cat? = null, context? = null)`
+    - `LogDebug(comp, op, evt? = null, msg, data? = null, cat? = null, context? = null)`
+    - `LogInfo(comp, op, evt? = null, msg, data? = null, cat? = null, context? = null)`
+    - `LogWarn(comp, op, evt? = null, msg, data? = null, cat? = null, context? = null)`
+    - `LogError(comp, op, evt? = null, msg, data? = null, ex? = null, cat? = null, context? = null)`
+    - `LogFatal(comp, op, evt? = null, msg, data? = null, ex? = null, cat? = null, context? = null)`
   - `lvl` comes from the method; there is no parsing of `comp` or `op` from the message.
+  - Categories: each WebUI method takes an optional `cat` from the schema's category list, and server code can set an entry's `cat` when logging through `ILogger` (how, for example a logging scope or a structured property, is decided here). An entry logged without one is written as `general`, from the WebUI and the server alike.
   - `LogContext = { clientOpId?, traceId?, spanId?, clientId?, sessionId?, ver?, build?, clientTs? }`; `ingestReqId`, `srcIp`, and `userAgent` are never client-supplied.
   - Baseline `comp` names: server `api`, `auth`, `sse`, `playback`, `refresh.pipeline`, `storage`; WebUI `web.app`, `web.player`, `web.library`, `web.api`, `web.sse`.
   - Privacy by construction, enforced by the API rather than by rewriting entries afterwards:
@@ -673,13 +685,14 @@ Last milestone completed: M10j12
   - Until WebUI Instrumentation, the WebUI status relay keeps working by emitting through the new API as `comp` `legacy`, `op` `unmigrated`, level `info`. This is the only inferred path, and that milestone removes it.
   - Not included: migrating WebUI call sites, which is WebUI Instrumentation.
 - **Acceptance criteria**:
-  - The WebUI has the level-typed API with explicit `comp` and `op`, optional `evt`, and typed context.
+  - The WebUI has the level-typed API with explicit `comp` and `op`, optional `evt` and `cat`, and typed context.
+  - A WebUI entry and a server `ILogger` entry logged with a category are written with that `cat`, and ones logged without one are written as `general`.
   - `ex` is always written as privacy-safe `data.error`, never as a top-level field.
   - Oversized or arbitrary `data` is rejected before it is written.
   - The legacy path is the only one that emits `comp` `legacy`, and it is documented as temporary.
   - The `comp` baseline and privacy rules are documented.
 - **Verification evidence**:
-  - Completion evidence must include API tests per level, `ex` normalization tests, context mapping tests, negative tests that paths, names, and secrets in the shapes above are refused, `dotnet test ReelRoulette.sln`, and `npm run verify`.
+  - Completion evidence must include API tests per level, `ex` normalization tests, context mapping tests, category tests for WebUI and server `ILogger` entries, negative tests that paths, names, and secrets in the shapes above are refused, `dotnet test ReelRoulette.sln`, and `npm run verify`.
 
 ### P27d - Server Instrumentation
 
@@ -723,18 +736,24 @@ Last milestone completed: M10j12
   - Planned for v0.18.0. Depends on: Structured Log Schema, Writer, and Ingestion, and Admin Section in WebUI Settings.
   - Rename **Server Logs** to **Log Viewer** across the admin section, the recovery page, API, tests, and docs, and rename `GET /control/logs/server` to `GET /control/log-viewer` in one step. There is no alias period: the admin section and the recovery page are the route's only callers and ship in the same binary.
   - The route stays read-only; logs are still written directly to `last.log`.
-  - Server-side filters: `svc`, `lvl`, `clientId`, `sessionId`, `traceId`, `ingestReqId`, `clientOpId`, `comp`, `op`, `evt`, message text, and a time window. Client-side filtering only refines results already fetched.
+  - Server-side filters: `svc`, `lvl`, `cat`, `clientId`, `sessionId`, `traceId`, `ingestReqId`, `clientOpId`, `comp`, `op`, `evt`, message text, and a time window. `lvl`, `cat`, and `svc` each take several values. Client-side filtering only refines results already fetched.
+  - Level, category, and source filters in the view:
+    - The level filter is a set of checkboxes, one per `lvl` value, instead of the free-text level box carried over from the Operator page, so several levels can be shown at once.
+    - Next to it, a multi-select filter by category, one option per `cat` value.
+    - A multi-select filter by source, one option per `svc` value (`server` and `webui`; the desktop client is gone by this release).
   - Newest first by `ts`, tie-broken by `ingestReqId` and then a stable row sequence, with a versioned cursor and defined `from` and `to` bounds, so paging never repeats or skips rows.
   - Read from the end of the file and across rotated archives instead of walking every line on each request (found by the repository audit: `ServerLogService.Read` walks the entire log on every request).
   - Admin section view: controls collapsed by default with active-filter chips, readable rows with expandable raw JSON, and auto-refresh that pauses while scrolled away from the newest rows, with a resume control.
 - **Acceptance criteria**:
   - The admin section's Log Viewer filters by every listed field, text, and time window.
+  - The level filter is one checkbox per level, not free text, and checking several levels shows entries of exactly those levels.
+  - The category and source filters each select several values at once and show entries from exactly those categories or sources.
   - `/control/logs/server` is gone and `/control/log-viewer` is in OpenAPI and `docs/api.md`.
   - The same filters and cursor return the same rows, and paging never repeats or skips a row.
   - A request reads only as much of the log as its page needs.
   - Controls start collapsed and show active filters; rows expand to raw JSON; auto-refresh pauses and resumes as described.
 - **Verification evidence**:
-  - Completion evidence must include paging tests across page and archive boundaries, replay tests for identical filters, a read-cost test on a large log, admin section UI tests for the view, and `npm run verify`.
+  - Completion evidence must include paging tests across page and archive boundaries, replay tests for identical filters, filter tests with several levels, categories, and sources, a read-cost test on a large log, admin section UI tests for the view, and `npm run verify`.
 
 ### P27g - Client Log Relay Reliability
 

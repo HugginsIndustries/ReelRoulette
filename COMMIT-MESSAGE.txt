@@ -19,11 +19,8 @@ Instructions:
 
 Commit Message:
 
-Bugfix: Keep file paths and names out of last.log and stop lines overwriting each other
+Docs: Plan log categories, a minimum log level, and multi-value log viewer filters
 
-- Every `last.log` append goes through `ServerLogService` under one process-wide lock, so lines written at the same moment no longer overwrite each other on Linux or go missing on Windows.
-- Line breaks in a log line become a literal `\n`, so a relayed client message stays on one line and cannot forge another.
-- WebUI relayed lines carry `hasCurrent` and the attempt id instead of item ids, file or preset names, media URLs, or server error text; the line building moves into `relayLogLines.ts`.
-- Desktop log lines leave file names out: the audio lines record whether an item is current, and the playback target and catalog event lines drop the name.
-- The desktop log sanitizer redacts absolute Unix paths, and redacts only file names with a playable media extension, whole, so volume levels, host names, and versions stay readable.
-- Add tests for parallel appends, line breaks, WebUI relay lines, and the desktop sanitizer.
+- The structured log schema gets a required `cat` category (`action`, `access`, `job`, `lifecycle`, `connection`, or `general`, which the writer sets when an entry has none) and a configurable minimum level for `last.log`, `info` by default; the WebUI log methods take an optional category, and server code can set one through `ILogger`.
+- The Admin Log Viewer replaces the free-text level box with one checkbox per level, adds multi-select category and source filters, and its `lvl`, `cat`, and `svc` filters take several values.
+- Library Query Performance keeps one library query line per request and adds its elapsed time, so a reload writes one line once it is a single request; in the v0.14.0 manual pass a six-page reload from two WebUI clients wrote twelve lines.

@@ -136,21 +136,21 @@ An agent runs these and ticks them.
 
 - [x] Operator Server Logs shows entries during a test run, with timestamp, level, and source.
 - [x] Desktop and WebUI entries both appear in the server log.
-- [ ] No tokens, secrets, or cookies appear in logs.
-- [ ] WebUI and desktop log lines contain no file paths or file names (the server's own source and backup lines still show paths until the server instrumentation milestone).
-- [ ] No log line is cut off or merged with another.
+- [x] No tokens, secrets, or cookies appear in logs.
+- [x] WebUI and desktop log lines contain no file paths or file names (the server's own source and backup lines still show paths until the server instrumentation milestone).
+- [x] No log line is cut off or merged with another.
 
 ### Packaging
 
-- [ ] Windows `Setup.exe` installs per user without elevation, and its shortcuts appear when offered.
-- [ ] Linux `.AppImage` runs after `chmod +x`; desktop plays video with system LibVLC and refresh works with system `ffmpeg`.
-- [ ] After first launch, both Linux AppImages appear under Multimedia in the app menu with their icons and launch the right AppImage.
-- [ ] Without LibVLC on Linux, the desktop AppImage shows a dependency dialog with a copyable install command and exits cleanly.
-- [ ] Moving a Linux AppImage and running it updates its menu entry; relaunching without moving does not rewrite it.
-- [ ] After an in-app update on Linux, menu entries still launch the updated AppImage.
-- [ ] Server in-app update: the check finds the new version without downloading, Download reaches ready, and Apply & Restart relaunches on it.
-- [ ] Desktop in-app update: Settings finds the new version without downloading, Download reaches ready, and Apply & Restart relaunches on it.
-- [ ] Icons match across shortcuts, menus, and the WebUI.
+- [x] Windows `Setup.exe` installs per user without elevation, and its shortcuts appear when offered.
+- [x] Linux `.AppImage` runs after `chmod +x`; desktop plays video with system LibVLC and refresh works with system `ffmpeg`.
+- [x] After first launch, both Linux AppImages appear under Multimedia in the app menu with their icons and launch the right AppImage.
+- [x] Without LibVLC on Linux, the desktop AppImage shows a dependency dialog with a copyable install command and exits cleanly.
+- [x] Moving a Linux AppImage and running it updates its menu entry; relaunching without moving does not rewrite it.
+- [x] After an in-app update on Linux, menu entries still launch the updated AppImage.
+- [x] Server in-app update: the check finds the new version without downloading, Download reaches ready, and Apply & Restart relaunches on it.
+- [x] Desktop in-app update: Settings finds the new version without downloading, Download reaches ready, and Apply & Restart relaunches on it.
+- [x] Icons match across shortcuts, menus, and the WebUI.
 
 ## Release Specific
 
