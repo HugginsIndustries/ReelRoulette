@@ -9,7 +9,7 @@ An outline of upcoming releases and the milestones each one ships, in order. v0.
 
 The WebUI becomes the only client on every device. The desktop client is frozen to bug fixes (crashes, data loss, broken playback, security) until the desktop removal release, and until then server contract changes only add fields, so the last desktop build keeps working. The native Android client is dropped.
 
-- **v0.14.0 — Cleanup and polish**: Finish the SQLite migration cleanup, fix the defects found since, cut redundant client and refresh event work, and close the control plane to the LAN without a token. M10j1, M10j2, M10j3, M10j4, M10j5, M10j6, M10j7, M10j8, M10j9, M10j10, M10j11, M10j12, M10j13.
+- **v0.14.0 — Cleanup and polish**: Finish the SQLite migration cleanup, fix the defects found since, cut redundant client and refresh event work, and close the control plane to the LAN without a token. M10j1, M10j2, M10j3, M10j4, M10j5, M10j6, M10j7, M10j8, M10j9, M10j10, M10j11, M10j12.
 - **v0.14.1 — Performance**: Make library browse, window reloads, and random selection cheap on large catalogs, cache thumbnails until they change, and identify items by ID in every event and response. P29a, P29b, P29c, P29d.
 - **v0.15.0 — WebUI overhaul**: Serve the WebUI over HTTPS so it installs as an app, move it to Preact, give it a responsive layout with side panels and phone overlays, and add keyboard shortcuts, stats, settings, an admin section that replaces the Operator page, duplicate review, and Show in File Manager. P28a, P38, P39, P34, P20, P26a, P40, P41, P42, P43, P44, P45, P31.
 - **v0.15.1 — Desktop parity**: Give the WebUI everything else the desktop does, including source management, catalog transfer, multi-select, and a browser-playable filter, while the desktop still ships as a fallback. P26b, P26c, P26d, P37, P46, P47.
@@ -111,24 +111,7 @@ Do not use this file for detailed architecture explanation or current capability
 
 Last milestone completed: M10j10
 
-### M10j11 - WebUI Light Mode Tag Colors
-
-- **Status**: ⏳ Planned
-- **Goal**: In WebUI light mode, tag chips and tag editor buttons use readable light-theme colors.
-- **Scope**:
-  - Ships in v0.14.0.
-  - Found in the v0.12.0 manual regression pass: in light mode, tag chip text in the filter Tags tab and the tag editor is black, and the tag editor buttons outside the tag grid stay white instead of switching to dark.
-  - Dark mode stays as it is.
-  - Add a Release Specific checklist item: "In WebUI light and dark themes, tag chips in the filter Tags tab and the tag editor are readable, and the tag editor buttons match the theme."
-- **Acceptance criteria**:
-  - In WebUI light mode, tag chip text in the filter Tags tab and the tag editor is readable on every chip state, and the tag editor buttons outside the tag grid use light-theme colors. Switching the system theme while the tag editor is open updates both.
-- **Verification evidence**:
-  - Completion evidence must include automated tests where they reach the behavior (for example light-theme chip and button styles), `npm run verify`, and one quick spot check in light mode.
-  - The pass in both themes is the Release Specific checklist item above, run in the pre-release pass.
-- **Deferrals / Follow-ups**:
-  - Dropped when the desktop was frozen to bug fixes: the desktop tag chip toggle state, the desktop Auto Tag busy indicator, and the desktop filter dialog collapse toggle styling, found in the v0.12.0 and v0.13.0 manual regression passes.
-
-### M10j12 - Server Shutdown Fixes
+### M10j11 - Server Shutdown Fixes
 
 - **Status**: ⏳ Planned
 - **Goal**: Stopping the server finishes in a few seconds with clients connected, the Windows tray survives its right-click menu, and Operator **Stop**, Operator **Restart**, and in-app update apply shut the tray down on its UI thread, so they cannot deadlock the server's shutdown.
@@ -171,7 +154,7 @@ Last milestone completed: M10j10
 - **Deferrals / Follow-ups**:
   - If the Windows tray icon survives right-click but the menu still closes instantly, the menu window is losing focus as it opens, which ServerApp cannot change inside Avalonia. The fallback is a Windows-only native menu, such as the WinForms `NotifyIcon` tray that passed Windows verification before the move to Avalonia.
 
-### M10j13 - Drop the Old Milestones Layout From the Checker
+### M10j12 - Drop the Old Milestones Layout From the Checker
 
 - **Status**: ⏳ Planned
 - **Goal**: `check-milestones.ps1` supports only the current layout, with completed milestones in `MILESTONES-COMPLETED.md`, once no comparison needs the old single-file layout.
