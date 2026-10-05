@@ -140,7 +140,7 @@ pwsh ./tools/scripts/run-server-rebuild.ps1
 Set release-aligned version surfaces in one step (repo-root `.version` is the source of truth; bare semver is written to consumers):
 
 ```bash
-pwsh ./tools/scripts/set-release-version.ps1 -Version v0.14.0-dev.1
+pwsh ./tools/scripts/set-release-version.ps1 -Version v0.14.0-dev.2
 ```
 
 Omit `-Version` to read the current value from `.version` and fan out without changing the file. By default this also updates the desktop app `<Version>`, regenerates WebUI OpenAPI contracts (`npm run generate:contracts`), and runs solution build/test, WebUI verify, and deploy smoke. Pass `-NoUpdateDesktopVersion`, `-NoRegenerateContracts`, and/or `-NoRunVerify` to skip any of those. Use `-NoDocUpdates` to leave `README.md` / `docs/dev-setup.md` release command examples unchanged.
@@ -202,7 +202,7 @@ ReelRoulette ships through **Velopack** only. The **`.github/workflows/release.y
 1. Set the repo version and align contract/project surfaces:
 
    ```bash
-   pwsh ./tools/scripts/set-release-version.ps1 -Version v0.14.0-dev.1
+   pwsh ./tools/scripts/set-release-version.ps1 -Version v0.14.0-dev.2
    ```
 
 2. Cut the changelog's `[Unreleased]` section into the release:

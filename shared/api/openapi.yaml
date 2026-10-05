@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: ReelRoulette API
-  version: 0.14.0-dev.1
+  version: 0.14.0-dev.2
   description: Contract-first API with the refresh pipeline, status and settings APIs, and thumbnail artifact retrieval endpoints.
 paths:
   /health:
