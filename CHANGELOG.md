@@ -30,6 +30,7 @@ Write **[Unreleased]** bullets at the same level as the released sections below.
 - **Desktop filter dialog presets:** Deleting a preset, renaming one, or moving the selected one up or down no longer throws away your unsaved filter changes or turns off **Update Preset**. A saved preset whose minimum or maximum duration is stored in seconds keeps its settings on the desktop instead of loading as **None**.
 - **Desktop playback and sort labels:** The desktop shows a file as a photo or video based on what the server reports, as the WebUI does, and its library sort labels use the same arrows and dashes as the WebUI.
 - **WebUI catches up after a lost connection:** When the WebUI's connection to the server drops, for example while the server restarts, it now picks up the favorite, tag, and playback changes made in the meantime, or reloads if it missed too many. It used to keep showing the old state until something else reloaded. After a server restart, both clients now catch up or reload instead of missing changes, including when nothing had changed since they connected.
+- **Desktop videos starting silent:** A video started by random play, next, previous, or autoplay on the desktop no longer sometimes plays with no sound while the mute button shows unmuted. Volume and mute are applied again once the video is actually playing, including after turning loop on or off. A saved mute still keeps every video silent.
 - **Desktop Settings reopen hang:** Opening Settings a second time no longer freezes the desktop app so that it has to be force-closed.
 
 ### Security

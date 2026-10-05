@@ -829,6 +829,9 @@ namespace ReelRoulette
         private string _seekStep = "5s"; // Frame, 1s, 5s, 10s
         private int _volumeStep = 5; // 1, 2, 5
 
+        // Reapplies volume and mute once a new video's audio output exists
+        private readonly PlaybackAudioReapply _audioReapply = new();
+
         // Seek bar fields
         private DispatcherTimer? _seekTimer;
         private long _mediaLengthMs = 0;
@@ -909,7 +912,12 @@ namespace ReelRoulette
 
             // Hook up end reached event for auto-advance (Phase 2)
             _mediaPlayer.EndReached += MediaPlayer_EndReached;
-            
+
+            // Log LibVLC audio state changes so last.log shows whether a new audio output came up muted
+            _mediaPlayer.Muted += MediaPlayer_Muted;
+            _mediaPlayer.Unmuted += MediaPlayer_Unmuted;
+            _mediaPlayer.VolumeChanged += MediaPlayer_VolumeChanged;
+
             // Hook up Playing/Paused events to keep button state in sync
             _mediaPlayer.Playing += (s, e) =>
             {
@@ -917,6 +925,11 @@ namespace ReelRoulette
                 {
                     PlayPauseButton.IsChecked = true;
                     UpdateAspectRatioFromTracks();
+
+                    if (_mediaPlayer != null && _audioReapply.OnPlaying(_mediaPlayer.Time))
+                    {
+                        ReapplyAudioState("playing");
+                    }
                     
                     // If transitioning from photo to video, hide photo and show video now that video is playing
                     if (PhotoImageView != null && PhotoImageView.IsVisible && VideoView != null && !VideoView.IsVisible)
@@ -1152,6 +1165,9 @@ namespace ReelRoulette
             {
                 _mediaPlayer.Stop();
                 _mediaPlayer.EndReached -= MediaPlayer_EndReached;
+                _mediaPlayer.Muted -= MediaPlayer_Muted;
+                _mediaPlayer.Unmuted -= MediaPlayer_Unmuted;
+                _mediaPlayer.VolumeChanged -= MediaPlayer_VolumeChanged;
             }
             _currentMedia?.Dispose();
             _mediaPlayer?.Dispose();
@@ -1192,6 +1208,48 @@ namespace ReelRoulette
             _coreReconnectLoopCancellationSource = null;
 
             base.OnClosed(e);
+        }
+
+        // LibVLC raises these on its own thread; they only log and never call back into the player.
+        private void MediaPlayer_Muted(object? sender, EventArgs e)
+        {
+            Log($"MediaPlayer.Muted: LibVLC reports muted - Current: {CurrentAudioLogName()}, AppMuted: {_isMuted}");
+        }
+
+        private void MediaPlayer_Unmuted(object? sender, EventArgs e)
+        {
+            Log($"MediaPlayer.Unmuted: LibVLC reports unmuted - Current: {CurrentAudioLogName()}, AppMuted: {_isMuted}");
+        }
+
+        private void MediaPlayer_VolumeChanged(object? sender, MediaPlayerVolumeChangedEventArgs e)
+        {
+            Log($"MediaPlayer.VolumeChanged: LibVLC reports volume {e.Volume:F2} - Current: {CurrentAudioLogName()}, AppMuted: {_isMuted}");
+        }
+
+        private string CurrentAudioLogName()
+        {
+            var path = _currentVideoPath;
+            return string.IsNullOrEmpty(path) ? "null" : System.IO.Path.GetFileName(path);
+        }
+
+        /// <summary>
+        /// Reapplies the app's volume and mute to the player once its audio output exists.
+        /// Mute is set without reading it first, because the player reports unmuted while it has no audio output.
+        /// </summary>
+        private void ReapplyAudioState(string reason)
+        {
+            if (_mediaPlayer == null)
+            {
+                return;
+            }
+
+            Log($"ReapplyAudioState: Reapplying ({reason}) - Current: {CurrentAudioLogName()}, PlayerMute: {_mediaPlayer.Mute}, PlayerVolume: {_mediaPlayer.Volume}, AppMuted: {_isMuted}, UserVolume: {_userVolumePreference}");
+            _mediaPlayer.Mute = _isMuted;
+            ApplyVolumeNormalization();
+            if (MuteButton != null)
+            {
+                MuteButton.IsChecked = _isMuted;
+            }
         }
 
         private void MediaPlayer_EndReached(object? sender, EventArgs e)
@@ -4851,6 +4909,7 @@ namespace ReelRoulette
                     {
                         // Photos: Use Avalonia Image control instead of VLC for better performance with large images
                         Log("PlayMedia: This is a photo - loading with Avalonia Image control");
+                        _audioReapply.Clear();
                         
                         // Hide VideoView and show Image control
                         try
@@ -5177,6 +5236,7 @@ namespace ReelRoulette
 
                         Log("PlayMedia: Starting playback");
                         EnsureVideoViewMediaPlayerAttached();
+                        _audioReapply.BeginMedia();
                         _mediaPlayer!.Play(_currentMedia!);
                         Log("PlayMedia: Playback started successfully");
                         
@@ -5249,15 +5309,7 @@ namespace ReelRoulette
                 NextButton.IsEnabled = _playbackTimeline.Count > 0;
                 Log($"PlayMedia: Previous button enabled: {PreviousButton.IsEnabled}, Next button enabled: {NextButton.IsEnabled}");
 
-                // Initialize volume slider if first video
-                if (VolumeSlider.Value == 100 && _mediaPlayer!.Volume == 0)
-                {
-                    Log("PlayMedia: Initializing volume slider (first video)");
-                    _mediaPlayer.Volume = 100;
-                    VolumeSlider.Value = 100;
-                }
-
-                // Apply saved mute state
+                // Apply saved mute state (reapplied once playback has started, see ReapplyAudioState)
                 _mediaPlayer!.Mute = _isMuted;
                 if (MuteButton != null)
                 {
@@ -5421,6 +5473,7 @@ namespace ReelRoulette
                     
                     // Set media and restore playback position
                     EnsureVideoViewMediaPlayerAttached();
+                    _audioReapply.BeginMedia();
                     _mediaPlayer.Play(_currentMedia);
                     _mediaPlayer.Time = currentTime;
                     
@@ -9317,6 +9370,7 @@ namespace ReelRoulette
                                 
                                 // Set media and restore playback position
                                 EnsureVideoViewMediaPlayerAttached();
+                                _audioReapply.BeginMedia();
                                 _mediaPlayer.Play(_currentMedia);
                                 _mediaPlayer.Time = currentTime;
                                 
@@ -10455,6 +10509,11 @@ namespace ReelRoulette
             // Skip seek bar updates for photos
             if (_isCurrentlyPlayingPhoto)
                 return;
+
+            if (_audioReapply.OnTick(_mediaPlayer.Time))
+            {
+                ReapplyAudioState("time advanced");
+            }
 
             // Update media length from MediaPlayer
             var lengthMs = _mediaPlayer.Length;

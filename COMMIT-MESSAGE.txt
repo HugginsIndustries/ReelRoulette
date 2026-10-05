@@ -19,11 +19,11 @@ Instructions:
 
 Commit Message:
 
-Docs: Move completed milestones into MILESTONES-COMPLETED.md
+M10j10: Reapply desktop volume and mute once a video starts playing
 
-- Move the Completed Milestones section of `MILESTONES.md` unchanged into a new `MILESTONES-COMPLETED.md`; the tracker line stays in `MILESTONES.md`, and a completed milestone now moves to the top of the new file.
-- `check-milestones.ps1` checks both files: Depends on, outline, and duplicate-ID checks see completed entries, a Completed section left in `MILESTONES.md` is flagged, and the history comparison reads the new file.
-- Against a base from before the move, the checker reads the base history from the old section, so `-BaseRef HEAD` and `-Release` against older tags keep working.
-- Split the checker fixtures, add a legacy single-file fixture, and cover the migration, stray-section, and cross-file duplicate cases.
-- AGENTS.md, skills, and docs: point the completed-milestone rules and milestone-ID allowance at the new file.
-- Plan a v0.14.0 milestone to drop the old-layout support once the release check against v0.13.0 has passed.
+- Reapply volume and mute when a new video starts playing and again when its playback time first advances, once per new media and not on resume from pause, so a video no longer starts silent while the mute button shows unmuted.
+- Cover the loop-toggle and Settings media rebuilds, which never applied volume or mute before.
+- Set mute without reading it first, since the player reports unmuted until its audio output exists.
+- Drop the first-video volume check that read the player's volume before an audio output existed.
+- Log LibVLC mute and volume events and the player's mute and volume before each reapply to `last.log`.
+- Add tests for the once-per-media reapply rule and a Release Specific checklist item for repeated video switching on Linux and Windows.

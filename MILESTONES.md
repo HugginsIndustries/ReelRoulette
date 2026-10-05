@@ -109,33 +109,7 @@ Do not use this file for detailed architecture explanation or current capability
 
 ## Active Milestones
 
-Last milestone completed: M10j9
-
-### M10j10 - Desktop Sound on Video Start
-
-- **Status**: ⏳ Planned
-- **Goal**: Every desktop video starts with the sound the mute button shows.
-- **Scope**:
-  - Ships in v0.14.0. The desktop is frozen to bug fixes, so this milestone keeps only the silent-start fix; the player view and fullscreen problems are recorded under Deferrals.
-  - Videos sometimes start with no sound on desktop after random play, next, or previous, while the mute button shows unmuted. Muting and unmuting restores sound. The WebUI, which plays through the browser's own video element, is unaffected. Existing behavior: the volume and mute code is unchanged since v0.12.0.
-  - Likely cause, not confirmed: `PlayMedia` sets volume and mute only before LibVLC creates the new audio output (before and right after `Play()`, which returns before the output exists), and never after playback starts. LibVLC documents that mute may not apply when no audio stream is active. The desktop does not listen to LibVLC's mute or volume events, so the button never learns the player is muted.
-  - Log LibVLC's `Muted`, `Unmuted`, and `VolumeChanged` events, and the player's mute and volume just before reapplying, so `last.log` shows whether a new file's audio output came up muted.
-  - Reapply volume and mute once playback has actually started: on `Playing`, and again on the first seek-timer tick where playback time advances, once per new media and not on resume from pause. Cover the loop-toggle media rebuild and the other player rebuild path, which do not reapply mute today.
-  - Fix the first-video volume check in `PlayMedia`, which reads the player's volume after `Play()`, before an audio output exists.
-  - Add a Release Specific checklist item: "Switching videos repeatedly with random, next, and previous never starts a video silently, and the mute button matches what you hear," on Linux and Windows.
-- **Acceptance criteria**:
-  - After random play, next, previous, autoplay, and the loop-toggle rebuild, volume and mute are reapplied once playback has started, and not again on resume from pause.
-  - `last.log` records LibVLC mute and volume events and the player's mute and volume before each reapply.
-  - The first-video volume check does not read the player's volume before an audio output exists.
-  - A saved mute still applies: with the app muted, switching videos stays silent and the button shows muted.
-- **Verification evidence**:
-  - Completion evidence must include automated tests where they reach the behavior (for example the once-per-media reapply rule), `dotnet build ReelRoulette.sln`, `dotnet test ReelRoulette.sln`, and one quick Linux spot check of a few video switches with sound.
-  - The Linux and Windows pass of repeated video switching is the Release Specific checklist item above, run in the pre-release pass.
-- **Deferrals / Follow-ups**:
-  - Not fixed, because the desktop is frozen to bug fixes and is being retired. All existing behavior, found in the v0.13.0 manual regression pass:
-    - Keyboard shortcuts (**P**, **F11**, and the rest) stop working while the pointer is over the video. With player view and fullscreen combined, the video fills the screen, so neither can be exited from the keyboard. Likely cause, not confirmed: the desktop never sets LibVLC's `EnableKeyInput` or `EnableMouseInput`, so the embedded video surface takes keyboard input.
-    - Player view leaves a thin divider line from the normal layout at the top of the screen. Moving the pointer onto that line is the only way to make shortcuts work again in fullscreen player view.
-    - The video does not always resize to fill the screen in fullscreen or player view.
+Last milestone completed: M10j10
 
 ### M10j11 - WebUI Light Mode Tag Colors
 
