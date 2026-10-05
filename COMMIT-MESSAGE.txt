@@ -19,10 +19,8 @@ Instructions:
 
 Commit Message:
 
-Docs: Prepare the v0.14.0 Loose Ends pre-release pass
+M10j12: Drop the old milestones layout from the checker
 
-- Consolidate `[Unreleased]` in `CHANGELOG.md` to one user-visible outcome per bullet, splitting the source list and refresh settings fixes.
-- Draft the v0.14.0 — Loose Ends entry in `RELEASE-NOTES.md`, with Verification left for the manual pass.
-- Reset the testing checklist for v0.14.0, tick the automated checks that passed, and drop the previous pass's failure notes.
-- Add Release Specific checks for reopening desktop Settings and for desktop filter dialog preset edits keeping unsaved changes.
-- Fix the docs review findings: `docs/api.md` no longer mentions the removed desktop list view or desktop favorites and recently played, and `docs/domain-inventory.md` says the headless host is used on any OS when no tray can be created.
+- `check-milestones.ps1` reads a base's completed history only from its `MILESTONES-COMPLETED.md`, and refuses a base without one, including a `-BasePath` given without `-BaseCompletedPath`.
+- Remove the `legacy.md` fixture and its two base tests; the leftover Completed Milestones section test now uses a copy of `valid.md` with that section added, and a new test covers the `-BasePath` refusal.
+- Remove the old-layout note from `docs/dev-setup.md`, note that a base without `MILESTONES-COMPLETED.md` is refused, and move the completed milestone to `MILESTONES-COMPLETED.md`.

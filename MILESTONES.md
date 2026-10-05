@@ -109,24 +109,7 @@ Do not use this file for detailed architecture explanation or current capability
 
 ## Active Milestones
 
-Last milestone completed: M10j11
-
-### M10j12 - Drop the Old Milestones Layout From the Checker
-
-- **Status**: ⏳ Planned
-- **Goal**: `check-milestones.ps1` supports only the current layout, with completed milestones in `MILESTONES-COMPLETED.md`, once no comparison needs the old single-file layout.
-- **Scope**:
-  - Ships in v0.14.0, as part of the pre-release pass. Do it only after `pwsh ./tools/scripts/check-milestones.ps1 -BaseRef v0.13.0 -Release` has passed in that pass. v0.13.0 is the last release with completed milestones inside `MILESTONES.md`, so later comparisons never need the old layout.
-  - Remove the checker's reading of a base's completed history from the Completed Milestones section of its `MILESTONES.md`, including the intro fallback, and the header comment describing it.
-  - Refuse a base that has no `MILESTONES-COMPLETED.md`, instead of treating every completed entry as newly moved.
-  - Remove the `legacy.md` fixture and the tests that compare against it. Keep the check that flags a Completed Milestones section left in `MILESTONES.md`, and point its test at a fixture copy with that section added.
-  - Remove the sentence in `docs/dev-setup.md` about bases from before the completed history had its own file.
-- **Acceptance criteria**:
-  - The checker no longer reads completed entries from a base's `MILESTONES.md`, and a base without `MILESTONES-COMPLETED.md` is refused with a clear message.
-  - `legacy.md` and its tests are gone, and the leftover-section check is still tested.
-  - `check-milestones.ps1 -BaseRef HEAD` and `tools/scripts/tests/test-scripts.ps1` pass.
-- **Verification evidence**:
-  - Completion evidence must include the passing release-wide check against v0.13.0 from the pre-release pass, run before this change, then `check-milestones.ps1 -BaseRef HEAD`, `tools/scripts/tests/test-scripts.ps1`, and a run against v0.13.0 showing the refusal.
+Last milestone completed: M10j12
 
 ## Planned Milestones
 

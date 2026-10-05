@@ -11,7 +11,6 @@ $validMilestones = Join-Path $fixturesDir "milestones" "valid.md"
 $movedMilestones = Join-Path $fixturesDir "milestones" "moved.md"
 $validCompleted = Join-Path $fixturesDir "milestones" "valid-completed.md"
 $movedCompleted = Join-Path $fixturesDir "milestones" "moved-completed.md"
-$legacyMilestones = Join-Path $fixturesDir "milestones" "legacy.md"
 $changelogInput = Join-Path $fixturesDir "changelog" "input.md"
 $changelogExpected = Join-Path $fixturesDir "changelog" "expected.md"
 
@@ -186,7 +185,8 @@ try {
     }
 
     Test-Case "a Completed Milestones section left in MILESTONES.md fails" {
-        Assert-Check (Invoke-Tool $checker (Get-CheckArgs $legacyMilestones)) 1 @("legacy.md:63: the Completed Milestones section belongs in MILESTONES-COMPLETED.md")
+        $path = New-FixtureCopy $validMilestones "leftover-section.md" @(, @("Sharing ships first.`n", "Sharing ships first.`n`n## Completed Milestones`n`nNewest completions first.`n"))
+        Assert-Check (Invoke-Tool $checker (Get-CheckArgs $path)) 1 @("leftover-section.md:65: the Completed Milestones section belongs in MILESTONES-COMPLETED.md")
     }
 
     Test-Case "a completed history without its section fails" {
@@ -199,15 +199,9 @@ try {
         Assert-Check (Invoke-Tool $checker $parameters) 0 @("OK: moved.md and moved-completed.md passed")
     }
 
-    Test-Case "full mode: a base from before the completed history moved out of MILESTONES.md passes" {
-        $parameters = @{ Path = $movedMilestones; CompletedPath = $movedCompleted; BasePath = $legacyMilestones }
-        Assert-Check (Invoke-Tool $checker $parameters) 0 @("OK: moved.md and moved-completed.md passed")
-    }
-
-    Test-Case "full mode: against a base from before the move, a changed completed entry fails" {
-        $completed = New-FixtureCopy $validCompleted "legacy-edited-completed.md" @(, @("The first prototype.", "The first prototype, revised."))
-        $parameters = @{ Path = $validMilestones; CompletedPath = $completed; BasePath = $legacyMilestones }
-        Assert-Check (Invoke-Tool $checker $parameters) 1 @("completed milestone 'M0z - Prototype' changed") 1
+    Test-Case "a base without its completed history is refused" {
+        $parameters = @{ Path = $movedMilestones; CompletedPath = $movedCompleted; BasePath = $validMilestones }
+        Assert-Check (Invoke-Tool $checker $parameters) 1 @("-BasePath needs -BaseCompletedPath")
     }
 
     Test-Case "comparing against a base without the completed history is refused" {

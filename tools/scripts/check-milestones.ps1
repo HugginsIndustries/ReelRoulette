@@ -6,11 +6,10 @@
 #   -Staged                    check the staged MILESTONES.md and MILESTONES-COMPLETED.md
 #   -BaseRef <ref>             also check that the completed history only grew by newly moved entries since <ref>
 #   -BasePath <file>           same as -BaseRef, with the base MILESTONES.md read from a file
-#   -BaseCompletedPath <file>  with -BasePath, the base completed history, if the base had one
+#   -BaseCompletedPath <file>  with -BasePath, the base completed history (required)
 #   -Release                   with a release tag as the base, skip checking that new completed entries
 #                              existed in the base, since a release's milestones are often planned after it
-# A base from before the completed history moved out of MILESTONES.md is read from its
-# Completed Milestones section instead.
+# A base must keep its completed history in MILESTONES-COMPLETED.md; an older base is refused.
 param(
     [string]$Path,
     [string]$CompletedPath,
@@ -47,6 +46,9 @@ if ($Release.IsPresent -and -not ($BaseRef -or $BasePath)) {
 }
 if (($BaseRef -or $BasePath) -and $Path -and -not $CompletedPath) {
     throw "Comparing against a base needs the completed history; pass -CompletedPath with -Path."
+}
+if ($BasePath -and -not $BaseCompletedPath) {
+    throw "-BasePath needs -BaseCompletedPath, the base's completed history."
 }
 
 function Get-GitFileText {
@@ -275,15 +277,14 @@ $base = $null
 $baseCompleted = $null
 if ($BaseRef) {
     $base = Get-Document (Get-GitFileText "${BaseRef}:MILESTONES.md")
-    if (Test-GitFile "${BaseRef}:MILESTONES-COMPLETED.md") {
-        $baseCompleted = Get-Document (Get-GitFileText "${BaseRef}:MILESTONES-COMPLETED.md")
+    if (-not (Test-GitFile "${BaseRef}:MILESTONES-COMPLETED.md")) {
+        throw "${BaseRef} has no MILESTONES-COMPLETED.md; the checker compares only against bases that keep completed milestones in their own file."
     }
+    $baseCompleted = Get-Document (Get-GitFileText "${BaseRef}:MILESTONES-COMPLETED.md")
 }
 elseif ($BasePath) {
     $base = Get-Document (Read-File $BasePath "Base file")
-    if ($BaseCompletedPath) {
-        $baseCompleted = Get-Document (Read-File $BaseCompletedPath "Base completed file")
-    }
+    $baseCompleted = Get-Document (Read-File $BaseCompletedPath "Base completed file")
 }
 
 $doc = Get-Document $text
@@ -400,8 +401,7 @@ for ($i = 0; $i -lt $doc.Lines.Count; $i++) {
 
 # 5. Against a base, the completed history only grew by entries moved in from MILESTONES.md.
 if ($base) {
-    # A base from before the move keeps its history in MILESTONES.md.
-    $baseIntro = if ($baseCompleted -and $null -ne (Get-CompletedIntro $baseCompleted)) { Get-CompletedIntro $baseCompleted } else { Get-CompletedIntro $base }
+    $baseIntro = Get-CompletedIntro $baseCompleted
     $intro = Get-CompletedIntro $completedDoc
     $completedSection = $completedDoc.Sections | Where-Object { $_.Name -eq $completedSectionName } | Select-Object -First 1
     $completedLine = if ($completedSection) { $completedSection.Start } else { 0 }
@@ -410,7 +410,7 @@ if ($base) {
     }
 
     $current = $completed
-    $previous = @(Get-CompletedMilestones $baseCompleted) + @(Get-CompletedMilestones $base)
+    $previous = @(Get-CompletedMilestones $baseCompleted)
     $currentByHeader = @{}
     foreach ($milestone in $current) {
         $currentByHeader["$($milestone.Id) - $($milestone.Title)"] = $milestone
@@ -441,7 +441,7 @@ if ($base) {
     # New entries go above the old ones and, unless the base is a release, must have been active or
     # planned milestones in the base MILESTONES.md.
     $firstOld = ($current | Where-Object { $previousHeaders.ContainsKey("$($_.Id) - $($_.Title)") } | Select-Object -First 1)
-    $baseOthers = @($base.Milestones | Where-Object { $_.Section -ne $completedSectionName })
+    $baseOthers = $base.Milestones
     foreach ($milestone in $current) {
         $header = "$($milestone.Id) - $($milestone.Title)"
         if ($previousHeaders.ContainsKey($header)) {

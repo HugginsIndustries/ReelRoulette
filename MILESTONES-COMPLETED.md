@@ -6,6 +6,27 @@ The archive of finished milestones, moved here from `MILESTONES.md` as-is. The r
 
 Latest completions first:
 
+### M10j12 - Drop the Old Milestones Layout From the Checker
+
+- **Status**: ✅ Complete
+- **Goal**: `check-milestones.ps1` supports only the current layout, with completed milestones in `MILESTONES-COMPLETED.md`, once no comparison needs the old single-file layout.
+- **Scope**:
+  - Ships in v0.14.0, as part of the pre-release pass. Do it only after `pwsh ./tools/scripts/check-milestones.ps1 -BaseRef v0.13.0 -Release` has passed in that pass. v0.13.0 is the last release with completed milestones inside `MILESTONES.md`, so later comparisons never need the old layout.
+  - Remove the checker's reading of a base's completed history from the Completed Milestones section of its `MILESTONES.md`, including the intro fallback, and the header comment describing it.
+  - Refuse a base that has no `MILESTONES-COMPLETED.md`, instead of treating every completed entry as newly moved.
+  - Remove the `legacy.md` fixture and the tests that compare against it. Keep the check that flags a Completed Milestones section left in `MILESTONES.md`, and point its test at a fixture copy with that section added.
+  - Remove the sentence in `docs/dev-setup.md` about bases from before the completed history had its own file.
+- **Acceptance criteria**:
+  - The checker no longer reads completed entries from a base's `MILESTONES.md`, and a base without `MILESTONES-COMPLETED.md` is refused with a clear message.
+  - `legacy.md` and its tests are gone, and the leftover-section check is still tested.
+  - `check-milestones.ps1 -BaseRef HEAD` and `tools/scripts/tests/test-scripts.ps1` pass.
+- **Verification evidence**:
+  - Completion evidence must include the passing release-wide check against v0.13.0 from the pre-release pass, run before this change, then `check-milestones.ps1 -BaseRef HEAD`, `tools/scripts/tests/test-scripts.ps1`, and a run against v0.13.0 showing the refusal.
+  - Before this change, in the v0.14.0 pre-release pass: `check-milestones.ps1 -BaseRef v0.13.0 -Release` passed (`OK: MILESTONES.md and MILESTONES-COMPLETED.md passed milestone checks`).
+  - After: `check-milestones.ps1 -BaseRef HEAD` passes, and `tools/scripts/tests/test-scripts.ps1` reports 35 passed, 0 failed.
+  - `check-milestones.ps1 -BaseRef v0.13.0 -Release` now exits 1 with "v0.13.0 has no MILESTONES-COMPLETED.md; the checker compares only against bases that keep completed milestones in their own file."
+  - With the `-BasePath` refusal removed, the new test that a base without its completed history is refused fails; with the leftover-section check removed, its test fails. Both checks restored afterward.
+
 ### M10j11 - Server Shutdown Fixes
 
 - **Status**: ✅ Complete

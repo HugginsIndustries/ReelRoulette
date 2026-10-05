@@ -197,8 +197,8 @@ Reset manual testing checklist state for a fresh run:
 Check `MILESTONES.md` and `MILESTONES-COMPLETED.md` against their maintenance rules:
 
 - `pwsh ./tools/scripts/check-milestones.ps1` checks that milestone IDs appear only in section headers, the tracker line, and the Planned Releases outline; that the outline and the sections agree; and that every `Depends on`, and every milestone a `Not included` line names after "which is", is an existing milestone title.
-- `-BaseRef HEAD` also checks that `MILESTONES-COMPLETED.md` only grew by entries moved in from Active or Planned, newest on top. `-Staged` checks the staged files instead of the working tree. A base from before the completed history had its own file is read from the old Completed Milestones section of `MILESTONES.md`.
-- `-BaseRef <previous release tag> -Release` does the same across a release, allowing completed entries that were planned after the tag.
+- `-BaseRef HEAD` also checks that `MILESTONES-COMPLETED.md` only grew by entries moved in from Active or Planned, newest on top. `-Staged` checks the staged files instead of the working tree.
+- `-BaseRef <previous release tag> -Release` does the same across a release, allowing completed entries that were planned after the tag. A base without `MILESTONES-COMPLETED.md` is refused.
 - `pwsh ./tools/scripts/tests/test-scripts.ps1` runs both scripts against the fixtures in `tools/scripts/tests/fixtures/`.
 
 ## Troubleshooting
