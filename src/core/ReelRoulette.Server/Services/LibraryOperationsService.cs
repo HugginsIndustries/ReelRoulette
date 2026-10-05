@@ -31,7 +31,6 @@ public sealed class LibraryOperationsService
     private const string UncategorizedCategoryName = "Uncategorized";
 
     private readonly object _lock = new();
-    private readonly string _logPath;
     private readonly ServerLogService _serverLog;
     private readonly ILogger<LibraryOperationsService> _logger;
     private readonly LibraryCatalogHost _catalog;
@@ -46,7 +45,6 @@ public sealed class LibraryOperationsService
         _logger = logger ?? NullLogger<LibraryOperationsService>.Instance;
         var appData = appDataPathOverride ?? ServerDataPaths.DataDirectory();
         Directory.CreateDirectory(appData);
-        _logPath = Path.Combine(appData, "last.log");
         _serverLog = new ServerLogService(appData, _logger);
         _catalog = catalog;
         _enumerateFiles = enumerateMediaFiles ?? EnumerateAllFiles;
@@ -717,14 +715,7 @@ public sealed class LibraryOperationsService
             return;
         }
 
-        try
-        {
-            File.AppendAllText(_logPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] [{source}] [{level}] {message}{Environment.NewLine}");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to append client log.");
-        }
+        _serverLog.Append(source, level, message);
     }
 
     private static bool TryParseSort(string? sortMode, out LibraryListSort sort, out string? error)

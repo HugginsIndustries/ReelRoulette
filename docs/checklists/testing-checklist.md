@@ -137,6 +137,8 @@ An agent runs these and ticks them.
 - [x] Operator Server Logs shows entries during a test run, with timestamp, level, and source.
 - [x] Desktop and WebUI entries both appear in the server log.
 - [ ] No tokens, secrets, or cookies appear in logs.
+- [ ] WebUI and desktop log lines contain no file paths or file names (the server's own source and backup lines still show paths until the server instrumentation milestone).
+- [ ] No log line is cut off or merged with another.
 
 ### Packaging
 

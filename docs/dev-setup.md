@@ -122,6 +122,8 @@ For broader manual passes, use `docs/checklists/testing-checklist.md` and `pwsh 
 - Server diagnostics are available through `last.log` and `/control/logs/server`.
 - Clients can relay logs to server ingestion endpoint:
   - `POST /api/logs/client`
+- Every `last.log` line, from the server or relayed by a client, is written by one writer under a process-wide lock, and line breaks in it become a literal `\n`, so each entry stays one line.
+- Relayed client lines leave out file paths and names: the desktop redacts paths and media file names before sending, and the WebUI sends no item ids, file or preset names, or media URLs.
 - Connected client/session diagnostics are available in Operator UI and `/control/status`.
 
 ## User data locations

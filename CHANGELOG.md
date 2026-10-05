@@ -35,6 +35,7 @@ Write **[Unreleased]** bullets at the same level as the released sections below.
 - **Desktop Settings reopen hang:** Opening Settings a second time no longer freezes the desktop app.
 - **Slow server stop with clients connected:** Stopping or restarting the server from the tray or the Operator no longer takes about 30 seconds while a client is connected or a video is playing.
 - **Windows tray menu:** Right-clicking the server tray icon on Windows now opens its menu, instead of showing nothing and removing the icon.
+- **Log privacy and lost log lines:** The server log no longer shows file paths or file names from the WebUI or the desktop app, and the desktop no longer hides volume levels, the update address, and version numbers in the log as if they were file names. Log lines written at the same moment no longer overwrite each other or go missing.
 
 ### Security
 

@@ -4,6 +4,20 @@ namespace ReelRoulette;
 
 internal static class LogSanitizer
 {
+    // The extensions the app plays, copied from MediaPlayableExtensions.cs in ReelRoulette.Server, which the desktop
+    // does not reference. Keep the two lists the same.
+    private static readonly string[] MediaExtensions =
+    [
+        "mp4", "mkv", "avi", "mov", "wmv", "mpg", "mpeg",
+        "jpg", "jpeg", "png", "gif", "bmp", "webp", "tiff", "tif", "heic", "heif", "avif", "ico", "svg", "raw", "cr2", "nef", "orf", "sr2"
+    ];
+
+    // A media file name may hold spaces, dots, commas, brackets, and apostrophes, so it runs back to the nearest path
+    // separator, key/value delimiter, or character Windows does not allow in file names.
+    private static readonly Regex MediaFileName = new(
+        $@"[^\s\\/:*?""<>|=][^\\/:*?""<>|=\r\n]*?\.(?:{string.Join("|", MediaExtensions)})\b",
+        RegexOptions.IgnoreCase);
+
     public static string Sanitize(string? message)
     {
         if (string.IsNullOrWhiteSpace(message))
@@ -15,6 +29,12 @@ internal static class LogSanitizer
         sanitized = Regex.Replace(
             sanitized,
             @"([A-Za-z]:\\[^,\r\n]+|\\\\[^\\\s]+\\[^,\r\n]+)",
+            "[redacted-path]");
+
+        // Redact absolute Unix paths: a slash that starts a token, but not a URL's "//" or a server route.
+        sanitized = Regex.Replace(
+            sanitized,
+            @"(?<=^|[\s=:(\['""])/(?![/\s])(?!(?:api|control)/)[^,\r\n]+",
             "[redacted-path]");
 
         // Redact common key/value path fields.
@@ -50,8 +70,8 @@ internal static class LogSanitizer
             @"(?i)\b(LibraryPresetComboBox:\s*Selected\s*)'[^']*'",
             "$1'[redacted]'");
 
-        // Redact standalone filename-like tokens.
-        sanitized = Regex.Replace(sanitized, @"\b[^\\/\s:]+?\.[A-Za-z0-9]{2,6}\b", "[redacted-file]");
+        // Redact media file names left in free text. Numbers, host names, and versions are not file names.
+        sanitized = MediaFileName.Replace(sanitized, "[redacted-file]");
 
         return sanitized;
     }

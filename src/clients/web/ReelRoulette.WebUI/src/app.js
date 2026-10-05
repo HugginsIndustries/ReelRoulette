@@ -47,6 +47,7 @@ import {
 } from "./library/tagSave.ts";
 import { requestPlayItem } from "./api/coreApi.ts";
 import { createSseClient } from "./events/sseClient.ts";
+import { playbackTraceLine, statusLogLine } from "./logging/relayLogLines.ts";
 
 const CLIENT_ID_KEY = "rr_clientId";
 const SESSION_ID_KEY = "rr_sessionId";
@@ -988,7 +989,7 @@ export function startApp(config) {
       readGeneralPanelIntoWorking();
       filterWorkingPresets[idx].filterState = cloneFilterState(filterWorking);
       filterPresetCatalogDirty = true;
-      setStatus(`Updated preset "${filterDialogActiveName}" locally — Apply to save.`);
+      setStatus(`Updated preset "${filterDialogActiveName}" locally — Apply to save.`, "Updated preset locally — Apply to save.");
       updateFilterApplyButtonPending();
     });
 
@@ -1337,7 +1338,7 @@ export function startApp(config) {
 
     libraryPlayInFlight = true;
     setStatus("Loading...");
-    tracePlayback("info", "library-play-start", { libraryItemId: trimmedItemId });
+    tracePlayback("info", "library-play-start");
 
     try {
       const result = await requestPlayItem(
@@ -1354,11 +1355,10 @@ export function startApp(config) {
 
       if (!result.ok) {
         tracePlayback("warn", "library-play-failed", {
-          libraryItemId: trimmedItemId,
           statusCode: result.statusCode,
           code: result.code || "none"
         });
-        setStatus(mapPlayItemErrorToStatus(result));
+        setStatus(mapPlayItemErrorToStatus(result), "Playback failed");
         return;
       }
 
@@ -1374,11 +1374,10 @@ export function startApp(config) {
       state.history.push(state.current);
       state.historyIndex = state.history.length - 1;
       closeLibraryOverlay();
-      tracePlayback("info", "library-play-success", { libraryItemId: trimmedItemId, mediaId: data.id });
+      tracePlayback("info", "library-play-success");
       playCurrent({ skipRecordPlayback: true });
     } catch (error) {
       tracePlayback("warn", "library-play-error", {
-        libraryItemId: trimmedItemId,
         message: error?.message || String(error)
       });
       setStatus(`Playback failed: ${error?.message || error}`);
@@ -1474,15 +1473,16 @@ export function startApp(config) {
     });
   }
 
-  function setStatus(message) {
+  /** `logText` replaces `message` in the server log when `message` shows a file, preset, or server error text. */
+  function setStatus(message, logText = message) {
     statusEl.textContent = message;
     const now = Date.now();
-    const normalizedMessage = String(message || "");
+    const normalizedMessage = String(logText || "");
     const shouldLog = normalizedMessage !== lastLoggedStatusMessage || now - lastLoggedStatusAtMs > 1000;
     if (shouldLog) {
       lastLoggedStatusMessage = normalizedMessage;
       lastLoggedStatusAtMs = now;
-      relayClientLog("info", `status=${normalizedMessage} currentId=${state.current?.id || "none"} attempt=${state.playAttemptId}`);
+      relayClientLog("info", statusLogLine(normalizedMessage, state.current, state.playAttemptId));
     }
   }
 
@@ -1504,16 +1504,7 @@ export function startApp(config) {
   }
 
   function tracePlayback(level, message, context = {}) {
-    const parts = [
-      `playback=${message}`,
-      `attempt=${state.playAttemptId}`,
-      `currentId=${state.current?.id || "none"}`
-    ];
-    for (const [key, value] of Object.entries(context)) {
-      parts.push(`${key}=${value == null ? "null" : String(value)}`);
-    }
-
-    relayClientLog(level, parts.join(" "));
+    relayClientLog(level, playbackTraceLine(message, state.current, state.playAttemptId, context));
   }
 
   function renderMobileDiagnostics() {
@@ -1693,7 +1684,7 @@ export function startApp(config) {
     if (!item) return;
     state.playAttemptId += 1;
     const expectedPlayAttemptId = state.playAttemptId;
-    tracePlayback("info", "start", { expectedItemId: item.id, mediaType: item.mediaType });
+    tracePlayback("info", "start", { mediaType: item.mediaType });
     if (!options.skipRecordPlayback) {
       notifyPlaybackStarted(item);
     }
@@ -1724,24 +1715,24 @@ export function startApp(config) {
     if (item.mediaType === "photo") {
       const mediaUrl = absolutizeMediaUrl(apiBaseUrl, item.mediaUrl);
       if (!state.current || state.current.id !== expectedItemId || state.playAttemptId !== expectedPlayAttemptId) {
-        tracePlayback("info", "photo-preload-stale", { expectedItemId, expectedPlayAttemptId });
+        tracePlayback("info", "photo-preload-stale", { expectedPlayAttemptId });
         return;
       }
 
       photo.onload = () => {
         if (!state.current || state.current.id !== expectedItemId || state.playAttemptId !== expectedPlayAttemptId) {
-          tracePlayback("info", "photo-onload-stale", { expectedItemId, expectedPlayAttemptId });
+          tracePlayback("info", "photo-onload-stale", { expectedPlayAttemptId });
           return;
         }
-        tracePlayback("info", "photo-onload", { mediaUrl });
+        tracePlayback("info", "photo-onload");
         setStatus("Playing");
       };
       photo.onerror = () => {
         if (!state.current || state.current.id !== expectedItemId || state.playAttemptId !== expectedPlayAttemptId) {
-          tracePlayback("info", "photo-onerror-stale", { expectedItemId, expectedPlayAttemptId });
+          tracePlayback("info", "photo-onerror-stale", { expectedPlayAttemptId });
           return;
         }
-        tracePlayback("warn", "photo-onerror", { mediaUrl });
+        tracePlayback("warn", "photo-onerror");
         setStatus("Photo file not found.");
       };
       photo.src = mediaUrl;
@@ -1759,7 +1750,7 @@ export function startApp(config) {
     } else {
       const mediaUrl = absolutizeMediaUrl(apiBaseUrl, item.mediaUrl);
       if (!state.current || state.current.id !== expectedItemId || state.playAttemptId !== expectedPlayAttemptId) {
-        tracePlayback("info", "video-preload-stale", { expectedItemId, expectedPlayAttemptId });
+        tracePlayback("info", "video-preload-stale", { expectedPlayAttemptId });
         return;
       }
 
@@ -1769,18 +1760,18 @@ export function startApp(config) {
       setupVideoEvents();
       video.onplaying = () => {
         if (!state.current || state.current.id !== expectedItemId || state.playAttemptId !== expectedPlayAttemptId) {
-          tracePlayback("info", "video-onplaying-stale", { expectedItemId, expectedPlayAttemptId });
+          tracePlayback("info", "video-onplaying-stale", { expectedPlayAttemptId });
           return;
         }
-        tracePlayback("info", "video-onplaying", { mediaUrl });
+        tracePlayback("info", "video-onplaying");
         setStatus("Playing");
       };
       video.onerror = () => {
         if (!state.current || state.current.id !== expectedItemId || state.playAttemptId !== expectedPlayAttemptId) {
-          tracePlayback("info", "video-onerror-stale", { expectedItemId, expectedPlayAttemptId });
+          tracePlayback("info", "video-onerror-stale", { expectedPlayAttemptId });
           return;
         }
-        tracePlayback("warn", "video-onerror", { mediaUrl });
+        tracePlayback("warn", "video-onerror");
         setStatus("Video file not found.");
       };
       video.muted = state.videoMuted;
@@ -3009,7 +3000,9 @@ export function startApp(config) {
         refreshStatusChanged(payload) {
           const raw = payload?.snapshot || payload?.Snapshot;
           if (!raw) return;
-          setStatus(buildRefreshStatusMessage(coerceRefreshSnapshot(raw)));
+          const message = buildRefreshStatusMessage(coerceRefreshSnapshot(raw));
+          // The server's refresh error text can name a file or folder, so the log leaves it out.
+          setStatus(message, message.startsWith("Core refresh failed:") ? "Core refresh failed" : message);
         },
         resyncRequired() {
           void loadPresets();
@@ -3031,11 +3024,11 @@ export function startApp(config) {
     void librarySession.applyFavorite(payload);
     const fileName = basenameFromPath(itemPath);
     if (payload.isBlacklisted) {
-      setStatus(`Synced: Blacklisted: ${fileName}`);
+      setStatus(`Synced: Blacklisted: ${fileName}`, "Synced: Blacklisted");
     } else if (payload.isFavorite) {
-      setStatus(`Synced: Added to favorites: ${fileName}`);
+      setStatus(`Synced: Added to favorites: ${fileName}`, "Synced: Added to favorites");
     } else {
-      setStatus(`Synced: Removed from favorites: ${fileName}`);
+      setStatus(`Synced: Removed from favorites: ${fileName}`, "Synced: Removed from favorites");
     }
   }
 

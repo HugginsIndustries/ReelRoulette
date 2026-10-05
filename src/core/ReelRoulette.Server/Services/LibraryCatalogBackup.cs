@@ -181,7 +181,7 @@ public static class LibraryCatalogBackup
                     snapshotNewest = existing.Count == 0
                         ? null
                         : BackupFileNaming.GetFileOrderingUtcTimestamp(existing[^1]);
-                    AppendLog(appDataDirectory, "info", $"Catalog backup written to {backupPath}.");
+                    AppendLog(appDataDirectory, logger, "info", $"Catalog backup written to {backupPath}.");
                 }
 
                 snapshotSignature = FolderSignature(backupDirectory);
@@ -207,7 +207,7 @@ public static class LibraryCatalogBackup
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Catalog backup failed for {DatabasePath}.", databasePath);
-            AppendLog(appDataDirectory, "error", "Catalog backup failed: " + ex.Message);
+            AppendLog(appDataDirectory, logger, "error", "Catalog backup failed: " + ex.Message);
             lock (ScheduleGate)
             {
                 var schedule = Get(databasePath);
@@ -500,16 +500,8 @@ public static class LibraryCatalogBackup
         }
     }
 
-    private static void AppendLog(string appDataDirectory, string level, string message)
+    private static void AppendLog(string appDataDirectory, ILogger logger, string level, string message)
     {
-        try
-        {
-            File.AppendAllText(
-                Path.Combine(appDataDirectory, "last.log"),
-                $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] [server] [{level}] {message}{Environment.NewLine}");
-        }
-        catch (IOException)
-        {
-        }
+        new ServerLogService(appDataDirectory, logger).Append(level, message);
     }
 }

@@ -1213,24 +1213,21 @@ namespace ReelRoulette
         // LibVLC raises these on its own thread; they only log and never call back into the player.
         private void MediaPlayer_Muted(object? sender, EventArgs e)
         {
-            Log($"MediaPlayer.Muted: LibVLC reports muted - Current: {CurrentAudioLogName()}, AppMuted: {_isMuted}");
+            Log($"MediaPlayer.Muted: LibVLC reports muted - HasCurrent: {HasCurrentItem}, AppMuted: {_isMuted}");
         }
 
         private void MediaPlayer_Unmuted(object? sender, EventArgs e)
         {
-            Log($"MediaPlayer.Unmuted: LibVLC reports unmuted - Current: {CurrentAudioLogName()}, AppMuted: {_isMuted}");
+            Log($"MediaPlayer.Unmuted: LibVLC reports unmuted - HasCurrent: {HasCurrentItem}, AppMuted: {_isMuted}");
         }
 
         private void MediaPlayer_VolumeChanged(object? sender, MediaPlayerVolumeChangedEventArgs e)
         {
-            Log($"MediaPlayer.VolumeChanged: LibVLC reports volume {e.Volume:F2} - Current: {CurrentAudioLogName()}, AppMuted: {_isMuted}");
+            Log($"MediaPlayer.VolumeChanged: LibVLC reports volume {e.Volume:F2} - HasCurrent: {HasCurrentItem}, AppMuted: {_isMuted}");
         }
 
-        private string CurrentAudioLogName()
-        {
-            var path = _currentVideoPath;
-            return string.IsNullOrEmpty(path) ? "null" : System.IO.Path.GetFileName(path);
-        }
+        // Audio log lines say whether an item is current, never its name, so the log holds no file names.
+        private bool HasCurrentItem => !string.IsNullOrEmpty(_currentVideoPath);
 
         /// <summary>
         /// Reapplies the app's volume and mute to the player once its audio output exists.
@@ -1243,7 +1240,7 @@ namespace ReelRoulette
                 return;
             }
 
-            Log($"ReapplyAudioState: Reapplying ({reason}) - Current: {CurrentAudioLogName()}, PlayerMute: {_mediaPlayer.Mute}, PlayerVolume: {_mediaPlayer.Volume}, AppMuted: {_isMuted}, UserVolume: {_userVolumePreference}");
+            Log($"ReapplyAudioState: Reapplying ({reason}) - HasCurrent: {HasCurrentItem}, PlayerMute: {_mediaPlayer.Mute}, PlayerVolume: {_mediaPlayer.Volume}, AppMuted: {_isMuted}, UserVolume: {_userVolumePreference}");
             _mediaPlayer.Mute = _isMuted;
             ApplyVolumeNormalization();
             if (MuteButton != null)
@@ -1464,13 +1461,13 @@ namespace ReelRoulette
                 if (IsCurrentVideoPath(fullPath) &&
                     LibraryPanelBrowse.NeedsCurrentFileRead(loadedHasItem: false, cachedItemMatches: false))
                 {
-                    Log($"CoreEvents: Projection reads the current file {Path.GetFileName(fullPath)}.");
+                    Log("CoreEvents: Projection reads the current file.");
                     _ = SyncCurrentFileItemAsync();
                     _ = RefreshGlobalStatsFromCoreAsync();
                     return;
                 }
 
-                Log($"CoreEvents: Projection has no loaded tile for {Path.GetFileName(fullPath)}.");
+                Log("CoreEvents: Projection has no loaded tile for the changed item.");
                 ApplyLibraryBrowseEvent(change);
                 return;
             }
@@ -2977,7 +2974,7 @@ namespace ReelRoulette
                 }
                 catch (Exception ex)
                 {
-                    Log($"EnsureCurrentFileItem: Failed to read {Path.GetFileName(fullPath)} ({ex.Message})");
+                    Log($"EnsureCurrentFileItem: Failed to read the current file ({ex.Message})");
                     result = CurrentFileReadResult.Failed;
                 }
 
@@ -4559,7 +4556,7 @@ namespace ReelRoulette
             }
 
             target = target with { SkipRecordPlayback = true };
-            Log($"PlayFromLibraryItemId: Resolved playback target for {Path.GetFileName(target.StatsPath)} (ApiPath={target.UsedApiPath})");
+            Log($"PlayFromLibraryItemId: Resolved playback target (ApiPath={target.UsedApiPath})");
             await EnsureCurrentFileItemAsync(target.StatsPath);
             PlayMedia(target, addToHistory);
         }
@@ -5399,7 +5396,7 @@ namespace ReelRoulette
                 return;
             }
 
-            Log($"PlayRandomVideoAsync: Selected ({_randomizationMode}) {Path.GetFileName(randomTarget.StatsPath)} (ApiPath={randomTarget.UsedApiPath})");
+            Log($"PlayRandomVideoAsync: Selected an item ({_randomizationMode}) (ApiPath={randomTarget.UsedApiPath})");
             await EnsureCurrentFileItemAsync(randomTarget.StatsPath);
             await Dispatcher.UIThread.InvokeAsync(() => PlayMedia(randomTarget));
         }

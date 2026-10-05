@@ -19,9 +19,11 @@ Instructions:
 
 Commit Message:
 
-Docs: Promote the v0.14.1 Performance release to active milestones
+Bugfix: Keep file paths and names out of last.log and stop lines overwriting each other
 
-- Promote Library Query Performance, Random Selection Performance, Thumbnail Caching, and Item IDs in the Contract as M11a through M11d, in the Planned Releases order.
-- Library query counts are cached on the server by catalog revision, search, and filter instead of skipped on later pages, because both clients read the totals from every page.
-- Random selection builds a cheap id-based signature instead of caching it by revision, which every recorded play raises.
-- Thumbnail caching first checks what browsers already cache, and item IDs in the contract records what the WebUI already matches by id.
+- Every `last.log` append goes through `ServerLogService` under one process-wide lock, so lines written at the same moment no longer overwrite each other on Linux or go missing on Windows.
+- Line breaks in a log line become a literal `\n`, so a relayed client message stays on one line and cannot forge another.
+- WebUI relayed lines carry `hasCurrent` and the attempt id instead of item ids, file or preset names, media URLs, or server error text; the line building moves into `relayLogLines.ts`.
+- Desktop log lines leave file names out: the audio lines record whether an item is current, and the playback target and catalog event lines drop the name.
+- The desktop log sanitizer redacts absolute Unix paths, and redacts only file names with a playable media extension, whole, so volume levels, host names, and versions stay readable.
+- Add tests for parallel appends, line breaks, WebUI relay lines, and the desktop sanitizer.

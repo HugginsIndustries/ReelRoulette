@@ -616,7 +616,7 @@ Last milestone completed: M10j12
 - **Goal**: `last.log` is JSON Lines written by one server writer, for server logs and ingested client logs alike, with correlation fields and deterministic rotation.
 - **Scope**:
   - First milestone of the structured log foundation release, planned for v0.16.1. Depends on: Server Data Folder Override, whose folder helper resolves the log path.
-  - Today `last.log` is free text: a few server paths append bracketed lines by hand, the server's `ILogger` output goes only to the console, client logs arrive through `POST /api/logs/client` as source, level, and message, and startup empties the file. Decide here whether startup still empties it once rotation exists.
+  - Today `last.log` is free text: server code and `POST /api/logs/client` append bracketed lines through `ServerLogService`, which writes under one process-wide lock and turns line breaks into a literal `\n`; the server's `ILogger` output goes only to the console, client logs arrive through `POST /api/logs/client` as source, level, and message, and startup empties the file. Decide here whether startup still empties it once rotation exists.
   - Schema, one JSON object per line:
     - required on every entry: `ts`, `lvl`, `svc`, `comp`, `op`, `msg`, and the writer-assigned `ingestReqId`,
     - `lvl` is one of lowercase `trace|debug|info|warn|error|fatal`,
@@ -632,7 +632,7 @@ Last milestone completed: M10j12
     - `clientOpId` is an optional client operation id, kept when provided,
     - request-scoped HTTP and event stream logs carry W3C `traceId` and `spanId` when trace context is active; background and client-local events may omit them,
     - `srcIp` and `userAgent` are added by the server, never by clients.
-  - Strict ingestion at `POST /api/logs/client`: keep valid fields as sent without inferring `lvl`, `comp`, or `op` from the message; reject missing required fields, invalid `lvl` or `svc`, invalid or oversized `data`, and unknown fields; return a `400` listing every error with `code`, `field` (dotted path such as `data.error.code`), and `reason`. JSON serialization also closes a forged-line problem found by the repository audit: `LibraryOperationsService.AppendClientLog` writes client messages without escaping newlines or control characters.
+  - Strict ingestion at `POST /api/logs/client`: keep valid fields as sent without inferring `lvl`, `comp`, or `op` from the message; reject missing required fields, invalid `lvl` or `svc`, invalid or oversized `data`, and unknown fields; return a `400` listing every error with `code`, `field` (dotted path such as `data.error.code`), and `reason`. JSON serialization also escapes the control characters other than line breaks that `ServerLogService` still writes as sent.
   - Rotation: rotate at 25 MB, keep the current file plus 10 uncompressed archives, enforce retention at startup before writing, and define what happens to a single oversized entry and to concurrent appends.
   - Human-readable rendering is a view over the fields (admin section, console), not what is stored.
   - Contract change for `POST /api/logs/client` in OpenAPI and the generated WebUI types.
