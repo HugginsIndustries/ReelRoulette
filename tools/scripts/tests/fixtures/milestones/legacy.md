@@ -25,7 +25,14 @@ Upcoming releases. v1.0.0 closes the M1 series.
 
 ## Active Milestones
 
-Last milestone completed: M1b
+Last milestone completed: M1a
+
+### M1b - Widget Build
+
+- **Status**: 🚧 In Progress
+- **Scope**:
+  - Depends on: Lay the Groundwork.
+  - Plays MP3 files and talks P2P to other widgets.
 
 ### M1c - Polish the Widget
 
@@ -52,3 +59,19 @@ Last milestone completed: M1b
 - **Status**: ⏳ Planned
 - **Scope**:
   - Unscheduled. Depends on: Widget Sharing, Export, and Import, so sharing exists first.
+
+## Completed Milestones
+
+Newest completions first.
+
+### M1a - Lay the Groundwork
+
+- **Status**: ✅ Complete
+- **Scope**:
+  - Historical text from before the ID rule, mentioning M0z by ID.
+
+### M0z - Prototype
+
+- **Status**: ✅ Complete
+- **Scope**:
+  - The first prototype.

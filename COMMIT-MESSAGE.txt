@@ -19,13 +19,11 @@ Instructions:
 
 Commit Message:
 
-Docs: Plan the desktop client's retirement and the WebUI overhaul
+Docs: Move completed milestones into MILESTONES-COMPLETED.md
 
-- Freeze the desktop client to bug fixes and make the WebUI the only client on every device; drop the native Android client.
-- Add a v0.15.0 WebUI overhaul release: HTTPS first, a screen-by-screen Preact migration with `happy-dom` tests, a responsive layout with side panels and phone overlays, keyboard shortcuts, stats and settings panels, duplicate review, and Show in File Manager.
-- Fold the Operator page into an admin section of WebUI Settings, gated by the control token and later by admin accounts, with a minimal built-in recovery page for restart, stop, logs, and updates.
-- Add a v0.15.1 desktop parity release (source management, catalog transfer, multi-select, a browser-playable filter that also fixes the misleading "file not found" message) and a v0.16.0 desktop removal release.
-- Shrink the remaining v0.14.0 desktop milestones to the silent-start fix and the WebUI light-mode slice, and move the status line and testing suite work into the overhaul for the WebUI only.
-- Drop or shrink every later milestone that existed only because there were two clients, and shift the log, accounts, and playback session releases to v0.16.1 through v0.19.0.
-- Record the duplicate localhost checks under reverse proxy and HTTPS access, and point the testing checklist's stale backlog references at the current milestones.
-- AGENTS.md: replace the desktop and WebUI consistency rule with the desktop freeze.
+- Move the Completed Milestones section of `MILESTONES.md` unchanged into a new `MILESTONES-COMPLETED.md`; the tracker line stays in `MILESTONES.md`, and a completed milestone now moves to the top of the new file.
+- `check-milestones.ps1` checks both files: Depends on, outline, and duplicate-ID checks see completed entries, a Completed section left in `MILESTONES.md` is flagged, and the history comparison reads the new file.
+- Against a base from before the move, the checker reads the base history from the old section, so `-BaseRef HEAD` and `-Release` against older tags keep working.
+- Split the checker fixtures, add a legacy single-file fixture, and cover the migration, stray-section, and cross-file duplicate cases.
+- AGENTS.md, skills, and docs: point the completed-milestone rules and milestone-ID allowance at the new file.
+- Plan a v0.14.0 milestone to drop the old-layout support once the release check against v0.13.0 has passed.

@@ -1,16 +1,23 @@
 #!/usr/bin/env pwsh
-# Checks MILESTONES.md against its maintenance rules. Read-only.
-#   -Path <file>      check another file instead of the repo's MILESTONES.md
-#   -Staged           check the staged MILESTONES.md
-#   -BaseRef <ref>    also check that Completed Milestones only grew by newly moved entries since <ref>
-#   -BasePath <file>  same as -BaseRef, with the base read from a file
-#   -Release          with a release tag as the base, skip checking that new completed entries
-#                     existed in the base, since a release's milestones are often planned after it
+# Checks MILESTONES.md and MILESTONES-COMPLETED.md against their maintenance rules. Read-only.
+#   -Path <file>               check another file instead of the repo's MILESTONES.md
+#   -CompletedPath <file>      the completed history to check with it; defaults to the repo's
+#                              MILESTONES-COMPLETED.md only when -Path is not given
+#   -Staged                    check the staged MILESTONES.md and MILESTONES-COMPLETED.md
+#   -BaseRef <ref>             also check that the completed history only grew by newly moved entries since <ref>
+#   -BasePath <file>           same as -BaseRef, with the base MILESTONES.md read from a file
+#   -BaseCompletedPath <file>  with -BasePath, the base completed history, if the base had one
+#   -Release                   with a release tag as the base, skip checking that new completed entries
+#                              existed in the base, since a release's milestones are often planned after it
+# A base from before the completed history moved out of MILESTONES.md is read from its
+# Completed Milestones section instead.
 param(
     [string]$Path,
+    [string]$CompletedPath,
     [switch]$Staged,
     [string]$BaseRef,
     [string]$BasePath,
+    [string]$BaseCompletedPath,
     [switch]$Release
 )
 
@@ -21,15 +28,25 @@ $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 # Whole-word milestone ID, so "MP3" or "P2P" in prose is not an ID.
 $idPattern = '(?<![A-Za-z0-9_])[MP]\d+[a-z]?\d*(?![A-Za-z0-9_])'
 $headerPattern = '^### ([MP]\d+[a-z]?\d*) - (.+?)\s*$'
+$completedSectionName = "Completed Milestones"
 
-if ($Path -and $Staged.IsPresent) {
-    throw "Use either -Path or -Staged, not both."
+if (($Path -or $CompletedPath) -and $Staged.IsPresent) {
+    throw "Use either -Path and -CompletedPath or -Staged, not both."
+}
+if ($CompletedPath -and -not $Path) {
+    throw "-CompletedPath needs -Path."
 }
 if ($BaseRef -and $BasePath) {
     throw "Use either -BaseRef or -BasePath, not both."
 }
+if ($BaseCompletedPath -and -not $BasePath) {
+    throw "-BaseCompletedPath needs -BasePath."
+}
 if ($Release.IsPresent -and -not ($BaseRef -or $BasePath)) {
     throw "-Release needs -BaseRef or -BasePath."
+}
+if (($BaseRef -or $BasePath) -and $Path -and -not $CompletedPath) {
+    throw "Comparing against a base needs the completed history; pass -CompletedPath with -Path."
 }
 
 function Get-GitFileText {
@@ -172,10 +189,27 @@ function Test-DependsOn {
     }
 }
 
+
+function Test-GitFile {
+    param([string]$Spec)
+
+    & git -C $repoRoot cat-file -e $Spec 2>$null
+    return ($LASTEXITCODE -eq 0)
+}
+
+function Read-File {
+    param([string]$FilePath, [string]$What)
+
+    if (-not (Test-Path $FilePath)) {
+        throw "${What} not found: $FilePath"
+    }
+    return (Get-Content -Path $FilePath -Raw)
+}
+
 function Get-CompletedIntro {
     param($Document)
 
-    $section = $Document.Sections | Where-Object { $_.Name -eq "Completed Milestones" } | Select-Object -First 1
+    $section = $Document.Sections | Where-Object { $_.Name -eq $completedSectionName } | Select-Object -First 1
     if (-not $section) {
         return $null
     }
@@ -186,48 +220,73 @@ function Get-CompletedIntro {
     return (($Document.Lines[($section.Start + 1)..($end - 1)]) -join "`n").Trim()
 }
 
-# Load the document and the optional base.
+function Get-CompletedMilestones {
+    param($Document)
+
+    if (-not $Document) {
+        return @()
+    }
+    return @($Document.Milestones | Where-Object { $_.Section -eq $completedSectionName })
+}
+
+# Load the documents and the optional base.
+$completedText = $null
 if ($Staged.IsPresent) {
     $label = "MILESTONES.md (staged)"
+    $completedLabel = "MILESTONES-COMPLETED.md (staged)"
     $text = Get-GitFileText ":MILESTONES.md"
+    $completedText = Get-GitFileText ":MILESTONES-COMPLETED.md"
 }
 else {
     if (-not $Path) {
         $Path = Join-Path $repoRoot "MILESTONES.md"
-    }
-    if (-not (Test-Path $Path)) {
-        throw "File not found: $Path"
+        $CompletedPath = Join-Path $repoRoot "MILESTONES-COMPLETED.md"
     }
     $label = Split-Path $Path -Leaf
-    $text = Get-Content -Path $Path -Raw
+    $text = Read-File $Path "File"
+    if ($CompletedPath) {
+        $completedLabel = Split-Path $CompletedPath -Leaf
+        $completedText = Read-File $CompletedPath "File"
+    }
 }
 
 $base = $null
+$baseCompleted = $null
 if ($BaseRef) {
     $base = Get-Document (Get-GitFileText "${BaseRef}:MILESTONES.md")
+    if (Test-GitFile "${BaseRef}:MILESTONES-COMPLETED.md") {
+        $baseCompleted = Get-Document (Get-GitFileText "${BaseRef}:MILESTONES-COMPLETED.md")
+    }
 }
 elseif ($BasePath) {
-    if (-not (Test-Path $BasePath)) {
-        throw "Base file not found: $BasePath"
+    $base = Get-Document (Read-File $BasePath "Base file")
+    if ($BaseCompletedPath) {
+        $baseCompleted = Get-Document (Read-File $BaseCompletedPath "Base completed file")
     }
-    $base = Get-Document (Get-Content -Path $BasePath -Raw)
 }
 
 $doc = Get-Document $text
+$completedDoc = if ($null -ne $completedText) { Get-Document $completedText } else { $null }
 $problems = New-Object System.Collections.Generic.List[object]
 function Add-Problem {
-    param([int]$Index, [string]$Message)
-    $problems.Add([pscustomobject]@{ Line = $Index + 1; Message = $Message })
+    param([int]$Index, [string]$Message, [switch]$Completed)
+    $problems.Add([pscustomobject]@{
+        File = if ($Completed.IsPresent) { $completedLabel } else { $label }
+        Order = if ($Completed.IsPresent) { 1 } else { 0 }
+        Line = $Index + 1
+        Message = $Message
+    })
 }
 
 $trackedSections = @("Active Milestones", "Planned Milestones")
+$completed = Get-CompletedMilestones $completedDoc
 
 # 1. IDs appear only in section headers, the tracker line, and the Planned Releases outline.
-# Completed Milestones is history; the base comparison below guards it instead.
+# The completed history lives in its own file; the base comparison below guards it instead.
 for ($i = 0; $i -lt $doc.Lines.Count; $i++) {
     $section = $doc.LineSections[$i]
     $line = $doc.Lines[$i]
-    if ($section -in @("Planned Releases", "Completed Milestones")) {
+    if ($section -in @("Planned Releases", $completedSectionName)) {
         continue
     }
     if ($line -match $headerPattern -or $line -match '^Last milestone completed:') {
@@ -238,14 +297,35 @@ for ($i = 0; $i -lt $doc.Lines.Count; $i++) {
     }
 }
 
-# 2. The outline and the sections agree.
+# 2. The completed history is in its own file, inside its Completed Milestones section.
+$strayCompleted = $doc.Sections | Where-Object { $_.Name -eq $completedSectionName } | Select-Object -First 1
+if ($strayCompleted) {
+    Add-Problem $strayCompleted.Start "the Completed Milestones section belongs in MILESTONES-COMPLETED.md"
+}
+if ($completedDoc) {
+    if (-not ($completedDoc.Sections | Where-Object { $_.Name -eq $completedSectionName })) {
+        Add-Problem 0 "has no '## Completed Milestones' section" -Completed
+    }
+    foreach ($milestone in $completedDoc.Milestones) {
+        if ($milestone.Section -ne $completedSectionName) {
+            Add-Problem $milestone.Index "milestone '$($milestone.Id) - $($milestone.Title)' is outside the Completed Milestones section" -Completed
+        }
+    }
+}
+
+# 3. The outline and the sections agree, counting completed entries as sections.
+$allMilestones = @($doc.Milestones | ForEach-Object { [pscustomobject]@{ Milestone = $_; Completed = $false } }) +
+    @($completed | ForEach-Object { [pscustomobject]@{ Milestone = $_; Completed = $true } })
 $headerIds = @{}
-foreach ($milestone in $doc.Milestones) {
+foreach ($entry in $allMilestones) {
+    $milestone = $entry.Milestone
     if ($headerIds.ContainsKey($milestone.Id)) {
-        Add-Problem $milestone.Index "milestone ID '$($milestone.Id)' heads more than one section (first on line $($headerIds[$milestone.Id].Index + 1))"
+        $first = $headerIds[$milestone.Id]
+        $firstFile = if ($first.Completed) { $completedLabel } else { $label }
+        Add-Problem $milestone.Index "milestone ID '$($milestone.Id)' heads more than one section (first at ${firstFile}:$($first.Milestone.Index + 1))" -Completed:$entry.Completed
         continue
     }
-    $headerIds[$milestone.Id] = $milestone
+    $headerIds[$milestone.Id] = $entry
 }
 
 $outlineIds = @{}
@@ -272,8 +352,8 @@ foreach ($milestone in $doc.Milestones) {
     }
 }
 
-# 3. Every Depends on reference in Active and Planned names an existing milestone.
-$titles = @($doc.Milestones | ForEach-Object { Get-NormalizedTitle $_.Title } | Sort-Object -Unique | Sort-Object Length -Descending)
+# 4. Every Depends on reference in Active and Planned names an existing milestone, completed ones included.
+$titles = @($allMilestones | ForEach-Object { Get-NormalizedTitle $_.Milestone.Title } | Sort-Object -Unique | Sort-Object Length -Descending)
 for ($i = 0; $i -lt $doc.Lines.Count; $i++) {
     if ($doc.LineSections[$i] -notin $trackedSections) {
         continue
@@ -289,18 +369,19 @@ for ($i = 0; $i -lt $doc.Lines.Count; $i++) {
     }
 }
 
-# 4. Against a base, Completed Milestones only grew by entries moved in from other sections.
+# 5. Against a base, the completed history only grew by entries moved in from MILESTONES.md.
 if ($base) {
-    $intro = Get-CompletedIntro $doc
-    $baseIntro = Get-CompletedIntro $base
-    $completedSection = $doc.Sections | Where-Object { $_.Name -eq "Completed Milestones" } | Select-Object -First 1
+    # A base from before the move keeps its history in MILESTONES.md.
+    $baseIntro = if ($baseCompleted -and $null -ne (Get-CompletedIntro $baseCompleted)) { Get-CompletedIntro $baseCompleted } else { Get-CompletedIntro $base }
+    $intro = Get-CompletedIntro $completedDoc
+    $completedSection = $completedDoc.Sections | Where-Object { $_.Name -eq $completedSectionName } | Select-Object -First 1
     $completedLine = if ($completedSection) { $completedSection.Start } else { 0 }
     if ($null -ne $baseIntro -and $intro -cne $baseIntro) {
-        Add-Problem $completedLine "the Completed Milestones introduction changed"
+        Add-Problem $completedLine "the Completed Milestones introduction changed" -Completed
     }
 
-    $current = @($doc.Milestones | Where-Object { $_.Section -eq "Completed Milestones" })
-    $previous = @($base.Milestones | Where-Object { $_.Section -eq "Completed Milestones" })
+    $current = $completed
+    $previous = @(Get-CompletedMilestones $baseCompleted) + @(Get-CompletedMilestones $base)
     $currentByHeader = @{}
     foreach ($milestone in $current) {
         $currentByHeader["$($milestone.Id) - $($milestone.Title)"] = $milestone
@@ -315,49 +396,50 @@ if ($base) {
     foreach ($old in $previous) {
         $header = "$($old.Id) - $($old.Title)"
         if (-not $currentByHeader.ContainsKey($header)) {
-            Add-Problem $completedLine "completed milestone '$header' was removed or renamed"
+            Add-Problem $completedLine "completed milestone '$header' was removed or renamed" -Completed
             continue
         }
         $new = $currentByHeader[$header]
         if ($new.Body -cne $old.Body) {
-            Add-Problem $new.Index "completed milestone '$header' changed"
+            Add-Problem $new.Index "completed milestone '$header' changed" -Completed
         }
         if ($new.Index -lt $lastIndex) {
-            Add-Problem $new.Index "completed milestone '$header' moved out of its original order"
+            Add-Problem $new.Index "completed milestone '$header' moved out of its original order" -Completed
         }
         $lastIndex = [Math]::Max($lastIndex, $new.Index)
     }
 
-    # New entries go above the old ones and, unless the base is a release, must have been milestones
-    # outside Completed in the base.
+    # New entries go above the old ones and, unless the base is a release, must have been active or
+    # planned milestones in the base MILESTONES.md.
     $firstOld = ($current | Where-Object { $previousHeaders.ContainsKey("$($_.Id) - $($_.Title)") } | Select-Object -First 1)
-    $baseOthers = @($base.Milestones | Where-Object { $_.Section -ne "Completed Milestones" })
+    $baseOthers = @($base.Milestones | Where-Object { $_.Section -ne $completedSectionName })
     foreach ($milestone in $current) {
         $header = "$($milestone.Id) - $($milestone.Title)"
         if ($previousHeaders.ContainsKey($header)) {
             continue
         }
         if ($firstOld -and $milestone.Index -gt $firstOld.Index) {
-            Add-Problem $milestone.Index "newly completed milestone '$header' must go above the existing completed entries"
+            Add-Problem $milestone.Index "newly completed milestone '$header' must go above the existing completed entries" -Completed
         }
         if ($Release.IsPresent) {
             continue
         }
         $known = $baseOthers | Where-Object { $_.Id -eq $milestone.Id -or (Get-NormalizedTitle $_.Title) -eq (Get-NormalizedTitle $milestone.Title) }
         if (-not $known) {
-            Add-Problem $milestone.Index "newly completed milestone '$header' was not an active or planned milestone in the base"
+            Add-Problem $milestone.Index "newly completed milestone '$header' was not an active or planned milestone in the base" -Completed
         }
     }
 }
 
+$checked = if ($completedDoc) { "$label and $completedLabel" } else { $label }
 if ($problems.Count -gt 0) {
-    foreach ($problem in ($problems | Sort-Object Line)) {
-        Write-Host "${label}:$($problem.Line): $($problem.Message)"
+    foreach ($problem in ($problems | Sort-Object Order, Line)) {
+        Write-Host "$($problem.File):$($problem.Line): $($problem.Message)"
     }
-    Write-Host "FAIL: $($problems.Count) problem(s) in $label"
+    Write-Host "FAIL: $($problems.Count) problem(s) in $checked"
     exit 1
 }
 
-$scope = if ($base) { "" } else { " (Completed Milestones not compared; pass -BaseRef to check it)" }
-Write-Host "OK: $label passed milestone checks$scope"
+$scope = if ($base) { "" } elseif ($completedDoc) { " (completed history not compared; pass -BaseRef to check it)" } else { " (no completed history given)" }
+Write-Host "OK: $checked passed milestone checks$scope"
 exit 0

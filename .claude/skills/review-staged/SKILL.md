@@ -11,7 +11,7 @@ Review the staged changes. Report only — make no changes.
 
 Read the diff in full before judging any part of it. A change that looks wrong in isolation is often correct in context, and the opposite is also true.
 
-If `MILESTONES.md` is staged, run `pwsh ./tools/scripts/check-milestones.ps1 -Staged -BaseRef HEAD` and report each problem it prints as a finding.
+If `MILESTONES.md` or `MILESTONES-COMPLETED.md` is staged, run `pwsh ./tools/scripts/check-milestones.ps1 -Staged -BaseRef HEAD` and report each problem it prints as a finding.
 
 ## Look for
 

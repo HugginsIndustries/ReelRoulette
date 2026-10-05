@@ -182,7 +182,7 @@ Manual test guide:
 
 - `docs/checklists/testing-checklist.md`
 - `pwsh ./tools/scripts/reset-checklist.ps1` resets testing-checklist metadata/checklist state for a new pass.
-- `pwsh ./tools/scripts/check-milestones.ps1` checks `MILESTONES.md` against its maintenance rules (ID placement, release outline, `Depends on` titles). Add `-BaseRef <ref>` to also check that Completed Milestones only grew by moved entries, with `-Release` when the base is a release tag.
+- `pwsh ./tools/scripts/check-milestones.ps1` checks `MILESTONES.md` and `MILESTONES-COMPLETED.md` against their maintenance rules (ID placement, release outline, `Depends on` titles). Add `-BaseRef <ref>` to also check that `MILESTONES-COMPLETED.md` only grew by moved entries, with `-Release` when the base is a release tag.
 - `pwsh ./tools/scripts/tests/test-scripts.ps1` runs the milestones checker and changelog cut script against their fixtures.
 
 ## Known Issues
@@ -227,6 +227,7 @@ See `docs/dev-setup.md` for channel names, dev vs stable tiers, and troubleshoot
 
 - Current implemented capability inventory: `CONTEXT.md`
 - Milestone planning and tracking: `MILESTONES.md`
+- Completed milestones: `MILESTONES-COMPLETED.md`
 - API contract and endpoint/event behavior: `docs/api.md`
 - Local setup and development workflows: `docs/dev-setup.md`
 - Domain-level implementation inventory: `docs/domain-inventory.md`

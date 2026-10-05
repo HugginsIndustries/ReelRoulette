@@ -9,6 +9,9 @@ $checker = Join-Path $scriptsDir "check-milestones.ps1"
 $cutter = Join-Path $scriptsDir "cut-changelog.ps1"
 $validMilestones = Join-Path $fixturesDir "milestones" "valid.md"
 $movedMilestones = Join-Path $fixturesDir "milestones" "moved.md"
+$validCompleted = Join-Path $fixturesDir "milestones" "valid-completed.md"
+$movedCompleted = Join-Path $fixturesDir "milestones" "moved-completed.md"
+$legacyMilestones = Join-Path $fixturesDir "milestones" "legacy.md"
 $changelogInput = Join-Path $fixturesDir "changelog" "input.md"
 $changelogExpected = Join-Path $fixturesDir "changelog" "expected.md"
 
@@ -94,108 +97,158 @@ function Assert-Check {
     return $null
 }
 
-# Replacements that turn the valid milestones fixture into each failing case.
+# Replacements that turn the valid milestones fixtures into each failing case.
 $newCompletedEntry = "### M1d - Late Fix`n`n- **Status**: ✅ Complete`n- **Scope**:`n  - Planned and completed after the base.`n`n"
+
+# Checker parameters for a MILESTONES.md path, with the valid completed history unless another is given.
+function Get-CheckArgs {
+    param([string]$Path, [string]$Completed = $validCompleted, [switch]$WithBase, [switch]$Release)
+
+    $parameters = @{ Path = $Path; CompletedPath = $Completed }
+    if ($WithBase.IsPresent) {
+        $parameters.BasePath = $validMilestones
+        $parameters.BaseCompletedPath = $validCompleted
+    }
+    if ($Release.IsPresent) {
+        $parameters.Release = $true
+    }
+    return $parameters
+}
 
 try {
     Write-Host "check-milestones.ps1"
 
-    Test-Case "valid file passes, including MP3 and P2P in prose and IDs in completed history" {
-        Assert-Check (Invoke-Tool $checker @{ Path = $validMilestones }) 0 @("OK: valid.md passed")
+    Test-Case "valid files pass, including MP3 and P2P in prose and IDs in completed history" {
+        Assert-Check (Invoke-Tool $checker (Get-CheckArgs $validMilestones)) 0 @("OK: valid.md and valid-completed.md passed")
     }
 
     Test-Case "a bare milestone ID in prose fails on its line, and MP3 and P2P beside it are not flagged" {
         $path = New-FixtureCopy $validMilestones "bare-id.md" @(, @("Plays MP3 files and talks P2P", "Plays MP3 files like M1c and talks P2P"))
-        Assert-Check (Invoke-Tool $checker @{ Path = $path }) 1 @("bare-id.md:35: milestone ID 'M1c' outside") 1
+        Assert-Check (Invoke-Tool $checker (Get-CheckArgs $path)) 1 @("bare-id.md:35: milestone ID 'M1c' outside") 1
     }
 
     Test-Case "an outline ID with no section fails" {
         $path = New-FixtureCopy $validMilestones "outline-orphan.md" @(, @("Ship sharing. P2a, P2b.", "Ship sharing. P2a, P2b, P9."))
-        Assert-Check (Invoke-Tool $checker @{ Path = $path }) 1 @("'P9' is in the Planned Releases outline but has no milestone section") 1
+        Assert-Check (Invoke-Tool $checker (Get-CheckArgs $path)) 1 @("'P9' is in the Planned Releases outline but has no milestone section") 1
+    }
+
+    Test-Case "an outline ID whose section is only in the completed history needs that history" {
+        Assert-Check (Invoke-Tool $checker @{ Path = $validMilestones }) 1 @("'M1a' is in the Planned Releases outline but has no milestone section", "no milestone title matches 'lay the groundwork'")
     }
 
     Test-Case "a planned section missing from the outline fails" {
         $path = New-FixtureCopy $validMilestones "outline-missing.md" @(, @("**Unscheduled backlog**: P3.", "**Unscheduled backlog**: none."))
-        Assert-Check (Invoke-Tool $checker @{ Path = $path }) 1 @("'P3 - Someday Feature' is missing from the Planned Releases outline") 1
+        Assert-Check (Invoke-Tool $checker (Get-CheckArgs $path)) 1 @("'P3 - Someday Feature' is missing from the Planned Releases outline") 1
     }
 
     Test-Case "an ID listed twice in the outline fails" {
         $path = New-FixtureCopy $validMilestones "outline-twice.md" @(, @("Ship sharing. P2a, P2b.", "Ship sharing. P2a, P2b, M1c."))
-        Assert-Check (Invoke-Tool $checker @{ Path = $path }) 1 @("'M1c' is listed in the Planned Releases outline more than once") 1
+        Assert-Check (Invoke-Tool $checker (Get-CheckArgs $path)) 1 @("'M1c' is listed in the Planned Releases outline more than once") 1
     }
 
     Test-Case "two sections with the same ID fail" {
         $path = New-FixtureCopy $validMilestones "duplicate-id.md" @(
             @("### P3 - Someday Feature", "### P2b - Someday Feature"),
             @("**Unscheduled backlog**: P3.", "**Unscheduled backlog**: none."))
-        Assert-Check (Invoke-Tool $checker @{ Path = $path }) 1 @("milestone ID 'P2b' heads more than one section") 1
+        Assert-Check (Invoke-Tool $checker (Get-CheckArgs $path)) 1 @("milestone ID 'P2b' heads more than one section") 1
+    }
+
+    Test-Case "an ID heading both an active and a completed entry fails" {
+        $path = New-FixtureCopy $validMilestones "duplicate-completed.md" @(
+            @("### M1b - Widget Build", "### M1a - Widget Build"),
+            @("Ship the widget. M1a, M1b, M1c.", "Ship the widget. M1a, M1c."))
+        Assert-Check (Invoke-Tool $checker (Get-CheckArgs $path)) 1 @("valid-completed.md:7: milestone ID 'M1a' heads more than one section (first at duplicate-completed.md:30)") 1
     }
 
     Test-Case "a Depends on reference that matches no title fails" {
         $path = New-FixtureCopy $validMilestones "depends-unknown.md" @(, @("Depends on: Lay the Groundwork.", "Depends on: Lay the Foundations."))
-        Assert-Check (Invoke-Tool $checker @{ Path = $path }) 1 @("depends-unknown.md:34: Depends on: no milestone title matches 'lay the foundations'") 1
+        Assert-Check (Invoke-Tool $checker (Get-CheckArgs $path)) 1 @("depends-unknown.md:34: Depends on: no milestone title matches 'lay the foundations'") 1
     }
 
     Test-Case "a Depends on title followed by text that is not a list or an explanation fails" {
         $path = New-FixtureCopy $validMilestones "depends-trailing.md" @(, @(", so sharing exists first.", " because sharing exists first."))
-        Assert-Check (Invoke-Tool $checker @{ Path = $path }) 1 @("unexpected text after a milestone title: ' because sharing exists first'") 1
+        Assert-Check (Invoke-Tool $checker (Get-CheckArgs $path)) 1 @("unexpected text after a milestone title: ' because sharing exists first'") 1
     }
 
     Test-Case "the second of two Depends on references is checked too" {
         $path = New-FixtureCopy $validMilestones "depends-second.md" @(, @("Polish the Widget, and Plan.json Format Cleanup.", "Polish the Widget, and Plan Cleanup."))
-        Assert-Check (Invoke-Tool $checker @{ Path = $path }) 1 @("no milestone title matches 'plan cleanup'") 1
+        Assert-Check (Invoke-Tool $checker (Get-CheckArgs $path)) 1 @("no milestone title matches 'plan cleanup'") 1
+    }
+
+    Test-Case "a Completed Milestones section left in MILESTONES.md fails" {
+        Assert-Check (Invoke-Tool $checker (Get-CheckArgs $legacyMilestones)) 1 @("legacy.md:63: the Completed Milestones section belongs in MILESTONES-COMPLETED.md")
+    }
+
+    Test-Case "a completed history without its section fails" {
+        $completed = New-FixtureCopy $validCompleted "no-section-completed.md" @(, @("## Completed Milestones`n", "## Finished`n"))
+        Assert-Check (Invoke-Tool $checker (Get-CheckArgs $validMilestones -Completed $completed)) 1 @("no-section-completed.md:1: has no '## Completed Milestones' section", "'M1a - Lay the Groundwork' is outside the Completed Milestones section")
     }
 
     Test-Case "full mode: an entry moved from Active to Completed passes" {
-        Assert-Check (Invoke-Tool $checker @{ Path = $movedMilestones; BasePath = $validMilestones }) 0 @("OK: moved.md passed")
+        $parameters = Get-CheckArgs $movedMilestones -Completed $movedCompleted -WithBase
+        Assert-Check (Invoke-Tool $checker $parameters) 0 @("OK: moved.md and moved-completed.md passed")
+    }
+
+    Test-Case "full mode: a base from before the completed history moved out of MILESTONES.md passes" {
+        $parameters = @{ Path = $movedMilestones; CompletedPath = $movedCompleted; BasePath = $legacyMilestones }
+        Assert-Check (Invoke-Tool $checker $parameters) 0 @("OK: moved.md and moved-completed.md passed")
+    }
+
+    Test-Case "full mode: against a base from before the move, a changed completed entry fails" {
+        $completed = New-FixtureCopy $validCompleted "legacy-edited-completed.md" @(, @("The first prototype.", "The first prototype, revised."))
+        $parameters = @{ Path = $validMilestones; CompletedPath = $completed; BasePath = $legacyMilestones }
+        Assert-Check (Invoke-Tool $checker $parameters) 1 @("completed milestone 'M0z - Prototype' changed") 1
+    }
+
+    Test-Case "comparing against a base without the completed history is refused" {
+        Assert-Check (Invoke-Tool $checker @{ Path = $movedMilestones; BasePath = $validMilestones }) 1 @("pass -CompletedPath with -Path")
     }
 
     Test-Case "full mode: a completed entry that was never active or planned in the base fails" {
-        $path = New-FixtureCopy $validMilestones "late-entry.md" @(
-            @("### M1a - Lay the Groundwork", "$newCompletedEntry### M1a - Lay the Groundwork"),
-            @("Ship the widget. M1a, M1b, M1c.", "Ship the widget. M1a, M1b, M1c, M1d."))
-        Assert-Check (Invoke-Tool $checker @{ Path = $path; BasePath = $validMilestones }) 1 @("newly completed milestone 'M1d - Late Fix' was not an active or planned milestone in the base") 1
+        $path = New-FixtureCopy $validMilestones "late-entry.md" @(, @("Ship the widget. M1a, M1b, M1c.", "Ship the widget. M1a, M1b, M1c, M1d."))
+        $completed = New-FixtureCopy $validCompleted "late-entry-completed.md" @(, @("### M1a - Lay the Groundwork", "$newCompletedEntry### M1a - Lay the Groundwork"))
+        Assert-Check (Invoke-Tool $checker (Get-CheckArgs $path -Completed $completed -WithBase)) 1 @("newly completed milestone 'M1d - Late Fix' was not an active or planned milestone in the base") 1
     }
 
     Test-Case "release mode: a completed entry planned and completed since the base passes" {
-        $path = New-FixtureCopy $validMilestones "late-entry-release.md" @(
-            @("### M1a - Lay the Groundwork", "$newCompletedEntry### M1a - Lay the Groundwork"),
-            @("Ship the widget. M1a, M1b, M1c.", "Ship the widget. M1a, M1b, M1c, M1d."))
-        Assert-Check (Invoke-Tool $checker @{ Path = $path; BasePath = $validMilestones; Release = $true }) 0 @("OK: late-entry-release.md passed")
+        $path = New-FixtureCopy $validMilestones "late-entry-release.md" @(, @("Ship the widget. M1a, M1b, M1c.", "Ship the widget. M1a, M1b, M1c, M1d."))
+        $completed = New-FixtureCopy $validCompleted "late-entry-release-completed.md" @(, @("### M1a - Lay the Groundwork", "$newCompletedEntry### M1a - Lay the Groundwork"))
+        Assert-Check (Invoke-Tool $checker (Get-CheckArgs $path -Completed $completed -WithBase -Release)) 0 @("OK: late-entry-release.md and late-entry-release-completed.md passed")
     }
 
     Test-Case "release mode: a new completed entry below the existing ones fails" {
-        $path = New-FixtureCopy $validMilestones "late-entry-bottom.md" @(, @("  - The first prototype.`n", "  - The first prototype.`n`n$($newCompletedEntry.TrimEnd())`n"))
-        Assert-Check (Invoke-Tool $checker @{ Path = $path; BasePath = $validMilestones; Release = $true }) 1 @("newly completed milestone 'M1d - Late Fix' must go above the existing completed entries") 1
+        $path = New-FixtureCopy $validMilestones "late-entry-bottom.md" @(, @("Ship the widget. M1a, M1b, M1c.", "Ship the widget. M1a, M1b, M1c, M1d."))
+        $completed = New-FixtureCopy $validCompleted "late-entry-bottom-completed.md" @(, @("  - The first prototype.`n", "  - The first prototype.`n`n$($newCompletedEntry.TrimEnd())`n"))
+        Assert-Check (Invoke-Tool $checker (Get-CheckArgs $path -Completed $completed -WithBase -Release)) 1 @("newly completed milestone 'M1d - Late Fix' must go above the existing completed entries") 1
     }
 
     Test-Case "a changed completed entry fails in both modes" {
-        $path = New-FixtureCopy $validMilestones "completed-edited.md" @(, @("The first prototype.", "The first prototype, revised."))
-        $full = Assert-Check (Invoke-Tool $checker @{ Path = $path; BasePath = $validMilestones }) 1 @("completed milestone 'M0z - Prototype' changed") 1
+        $completed = New-FixtureCopy $validCompleted "completed-edited.md" @(, @("The first prototype.", "The first prototype, revised."))
+        $full = Assert-Check (Invoke-Tool $checker (Get-CheckArgs $validMilestones -Completed $completed -WithBase)) 1 @("completed milestone 'M0z - Prototype' changed") 1
         if ($full) { return "full mode: $full" }
-        $release = Assert-Check (Invoke-Tool $checker @{ Path = $path; BasePath = $validMilestones; Release = $true }) 1 @("completed milestone 'M0z - Prototype' changed") 1
+        $release = Assert-Check (Invoke-Tool $checker (Get-CheckArgs $validMilestones -Completed $completed -WithBase -Release)) 1 @("completed milestone 'M0z - Prototype' changed") 1
         if ($release) { return "release mode: $release" }
     }
 
     Test-Case "a removed completed entry fails" {
-        $path = New-FixtureCopy $validMilestones "completed-removed.md" @(, @("`n### M0z - Prototype`n`n- **Status**: ✅ Complete`n- **Scope**:`n  - The first prototype.`n", ""))
-        Assert-Check (Invoke-Tool $checker @{ Path = $path; BasePath = $validMilestones }) 1 @("completed milestone 'M0z - Prototype' was removed or renamed") 1
+        $completed = New-FixtureCopy $validCompleted "completed-removed.md" @(, @("`n### M0z - Prototype`n`n- **Status**: ✅ Complete`n- **Scope**:`n  - The first prototype.`n", ""))
+        Assert-Check (Invoke-Tool $checker (Get-CheckArgs $validMilestones -Completed $completed -WithBase)) 1 @("completed milestone 'M0z - Prototype' was removed or renamed") 1
     }
 
     Test-Case "reordered completed entries fail" {
-        $path = New-FixtureCopy $validMilestones "completed-reordered.md" @(
+        $completed = New-FixtureCopy $validCompleted "completed-reordered.md" @(
             @("### M1a - Lay the Groundwork`n`n- **Status**: ✅ Complete`n- **Scope**:`n  - Historical text from before the ID rule, mentioning M0z by ID.`n`n", ""),
             @("  - The first prototype.`n", "  - The first prototype.`n`n### M1a - Lay the Groundwork`n`n- **Status**: ✅ Complete`n- **Scope**:`n  - Historical text from before the ID rule, mentioning M0z by ID.`n"))
-        Assert-Check (Invoke-Tool $checker @{ Path = $path; BasePath = $validMilestones }) 1 @("moved out of its original order")
+        Assert-Check (Invoke-Tool $checker (Get-CheckArgs $validMilestones -Completed $completed -WithBase)) 1 @("moved out of its original order")
     }
 
     Test-Case "a changed Completed Milestones introduction fails" {
-        $path = New-FixtureCopy $validMilestones "completed-intro.md" @(, @("Newest completions first.", "Newest first."))
-        Assert-Check (Invoke-Tool $checker @{ Path = $path; BasePath = $validMilestones }) 1 @("the Completed Milestones introduction changed") 1
+        $completed = New-FixtureCopy $validCompleted "completed-intro.md" @(, @("Newest completions first.", "Newest first."))
+        Assert-Check (Invoke-Tool $checker (Get-CheckArgs $validMilestones -Completed $completed -WithBase)) 1 @("the Completed Milestones introduction changed") 1
     }
 
     Test-Case "-Release without a base is refused" {
-        Assert-Check (Invoke-Tool $checker @{ Path = $validMilestones; Release = $true }) 1 @("-Release needs -BaseRef or -BasePath")
+        Assert-Check (Invoke-Tool $checker (Get-CheckArgs $validMilestones -Release)) 1 @("-Release needs -BaseRef or -BasePath")
     }
 
     Write-Host ""

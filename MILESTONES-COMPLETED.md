@@ -1,0 +1,2331 @@
+# ReelRoulette Completed Milestones
+
+The archive of finished milestones, moved here from `MILESTONES.md` as-is. The rules in `MILESTONES.md` apply to this file too.
+
+## Completed Milestones
+
+Latest completions first:
+
+### M10j9 - Client Event Efficiency
+
+- **Status**: ✅ Complete
+- **Goal**: Library events cost the clients and server only the work they need: a loaded window reloads only when an event can change what it shows, the WebUI resumes its event stream without losing events, the desktop does not refetch library stats once per event, and refresh progress does not send one event per file.
+- **Scope**:
+  - Ships in v0.14.0, right after the post-migration fixes. Four slices, each verified on its own.
+  - Found and measured by the efficiency and divergence report on a copy of a 48,938-item catalog and 13 hours of `last.log`.
+  - Patch-or-reload rule (desktop and WebUI, shared fixture):
+    - Both clients reload every loaded window on a favorite or blacklist event while the filter has `favoritesOnly` or `excludeBlacklisted` (on by default), on a playback event while sorted by last played or play count or filtered to never played, and on a tag event while any tag filter is set. A reload re-reads the window in 200-item pages, one after another. Measured: reloading 5,000 loaded tiles sorted by last played takes 2.45 s and allocates 1.1 GB on the server, per event and per client. In one minute of real use, 31 WebUI plays caused 37 play-count-sorted library queries.
+    - Reload the loaded window only when a field the event changed affects the current filter or sort; otherwise patch the tile. For example, a favorite on a loaded tile whose blacklist flag does not change patches under `excludeBlacklisted`, and a playback event under name sort patches. An event for an item that is not loaded reloads only when the change could bring it into the window.
+    - Both clients implement the rule today in `LibraryPanelBrowse.EffectFor` and `libraryQueryTileEffect`, identically but with no shared fixture. Add a fixture under `shared/fixtures/` listing event kind, the fields that changed with before and after values, whether the tile is loaded, filter, and sort, with the expected patch or reload. Desktop and WebUI tests both run against it.
+    - Decided here: an item that is not loaded and leaves the result (for example blacklisted under `excludeBlacklisted`, or played under `onlyNeverPlayed`) does not reload, so the header total stays one too high until the next query. A favorite on an item that is not loaded still reloads under `excludeBlacklisted`, because the event does not carry its previous blacklist flag. Playback under a last played or play count sort reloads in either direction. A tag change reloads a loaded tile when it removes a selected tag or adds an excluded one, and an item that is not loaded when it adds a selected tag or removes an excluded one. A tag save made on that client, and a catalog tag rename or delete, still reload under any tag filter, because they can change the filter itself.
+  - WebUI event stream resume (WebUI, with one server fix):
+    - The WebUI's live event stream in `app.js` opens a new `EventSource` on every error, with no last event ID. It receives neither the events published while it was away nor `resyncRequired`, so it shows stale favorites, tags, and playback until something else reloads. The desktop resumes with the last event ID.
+    - `events/sseClient.ts` already tracks the last revision and builds the stream URL with it, but only its test uses it. Wire it into the WebUI and remove the duplicate `EventSource`, reconnect timer, and stream URL code in `app.js`.
+    - `sseClient.ts` listens only for `refreshStatusChanged` and `resyncRequired`. It needs to carry every event type `app.js` handles today, with the same handling.
+    - `sseClient.ts` has its own connection status wording. The WebUI keeps the connection messages `app.js` shows today; the client status line overhaul defines them.
+    - `sseClient.ts` reconnects when no event arrives for 30 seconds, and the server sends no keepalive, so an idle stream would reconnect every 30 seconds. Decided here: drop the watchdog. A keepalive comment never reaches the page through `EventSource`, so it could not reset the watchdog; error events and the focus, visibility, and online reconnects cover a dropped stream, as they did before.
+    - Server fix found while planning this slice, from code reading: the server's revision counter starts over when it restarts, and a reconnect whose last event ID is ahead of the current revision gets no replay and no `resyncRequired`. Treat a last event ID ahead of the current revision as a gap and send `resyncRequired`.
+    - Both clients kept the highest revision they had seen, so after a restart they would keep resuming from the old one and get `resyncRequired` on every reconnect. Decided here: a client takes the revision of a `resyncRequired` it receives.
+    - A client that had received no event yet reconnected with no last event ID, so it got neither the missed events nor `resyncRequired`. Decided here: a stream opened without a last event ID starts with a new `streamOpened` event carrying the server's current revision. An SSE `id:` line alone could not be used, because a browser `EventSource` does not hand an event with no data to the page and the desktop reader ignores it. This adds an event type to the contract.
+    - Update `CONTEXT.md` to say both clients resume with the last event ID.
+  - Desktop library stats coalescing (desktop):
+    - The desktop refetches `GET /api/library/stats` from the playback, favorite, and blacklist event handlers, from the current-file read, and after other actions, once per call. Measured: 1,723 stats fetches in 13 hours, and 116 fetches for 31 WebUI plays in one minute, about 3.7 per play. Each fetch costs about 138 ms of server time under the lock the list query and item updates also take.
+    - Coalesce them: at most one stats request in flight, a short delay to gather a burst of events, and one more request when events arrived while a request was in flight. Totals stay server-computed; the desktop does not add play counts or favorite counts itself.
+  - Refresh progress throttling (server):
+    - The fingerprint and thumbnail stages publish progress at most every 400–500 ms. The duration and loudness stages publish one `refreshStatusChanged` event per file they scan. A forced rescan of the 17,307 videos in the measured catalog sends about 17,000 events per stage, which overflows the server's 256-event replay history, so a client that reconnects during the scan gets `resyncRequired` and reloads its window.
+    - Throttle duration and loudness progress the same way as the fingerprint and thumbnail stages, and keep the stage completion event and its final counts.
+  - Add a Release Specific checklist item: "With the WebUI open, stop and restart the server, change a favorite and a tag on the desktop while the WebUI reconnects, and the WebUI shows both."
+- **Acceptance criteria**:
+  - Desktop and WebUI patch-or-reload tests read the same fixture, and changing an expected result in it fails both.
+  - Under the default filter and name sort, a favorite on a loaded tile and a playback event patch the tile and do not query the library.
+  - An event that can change which items are shown or their order still reloads the loaded window, keeping the scroll position.
+  - After the WebUI's event stream drops and reconnects, the events published in between are applied, or the WebUI receives `resyncRequired` and reloads.
+  - After a server restart, a reconnecting client whose last event ID is ahead of the server's revision receives `resyncRequired`.
+  - The WebUI has one event stream implementation, and an idle stream does not reconnect on its own.
+  - A burst of playback events on any client causes at most two desktop stats requests, and the desktop header totals match `GET /api/library/stats` once the burst settles.
+  - A duration or loudness stage over N files publishes at most one progress event per throttle interval plus its completion event, and the completion message reports the same counts as before.
+  - `CONTEXT.md` says both clients resume their event stream with the last event ID.
+- **Verification evidence**:
+  - `dotnet build ReelRoulette.sln` (0 warnings), `dotnet test ReelRoulette.sln` (desktop 244, Core 293 passed), `npm run verify` (228 WebUI tests passed, contracts fresh, build output verified), and SystemChecks passed.
+  - Patch-or-reload: `shared/fixtures/library-tile-effect.json` (28 cases) is read by `LibraryTileEffectFixtureTests` and the WebUI library session tests. Flipping the expected result of "favorite on a loaded tile under the default filter patches" to `reload` failed that case in both, and restoring it passed both. WebUI session tests show a favorite on a loaded tile and a playback event under the default filter and name sort make no library query, and that a blacklist on a loaded tile reloads and keeps the scroll position.
+  - Event stream resume: WebUI `sseClient` tests cover a reconnect that sends the last event ID and applies the replayed events, taking the resync revision after a server restart, every event type reaching its handler, and an idle stream left open for 10 minutes with no reconnect. Building the stream URL without the last revision failed both resume tests. `ReplayAfter_TreatsALastEventIdAheadOfTheCurrentRevisionAsAGap` fails without the server fix. The resync-revision rule is locked to `shared/fixtures/event-revision.json`, read by `CoreEventRevisionTests` and the WebUI `sseClient` tests; flipping the expected result of "streamOpened never moves a revision the client already holds" failed that case in both, and restoring it passed both.
+  - Quiet-server restart: a stream opened without a last event ID starts with `streamOpened` carrying the current revision, so a client that received no other event resumes from it, from 0 if need be. `EventStreamTests` runs the server's event stream with no events before a restart and a favorite after it, and the reconnecting client gets that favorite; it and the `streamOpened` test failed before the change. WebUI `sseClient` and desktop `CoreServerApiClient` tests show a reconnect sending a last event ID of 0.
+  - Stats coalescing: `LibraryStatsRefreshTests` show 30 requests during the gather wait make one fetch, requests during a fetch make exactly one more, and the last applied stats are from the last fetch. Fetching on every request, as before, failed three of the four tests.
+  - Refresh progress: a duration and a loudness stage over 200 files with the clock held publish one progress event and one completion event each, with completion messages `Duration scan complete (200 files, 0 updated)` and `Loudness scan complete (200 files, 0 updated)`. Without the throttle they published 201 and 202 events.
+  - Stats fetches from `last.log` for a WebUI playback burst: before, 116 fetches for 31 plays in one minute (about 3.7 per play), from the efficiency and divergence report; after, 30 fetches for about 30 plays (about 1 per play), with the `LibraryStats: Fetching stats for N refresh request(s).` lines showing several requests collapsed into one fetch. Plays spaced further apart than the gather wait still get one fetch each; the at-most-two-per-burst bound is shown by `LibraryStatsRefreshTests`.
+  - WebUI reconnect spot check: PASS. After the server was stopped and started again, a favorite changed on the desktop showed in the WebUI without a page reload.
+  - Docs updated: `CONTEXT.md`, `docs/api.md`, `docs/architecture.md`, `docs/domain-inventory.md`, and the Release Specific checklist item.
+  - The full outage pass is the Release Specific checklist item above, run in the pre-release pass.
+- **Deferrals / Follow-ups**:
+  - Making each reload cheaper (one request for the loaded window, indexed sort, no counts on later pages) is the library query performance milestone.
+  - Matching event items by ID instead of by path is the item IDs in the contract milestone.
+  - Previous favorite and blacklist values in item-state events, so a favorite on an item that is not loaded can patch under the default filter, is a follow-up on the item IDs in the contract milestone.
+  - Revision reuse after a restart is recorded in the server robustness findings: a client whose last event ID is below a restarted server's revision gets a partial replay with no `resyncRequired`, which revisions alone cannot detect.
+
+### M10j8 - Post-Migration Fixes
+
+- **Status**: ✅ Complete
+- **Goal**: Fix defects left from the move to the server-owned catalog and two places where desktop and WebUI disagree, and close the control plane to unauthenticated LAN callers, one slice per defect, each with a test that fails before the fix.
+- **Scope**:
+  - Ships in v0.14.0. Ten slices, each verified on its own.
+  - Landed in three parts, each with its own commit: server and Core (source list after import, auto-refresh reschedule, catalog item tags, fingerprint parallelism), then desktop (Update Preset after delete, scan menu items, media type, sort labels, numeric preset durations), then the control token.
+  - Source list after source import (server):
+    - Recorded as a deferral on catalog document removal: source import does not refresh the in-memory source list that `GET /api/sources` and source enable/disable read. That list is filled at startup.
+    - Confirmed during v0.14.0 planning by a throwaway test: after a successful import, the server's source list still had 0 sources and disabling the new source failed until restart.
+    - A newly imported source appears in `GET /api/sources` and can be enabled and disabled without a restart. Whether the list is refreshed after import or read from catalog rows is decided here.
+  - Auto-refresh interval reschedule (server):
+    - `POST /api/refresh/settings` writes through `CoreSettingsService` and skips `RefreshPipelineService.UpdateSettings`, so changing the auto-refresh interval or enabling auto-refresh does not reschedule the next run. Found by code reading and git history during v0.14.0 planning: the route has gone around the pipeline since the change that also split web runtime settings onto their own route.
+    - Changing auto-refresh settings through the API schedules the next run from the new settings.
+  - Catalog item tag assignment without field copy (Core):
+    - `LibraryCatalogSession.AttachTags` replaces each tagged item with `CopyWithTags`, which lists every `LibraryCatalogItem` property by hand because `Tags` is init-only. Thumbnail revision, width, and height were added to the item without being added to that copy, so the list query returned no thumbnail dimensions for tagged items until the copy was fixed.
+    - Let tags be assigned on an existing item (for example a settable `Tags`), have `AttachTags` set them in place, and remove `CopyWithTags` and its reflection test.
+    - Related trap to check while there: `InsertItem` writes neither thumbnail columns nor tags from the item it is given. Every caller passes a new item today and thumbnails arrive later through `SetThumbnail`, so nothing is lost, but an item passed in with those fields set would silently drop them.
+  - Desktop filter dialog Update Preset after preset delete (desktop):
+    - In the desktop filter dialog, **Update Preset** can stay enabled after the active preset is deleted from the preset list, although no saved preset is left to update.
+    - Found during review of the client-authority sync routes removal. The behavior existed before that work.
+    - Likely cause, not confirmed: `DeletePresetButton_Click` clears the active preset name and refreshes the heading and pending state, but does not raise the `CanUpdatePreset` change notification.
+    - The WebUI filter dialog has no Update Preset gate, so it is out of scope.
+  - Desktop scan menu items (desktop):
+    - **Scan Durations** and **Scan Loudness** check `Directory.Exists` on each source root on the desktop's own disk before asking the server to refresh. When the server runs on another machine, that check uses the wrong disk. The server decides which sources it can read.
+    - Both items request the server refresh without a local folder check, and their status and log text no longer names a single source folder.
+  - Desktop media type from the server (desktop):
+    - Found by the efficiency and divergence report: the desktop decides whether the playing file is a photo or a video from its file extension, in `PlayMedia` and in the file-not-found message in `PlayFromPath`, using its own copy of the photo extension list. The playback response already carries the server's `mediaType`, and the WebUI uses it.
+    - The desktop uses the server's media type for the playing item, and its photo and video extension lists are removed. The server keeps the only extension lists.
+  - Sort direction labels (desktop and WebUI):
+    - Found by the efficiency and divergence report: the two clients label the same sort direction differently. The WebUI shows `Newest → Oldest`, `A–Z`, and `Z–A`; the desktop shows `Newest -> Oldest`, `A-Z`, and `Z-A`.
+    - Both clients use the WebUI's labels, with `→` and `–`. Check that the desktop font renders both characters in light and dark themes.
+  - Numeric preset durations on the desktop (desktop):
+    - Found while removing the preset match route: the desktop reads saved preset text with `JsonSerializer.Deserialize<FilterState>`, which throws on a numeric `minDuration` or `maxDuration` (seconds). `ParseCorePresetFilterState` then falls back to the default filter, so that whole preset is read as **None**. The WebUI and server filtering accept seconds, and `docs/api.md` documents them.
+    - The desktop reads a numeric duration as seconds. Add a `"minDuration": 60` against `"00:01:00"` entry with `same: true` to `shared/fixtures/preset-filter-equality.json`; it fails on the desktop until the fix.
+  - Fingerprint parallelism after a forced rescan (server):
+    - Found by code reading while documenting the refresh settings: `RefreshPipelineService.ConsumeRefreshRescanFlags` clears a force flag by building a new `RefreshSettingsSnapshot` from auto-refresh enabled, interval, and the two force flags only. `FingerprintScanMaxDegreeOfParallelism` falls back to its default of 4, so a forced duration or loudness rescan resets a saved value such as 8.
+    - Clearing a force flag keeps every other refresh setting.
+  - Control token for non-localhost control requests (server and Operator):
+    - Found by the repository audit and confirmed by the planned-milestones audit: `ServerPairingAuthMiddleware.AuthorizeControlPlaneAsync` enforces the control token only when `AdminAuthMode` is `TokenRequired`. With LAN binding on, the admin auth mode defaults to `Off`, so any LAN caller can stop, restart, or update the server, change settings, and run testing scenarios. First start writes that `Off` into `core-settings.json`, so changing the default alone would leave existing installs open.
+    - The testing routes are open the same way: `IsTestingControlAuthorized` in `ServerHostComposition.cs` also checks the token only in `TokenRequired` mode. They check it themselves and do not exempt localhost, so requiring the token would lock the Operator's own testing panel out on the server machine.
+    - Every non-localhost control request needs the control token. There is no `Off` for non-localhost requests: a persisted `Off` no longer opens the control plane to the LAN, and the Operator settings no longer offer it. Whether the admin auth mode field leaves `/control/settings` or stays read-only is decided here; removing it is its own contract slice.
+    - Localhost stays trusted for every control route, including the testing routes.
+    - A server with no control token generates one on start and saves it.
+    - How a browser on another machine gets in: `/operator` still loads, and when its first control read returns `401`, the page shows only a control token prompt in place of the other sections. Submitting it posts to `POST /control/pair`, which sets the admin cookie, and the page then loads normally. The token is shown in the Operator settings opened on the server machine. For a headless server with no local browser, the docs say where `core-settings.json` keeps it. The page does not put the token in the URL.
+    - A reverse proxy on the server machine still looks like localhost; that is fixed with reverse proxy support in the accounts release.
+    - Add a Release Specific checklist item: "From another machine, the Operator asks for the control token, works after it is entered, and refuses a wrong one; on the server machine it opens without one, testing panel included," on Linux and Windows.
+- **Acceptance criteria**:
+  - A source imported through `POST /api/sources/import` appears in `GET /api/sources` and can be enabled and disabled before a restart.
+  - Changing auto-refresh enabled or interval through `POST /api/refresh/settings` moves the next scheduled run to match the new settings.
+  - No code rebuilds a `LibraryCatalogItem` from another one field by field. The list query and single-item read return the same item fields for tagged and untagged items, including thumbnail revision, width, and height. `InsertItem` either writes every field it is given or its contract says which fields it ignores.
+  - After deleting the active preset while the heading shows a starred preset, **Update Preset** is disabled and the heading shows **None** or `None*`. Deleting a preset that is not active leaves **Update Preset** as it was. A headless desktop filter dialog test covers deleting the active starred preset and fails without the fix.
+  - Scan Durations and Scan Loudness do not read source folders on the desktop's disk and start a server refresh when the server is reachable.
+  - After a forced duration or loudness rescan clears its flag, `fingerprintScanMaxDegreeOfParallelism` keeps its saved value.
+  - A non-localhost control request without the control token gets `401`, including with `Off` saved in `core-settings.json`. Localhost control requests, including the testing routes, work without it.
+  - A server that has no control token creates and saves one on start.
+  - On another machine, the Operator shows only the token prompt until a valid token is entered, then works; on the server machine it opens directly.
+  - The desktop decides photo or video for the playing item from the server's media type, including when that type disagrees with the file extension, and has no extension list of its own.
+  - Every sort mode and direction shows the same label on desktop and WebUI, and the desktop renders `→` and `–`.
+  - A saved preset with a numeric `minDuration` or `maxDuration` keeps its other settings on the desktop, and the shared preset equality fixture covers a numeric duration on both clients.
+  - Each slice has a test that fails without its fix, or the evidence says why one cannot be written.
+- **Verification evidence**:
+  - Completion evidence must include each slice's failing test before the fix and passing after it, and `dotnet test ReelRoulette.sln` with the list-query test that covers a tagged and an untagged item with catalog-only thumbnail dimensions still passing.
+  - Server and Core part:
+    - Source list after import: `ImportedSource_IsListedAndToggles_WithoutRestart` failed before the fix (no source listed after import) and passes. The source list and enable and disable read catalog rows; setting the flag a source already has neither writes nor publishes.
+    - Auto-refresh reschedule: `RefreshSettingsRoute_SchedulesTheNextRunFromTheNewInterval` failed against the old route body (next run still 15 minutes out after saving 120) and passes. It calls the route's named handler, so the mapping of `POST /api/refresh/settings` to that handler is checked by reading, not by a test: the core tests share one data folder, so a test cannot start an isolated server host.
+    - Fingerprint parallelism: `ForceRescan_ClearingItsFlag_KeepsFingerprintParallelism` (duration and loudness cases) failed before the fix (expected 8, got 4) and passes, and also checks auto-refresh enabled and interval are kept.
+    - Catalog item tags: `CopyWithTags` and its reflection test are removed and `AttachTags` sets tags in place. `InsertItem` already wrote tags; it now also writes thumbnail revision, width, and height. `InsertItem_WritesThumbnailFieldsAndTags_ListAndSingleReadsAgree` failed before the fix (thumbnail revision read back null) and passes, comparing the list query and single-item read for a tagged and an untagged item. The existing list-query test with catalog-only thumbnail dimensions still passes.
+    - `dotnet build ReelRoulette.sln` clean; `dotnet test ReelRoulette.sln` 262 core and 167 desktop tests pass; SystemChecks pass.
+  - Desktop part:
+    - Update Preset after preset delete: the recorded symptom did not reproduce. Deleting the active starred preset already disabled **Update Preset** and showed `Preset: None`, because the preset list reload switched the preset dropdown to None and that path raises the change notification. `DeletingTheActiveStarredPreset_DisablesUpdateAndClearsTheHeading` clicks the real Delete button on the Presets tab and passed before any fix; it stays as a regression test, and the delete handler now raises the notification itself. The actual bug: deleting any other preset, or moving the selected one up or down, reloaded the list, reselected the active preset in the dropdown, and loaded that preset's saved filter over the unsaved one, so `P*` became `P` and **Update Preset** turned off. The reload no longer loads the saved filter when it puts back the preset that was already selected. `DeletingAPresetThatIsNotActive_LeavesUpdateAsItWas` and `MovingTheActiveStarredPreset_KeepsTheUnsavedFilterAndUpdate` (up and down) failed before the fix (`Preset: P`, disabled, saved filter loaded) and pass. Renaming the selected starred preset, found in the user's spot check, did the same: the rename handler set the new name before the reload, the dropdown cleared it because the list did not have that name yet, and the reload then loaded the saved filter. The rename handler now tells the reload that the renamed preset is the one already selected. `RenamingTheActiveStarredPreset_KeepsTheUnsavedFilterAndUpdate` drives the real rename dialog and failed before the fix (`Preset: R`, disabled, saved filter loaded) and passes.
+    - Scan menu items: the slice turned out to be dead code and was removed rather than fixed. The **Scan Durations** and **Scan Loudness** menu items left the desktop XAML when refresh moved to the server (commit `1657dbe`), and nothing else called `ScanDurations_Click` or `ScanLoudness_Click`, so neither the local folder check nor the ignored **Rescan all files** choice could run. Both handlers are deleted; everything they used has other callers. Refresh and forced rescans go only through the refresh pipeline and its settings. No test applies to removed code.
+    - Media type: `PlaybackTarget` carries the server's media type (`mediaType == "photo"` on random and play-item responses, the item's media type for manual play), and `PlayMedia` and the file-not-found message use it. `_photoExtensions` is removed; the desktop had no video list. `PlaybackTargetResolverTests` covers `.mp4` reported as a photo and `.jpg` reported as a video, local and API; with extension detection put back, 4 of 8 cases fail.
+    - Sort labels: `shared/fixtures/sort-direction-labels.json` lists every mode and direction. The desktop test failed on all 10 entries before the fix and passes; the WebUI test reads the same fixture and also checks it covers every sort mode. Changing one label in the fixture fails both. The theme spot check of `→` and `–` is the user's.
+    - Numeric preset durations: the fixture's numeric `minDuration` and `maxDuration` entries failed on the desktop and pass after a property converter that reads durations the way the server's filter parser does; the WebUI already passed them. `FilterDurationJsonTests` checks a preset with numeric durations keeps its other settings and that durations are still written as `HH:MM:SS` text.
+    - `dotnet build ReelRoulette.sln` clean; `dotnet test ReelRoulette.sln` 262 core and 201 desktop tests pass; `npm run verify` passes.
+  - Control token part:
+    - Found while planning: the auth middleware was installed only when API pairing was required, so with WebUI auth `Off` the control plane had no check at all, not even the 403 for LAN binding off. It is now always installed; its API branch still passes every request when pairing is not required. Checked by reading: the core tests cannot start an isolated server host with a non-local caller.
+    - Throwaway checks against an export of the previous commit: a non-localhost `/control/stop` with `Off` saved passed through, no control token was generated, and an in-process host on loopback with `TokenRequired` saved returned 401 for `/control/testing/reset` and `/control/testing/update` without a cookie. Against this change: 401, a 32-character token saved, and 200 for both.
+    - `ControlTokenTests` (21 tests): a non-localhost control request with `Off` saved gets 401; a control cookie or the bearer token passes and a wrong bearer token does not; localhost testing routes pass the middleware and their handlers return 200 without a token; a non-localhost testing route gets 401; a token is generated on start, saved, and kept on reload, and a saved `Off` is rewritten; `POST /control/pair` with the token sets `rr_admin` with a valid session, and a wrong token gets 401 with no cookie and logs `Control pairing failed from 192.168.1.90` without either token; a changed token ends both control sessions and keeps the API session, and saving the same token keeps them; a control session authorizes a non-localhost `/api/version` when pairing is required; a non-localhost token change ends every earlier control session and sets one fresh `rr_admin` session for the caller, and a localhost change sets no cookie; the control token as a `token` query gets 401 on a control route and on `POST /control/pair`, while the API pairing token as a query still passes on `/api`; a failed `last.log` append does not throw.
+    - Review fixes: a remote Operator that changed the token got a 401 on the startup setting saved right after it, so the caller now gets a fresh control cookie; the control token is no longer accepted as a query parameter and `GET /control/pair` is removed; `LibraryOperationsService` writes its server log lines through `ServerLogService.Append`, which now catches every exception. The fresh cookie, query-token, and query-pair tests failed before their fixes, and the append test failed with the old `IOException`-only catch.
+    - Mutation checks: letting every control request through, skipping token generation, skipping the session end, refusing control sessions on API routes, dropping the failed-pair log, skipping the `Off` rewrite, and skipping the cookie each failed at least one of those tests.
+    - `adminAuthMode` stays in the contract, read-only. Because a token is now always required, `POST /control/settings` rejects an empty token, so three dev channel tests that posted `Off` with no token now post the current token. A token change reports `restartRequired: false`, since the middleware reads the token on every request.
+    - `verify-web-deploy.ps1` now checks the generated token, an accepted settings save with it, and a 200 from a localhost `/control/testing/reset`; it passes. The cross-machine pass is the Release Specific checklist item above.
+    - `dotnet build ReelRoulette.sln` clean; `dotnet test ReelRoulette.sln` 283 core and 201 desktop tests pass; `npm run verify` passes; SystemChecks pass; the Operator page script passes `node --check`.
+  - The media type slice's test must cover a playback response whose `mediaType` disagrees with the file extension. The sort label slice's tests must check every mode and direction on both clients against the same expected labels, plus one quick spot check of the desktop label in each theme.
+- **Deferrals / Follow-ups**:
+  - WebUI reaction to `sourceStateChanged` stays with WebUI Source State Sync.
+  - Found while planning: **Scan Loudness** asked whether to rescan every file, but only logged that choice. Moot: the handler was unreachable and was removed with the scan menu slice.
+  - Found in the numeric duration slice: the server's filter parser, and now the desktop, read duration strings with `TimeSpan` rules first, so `"75"` is 75 days and `"1:30"` is 1 hour 30 minutes, while the WebUI reads them as 75 and 90 seconds. Both clients only write `HH:MM:SS`, so only hand-written or API-written presets differ. Not changed here; it needs a backlog item if those forms should agree.
+  - Found during the desktop part's spot checks: the WebUI uses the browser's native prompt, confirm, and alert dialogs, such as for preset rename -> WebUI In-App Dialogs backlog item.
+  - Release notes for v0.14.0 must say that opening the Operator from another machine now asks for the control token, and where to find it.
+  - Found in the control token slice: removing the now read-only `adminAuthMode` field -> Auth Cutover for API and Operator, which removes the control token and its setting.
+  - Found in the control token slice: `/api` routes and `GET /api/pair` still accept the API pairing token as a query parameter -> Auth Cutover for API and Operator.
+  - Found in the control token slice: `/api/web-runtime/settings` is open to any LAN caller with the API pairing token, which `/runtime-config.json` serves to every browser -> Auth Cutover for API and Operator.
+
+### M10j7 - Scrub library.json From the Product
+
+- **Status**: ✅ Complete
+- **Goal**: Make product code, comments, user-facing copy, tests, and current-state docs read as if a JSON library, a schema 1 catalog, and a catalog document never existed.
+- **Scope**:
+  - Depends on: Remove library.json Library Support.
+  - Ships in v0.14.0.
+  - Product code, comments, user-facing copy, tests, and current-state docs do not mention `library.json`, `library.json.migrated`, or a legacy flat tag list.
+  - They also do not mention the catalog document (for example "does not load the full catalog document" in `docs/api.md`, `docs/architecture.md`, `CONTEXT.md`, and the description text in `shared/api/openapi.yaml`), schema 1 or a schema 1 migration, `presets.json`, or the thumbnail `index.json`.
+  - Rename the empty-catalog temp file `library.db.migrating`, left from the removed migration, to a name that does not mention migration. A leftover file with the old name is not cleaned up, so the old name does not stay in the code.
+  - Remove the `docs/feature-migration.md` §3.17 Tag-Catalog Migration Wizard entry, whose dialog is gone.
+  - Fix the other `docs/feature-migration.md` sections the planned-milestones audit found stale:
+    - The header says no Operator UI project exists. The Operator page exists, served by the server at `/operator`.
+    - §3.1 says WebUI click-to-play is not implemented and describes a projection refetch on open. The WebUI library overlay plays on click and browses through the list query.
+    - §3.2 says the WebUI lacks the category, tag, duration, and source filter UI. The WebUI filter overlay has it.
+    - §3.9 says Manage Sources calls `/api/sources/*` for every action. There are no rename or remove routes.
+    - §3.11 says Auto Tag has no web equivalent. The WebUI tag overlay has an Auto Tag tab.
+    - §3.12 says tag rename has no web equivalent. The WebUI tag editor renames tags.
+    - §3.16 says item removal is backed by a server API. There is no item removal route.
+    - §3.18 names `/control/log`. The route is `/control/logs/server`.
+  - Fix three `CONTEXT.md` claims the audits found wrong:
+    - It says the service worker lets Android Chrome install the WebUI. The worker registers only in a secure context and the server serves plain HTTP, so on a LAN address Chrome offers only a shortcut. Say that installing on Android needs HTTPS, for example through a reverse proxy.
+    - It lists remove among the desktop grid's working bulk actions. Remove from Library has no server route and is hidden by the dead code removal milestone.
+    - It lists reconnect recovery with `Last-Event-ID` as an SSE capability without naming a client. Found by the efficiency and divergence report: only the desktop resumes with the last event ID. The WebUI opens a new event stream with no last event ID after an error, so it gets neither the missed events nor `resyncRequired`. Say that only the desktop resumes; the client event efficiency milestone updates it when the WebUI does.
+  - Remove leftover comments that describe removed or "legacy" paths, such as the disabled legacy tag migration dialog and legacy local-authority comments in `MainWindow.axaml.cs` and the legacy view-model comment in `FilterDialog.axaml.cs`. Code that is still live keeps its name; `AllowLegacyTokenAuth` stays with the auth cutover.
+  - Add the desktop flows that still run locally to `docs/domain-inventory.md`, which `AGENTS.md` says it records: library database import writing the server's `library.db` from the desktop process, whole-list preset writes, preset-match heading comparison, refresh status summary parsing, and the client-owned flows that stay local by design (local-first playback, loudness baseline choice, desktop settings backups, Show in File Manager).
+  - Core settings and desktop settings stay JSON. Presets and thumbnail revision, width, and height stay in the catalog. JPEG files stay in the local thumbnail directory.
+  - Do not rewrite released changelog sections, completed milestone entries, `docs/full-audit.md`, `docs/velopack-migration-audit.md`, or `docs/migration-cleanup.md`. The unreleased changelog may record that the format was removed.
+  - Update the testing checklist so it does not mention those names.
+- **Acceptance criteria**:
+  - Product code, comments, user-facing copy, tests, and current-state docs do not mention `library.json`, `library.json.migrated`, a legacy flat tag list, the catalog document, schema 1, `presets.json`, the thumbnail `index.json`, or `library.db.migrating`. A search for those names outside the historical files named below finds nothing, with no exceptions.
+  - `docs/feature-migration.md` has no Tag-Catalog Migration Wizard entry, and its header and §3.1, §3.2, §3.9, §3.11, §3.12, §3.16, and §3.18 match the current WebUI, Operator, and routes.
+  - `CONTEXT.md` does not claim Android install works over plain HTTP, that the desktop can remove items from the library, or that the WebUI resumes its event stream with the last event ID.
+  - `docs/domain-inventory.md` lists the desktop flows that still run locally and says which are local by design.
+  - Core settings and desktop settings stay JSON. Presets and thumbnail metadata stay in the catalog. JPEG files stay local.
+  - Released changelog sections, completed milestone entries, and the historical audit and migration notes named above are left as written.
+- **Verification evidence**:
+  - A case-insensitive `git grep` for `library.json`, a flat tag list, the catalog document (including the shorter "full document"), schema 1 (including `Schema1` identifiers), `presets.json`, `index.json`, `library.db.migrating`, the thumbnail index, the tag-catalog migration wizard, and `/control/log` finds nothing outside `CHANGELOG.md`, `MILESTONES.md`, `RELEASE-NOTES.md`, `COMMIT-MESSAGE.txt`, `docs/full-audit.md`, `docs/velopack-migration-audit.md`, and `docs/migration-cleanup.md`, with no exceptions.
+  - The empty-catalog temp file is `library.db.creating`. A leftover `library.db.migrating` is not cleaned up, by decision, so the old name is not in the code.
+  - Tests: the leftover-file cases for `library.json`, `library.json.migrated`, `presets.json`, and `thumbnails/index.json` were dropped, by decision, and the behavior tests kept: empty create, healthy open, and quarantine and refusal for a file that is not a database, corrupt row pages, an unversioned database, and an unrecognized schema version. Backup trim tests plant neutrally named backups beside the catalog backups. Desktop import into an empty folder needs no confirmation and remaps. `dotnet test ReelRoulette.sln` passes 425 (Core 258, Desktop 167). Core went from 265 because four parameterized tests became single cases.
+  - Mutation check, restored afterward: widening the catalog backup trim to `*.backup.*` failed both backup trim tests.
+  - Tests that remap source roots build those roots under the test's temp folder and assert the exact combined path, so they pass on Windows, where an unrooted `/to` resolves onto the current drive. That covers the desktop import tests, the remap rejection test, and the three `CombineRootAndRelative` tests, which resolve their root with `Path.GetFullPath`. No other test resolves or remaps a Unix-style rooted literal; the rest are stored and compared as strings. `AGENTS.md` now requires this for paths a test resolves or remaps. Mutation check, restored afterward: remapping onto the old root failed both desktop remap tests.
+  - `dotnet build ReelRoulette.sln` has no warnings or errors. `npm run verify` passes after regenerating contracts. SystemChecks passes.
+  - Comments: the disabled tag migration dialog comment and the "removed, now X" tombstone comments in `MainWindow.axaml.cs` are gone. The legacy view-model comment in `FilterDialog.axaml.cs` had already been removed. The Linux packaged server smoke script no longer mentions the retired portable smoke.
+  - `docs/feature-migration.md`: the Tag-Catalog Migration Wizard entry had already been removed, so the FFmpeg log entry is §3.17 and names `/control/logs/server`. The header names the Operator page at `/operator`. §3.1, §3.2, §3.9, §3.11, §3.12, and §3.16 were rewritten in place with their numbers kept, by decision.
+  - `CONTEXT.md`: Android install needs HTTPS, and only the desktop resumes its event stream with the last event ID, confirmed from `app.js`, which opens a new `EventSource` with no last event ID. It already said Remove from Library is hidden.
+  - `docs/domain-inventory.md` lists the desktop flows that still run locally, split into server-owned work still on the desktop and client-owned flows local by design.
+  - The testing checklist's Windows first-start item now says a data folder from v0.12.0 or earlier that has no `library.db`.
+  - Released changelog sections, completed milestone entries, `docs/full-audit.md`, `docs/velopack-migration-audit.md`, and `docs/migration-cleanup.md` are left as written.
+- **Deferrals / Follow-ups**:
+  - Accounts stay with the Account Store work, in their own store outside `library.db`.
+
+### M10j6 - Remove library.json Library Support
+
+- **Status**: ✅ Complete
+- **Goal**: Remove `library.json` as a library format, the schema 1 catalog migration, and the side-file copy in v0.14.0, so the catalog store only opens or creates a schema version 2 `library.db`.
+- **Scope**:
+  - Depends on: Seed Tests Through SQL.
+  - Ships in v0.14.0.
+  - Startup does not look for `library.json` or `library.json.migrated`. Those files do not change open, refuse, or empty-catalog behavior. A missing `library.db` creates an empty catalog with SQL, not by parsing an empty document, whether or not `library.json` is present. `library.json` is left untouched. A healthy `library.db` opens. A corrupt `library.db` is quarantined and startup refuses with the same result it uses when those files are absent. They are not read, not a restore path, and not deleted. Startup and user-facing strings do not mention either file.
+  - Delete the JSON-to-SQLite importer, including `PrepareIncomingFromJson`. Tests build a catalog in `library.db`. They do not write `library.json` to create one.
+  - Also remove the schema 1 to schema 2 migration and the `presets.json` / `index.json` side-file copy. This overrides the earlier decision to keep the schema 1 migration: no release ever wrote a schema 1 catalog. Release builds before v0.13.0 had no catalog, and the first build after schema 1 was introduced already wrote schema version 2. That removes `LibraryCatalogStore.SideFiles.cs`, `PreviousSchemaVersion`, the schema 1 table list and health branch, the `side_files_copied` key handling, `AfterSideFileCopy`, the open result's migrated-schema flag, and the server's migrated-schema log line. A `library.db` at schema version 1 is treated like any other database with an unrecognized schema. An existing `side_files_copied` row in a catalog is left in place and not read. `presets.json`, `index.json`, and their `.migrated` copies are left untouched.
+  - Remove the desktop `LibraryArchive` JSON helpers: `LibraryJsonHasContent` in the overwrite check and `RetireUnmigratedLibraryJson` after import.
+  - Import already has no `library.json` path and no zip. A file that is not a library database is rejected. A `.db` import still remaps sources. Export and catalog backups stay on `library.db`.
+  - Update current-state docs and the testing checklist to say `library.json` library support is removed, including the checklist item that a v0.12.0 library migrates on first start.
+  - Add a Release Specific checklist item: "On Windows, first start with no data folder, and with a data folder holding only `library.json`, opens an empty library."
+- **Acceptance criteria**:
+  - Startup does not migrate `library.json` and does not rebuild a catalog from `library.json.migrated`.
+  - A missing `library.db` creates an empty healthy `library.db` at schema version 2 with SQL, whether or not `library.json` or `library.json.migrated` is present. Those files are left in place and are not read. No message mentions them.
+  - A healthy `library.db` opens. A corrupt `library.db` is quarantined and startup refuses the same way whether or not those JSON files are present, and it is not repaired from them.
+  - There is no JSON-to-SQLite importer and no `PrepareIncomingFromJson`. There is no schema 1 migration and no side-file copy. A missing database does not read `presets.json` or the thumbnail index, and those files are left in place.
+  - A schema version 1 `library.db` is quarantined and refused like any other unrecognized database.
+  - Desktop import does not read or rename `library.json`. A folder whose only library data is `library.json` does not ask for overwrite confirmation.
+  - There is no `library.json` import path and no deprecation message for that format. A `.db` import still remaps sources.
+  - A file that is not a library database is not imported, including a file that used to be a `library.json` archive. Import does not replace the live catalog.
+  - Startup messages and user-facing copy do not mention `library.json` or `library.json.migrated`.
+  - Docs and the testing checklist describe `library.json` library support as removed in v0.14.0.
+- **Verification evidence**:
+  - Before: `dotnet test ReelRoulette.sln` passed 441 (Core 274, Desktop 167). After: it passes 432 (Core 265, Desktop 167). Deleted: the 13 `library.json` migration tests, the 5 schema 1 and side-file tests, the loudness-error-from-JSON session test (session writes and the seeding helper's test already cover that column), and the refusal and empty-create tests that named `library.json`, which were rewritten.
+  - Added or rewritten: a missing database creates an empty healthy schema version 2 catalog (Uncategorized category, revision 0, no presets, no thumbnail columns, only the `revision` meta row) with nothing present, with `library.json`, with `library.json.migrated`, with both, and with those plus `presets.json` and `thumbnails/index.json` holding data, and every one of those files is byte-identical afterward with no `.migrated` file created. A healthy seeded catalog opens unchanged with all four files present. A file that is not a database, a database with corrupt row pages, and an unversioned database are each quarantined to `library.db.refused` and refused with the same message with and without the JSON files, which stay untouched. A schema version 1 database is quarantined and refused, leaves `presets.json` and `index.json` untouched, and is rejected by catalog inspection and by preparing an import. An existing `side_files_copied` row is kept and not read. A `library.json` document is not imported and leaves the live catalog. Desktop: a folder whose only library data is `library.json` does not count for overwrite confirmation, and import into it needs no confirmation, remaps sources, and leaves `library.json` byte-identical.
+  - Removing the side-file copy also removed the only row read on open, which was what quarantined a database with corrupt row pages. Approved fix: open reads the catalog's `revision` row after the schema check, and both corrupt-row-page cases fail without it. Stronger detection is the Catalog Corruption Detection Off the Startup Path backlog item.
+  - The empty-catalog create path did not use the before-publish or directory-sync hooks, so the open options and the server's thumbnail-folder open parameter were removed with no loss of coverage.
+  - Mutation checks, each restored afterward: removing the revision read failed 2 tests; moving `library.json` aside when creating a catalog failed 3; a JSON-specific refusal message failed 3; accepting schema version 1 failed 2; writing `side_files_copied` on create failed 5; renaming `library.json` after desktop import failed 1; counting `library.json` as library data failed 2.
+  - SystemChecks passes. `dotnet build ReelRoulette.sln` has no warnings or errors.
+  - Linux spot check: the built server, run from an isolated data, config, and XDG folder holding only `library.json`, started with empty library stats and sources, created `library.db` at user version 2, left `library.json` byte-identical with no `.migrated` file, and logged nothing about `library.json`. The server was stopped by its own PID and the folder removed.
+  - Docs: `CONTEXT.md`, `docs/architecture.md`, `docs/dev-setup.md`, and `docs/domain-inventory.md` say `library.json` library support is removed in v0.14.0. `docs/feature-migration.md` says a leftover `library.json` does not count for overwrite confirmation and is left in place. The testing checklist has the Windows first-start item under Release Specific. It no longer had an item saying a v0.12.0 library migrates on first start; the last checklist reset had cleared it.
+- **Deferrals / Follow-ups**:
+  - Release notes for v0.14.0 must say: users on v0.12.0 or earlier must start v0.13.0 once before updating to v0.14.0, because v0.14.0 does not convert `library.json`.
+  - Release notes for v0.14.0 must give the recovery steps for anyone who updated straight from v0.12.0 and sees an empty library: delete the new `library.db`, start v0.13.0 once to convert `library.json`, then update to v0.14.0 again.
+  - Scrubbing every remaining `library.json` mention from product code, comments, user-facing copy, tests, and current-state docs is the next milestone.
+  - Operator export and import stay with Operator Library Catalog Transfer. That transfer is a `library.db` checkpoint.
+  - Accounts stay with the Account Store work, in their own store outside `library.db`.
+  - Stronger corruption detection that does not add to startup time is the Catalog Corruption Detection Off the Startup Path backlog item.
+  - The empty-catalog temp file is still named `library.db.migrating`; the scrub milestone renames it.
+
+### M10j5 - Seed Tests Through SQL
+
+- **Status**: ✅ Complete
+- **Goal**: Tests build their catalog in `library.db` directly, so removing `library.json` support does not touch what they check.
+- **Scope**:
+  - Ships in v0.14.0. Test-only. No product change.
+  - Measured during v0.14.0 planning: with startup `library.json` migration switched off, 81 tests fail because they seed through `library.json`. By class: `LibraryOperationsServiceTests` 23, `LibraryCatalogStoreTests` 21, `RefreshPipelineServiceTests` 17, `LibraryPlaybackServiceTests` 12, `LibraryArchiveMigrationTests` 4, `LibraryListQueryTests` 2, `LibraryCatalogSessionTests` 1, `PlayItemOrchestrationTests` 1.
+  - Add one test seeding helper that creates a schema version 2 catalog and writes sources, categories, tags, items, item tags, and presets with SQL.
+  - Move every test that seeds through `library.json` to that helper, except tests whose subject is `library.json` migration or recognition. Those stay unchanged until the removal milestone deletes them.
+  - Each moved test checks the same thing as before.
+- **Acceptance criteria**:
+  - With startup `library.json` migration switched off on a scratch copy, the only failing tests are those whose subject is `library.json` migration or recognition.
+  - No test outside that set writes `library.json`.
+  - The test count and pass count are unchanged on the real code.
+- **Verification evidence**:
+  - Before: `dotnet test ReelRoulette.sln` passed 437 (Core 270, Desktop 167). With startup migration switched off on a scratch copy, 83 failed, not the 81 measured during planning: `LibraryOperationsServiceTests` had 24 and `LibraryPlaybackServiceTests` 13.
+  - After: `dotnet test ReelRoulette.sln` passes 441 (Core 274, Desktop 167). The four added tests cover the seeding helper: its case fold matches the catalog store's, its schema (tables, columns with types, indexes, and user version) matches a catalog the store creates, and a seeded catalog opens healthy with every column read back. Changing a column type, dropping an index, adding a column, or changing the user version in the helper each fails the schema test. Every existing test still runs and passes.
+  - After, with migration switched off on a scratch copy, 15 fail, each with `library.json` migration or recognition as its subject: 13 `LibraryCatalogStoreTests` (`Open_MigratesLibraryJson_…`, `Open_BeforePublish_…`, `Open_DirectorySyncFails_…`, `Open_ExistingSnapshot_…`, `Open_PartialDatabase_…`, `Open_HealthyDatabase_DoesNotReadEitherJsonFile`, `Open_TimeSpanDuration_…`, `Open_BlankCategoryId_…`, `Open_DuplicateTagNames_…`, `Open_ItemWithoutFullPath_…`, `Open_MissingFingerprintStatus_…`, `Open_MissingUncategorizedCategory_…`, `Open_SourceMissingIdOrRootPath_…`), `LibraryCatalogSessionTests.Open_StoresLoudnessErrorFromLibraryJson`, and desktop `Import_RejectsALibraryJsonDocument_…`.
+  - The only tests that still write `library.json` are those 15 and tests that already pass with migration off and test recognition (`Open_CorruptRowPage_…`, `Open_UnversionedDatabaseWithoutJson_…`, `Open_MigratedSnapshotOnly_…`, `InspectCatalogFile_RejectsALibraryJsonDocument`, desktop `LibraryExistsWithContent_IncludesUnmigratedLibraryJson_…` and `Import_UnmigratedLibraryJson_…`).
+  - Same data proven: on scratch copies, a temporary hook in `LibraryCatalogStore.Open` recorded every test's first-open catalog (sources, categories, tags, items with all columns, presets) before and after the move. All 160 shared snapshots match except one `LastWriteTimeUtc` that the test reads from a file it creates at run time.
+  - Mutation check: a seeding helper that dropped favorites, blacklists, play counts, and item tags failed 19 moved tests and the helper's own test.
+  - Approved addition, requested when the plan was confirmed: the services that fell back to opening their own catalog from a data folder (`LibraryOperationsService`, `LibraryPlaybackService`, `RefreshPipelineService`, `ServerStateService`) no longer do. The tests pass the catalog they seeded, and the server already passed its one catalog to each, so runtime behavior is unchanged. `ServerDataPathsTests` resolves all four services from the server's composition. SystemChecks passes.
+  - Two replace-recovery tests prepared their incoming catalog from JSON and now prepare it from a seeded database file. One startup test no longer asserts that `library.json.migrated` exists; it still checks that sources load from the catalog. The importer dropped the orchestration test's source because it had no root path, so its seed has no source row.
+- **Deferrals / Follow-ups**:
+  - `ServerStateService` keeps an optional catalog. SystemChecks and 38 test constructions use it without one, a mode that touches no disk and is not a data-folder fallback.
+  - The 15 tests above stay until the removal milestone deletes or rewrites them, and their names, together with the "Legacy" and "LibraryJson" names of moved tests, are left for the scrub milestone.
+
+### M10j4 - Document Unlisted Server Routes in OpenAPI
+
+- **Status**: ✅ Complete
+- **Goal**: Every route the server serves to clients is in `shared/api/openapi.yaml`.
+- **Scope**:
+  - Ships in v0.14.0. Additive contract change in its own slice.
+  - The server serves four routes that the spec does not list: `GET` and `POST /api/backup/settings`, `GET /api/library/stats`, `GET` and `POST /api/web-runtime/settings`, and `GET` and `POST /control/startup`. The desktop calls the first three, and the Operator calls the web-runtime and startup routes.
+  - Add them to the spec with the request and response shapes the server returns today, and regenerate the WebUI types.
+  - `/` and `/runtime-config.json` stay out of the spec. `/health` was already in the spec and stays there.
+  - No server or client behavior changes.
+  - Scope expanded with approval: add `forceRescanLoudness` and `forceRescanDuration`, which the server already returns, to `RefreshSettingsSnapshot`, and remove the milestone ID from the spec's `info.description`.
+- **Acceptance criteria**:
+  - Each listed route and method is in the spec, and its schema matches what the server returns.
+  - The spec's paths and the server's mapped API and control routes match, apart from `/` and `/runtime-config.json`.
+  - `npm run verify:contracts` passes after regeneration.
+- **Verification evidence**:
+  - Path diff before the change, from the `MapGet` and `MapPost` literals in `ServerHostComposition.cs` and `ServerApp/Program.cs` against the spec's path and method pairs: the spec lacked exactly the seven listed operations, the server alone had `GET /` and `GET /runtime-config.json`, and the spec had nothing the server does not serve. The Operator page is mapped from a configured path, not a literal, and is also left out.
+  - Added the seven operations and the `BackupSettingsSnapshot`, `WebRuntimeSettingsSnapshot`, `LibraryStatsResponse`, `LibraryGlobalStatsResponse`, `SourceStatsResponse`, `StartupLaunchStatus`, `StartupLaunchUpdateRequest`, and `StartupLaunchResult` schemas. Response fields are required, with `sharedToken`, `displayName`, and `averageDurationSeconds` nullable. `StartupLaunchUpdateRequest` requires no fields; the backup and web runtime settings `POST` bodies take the full snapshot, using the same schema as their responses. `POST /control/startup` lists `409` with the same body, and both startup operations list `401` and `403` like the other control routes. The regenerated WebUI types only gained lines.
+  - `OpenApiRouteContractTests.Spec_ListsEveryMappedApiAndControlRoute` compares the scanned route mappings with the spec. Property-name shape tests serialize real `CoreSettingsService` get and update results for backup, web runtime, and refresh settings, and `LibraryOperationsService.GetLibraryStats` with a source that has no display name and a source with no items, using ASP.NET's default minimal API JSON options, and require the property names to equal the spec schema's, nested schemas included. They check property names only, not types, nullability, or required lists. `/control/startup` has no automated shape test; the captured responses below cover it. Against the HEAD spec, all five tests failed and the route test named exactly the seven missing operations. Removing `averageDurationSeconds` from `SourceStatsResponse` failed only the stats test, and adding an unserved `GET /api/bogus` failed only the route test. All passed again once the spec was restored.
+  - `/control/startup` responses were captured from the Debug server started with `REELROULETTE_DATA_DIR`, `XDG_CONFIG_HOME`, and `XDG_DATA_HOME` in a temporary folder on a random localhost port, then stopped by PID and removed. Run through `dotnet`, `GET` returned `200 {"supported":true,"launchServerOnStartup":false,"message":"…"}` and `POST` returned `409 {"accepted":false,"supported":true,"launchServerOnStartup":false,"message":"…"}`. Run as the app binary, `POST` with `true` returned `200` with `accepted: true` and wrote the autostart entry under the temporary `XDG_CONFIG_HOME`, the following `GET` reported it on, and `POST` with `false` removed it.
+  - `dotnet build ReelRoulette.sln` passed with 0 warnings. `dotnet test ReelRoulette.sln` passed: Core 270 (+5), Desktop 167. `npm run verify` passed, including `verify:contracts`, with 170 tests. `dotnet run --project src/core/ReelRoulette.Core.SystemChecks -- --verbose` passed.
+  - Docs: `docs/api.md` already listed every route. It now says which server routes the spec leaves out, lists the refresh settings fields, and describes the `/control/startup` fields and `409`.
+- **Deferrals / Follow-ups**:
+  - A forced duration or loudness rescan resets the fingerprint parallelism setting to its default -> Post-Migration Fixes.
+
+### M10j3 - Remove the Preset Match Route
+
+- **Status**: ✅ Complete
+- **Goal**: Remove `POST /api/presets/match`, which no client calls, and lock the desktop and WebUI preset comparisons to one shared fixture.
+- **Scope**:
+  - Ships in v0.14.0. Contract change in its own slice.
+  - The desktop `CoreServerApiClient.MatchPresetAsync` is the route's only client method, and only a test calls it. The desktop compares presets with `LibraryPresetSelection.FiltersEqual`, and the WebUI with `filterStatesEqualForPresetMatch`. Neither asks the server.
+  - Remove the route, `PresetMatchRequest` and `PresetMatchResponse` from `ApiContracts.cs` and `shared/api/openapi.yaml`, the regenerated WebUI types, the desktop client method and its request and response types, and the tests that call them.
+  - Remove the server-side preset equality that only the route uses: `LibraryPlaybackService.TryMatchPreset`, `ResolvePresetByFilterState`, `ParseFilterState`, `FilterStateProjection`, and the token and value helpers only `ParseFilterState` calls.
+  - `POST /api/random` still resolves `presetId` by name.
+  - Add a shared fixture under `shared/fixtures/` listing pairs of filter states with whether they are the same preset, covering at least an unset global match mode against an explicit AND, per-category local match modes, include and exclude tags, source inclusion, media type, audio filter, duration bounds, and a saved filter that still carries `tagMatchMode`. Desktop and WebUI preset-equality tests both run against it.
+- **Acceptance criteria**:
+  - The route, its contract types, and its generated WebUI types are gone, and `npm run verify:contracts` passes.
+  - The server has no preset equality code. `POST /api/random` with `presetId` gives the same result as before.
+  - Desktop and WebUI preset-equality tests read the same fixture, and changing an expected result in it fails both.
+  - The desktop filter dialog and library preset list, and the WebUI filter dialog preset heading, behave as before.
+- **Verification evidence**:
+  - Measured before planning with throwaway tests: both clients agreed on 15 of 18 saved-filter pairs. The desktop alone treated a `null` tag list and an empty `categoryLocalMatchModes` as different from none, and threw on a numeric duration. The removed server equality compared tags as case-insensitive sets, which neither client did.
+  - Scope expanded with approval: both clients now compare included and excluded tags as case-insensitive sets and source IDs as case-sensitive sets that ignore order. Category mode maps compare by key regardless of key order, since an older saved preset can list categories in a different order than a filter built after the categories were reordered. The desktop treats a missing tag or source list as empty, ignores empty tag and source names, and treats an empty category mode map as none, matching the WebUI. Tag matching is identical on both clients only for ASCII names, since JavaScript `toUpperCase` and .NET `ToUpperInvariant` differ on some non-ASCII letters such as `ß`; both comparisons and `docs/api.md` say so.
+  - `shared/fixtures/preset-filter-equality.json` has 37 entries, checked both ways round on each client. The category mode key order entry was added before its fix and failed on both the desktop and the WebUI (1 of 36 each) against the comparison without it. Against the old comparison code, 8 desktop and 5 WebUI entries failed, all of them the order, case, duplicate, `null` list, and empty map cases this change targets. Flipping `selected tag order is ignored` to `false` failed exactly that entry on both the desktop and the WebUI (1 of 35 each, before the category entry was added), and both passed again once it was restored. The `empty tag and source names are ignored` entry failed on the desktop alone (1 of 37) before the desktop dropped empty names, and passes on both now.
+  - Removed `LibraryPlaybackService.TryMatchPreset`, `ResolvePresetByFilterState`, `ParseFilterState`, `FilterStateProjection`, and their token, duration, map, and array helpers. `ResolvePreset` stays. No test sent `presetId` without an inline filter, so `TrySelectRandom_ResolvesPresetIdByNameWhenNoFilterStateIsSent` was added: it resolves a differently cased preset name to that preset's filter and returns 404 for an unknown name. It passed against the HEAD server code and passes after the removal.
+  - Removed the client and server tests that called the route or `TryMatchPreset`. The existing desktop and WebUI preset-selection tests still pass unchanged.
+  - `dotnet build ReelRoulette.sln` passed with 0 warnings. `dotnet test ReelRoulette.sln` passed: Core 265, Desktop 167 (+37 fixture cases). `npm run verify` passed, including `verify:contracts`, with 170 tests (+37 fixture cases). `dotnet run --project src/core/ReelRoulette.Core.SystemChecks -- --verbose` passed.
+  - Docs: `docs/api.md` no longer lists the route and describes the client comparison. `CONTEXT.md` and the `docs/migration-cleanup.md` status line are updated. Added `[Unreleased]` Changed and Removed entries and a Release Specific checklist check.
+- **Deferrals / Follow-ups**:
+  - The desktop drops a saved preset with a numeric duration to the default filter -> Post-Migration Fixes.
+
+### M10j2 - Dead Code Removal Without Contract Changes
+
+- **Status**: ✅ Complete
+- **Goal**: Remove code that nothing calls at runtime, on every surface, without changing the API contract or user-visible behavior.
+- **Scope**:
+  - Ships in v0.14.0. Code that only tests call counts as unused. Test hooks that hold or observe a production code path stay (`Hold*` / `*Entered` and `CancelRunsForShutdown` in `RefreshPipelineService`, `LibraryCatalogBackup.WaitForPending`, `ClientLogRelay.DisableForTests`, `AppDataManager.UseDirectoryForTests`).
+  - The WebUI `events/sseClient.ts` (`createSseClient`) and `buildEventsUrl` in `events/eventEnvelope.ts` stay, although only their tests call them today: the client event efficiency milestone wires them into the WebUI for reconnect resume.
+  - Found by the v0.14.0 planning report: the Roslyn unused-member analyzers (IDE0051, IDE0052, IDE0060) run on a copy of the repo, TypeScript `--noUnusedLocals --checkJs`, and caller searches. Removing one item can leave others unused, so re-run those checks until they report nothing.
+  - Three slices, each verified on its own:
+  - Desktop slice:
+    - The never-constructed `MigrationDialog` (`MigrationDialog.axaml`, `MigrationDialog.axaml.cs`, `MigrationTagViewModel`).
+    - Handlers for the removed History, Recently Played, Favorites, and Blacklist list views, which nothing wires: `HistoryPlayAgain_Click`, `RecentlyPlayedPlay_Click`, `RecentlyPlayedShowInFileManager_Click`, `RecentlyPlayedRemove_Click`, `BlacklistPlay_Click`, `BlacklistRemove_Click`, `BlacklistShowInFileManager_Click`, `FavoritesPlay_Click`, `FavoritesRemove_Click`, `FavoritesShowInFileManager_Click`, and `BlacklistCurrentVideo_Click`.
+    - `MainWindow` members with no caller: `PlayMedia(string, bool)`, `RemoveLibraryItemAsync`, `BeginLibraryArchiveOperationUI`, `EndLibraryArchiveOperationUI`, `BlacklistCurrentVideo`, `BuildGridRowModels`, `ContainsTagCaseInsensitive`, the `GetAutoTagScopeItems` stub that always returns an empty list, the `persistLibrary` parameter of `ApplyRemoteItemStateProjection`, and the unread `_rng` and `_videoExtensions` fields.
+    - The unread `EditTagDialog._categories` field and the unused `TagViewModel` class in `FilterDialog.axaml.cs`.
+    - `CoreServerApiClient.AppendClientLogAsync`, `GetVersionAsync`, and `TryReadJsonError`, and `TagSaveApply.EchoesFor`, which nothing calls. `LibraryConnectReads`, which only its test reads.
+    - The Auto Tag dialog's local matching fallback: `ItemMatchesTag` and the scan branch that runs it when no API scan is passed. Production always passes the API scan, so this branch is a client-local fallback that never runs. Found by the efficiency and divergence report.
+    - `LibraryPanelSort.Apply` and its file name comparer, an in-memory client sort that only tests call. The server sorts the list query. `IsDefaultDescendingForSortMode` and `GetSortDirectionLabel` stay: the sort control uses them. Found by the efficiency and divergence report.
+    - Hide the desktop controls that cannot work because their server routes do not exist: **Rename** and **Remove** in the Manage Sources dialog, which only show "API-required and not available" after their dialogs, and **Remove from Library** in the grid's context menu, which shows its confirmation and then the same message. Found by the planned-milestones audit. They stay hidden until Operator Source and Item Management adds the routes. This is the one user-visible change in this milestone. The handlers and dialogs behind them stay: Remove from Library comes back on the new item route, and the Manage Sources dialog is replaced by Desktop Source Management Link.
+  - Core and server slice:
+    - `State/RuntimeStateServices.cs` (randomization, filter-session, and playback-session state services), the `IPathResolver` and `IBackgroundTaskScheduler` interfaces, and `CoreFilterState` / `CoreFilterPreset` with the `CoreVerification.VerifyDtoMappingRules` check that only exists to construct them. Drop the placeholder list from the SystemChecks verbose output.
+    - `LibraryCatalogStore.DatabaseHasContent` (no caller) and `IsUsableDatabase` (tests only). `LibraryCatalogSession.ReplaceItemTags` (no caller), and `AddItemTags`, `RemoveItemTags`, and `SetPlayback`, which only tests call. Tests that seed through them move to the SQL seeding helper from the test seeding milestone, or to the production write they stand in for.
+    - The full-catalog read on every open: `LibraryCatalogStore.Open` builds `LibraryCatalogOpenResult.Catalog`, and only tests read it. Measured on a 48,938-item catalog at about 360-450 ms and about 100 MB of allocations at each server start. Tests read the snapshot through `LibraryCatalogStore.Read` instead.
+    - `ServerSessionStore.GetActiveSessionCount`, `ServerStateService.GetSubscriberCount`, `MediaPlayableExtensions.IsPhotoExtension`, `CoreSettingsService.ReloadFromDisk`, `FilterStateProjection.ToModel`, and `RefreshPipelineService.GetSettings`, `GetWebRuntimeSettings`, and `UpdateWebRuntimeSettings`. Keep `RefreshPipelineService.UpdateSettings` for the auto-refresh reschedule fix in the post-migration fixes milestone.
+    - The unread `CoreSettingsService._logger` and `RefreshPipelineService.JsonOptions` fields.
+    - The `catalog ?? LibraryCatalogHost.Open(...)` fallbacks in `LibraryOperationsService`, `LibraryPlaybackService`, `RefreshPipelineService`, and `ServerStateService` are reached only from tests. Remove them if the server data folder override leaves no test that needs them.
+  - WebUI and scripts slice:
+    - The unread `filterActiveTab` in `app.js`.
+    - The flat-tag branch in the WebUI filter Tags tab (`legacyFlat` in `app.js`), which renders tags when the catalog has no categories. The server always keeps Uncategorized and no longer has a no-categories tag path, so this branch cannot be reached.
+    - `tools/scripts/publish-web.ps1`, which writes a `.web-deploy` folder that nothing reads, and `tools/scripts/verify-web.ps1`, which only runs `npm install` and `npm run verify`. Remove their references in `docs/dev-setup.md` and `docs/domain-inventory.md`.
+- **Acceptance criteria**:
+  - Every item listed above is gone, or the evidence says why it stayed.
+  - The unused-member analyzers and TypeScript unused-locals checks report nothing new for product code.
+  - `LibraryCatalogStore.Open` does not read the full catalog, and server startup does not build a catalog snapshot.
+  - API routes, OpenAPI, generated WebUI types, desktop and WebUI behavior, and the Operator are unchanged, except that the desktop no longer shows Manage Sources **Rename** and **Remove** or the grid's **Remove from Library**.
+  - The rest of the Manage Sources dialog and the grid context menu work as before.
+  - Test hooks listed in scope still exist and their tests pass.
+  - `events/sseClient.ts` and `buildEventsUrl` still exist and their tests pass.
+  - The desktop Auto Tag scan has no local matching path, and the desktop has no client-side list sort.
+- **Verification evidence**:
+  - Unused-member analyzers (IDE0051, IDE0052, IDE0060, plus CS0169 and CS0649) on a copy of the working tree. Before: 15 hits, all on the list above except one pre-existing IDE0060 on the `cancellationToken` parameter of `AvaloniaTrayHostUi.RequestUiExitAsync`, which was left alone because it is not dead code on this list. After the desktop slice: 4 (that one plus three server items). After the core and server slice: only that one remains. TypeScript `tsc --noUnusedLocals --noUnusedParameters --checkJs --allowJs`: before, `filterActiveTab` only; after the WebUI slice, nothing.
+  - Removals left more items unused, and those went too. Desktop: `RemoveFromBlacklistAsync`, `PlayFromPath`, the archive-operation status fields, the always-hidden status-bar progress bar, and the Auto Tag dialog's `ItemHasTag`, display-path helper, catalog, and scope-items arguments. Core and server: `LibraryCatalogSession.ItemExists`, `CoreSettingsService.ApplyLoadedSettings` and `_serverRuntimeOptions`, and the `CoreSettingsService` constructor's logger parameter, which only fed the removed field.
+  - Searches for callers confirmed the public members the analyzers cannot see. `FilterStateProjection.ToModel` is gone; the class stays for the preset match route removal.
+  - Catalog open: `LibraryCatalogOpenResult.Catalog` is gone, and `Open` no longer calls `Read`. On a synthetic 50,000-item catalog, `Open` went from a median of 150 ms with 44.5 MB allocated (HEAD) to 0.8 ms with almost nothing allocated (7 runs each). Tests read the snapshot through `LibraryCatalogStore.Read` on the opened database. A check confirmed no test writes between its open and that read.
+  - Tests that used `AddItemTags`, `RemoveItemTags`, or `SetPlayback` now use `ApplyItemTagEdits` and `RecordPlayback`. The refresh hold test checks a play count of 1 from a seeded 0 instead of an explicit 3. `AddItemTags_MissingItem_CreatesNothing` was deleted because it covered only the removed method. `ApplyItemTagEdits` still adds the catalog tag for a missing item. The backup test checks `InspectCatalogFile` instead of `IsUsableDatabase`.
+  - Met differently: the `catalog ?? LibraryCatalogHost.Open(...)` fallbacks in `LibraryOperationsService`, `LibraryPlaybackService`, `RefreshPipelineService`, and `ServerStateService` stay. About 35 tests build these services from a data folder alone and rely on them.
+  - The test hooks listed in scope, `events/sseClient.ts`, and `buildEventsUrl` still exist, and their tests pass. `shared/api/openapi.yaml`, `ApiContracts.cs`, and `openapi.generated.ts` are unchanged, and `npm run verify:contracts` passes.
+  - Hidden controls use `IsVisible="False"`, and their handlers and dialogs stay. A new headless test opens Manage Sources with one source and checks that Rename and Remove are not shown while Refresh and Find Duplicates are. It failed with Rename made visible. The test classes now share one headless session. `MainWindow` cannot be built in a headless test without side effects: its constructor loads native LibVLC, and its `Loaded` handler starts the core reconnect loop and the update service. So the grid menu gets a manual spot check instead of a test.
+  - Grid menu spot check (manual, desktop app): PASS. **Remove from Library** is hidden from the grid menu with no doubled separator, and the other menu items work. Manage Sources shows the enable toggle, **Refresh**, and **Find Duplicates...** without **Rename** or **Remove**.
+  - `dotnet build ReelRoulette.sln` passed with 0 warnings. `dotnet test ReelRoulette.sln` passed: Core 273 (one deleted test), Desktop 130 (−1 `LibraryConnectReads`, −7 list-sort tests, +1 Manage Sources). `npm run verify` passed with 133 tests. `dotnet run --project src/core/ReelRoulette.Core.SystemChecks -- --verbose` passed, with no placeholder list.
+  - Docs: `docs/dev-setup.md`, `docs/domain-inventory.md`, and `CONTEXT.md` no longer name the removed scripts. `docs/feature-migration.md` drops the migration wizard and notes the hidden controls. `CONTEXT.md` and `docs/domain-inventory.md` note that opening the catalog does not read it whole. Added an `[Unreleased]` Changed entry and a Release Specific checklist check for the hidden controls.
+- **Deferrals / Follow-ups**:
+  - Unused routes and contract types are the preset match route removal milestone.
+  - Make the catalog a required constructor argument of `LibraryOperationsService`, `LibraryPlaybackService`, `RefreshPipelineService`, and `ServerStateService`, and drop their `catalog ?? LibraryCatalogHost.Open(...)` fallbacks, once the tests that build them from a data folder are rewritten -> the test seeding milestone or later.
+  - The pre-existing unused `cancellationToken` parameter of `AvaloniaTrayHostUi.RequestUiExitAsync` -> backlog; not on this milestone's list.
+
+### M10j1 - Server Data Folder Override
+
+- **Status**: ✅ Complete
+- **Goal**: Let verification scripts and tests point the server at a temporary data folder on every OS, so they never read or write the developer's real settings, catalog, or thumbnails.
+- **Scope**:
+  - This is the first milestone in the v0.14.0 release. It comes first so later milestones can verify the server on Windows without touching real settings.
+  - Why: `verify-web-deploy.ps1` isolates data by setting `APPDATA` on Windows and `XDG_CONFIG_HOME` on Linux. Setting `APPDATA` does not redirect `Environment.GetFolderPath` on Windows, so that script currently runs against real settings there. On Linux it does not set `XDG_DATA_HOME`, so thumbnails still resolve under the real `LocalApplicationData` folder. `set-release-version.ps1` runs that script by default.
+  - Add one server helper that reads an environment variable such as `REELROULETTE_DATA_DIR` and otherwise falls back to the current folder lookup (`ApplicationData/ReelRoulette` for data, `LocalApplicationData/ReelRoulette/thumbnails` for thumbnails). With the override set, data lives in the override folder and thumbnails under `<override>/thumbnails`.
+  - Use that helper at every place the server and ServerApp resolve their data or thumbnail folder: `ServerHostComposition` (three places), `CoreSettingsService`, `LibraryPlaybackService`, `RefreshPipelineService` (data and thumbnail folders), `ServerLogService`, `ServerStateService`, `LibraryOperationsService`, `LibraryCatalogHost` (thumbnail folder), and the ServerApp `Program.cs` data folder lookup. Explicit constructor path overrides keep precedence.
+  - `verify-web-deploy.ps1` sets the override to its temporary folder on every OS, in place of the `APPDATA` / `XDG_CONFIG_HOME` split.
+  - Remove the `APPDATA` scope (`AppDataScope`) in `RefreshPipelineServiceTests`, which has no effect on `Environment.GetFolderPath` on Windows. Those tests pass their temporary folder explicitly.
+  - Tests that construct `ServerStateService` pass a data folder override instead of falling back to the real folder.
+  - Also check `ReelRoulette.Core.SystemChecks`: it constructs `ServerStateService()` with no override, which creates the real data folder if it is missing.
+  - Desktop data folder resolution is out of scope.
+  - Add a Release Specific checklist item: "`verify-web-deploy.ps1` on Windows leaves the real data and thumbnail folders unchanged."
+- **Acceptance criteria**:
+  - With the environment variable set, the server reads and writes settings, catalog, backups, logs, and thumbnails only under that folder, with thumbnails under `<override>/thumbnails`.
+  - With the variable unset, the server resolves the same folders as before.
+  - No server or ServerApp code outside the helper calls `Environment.GetFolderPath` for its data or thumbnail folder.
+  - `verify-web-deploy.ps1` leaves the real `ApplicationData/ReelRoulette` and `LocalApplicationData/ReelRoulette` folders untouched on Windows and Linux.
+  - No test sets `APPDATA` to isolate data, and every test that constructs `ServerStateService` passes an override.
+- **Verification evidence**:
+  - Added `ServerDataPaths` in the server project. Every server and ServerApp data and thumbnail lookup goes through it. `git grep GetFolderPath` in `ReelRoulette.Server` and `ReelRoulette.ServerApp` finds only the helper and the unrelated XDG autostart and AppImage `UserProfile` lookups.
+  - Met differently: `ServerStateService` with no override and no catalog touches no folder, so tests that construct it without an override are safe. Core verification no longer creates the real data folder.
+  - `Core.Tests` now has a test-isolation module initializer. It sets `REELROULETTE_DATA_DIR` to a temporary folder for the run and, on Linux, points `XDG_CONFIG_HOME` and `XDG_DATA_HOME` at temporary folders it creates first, because `GetFolderPath` returns an empty path for an XDG folder that does not exist. `AppDataScope` is gone from `RefreshPipelineServiceTests`.
+  - Helper tests cover the unset, blank, set, and relative override cases and the environment variable read. A composition test builds `AddReelRouletteServer()` with the override, resolves every server service, saves settings, writes a log line, and starts and stops the hosted services. It checks that `library.db`, `core-settings.json`, a settings backup, and `last.log` are under the override, and that the Linux XDG folders contain no `ReelRoulette` folder.
+  - The composition test was confirmed to fail when `ServerLogService` or `ServerHostComposition` bypasses the helper, and when the thumbnail folder lookup does (caught by the XDG check).
+  - `verify-web-deploy.ps1` sets the override on every OS and drops `APPDATA`. Rather than replacing the XDG variables, on Linux it keeps both `XDG_CONFIG_HOME` and `XDG_DATA_HOME` alongside the override, as the verification-script rules in `AGENTS.md` require, so desktop integration such as autostart and menu entries stays isolated too. `verify-linux-packaged-server-smoke.sh` also sets the override, keeping its XDG variables, and checks that `last.log`, `library.db`, and `core-settings.json` are under the override and that the isolated XDG config folder contains nothing named `ReelRoulette`. It passed, and a copy with the override removed failed on the missing `last.log`.
+  - `verify-web-deploy.ps1` now checks that `last.log`, `library.db`, and `core-settings.json` are under the override and, on Linux, that the isolated XDG folders contain no `ReelRoulette` folder.
+  - One Linux run of `pwsh ./tools/scripts/verify-web-deploy.ps1` passed with no other ReelRoulette server running (checked by port and process list). Names, sizes, and modification times under `~/.config/ReelRoulette` and `~/.local/share/ReelRoulette` (48,973 entries) were identical before and after the run. Port 51312 was free afterward, and the temporary folder was removed.
+  - `dotnet build ReelRoulette.sln` passed with 0 warnings. `dotnet test ReelRoulette.sln` passed (Core 274, Desktop 137). `dotnet run --project src/core/ReelRoulette.Core.SystemChecks -- --verbose` passed.
+  - The Windows run is the Release Specific checklist item, run in the pre-release pass.
+  - Docs: `docs/dev-setup.md` describes the override, the core test isolation, and the verification-script rules it satisfies. Updated `CONTEXT.md`, the testing checklist (the automated `verify-web-deploy.ps1` check is no longer skipped, plus the Release Specific Windows check), and `CHANGELOG.md`.
+- **Deferrals / Follow-ups**:
+  - Desktop data folder resolution stays out of scope. Desktop library import writes `library.db` into the server data folder it resolves itself, so it does not follow a server started with `REELROULETTE_DATA_DIR`.
+
+### M10i20 - Remove Client-Authority Sync Routes
+
+- **Status**: ✅ Complete
+- **Goal**: Remove the unused client-authority tag sync routes and the unused `tagMatchMode` filter field so v0.13.0 no longer offers a client-held catalog sync, after checking whether a v0.12.0 client still needs either.
+- **Scope**:
+  - Depends on: dropping the unread server tag and item cache.
+  - This is the last milestone in the v0.13.0 release.
+  - Before removal, check at the `v0.12.0` tag whether a v0.12.0 desktop or WebUI posted to `POST /api/tag-editor/sync-catalog` or `POST /api/tag-editor/sync-item-tags`, and whether the version/capability gate lets a v0.12.0 client connect to a v0.13.0 server. If both are true, stop. This milestone is a compatibility decision to bring back, and the routes stay until that decision.
+  - Remove `POST /api/tag-editor/sync-catalog` and `POST /api/tag-editor/sync-item-tags`.
+  - Remove their OpenAPI request schemas and the generated WebUI types for those routes. The shared tag snapshot schemas stay.
+  - Remove the desktop client methods and request types for those routes.
+  - Remove the server operations methods and session methods that exist for those routes, and the tests that call them.
+  - WebUI tag save still goes through apply-item-tags after the regenerated types.
+  - Current-state docs and the testing checklist no longer describe these routes. Completed milestone entries stay as written.
+  - Added during planning: remove `tagMatchMode` from the filter contract. The same `v0.12.0` check covers it, since removing a filter field can affect a v0.12.0 client the same way removing a route can. OpenAPI types `filterState` as a free-form object and never named the field, so the OpenAPI document and generated WebUI types do not change for it. Remove it from the server and Core filter models, the server filter parser and preset-match projection, the desktop `FilterState`, the hidden legacy radio buttons in the desktop filter dialog, the WebUI filter state, and the WebUI code that copies the global match selector into it.
+  - Added during planning: the desktop main-window filter summary says "all" or "any" for included tags from the global match mode, not `tagMatchMode`. It used to say "all" for both global AND and global OR.
+  - Added during planning: preset matching ignores `tagMatchMode` in saved filter text on the server, the desktop, and the WebUI, so a desktop preset and a WebUI preset with the same filter match. Saved presets are not rewritten.
+  - Added during planning: remove `LibraryCatalogSession.ReplaceTagCatalog`, which had no production caller.
+  - Added during manual verification: the desktop filter dialog enables **Update Preset** from the same comparison as its `Preset:` heading, including the global match mode. It used to depend on a flag that only a control change set, so reopening the dialog on a starred preset showed the `*` with Update disabled. Apply still compares with the filter the dialog opened with. The WebUI filter dialog has no Update Preset gate, so that part does not change there.
+  - Added during manual verification: preset matching on the server, the desktop, and the WebUI treats an unset global match mode as AND, the same as filtering does. Switching the global mode away and back then clears the `*`, and a preset saved with the mode unset matches the same filter with an explicit AND in either app. The desktop filter dialog's own preset checks, including on Apply, use the same desktop comparison, and its Apply button compares the working filter with the filter it opened with the same way, so a toggle away and back leaves Apply disabled. Saved presets are not rewritten. This predates this milestone.
+  - Added during review: the WebUI filter dialog's **Apply** `*` compares the working filter with the filter it opened with through the same preset comparison, so a toggle away and back from an unset global mode clears it, as on the desktop. The desktop dialog's pending check compares its preset list by name and order and each preset's filter with `FiltersEqual`, so updating a preset to a filter that means the same as before leaves Apply disabled. The desktop filter dialog has no raw JSON filter comparison left. `LibraryPresetSelection.SameFilterSnapshot`, a raw JSON filter comparison that only its own test called, is removed with that test.
+  - Added during manual verification: desktop tests use a test-only settings directory and turn off the server log relay, so they do not touch the developer's settings or a running server on Linux or Windows. Filter dialog tests drive the real dialog with `Avalonia.Headless` in the desktop test project only.
+- **Acceptance criteria**:
+  - The `v0.12.0` tag check is recorded. Removal proceeds when a v0.12.0 desktop or WebUI did not post to either route, or when the version/capability gate does not let a v0.12.0 client connect to a v0.13.0 server.
+  - When both are true, the routes stay and this milestone stops for a compatibility decision.
+  - `POST /api/tag-editor/sync-catalog` and `POST /api/tag-editor/sync-item-tags` are gone, along with their OpenAPI request schemas, generated WebUI types, desktop client methods and request types, server operations methods, session methods, and tests.
+  - The shared tag snapshot schemas stay.
+  - WebUI tag save still goes through apply-item-tags after the regenerated types.
+  - Current-state docs and the testing checklist do not describe these routes.
+  - Startup still migrates a leftover `library.json`.
+  - `tagMatchMode` is not in the server, Core, desktop, or WebUI filter models, the desktop filter dialog, or the WebUI filter code. A filter or saved preset that still carries it is accepted and gives the same result as one without it.
+  - The desktop filter summary says "any" with global OR and "all" with global AND or an unset global mode. A test covers each.
+  - Saved preset text that still carries `tagMatchMode` matches the same filter without it, and a different `tagMatchMode`, on the server, the desktop, and the WebUI. A test covers each.
+  - A desktop settings file whose saved filter still carries `tagMatchMode` loads and keeps its other values.
+  - `ReplaceTagCatalog` is gone.
+  - In the desktop filter dialog, **Update Preset** is enabled exactly when the heading shows a starred preset, both after a change in the dialog and when the dialog opens on a starred preset. A headless dialog test covers both and fails with the previous flag.
+  - Desktop tests resolve settings and backups under a temporary test directory on Linux and Windows, and send no log lines to a server.
+  - A preset saved with the global mode unset matches the same filter with an explicit AND, and not with OR, on the server, the desktop, and the WebUI. In the desktop filter dialog, switching the global mode away and back clears the `*`, disables Update, and leaves Apply disabled. A test at each site fails without the normalization.
+  - In the WebUI filter dialog, switching the global mode away and back from an unset opening filter clears the Apply `*`. In the desktop filter dialog, updating a preset saved unset to OR and then back to an explicit AND leaves Apply disabled. A test covers each and fails with the previous raw comparison.
+- **Verification evidence**:
+  - `v0.12.0` tag check: `git grep` at `v0.12.0` finds `/api/tag-editor/sync` only in the desktop `SyncTagCatalogAsync` and `SyncItemTagsAsync` definitions, which nothing calls, and in generated WebUI types. No v0.12.0 desktop or WebUI code posts to either route. The version gate does let a v0.12.0 client connect: v0.12.0 and this release both report API version `1`, minimum compatible `0`, and supported `["1","0"]`, and the WebUI's required capabilities are still offered. Removal proceeds because no client posted to either route.
+  - `tagMatchMode` at `v0.12.0`: both clients send it. The v0.12.0 desktop and WebUI filter with it only in their client-side legacy tag filter for a catalog with no categories, which a catalog the app writes cannot reach. The v0.12.0 desktop filter summary also reads it, and the v0.12.0 WebUI derives it from `globalMatchMode`. The server reads named fields from the `filterState` JSON, so an extra field is ignored. A v0.12.0 client that reads a preset without the field falls back to AND.
+  - `dotnet build ReelRoulette.sln` (0 errors, 0 warnings) and `dotnet test ReelRoulette.sln` passed: 137 desktop tests and 265 core tests. `dotnet run --project src/core/ReelRoulette.Core.SystemChecks -- --verbose` passed and exited 0.
+  - CI run 36847737031 (`ci.yml`, push to `main` at `1b4c82e`) completed with success, including the `build-test-windows` job.
+  - `npm run generate:contracts` removed only lines from `openapi.generated.ts`. `npm run verify` in `src/clients/web/ReelRoulette.WebUI` passed: contracts up to date, typecheck, 133 tests, build, and build output check.
+  - The route and session removals leave no reference in `src/` to the routes, `SyncTagCatalog`, `SyncItemTags`, `ApplySyncedTagCatalog`, `CatalogItemTagAssignment`, `ReplaceTagCatalog`, or the private helpers only they called. `EveryCatalogWritePath_KeepsUncategorized` keeps the new-catalog, category upsert, and Uncategorized delete-refusal checks. Its sync and replace steps went with those paths, which were the only writers that cleared the category table. WebUI tag save still posts `apply-item-tags` (`tagSave.ts`, `app.js`, `tagSave.test.ts`).
+  - `TryMatchPreset_IgnoresTagMatchModeInSavedPresetText` (server), `SavedPresetTextWithTagMatchMode_MatchesTheSameFilter` (desktop), and the WebUI `filterStateModel` test match saved preset text that carries `tagMatchMode`. Putting the projection comparison back made all three server cases fail. Putting the field back on the desktop `FilterState` made both desktop cases fail. Keeping the field in the WebUI parser and serializer made the WebUI test fail. Each change was reverted.
+  - `FilterSummaryFormatTests` covers global AND, OR, and unset. Making the summary always say "all", which is what reading the default `tagMatchMode` produced, made the OR case fail. That change was reverted.
+  - `LoadSettingsWithSavedFilterTagMatchMode_KeepsTheFilterAndOtherSettings` loads a desktop settings file whose saved filter carries `tagMatchMode` or `TagMatchMode` and checks the other filter values and settings. Making `FilterState` refuse unknown fields made both cases fail. That change was reverted.
+  - `TagFilter_ListQueryAndRandomEligibilityAgree_ForEveryTagShape` parses a filter that carries `tagMatchMode` as `1` and `"Or"` and gets the same AND result on the list query and random eligibility.
+  - Desktop filter dialog Update Preset: a headless harness against a `git archive` of HEAD and against the working tree gave the same results, so this predates the milestone. In both, changing only the global mode in the dialog starred the heading and enabled Update. Reopening on a filter that differed from its preset, whether by the global mode or a tag, showed `Preset: P*` with Update disabled. `FilterDialogPresetUpdateTests` covers reopen after a global-only change in both directions, reopen after a tag change, an in-dialog global change and back, reopen then matching again (with the `CanUpdatePreset` change notification), and opening on the saved preset. Putting `CanUpdatePreset` back on the flag made all four reopen cases fail. Those tests read the dialog's properties and run with a headless Fluent theme.
+  - Unset global mode: `TryMatchPreset_TreatsAnUnsetGlobalModeAsAnd` (server, missing and `null` stored modes against explicit AND, and unset against OR), `UnsetGlobalMode_EqualsAnExplicitAnd_ButNotOr` (desktop `FiltersEqual` and `Resolve`), `TogglingTheGlobalModeAwayAndBack_OnAPresetSavedUnset_ClearsTheStarAndUpdate` (headless desktop dialog), and the WebUI `filterStateModel` test for a desktop preset saved with `null`. Restoring the raw nullable comparison on the server made its three matching cases fail. Removing the desktop normalization made both desktop tests fail. Restoring the raw WebUI comparison made the WebUI test fail. Each change was reverted. The desktop dialog's `CheckAndSelectMatchingPreset` and Apply path now call `FiltersEqual` instead of comparing raw JSON. `TogglingTheGlobalModeAwayAndBack_FromAnUnsetOpeningFilter_LeavesApplyDisabled` (headless dialog) failed against the raw JSON pending check with `Apply*` after switching back, and passes now that the pending check compares with the opening filter through `FiltersEqual`.
+  - Review fixes: the WebUI `filterStateModel` test for the Apply `*` after a toggle away and back from an unset opening filter failed with the helper written as the previous raw `JSON.stringify` comparison, and passes through `filterStatesEqualForPresetMatch`. `UpdatingAPresetSavedUnset_BackToAnExplicitAnd_LeavesApplyDisabled` (headless desktop dialog) failed against the raw preset-list JSON check with `Apply*` after the second update, and passes with `PresetsEqual`, which `PresetsEqual_ComparesNamesAndOrderExactly_AndFiltersWithFiltersEqual` covers. In `app.js`, the four sites that set the dialog's opening filter are the ones that set it before; the only other assignment to the working filter is loading a preset inside the dialog, which is meant to count as a change from the opening filter. After removing `SameFilterSnapshot` and its test, a repository search outside build output finds no reference to it.
+  - Desktop test isolation: `AppDataManager` resolves the folder with `Environment.GetFolderPath(SpecialFolder.ApplicationData)`, which on Windows comes from the shell's Roaming AppData folder and ignores `APPDATA`, so a test-only `AppDataManager.UseDirectoryForTests` override is set from a module initializer instead of an environment variable. Settings, backups, and filter dialog bounds all resolve through that directory. `ClientLogRelay.DisableForTests` returns before any network call. `TestIsolationTests` asserts the settings and backup paths are under the test directory. Removing the override made it fail. A full desktop test run left the real `~/.config/ReelRoulette` listing unchanged.
+  - `docs/api.md`, `CONTEXT.md`, `docs/domain-inventory.md`, and the testing checklist no longer describe the sync routes. `docs/api.md` says `filterState` has no `tagMatchMode` and preset match ignores it. The checklist has release items for the desktop summary and cross-client preset matching.
+- **Deferrals / Follow-ups**:
+  - Removing `library.json` file recognition and the JSON-to-SQLite importer, including `PrepareIncomingFromJson`, ships in v0.14.0. The import check and retire-aside for a leftover `library.json` stay until that removal.
+  - Scrubbing every remaining `library.json` mention from product code, comments, user-facing copy, tests, and current-state docs follows that format removal.
+  - Account and PIN tables stay with the account and PIN data model work.
+  - Found while implementing: `FilterStateProjection.ToModel()` in the server preset-match code has no caller.
+  - Found while implementing: the desktop server-preset parser returns the default filter when a saved filter cannot be parsed, without logging it.
+
+### M10i19 - Drop the Unread Server Tag and Item Cache
+
+- **Status**: ✅ Complete
+- **Goal**: Stop loading a server-side tag and item cache that no live route reads, while v0.13.0 still migrates a leftover `library.json`.
+- **Scope**:
+  - Depends on: JSON-era leftovers that do not serve migration.
+  - This ships in v0.13.0. Removing the client-authority sync routes follows this milestone and is the last milestone in that release.
+  - Remove the server startup bootstrap of categories, tags, item tags, favorites, and blacklist.
+  - Remove the readers that serve only that cache, and the private helpers that exist only to fill or read it. This includes the test-only server state readers `GetTagEditorModel`, `GetTagsSnapshot`, `GetTagCategoriesSnapshot`, and `GetLibraryStates`, and the uncalled `CreateTagCatalogPayload`.
+  - The source list, source enable/disable, and the preset cache stay. `GET /api/sources` still reads the startup source list.
+  - The startup test still checks sources loaded from SQL. It no longer reads categories, tags, item tags, favorites, or blacklist from server state.
+  - Added during planning: remove the server list query's no-categories tag path, which no catalog the app writes can reach. This removes that branch, the category-count check before it in both the list query and random eligibility, and `Query_LegacyTagAnd_WhenCatalogHasNoCategories`, which seeded that shape with `DELETE FROM categories`.
+  - Evidence for that removal covers every catalog the app can produce: tag include and exclude, global and per-category AND/OR, and Uncategorized tags, on both the list query and random eligibility, since they share the filter.
+  - A hand-edited catalog with no categories then groups selected tags by the category id stored on each tag row, the same as any other catalog. Per-category and global modes apply. A selected tag that is not in the tag table forms its own group. `tagMatchMode` no longer applies. Selected tags in one group with no per-category mode match with AND, where that catalog previously honored `tagMatchMode = Or`.
+- **Acceptance criteria**:
+  - Server startup does not load categories, tags, item tags, favorites, or blacklist into server state.
+  - The readers and private helpers that served only that cache are gone.
+  - The source list, source enable/disable, and the preset cache stay. `GET /api/sources` still reads the startup source list.
+  - No API route, control-plane endpoint, Operator UI path, tray path, or SSE event builder reads the removed state.
+  - The startup test still checks sources loaded from SQL.
+  - Startup still migrates a leftover `library.json`.
+  - The list query and random eligibility have no no-categories tag path and no category-count check. A test shows every catalog write path the app uses leaves Uncategorized in place.
+  - Tag include and exclude, global and per-category AND/OR, Uncategorized tags, and a tag that is not in the tag table give the same results on the list query and random eligibility, and those results match the expected items.
+- **Verification evidence**:
+  - `dotnet build ReelRoulette.sln` (0 errors, 0 warnings) and `dotnet test ReelRoulette.sln` passed: 118 desktop tests and 267 core tests. `dotnet run --project ./src/core/ReelRoulette.Core.SystemChecks/ReelRoulette.Core.SystemChecks.csproj -- --verbose` passed and exited 0.
+  - `ServerStateService` keeps sources, presets, and event publish and replay. Its startup reads only sources, through `LibraryCatalogSession.ReadStartupSources`. `ReadStartupState`, `CatalogStartupState`, and `CatalogStartupItem` are gone. A search of `src/` for the removed readers, fields, and `hasCategories` finds only `LibraryOperationsService` methods of the same name, which the routes and SSE builders in `ServerHostComposition` already call. The build shows nothing else references the removed members.
+  - `Startup_LoadsSourcesFromTheCatalog` seeds `library.json`, checks that startup migrated it to `library.db` and `library.json.migrated`, and checks the source loaded from SQL. `Open_MigratesLibraryJson_IncludingStringEnumsNumericDurationAndAvailableTags` still covers that migration.
+  - `EveryCatalogWritePath_KeepsUncategorized` checks a new catalog, tag catalog sync with and without categories, tag catalog replace with nothing, and that deleting Uncategorized is refused. `Open_MissingUncategorizedCategory_IsAppended` covers migration. Removing the Uncategorized append from sync normalization made the test fail. Removing the Uncategorized delete refusal also made it fail. Both changes were reverted.
+  - `TagFilter_ListQueryAndRandomEligibilityAgree_ForEveryTagShape` asserts the same expected items from `QueryList` and `QueryEligible` for include, exclude, include with exclude, global AND with mixed per-category modes, global OR with mixed per-category modes, Uncategorized tags with and without a per-category OR, a tag that is not in the tag table under global AND and OR, and `tagMatchMode = Or` leaving the result unchanged. Inverting the per-category OR check made it fail. Swapping the global joiner also made it fail. Both changes were reverted.
+  - `CONTEXT.md`, `docs/domain-inventory.md`, and the testing checklist say server startup loads sources from catalog rows.
+- **Deferrals / Follow-ups**:
+  - Removing the client-authority sync routes is the next milestone and ends the v0.13.0 release.
+  - Source import does not refresh the in-memory source list that `GET /api/sources` reads. That list stays filled at startup.
+  - The JSON reader, the side-file copy, the import check and retire-aside for a leftover `library.json`, refuse strings, and the tests that seed through `library.json` stay until removal of `library.json` library support.
+  - Account and PIN tables stay with the account and PIN data model work.
+  - Candidate for the sync-route removal milestone, since both are contract changes: `tagMatchMode` is still in the filter contract. The server parses it, and preset matching compares it. Filtering no longer reads it. No visible desktop or WebUI control sets it on its own. The desktop filter dialog sets it only from hidden legacy radio buttons. The desktop main-window filter summary reads it to say "all" or "any". The WebUI sets it to mirror the global match selector. Desktop presets keep the default AND while WebUI presets with global OR store OR. So two saved presets that differ only in `tagMatchMode` do not match today, and would start matching once the field is removed.
+  - Found while testing: `LibraryCatalogSession.ReplaceTagCatalog` has no production caller. Only tests call it.
+
+### M10i18 - JSON-Era Leftovers That Do Not Serve Migration
+
+- **Status**: ✅ Complete
+- **Goal**: Remove JSON-era library code that does not read `library.json`, while v0.13.0 still migrates a leftover `library.json`. Import does not accept a `library.json` archive.
+- **Scope**:
+  - Depends on: catalog document removal.
+  - This follows catalog document removal. It does not depend on the document work itself. Dropping the unread server tag and item cache follows this milestone. Removing the client-authority sync routes is the last milestone in the v0.13.0 release.
+  - Remove the unused library-index file store. Settings JSON storage stays for core settings and desktop settings. Presets and thumbnail metadata are already in the catalog.
+  - Remove the verification-only in-memory tag mutator and the verification check that only exists to call it. Remove `FilterSetBuilder` and the verification check that only exists to call it. The rest of that verification stays.
+  - Remove the empty desktop tag-catalog sync method and the empty desktop item-tag sync method `SyncRequestedItemTagsToCore`.
+  - Remove every server state method whose body only throws because mutation authority moved. Live routes stay on library operations.
+  - Remove the desktop check that treats a full-catalog projection route as a live read, and the test that expects that route to count as one. That route is already gone.
+  - The desktop library model drops the legacy flat tag list, the fingerprint index, and `LibraryIndex.Items`. Sources, categories, and tags on that model stay. The filter dialog drops the branch that reads that flat list, and the collection that only that branch fills.
+  - Remove the unused desktop setting `LibraryGridViewEnabled`.
+  - Comments that are not describing startup migration no longer mention `library.json`. Current-state docs that describe that migration still do.
+  - Update the testing checklist line that says the filter dialog Tags tab shows per-category collapse toggles and the legacy flat tag model renders correctly. Update the checklist where the other leftovers were described.
+  - Fix the `CONTEXT.md` repository map sentence that calls `ReelRoulette.LibraryArchive` zip export/import helpers. That project imports and exports a `library.db` checkpoint.
+  - Final-state addition: remove the desktop `LibraryProjectionDisplayFilter`. It has had no caller since desktop browse moved to the list query, so its legacy flat-tag branch could not run either. Library filtering through categories is the server list query. Also remove the Core filter-request, filter-item, filter-source, and filter-tag types and the in-memory index, item, category, and tag types that only the removed builder and mutator used.
+- **Acceptance criteria**:
+  - The unused library-index file store, the verification-only tag mutator, `FilterSetBuilder` and its verification check, the empty desktop tag-catalog sync method, `SyncRequestedItemTagsToCore`, and the throw-only server state methods are gone. Core settings and desktop settings JSON storage is unchanged. The rest of that verification stays.
+  - The desktop library model has no legacy flat tag list, no fingerprint index, and no item list. Sources, categories, and tags on that model stay. The filter dialog does not read a flat tag list.
+  - `LibraryGridViewEnabled` is gone. An existing desktop settings file containing `libraryGridViewEnabled` still loads.
+  - A full-catalog projection route is not treated as a live library read.
+  - Comments that are not about startup migration do not mention `library.json`.
+  - The testing checklist no longer says the legacy flat tag model renders correctly. `CONTEXT.md` does not call `ReelRoulette.LibraryArchive` zip export/import helpers.
+  - Startup still migrates a leftover `library.json`. Import Library does not accept a `library.json` archive.
+- **Verification evidence**:
+  - `dotnet build ReelRoulette.sln` (0 errors, 0 warnings) and `dotnet test ReelRoulette.sln` passed: 118 desktop tests and 265 core tests. `dotnet run --project src/core/ReelRoulette.Core.SystemChecks -- --verbose` passed with randomization and DTO mapping checks and exited 0.
+  - A search of `src/` finds no library-index file store, tag mutator, `FilterSetBuilder`, filter-request types, empty desktop sync methods, throw-only server state methods, full-catalog path check, `LibraryProjectionDisplayFilter`, legacy flat tag list, or fingerprint index. `LibraryGridViewEnabled` appears only as the key in the settings-load test. Nothing under `src/` assigns or deserializes the desktop `AvailableTags` before removal, so the filter dialog branch that read it could not run.
+  - `LoadSettingsWithRetiredGridViewKey_KeepsTheOtherSettings` loads a desktop settings file with `LibraryGridViewEnabled` or `libraryGridViewEnabled` and keeps the other values. Marking the settings type to reject unknown members made both cases fail, then that change was reverted.
+  - `Query_FilterMatchesPanelRules_ForTagsDurationAndPhotos` covers tag filtering through categories on the server list query. `Open_MigratesLibraryJson_IncludingStringEnumsNumericDurationAndAvailableTags` and `Open_PartialDatabase_QuarantinesAndLaterOpenMigratesPreservedJson` still migrate a leftover `library.json`. `Import_RejectsALibraryJsonDocument_AndLeavesTheLiveCatalog` still rejects a `library.json` import.
+  - `library.json` remains only in the catalog store's startup migration and in tests that seed through it.
+  - `docs/checklists/testing-checklist.md` no longer says the legacy flat tag model renders correctly. No other checklist item described these leftovers. `CONTEXT.md` describes `ReelRoulette.LibraryArchive` as `library.db` checkpoint import/export helpers and still describes startup migration of a leftover `library.json`.
+- **Deferrals / Follow-ups**:
+  - Dropping the unread server tag and item cache is the next milestone, still in v0.13.0.
+  - Removing the client-authority sync routes ends the v0.13.0 release.
+  - Removing `library.json` file recognition and the JSON-to-SQLite importer ships in v0.14.0.
+  - Scrubbing every remaining `library.json` mention from product code, comments, user-facing copy, tests, and current-state docs follows that format removal.
+  - Renaming `LibraryProjectionItem` and the WebUI `libraryProjection*` modules is not planned.
+  - Account and PIN tables stay with the account and PIN data model work.
+  - Follow-up candidate for the v0.13.0 cleanup: the server list query's no-categories tag path, covered by `Query_LegacyTagAnd_WhenCatalogHasNoCategories`, cannot be reached by a catalog ReelRoulette writes. An empty catalog, `library.json` migration, tag catalog sync, and tag catalog replace all ensure Uncategorized, and deleting Uncategorized is refused. Schema 1 never shipped, and its writer also ensured Uncategorized. Only a `library.db` edited outside the app reaches it. Removing it would remove that branch, the category-count check before it, and that test. A hand-edited catalog with no categories would then filter selected tags as one Uncategorized group.
+  - `docs/full-audit.md` and `docs/migration-cleanup.md` are report-only audits and still cite `FilterSetBuilder` and `TagMutationService`.
+
+### M10i17 - Catalog Document Removal
+
+- **Status**: ✅ Complete
+- **Goal**: Stop using the catalog document for live reads and writes in v0.13.0, while keeping startup migration of a leftover `library.json` so an old library can still be migrated.
+- **Scope**:
+  - Depends on: catalog schema version 2.
+  - JSON-era leftovers that do not serve migration follow this milestone and end the v0.13.0 release.
+  - Tag catalog sync and item-tag sync update catalog rows directly. They do not load or diff the full catalog document.
+  - Server startup loads sources, tags, item tags, and favorite and blacklist item state with SQL. It does not build the catalog document.
+  - The library reload after import uses that same SQL load, or that reload is removed. It does not build the catalog document.
+  - Remove the catalog document builder and the full-document save path.
+  - The JSON-to-SQLite importer stays for startup migration of a leftover `library.json`, including the preset and thumbnail-index copy from catalog schema version 2. Startup still migrates a leftover `library.json` once. Import Library does not accept a `library.json` archive. An empty database may still be created through that importer.
+  - Update the testing checklist and current-state docs.
+- **Acceptance criteria**:
+  - Tag catalog sync and item-tag sync persist without loading or diffing the full catalog document.
+  - Server startup loads favorite and blacklist item state without building the catalog document.
+  - Library reload does not build the catalog document.
+  - There is no catalog document builder and no full-document save path.
+  - A missing `library.db` still migrates `library.json`. Import Library does not accept a `library.json` archive.
+  - Docs and the testing checklist describe live catalog reads and writes as row operations, describe the tag table as the only tag list, and still describe startup migration of a leftover `library.json`.
+- **Verification evidence**:
+  - `dotnet build ReelRoulette.sln` and `dotnet test ReelRoulette.sln` passed. `dotnet run --project src/core/ReelRoulette.Core.SystemChecks -- --verbose` passed.
+  - Tests cover tag catalog sync and item-tag sync as row writes: trimmed names, blank names skipped, the earlier category kept unless it is Uncategorized, Uncategorized forced, last-wins on a duplicate category id, tags stored in name order, no revision bump when the stored rows already match, a removed catalog tag losing its item assignments, an item tag that was never in the tag table staying, a catalog spelling change from `Night` to `NIGHT` updating the item assignment, and an item that already holds both spellings keeping one row. Item-tag sync matches catalog id or full path, returns false when none match, and does not bump revision when the stored tags already match. Server startup loads sources, categories including Uncategorized, item tags, favorite, and blacklist from SQL, and the in-memory item id is the file path. The catalog document builder and the full-document save path are removed, and the unused library reload is removed. `Open_MigratesLibraryJson_IncludingStringEnumsNumericDurationAndAvailableTags` still migrates a leftover `library.json`. A file whose body is a `library.json` object is rejected by the catalog file check and by Import Library, and the live catalog stays.
+  - `CONTEXT.md`, `docs/api.md`, `docs/domain-inventory.md`, and `docs/checklists/testing-checklist.md` describe live catalog reads and writes as row operations, describe the tag table as the catalog's tag list, and still describe startup migration of a leftover `library.json`. The `[Unreleased]` library-catalog changelog bullet includes the same outcome.
+- **Deferrals / Follow-ups**:
+  - Removing `library.json` file recognition and the JSON-to-SQLite importer ships in v0.14.0.
+  - Unused JSON-era types, desktop fields, and comments that do not serve startup migration are the next milestone, still in v0.13.0.
+  - Account and PIN tables stay with the account and PIN data model work.
+  - An item can still hold a tag name that is not in the tag table. The tag table is the catalog's tag list. That does not require every name stored on an item to be in that list.
+  - Source import does not refresh the in-memory source list that `GET /api/sources` reads. That list is filled at startup. This is pre-existing and is not fixed here.
+  - Ordinal path identity on Linux is recorded in the backlog item of that name. This milestone does not change path casing.
+  - Removing `POST /api/tag-editor/sync-catalog` and `POST /api/tag-editor/sync-item-tags` needs its own contract decision. Those routes stay.
+
+### M10i16 - Catalog Schema Version 2
+
+- **Status**: ✅ Complete
+- **Goal**: Move presets and thumbnail metadata into the catalog, drop the legacy available-tags list, and open every database at schema version 2 in one migration.
+- **Scope**:
+  - Depends on: refresh column updates.
+  - This ships in v0.13.0, before catalog document removal. JSON-era leftovers that do not serve migration still end that release.
+  - One migration runs before the health check. A schema 1 database is migrated in place. A corrupt database is still quarantined and startup still refuses it. The health check does not treat schema 1 as corrupt.
+  - The schema version is the integer already stored in SQLite `PRAGMA user_version`. The code constant stays `SchemaVersion`. There is no second version key in `catalog_meta`. After this milestone the version is 2.
+  - Opening a schema 1 database drops `available_tags` and the `available_tags_present` flag, adds a presets table, and adds thumbnail revision, width, and height on `items`. Existing rows in `tags` stay as they are. `generatedUtc` is not stored.
+  - That same open copies `presets.json` and the thumbnail index into the catalog. The thumbnail index lives in the local cache directory, not beside `library.db`, and the migration is given that directory. The schema version is set only after the schema change and that copy have committed, in the same transaction as a flag that the copy finished. `presets.json` and `index.json` are then renamed to `presets.json.migrated` and `index.json.migrated`. A crash after the commit and before those renames does not copy them again; the next open only finishes the rename.
+  - A missing `presets.json` or thumbnail index leaves presets or thumbnail columns empty. A file that cannot be parsed does the same and does not quarantine the catalog.
+  - A new database, including an empty one and one created by migrating `library.json`, is created at schema version 2. It does not create `available_tags` or `available_tags_present`, and it does not create schema 1 and then migrate. That `library.json` migration also copies `presets.json` and the thumbnail index. The importer ignores `availableTags`. A name that appears only in that list is not stored.
+  - The catalog document builder omits `availableTags` and does not query the dropped table. Removing that builder stays with catalog document removal.
+  - Preset reads and writes use the catalog table. Tag rename and delete still update presets. `core-settings.json` and `desktop-settings.json` stay JSON.
+  - Thumbnail revision, width, and height are read from the item row. The stored revision is the revision the JPEG was built for, and the thumbnail stage still reuses a JPEG when that revision matches the item fingerprint, size, and write time. The thumbnail stage writes that item's revision, width, and height as the item finishes, including a dimension fill when the revision already matches. It does not hold those columns until the stage ends. A favorite, tag, blacklist, or playback change that commits during the stage stays. A cancel leaves thumbnail columns already written. Browse no longer reads `index.json`. `hasThumbnail` is still whether that item's JPEG exists. The JPEG files stay in the local thumbnail directory. `generatedUtc` is not written.
+  - At the end of the thumbnail stage, JPEG cleanup lists the thumbnail directory. A `{itemId}.jpg` whose id is not in the catalog is deleted, including files that were never listed in `index.json` and files left from a catalog this run did not remove item by item. `index.json` and `index.json.migrated` are left in place. The server reports progress as it deletes them. Opening the catalog does not scan the thumbnail directory. A cancel before that cleanup finishes leaves the remaining files for the next thumbnail stage that completes. An item removed by source refresh still loses its thumbnail metadata and JPEG.
+  - Export, import, and catalog backup copy the whole database, so presets and thumbnail revision and dimensions travel with `library.db`. JPEG files do not. Import replaces the destination preset list. Local JPEGs for item ids that are not in the imported catalog stay until the next thumbnail stage completes. Docs and instructions recommend a refresh after import so those thumbnails are generated and the previous JPEG files are removed.
+  - Update the testing checklist and current-state docs.
+- **Acceptance criteria**:
+  - A schema 1 database opens at schema version 2 with `available_tags` and `available_tags_present` gone, with presets loaded from `presets.json`, and with thumbnail revision, width, and height loaded from the thumbnail index. Existing tags are unchanged. `generatedUtc` is not stored.
+  - A crash after that commit and before the side files are renamed does not import them a second time.
+  - A missing or unreadable `presets.json` or thumbnail index does not refuse the database. Presets or thumbnail columns stay empty.
+  - A new database, including an empty one and one migrated from `library.json`, is schema version 2, has no `available_tags` table, and includes presets and thumbnail metadata from those side files when they are present. A name that appears only in `availableTags` is not stored. The rest of that library still migrates.
+  - A corrupt database is still quarantined.
+  - The catalog document builder does not read `available_tags`.
+  - Preset save, tag rename, and tag delete persist in the catalog table. Core settings and desktop settings stay in their JSON files.
+  - Browse thumbnail dimensions come from the item row. The thumbnail stage persists that item's revision, width, and height as the item finishes, including a dimension fill when the revision already matches. A favorite, tag, blacklist, or playback change committed during the stage is still present afterward. A cancel keeps thumbnail columns already written. At the end of the thumbnail stage, a JPEG whose item id is not in the catalog is deleted, including after import replaces the catalog, and the server reports progress during that cleanup. Opening the catalog does not delete those files. A cancel before that cleanup finishes leaves them for the next thumbnail stage that completes. JPEG files are not part of export or import.
+  - Export and import include presets. Import replaces the destination preset list.
+  - Docs and the testing checklist describe schema version 2, presets and thumbnail metadata in the catalog, local JPEG files, a refresh after import to generate thumbnails and remove JPEGs that are not in the imported catalog, and core settings remaining in `core-settings.json`.
+- **Verification evidence**:
+  - `dotnet build ReelRoulette.sln` — 0 warnings, 0 errors. `dotnet test ReelRoulette.sln` — pass (Core.Tests 256, DesktopApp.Tests 115).
+  - `LibraryCatalogSchema2Tests`: `Open_Schema1_MigratesPresetsAndThumbnailMetadata` opens a schema 1 database at schema version 2, drops `available_tags` and `available_tags_present`, keeps the existing tag, copies the preset and thumbnail revision, width, and height, stores a non-positive width as null, stores no `generatedUtc` column, renames the side files, and builds a document with no `availableTags`. `Open_CrashAfterSideFileCopy_DoesNotCopyAgain` keeps the first copy when the side files change before the rename finishes. `Open_MissingOrUnreadableSideFiles_DoesNotRefuse` opens with empty presets and thumbnail columns. `Open_WithoutThumbnailDirectory_LeavesSchema1` leaves schema 1 in place. `PublishIncoming_LeavesSchema1_UntilTheNextOpen` publishes a schema 1 export still at version 1, and the next open migrates it. `Open_DoesNotDeleteThumbnailFiles` leaves an orphan JPEG. `WriteCheckpoint_IncludesPresetsAndThumbnailColumns_AndNotJpegBytes` copies the preset and thumbnail columns and not the JPEG bytes.
+  - `LibraryCatalogStoreTests`: `Open_MigratesLibraryJson_IncludingStringEnumsNumericDurationAndAvailableTags` creates schema version 2 with no `available_tags` table and does not store a name that appears only in `availableTags`. `Open_EmptyDirectory_CreatesEmptyDatabase` creates schema version 2 with no `available_tags` table. `Open_CorruptRowPage_QuarantinesAndLeavesLibraryJson` still quarantines a corrupt database.
+  - `LibraryCatalogSessionTests.BuildDocument_UsesIntegerEnumsAndHourDuration_OmitsThumbnailsAndFingerprintIndex` builds a document with no `availableTags`.
+  - `ServerStateRegressionTests.RenameTagInPresetCatalogOnly_ShouldRenameSelectedAndExcludedTags` reloads a renamed preset from the catalog, deletes that tag from the preset, writes `core-settings.json`, and does not write `presets.json` or `desktop-settings.json`.
+  - `RefreshPipelineServiceTests`: `EnrichListedItems_UsesRowDimensionsAndJpegExistence` uses row dimensions and JPEG existence. `ThumbnailStage_ShouldWriteIndexMetadataObject` and `ThumbnailStage_ShouldBackfillLegacyStringIndexEntry` persist revision, width, and height as the item finishes, including a dimension fill. `ThumbnailStage_PreservesFavoriteTagBlacklistAndPlaybackDuringTheWrite` keeps a favorite, tag, blacklist, and playback change committed during the write. `ThumbnailStage_CancelKeepsColumnsAlreadyWritten_AndLeavesRemainingCleanup` keeps columns already written, reports thumbnail cleanup progress, and leaves a remaining JPEG when cleanup is cancelled. `ThumbnailStage_RemovesDeletedItemThumbnail_AndKeepsLibraryThumbnails` deletes a JPEG whose item is not in the catalog, including one never listed in `index.json`, and leaves `index.json` in place.
+  - `CONTEXT.md`, `docs/architecture.md`, `docs/api.md`, `docs/domain-inventory.md`, `docs/dev-setup.md`, `docs/feature-migration.md`, and `docs/checklists/testing-checklist.md` describe schema version 2, presets and thumbnail metadata in the catalog, local JPEG files, a refresh after import, and core settings remaining in `core-settings.json`.
+- **Deferrals / Follow-ups**:
+  - Catalog document removal follows this milestone and still removes the document builder.
+  - Removing `library.json` file recognition and the JSON-to-SQLite importer ships in v0.14.0. That removal does not remove the schema 1 migration. After that removal, a missing database does not read `presets.json` or the thumbnail index.
+  - Account and PIN tables stay with the account and PIN data model work. They extend the schema version rather than replacing this catalog schema.
+
+### M10i15 - Refresh Column Updates
+
+- **Status**: ✅ Complete
+- **Goal**: Make each refresh stage write only its own columns as work completes, so a long stage no longer diffs a full catalog snapshot, and so unchanged thumbnails are not revisited file by file.
+- **Scope**:
+  - Depends on: library catalog export and import cutover.
+  - Source refresh, fingerprint, duration, and loudness write the columns that stage owns as work completes. They do not load a snapshot at the start and diff it back at the end.
+  - A tag, favorite, blacklist, or playback change that commits during a stage is still present when the stage finishes. The stage does not write those columns.
+  - Source refresh still adds, removes, renames, and updates item identity. Missing files are still removed here, not by folder import.
+  - The thumbnail stage reads the rows it needs without building the full catalog document. It treats a stored thumbnail revision that still matches the item's fingerprint, size, and write time as current, the same way duration and loudness trust a stored result. It does not stat those source files again. Fingerprint still notices a size or write-time change and updates the fingerprint, which changes the revision.
+  - Generate a thumbnail when the item is new, that stored revision differs, or the JPEG is missing. Remove the index entry and JPEG for an item the source stage removed.
+  - Remove the thumbnail file-count and byte caps. Every item still in the library keeps its thumbnail. The stage does not delete JPEGs to get under a size or count limit, and it does not stat every JPEG to measure one.
+  - Refresh does not load or diff the full catalog document. Tag catalog sync, item-tag sync, and server startup still do, until catalog document removal.
+  - Update the testing checklist and current-state docs.
+- **Acceptance criteria**:
+  - A refresh run persists source, fingerprint, duration, and loudness changes without loading or diffing a full catalog snapshot.
+  - A tag, favorite, or playback change committed during a stage is still present after that stage writes.
+  - Source refresh still adds, removes, and renames items. Folder import still does not remove missing files.
+  - The thumbnail stage does not build the full catalog document.
+  - A refresh where every thumbnail revision still matches does not stat those source files. A new item, a changed revision, or a missing JPEG still generates. An item removed by source refresh loses its thumbnail index entry and JPEG.
+  - There is no thumbnail file-count or byte cap. A refresh does not delete thumbnails for items still in the library, and it does not stat every JPEG to enforce a cap.
+  - Refresh no longer has a full-document write path. Tag catalog sync and item-tag sync still do, until catalog document removal.
+  - Docs and the testing checklist describe refresh as column updates, including thumbnail reuse without a full file walk and no file-count or byte cap.
+- **Verification evidence**:
+  - `dotnet build ReelRoulette.sln` — 0 warnings, 0 errors. `dotnet test ReelRoulette.sln` — pass (Core.Tests 246, DesktopApp.Tests 115).
+  - `dotnet test src/core/ReelRoulette.Core.Tests/ReelRoulette.Core.Tests.csproj --filter FullyQualifiedName~RefreshPipelineServiceTests` — 26 passed. `Refresh_PersistsStageColumnsWithoutBuildingTheCatalogDocument` adds and removes a source file and stores fingerprint, duration, and loudness with `DocumentBuilds` unchanged. `FingerprintStage_PreservesFavoriteAndTagCommittedDuringTheWrite` keeps a favorite and tag committed during the fingerprint write. `ThumbnailStage_ReusesMatchingRevisionWithoutTheSourceFile` reuses a matching revision when the source file is absent. `ThumbnailStage_GeneratesWhenJpegIsMissing` generates a missing JPEG. `ThumbnailStage_RemovesDeletedItemThumbnail_AndKeepsLibraryThumbnails` removes a deleted item's thumbnail and keeps one for an item still in the library, with no eviction count. Existing thumbnail tests still regenerate on a changed revision and generate for a new item. `SourceRefresh_ShouldReconcileMovedFile_ByFingerprintWithoutAddRemove` still renames by fingerprint. `ImportSource_UpdatesRowsWithoutBuildingTheCatalogDocument` still leaves a missing file in place.
+  - `LibraryOperationsServiceTests`: `DeferredCatalogWrites_CheckpointTheLatestRowsAfterRelease` keeps the startup backup unchanged while catalog writes are deferred, then checkpoints the latest play count after release. `RecordPlayback_WhenBackupGapIsShortened_CreatesACheckpoint` applies a shorter gap on the next save. `RecordPlayback_WhenANewerBackupCannotBeOpened_UsesTheHealthyBackupAge` still checkpoints when the newest healthy backup is outside the gap and a newer file cannot be opened.
+  - `CONTEXT.md`, `docs/api.md`, `docs/architecture.md`, `docs/domain-inventory.md`, and `docs/checklists/testing-checklist.md` describe refresh column updates, thumbnail reuse without a source walk, and no thumbnail file-count or byte cap.
+- **Deferrals / Follow-ups**:
+  - Account and PIN tables stay with the account and PIN data model work.
+  - Tag catalog sync, item-tag sync, and the server startup read of the catalog document are the next milestone, still in v0.13.0.
+  - Removing `library.json` file recognition and the JSON-to-SQLite importer ships in v0.14.0.
+
+### M10i14 - Library Catalog Export and Import Cutover
+
+- **Status**: ✅ Complete
+- **Goal**: Re-enable library export, import, and catalog backups as a live SQLite `library.db` checkpoint, and deprecate `library.json` library files with removal of startup migration planned for v0.14.0.
+- **Scope**:
+  - Depends on: source folder import row updates.
+  - Re-enable desktop Library Export / Import and server catalog backups that were disabled after the SQLite store landed.
+  - Export and import move only `library.db`. The server produces the checkpoint while it has that file open. The desktop asks for a destination, then saves that checkpoint. It is not a zip, not a raw copy of an open WAL file, and not leftover `library.json`. Presets, settings, thumbnails, and backups stay in their own files.
+  - Import Library restores that checkpoint by replacing the live SQLite catalog, with remap/skip for sources. Keep the server-stopped acknowledgment, because the desktop replaces the database file. The replacement is written to a temporary file, checkpointed so it does not depend on a WAL sidecar, then published by rename. The previous `library.db` stays aside until the new file is in place and opens. A crash between those renames restores the previous file, or promotes the finished temporary file if that is the one that landed. A file that is not a library database is rejected. A `library.json` archive is not imported.
+  - The import confirmation names the library catalog. It does not say the import replaces presets, settings, thumbnails, backups, or `library.json`. An existing `library.db` counts as library data unless a successful read shows it has no sources and no items. A folder that still has only `library.json` with sources or items asks for the same confirmation, and a successful import renames that file aside.
+  - v0.13.0 deprecates `library.json` as a library format. It is not the live catalog, not an export, and not a backup. There is no JSON dump action. Startup may still migrate a leftover `library.json` once when `library.db` is missing. v0.14.0 removes that startup migration and the JSON-to-SQLite importer.
+  - Server catalog backups use the same server-produced checkpoint, not leftover JSON. The copy runs after the save returns. A failed copy is discarded. A backup that cannot be opened is left in place.
+  - Update testing checklist and current-state docs for database-file export and import, catalog backups, and the v0.13.0 deprecation with removal of startup migration planned for v0.14.0.
+- **Acceptance criteria**:
+  - Export saves a usable SQLite checkpoint of the live library. Import Library can restore that file into the live catalog and remap source folders.
+  - Import Library still requires the server-stopped acknowledgment before it replaces the live database.
+  - An interrupted replace leaves the previous catalog or the finished incoming file, and does not leave a partial `library.db` or an empty catalog.
+  - Import rejects a file that is not a library database, including a `library.json` archive, and does not replace the live catalog.
+  - Export does not read `library.json` from disk. There is no JSON dump action. Presets, settings, thumbnails, and backups are not part of the transfer.
+  - The import confirmation names the library catalog. An unreadable `library.db`, or a leftover `library.json` that still has sources or items, asks before replace. A successful import renames that `library.json` aside.
+  - Server catalog backups capture the live SQLite catalog.
+  - Docs and the testing checklist describe `library.db` export and restore, deprecated `library.json` library files, and removal of that startup migration in v0.14.0, without treating `library.json` as the live store.
+- **Verification evidence**:
+  - `dotnet test ReelRoulette.sln` — pass (Core.Tests 238, DesktopApp.Tests 115).
+  - `LibraryCatalogStoreTests`: a checkpoint includes a committed favorite and has no WAL sidecar. An interrupted replace restores the previous catalog. A published incoming file is kept and the previous file is removed on the next open. A finished incoming file is promoted when no previous catalog exists. A partial incoming file does not replace a healthy catalog. An unusable live file is restored from the previous catalog. A failed checkpoint copy deletes its destination. A file that is not a database is not a usable catalog.
+  - `LibraryArchiveMigrationTests`: import restores a remapped source and item path, including a `..` segment that stays inside the chosen folder. A file that is not a library database is rejected and does not create `library.db`. An unreadable `library.db` asks for confirmation and is not replaced until that confirmation. A leftover `library.json` with items asks for confirmation, and a successful import renames it to `library.json.migrated`. A failure while discarding the previous catalog leaves the imported database in place. The overwrite confirmation names the library catalog.
+  - `LibraryOperationsServiceTests`: opening the service writes a `library.db.backup.*` checkpoint and does not write `library.json.backup.*`. When the backup gap has elapsed, playback writes a checkpoint of the updated play count and does not trim leftover JSON backups. A recent SQLite backup skips another create. Leftover `library.json.backup.*` files stay in place. A backup that is not a database is removed. A backup that cannot be opened is left in place.
+  - Current-state docs and the testing checklist describe `library.db` export and restore, deprecated `library.json` library files with startup-migration removal planned for v0.14.0, and SQLite catalog backups.
+- **Deferrals / Follow-ups**:
+  - Account/PIN persistence in SQLite is deferred to the account and PIN data model work.
+  - Presets, core settings, and desktop-settings remain on their current files.
+  - Running-server import, Operator export/import, and removal of the desktop Library Export / Import menus are deferred to Operator library catalog transfer. That transfer is a `library.db` checkpoint. It ships with the later account and Operator milestones, in the release after the SQLite store/query sequence.
+  - Refresh stays on the full-document adapter until refresh column updates.
+  - Removing the one-time startup migration from `library.json`, and the JSON-to-SQLite importer, is deferred to removal of `library.json` library support. This milestone deprecates that file and does not remove the startup migration.
+
+### M10i13 - Source Folder Import Row Updates
+
+- **Status**: ✅ Complete
+- **Goal**: Add or refresh a media folder with row inserts and updates, without holding the catalog lock across the disk walk or loading the full catalog document.
+- **Scope**:
+  - Depends on: desktop full-catalog projection removal.
+  - Enumerate the folder outside the catalog lock. Then insert new items and update existing ones in one transaction.
+  - Match existing items by path. Keep their id, tags, favorite, blacklist, and playback stats. New files get new rows. Report the same imported and updated counts as today.
+  - Do not remove items that are missing on disk. That stays with refresh.
+  - Do not build or diff the full catalog document.
+  - Update the testing checklist and current-state docs.
+- **Acceptance criteria**:
+  - Importing a folder persists new and updated items in SQLite and does not load or diff the full catalog document.
+  - The disk walk does not hold the catalog lock, so browse is not blocked for the whole scan.
+  - An existing item matched by path keeps its id, tags, favorite, blacklist, and playback stats.
+  - Items missing on disk are not removed by this import.
+  - Docs and the testing checklist describe folder import as a row update.
+- **Verification evidence**:
+  - `dotnet build ReelRoulette.sln` and `dotnet test ReelRoulette.sln` pass (Core.Tests 222, DesktopApp.Tests 121). A new file is inserted. An existing path keeps its id, tags, favorite, blacklist, playback stats, fingerprint, and duration, and updates source, relative path, file name, and media type. A file missing on disk stays. The import does not build the catalog document, and a second unchanged import does not bump the revision. Browse returns while enumeration is still blocked.
+  - Manual: importing `/mnt/nas/multimedia/TV` inserted 902 files. Library browse kept answering during that scan, and a query after the import returned the new total.
+  - `CONTEXT.md`, `docs/api.md`, `docs/domain-inventory.md`, `docs/checklists/testing-checklist.md`, and `CHANGELOG.md` [Unreleased] describe folder import as a row update.
+- **Deferrals / Follow-ups**:
+  - Refresh stays on the full-document adapter until refresh column updates.
+  - Catalog export, import, and backups stay with the library catalog export and import cutover.
+
+### M10i12 - Desktop Full-Catalog Projection Removal
+
+- **Status**: ✅ Complete
+- **Goal**: Stop desktop from downloading the full catalog at startup and on resync, and remove that endpoint once nothing calls it.
+- **Scope**:
+  - Depends on: auto-tag and duplicate scans.
+  - Desktop connect and resync do not call the full-catalog projection endpoint. WebUI already does not call it.
+  - Header video and photo counts come from library stats. Source names in the filter summary come from the sources API. Tag and category lists for the filter and tag editor come from the tag catalog, not from a full item download.
+  - Now-playing tags, favorite, blacklist, and playback stats come from the loaded tile or a single-item read. The loudness baseline is a server aggregate that preserves the current baseline, not a scan of a local item replica.
+  - Scoped auto-tag scan does not rebuild a path list from a local item replica.
+  - Remove the full-catalog projection endpoint once desktop has stopped calling it. Thumbnail layout fields stay on list query.
+  - Update the testing checklist and current-state docs.
+- **Acceptance criteria**:
+  - Desktop connect and resync do not download the full catalog. WebUI still does not.
+  - Header counts, source names, tag and category lists, now-playing tags, and the loudness baseline still match current behavior.
+  - The full-catalog projection endpoint is removed. List query still returns thumbnail layout fields.
+  - Docs and the testing checklist no longer describe that endpoint as a client read.
+- **Verification evidence**:
+  - `dotnet build ReelRoulette.sln` and `dotnet test ReelRoulette.sln` pass (Core.Tests 220, DesktopApp.Tests 115). The catalog test covers the 75th-percentile loudness baseline, including a video on a disabled source, and a single-item read by id and path that does not build the catalog document. Desktop tests lock connect and resync to library stats, sources, and the tag catalog, and lock the one-item read off the removed projection path. List-query thumbnail enrichment still has its own test. A playback event for a file that is not yet playing does not paint the current-file section; starting that file does. `npm run generate:contracts` regenerated the WebUI client from OpenAPI.
+  - Manual: desktop startup and a resync on a large library did not download the full catalog. Header counts, now-playing tags, and loudness normalization still matched. The current-file section updates when that file starts, including a library-grid play whose playback event arrives first.
+  - Current-state docs and the testing checklist no longer describe the projection endpoint as a client read. `CONTEXT.md`, `docs/api.md`, `docs/architecture.md`, `docs/domain-inventory.md`, `docs/checklists/testing-checklist.md`, and `CHANGELOG.md` [Unreleased].
+- **Deferrals / Follow-ups**:
+  - Source folder import, refresh, and catalog export stay on their current paths until their own slices.
+
+### M10i11 - Auto-Tag and Duplicate Scans
+
+- **Status**: ✅ Complete
+- **Goal**: Run auto-tag scan, duplicate scan, and duplicate apply without loading the full catalog document.
+- **Scope**:
+  - Depends on: catalog stats and item-state reads.
+  - Auto-tag scan matches tags to items without building the catalog document. `scanFullLibrary: true` still scans every item and ignores a path list. `scanFullLibrary: false` with no list still scans enabled sources only. An explicit list still matches full paths.
+  - Duplicate scan groups items whose fingerprint status is ready and whose fingerprint is set, without building the catalog document. Pending, failed, and stale fingerprints stay excluded. A missing fingerprint status is not treated as ready.
+  - Duplicate apply removes the non-kept items from the catalog with the existing item delete and still deletes those files on disk. It does not load the full catalog document. The kept item stays.
+  - Update the testing checklist and current-state docs.
+- **Acceptance criteria**:
+  - Auto-tag scan, duplicate scan, and duplicate apply do not load or diff the full catalog document.
+  - Auto-tag scan scope matches today's full-library, enabled-source, and explicit-path rules.
+  - Duplicate groups are ready fingerprints only. Pending, failed, and stale stay excluded. A missing fingerprint status is not treated as ready.
+  - Duplicate apply deletes the non-kept files and catalog rows and leaves the kept item in place.
+  - Docs and the testing checklist describe these scans as query-backed.
+- **Verification evidence**:
+  - `dotnet build ReelRoulette.sln` — pass. `dotnet test ReelRoulette.sln` — pass (Core 219, Desktop 115). `ScanAutoTags_ScopeFollowsFullLibraryFlagAndPathList`: enabled sources return the filename match, the already-tagged file, and the relative-path match; a differently cased path matches that full path; full-library scan ignores the path list and includes a disabled source and an unknown source; the document build count stays put. `ScanAutoTags_WhenNoEnabledSourcesAndNoList_ScansNothing` returns no rows and does not build the document. `ScanDuplicates_HonorsIntegerFingerprintStatus`: one ready pair is grouped with favorite, play count, and tag count; pending, failed, and stale are excluded; two items with a fingerprint and no status are not grouped; the document build count stays put. `ScanDuplicates_ScopeFollowsCurrentSourceAndEnabledSources`: current source and enabled sources return the enabled pair and that source's pending exclusion; all sources also return the disabled pair and its stale exclusion; the document build count stays put. `ApplyDuplicateSelection_ShouldPersistRemovedItems_AndKeepProjectionParity`: a missing keep id deletes nothing; apply deletes the other file and row, reports a missing file and leaves that row, leaves the kept file and its favorite flag, and does not build the document.
+  - Docs: `CONTEXT.md`, `docs/api.md`, `docs/architecture.md`, `docs/domain-inventory.md`, `docs/checklists/testing-checklist.md`, and `CHANGELOG.md` [Unreleased].
+- **Deferrals / Follow-ups**:
+  - The desktop full-catalog download, source folder import, refresh, and catalog export stay on their current paths until their own slices.
+
+### M10i10 - Catalog Stats and Item-State Reads
+
+- **Status**: ✅ Complete
+- **Goal**: Answer library stats and item-state reads with SQL so they do not load the full catalog document.
+- **Scope**:
+  - Depends on: random selection from the catalog query.
+  - Library stats, including global totals and per-source totals, are SQL aggregates. The figures stay the ones clients already show.
+  - An item-state read returns only the requested paths and does not load the full catalog document. An empty path list returns no items.
+  - WebUI resync stops posting an item-state read with an empty path list and discarding the body.
+  - Leave auto-tag scan, duplicate scan, and the desktop full-catalog download on their current paths.
+  - Update the testing checklist and current-state docs.
+- **Acceptance criteria**:
+  - Library stats match the current global and per-source figures and do not load the full catalog document.
+  - An item-state request returns only the requested items. An empty path list returns no items and does not load the catalog.
+  - WebUI resync does not call item-state with an empty path list.
+  - Docs and the testing checklist describe stats and item-state as scoped reads.
+- **Verification evidence**:
+  - `dotnet build ReelRoulette.sln` — pass. `dotnet test ReelRoulette.sln` — pass (Core 218, Desktop 115). `GetLibraryStats_ShouldAggregateGlobalAndPerSourceTotals` and `GetLibraryStats_ShouldHandleLegacyMediaTypeAndMissingSourceId` still match the current global and per-source figures, including a missing source id matched by path, and the catalog document build count stays put. `GetLibraryStatsAndItemStates_MatchCurrentFiguresWithoutBuildingTheCatalogDocument`: a 120.5 second duration counts as 120 whole seconds (total 180, average 90), a negative play count is ignored, a stored media type other than video or photo follows the file extension, an item-state read returns only the requested path, an empty or blank list returns nothing, and the document build count stays put until an explicit document read. WebUI `sseClient` test: resync syncs refresh status and does not request `/api/library-states`. WebUI unit tests 129 passed. OpenAPI contracts regenerated and the freshness check passed.
+  - Docs: `CONTEXT.md`, `docs/api.md`, `docs/architecture.md`, `docs/domain-inventory.md`, `docs/checklists/testing-checklist.md`, and `CHANGELOG.md` [Unreleased].
+- **Deferrals / Follow-ups**:
+  - Auto-tag scan, duplicate scan, the desktop full-catalog download, source folder import, refresh, and catalog export stay on their current paths until their own slices.
+  - The loudness baseline stays on the desktop full-catalog download until that download is removed.
+
+### M10i9 - Random Selection from the Catalog Query
+
+- **Status**: ✅ Complete
+- **Goal**: Choose random and play eligibility through the list-query filter so a catalog revision does not reload the full library into memory.
+- **Scope**:
+  - Depends on: favorite, blacklist, and playback row updates.
+  - Random selection loads the eligible set through the same server filter as library list query. It does not keep a full-catalog cache that rebuilds when the revision changes.
+  - The current weighting still runs on that eligible set. An empty eligible set still returns no item.
+  - Playing one item reads that item and its source state by id or path. It does not read the rest of the catalog.
+  - Eligibility stays server-authoritative. Clients do not gain a local eligibility replica.
+  - Update the testing checklist and current-state docs.
+- **Acceptance criteria**:
+  - A random draw after a favorite, playback, or tag change does not build the full catalog document.
+  - Eligible items for a draw match library list query for the same filter, enabled sources, and media-type options.
+  - The current weighting still chooses among that eligible set. An empty eligible set still returns no item.
+  - Playing one item reads that item only.
+  - Docs and the testing checklist describe random and play eligibility as query-backed.
+- **Verification evidence**:
+  - `dotnet build ReelRoulette.sln` — pass. `dotnet test ReelRoulette.sln` — pass (Core 217, Desktop 115). `QueryEligible_MatchesListQuery_ForFilterEnabledSourcesAndMediaType`: eligible ids match list query for the same favorites and tag filter, a disabled source and an unknown source stay out, and video or photo options match the list media-type filter. The catalog document build count stays put. `ReadPlaybackItem_ReadsThatItemAndSource_ByIdOrPath_WithoutBuildingTheCatalogDocument`: id or path returns that item, a disabled source is disabled, a missing source row stays enabled, and the document build count stays put. `TrySelectRandom_AfterFavoritePlaybackAndTagChange_DoesNotBuildTheCatalogDocument`: a draw after a favorite, a playback, and a tag change does not build the catalog document, and play plus media lookup by id or path do not either. `TrySelectRandom_WeightedRandom_PrefersNeverPlayedItemInTheEligibleSet`: weighted draws stay inside the list-query set and prefer the never-played item. An empty eligible set still returns no item. A library with no items still returns 503.
+  - Manual random draw on a large library immediately after a playback passed. The response came back immediately, and playing one item still started that item.
+  - Docs: `CONTEXT.md`, `docs/api.md`, `docs/architecture.md`, `docs/domain-inventory.md`, `docs/checklists/testing-checklist.md`, and `CHANGELOG.md` [Unreleased].
+- **Deferrals / Follow-ups**:
+  - Library stats, item-state reads, auto-tag scan, duplicate scan, the desktop full-catalog download, source folder import, refresh, and catalog export stay on their current paths until their own slices.
+
+### M10i8 - Favorite, Blacklist, and Playback Row Updates
+
+- **Status**: ✅ Complete
+- **Goal**: Make favorite, blacklist, playback recording, and clear-stats SQLite row updates so they do not stall on a full-catalog load.
+- **Scope**:
+  - Depends on: responsive tag apply.
+  - Move favorite, blacklist, record-playback, and clear-stats onto the existing single-row catalog updates. Resolve the item by catalog id or full path, as current clients already send.
+  - A favorite still clears blacklist, and a blacklist still clears favorite.
+  - Clear-stats with no path list clears every row that has a play count or last-played time in one update. A path list clears only those items.
+  - Publish the same item-state and playback events as today. Do not build or diff the full catalog document for these operations.
+  - Leave the playback catalog cache, library stats, auto-tag scan, duplicate scan, the desktop full-catalog download, source folder import, and refresh on their current paths.
+  - Update the testing checklist and current-state docs.
+- **Acceptance criteria**:
+  - Setting a favorite, setting a blacklist flag, recording a playback, and clearing playback stats persist in SQLite and do not load or diff the full catalog document.
+  - A favorite still clears blacklist, and a blacklist still clears favorite.
+  - Clearing stats with an empty path list clears played items across the library. A path list clears only those items.
+  - Other clients still receive the item-state and playback events and update the loaded window the same way they do today.
+  - Docs and the testing checklist describe these as row updates.
+- **Verification evidence**:
+  - `dotnet build ReelRoulette.sln` — pass. `dotnet test ReelRoulette.sln` — pass (Core 211, Desktop 115). `FavoriteBlacklistAndPlayback_PersistByIdOrPath_WithoutBuildingTheCatalogDocument`: favorite and blacklist persist by catalog id or full path, a favorite clears blacklist, a blacklist clears favorite, repeating the same flag does not bump the catalog revision, record-playback increments and stops at the maximum play count, a list that matches nothing clears nothing, a path list clears only those items, and an empty list clears every played row including a last-played time with no play count. The catalog document build count stays put until an explicit document read. `FavoriteBlacklistAndPlayback_PersistWithoutBuildingTheCatalogDocument`: the operations service returns the stored id, path, and flags for those writes, and the catalog document build count stays put until an explicit document read. `itemStateChanged`, `playbackRecorded`, and clear-stats `resyncRequired` are still published from the same endpoint handlers.
+  - Manual favorite, blacklist, playback record, and clear-stats for a selection on a large library passed: a favorite clears blacklist, a blacklist clears favorite, browse does not stall, a selection clears only those items, and the other client updates. Clear-all was not run on the real library.
+  - Docs: `CONTEXT.md`, `docs/api.md`, `docs/domain-inventory.md`, `docs/checklists/testing-checklist.md`, and `CHANGELOG.md` [Unreleased].
+- **Deferrals / Follow-ups**:
+  - The playback catalog cache stays until random selection from the catalog query. A row update still bumps the catalog revision.
+  - Library stats, item-state reads, auto-tag scan, duplicate scan, the desktop full-catalog download, source folder import, refresh, and catalog export stay on their current paths until their own slices.
+
+### M10i7 - Responsive Tag Apply
+
+- **Status**: ✅ Complete
+- **Goal**: Make tag apply a SQLite row update so desktop and WebUI saves return immediately and do not stall on a full-catalog load.
+- **Scope**:
+  - Depends on: WebUI library query cutover.
+  - Move tag-editor writes and the tag-editor model read onto catalog-session row operations: item-tag add and remove, category and tag upsert, rename, and delete, and auto-tag apply. Match items by catalog id or full path, as current clients already send.
+  - Publish item-tag and tag-catalog events from those writes. When a catalog row changes, read that event's payload from the category and tag tables. Do not build or diff the full catalog document for these operations, and do not load it only to return a model the clients ignore.
+  - WebUI save sends only pending category, tag, and item-tag edits. It does not upsert unchanged categories. It uses the catalog returned by the mutation instead of fetching the tag-editor model again.
+  - Desktop and WebUI close the tag editor as soon as the user saves. The current file and loaded tiles show the new tags immediately, and the request runs in the background. On failure, restore the previous tags and show the error. The server remains the authority; the local change is that same delta, not a second catalog.
+  - The save's own echoed event must not duplicate tags or undo the local update. A tag filter that can change which items are shown still reloads the loaded window once the save lands, and keeps the scroll position.
+  - Leave refresh, source import, favorites, blacklist, and playback stats on the full-document catalog adapter.
+  - Update the testing checklist and current-state docs for the immediate save.
+- **Acceptance criteria**:
+  - Adding, removing, renaming, deleting, and auto-applying tags persists in SQLite and does not load or diff the full catalog document.
+  - Opening the tag editor and reading its model does not load the full catalog document.
+  - A WebUI save that only changes item tags does not upsert categories or tags and does not fetch the tag-editor model a second time.
+  - Desktop and WebUI close the editor without waiting for the request. The current file and loaded tiles show the edit immediately. A failed request restores the previous tags and shows an error.
+  - The save's own event does not duplicate tags. The other client still receives the item-tag and catalog events and updates.
+  - When a tag filter can change which files are shown, the loaded window reloads after the save lands and keeps the scroll position.
+  - Docs and the testing checklist describe the immediate save and the server-authoritative rollback.
+- **Verification evidence**:
+  - `dotnet build ReelRoulette.sln` — pass. `dotnet test ReelRoulette.sln` — pass (Core 209, Desktop 115). `TagEdits_PersistByIdOrPath_WithoutBuildingTheCatalogDocument` and `TagEditorWrites_PersistWithoutBuildingTheCatalogDocument`: item-tag add and remove by catalog id or full path, category and tag upsert, rename, and delete, and auto-tag apply persist, and the catalog document build count stays put until an explicit document read. Opening the tag-editor model does not build that document. `RenameAndDelete_ReturnTheItemIdsThatHadTheTag_WithoutBuildingTheCatalogDocument`: rename and delete return the catalog ids of files that had the tag, and not files that did not, and a missing name returns no ids. The catalog document build count stays put until an explicit document read. `ApplyAutoTagAssignments_ReportsChangedPathsPerTag`: a file that already has the first tag is left out of that tag's changed paths, and the second tag reports only the file that gained it. The apply response includes that per-tag list.
+  - `npm test` in `src/clients/web/ReelRoulette.WebUI` — pass (130 tests). `tagSave.test.ts`: a tag-only save posts no category or tag upsert and does not fetch the tag-editor model again. A reorder upserts only the categories whose order changed. Categories whose stored sort numbers are not their display indexes are left alone. A category rename that only changes case is upserted. Local tags update before the request. The save's own echo does not add those tags again. A tag-filter reload runs once, including a rename that has no item-tag echo. A save that started under a tag filter reloads once after that filter is empty, and a save that did not does not. A per-tag auto-tag event for a subset of that assignment's paths is the save's own echo, and a different item-tag event is not. An item-tag echo does not match a subset of its items. The smaller of two matching auto-tag saves takes the event. An assignment with no changed paths is retired, and a later event for that tag is applied. An assignment whose tag was not written is retired when another tag changed the same path, and a later event for the unwritten tag is applied. A live empty tag list replaces the optimistic tags. A failed later step, including one that throws, restores only that tail. A tag added after the save starts is kept when the save fails. A failed rename puts the old name back and keeps a name that was already on the file. A rename replaces that name in the include and exclude lists, and a delete removes it. The stored library filter is what the next reload sends. Another client's echo is applied. A newer in-flight save that finishes first does not take the older save's echo. Failing the newer save leaves that echo. Failing the older save keeps the newer tags. A confirmed item-tag event keeps that tag when the save then fails, including on tiles that were replaced with the old tags. A confirmed rename for a wider set of files still applies, and a later unconfirmed step still rolls back. An in-flight save projects onto replaced tiles. A confirmed auto-tag assignment stays when the other assignment rolls back. An auto-tag the server did not newly write still rolls back. `handleIncomingItemTags`: a catalog rename replaces that name in the include and exclude lists before the reload sees them, a per-item add and remove leaves those lists, and a catalog delete removes the name and reloads when that clears the filter. Those two catalog cases fail when the filter is updated after the reload.
+  - `TagSaveApplyTests`: the same immediate tile update, failed-tail undo, and own-echo skip. A rename with no item-tag echo reloads once when a tag filter can change which files are shown. A save that started under a tag filter reloads once after that filter is empty, and a save that did not does not. A per-tag auto-tag event for a subset of that assignment's paths is the save's own echo, and a different item-tag event is not. An item-tag echo does not match a subset of its items. The smaller of two matching auto-tag saves takes the event. An assignment with no changed paths is retired, and a later event for that tag is applied. An assignment whose tag was not written is retired when another tag changed the same path, and a later event for the unwritten tag is applied. The same overlap cases, plus an auto-tag force reload that does not reload a different in-flight save. A tag added after the save starts is kept when the save fails. A failed rename puts the old name back and keeps a name that was already on the file. A rename replaces that name in the include and exclude lists, and a delete removes it. A confirmed item-tag event keeps that tag when the save then fails, including on tiles that were replaced with the old tags. A confirmed rename for a wider set of files still applies, and a later unconfirmed step still rolls back. An in-flight save projects onto replaced tiles. A confirmed auto-tag assignment stays when the other assignment rolls back. An auto-tag the server did not newly write still rolls back. `IncomingRename_UpdatesTheFilterBeforeTheOtherClientReloads`, `IncomingPerItemEdit_LeavesTheFilterInPlace`, and `IncomingDelete_RemovesTheTagBeforeTheOtherClientReloads`: the same catalog rename, per-item edit, and catalog delete. Those two catalog cases fail when the filter is updated after the reload.
+  - Manual tag save on a large library from desktop and WebUI, and a forced failure that restores the previous tags, were not run.
+  - Docs: `CONTEXT.md`, `docs/api.md`, `docs/domain-inventory.md`, `docs/checklists/testing-checklist.md`, and `CHANGELOG.md` [Unreleased].
+- **Deferrals / Follow-ups**:
+  - Favorites, blacklist, playback stats, the playback catalog cache, stats and item-state reads, auto-tag and duplicate scans, the desktop full-catalog download, source folder import, and refresh each move in the following slices of this series.
+  - Library export, import, and catalog backups stay with the library catalog export and import cutover, after the desktop full-catalog download is gone.
+
+### M10i6 - WebUI Library Query Cutover
+
+- **Status**: ✅ Complete
+- **Goal**: Cut the WebUI library overlay over to the same list/query API as desktop so both clients browse identically through the server, and keep that window current so showing or hiding the overlay is close to instant.
+- **Scope**:
+  - Depends on: desktop library query cutover.
+  - Replace WebUI overlay browse that filters a full in-memory projection with the server list/query API (filter, search, sort, fill-on-scroll).
+  - After the WebUI session can reach the server, load the first query window even if the overlay has never been opened.
+  - Preserve current WebUI library UX: overlay shell, header counts, justified grid, overscan, and click-to-play. Header "Showing N of M" uses `totalCount` and `searchBaselineCount`.
+  - Keep the loaded window across hide and show. Hiding or showing the overlay does not drop that window, does not call list/query, and does not move the scroll position. Showing it again is instant when a window is already loaded.
+  - Favorite, blacklist, playback, and tag updates patch the loaded tiles or reload the loaded window whether the overlay is shown or hidden. Filter, search, sort, and a header preset start over from the first page either way. Header **None** restores the default filter and stays on **None** until that filter changes, even when a saved preset has the same filter. A filter that matches neither a preset nor the default shows a starred row first and does not requery when that row is chosen.
+  - Fill-on-scroll runs only while the overlay is shown. Showing it again requests further pages only when the restored viewport is not already covered.
+  - `resyncRequired` reloads the loaded window the same way, shown or hidden. It does not fetch the full catalog.
+  - Stop fetching full-catalog projection to build an auto-tag path list when scan-full-library is off; scoped scan is `scanFullLibrary: false` with no path list. Do not page list/query to collect paths.
+  - Do not introduce WebUI-local catalog mutation or eligibility authority.
+- **Acceptance criteria**:
+  - WebUI library overlay browse uses the same server list/query contract as desktop.
+  - The first query window is loaded after connect, before the overlay is opened.
+  - Hiding or showing the overlay does not drop the loaded window, does not query, and keeps the scroll position.
+  - Scrolling loads further query windows while the overlay is shown; filter/search/sort/preset requery the server from the first page whether the overlay is shown or hidden.
+  - Header counts show the filtered total against the post-search, pre-filter baseline.
+  - Favorite, blacklist, playback, tag, and resync updates keep the loaded window current whether the overlay is shown or hidden, without a full-catalog refetch.
+  - Auto-tag scoped scan does not depend on a full-catalog projection fetch or a client-assembled path list.
+- **Verification evidence**:
+  - `npm test` in `src/clients/web/ReelRoulette.WebUI` — pass (98 tests). `libraryQuerySession` covers the first list-query window and header counts from `totalCount` and `searchBaselineCount`, the next page when the loaded rows do not cover the viewport, no fill while hidden, hide/show that issues no query and keeps scroll, a filter change while hidden that replaces the saved window and resets scroll, a favorite patch while hidden when membership cannot change, a favorite reload while hidden under the default blacklist filter, a playback patch and a playback reload, resync that reloads the loaded window through list query, a further page still in flight that is discarded when a tile update arrives, an open first page that is read again instead of being replaced by a reload, tag patch versus tag-filter reload, and a failed further page that retries after the scroll position changes. Scoped auto-tag sends `scanFullLibrary` with an empty path list. Header **None** selects the default filter and stays on **None** when a saved preset equals that default. A later comparison without that hold selects the preset. A filter that matches neither a preset nor the default shows a starred row first. A dirty filter-dialog edit keeps that dialog's base. Choosing None in the filter dialog stays on a preset the working filter still equals. A header None or named pick drops the starred row. `libraryGridController` scrolls an empty reset to the top while the scroller has a box, and applies that reset when the scroller is shown again if it had no box. Desktop preset labels use the same in-memory comparison, and an explicit **None** stays on **None** until the filter changes. `DesktopAppSettingsTests` pass: an explicit **None** hold round-trips with a null preset name, and a settings file without the flag loads as no hold.
+  - `node --check` on `src/clients/web/ReelRoulette.WebUI/src/app.js` — pass. The WebUI client no longer calls `GET /api/library/projection`.
+  - Manual instant hide/show, fill-on-scroll, and desktop/WebUI browse parity were not run in the browser.
+- **Deferrals / Follow-ups**:
+  - Source enable/disable list-query refresh stays with the later WebUI source-management alignment work.
+  - Export/import format cutover is the next slice in this store/query sequence.
+
+### M10i5 - Desktop Library Query Cutover
+
+- **Status**: ✅ Complete
+- **Goal**: Cut the desktop library panel over to the server list/query API with fill-on-scroll, without keeping a full local catalog replica for browse.
+- **Scope**:
+  - Depends on: library list query API.
+  - Replace desktop library-panel browse that filters a full in-memory projection with list/query requests using the active filter, search, and sort.
+  - Load additional result windows as the user scrolls (including overscan) and treat the last loaded justified row as provisional until the query is exhausted.
+  - Preserve current desktop library UX: justified grid, search/sort, multi-select, bulk actions, and click-to-play. Shift-click range selection covers loaded items only.
+  - While the panel is open, favorite, blacklist, playback, and tag SSE update the loaded window by patch or requery. They do not refetch the whole catalog.
+  - The startup full-catalog fetch may remain in this slice for non-browse readers (video/photo header, now-playing tag grouping, and other library-index uses outside the grid). Browse, scroll, and filter/search/sort do not depend on it.
+  - Stop sending a replica-built path list for auto-tag scan; scoped scan is `scanFullLibrary: false` with no path list (server enabled-source semantics from the catalog store). Do not page list/query to collect paths.
+  - Keep random/play API-authoritative; do not reintroduce client-side eligibility authority.
+- **Acceptance criteria**:
+  - Desktop library browse no longer requires downloading the full catalog to filter, search, sort, or scroll.
+  - Scrolling loads further query windows and layout remains stable except for the expected last-row pack of an incomplete page.
+  - Filter, search, and sort changes requery the server and reset browse to the start of the result set.
+  - Favorite, blacklist, playback, and tag SSE while the panel is open update the loaded window without a full-catalog refetch.
+  - Auto-tag scoped scan does not depend on a full local item replica or a client-assembled path list.
+- **Verification evidence**:
+  - `dotnet build ReelRoulette.sln` — pass. `dotnet test ReelRoulette.sln` — pass (Core + Desktop, including `LibraryPanelBrowseTests`, `QueryLibrary_AcceptsDesktopDurationFilterJson`, `ShutdownCancel_ShouldStopManualRunWithoutRecordingAFailure`, `ShutdownCancel_DuringFfmpegCheck_DoesNotRecordLoudnessAsUnavailable`, and `ShutdownCancel_LeavesForcedRescansPending`).
+  - `LibraryPanelBrowseTests`: another window is requested until the loaded rows cover the viewport plus overscan or the result is exhausted; an append continues at the loaded count and reflows from the last loaded row; a reload covers the loaded count in window-sized slices. A torn live count does not shrink that reload or move the next append offset; only a finished apply commits the span. A queued reset is not replaced by a reload. An append page applies only when the loaded count is still the offset it was fetched against. A held scrollbar defers a query or reload and does not defer an append, so the drag does not replay a reset. That deferred refresh keeps the browse query open and suppresses a further page, so the new filter or sort is not appended onto the old tiles. An open query is read again after a tile update, including a patch and including before the first page arrives. A further page that has not been applied yet counts as that open query, so a patch reloads the loaded window and that page is discarded. A restored scroll offset stays inside the row-model extent. Favorite, blacklist, playback, and tag events patch loaded tiles when the active filter and sort cannot change membership or order. They reload the loaded window when favorites-only, exclude-blacklisted, never-played, a tag filter, or a last-played or play-count sort can. An unchanged id page reflows from the first tile whose aspect changed, and does not reflow when nothing changed. An item in neither the snapshot nor the loaded tiles syncs the full snapshot when the panel is closed, is skipped when the panel is open with no tag filter, and reloads the loaded window after the rest of the event when a tag filter is active. Now-playing stats use the loaded tile when the snapshot misses that file. The current file downloads the snapshot when it is in neither copy. A playback for any other file missing from both copies still refreshes global play totals. A tag event applies the rest of its items before that snapshot download.
+  - A finished item splice applies thumbnail fields on the unchanged tail. An append whose loaded count is no longer the requested offset does not request another page. A panel resize waits for the current grid update, then reflows the loaded rows and restores the viewport anchor.
+  - `LibraryListQueryTests.QueryLibrary_AcceptsDesktopDurationFilterJson`: a `minDuration` / `maxDuration` string in desktop `HH:MM:SS` form filters the page.
+  - Manual fill-on-scroll, filter/search/sort, and in-place favorite updates were confirmed on a large library before the membership reload rules.
+  - Server shutdown during a refresh cancels the manual or automatic run, does not record it as a pipeline failure, and does not set a completion time. `ShutdownCancel_DuringFfmpegCheck_DoesNotRecordLoudnessAsUnavailable`: a cancel while the ffmpeg check is blocked leaves the loudness stage incomplete and does not record "ffmpeg not found" or a pipeline error. `ShutdownCancel_LeavesForcedRescansPending`: cancelling the duration and loudness stages leaves both one-shot rescan flags set, and a cancelled manual run still has no pipeline error.
+- **Deferrals / Follow-ups**:
+  - WebUI overlay cutover is the next slice in this store/query sequence.
+  - Jump-to-middle scrollbar accuracy without loading the result prefix remains out of scope. Shift-click range selection of items that are not yet loaded is the same limitation.
+  - Removing the startup full-catalog fetch, and moving the video/photo header and now-playing tag grouping off that replica, is deferred until full-catalog projection is removed or explicitly documented as leftover.
+
+### M10i4 - Library List Query API
+
+- **Status**: ✅ Complete
+- **Goal**: Add a server-authoritative library list/query API so browse filter, search, sort, and paging run on the server.
+- **Scope**:
+  - Depends on: SQLite library catalog cutover.
+  - Define OpenAPI list/query contracts that accept `filterState`, free-text search, sort, and offset/limit. Apply the desktop library-panel order: enabled sources, then a filename and relative-path substring search, then `FilterState`, then sort. Search uses the invariant-lowercase fold column, accent-sensitive, matching desktop `ToLowerInvariant` substring match. Name sort uses an `OrdinalIgnoreCase` collation, accent-sensitive, matching desktop, not the fold column. Missing files stay in the result.
+  - Return items plus `totalCount` (after search and filter; the pageable set) and `searchBaselineCount` (after search, before filter) so WebUI can keep "Showing N of M".
+  - Sort modes are Name, LastPlayed, PlayCount, Duration, and DateAdded, each with direction. Direction applies only to the primary key. Null last-played, duration, and last-write sort as the minimum, as in the desktop panel. Ties follow filename with `OrdinalIgnoreCase` ascending, as in the desktop panel `ThenBy`, then item id ascending, including when the primary sort is descending, so offset pages do not skip or repeat ties.
+  - Include per-item thumbnail layout fields (`hasThumbnail`, `thumbnailWidth`, `thumbnailHeight`) on listed items without stating thumbnail files for the entire catalog on each request.
+  - Update generated clients, API docs, and validation/error behavior for the new query surface.
+  - Keep the existing full-catalog projection endpoint until both clients have cut over.
+- **Acceptance criteria**:
+  - Clients can request a window of library items with desktop library-panel filter, search, and sort semantics, including missing files and invariant case folding.
+  - Responses include `totalCount`, `searchBaselineCount`, and enough thumbnail layout metadata for justified-row virtualization.
+  - Equal sort keys stay in ascending filename order, then item id ascending, across adjacent offset windows, including when the primary sort is descending, with no skipped or repeated rows.
+  - Query results honor server-owned source enabled state. They do not drop items whose files are missing.
+  - Contract documentation describes list/query as the browse path and does not treat full-catalog projection as the long-term browse API.
+- **Verification evidence**:
+  - `LibraryListQueryTests` covers enabled sources then search then filter, the search-then-filter count split, invariant accent-sensitive search, name sort with ordinal ignore-case and id tie-break across descending offset windows, null last-played / duration / last-write placement, play-count and date-added sort, category and legacy tag filters, photo duration/audio skip, missing-file inclusion, empty and large-offset windows, and thumbnail metadata on the returned page only.
+  - `dotnet build ReelRoulette.sln` and `dotnet test ReelRoulette.sln` passed (Core.Tests 201, DesktopApp.Tests 58).
+  - OpenAPI, `docs/api.md`, `CONTEXT.md`, `docs/domain-inventory.md`, and the testing checklist describe list/query as the browse path. `npm run generate:contracts` refreshed `openapi.generated.ts`.
+  - Desktop and WebUI still browse through full-catalog projection. Export and import stay disabled.
+- **Deferrals / Follow-ups**:
+  - Desktop and WebUI browse cutover to this API are later slices in this store/query sequence.
+  - Infinite-scroll client behavior is out of scope here.
+  - Library export, import, and JSON catalog backups remain disabled until the library catalog export and import cutover. That gap is intentional because this store/query sequence ships as one release, ahead of the later account and Operator milestones.
+
+### M10i3 - SQLite Library Catalog Cutover
+
+- **Status**: ✅ Complete
+- **Goal**: Make the SQLite catalog the live library store so catalog mutations are transactional row updates instead of whole-document JSON rewrites.
+- **Scope**:
+  - Depends on: SQLite library catalog session.
+  - On startup, open the catalog session so a healthy `library.db` is authoritative and a missing `library.db` migrates `library.json` using that store.
+  - Move every live catalog reader and writer onto the database: library operations (source import, tags, favorites, blacklist, playback stats, duplicates, auto-tag, stats, and projection), the refresh pipeline, source enabled state, and playback's catalog cache. Each updates the affected rows rather than loading and writing the entire catalog document. Playback cache invalidation uses the session revision, not `library.json` last-write time.
+  - After migration, do not treat leftover `library.json` as a source of truth: do not dual-write it, do not read it for live catalog operations, and do not copy it for export or backup.
+  - Disable desktop Library Export / Import and server `library.json` catalog backups after migration, with a clear unavailable message; do not export, import, or back up a stale JSON snapshot.
+  - Make auto-tag scan scope server-authoritative. `scanFullLibrary: true` scans every item and ignores the client list. `scanFullLibrary: false` with no list scans enabled sources only (zero enabled sources scans nothing). An explicit list scans those items. Values in that list are full paths, matched the way scan matches `fullPath` today, so current clients keep working.
+  - Keep `GET /api/library/projection` working by reading SQLite. Projection keeps the current JSON shape, including string-or-integer enums and a duration form both current clients already parse. Thumbnail fields stay serve-time enrichments.
+  - Do not change desktop or WebUI browse UX in this milestone.
+- **Acceptance criteria**:
+  - After upgrade, an existing `library.json` library is available from SQLite with equivalent items, sources, categories, tags, legacy `availableTags`, and item flags/stats. `fingerprintIndex` need not survive.
+  - A committed row update from any live catalog writer (refresh, tag apply, playback stats, source enabled state, and the other writers in scope) is still present after another of them commits.
+  - Refresh, auto-tag apply, and other catalog mutations persist through SQLite; leftover `library.json` is not read, written, exported, or backed up as the live catalog.
+  - Desktop Library Export / Import and server JSON catalog backups are disabled with a clear message until the export and import cutover.
+  - Auto-tag scan with `scanFullLibrary: false` and no path list matches enabled sources only. An explicit path list still scans those paths. `scanFullLibrary: true` scans every item.
+  - Existing clients can still load the library through the current full-catalog projection API.
+- **Verification evidence**:
+  - `dotnet build ReelRoulette.sln` — pass. `dotnet test ReelRoulette.sln` — pass (194 Core + 58 Desktop).
+  - `LibraryOperationsServiceTests`: opening the service migrates `library.json` to `library.db` and does not create or trim `library.json.backup.*`. Playback, tags, import, and stats persist through the session document. Auto-tag with `scanFullLibrary: false` and no path list matches enabled sources only, including zero enabled sources. An explicit path list matches `fullPath`. `scanFullLibrary: true` scans every item and ignores the list. A duration save from an earlier snapshot keeps a tag apply that committed in between. A path rename that only changes casing is stored. A save that fails after an earlier edit does not keep that edit. Duplicate scan excludes integer pending, failed, and stale statuses, and still groups a missing status that has a SHA-256 fingerprint.
+  - `RefreshPipelineServiceTests`: fingerprint status persists as an integer. A fingerprint change through the session regenerates the thumbnail. Thumbnail index reads stay on `index.json`.
+  - `LibraryPlaybackServiceTests`: a disabled source with a root path returns 409.
+  - Server startup resolves the catalog host before it serves. A refused open throws.
+  - Desktop Export Library and Import Library show that export, import, and catalog backups are unavailable and do not write a zip.
+  - Docs identify SQLite as the live catalog and the temporary export/import/backup gap. List-query browse and new export formats are not documented as shipping.
+- **Deferrals / Follow-ups**:
+  - Library list/query API and client browse cutover are later slices in this store/query sequence.
+  - Re-enabling export, import, and catalog backups (zip envelope with live `.db`, legacy `library.json` zip import, separate JSON dump that is not a restore path) is deferred to the library catalog export and import cutover. Export, import, and catalog backups stay unavailable until that slice. The gap is intentional: this store/query sequence ships as one release, ahead of the later account and Operator milestones.
+  - Removing `GET /api/library/projection` is deferred until both clients browse through the list-query API.
+  - Account tables in this database are deferred to the account and PIN data model work. They extend `user_version` rather than replacing this catalog schema.
+
+### M10i2 - SQLite Library Catalog Session
+
+- **Status**: ✅ Complete
+- **Goal**: Add a Core catalog session whose mutations are transactional row updates, and a projection builder for the current library document shape, without opening that database from the running server.
+- **Scope**:
+  - Depends on: SQLite library catalog store.
+  - `Open` stays the health and migration gate. `Opened` returns a session for the published database. `Refused` returns no session and does not create an empty catalog. `Absent` (no `library.db` and no `library.json`) creates an empty healthy database.
+  - Each operation uses its own connection, WAL, and a short busy timeout. A shared connection is not safe across the refresh pipeline and request threads. Mutations update the affected rows. They do not load a snapshot and write every row back.
+  - Row writes cover the live catalog writers the cutover will move: sources (insert, display name, enabled flag); items (insert, path and identity, delete, favorite with blacklist cleared, blacklist, play count and last played, clear playback stats, fingerprint fields, duration, loudness, file size, last write time); tags and categories (upsert, rename, delete, catalog sync, per-item tag add, remove, and replace). Adding a tag to an item inserts a missing catalog tag as `uncategorized` and does not change an existing catalog tag's name or category. An upsert does not rename an existing tag; a blank category leaves its category in place, and a different category updates only that category. `availableTags` stays as migrated. New writes do not invent a second tag list.
+  - `loudnessError` is a nullable item column on the version 1 schema. `user_version` stays 1. JSON migration stores the field when `library.json` has it. There is no second schema version.
+  - Each committing transaction increments a `catalog_meta` revision so the cutover can drop playback's file-timestamp cache.
+  - The session can build the current library document from SQLite: sources, items, categories, tags, and legacy `availableTags` when that list was present. `mediaType` and `fingerprintStatus` are integers. `duration` is an `hh:mm:ss` string. Both current clients already parse those forms. Thumbnail fields are not in this document. `fingerprintIndex` is not emitted.
+  - The running server still reads and writes `library.json` and does not open `library.db`.
+- **Acceptance criteria**:
+  - A missing database and missing `library.json` produce an empty healthy `library.db`. A refused database does not.
+  - Migrated and empty databases stay at `user_version` 1 and store `loudnessError`.
+  - A committed row update is still present after another connection commits a different row. A tag update is not wiped by a later source-enabled update.
+  - Built projection JSON uses integer `mediaType` and `fingerprintStatus` and an `hh:mm:ss` duration. Thumbnail fields and `fingerprintIndex` are absent.
+  - The revision increments only when a transaction commits.
+  - The running server still reads and writes `library.json`. It does not open `library.db`.
+- **Verification evidence**:
+  - `dotnet build ReelRoulette.sln` — pass. `dotnet test ReelRoulette.sln` — pass (188 Core + 58 Desktop).
+  - `LibraryCatalogStoreTests`: an empty directory creates a healthy `library.db` at `user_version` 1 with a session and revision 0. A migrated snapshot alone is still refused and returns no session.
+  - `LibraryCatalogSessionTests`: JSON `loudnessError` is stored at `user_version` 1, a favorite update and a duration update on two connections both remain, a tag update survives a later source-enabled update and does not create `availableTags`, an inserted tag with surrounding whitespace and a case-duplicate collapses to one trimmed tag that a later remove clears, renaming a tag onto an existing name leaves one catalog row and one `bar` item tag for items that had either name or both, that rename keeps the earlier category unless it is `Uncategorized` and the other is not, a blank-category upsert keeps an existing name and category and does not bump the revision, a same-category upsert with a different spelling changes nothing, a different category updates only the category, a new tag with a blank category is stored as `uncategorized`, adding a tag to an item inserts a missing catalog tag as `uncategorized` and leaves an existing catalog tag's name and category in place, a repeat add fills a missing catalog row without duplicating the item tag, and a missing item creates no catalog tag, a catalog sync of duplicate names keeps the earlier spelling and category unless that category is `Uncategorized`, an insert that omits fingerprint version stores `1`, an inserted local timestamp is stored as UTC, projection JSON uses integer `mediaType` and `fingerprintStatus` and `00:01:30` for 90.5 seconds, thumbnail fields and `fingerprintIndex` are absent, and revision stays 0 across a read and a missing-item update then increments on commit.
+  - `ReelRoulette.Server` has no reference to `LibraryCatalogStore` or `LibraryCatalogSession`. Startup does not open `library.db`.
+- **Deferrals / Follow-ups**:
+  - Opening this session from the running server, moving live readers and writers onto it, auto-tag scan scope, projection served from SQLite, and disabling export, import, and JSON catalog backups are the next slice in this store/query sequence.
+  - Account tables in this database are deferred to the account and PIN data model work. They extend `user_version` rather than replacing this catalog schema.
+
+### M10i1 - SQLite Library Catalog Store
+
+- **Status**: ✅ Complete
+- **Goal**: Add a tested SQLite catalog store and JSON migration without opening that database from the running server.
+- **Scope**:
+  - Depends on: completed WebUI library browser series.
+  - Introduce a server-owned SQLite catalog at `library.db` in the same roaming config directory as `library.json`, versioned with `user_version` and run in WAL mode. Tables cover sources, items, categories, tags, item-tag assignments, and legacy `availableTags`. Item primary key is the existing item `id`. Paths, filenames, and tag names keep invariant-lowercase fold columns for substring search and case-insensitive path/tag match. Name sort does not use those fold columns. Duration is stored as `TimeSpan` ticks. Thumbnails, presets, core settings, and desktop settings stay in their current files. `fingerprintIndex` is not stored.
+  - Migrate an existing `library.json` when no `library.db` exists, in one transaction, using the parsers the server already uses: `mediaType` and `fingerprintStatus` may be numbers or strings, and duration may be a `TimeSpan`, a seconds number, or a string. Keep legacy `availableTags` when that list is what the library has. Write that database to a temporary file in the same directory, set `user_version`, commit, and sync it. Rename the temporary file to `library.db` only after it is complete. Rename `library.json` to `library.json.migrated` only after that rename has succeeded. A crash before the database rename leaves `library.json` in place and no `library.db`. A crash after it leaves a healthy `library.db`.
+  - A healthy `library.db` is authoritative: ignore `library.json` and `library.json.migrated`. A partial or unversioned `library.db` refuses to serve and is not migrated over. When `library.json` is still present, quarantine that database by renaming it aside and leave `library.json` in place, so a later open with no `library.db` can migrate the preserved JSON. When `library.json` is already gone, quarantine the bad database and refuse to serve: do not migrate `library.json.migrated`, and do not create an empty catalog. The same refusal applies when the open finds `library.json.migrated` but neither `library.db` nor `library.json`. Report that the live database was refused and that the migration-time snapshot is still at `library.json.migrated`.
+  - The running server does not open `library.db` in this milestone. Live readers and writers stay on `library.json` until the catalog cutover.
+- **Acceptance criteria**:
+  - An existing `library.json` library can be migrated into SQLite with equivalent items, sources, categories, tags, legacy `availableTags`, and item flags/stats. `fingerprintIndex` need not survive.
+  - Successful migration renames `library.json` to `library.json.migrated` only after `library.db` is in place and healthy. A crash before that publish leaves `library.json` unmoved. A later open of a healthy `library.db` does not read either JSON file. A partial or unversioned `library.db` does not serve and does not consume `library.json`. When `library.json` is still present, quarantine lets a later open migrate it. When only `library.json.migrated` remains, the open refuses and does not create an empty catalog.
+  - The running server still reads and writes `library.json`. It does not publish `library.db` on startup.
+- **Verification evidence**:
+  - `dotnet build ReelRoulette.sln` — pass. `dotnet test ReelRoulette.sln` — pass (168 Core + 58 Desktop).
+  - `LibraryCatalogStoreTests`: JSON-to-SQLite migration (string enums, numeric duration, TimeSpan duration, legacy `availableTags`, fold columns, `fingerprintIndex` absent), crash before publish leaves `library.json` unmoved and creates no `library.db`, a failed directory sync after publish leaves `library.json` unmoved, a healthy `library.db` ignores both JSON files, a partial database is quarantined so the next open migrates preserved `library.json`, an unversioned database with only `library.json.migrated` is refused, a migrated snapshot alone does not create `library.db`, an existing `library.json.migrated` blocks publish so `library.json` stays put, a bad database with neither JSON file does not name a missing snapshot, a database whose header opens but whose later pages are corrupt is quarantined without consuming `library.json`, a read-only database file fails the pre-publish sync, the Windows directory-sync access mask is `FILE_LIST_DIRECTORY`, a missing `fingerprintStatus` stays null while an explicit Pending `0` stays `0`, a source without an id or root path is omitted, an item with no full path is omitted, a locked `library.db` fails within about a second and stays in place, a blank category id is forced to `Uncategorized` with sort order `int.MaxValue` and a later duplicate id is skipped, that category is appended when the file does not have it, duplicate tag names collapse case-insensitively to the last one, and catalog test connections disable pooling so Windows can rename and delete `library.db`.
+  - `ReelRoulette.Server` has no reference to `LibraryCatalogStore`. Startup does not publish `library.db`.
+- **Deferrals / Follow-ups**:
+  - Opening this database from the running server, moving live readers and writers onto row updates, auto-tag scan scope, projection from SQLite, and disabling export, import, and JSON catalog backups are the next slice in this store/query sequence.
+  - Library list/query API and client browse cutover remain later slices. This store/query sequence ships as one release, ahead of the later account and Operator milestones.
+  - Account tables in this database are deferred to the account and PIN data model work. They extend `user_version` rather than replacing this catalog schema.
+
+### M10h - WebUI Library Click-to-Play and Responsive Sign-off
+
+- **Status**: ✅ Complete
+- **Goal**: Complete WebUI library browser behavior by using the server-authoritative play endpoint and signing off responsive/theme parity.
+- **Scope**:
+  - Depends on: WebUI library SSE state sync and server-authoritative play endpoint foundation.
+  - Wire tile activation to `POST /api/play/{itemId}` and play the returned media through the existing WebUI player path.
+  - Map endpoint errors into clear overlay/player feedback without local fallback selection logic.
+  - Complete mobile LAN and desktop browser responsiveness, fullscreen behavior, keyboard/focus basics, and light/dark theme polish for the full browser.
+  - Update docs and testing checklist for the new standard WebUI library play path.
+- **Acceptance criteria**:
+  - Clicking a WebUI library tile requests item playback through the server endpoint and starts the returned media in the WebUI player.
+  - Playback side effects update all clients through SSE and update the open library browser projection.
+  - The browser is usable on mobile-width LAN browsers and desktop browsers in light and dark themes.
+  - The browser follows established WebUI icon, dialog, and theming conventions with no desktop list-view parity requirement.
+- **Verification evidence**:
+  - `dotnet build ReelRoulette.sln` — pass.
+  - `dotnet test ReelRoulette.sln` — pass (126 Core + 49 Desktop tests; no server/desktop changes).
+  - `npm run verify` in `src/clients/web/ReelRoulette.WebUI` — pass (95 Vitest tests).
+  - WebUI `coreApi.test.ts` — `requestPlayItem` URL/body/encoding, success JSON, structured failure, blank id guard.
+  - WebUI `libraryPlayModel.test.ts` — 404/409/415/401 and fallback status mapping.
+  - WebUI `libraryGridTileModel.test.ts` — `data-item-id`, `tabindex`, `role="button"` on tiles.
+  - WebUI modules: `coreApi.ts` (`requestPlayItem`), `libraryPlayModel.ts`, `app.js` (`playFromLibraryItemId`, delegated tile click/keyboard, `playCurrent({ skipRecordPlayback })`, Escape closes overlay), `libraryGridTileModel.ts`, `styles.css` (tile focus/active, mobile sort-cluster wrap).
+  - API smoke — `POST /api/play/{itemId}` returns `200` with `RandomResponse` against live server library.
+  - Manual UI smoke — confirmed: tile click play (overlay closes, no duplicate `record-playback`), error mapping (404/409/415), keyboard (Escape/Enter/Space), desktop and mobile width, light/dark themes, cross-client SSE playback updates, fullscreen (`docs/checklists/testing-checklist.md`).
+- **Deferrals / Follow-ups**:
+  - Offline/PWA-specific library browsing and advanced library actions remain future considerations.
+
+### M10g - WebUI Library SSE State Sync
+
+- **Status**: ✅ Complete
+- **Goal**: Keep the WebUI library browser projection current while open using existing SSE infrastructure.
+- **Scope**:
+  - Depends on: WebUI virtual thumbnail grid.
+  - Subscribe the library browser model to existing SSE events that affect favorite, blacklist, play count, and last played state.
+  - Update visible and non-visible virtualized items without requiring a full overlay reopen.
+  - Handle `resyncRequired` by re-fetching the authoritative projection.
+  - Preserve the explicit refetch-on-open behavior even after live updates are added.
+- **Acceptance criteria**:
+  - Favorite and blacklist changes from any client update matching WebUI tiles while the overlay is open.
+  - Playback stats and last-played changes from any client update search/sort projections correctly while the overlay is open.
+  - SSE replay gaps or resync-required events trigger an authoritative projection re-fetch.
+  - Closing and reopening the overlay still performs a fresh projection fetch.
+- **Verification evidence**:
+  - `dotnet build ReelRoulette.sln` — pass.
+  - `dotnet test ReelRoulette.sln` — pass (126 Core + 49 Desktop tests; desktop change limited to library grid hover opacity 0.79).
+  - `npm run verify` in `src/clients/web/ReelRoulette.WebUI` — pass (84 Vitest tests).
+  - WebUI `libraryProjectionSync.test.ts` — tile-state patch, playback patch with optional server fields, rebrowse decision matrix, id/fullPath lookup.
+  - WebUI `libraryProjectionModel.test.ts` — optional `fullPath` parse for SSE path matching.
+  - WebUI modules: `libraryProjectionSync.ts`, `libraryGridController.ts` (`resetScroll`), `app.js` SSE handlers (`itemStateChanged`, `playbackRecorded`, `resyncRequired` projection refetch when overlay open).
+  - Manual cross-client smoke — confirmed: favorite/blacklist tile updates (visible + scrolled-off), playback sort/filter re-browse (`Play count`, `Last played`, `Only never played`), `resyncRequired` projection refetch while open, refetch-on-open, search/sort/filter scroll-to-top regression, playback continues with overlay open (`docs/checklists/testing-checklist.md`).
+- **Deferrals / Follow-ups**:
+  - New SSE event types are out of scope unless existing events cannot express the required state changes.
+  - `refreshStatusChanged` completion → overlay projection refetch remains deferred (desktop parity gap until follow-up).
+  - `createSseClient.ts` consolidation with inline `app.js` SSE remains deferred.
+
+### M10f - WebUI Virtual Thumbnail Grid
+
+- **Status**: ✅ Complete
+- **Goal**: Replace the interim filename result list with a responsive, virtualized, desktop-aligned justified thumbnail grid using API-backed projection metadata and shared layout rules.
+- **Scope**:
+  - Depends on: WebUI library projection search and sort; API-backed library thumbnail metadata and desktop grid cutover.
+  - Port or mirror `ReelRoulette.Core.Library.LibraryGridLayout` in WebUI (same constants, aspect fallbacks, row packing, and layout-width rules as Core tests in `LibraryGridLayoutTests.cs`).
+  - Build justified-row virtual scrolling with top/bottom spacers so only visible rows (plus a small buffer) are mounted; DOM item count stays bounded relative to the viewport, not total library size.
+  - Derive tile aspect ratios from projection `thumbnailWidth` / `thumbnailHeight` and `mediaType` fallbacks (same rules as `LibraryGridLayout.GetAspectRatio`); load tile JPEGs from `GET /api/thumbnail/{itemId}` when `hasThumbnail` is true (no local thumbnail cache reads).
+  - Replace the interim scrollable filename list in the library overlay with the virtual grid while keeping the “Showing N of M items” summary.
+  - Match the current desktop library grid tile chrome as closely as web technology allows. Before implementation, read `LibraryGridLayout.cs`, `LibraryGridLayoutTests.cs`, the `MainWindow.axaml` tile template, and desktop row virtualization/spacer logic in `MainWindow.axaml.cs`; implement equivalent CSS rather than approximate styling. Parity targets include: square tile edges; image scrim (`#22000000`) with crop equivalent to desktop `UniformToFill` inside variable-size cells; bottom filename bar (`#AA000000`, 12px white, ellipsis); top-right favorite/blacklist badge pill (`#99000000`, Material Symbols, Huggins Orange, 18px); missing-thumbnail placeholder when `hasThumbnail` is false; hover opacity ~0.92.
+  - Show favorite and blacklist state indicators on tiles using established Material Symbols conventions.
+  - Exclude play-count badges, list-view affordances, multi-select, orange selection overlay, and bulk context menu from this milestone.
+- **Acceptance criteria**:
+  - The browser renders a responsive justified thumbnail grid on mobile-width and desktop-width overlay layouts.
+  - Virtual scrolling keeps mounted row/tile count bounded relative to the visible viewport, not total library size.
+  - Justified-row layout at a given content width matches desktop row packing for the same visible items and projection metadata.
+  - Aspect ratios use projection dimensions when present and the same media-type fallbacks when missing.
+  - Tiles with `hasThumbnail: false` render placeholder behavior consistent with desktop (layout still uses fallback aspect; no broken image).
+  - Thumbnail images load from `GET /api/thumbnail/{itemId}` only.
+  - WebUI grid tile visual design—including variable tile sizing, row gaps, overlay scrims, filename bar, badge pill, and missing-thumbnail placeholder—matches the desktop grid as closely as web technology allows.
+  - Tile hover uses desktop-equivalent opacity treatment; no distinct pressed-state requirement beyond that.
+  - Side-by-side visual comparison of WebUI and desktop grids at equivalent viewport widths shows no significant unintentional divergence in tile appearance.
+  - Thumbnail cropping, placeholder/missing-thumbnail behavior, and filename metadata remain readable in light and dark themes.
+  - Favorite and blacklist indicators appear on tiles; play-count badges do not appear.
+- **Verification evidence**:
+  - `dotnet build ReelRoulette.sln` — pass.
+  - `dotnet test ReelRoulette.sln` — pass (126 Core + 49 Desktop tests; no server/desktop changes).
+  - `npm run verify` in `src/clients/web/ReelRoulette.WebUI` — pass (72 Vitest tests).
+  - WebUI `libraryGridLayout.test.ts` — Core-aligned `getAspectRatio` and `buildRows` parity; layout width uses full scrollport (no Avalonia 8px right gutter).
+  - WebUI `libraryGridVirtualizer.test.ts` — visible row window bounded for 1200-item fixture at mid-scroll.
+  - WebUI `libraryGridTileModel.test.ts` — favorite/blacklist badges, missing-thumbnail placeholder (no `<img>`), filename escape, thumbnail URL shape.
+  - WebUI library grid modules: `libraryGridLayout.ts`, `libraryGridTileModel.ts`, `libraryGridRowModel.ts`, `libraryGridVirtualizer.ts`, `libraryGridController.ts`; overlay wired via `app.js` grid controller; browse re-browse resets scroll to top.
+  - Manual smoke — confirmed: large-projection scroll, API thumbnail loading, mixed-aspect reflow, resize debounce, light/dark themes, side-by-side desktop visual parity, edge-to-edge grid layout, overlay scrollbar, header item count, and responsive toolbar/sort cluster at mobile and desktop widths.
+- **Deferrals / Follow-ups**:
+  - Multi-select, orange selection overlay, bulk context menu, batch actions, list view, and click-to-play are out of scope for this milestone (selection overlay and bulk actions are planned for a later WebUI library milestone; implementation may differ slightly from desktop to support both touch and pointer input).
+  - Any desktop grid behavior that is technically impossible to replicate in a browser context should be noted as a known divergence in milestone completion evidence rather than treated as a blocker.
+
+### M10e2 - API-Backed Library Thumbnail Metadata and Desktop Grid Cutover
+
+- **Status**: ✅ Complete
+- **Goal**: Serve thumbnail layout metadata through the library projection API and cut the desktop library grid over to API-only thumbnail access so WebUI can replicate the same contract.
+- **Scope**:
+  - Enrich `GET /api/library/projection` items at serve time with `hasThumbnail`, `thumbnailWidth`, and `thumbnailHeight` derived from the server thumbnail index (not persisted in `library.json`).
+  - Extract the justified-row library grid layout algorithm into `ReelRoulette.Core` with golden-vector tests.
+  - Cut desktop library grid thumbnail metadata and image loading over to the projection API and `GET /api/thumbnail/{itemId}`; remove local `thumbnails/` reads for grid rendering.
+  - Parse projection thumbnail fields in WebUI `libraryProjectionModel` (prep for M10f; no grid rendering yet).
+- **Acceptance criteria**:
+  - Projection items expose thumbnail metadata when generated thumbs exist; missing thumbs omit dimensions and set `hasThumbnail: false`.
+  - Desktop library grid layout remains visually unchanged and no longer reads local thumbnail cache files for rendering.
+  - Desktop visible tiles load thumbnail JPEGs through the API only.
+  - After refresh completes, new/changed thumbnails appear without desktop restart (projection refetch + visible-tile reload + layout reflow when dimensions change).
+  - Core layout tests and WebUI projection parser tests cover the new contract.
+- **Verification evidence**:
+  - `dotnet build ReelRoulette.sln` — pass.
+  - `dotnet test ReelRoulette.sln` — pass (126 Core + 49 Desktop tests).
+  - `npm run verify` in WebUI — pass (56 Vitest tests).
+  - Manual desktop grid smoke — confirmed (Linux desktop): grid appearance and interaction unchanged vs pre-cutover; thumbnails load via projection metadata and `GET /api/thumbnail/{itemId}` after refresh without restart; mixed-aspect layout and panel resize reflow behave as before.
+- **Deferrals / Follow-ups**:
+  - WebUI virtual thumbnail grid remains M10f.
+  - Library archive export/import continues to use on-disk `thumbnails/` (server artifact management, not grid rendering).
+
+### M10e - WebUI Library Projection Search and Sort
+
+- **Status**: ✅ Complete
+- **Goal**: Add the WebUI library browser's in-memory projection model, playback FilterState narrowing, free-text search, and desktop-aligned sort controls.
+- **Scope**:
+  - Depends on: WebUI library overlay shell.
+  - Build an in-memory library projection model from the server projection response for overlay rendering.
+  - Apply active playback **FilterState** to the library overlay (desktop `LibraryProjectionDisplayFilter` parity).
+  - Add free-text search over filename and relative path without server-side query changes.
+  - Add sort by name, last played, date added, play count, and duration with ascending/descending selection matching desktop defaults.
+  - Keep filtering/sorting deterministic across missing values, mixed media types, and projection refreshes.
+- **Acceptance criteria**:
+  - Search matches filename and relative path case-insensitively from the in-memory projection.
+  - Sort controls support name, last played, date added, play count, and duration in both directions.
+  - Default sort behavior matches the desktop library panel.
+  - Search and sort combine predictably and update rendered results without re-fetching the projection.
+  - Library overlay reflects the active playback filter (Filter Media / header preset) with desktop-aligned display rules.
+- **Verification evidence**:
+  - `dotnet build ReelRoulette.sln` — pass.
+  - `dotnet test ReelRoulette.sln` — pass (168 tests; no server/desktop changes).
+  - `npm run verify` in `src/clients/web/ReelRoulette.WebUI` — pass (55 Vitest tests including `libraryProjectionModel`, `libraryProjectionDisplayFilter`, and `libraryBrowseModel` suites).
+  - WebUI library browse modules: projection parse + catalog; FilterState display filter port; browse pipeline (enabled sources → search → FilterState → sort); interim scrollable filename result list with “Showing N of M items” summary.
+  - Search/sort controls persist across overlay close/reopen; Filter Media Apply and header preset changes re-browse in memory while overlay is open; projection still refetches on every open.
+  - Manual smoke — confirmed: FilterState narrowing (default + favorites-only + header preset), search/sort without refetch, Filter Apply re-browse while overlay open, search/sort persistence across close/reopen, refetch-on-open, zero-match messaging, fullscreen, and light/dark themes.
+- **Deferrals / Follow-ups**:
+  - Virtual thumbnail grid, SSE sync, and click-to-play remain follow-on WebUI library milestones.
+  - Server-side search/query endpoints remain out of scope unless projection size proves untenable after virtual scrolling.
+
+### M10d - WebUI Library Overlay Shell
+
+- **Status**: ✅ Complete
+- **Goal**: Introduce the WebUI library browser entry point and full-screen overlay shell without implementing the full grid behavior yet.
+- **Scope**:
+  - Depends on: none.
+  - Add a **Library** button to the WebUI top-right overlay controls, positioned left of the filter button.
+  - Implement a full-screen overlay matching the existing tag editor and filter dialog shell patterns, including header, close behavior, responsive layout, focus handling, and light/dark theme integration.
+  - Wire overlay open/close lifecycle and fetch the library projection on every open, with loading and error states.
+  - Keep the initial content minimal enough to validate shell behavior before grid/search/sort work lands.
+- **Acceptance criteria**:
+  - The Library button appears in the correct top-right overlay control position and opens a full-screen library overlay.
+  - The overlay matches established WebUI dialog structure and works in fullscreen/pseudo-fullscreen contexts used by the player shell.
+  - Opening the overlay re-fetches the projection every time, including after close/reopen.
+  - Loading, empty, and request-failure states are visible and theme-compatible.
+- **Verification evidence**:
+  - `dotnet build ReelRoulette.sln` — pass.
+  - `dotnet test ReelRoulette.sln` — pass (168 tests; no server/desktop changes).
+  - `npm run verify` in `src/clients/web/ReelRoulette.WebUI` — pass (36 Vitest tests including new `libraryOverlayModel.test.ts`).
+  - WebUI library overlay shell: `#library-open-btn` (`browse` icon) left of filter; `#library-overlay` inside `#fullscreen-stage`; Close-only header; `GET /api/library/projection` on every open with loading/empty/error/summary states; playback continues while open.
+  - `libraryOverlayModel.ts` — projection summary parsing (enabled-source item counts), open/close lifecycle, refetch-on-open contract tests.
+  - Manual shell smoke — confirmed (Linux desktop, dark theme): open/close from corner control, projection refetch on reopen with loading then summary, native fullscreen overlay usable; light theme not explicitly re-tested (uses same `html.theme-light` overlay pattern as filter/tag dialogs).
+- **Deferrals / Follow-ups**:
+  - Grid rendering, search, sort, SSE state updates, and click-to-play are handled by later WebUI library-browser milestones.
+
+### M10c - Desktop Grid-Only Library Panel Cleanup
+
+- **Status**: ✅ Complete
+- **Goal**: Remove the obsolete desktop library list view so the desktop library panel is grid-only.
+- **Scope**:
+  - Depends on: desktop click-to-play API cutover.
+  - Remove list/grid toggle UI, list-view rendering, and list-view-specific state persistence from the desktop library panel.
+  - Keep the existing grid view, thumbnail behavior, filtering behavior, and item activation path intact.
+  - Add a `lastWriteTimeUtc`-backed **Date Added** sort mode to the desktop library panel sort selector, supporting both descending (Newest to Oldest) and ascending (Oldest to Newest) directions.
+  - Clean up dead list-view styles, settings keys, and code paths without changing library projection contracts.
+- **Acceptance criteria**:
+  - Desktop library panel always renders the grid view and exposes no list-view toggle.
+  - Existing grid thumbnail, sorting, filtering, favorite/blacklist indicator, and click-to-play behavior remain functional.
+  - Sort controls include **Date Added** (from `lastWriteTimeUtc`) with both **Newest to Oldest** and **Oldest to Newest** directions.
+  - **Date Added** defaults to descending (**Newest to Oldest**), matching desktop time-based sort conventions.
+  - Removed list-view preference data is ignored harmlessly if present in existing desktop settings.
+  - No WebUI behavior changes are included in this cleanup.
+- **Verification evidence**:
+  - `dotnet build ReelRoulette.sln` — pass (0 warnings after cleanup).
+  - `dotnet test ReelRoulette.sln` — pass (`LibraryPanelSortTests` Date Added asc/desc/null ordering; existing desktop/core suites).
+  - Confirmed `GET /api/library/projection` already exposes per-item `lastWriteTimeUtc` via full library root JSON; no server/OpenAPI contract change required.
+  - Desktop library panel is grid-only: removed `LibraryListBox`, grid/list toggle, list scroll-anchor restore, and `LibraryGridViewEnabled` settings read/write (legacy JSON property ignored on load).
+  - Added `LibraryPanelSort` helper with **Date added** sort mode (`lastWriteTimeUtc`).
+  - Manual grid-only smoke — confirmed (Linux desktop): library panel grid-only with no list/toggle; thumbnails and favorite/blacklist overlays; search and existing sort modes; **Date added** Newest→Oldest/Oldest→Newest (defaults to Newest→Oldest when selected); grid double-click/Enter play via `POST /api/play/{itemId}`; multi-select and right-click bulk context menu; selection persists across filter/sort changes; legacy `libraryGridViewEnabled: false` settings load with grid shown; random playback and prev/next timeline unchanged.
+  - Docs/checklist updated to remove list-view validation references.
+- **Deferrals / Follow-ups**:
+  - Duplicate detection remains in the desktop client until Operator Source Management and must not be removed as part of this milestone.
+
+### M10b - Desktop Click-to-Play API Cutover
+
+- **Status**: ✅ Complete
+- **Goal**: Replace the desktop library click-to-play workaround with the server-authoritative item play endpoint.
+- **Scope**:
+  - Depends on: server-authoritative play endpoint foundation.
+  - Route desktop grid item activation through `POST /api/play/{itemId}` instead of determining the selected media locally.
+  - Keep LibVLC rendering local to the desktop client while treating the server response as the source of playback truth.
+  - Preserve existing desktop error UX for missing/unplayable media with endpoint-backed messages.
+  - Remove or retire the click-to-play workaround code path once the API path is verified.
+- **Acceptance criteria**:
+  - Clicking a desktop library grid item requests playback through the server endpoint and starts the returned media locally.
+  - Playback stats, last-played, favorite, and blacklist state continue to update via API/SSE projection only.
+  - Missing/unavailable media produces a clear desktop error without local fallback selection logic.
+  - Existing random playback and player controls remain unchanged.
+- **Verification evidence**:
+  - `dotnet build ReelRoulette.sln` — pass (0 warnings).
+  - `dotnet test ReelRoulette.sln` — pass (`CoreServerApiClientPlayItemTests`, `PlaybackMediaUrlResolverTests`, `PhotoPlaybackStreamOpenerTests`; existing Core play-item coverage).
+  - Desktop library grid and list activation wired to `RequestPlayItemAsync` with `SkipRecordPlayback` on `PlaybackTarget`; no client `record-playback` for play-item starts.
+  - Manual smoke — confirmed (Linux desktop): library grid/list click-to-play for playable video and photo items with Force API `/api/media/...` playback; list double-click, Enter, and play button match grid play-item behavior; favorite/blacklist toggles no longer emit spurious add/remove status on play; random playback and prev/next timeline unchanged.
+- **Deferrals / Follow-ups**:
+  - WebUI library-browser click-to-play adoption is handled in the WebUI browser series.
+  - Non-library play entry points (favorites, blacklist, recently played, timeline navigation) remain on `PlayFromPathAsync` + `record-playback` unless explicitly expanded later.
+
+### M10a - Server-Authoritative Play Endpoint Foundation
+
+- **Status**: ✅ Complete
+- **Goal**: Add a dedicated server-owned play request path that any client can use to request a specific library item.
+- **Scope**:
+  - Depends on: none.
+  - Define `POST /api/play/{itemId}` in the OpenAPI contract with deterministic success and failure responses (including optional machine-readable `code` on `ErrorResponse`) for playable item, unknown id, missing media file, disabled source, and unsupported extension cases. Route `itemId` is the persisted library **id** only (not `fullPath`). Direct play does **not** reject blacklisted items; disabled sources return **409**; missing media returns **404** with `play_media_missing`; unknown id returns **404** with `play_item_not_found`; unsupported extension returns **415** with `play_unsupported_media`.
+  - Implement the server command path with `LibraryPlaybackService.TryPlayItem`, shared playable extension allowlist (`MediaPlayableExtensions`, aligned with library import lists), and correct per-source `isEnabled` projection for items (including when all catalog sources are disabled).
+  - On success, return the same `RandomResponse` shape as random playback, call `LibraryOperationsService.RecordPlayback`, and publish `playbackRecorded` via `ServerStateService` (same side effects as `POST /api/record-playback`). No transcoding/session-streaming.
+- **Acceptance criteria**:
+  - A valid item-specific play request returns a playable media response for the requesting client.
+  - Invalid or unavailable item requests return deterministic status codes and machine-readable error payloads.
+  - Playback stats and last-played state are updated server-side and projected to all clients through existing SSE infrastructure.
+  - The endpoint is covered in the shared API contract and generated/typed client surfaces where applicable.
+  - No client-local state mutation path is introduced for endpoint side effects.
+- **Verification evidence**:
+  - `dotnet build ReelRoulette.sln` — pass (0 warnings).
+  - `dotnet test ReelRoulette.sln` — pass (`LibraryPlaybackServiceTests` play-item and random-blacklist cases; `PlayItemOrchestrationTests`).
+  - WebUI `npm run generate:contracts` / `npm run verify` — pass (OpenAPI + `openapi.generated.ts`).
+  - Docs: `docs/api.md`, `docs/domain-inventory.md`, `docs/checklists/testing-checklist.md`, `CONTEXT.md`, `CHANGELOG.md` `[Unreleased]`, `COMMIT-MESSAGE.txt`.
+- **Deferrals / Follow-ups**:
+  - Full playback-session, direct-stream, transcode, resume, and format-resilience architecture remains future playback architecture work.
+  - Desktop/WebUI cutover to call this endpoint without double `record-playback` is tracked in the desktop/WebUI browser milestones.
+
+### M9i - WebUI Auto Tag Parity
+
+- **Status**: ✅ Complete
+- **Goal**: Ship **Auto Tag** in the WebUI with the same **API-level** scan/selection/apply behavior as the **Desktop** **Auto Tag** dialog (full-screen tag overlay with tabs), while using the WebUI’s **shared Save** / **Close**+discard model instead of separate Auto Tag OK/Cancel buttons. **Align Desktop Auto Tag scan scope** with WebUI so **Scan full library** off means **enabled sources only**—not playback/filter state, tag filters, or library search. WebUI integrates into the existing tag experience without duplicating tag logic on the client.
+- **Scope**:
+  - **Desktop — Auto Tag scan scope:** When **Scan full library** is **unchecked**, the candidate item set for scan/apply is **all library items belonging to enabled sources** only. Remove or bypass any narrowing that used **current filter state**, **tag filter**, or **library search** text for that path (for example **`GetCurrentFilteredLibraryItems`** or equivalent). When **Scan full library** is **checked**, behavior remains **all items** (full library) as today. **`POST /api/autotag/scan`** continues to receive **`scanFullLibrary`** plus **`itemIds`** as **`fullPath`** values for the scoped items (or empty / full-library semantics consistent with the server).
+  - Split the WebUI tag overlay into **tabs** using the **same structural pattern** as the WebUI **filter** full-screen overlay: **Edit Tags** retains today’s manual editor; add **Auto Tag** for scan/selection workflows so tab chrome and layout feel consistent across filter and tags.
+  - **Shared chrome (both tabs):** **Header** — title, tab strip, **Refresh**, **Close**. **Footer** — add category/tag controls and **Save** (same as today’s tag overlay). Only the **body** switches between **Edit Tags** and **Auto Tag** content.
+  - **Default tab:** Opening the overlay from the existing **Edit tags** entry lands on **Edit Tags** first; **Auto Tag** is the sibling tab. **No** extra confirmation when switching tabs; pending work may span both tabs until **Save** or discard.
+  - **Auto Tag** tab mirrors **Desktop** scan/selection semantics: **Scan full library**, **View all matches**, explanatory copy (e.g. filename match ignores extension), **Scan Files** → **`POST /api/autotag/scan`**; results list with expand/collapse, row tri-state **Apply**, per-file checkboxes, **Select all** / **Deselect all**, **Total matched** / **To be changed**, status text. **Desktop** uses a separate **OK** / **Cancel** in the Auto Tag **window**; **WebUI** maps **commit** to the shared **Save** and **discard** to **Close** / **Refresh** with **`Discard changes?`** when anything is pending (manual and/or Auto Tag), not separate Auto Tag OK/Cancel buttons.
+  - **Save (WebUI):** Single **Save** applies all pending work in order: **(1)** catalog / tag-structure mutations (existing `POST /api/tag-editor/*` upsert/delete/rename sequence), **(2)** manual item tag apply (`POST /api/tag-editor/apply-item-tags` when applicable), **(3)** **`POST /api/autotag/apply`** when Auto Tag has selected assignments after a scan. If any step fails, **abort** the remainder and show the error. **`Save`** shows pending/active state when **either** manual editor deltas **or** Auto Tag selections are pending.
+  - **Close / Refresh (WebUI):** If manual and/or Auto Tag changes are pending, prompt **`Discard changes?`** before closing the overlay or refreshing the tag model; **no** prompt on tab switch alone.
+  - **Scan request shape (WebUI):** **`scanFullLibrary`** and **`itemIds`** (`fullPath` values) must match the **same scope rules** as **Desktop** after alignment: **off** = items in **enabled sources** only; **on** = full library per server behavior.
+  - **In-flight scan UX (WebUI):** While a scan is running, disable **Scan Files** (no overlapping scans), show a clear **status line** (scanning / success / error), and show an **indeterminate progress** indicator consistent with WebUI patterns. Define interaction for **Close** / **Refresh** during an in-flight scan (e.g. disable or cancel scan first) so behavior is deterministic.
+  - **After Save** that includes **`POST /api/autotag/apply`**, **refresh or resync tag state** the same way as other WebUI tag mutations (**`tagCatalogChanged`**, **`itemTagsChanged`**, **`resyncRequired`**, and/or refetch of the tag editor model) so the **Edit Tags** tab and any visible chips stay aligned with the server.
+  - **Scan full library** default (WebUI): **best-effort `localStorage`** persistence (**Desktop**-style preference), with acceptable fallback if storage is unavailable.
+- **Acceptance criteria**:
+  - **Desktop:** With **Scan full library** off, Auto Tag scan considers only items from **enabled sources**; filter state, tag filter, and library search **do not** shrink the scan set. With it on, full-library behavior is unchanged.
+  - **WebUI:** Scan/selection semantics and **`POST /api/autotag/apply`** payload behavior match **Desktop** Auto Tag for representative libraries (including partial selections and **View all matches**), using the **same** enabled-sources-only rule when **Scan full library** is off.
+  - **Edit Tags** and **Auto Tag** are both available inside one WebUI overlay without leaving the flow; **header/footer** shared; tab UX matches the WebUI filter overlay pattern; default tab is **Edit Tags** when opened from the existing control.
+  - **WebUI:** **Save** commits manual + Auto Tag pending work in the specified order; **Close** / **Refresh** prompt **`Discard changes?`** when pending; **no** tab-switch-only confirm.
+  - During scan, WebUI **in-flight** UX is clear (disabled **Scan Files**, status line, indeterminate progress).
+  - After **Save** (including autotag apply), **Edit Tags** data and tag surfaces reflect applied changes without a manual full reload (same class of handling as other tag operations).
+  - Automated checks: `dotnet build` / `dotnet test`, WebUI `npm run verify`; OpenAPI/clients updated only if a contract gap is found and fixed.
+  - Docs/checklist/`CHANGELOG` `[Unreleased]`/`CONTEXT`/`COMMIT-MESSAGE` updated when work lands, per repo discipline.
+- **Verification evidence**:
+  - `dotnet build ReelRoulette.sln` — pass (0 warnings).
+  - `dotnet test ReelRoulette.sln` — pass (DesktopApp.Tests + Core.Tests).
+  - WebUI `npm run verify` (contracts, typecheck, vitest, build, build-output) — pass.
+  - Manual spot-check — **confirmed**: **WebUI** and **Desktop** Auto Tag — **Scan full library** on/off; with it off, scope is **enabled sources** only (e.g. disabled source excluded; filter/search do not exclude items that share an enabled source). **WebUI:** **Save** with combined manual + Auto Tag pending; **Close** / **Refresh** with **`Discard changes?`** when pending.
+- **Deferrals / Follow-ups**:
+  - Server-owned preference for scan scope instead of WebUI `localStorage`, if desired later.
+  - Extra keyboard/ARIA polish on the Auto Tag grid, if not gated here.
+
+### M9h - WebUI Filter Dialog Parity
+
+- **Status**: ✅ Complete
+- **Goal**: Bring WebUI playback filtering to parity with the desktop **Filter Media** experience: full filter state editing, tag selection with the same AND/OR semantics (global category combination and per-category local modes), tri-state tag chips, and preset catalog management (create, edit, rename, delete, reorder, update-from-current), while keeping a **quick preset** combobox for fast apply—API-authoritative state only, matching existing tag-editor parity patterns.
+- **Scope**:
+  - Replace **preset-only** WebUI playback filtering with a desktop-equivalent **filter** UI: **full-screen overlay** implemented the same way as the WebUI tag editor/dialog (layout/shell parity), with desktop-mirroring tabs/sections: **General** (basic flags, media type, client source inclusion, audio filter, duration min/max with **the same free-text format, parsing, validation, and “no min / no max” checkbox semantics as the desktop Filter Media dialog**—e.g. `HH:MM:SS` style inputs, not a divergent mobile-only shortcut), **Tags** (category combination mode, per-category local AND/OR, expandable categories, include/exclude tri-state chips aligned with desktop filter behavior), and **Presets** (list management, header/summary behavior for the **client-held** active preset name, save-as-new, update existing, discard/revert flows as on desktop).
+  - **Chrome**: keep the **preset combobox** in its **current** location (shell placement unchanged); add a dedicated **Filter…** control that opens the filter overlay, placed in the **top-right media controls cluster** **to the left of** the tag-edit control (order: … **filter** → **tag** → **favorite** …), using the same **Material Symbols** glyph as desktop (**`filter_alt`**, same tooltip intent as desktop “Select filters…”).
+  - Wire filter and preset behavior through existing server APIs (no client-local authoritative preset catalog or server-side filter overrides): **`GET`/`POST /api/presets`**, **`POST /api/presets/match`**, **`POST /api/random`** (request body carries either `filterState` or `presetId`), **`GET /api/sources`** (General tab), **`POST /api/tag-editor/model`** (Tags tab). Continue existing **SSE / `resyncRequired`** handling; **`POST /api/library-states`** is only for **favorite/blacklist item snapshots** on reconnect/resync—not for filter or preset payloads. **Preset list order is API-canonical**; verify OpenAPI and handlers expose every **filter JSON field** and ordering behavior WebUI needs; fix contract/server gaps if found.
+  - **Preset catalog freshness:** refetch **`GET /api/presets`** when opening the filter overlay, after every successful **`POST /api/presets`**, and when **`resyncRequired`** is handled (same resync path as other WebUI reloads), so other tabs/clients cannot leave the UI silently stale.
+  - **Active preset (UI concept):** the server does not store a per-session “active preset”; WebUI holds the active preset name (and current filter JSON) locally and uses **`POST /api/presets/match`** when a named preset needs to be resolved or labeled—same mental model as desktop’s combo + dialog.
+  - Pairing/auth for these endpoints follows the **existing WebUI** and tag-editor gates (no separate auth model).
+  - Reuse WebUI theming and chip/surface patterns established for tag editor parity (light/dark, shadows, category rows) so filter and tag UIs feel consistent with desktop and with each other.
+- **Acceptance criteria**:
+  - Every filter and tag option available in the desktop **Filter Media** dialog is available and persisted via the API from WebUI with the same eligibility semantics for random/next/previous/history playback, for **mouse and touch** workflows; **keyboard parity is best-effort** and not a gate for this milestone.
+  - Every **`POST /api/random`** that requests a **new** random pick (including **Next** when not stepping through local history) sends either **`presetId`** **or** the **full serialized `filterState`**—including when **“None” / no named preset** is selected—so eligibility matches desktop for ad-hoc filters.
+  - Tag logic matches desktop: global category combination (AND/OR), per-category local ALL/ANY, and tri-state per-tag include/exclude/none behavior including edge cases covered by desktop (empty selection, legacy preset shapes if still supported server-side).
+  - Preset operations match desktop intent: create, rename, delete, reorder, set active from list, load preset into editor, update preset from current filter state, and “None” / clear active preset where applicable; preset catalog order matches **GET/POST `/api/presets`** everywhere (combobox + dialog).
+  - Quick preset combobox remains usable for one-step apply; full filter overlay is reachable via the dedicated control for all editing workflows.
+  - Automated checks green: `dotnet build` / `dotnet test` for the solution, WebUI `npm run verify` (plus any new unit tests for filter/preset client logic); OpenAPI/regenerated clients stay in sync if contracts change.
+  - Docs and testing checklist updated for WebUI filter/preset parity (manual spot-check steps vs desktop).
+- **Verification evidence**:
+  - `dotnet build ReelRoulette.sln` and `dotnet test ReelRoulette.sln` passed locally after implementation.
+  - `npm run verify` in `src/clients/web/ReelRoulette.WebUI` passed (contracts, `tsc`, Vitest including `filterStateModel.test.ts`, Vite build + output verify).
+  - Manual spot-check: follow **WebUI filter / preset parity** rows in `docs/checklists/testing-checklist.md` against desktop Filter Media where applicable.
+  - `CHANGELOG.md` `[Unreleased]`, `CONTEXT.md`, `docs/api.md`, `docs/domain-inventory.md`, `docs/checklists/testing-checklist.md`, and `COMMIT-MESSAGE.txt` updated for this landing.
+- **Deferrals / Follow-ups**:
+  - Full keyboard/shortcut parity for the filter overlay → optional later milestone or polish pass.
+  - Record any other server-only or UX deferrals here if scope must shrink during implementation.
+
+### M9g - Linux Release Readiness and Sign-off
+
+- **Status**: ✅ Complete
+- **Goal**: Final Linux + cross-platform tray sign-off for server and **Desktop** client distribution.
+- **Scope**:
+  - **Owns** the comprehensive automated + manual verification **deferred** from **Avalonia Server Tray + Linux Runtime Baseline**, **Linux Packaging (Server + Desktop)**, **Linux Installation UX**, and **CI Linux Distribution Gates**: full cross-platform matrix (**Windows** + **Linux**), completed `docs/checklists/testing-checklist.md` with PASS/FAIL evidence, and packaged-artifact smokes where applicable.
+  - Full automated + manual matrix on **CachyOS** (`linux-x64`): server (Avalonia tray + headless), **Desktop** client, WebUI/operator against server; include **XDG Autostart** on/off validation for **Launch Server on Startup** on **Linux**.
+  - AppImage launch, application menu registration, and install script end-to-end on a clean **CachyOS** user profile verified in both tray-capable and headless scenarios.
+  - **Windows** server tray and autostart: status **reviewed and documented** against the current baseline; **known open issues** with Avalonia/Win32 tray (if any remain) are **called out in release tracking**—this milestone is **not** blocked on full tray parity alone.
+  - End-to-end packaged install/run; release notes and tracking updates.
+- **Acceptance criteria**:
+  - All automated gates green (build/test/web verify/package/smoke) for Linux and **Windows**.
+  - Manual checklist complete with PASS/FAIL evidence (tray-capable vs tray-unavailable on Linux; **Linux** autostart on/off evidence).
+  - No critical Linux-only regressions; **Desktop** client behaviors accepted by spot-check matrix where exercised; **Windows** server tray status **reviewed and documented**, with any unresolved Avalonia Win32 tray reliability called out in **release tracking** (does not indefinitely defer this milestone).
+  - Tracking docs and changelog reflect **Desktop** naming (`desktop` paths) and Linux-ready state.
+- **Verification evidence**:
+  - **Automated (local, CachyOS `linux-x64`, 2026-04-10):** `dotnet build ReelRoulette.sln --configuration Release -p:TargetFramework=net10.0 -p:EnableWindowsTargeting=true -m:1`; `dotnet test ReelRoulette.sln --configuration Release --no-build -p:TargetFramework=net10.0 -p:EnableWindowsTargeting=true -m:1` (106 + 13 tests passed); WebUI `npm ci` + `npm run verify` in `src/clients/web/ReelRoulette.WebUI`; `pwsh ./tools/scripts/verify-web-deploy.ps1` (single-origin/control-plane smoke passed); `./tools/scripts/package-serverapp-linux-portable.sh` + `./tools/scripts/package-desktop-linux-portable.sh`; `./tools/scripts/package-serverapp-linux-appimage.sh` + `./tools/scripts/package-desktop-linux-appimage.sh`; `./tools/scripts/verify-linux-packaged-server-smoke.sh` (HTTP checks against extracted portable server OK); AppImage `--help` prerequisite text verified for server (ffmpeg/ffprobe) and desktop (LibVLC/VLC); portable staging tree: zero `.pdb` files, `run-server.sh` executable; `HOME=<temp> ./tools/scripts/install-linux-local.sh` verified stable AppImage names, `reelroulette-*.desktop` under `~/.local/share/applications`, and hicolor icons.
+  - **CI / Windows matrix:** Default branch protection is expected to run `.github/workflows/ci.yml` jobs `build-test-linux` and `build-test-windows` (build + test on `ubuntu-latest` and `windows-latest`); Linux packaging + headless packaged-server smoke is `package-linux.yml` (on tag / `workflow_dispatch`). Windows Inno/portable packaging rows in the manual checklist remain **waived** on the maintainer checklist with rationale (no Windows desktop session in this evidence pass).
+  - **Release tracking (Windows tray):** Avalonia **11.3.13** tray host with `NativeMenuItem` state updates marshaled on `Dispatcher.UIThread` after async registry work (see `[Unreleased]` / recent **Changed** notes in `CHANGELOG.md`). Residual Win32 tray flakiness, if observed in the field, is treated as a known follow-up—not a blocker for this sign-off per milestone scope.
+  - **Docs:** `docs/checklists/testing-checklist.md` metadata + sign-off updated; `MILESTONES.md` (this entry + active tracker); `CHANGELOG.md` `[Unreleased]`; `COMMIT-MESSAGE.txt` final state.
+- **Deferrals / Follow-ups**:
+  - Manual execution of Windows-only checklist rows (console-window absence, Inno installers, `fetch-native-deps.ps1` on a clean tree, packaged Windows tray/no-console) on a **Windows** maintainer host when cutting a Windows release.
+  - `install-linux-from-github.sh` against a live GitHub release asset set when tagging (or rely on CI release upload + spot-check).
+  - Optional **CHANGELOG** release section cut and tag publish remain a separate release operator step unless bundled into the next release milestone.
+
+### M9f - WebUI UX/UI Polish
+
+- **Status**: ✅ Complete
+- **Goal**: Deliver WebUI UX/UI polish and theme parity with desktop behavior without changing core API-first ownership boundaries.
+- **Scope**:
+  - Web refresh-status projections provide actionable stage/progress detail comparable to desktop, including parity for the consolidated refresh-complete summary (`Core refresh complete | Source | Duration | Loudness | Thumbnails`) using the same compact formatting rules as the desktop app (non-zero-only segments where applicable, `all cached` phrasing for duration/loudness no-scan cases, aligned thumbnail/source token vocabulary).
+  - Add WebUI runtime theme detection (system/device dark or light mode) and apply matching theme behavior automatically.
+  - Ensure WebUI styling parity with desktop for tag editor and related tag-surface visuals in both light and dark modes.
+  - WebUI automatically follows device/system dark-light preference at runtime and keeps styling parity with desktop in both modes.
+  - Keep WebUI tag chips visually consistent with desktop across themes:
+    - chip text/icons remain white in both light and dark modes,
+    - apply consistent chip drop-shadow styling matching desktop.
+  - Fix WebUI tag editor category reorder behavior so move-up/move-down operations are treated as apply-worthy changes and activate apply/save affordances.
+  - Update WebUI media-container controls layout to match desktop intent:
+    - replace the bottom-center edit-tags control with a mute control matching desktop mute-button behavior,
+    - move edit-tags action to the top-right controls cluster, positioned left of favorite.
+  - Add control-only shadow treatment on the WebUI media container controls (do not dim or shadow the full media container surface).
+- **Acceptance criteria**:
+  - Web refresh-status projections provide actionable stage/progress detail comparable to desktop, including parity for the consolidated refresh-complete summary (`Core refresh complete | Source | Duration | Loudness | Thumbnails`) using the same compact formatting rules as the desktop app (non-zero-only segments where applicable, `all cached` phrasing for duration/loudness no-scan cases, aligned thumbnail/source token vocabulary).
+  - WebUI category move-up/move-down actions in tag editor activate apply/save state and persist correctly when applied.
+  - WebUI media controls include a desktop-matching mute button in the bottom-center controls position, and edit-tags is moved to top-right immediately left of favorite.
+  - WebUI media-container control chrome uses control-only shadow treatment without darkening the full media container background.
+  - WebUI automatically follows device/system dark-light preference at runtime and keeps styling parity with desktop in both modes.
+  - WebUI tag chips preserve white text/icons with consistent drop-shadow treatment in both light and dark modes.
+  - No regressions to previously completed reliability fixes (compatibility gating, reconnect/resync, deterministic testing simulations).
+- **Verification evidence**:
+  - Automated: `dotnet build ReelRoulette.sln`, `dotnet test ReelRoulette.sln`, WebUI `npm run verify` (contracts, typecheck, Vitest including refresh projection cases, production build + output verify).
+  - Implementation: `src/clients/web/ReelRoulette.WebUI` — `refreshStatusProjection.ts` + `coerceRefreshSnapshot` wired from `app.js` for SSE refresh lines; tag editor `tagEditorCategoryOrderDirty`; `shell.ts` overlay layout (mute in transport row, tag edit top-right); `styles.css` control-only drop shadows and `theme-light`/`theme-dark` via `prefers-color-scheme` in `main.ts`; tag-chip styling unchanged for white glyphs + text shadows across themes.
+  - Docs: `CHANGELOG.md` `[Unreleased]`, `CONTEXT.md`, `docs/checklists/testing-checklist.md`, `COMMIT-MESSAGE.txt` updated for this landing.
+- **Deferrals / Follow-ups**:
+  - WebUI `localStorage` persistence for mute preference (desktop persists volume/mute in settings) remains optional future UX if desired.
+
+### M9e - Cross-Platform Library Migration
+
+- **Status**: ✅ Complete
+- **Goal**: Allow users to export their ReelRoulette library from one install and import it on another — including across **Windows** and **Linux** — with a guided source folder remapping step to handle path differences between systems.
+- **Scope**:
+  - **Export** (`Library > Export Library…`):
+    - Produces a single `.zip` archive containing: `library.json`, `core-settings.json`, `desktop-settings.json`, `presets.json`, and an `export-manifest.json`.
+    - `export-manifest.json` records: source OS, app version, and the list of unique source folder paths present in the library — used to drive the import remapping UI.
+    - Optional checkbox: **Include thumbnails** — if checked, the `thumbnails/` directory is included in the zip. Default unchecked (keeps zip small; thumbnails regenerate on use).
+    - Optional checkbox: **Include backups** — if checked, the `backups/` folder from the config directory is included in the zip. Default unchecked.
+    - Export writes to a user-chosen location; suggested filename: `ReelRoulette-Library-{timestamp}.zip`.
+  - **Import** (`Library > Import Library…`):
+    - User picks a previously exported `.zip` via file picker.
+    - App parses `export-manifest.json` and `library.json` to enumerate all unique source folder paths from the export.
+    - A **remapping dialog** presents each source folder path from the export with a **Browse…** button (to locate the equivalent folder on the current system) and a **Skip** option (source remains in library but is treated as offline/missing, consistent with existing missing-source behavior).
+    - After the user confirms remapping, app writes updated config files to the correct platform-specific locations (`~/.config/ReelRoulette/` on Linux; `%APPDATA%/ReelRoulette/` on Windows) with all source paths replaced by the remapped values.
+    - If the zip includes thumbnails, copies them to the platform-appropriate local cache location (`~/.local/share/ReelRoulette/thumbnails/` on Linux; `%LOCALAPPDATA%/ReelRoulette/thumbnails/` on Windows).
+    - If the zip includes backups, copies the `backups/` folder to the config directory on the target system (`~/.config/ReelRoulette/backups/` on Linux; `%APPDATA%/ReelRoulette/backups/` on Windows).
+    - If an existing library is present, prompts the user before overwriting.
+  - Path translation is performed entirely in-memory during import — paths in the zip are stored as-is from the source system; no normalization is applied at export time.
+  - Feature works symmetrically: **Windows → Linux**, **Linux → Windows**, and same-OS machine-to-machine migrations all follow the same code path.
+  - No changes to the internal library data model; migration is a read/transform/write operation on existing JSON structures.
+- **Acceptance criteria**:
+  - User can export a `.zip` from a Windows install and successfully import it on a Linux install (and vice versa) after remapping source folders.
+  - Remapping dialog lists every unique source folder from the export; each can be remapped or skipped independently.
+  - Skipped sources appear in the library as offline/missing without error on import.
+  - Thumbnails are included in the zip when the checkbox is checked and copied to the correct location on import; import succeeds cleanly when thumbnails are absent.
+  - Backups are included in the zip when the checkbox is checked and written to the correct config-directory location on import; import succeeds cleanly when backups are absent.
+  - Existing library overwrite prompt appears when a library is already present on the target install.
+  - `export-manifest.json` is present in every export zip and contains OS, version, and source path list.
+- **Verification evidence**:
+  - Implementation: `ReelRoulette.LibraryArchive` + `ReelRoulette.DesktopApp.Tests`, desktop `Library → Export Library…` / `Import Library…` (local disk zip I/O, remap/skip + overwrite confirm + import “server stopped” acknowledgment + **Import to disk** + local `desktop-settings.json` write); docs/checklist updated for current behavior.
+  - Author manually verifies round-trip: export from **Windows**, import on **CachyOS** (and vice versa if both environments are available); library loads with remapped sources functional.
+  - Same-OS round-trip (e.g. machine-to-machine on **CachyOS**) verified as a simpler baseline case.
+  - Thumbnail include/exclude checkbox verified on export; thumbnail presence/absence handled correctly on import.
+  - Backup include/exclude checkbox verified on export; backup presence/absence handled correctly on import.
+- **Deferrals / Follow-ups**:
+  - Automated cross-platform migration test coverage → future test milestone if warranted.
+  - Partial-remap recovery (re-opening remapping dialog after a failed import) → follow-up if needed post-verification.
+
+### M9d - CI Linux Distribution Gates
+
+- **Status**: ✅ Complete
+- **Goal**: Enforce Linux build/test/package quality in CI, including the **unified Avalonia server tray** and **Desktop** client; publish Linux artifacts to GitHub Releases on tag, mirroring the existing Windows packaging workflow.
+- **Scope**:
+  - Build/test/verify gates for Linux already exist in `ci.yml` (`build-test-linux`, `web-verify` jobs); `package-linux.yml` is packaging-only, consistent with `package-windows.yml`. No new build/test jobs are required in this milestone unless `ci.yml` needs adjustment for renamed **`desktop`** paths.
+  - Add `package-linux.yml` as a peer to `package-windows.yml` — same trigger shape (`workflow_dispatch` + tag push), same version normalization pattern, `ubuntu-latest` runner, bash throughout.
+  - `package-linux.yml` runs the Linux packaging scripts from `tools/scripts/` and produces all Linux artifact types established by the time this milestone lands: portable `tar.gz` packages (server + **Desktop**) and AppImage packages (server + **Desktop**).
+  - On tag push, `package-linux.yml` uploads all Linux artifacts (`.tar.gz` + `.AppImage`) to the existing GitHub release via `gh release upload`, mirroring the `package-windows.yml` upload behavior.
+  - CI artifact uploads (via `actions/upload-artifact`) publish packages to the workflow run for non-tag builds.
+  - Smoke checks: packaged server reachability (health/version/operator); optional **headless** server boot without display.
+  - Tray-related checks: when feasible, runner verifies **headless fallback**; tray-on-runner validation only where the image/session supports it (do not make CI flaky on absent status notifier).
+  - **Windows** jobs remain green; adjust `package-windows.yml` only for renamed **`desktop`** project paths / **Desktop** `.csproj` location if needed.
+- **Acceptance criteria**:
+  - `package-linux.yml` exists as a standalone workflow file, structurally consistent with `package-windows.yml`.
+  - Default-branch/PR Linux pipeline passes and catches Linux-only regressions in server, **Desktop** client, and packaging.
+  - On tag push, all Linux artifacts (`.tar.gz` + `.AppImage` for server and **Desktop**) are uploaded to the GitHub release alongside Windows artifacts.
+  - Headless server startup remains deterministic in CI (no hard dependency on GUI session for green builds).
+- **Verification evidence**:
+  - Landed `.github/workflows/package-linux.yml`: `ubuntu-latest`, .NET SDK 10.0.x, Node 22, `ffmpeg`, AppImageKit **12** `appimagetool` install, version normalization, `package-serverapp-linux-appimage.sh` + `package-desktop-linux-appimage.sh`, headless smoke via `tools/scripts/verify-linux-packaged-server-smoke.sh` (unsets display/DBus session variables for the server process; curls `/health`, `/api/version`, `/control/status`, `/operator`), `actions/upload-artifact`, tag path `gh release view` + `gh release upload` for `*.tar.gz` and `*.AppImage`.
+  - `package-windows.yml` packaging job updated to .NET SDK **10.0.x** (aligned with solution TFMs and Linux packaging).
+  - Default-branch PR CI remains `ci.yml` Linux/Windows build+test and WebUI verify; full tag/release artifact spot-check on GitHub Releases is expected on the next shipping tag (maintainer-verified).
+  - CI green builds as the bar for this milestone do not replace the full manual + packaged-artifact sign-off matrix; that broader verification remains **deferred** to **Linux Release Readiness and Sign-off**.
+- **Deferrals / Follow-ups**:
+  - Full cross-platform manual verification and checklist completion beyond CI gates → **Linux Release Readiness and Sign-off**.
+
+### M9c - Linux Installation UX
+
+- **Status**: ✅ Complete
+- **Goal**: Provide polished, low-friction installation paths for Linux users beyond the portable `tar.gz`: an **AppImage** for both server and **Desktop** client, a one-liner GitHub Releases install script, and application menu (`.desktop`) registration handled automatically during install.
+- **Scope**:
+  - **AppImage** packaging for server and **Desktop** client:
+    - Build scripts under `tools/scripts/` producing `ReelRoulette-Server-{Version}-linux-x64.AppImage` and `ReelRoulette-Desktop-{Version}-linux-x64.AppImage`.
+    - AppImage bundles carry embedded `.desktop` entry and icon metadata; application menu integration is automatic when `appimaged` is running or via an explicit `--install` flag pattern.
+    - AppImage artifacts are self-contained (`linux-x64`) and strip symbols consistent with portable `tar.gz` policy.
+    - Native prerequisites (ffmpeg/ffprobe, LibVLC) remain undocumented-as-bundled; document as prereqs in the embedded AppImage `README` or `--help` output, consistent with portable package policy.
+  - **GitHub Releases install script** (`tools/scripts/install-linux-from-github.sh`):
+    - Fetches the latest release artifact (AppImage preferred; portable `tar.gz` as fallback) from the GitHub Releases API.
+    - Places AppImages under `~/.local/share/ReelRoulette/` with stable filenames; portable tarball fallback uses `~/.local/share/ReelRoulette/<target>/<version>/` plus a `~/.local/bin/` launcher symlink.
+    - Registers a `.desktop` entry in `~/.local/share/applications/` and runs `update-desktop-database` so the app appears in the application menu.
+    - Supports both server and **Desktop** client as install targets (via argument or interactive prompt).
+    - Does not require `sudo`; targets the current user only.
+  - **Application menu registration** is handled for both install paths (AppImage via embedded metadata + `appimaged` / `--install`; install script via explicit `.desktop` drop + database update); no manual post-install step required for menu integration.
+  - Tray/headless fallback policy inherited unchanged from the baseline milestone: the packaged server must start headless when no tray or display is available, without hanging.
+  - **Windows** packaging: unchanged; this milestone is Linux installation UX only.
+- **Acceptance criteria**:
+  - AppImage artifacts build deterministically from `tools/scripts/` for both server and **Desktop** client.
+  - Artifact names follow `ReelRoulette-{Component}-{Version}-linux-x64.AppImage`, consistent with release naming conventions.
+  - On a fresh install via AppImage or install script, the application appears in the desktop application menu without any manual post-install step.
+  - Install script successfully fetches and installs the latest release artifact on the **CachyOS** baseline; user-local install requires no `sudo`.
+  - Native prereqs are documented in embedded help/README; nothing is silently missing at launch.
+- **Verification evidence**:
+  - Landed scripts: `tools/scripts/package-serverapp-linux-appimage.sh`, `tools/scripts/package-desktop-linux-appimage.sh`, shared `tools/scripts/lib/appimage-helpers.sh`, `tools/scripts/install-linux-from-github.sh`; `full-release.ps1` invokes AppImage packaging on Linux after portable steps (requires `appimagetool` on the maintainer machine).
+  - AppImages: `artifacts/packages/appimage/ReelRoulette-Server-{Version}-linux-x64.AppImage`, `artifacts/packages/appimage/ReelRoulette-Desktop-{Version}-linux-x64.AppImage` (built from portable tarballs; same publish/strip policy).
+  - `docs/checklists/testing-checklist.md` includes AppImage and install-script smoke items; full matrix completion remains **deferred** to **Linux Release Readiness and Sign-off**.
+  - Packaging author manual verification on **CachyOS** (AppImage launch, `--install` menu registration, install script end-to-end) is expected before relying on releases; comprehensive tray/headless matrix deferred as above.
+- **Deferrals / Follow-ups**:
+  - Full AppImage + install script smoke matrix and cross-platform checklist completion → **Linux Release Readiness and Sign-off**.
+
+### M9b - Linux Packaging (Server + Desktop)
+
+- **Status**: ✅ Complete
+- **Goal**: Produce distributable Linux artifacts for server and the renamed **Desktop** client using repo-owned packaging scripts.
+- **Scope**:
+  - Add Linux packaging scripts under `tools/scripts/` (portable first):
+    - Server portable package (`ReelRoulette-Server-{Version}-linux-x64.tar.gz`) including WebUI assets in `wwwroot`.
+    - **Desktop** client portable package (`ReelRoulette-Desktop-{Version}-linux-x64.tar.gz`) using `desktop`-segment naming and layout aligned with post-rename project output.
+  - Both packages are **self-contained** (`linux-x64`, `--self-contained true`) — .NET runtime is bundled; no .NET install required on the target machine.
+  - Symbols are **stripped** from packaged binaries (prod-appropriate size; no `.pdb` files in the artifact).
+  - Each package includes a **shell wrapper script** (`run-server.sh` / `run-desktop.sh` or equivalent) that sets up the environment (e.g. `LD_LIBRARY_PATH`, working directory) and launches the binary; correct executable bits set on wrapper and binary.
+  - Each package includes a bundled `README` (or inline comments in the wrapper) documenting **native prerequisites**: `ffmpeg`/`ffprobe` and LibVLC must be present on the target system and are not bundled.
+  - The packaged server binary must start in **headless mode** when no tray or display is available, without hanging — the same fallback behavior established in M9a applies to packaged artifacts.
+  - **Windows**-OS packaging for **Desktop** deliverables: unchanged intent; update script paths/names in `tools/scripts/` if the rename moves `.csproj` or output names.
+- **Acceptance criteria**:
+  - Linux server and **Desktop** client portable artifacts build deterministically from scripts in `tools/scripts/`.
+  - Artifacts are self-contained: no .NET runtime required on the target; symbols stripped.
+  - Server package includes API/SSE/media/WebUI/Operator assets and whatever the Avalonia tray host requires at runtime.
+  - Each artifact includes a shell wrapper with correct executable bits and native prereq documentation.
+  - Artifact names follow the pattern `ReelRoulette-{Component}-{Version}-linux-x64.tar.gz`, consistent with Windows release naming (`ReelRoulette-Server-*`, `ReelRoulette-Desktop-*`); no legacy `windows`-path or Windows-centric client naming in Linux outputs.
+  - Packaged apps run on the supported Linux baseline in both tray-available and headless/fallback scenarios.
+- **Verification evidence**:
+  - Landed scripts: `tools/scripts/package-serverapp-linux-portable.sh`, `tools/scripts/package-desktop-linux-portable.sh`; `full-release.ps1` invokes them on Linux after version/verify (and subsequent AppImage steps per Linux Installation UX).
+  - Portable tarballs: `artifacts/packages/portable/ReelRoulette-Server-{Version}-linux-x64.tar.gz`, `artifacts/packages/portable/ReelRoulette-Desktop-{Version}-linux-x64.tar.gz` (each includes `run-*.sh`, `README.txt`, no `.pdb` in tree).
+  - Docs/checklist updated (`docs/dev-setup.md`, `docs/domain-inventory.md`, `docs/checklists/testing-checklist.md`, `CONTEXT.md`, `README.md`).
+  - Full packaged-artifact smoke (tray + headless, CachyOS or CI-chosen Linux, cross-platform checklist completion) remains **deferred** to **Linux Release Readiness and Sign-off**.
+- **Deferrals / Follow-ups**:
+  - Full Linux packaging smoke matrix and cross-platform checklist completion → **Linux Release Readiness and Sign-off**.
+  - AppImage builds, GitHub Releases install script, and application menu (`.desktop`) registration → **Linux Installation UX** (planned).
+
+### M9a - Avalonia Server Tray + Linux Runtime Baseline
+
+- **Status**: ✅ Complete
+- **Goal**: Replace the **Windows**-only WinForms server host tray with a cross-platform **Avalonia** tray that preserves today’s behavior; validate server and the **Desktop** client on Linux with **CachyOS (Arch-based, `linux-x64`)** as the primary sign-off environment; align repo naming from legacy **`windows` / Windows-oriented** client identifiers to **`desktop` paths** and **Desktop**-oriented project/product names.
+- **Scope**:
+  - **Server host tray (WinForms → Avalonia)**:
+    - Retire the WinForms `NotifyIcon` host UI path; implement an Avalonia-based tray (or minimal Avalonia application lifetime) shared across **Windows** and Linux.
+    - Preserve functional parity with the current tray: **Open Operator UI**, **Launch Server on Startup** (enable/disable autostart in parity across OSes—**Windows** registry-backed behavior today; **Linux** via **XDG Autostart** using a standard `*.desktop` entry in the user autostart directory, with the tray toggle installing/removing or enabling/disabling that entry as appropriate), **Refresh Library**, **Restart Server**, **Stop Server / Exit**, shared icon loading with sensible fallback, non-blocking menu actions, graceful UI-thread shutdown aligned with host restart/stop flows.
+    - Preserve **light/dark context-menu theming** on **Windows** where applicable; on Linux, follow the **desktop environment** theme or document explicit behavior when the platform does not expose matching signals.
+    - Unify server app targeting where practical (avoid a **Windows**-only TFM solely for tray unless required); keep **`net10.0` headless** path when **tray is unavailable** (no display / no status notifier / unsupported session) with deterministic behavior matching current non-**Windows** headless semantics.
+  - **Desktop client**:
+    - The **Desktop** GUI client is **already Avalonia**; scope here is Linux **validation and hardening** (not a UI-framework rewrite).
+    - **Repo-wide rename**: `src/clients/desktop/...`-style paths, solution/project/assembly names, and docs/scripts slugs move to **`src/clients/desktop/...`**-style paths with **Desktop** client naming (e.g. `ReelRoulette.DesktopApp`—exact identifiers chosen at implementation time; keep **lowercase `desktop` in path segments**, **capitalized Desktop in product-facing names**).
+  - **Linux baseline**:
+    - Primary manual/automated sign-off reference: **CachyOS**, `linux-x64`, on typical **desktop environment** sessions (tray-capable **and** headless/tray-unavailable cases).
+    - Validate consolidated server on Linux: `/health`, `/api/version`, `/api/events`, `/api/media/{idOrToken}`, `/operator`, plus WebUI/static hosting as today.
+    - Validate **Desktop** client: launch, pair/connect, random/manual playback, core controls.
+    - Validate native deps: **ffprobe/ffmpeg**, **LibVLC** runtime expectations.
+    - Keep API-first / thin-client boundaries unchanged.
+- **Acceptance criteria**:
+  - On **Windows**, after the port, tray menu actions and host lifecycle behavior match pre-port intent (no loss of Operator open, refresh, restart, stop, startup-toggle behavior).
+  - On **Linux**, server starts and serves the same core surfaces as above; **Desktop** client completes core workflows against that server.
+  - **Launch Server on Startup** works on **Linux**: the tray toggle deterministically enables/disables user login autostart via **XDG Autostart** (`*.desktop` in the user autostart location), verified on **CachyOS** alongside the existing **Windows** registry-backed behavior.
+  - Tray-capable **desktop environments** show the Avalonia tray when supported; otherwise server runs **headless** without hanging or requiring a display—deterministic fallback.
+  - Linux prerequisites (including VLC/ffmpeg and tray fallbacks) are **documented and reproducible** for the CachyOS baseline.
+  - **Desktop** rename is **consistent** in solution, primary scripts, and contributor-facing paths (no lingering **`windows`** folder naming or **Windows**-centric client wording as the canonical **Desktop** app identity).
+  - No new client-local authoritative mutation paths are introduced.
+- **Verification evidence**:
+  - Informal confirmation that server and **Desktop** client run and perform core workflows on a **Linux** desktop baseline (maintainer-reported smoke) is sufficient for closing implementation work in this milestone when paired with green automated gates below.
+  - Comprehensive manual verification across **Windows** and **Linux** (full checklist completion, packaged-artifact matrix, formal tray vs headless vs autostart evidence on both platforms) is **deferred** to **Linux Release Readiness and Sign-off** (see that milestone).
+  - Automated gates passed (still required when touching release surfaces):
+    - `dotnet build ReelRoulette.sln`
+    - `dotnet test ReelRoulette.sln`
+    - `npm run verify` (`src/clients/web/ReelRoulette.WebUI`)
+  - Notes on any intentional **platform differences** (e.g. autostart implementation details) recorded in the doc slice of this series.
+- **Deferrals / Follow-ups**:
+  - Full cross-platform manual matrix and checklist-driven sign-off → **Linux Release Readiness and Sign-off**.
+
+### M8i - Desktop App UX/UI Polish
+
+- **Status**: ✅ Complete
+- **Goal**: Deliver desktop UX/UI polish and light-dark theme compatibility improvements without changing core API-first ownership boundaries.
+- **Scope**:
+  - Improve desktop duplicate-review UX in the duplicates dialog:
+    - for each duplicate group, render file thumbnails inline above each corresponding file info row for quick visual confirmation,
+    - target display order per group:
+      1. `x files share fingerprint...` header,
+      2. keep-selection dropdown,
+      3. file 1 thumbnail,
+      4. file 1 info row,
+      5. file 2 thumbnail,
+      6. file 2 info row,
+      7. continue for all files in that group.
+  - Keep desktop tag editor category rows theme-compatible:
+    - in light mode, category bars use light surfaces with dark-gray borders while text remains readable black,
+    - in dark mode, current dark presentation remains visually consistent.
+  - Keep desktop tag chips visually stable across themes:
+    - chip text/icons remain white in both light and dark modes,
+    - apply consistent chip drop-shadow styling aligned with WebUI appearance.
+  - Update desktop filter dialog `Tags` tab for visual parity with tag editor presentation in both light/dark modes while preserving control differences:
+    - chips expose add/remove controls only,
+    - category rows expose local combine-mode dropdown only.
+- **Acceptance criteria**:
+  - Duplicate groups in desktop duplicates dialog show per-file thumbnails inline in the defined order, enabling quick visual validation before delete/apply actions.
+  - Desktop tag editor category rows render with light-compatible surfaces/borders in light mode and retain readable text/contrast in both themes.
+  - Desktop tag chips preserve white text/icons with consistent drop-shadow treatment in both light and dark modes.
+  - Desktop filter dialog `Tags` tab has visual parity with tag editor surfaces across themes, while preserving intended control differences.
+  - No regressions to previously completed reliability fixes (compatibility gating, reconnect/resync, deterministic testing simulations).
+- **Verification evidence**:
+  - Implemented desktop duplicate-review thumbnail rendering in the required per-group order using server thumbnail endpoint paths (`/api/thumbnail/{itemId}`) with explicit desktop bitmap loading for deterministic thumbnail display.
+  - Added per-group duplicate handling selection to avoid forcing all groups to be processed:
+    - each group now supports `Keep All` and per-item keep selection in the same dropdown,
+    - desktop settings now persist a global `Duplicate Handling Default Behavior` (`Keep All` default, `Select Best` legacy behavior).
+    - duplicate delete confirmation now shows total groups handled and total files to delete, and it no longer prompts when all groups are set to `Keep All`.
+    - duplicate item metadata now includes tag counts, and keep-selection dropdown labels now include filename + plays/tags/favorite/blacklisted for easier comparisons.
+  - Implemented shared desktop tag-surface styling tokens and applied them across tag editor and filter `Tags` tab:
+    - category rows now use theme-aware shared surfaces/borders,
+    - chip text/icons are pinned white in both themes,
+    - chip text/icon shadows are strengthened to align with WebUI treatment,
+    - chip state-specific inset shadow behavior now mirrors WebUI closer for selected states.
+  - Preserved filter `Tags` behavior boundaries while applying visual parity:
+    - chips remain add/remove controls only,
+    - category rows retain local combine-mode dropdown controls,
+    - filter tags now render in a responsive wrapping layout instead of a fixed three-column grid.
+  - Automated verification passed:
+    - `dotnet build ReelRoulette.sln`
+    - `dotnet test ReelRoulette.sln` (91 passed, 0 failed).
+  - Manual validation checklist coverage for desktop UX/theme checks added to `docs/checklists/testing-checklist.md`.
+- **Deferrals / Follow-ups**:
+  - Capture post-implementation manual desktop verification evidence (light/dark screenshots + pass/fail notes) during the next targeted validation run.
+
+### M8h - Tray Theme Parity and Material Symbols Icon Standardization
+
+- **Status**: ✅ Complete
+- **Goal**: Align Windows ServerApp tray UX with system theme behavior and standardize icon rendering on Material Symbols **font-based** patterns (with shared icon styles) for consistent cross-platform theming/customization.
+- **Scope**:
+  - Windows tray menu theme parity:
+    - make tray context menu follow active system theme (light/dark) instead of fixed light styling,
+    - keep existing tray action behavior unchanged while applying theme-aware rendering.
+  - Desktop icon foundation (font-based):
+    - wire `assets/fonts/MaterialSymbolsOutlined.var.ttf` into Avalonia resources for desktop icon rendering,
+    - use shared `TextBlock.MaterialSymbolIcon` style for icon font setup,
+    - standardize transparent icon-button behavior on shared styles:
+      - base class: `IconGlyphBase`,
+      - control wrappers: `IconGlyphButton`, `IconGlyphToggle`.
+  - Full-surface migration contract (this milestone):
+    - use mute button as the first implementation slice, then migrate the intended remaining icon controls/surfaces in desktop and WebUI within this milestone,
+    - intentionally retain existing emoji/text indicator surfaces in `MainWindow.axaml` and `ManageSourcesDialog.axaml`,
+    - preserve existing control behavior while replacing icon rendering implementation (no feature-behavior regressions during cutover).
+  - Cross-surface tinting contract:
+    - desktop/Avalonia icon font tinting is driven by foreground color/brush and system theme,
+    - WebUI icon font tinting is driven via CSS color/theming so symbols inherit site theme state.
+  - Asset/source-of-truth boundaries:
+    - keep Material Symbols font asset under `assets/fonts/` as desktop icon-font source.
+  - Preserve architecture boundaries:
+    - keep icon/theming logic in host/UI/render layers,
+    - do not move domain logic into clients for this work.
+- **Acceptance criteria**:
+  - Tray context menu follows current Windows system light/dark theme at runtime.
+  - Desktop icon-font path is active via `MaterialSymbolsOutlined.var.ttf` and shared icon styles (`IconGlyphBase`, `IconGlyphButton`, `IconGlyphToggle`, `MaterialSymbolIcon`).
+  - Desktop icon controls/surfaces targeted for migration are moved to the shared icon-style foundation and Material Symbols font rendering, with intentional retention of existing emoji/text surfaces in `MainWindow.axaml` and `ManageSourcesDialog.axaml`.
+  - WebUI icon rendering is font-based (Material Symbols via CSS) and supports deterministic CSS-driven tinting.
+  - All WebUI icon controls/surfaces are migrated to the Material Symbols font-based CSS path.
+  - No regressions to existing tray actions (`Open Operator UI`, `Launch Server on Startup`, `Refresh Library`, `Restart Server`, `Stop Server / Exit`).
+- **Verification evidence**:
+  - Automated gate pass:
+    - `dotnet build ReelRoulette.sln`
+    - `dotnet test ReelRoulette.sln`
+    - `npm run verify` (`src/clients/web/ReelRoulette.WebUI`)
+  - Manual verification captures:
+    - tray menu light-mode rendering evidence,
+    - tray menu dark-mode rendering evidence,
+    - desktop icon-surface evidence showing targeted icon migration to shared icon-style + Material Symbols font rendering in light/dark themes, with intentional retention exceptions for `MainWindow.axaml` and `ManageSourcesDialog.axaml`,
+    - WebUI icon-surface evidence showing full icon migration to Material Symbols CSS font rendering in light/dark themes,
+    - icon-source evidence showing desktop font-asset usage (`assets/fonts/MaterialSymbolsOutlined.var.ttf`).
+- **Deferrals / Follow-ups**:
+  - Windows tray menu item icons are deferred; add Material Symbols-based tray menu icons in a follow-up milestone after theme-parity rollout stabilizes.
+  - Linux tray theme/icon parity remains best-effort and is tracked under Linux milestone work unless explicitly expanded.
+
+### M8g - Windows ServerApp System Tray Baseline (Single Binary, No Console)
+
+- **Status**: ✅ Complete
+- **Goal**: Provide a single-binary Windows `ReelRoulette Server` runtime that starts without a command prompt and exposes essential operator actions via system tray.
+- **Scope**:
+  - Convert Windows ServerApp startup to no-console behavior (`WinExe`) while preserving existing server/API behavior.
+  - Require tray icon asset parity with repo branding:
+    - system tray icon must use the shared app icon at `assets/HI.ico` (same icon source used by other app/package surfaces).
+  - Add initial Windows system tray surface with minimum actions:
+    - Open Operator UI (default browser to `/operator`),
+    - Refresh Library (manual refresh trigger),
+    - Restart Server,
+    - Stop Server / Exit.
+  - Keep server logic API-authoritative and reuse existing server services/endpoints for lifecycle/refresh operations.
+  - Introduce host-UI abstraction so non-Windows runtimes remain headless-compatible and can adopt tray support later without server-core rewrites.
+  - Preserve existing packaging/install behavior except for intentional startup UX change (no visible command prompt).
+- **Acceptance criteria**:
+  - Launching `ReelRoulette.ServerApp.exe` on Windows does not show a command prompt window.
+  - Windows tray icon uses the shared app icon from `assets/HI.ico` (not a placeholder/default framework icon).
+  - Tray icon appears reliably and menu actions execute deterministically:
+    - Operator UI opens in default browser,
+    - Refresh action triggers library refresh pipeline,
+    - Restart action performs graceful self-restart,
+    - Stop/Exit performs graceful shutdown.
+  - Existing API/SSE/WebUI/Operator runtime behavior remains functional and unchanged in intent.
+  - Single-binary Windows ServerApp packaging remains valid and install/run flow remains reproducible.
+  - Linux runtime path is unaffected (continues headless unless Linux-focused tray work is explicitly enabled later).
+- **Verification evidence**:
+  - Implemented code path:
+    - host-UI abstraction added under `src/core/ReelRoulette.ServerApp/Hosting/*` with Windows `NotifyIcon` tray host and non-Windows headless host.
+    - tray menu actions wired for Open Operator UI, Refresh Library, Restart Server, and Stop Server / Exit.
+    - Windows no-console runtime path implemented via `net9.0-windows` + `WinExe`; non-Windows path remains `net9.0` headless.
+    - tray icon source now resolves shared `assets/HI.ico` via published `HI.ico` copy and repo fallback path.
+  - Automated gate pass (2026-03-11):
+    - `dotnet build ReelRoulette.sln`
+    - `dotnet test ReelRoulette.sln`
+    - `npm run verify` (`src/clients/web/ReelRoulette.WebUI`)
+  - Manual verification completed (`docs/checklists/testing-checklist.md`):
+    - no-console Windows launch verified,
+    - tray icon parity evidence verified for `assets/HI.ico`,
+    - tray action behavior verified for all four required menu actions,
+    - packaged portable/install runtime tray behavior verified.
+- **Deferrals / Follow-ups**:
+  - Linux tray support is explicitly deferred to the Linux milestone group as best-effort capability.
+  - Advanced tray UX (notifications, rich status panes, localization, startup-on-login toggles) is out of scope for this milestone unless separately approved.
+
+### M8f - Hardening, Packaging, and Release Readiness
+
+- **Status**: ✅ Complete
+- **Goal**: Finalize reliability, packaging, and migration cleanup for the new server-thin-client architecture.
+- **Scope**:
+  - Add/expand integration tests for API/SSE/runtime transitions and refresh pipeline behavior.
+  - Complete migration cleanup of temporary compatibility paths.
+  - Finalize packaging/distribution for:
+    - `ReelRoulette Server` app,
+    - thin desktop client,
+    - WebUI assets served by server.
+  - Produce migration/upgrade playbook and release-readiness checklist.
+  - Add an **Operator Testing Suite** to `/operator` so desktop/web/server validation can be run from UI without ad-hoc shell workflows.
+  - Add **connected client/session visibility** in Operator UI (client/session identity and related diagnostics in appropriate sections).
+  - Add a dedicated **Server Logs** section in Operator UI for `last.log` with practical triage features.
+  - Add **Testing Mode** gate for test/fault controls:
+    - testing controls are available only when Testing Mode is enabled,
+    - existing control admin auth mode remains authoritative:
+      - if admin auth is `Off`, no auth required,
+      - if admin auth requires auth, testing actions require auth.
+  - Add safe, operator-driven fault/testing scenarios for client UX/error-handling validation, including:
+    - API version/capability mismatch simulation,
+    - client disconnect/reconnect behavior checks,
+    - SSE replay/resync-required recovery checks,
+    - missing/invalid media and related API-error path checks.
+  - Produce full repo-wide manual testing artifacts linked to Operator test sections:
+    - `docs/checklists/testing-checklist.md` (workflow + inline checklist + PASS/FAIL evidence capture).
+  - Include Operator-assisted evidence capture quality-of-life features:
+    - per-scenario PASS/FAIL + note + timestamp recording,
+    - copy/export test evidence bundle (status + relevant log snippets),
+    - per-scenario reset/cleanup actions for repeatable reruns.
+- **Acceptance criteria**:
+  - Stable multi-client operation (desktop + web minimum) against `ReelRoulette Server`.
+  - No critical cross-client state divergence.
+  - If `ReelRoulette Server` crashes or is unavailable, thin clients show friendly reconnect/start guidance and recover without state corruption.
+  - Core JSON persistence uses atomic write semantics (write temp then replace) and is resilient to partial-write failures.
+  - Web assets are served with cache-correct behavior (hashed filenames/cache-busting) to prevent stale UI after updates.
+  - Full regression suite is part of default CI `dotnet test` gate and remains green.
+  - Migration and upgrade documentation is complete and actionable.
+  - Operator UI exposes connected client/session identity details sufficient for troubleshooting and correlation.
+  - Operator UI includes a dedicated Server Logs section for `last.log` with tail/filter/search/copy-export workflows.
+  - Operator Testing Suite can execute key client/server error-handling scenarios from UI when Testing Mode is enabled.
+  - Testing controls obey Testing Mode and existing admin auth policy exactly.
+  - Repo-wide manual testing manual/checklist is complete, actionable, and mapped to Operator test sections plus common app/server workflows.
+  - End-to-end manual verification for desktop/web/server can be executed by a user without requiring ad-hoc command sequences.
+- **Verification evidence (implementation + automated gate pass)**:
+  - Operator/server implementation now includes:
+    - connected client/session/SSE identity snapshots in `/control/status`,
+    - dedicated server log endpoint (`/control/logs/server`) and Operator log workbench,
+    - testing suite endpoints (`/control/testing`, `/control/testing/update`, `/control/testing/reset`) and Operator Testing Mode/fault controls.
+  - Testing policy enforcement implemented:
+    - scenario flags require Testing Mode ON,
+    - testing actions enforce existing control admin auth mode (`Off` vs `TokenRequired`) using control auth credentials.
+  - Windows packaging + CI deliverables implemented:
+    - `tools/scripts/package-serverapp-win-portable.ps1`,
+    - `tools/scripts/package-serverapp-win-inno.ps1`,
+    - `tools/installer/ReelRoulette.ServerApp.iss`,
+    - `.github/workflows/ci.yml`,
+    - `.github/workflows/package-windows.yml`.
+  - Manual validation artifacts added:
+    - `docs/checklists/testing-checklist.md`.
+  - Automated verification passes on current branch:
+    - `dotnet build ReelRoulette.sln`
+    - `dotnet test ReelRoulette.sln`
+    - `npm run verify` (`src/clients/web/ReelRoulette.WebUI`)
+    - `tools/scripts/verify-web-deploy.ps1`
+  - Manual checklist waiver applied per user direction:
+    - remaining `NOT TESTED` items in `docs/checklists/testing-checklist.md` are accepted as pass/deferred for this milestone closeout.
+  - High/medium reliability fix slice (post-manual test feedback) is implemented:
+    - duplicate scan now shows deterministic API-recovery guidance instead of silent no-op,
+    - auto-tag scan now reports runtime recovery state accurately and no longer relies on a false version-only health signal,
+    - desktop now enforces API/capability compatibility gates and shows reconnect/resync SSE status guidance,
+    - missing-media simulation now preserves random selection and fails deterministically at media-fetch endpoints with explicit `Media not found` API errors.
+    - desktop legacy locate/remove missing-file dialog flow removed to keep missing-media remediation server-authoritative.
+  - Deferred to **UX/UI Polish** (polish-only follow-up):
+    - tag-editor apply latency/close responsiveness polish,
+    - web refresh-status detail parity enhancements.
+
+### M8e - WebUI and Mobile Thin-Client Contract Standardization
+
+- **Status**: ✅ Complete
+- **Goal**: Make WebUI and future mobile clients consume the same stable API contracts from `ReelRoulette Server`.
+- **Scope**:
+  - Standardize client-facing API contracts/capabilities for desktop/web/mobile parity.
+  - Ensure WebUI uses the same API semantics as desktop for migrated behaviors.
+  - Scope boundary: playback-session pipeline contracts/capabilities are owned by **Playback Session Contracts and Capability Surface** and are out of scope for this milestone.
+  - Define session/reconnect rules on the shared contract surface:
+    - persistent per-device `clientId`,
+    - optional `sessionId` for future shared-session features,
+    - SSE reconnect behavior with missed-revision recovery (replay when available, otherwise authoritative state refetch).
+  - Define mobile-ready auth expectations (pairing/session continuity, reconnect continuity) using the same server contracts.
+  - Keep client responsibilities strictly orchestration/render (no duplicated domain logic).
+- **Acceptance criteria**:
+  - WebUI and desktop are behaviorally aligned via shared server APIs.
+  - Session/reconnect rules (`clientId`, optional `sessionId`, SSE missed-revision recovery) are documented and validated in client/server behavior.
+  - Mobile bootstrap path is contract-ready with no new domain-logic duplication in clients and with documented auth/reconnect expectations.
+  - Version/capability compatibility expectations are documented for client evolution.
+- **Verification evidence**:
+  - OpenAPI contract now documents optional `sessionId` for request/event surfaces and explicit SSE identity/reconnect expectations.
+  - Server DTO/contracts now accept and propagate optional `sessionId`, and `/api/version` capabilities now include `identity.sessionId`.
+  - Desktop now persists stable `CoreClientId`, generates per-runtime `CoreSessionId`, and propagates both through random/playback/SSE calls with reconnect `lastEventId`.
+  - WebUI (legacy + modular seams) now propagates stable `clientId` plus runtime `sessionId` through random/requery/SSE paths and enforces capability checks including `identity.sessionId`.
+  - Automated verification passes:
+    - `dotnet build ReelRoulette.sln`
+    - `dotnet test ReelRoulette.sln`
+    - `npm run verify` (`src/clients/web/ReelRoulette.WebUI`)
+    - `tools/scripts/verify-web-deploy.ps1`
+  - Manual verification matrix prepared for desktop+web parity checks (session continuity, reconnect replay/resync, capability-mismatch UX) and ready for operator sign-off.
+
+### M8d - Desktop Playback Policy Compromise (Local-First with API Fallback)
+
+- **Status**: ✅ Complete
+- **Goal**: Keep desktop playback performant for local/shared-storage scenarios while preserving API-first orchestration and playback-session-series readiness.
+- **Scope**:
+  - Introduce desktop playback policy:
+    - local playback first when the selected media path is accessible on the desktop machine,
+    - automatic API media playback fallback when local path access fails.
+  - Route desktop manual library-panel play through API identity orchestration:
+    - resolve stable media identity (`itemId`/API-routable identity) before playback-path selection so playback stats remain API-authoritative and deterministic,
+    - if manual target cannot be mapped to stable identity, surface explicit user-facing error + guidance (no silent substitute/random reroute).
+  - Add desktop setting `ForceApiPlayback` (boolean, default `false`):
+    - when enabled, desktop always uses API playback even if local file access is available.
+  - Preserve strict desktop thin-client boundaries for non-playback domains:
+    - desktop may read/write only `desktop-settings.json`,
+    - desktop may read local media files for playback/accessibility checks only,
+    - no reintroduction of local authoritative state reads/writes (library/settings/log/domain mutations).
+  - Keep this policy compatible with incremental playback-session work so API-only playback can be forced during that series' validation.
+- **Acceptance criteria**:
+  - Desktop playback selection is deterministic:
+    - uses local playback when file path is locally accessible and `ForceApiPlayback=false`,
+    - otherwise uses API media playback path.
+  - Desktop manual library-panel play is deterministic and API-orchestrated:
+    - manual play target is identity-resolved through API path first,
+    - unmappable manual targets fail with explicit error + guidance (no implicit substitute playback path).
+  - `ForceApiPlayback` is persisted in desktop settings, defaults to `false`, and is respected across restarts.
+  - Desktop running on LAN clients can still play local files from shared/NAS mappings when accessible, with seamless API fallback when not accessible.
+  - Outside allowed exceptions (desktop settings + media-read playback), no additional local file access is introduced in desktop app.
+  - API-first/thin-client guarantees from the desktop thin-client cutover remain intact for source import, duplicates, auto-tag, playback-stats clear, and logging ownership.
+- **Verification evidence**:
+  - Desktop manual playback entry points now resolve stable API media identity first and surface explicit guidance when a manual target cannot be mapped.
+  - Desktop playback target policy now deterministically selects local playback when media is readable and `ForceApiPlayback=false`, otherwise routes playback through API media URLs.
+  - `ForceApiPlayback` is persisted in desktop settings (`desktop-settings.json`), defaults to `false`, and is wired through settings load/apply/save plus settings dialog toggle UX.
+  - Random playback target handling now accepts API media URLs (absolute or relative) and resolves relative API media routes against configured core base URL.
+  - Playback source type is tracked (`FromPath` vs `FromLocation`) so loop-toggle media recreation and timeline navigation preserve chosen playback-path semantics.
+  - Automated verification passes:
+    - `dotnet build ReelRoulette.sln`
+    - `dotnet test ReelRoulette.sln`
+  - Documentation/tracking updates are synchronized for final milestone state: `README.md`, `CONTEXT.md`, `docs/api.md`, `docs/architecture.md`, `docs/dev-setup.md`, `docs/domain-inventory.md`, `CHANGELOG.md`, `COMMIT_MESSAGE.txt`.
+
+### M8c - Desktop Client Thin-Client Cutover
+
+- **Status**: ✅ Complete
+- **Goal**: Convert desktop `ReelRoulette` app to strict thin-client behavior against `ReelRoulette Server`.
+- **Scope**:
+  - Remove remaining desktop direct runtime/process control of `ReelRoulette Server` functionality.
+  - Remove remaining desktop direct authoritative JSON mutation paths for migrated domains.
+  - Ensure desktop commands/queries go through shared APIs only.
+  - Ensure desktop sync/projection uses API + SSE paths only.
+  - Route source import (`Import Folder`) through core API and remove desktop-local import path now that refresh pipeline ownership is server-side.
+  - Route duplicate detection (scan + resolve/delete) through reusable core/server APIs and remove desktop-local duplicate execution paths.
+  - Route auto-tag scan/suggestion + apply through reusable core/server APIs so the same logic can be consumed by desktop/web/operator/mobile clients.
+  - Keep desktop-local persistence limited to client-side UI/preferences in `desktop-settings.json`.
+  - Move `last.log` ownership fully to `ReelRoulette.ServerApp`: server-owned logic writes directly to server-side `last.log`, clients send client-event logs through API, and `last.log` is overwritten/reset on ServerApp startup/restart.
+  - Desktop connect UX defaults to localhost `ReelRoulette Server`; if unavailable, show clear Connect/Start guidance without hosting/supervising server runtime.
+- **Acceptance criteria**:
+  - Desktop is a pure API/SSE consumer for authoritative core state.
+  - Desktop writes only `desktop-settings.json` for client-side UI/preferences.
+  - Desktop never writes core state files (for example `library.json` and core settings files) directly.
+  - Import Folder executes through core API only and does not use a desktop-local source import path.
+  - Duplicate detection executes through core API only; desktop has no local authoritative duplicate scan/delete path.
+  - Auto-tag scan/suggestion and apply execute through core API only; logic is reusable across clients.
+  - Desktop does not write `last.log` directly; ServerApp owns `last.log` lifecycle/reset, server-originated logs are written directly by server components, and client-originated logs are ingested via API into the centralized server log.
+  - Desktop no longer directly controls, hosts, or supervises `ReelRoulette Server` runtime responsibilities.
+  - Desktop functionality remains stable using API/SSE-only migrated flows.
+- **Verification evidence**:
+  - Desktop runtime auto-start/supervision path removed (`EnsureCoreRuntimeAvailableAsync` no longer launches `run-core.ps1`) and desktop core endpoint defaults to `http://localhost:51234`.
+  - Source import now executes through `POST /api/sources/import` with desktop API orchestration.
+  - Duplicate detection migrated to reusable server APIs:
+    - `POST /api/duplicates/scan`
+    - `POST /api/duplicates/apply`
+    and desktop duplicate dialogs now orchestrate through those endpoints.
+  - Auto-tag scan/suggestion + apply migrated to reusable server APIs:
+    - `POST /api/autotag/scan`
+    - `POST /api/autotag/apply`
+    and desktop auto-tag dialog now consumes API scan/apply flows.
+  - Playback stats clear migrated to reusable server API:
+    - `POST /api/playback/clear-stats`
+    and desktop ClearPlaybackStats action now executes through API command path.
+  - Client log ingestion endpoint added (`POST /api/logs/client`) and desktop local `last.log` file writes removed from app/dialog/service log call paths.
+  - ServerApp now resets centralized `last.log` at startup, preserving server-owned log lifecycle ownership.
+  - OpenAPI updated for this milestone's endpoints/schemas and WebUI generated contracts refreshed (`openapi.generated.ts`).
+  
+### M8b - Control-Plane UI + API for Runtime Operations
+
+- **Status**: ✅ Complete
+- **Goal**: Provide first-class control-plane operations in `ReelRoulette Server` UI and APIs for status/settings/lifecycle management.
+- **Scope**:
+  - Add operator UI for:
+    - runtime status/health,
+    - settings editing/apply,
+    - stop/restart operations (with start handled by external launch flow),
+    - operation result/error visibility.
+  - Expose control-plane API endpoints for trusted clients/tools:
+    - `get status`,
+    - `get settings`,
+    - `apply settings`,
+    - runtime restart operations.
+  - Reserve `/control/*` namespace for control-plane/admin runtime operations, separate from media/client API routes.
+  - Define transport/auth/trust model for control-plane APIs (local-first, optional LAN exposure with explicit safeguards).
+  - Keep control-plane access local-first (localhost always available on the shared listener); LAN exposure is opt-in via runtime settings with explicit safeguards.
+  - Define deterministic operation semantics:
+    - idempotent command behavior,
+    - conflicting-operation handling,
+    - partial-failure reporting.
+- **Acceptance criteria**:
+  - Control-plane UI and API both function and are documented.
+  - Control-plane access is localhost-available by default on the shared listener, with LAN control access disabled unless explicitly enabled by runtime settings.
+  - LAN exposure for control-plane endpoints requires explicit enablement plus pairing/auth and clear operator warnings.
+  - Settings apply/restart behavior is deterministic and observable.
+  - Control-plane auth/trust policy is implemented and enforced.
+  - No orphan child/runtime process behavior remains in supported restart/shutdown flows.
+- **Verification evidence**:
+  - Added control-plane APIs under `/control/*`: `GET /control/status`, `GET/POST /control/settings`, `GET/POST /control/pair`, `POST /control/restart`, and `POST /control/stop`.
+  - Added control-plane settings persistence and deterministic apply result reporting (`accepted`, `restartRequired`, `message`, `errors[]`) in core settings service.
+  - Added control-plane auth/trust enforcement with localhost-available default and explicit LAN gating tied to runtime bind settings plus optional admin token auth.
+  - Expanded operator UI to a responsive dark-theme layout with runtime status, lifecycle controls, incoming/outgoing API telemetry panels, and connected-client visibility.
+  - Added control telemetry and connected-client status projection (`paired sessions` and `SSE subscribers`) through `/control/status`.
+  - Extended OpenAPI contract and server contract tests for new control-plane endpoints/schemas.
+  - Extended smoke verification (`verify-web-deploy.ps1/.sh`) to validate control-plane status/settings endpoints in the consolidated runtime flow.
+
+### M8a - ReelRoulette Server App Consolidation (Single Process, Single Origin)
+
+- **Status**: ✅ Complete
+- **Goal**: Consolidate runtime hosting into one user-facing `ReelRoulette Server` app (UI + core runtime + API/SSE + Web UI static serving) with no separate WebHost process and no atomic deployment switching.
+- **Scope**:
+  - Create the server control app as `ReelRoulette Server` (operator UI app).
+  - Host all runtime responsibilities inside this app/process:
+    - core domain runtime,
+    - API endpoints,
+    - SSE endpoint,
+    - media streaming endpoints,
+    - WebUI static asset serving.
+  - Remove separate `WebHost` process dependency from runtime architecture.
+  - Retire manifest-based atomic web deployment switching (`active-manifest`, version pointer switching) from active runtime behavior.
+  - Enforce single browser-visible origin/port for WebUI + API + SSE + media.
+  - Serve WebUI, API, SSE, and media streaming from the same scheme/host/port (one origin and one port).
+  - Keep deployment model simple: current active web assets served directly by `ReelRoulette Server`.
+- **Acceptance criteria**:
+  - `ReelRoulette Server` runs as a single app/process and serves WebUI/API/SSE/media on one origin.
+  - `ReelRoulette Server` exposes runtime metadata/health endpoints (`/health`, `/api/version`, `/api/capabilities`) for clients and operator diagnostics.
+  - No separate WebHost process is required for normal runtime.
+  - Atomic web version switching is removed from required runtime path.
+  - Web client works without CORS for normal operation (same-origin by design).
+  - Operator can manage runtime settings and service state from the `ReelRoulette Server` UI.
+  - `ReelRoulette Server` app self-restart paths (settings changes or host failures) are graceful and deterministic (clean shutdown, no orphaned listeners/ports).
+- **Verification evidence**:
+  - Added new consolidated host project: `src/core/ReelRoulette.ServerApp` (single process serving API/SSE/media/static WebUI/operator UI).
+  - `ReelRoulette.Server` endpoint composition now includes `GET /api/capabilities` and OpenAPI contract updates in `shared/api/openapi.yaml`.
+  - Dynamic same-origin runtime config is served from server app (`/runtime-config.json`) and WebUI static content is served by the same host/port as API/SSE/media.
+  - Web runtime `enabled` now controls WebUI availability only: when disabled and after restart, WebUI entry routes return `404` while API/SSE/media/operator paths remain available.
+  - Web runtime settings apply follows explicit two-step semantics: apply persists settings, then operator triggers restart (`POST /control/restart`) for listen/auth/WebUI gating changes to take effect.
+  - Operator UI now shows next operator URL hints after apply and runtime status content wraps/scrolls without overlap.
+  - `tools/scripts/run-core.ps1` and `tools/scripts/run-core.sh` now start `ReelRoulette.ServerApp` by default.
+  - `ReelRoulette.Worker` no longer supervises external `ReelRoulette.WebHost` in its startup path.
+  - Prior version-switch runtime dependency is removed from required runtime behavior; `verify-web-deploy.*` now executes this milestone's single-origin smoke checks.
+  - Operator UI path `/operator` provides status visibility, runtime settings apply (`/api/web-runtime/settings`), and restart control (`POST /control/restart`, localhost-only).
+
+### M7e - Contract Compatibility and Final M7 Verification Gate
+
+- **Status**: ✅ Complete
+- **Goal**: Lock independent-release safety and complete this series sign-off with contract-compatibility guarantees.
+- **Scope**:
+  - Enforce N/N-1 compatibility policy with capability checks for independent web/core releases.
+  - Generate TS web client contracts from OpenAPI; verify C# contract compatibility against the same API source.
+  - Execute hybrid verification gate (automated + manual) as required milestone exit criteria.
+- **Acceptance criteria**:
+  - Web API/event models are generated from OpenAPI and validated in CI.
+  - Capability checks prevent unsupported feature usage against older compatible core/server versions.
+  - Automated gates pass: build-output asset serving, direct web-to-core SSE/refresh status projection, and OpenAPI compatibility checks.
+  - Manual gates pass: direct web connect without desktop bridge, refresh status-line parity through run/fail/complete states, and auth/reconnect continuity.
+  - Acceptance criteria across the full direct-web migration sequence are explicitly verified before advancing to the next major phase.
+- **Verification evidence**:
+  - OpenAPI contract generation pipeline added to WebUI (`openapi-typescript`) with generated types committed at `src/clients/web/ReelRoulette.WebUI/src/types/openapi.generated.ts`.
+  - Web verify gate now includes stale-contract enforcement (`npm run verify:contracts`) and fails when generated TS contracts drift from `shared/api/openapi.yaml`.
+  - `VersionResponse` contract now exposes explicit compatibility/capability metadata (`minimumCompatibleApiVersion`, `supportedApiVersions`, `capabilities`) in OpenAPI and server DTO mapping.
+  - Web auth/version bootstrap paths enforce N/N-1 compatibility and required capability checks before normal feature execution.
+  - C# compatibility regression coverage extended (`ServerContractTests`) for version compatibility/capability fields and OpenAPI property presence checks.
+  - Automated verification gate passes:
+    - `npm run verify` in `src/clients/web/ReelRoulette.WebUI`
+    - `dotnet build ReelRoulette.sln`
+    - `dotnet test ReelRoulette.sln`
+  - Manual gate checklist/instructions prepared at `m7e-final-verification-checklist.md` for direct web-connect, refresh-status parity, and auth/reconnect continuity sign-off.
+
+### M7d - Controlled Cutover and Legacy Bridge Retirement
+
+- **Status**: ✅ Complete
+- **Goal**: Complete migration to direct web-to-core paths while preserving current web-remote user experience, then remove legacy embedded web-remote bridge mutations/events.
+- **Scope**:
+  - Use a two-phase rollout with time-bounded migration feature flags:
+    1. parity-capable independent web path behind flag(s)
+    2. default-on independent path followed by legacy removal
+  - Define flag owner/default-by-environment/validation coverage/removal target metadata.
+  - Migrate the current legacy web UI experience into `ReelRoulette.WebUI` with functional and visual parity for the main media page, custom media controls, tag editor workflows, and related interaction paths.
+  - Integrate desktop settings UX so users can continue controlling web runtime behavior from desktop UI (web server enable/disable, LAN binding/access, hostname behavior including `reel.local`, and auth/token settings mapped to core/server or web-host runtime controls).
+  - Require explicit phase gates before any legacy removal:
+    - automated parity/build/test gate pass
+    - focused manual parity verification pass executed by the user (not by the agent)
+    - explicit user approval to proceed with removing legacy `source/WebRemote` paths
+  - Process requirement: after automated gate completion, the agent must stop implementation work, provide a manual migrated-WebUI verification checklist/instructions to the user, and wait for user confirmation before continuing.
+  - Remove legacy desktop `WebRemoteServer` mutation/event bridge paths only after parity verification and gate approval.
+- **Acceptance criteria**:
+  - Migration flag metadata is explicit (owner, defaults, tests, sunset/removal target).
+  - `ReelRoulette.WebUI` preserves required legacy web-remote UX parity for main media interactions, custom media controls, and tag editor flows.
+  - Desktop settings maintain equivalent user-facing controls for web runtime behavior (including `reel.local`/LAN discoverability and enable/disable/auth configuration paths) after migration.
+  - Required web parity flows are verified before default cutover and before legacy removal.
+  - Manual parity verification is user-executed; the agent provides instructions/checklist and waits for user confirmation before removal work resumes.
+  - Legacy embedded web-remote mutation/event bridge paths are removed only after automated gate pass, user-executed manual parity gate pass, and explicit user approval is recorded.
+  - Desktop/core behavior remains stable after legacy path retirement.
+  - Time-bounded migration flags are removed or scheduled with explicit follow-up completion criteria.
+- **Verification evidence**:
+  - Legacy embedded WebRemote stack under `source/WebRemote/` is removed from runtime behavior and project resources.
+  - Desktop Web UI controls now map to core-owned runtime settings through API (`/api/web-runtime/settings`) and worker-managed WebHost lifecycle.
+  - Core/server owns preset/filter randomization semantics used by both desktop and WebUI (`/api/presets`, `/api/presets/match`, `/api/random` with filter-state-first semantics).
+  - Independent WebHost serves host-aware `runtime-config.json`, enabling direct `localhost`, mDNS (`*.local`), and LAN-IP client access without legacy desktop bridge routes.
+  - Dynamic CORS allowlist and worker mDNS advertisement are derived from current web runtime settings and active LAN interfaces.
+  - Gate A automated checks passed during cutover slices (`dotnet build ReelRoulette.sln`, core test gate, web verify/build checks).
+  - Gate B manual parity checklist was user-executed and approved; Gate C explicit user approval was recorded prior to legacy removal.
+  - Remaining post-cutover runtime stabilization issues (settings reopen/apply lockout, LAN apply consistency edge cases, worker/WebHost shutdown orphan cleanup) are explicitly deferred to **Control-Plane UI + API for Runtime Operations**.
+
+### M7c - Zero-Restart Web Deployment, Caching, and Rollback
+
+- **Status**: ✅ Complete
+- **Goal**: Enable independent web deployments without desktop/core restarts and with fast rollback.
+- **Scope**:
+  - Publish web artifacts as immutable versioned bundles.
+  - Activate versions via atomic pointer/symlink/manifest switch.
+  - Apply split caching policy:
+    - `index.html` and runtime config: no-store (or short revalidate-first policy)
+    - hashed JS/CSS/assets: long-lived immutable caching
+  - Add atomic rollback path to prior known-good web artifact.
+- **Acceptance criteria**:
+  - New web versions can be activated without restarting desktop app or core server.
+  - Clients pick up shell/config updates promptly while retaining cached hashed assets.
+  - Rollback to previous artifact works via atomic switch only.
+  - Deployment/rollback flow is documented and repeatable.
+  - Automated smoke checks validate active version, cache policy behavior, and rollback.
+- **Verification evidence**:
+  - `dotnet build ReelRoulette.sln` passes with the new `ReelRoulette.WebHost` project included.
+  - `dotnet test ReelRoulette.sln` passes after this milestone's deployment-host/script changes.
+  - `npm run verify` passes in `src/clients/web/ReelRoulette.WebUI`.
+  - `tools/scripts/verify-web-deploy.ps1` passes end-to-end:
+    - publishes two immutable versions,
+    - activates v1 then v2 without restarting web host process,
+    - verifies split caching headers (`index.html`/`runtime-config.json` no-store, hashed assets immutable),
+    - rolls back atomically to v1 via manifest pointer switch.
+  - Activation/rollback are performed through atomic `active-manifest.json` pointer updates (`publish-web.*`, `activate-web-version.*`, `rollback-web-version.*`).
+
+### M7b - Direct Web-to-Core Auth and SSE Reliability
+
+- **Status**: ✅ Complete
+- **Goal**: Move web auth/eventing to direct core/server integration with robust reconnect/resync behavior.
+- **Scope**:
+  - Implement pair-token bootstrap followed by secure HTTP-only session-cookie auth for web API/SSE usage.
+  - Connect web directly to core/server SSE (`/api/events`) and refresh status APIs (`/api/refresh/status`) without desktop bridge/proxy.
+  - Implement revision-aware SSE reconnect (`Last-Event-ID`), replay handling, and authoritative API requery fallback when replay gaps occur.
+  - Define explicit CORS/cookie environment matrix for localhost, LAN/dev-cert, and production paths.
+- **Acceptance criteria**:
+  - Web auth sessions persist through expected reconnect/navigation flows using secure cookie semantics.
+  - `refreshStatusChanged` and related events are projected directly from core/server to web status line during active runs, failures, and completions.
+  - Replay-gap/resync-required scenarios recover by requerying authoritative API state with no persistent client divergence.
+  - CORS/cookie policies validate in supported environments.
+  - Automated reconnect/resync checks plus focused manual parity checks pass.
+- **Verification evidence**:
+  - `npm run verify` in `src/clients/web/ReelRoulette.WebUI` passes, including `sseClient` resync/requery regression coverage (`src/test/sseClient.test.ts`).
+  - `dotnet test ReelRoulette.sln` passes with server auth/cookie/CORS policy coverage (`ServerAuthRegressionTests`, `ServerCookiePolicyTests`, `ServerRuntimeOptionsTests`).
+  - `dotnet build ReelRoulette.sln` passes after stopping an active worker process that was locking `ReelRoulette.Server.dll`.
+  - Manual CORS preflight check (allowed origin): `OPTIONS /api/version` with `Origin: http://localhost:5173` returns `204` plus `Access-Control-Allow-Origin: http://localhost:5173` and `Access-Control-Allow-Credentials: true`.
+  - Manual CORS preflight check (blocked origin): `OPTIONS /api/version` with `Origin: http://example.com` returns `204` without `Access-Control-Allow-Origin`.
+  - Manual pairing check: `POST /api/pair?token=...` returns `200` and `Set-Cookie` with `httponly` + `samesite=lax`, confirming credentialed session bootstrap behavior.
+
+### M7a - Web Client Foundation and Independent Host Bootstrap
+
+- **Status**: ✅ Complete
+- **Goal**: Establish `ReelRoulette.WebUI` as an independently buildable/runnable web client without desktop-hosted runtime dependency.
+- **Scope**:
+  - Stand up `src/clients/web/ReelRoulette.WebUI` with Vite + TypeScript as the canonical web client project.
+  - Add runtime config bootstrap for API/SSE endpoint resolution (no compile-time hardcoded base URLs).
+  - Define independent dev-server and production-build workflows for web iteration.
+- **Acceptance criteria**:
+  - Web UI builds independently from desktop app build.
+  - Web UI runs in dev mode with runtime-configured API/SSE endpoints.
+  - Web iteration (build/reload) does not require restarting desktop app or core server.
+  - Runtime config keys/shape are documented and validated in tests.
+  - Automated checks for web build output and runtime-config schema pass.
+- **Verification evidence**:
+  - `npm run verify` passes in `src/clients/web/ReelRoulette.WebUI` (typecheck + runtime-config tests + production build + build-output checks).
+  - Web dev bootstrap starts successfully via `npm run dev` without desktop/core restart dependencies.
+
+### M6b - Feature Alignment Through API (Grid/Thumbnails + Unified Refresh Pipeline)
+
+- **Status**: ✅ Complete
+- **Goal**: Deliver API-backed grid/thumbnails and refresh pipeline refactor as a separate milestone.
+- **Linked milestone note**: `Grid View for Library Panel with Thumbnail Generation (Unified Refresh Pipeline)` is tracked directly in this document.
+- **Scope**:
+  - Implement API-backed **Grid View with Thumbnail Generation** pipeline:
+    - list/grid toggle persistence
+    - thumbnail generation for photos/videos
+    - pipeline execution and scheduling owned by core runtime (not desktop-local orchestration)
+    - unified refresh stage order:
+      1. source refresh
+      2. duration scan
+      3. loudness scan
+      4. thumbnail generation
+    - loudness stage runs new/unscanned files only (drop scan-all mode for this flow)
+    - manual refresh is triggered via `POST /api/refresh/start` and runs through the same core pipeline as auto-refresh
+    - `GET /api/refresh/status` snapshot endpoint complements SSE progress events for active clients
+    - core rejects overlapping runs with `409 already running`; auto and manual refresh do not run concurrently
+    - triggering manual refresh resets the auto-refresh interval baseline
+    - status/progress events are emitted for both auto/manual runs; desktop projects them during this milestone, while direct web/mobile projection is completed in later direct-web milestones when those clients are decoupled from desktop-hosted bridges
+  - Move refresh scheduling/config ownership to core host config:
+    - support appsettings + CLI override model
+    - client settings updates are pushed to core via API and persisted in core settings
+    - default auto refresh remains enabled, default interval becomes 15 minutes, idle-only gating settings are removed
+  - Define thumbnail artifact policy before feature completion:
+    - artifact location convention (for example, `%LOCALAPPDATA%/ReelRoulette/thumbnails/{itemId}.jpg`)
+    - invalidation rules (file change/fingerprint change -> thumbnail stale/regenerate)
+    - target size/quality and video thumbnail timestamp strategy
+- **Acceptance criteria**:
+  - Grid view and thumbnail generation work end-to-end through server/core.
+  - No standalone legacy duration/loudness actions in UX (as planned).
+  - Refresh progress/status remains observable while dialogs close and via `GET /api/refresh/status` + SSE for desktop in this milestone; direct web-to-core SSE status parity is tracked in later direct-web milestones.
+  - Core runtime is the single execution owner for unified refresh pipeline and auto-refresh scheduling.
+  - Manual refresh is API-triggered (`POST /api/refresh/start`) and returns `409` when a refresh run is already active.
+  - Auto-refresh timer baseline is reset when a manual refresh is started.
+  - Core config defaults are applied (auto enabled, 15-minute interval, no idle gating settings).
+  - Thumbnail artifact/invalidation policy is implemented and documented.
+  - Regression tests cover thumbnail invalidation decisions, unified refresh stage sequencing, refresh overlap rejection (`409`), and status/progress projection behavior; all pass in `dotnet test`.
+
+### M6a - Feature Alignment Through API (Web Tag Editing)
+
+- **Status**: ✅ Complete
+- **Goal**: Ship API-backed web tag editing parity as an independent, low-blast-radius milestone.
+- **Scope**:
+  - Implement API-backed **Web Remote Tag Editing** parity:
+    - tag/category edit flows
+    - batch-ready `itemIds[]`
+    - immediate SSE sync
+  - Migrate desktop tag/category/item-tag mutation flows to the same core/server command path:
+    - desktop tag editing remains orchestration/UI only
+    - mutation authority for migrated tag flows is core/server
+    - remove direct desktop JSON mutation for migrated tag/category/item-tag paths
+- **Acceptance criteria**:
+  - Web remote tag editing works end-to-end through server/core.
+  - Desktop and web tag edits execute through the same API/core mutation services (single-writer for migrated tag flows).
+  - Desktop does not directly mutate JSON for migrated tag/category/item-tag flows.
+  - Desktop and web remain synchronized via SSE for tag/category/item-tag changes.
+  - Category delete semantics reassign tags to canonical `uncategorized` (fixed ID) instead of deleting tags.
+  - `Uncategorized` appears in category dropdowns and remains hidden from category lists when it has no tags.
+  - Tag editing can ship independently of grid/thumbnail/pipeline refactors.
+  - Regression tests validate tag/category mutation contracts plus SSE sync projections (including batch-ready `itemIds[]` request handling) and pass in `dotnet test`.
+
+### M5 - Desktop as API Client (State Flows)
+
+- **Status**: ✅ Complete
+- **Goal**: Convert desktop from state owner to API client for core state.
+- **Scope**:
+  - Add `ApiClient` layer to Windows app.
+  - Migrate desktop flows to API calls + SSE updates:
+    - favorites/blacklist
+    - playback stat record
+    - random selection command/query
+    - filter/preset mutations
+  - Keep local media playback rendering in desktop client.
+- **Acceptance criteria**:
+  - Desktop writes state via API (not direct in-process data mutation) for migrated flows.
+  - SSE updates keep desktop UI in sync with out-of-process changes.
+  - Existing user workflows remain stable.
+  - Regression tests for desktop API-client request shape/parsing and this milestone's server-state replay/filter-session behaviors are added to `dotnet test` and passing.
+
+### M4 - Worker Runtime (Headless Host)
+
+- **Status**: ✅ Complete
+- **Goal**: Run core runtime independently of desktop UI.
+- **Scope**:
+  - Implement `ReelRoulette.Worker` to host server + scheduled/background jobs.
+  - Worker runtime target for this milestone:
+    - run as console host first (service packaging/hardening deferred)
+  - Add worker lifecycle:
+    - start
+    - stop
+    - health check
+    - graceful shutdown
+  - Add pairing/auth primitive used by web and future clients:
+    - auth can be required
+    - localhost trust can be optionally enabled for dev workflows
+    - LAN access requires pairing token/cookie
+  - Add desktop lifecycle UX for headless core:
+    - desktop detects core not running
+    - desktop can show friendly `Start Core` action (or equivalent auto-start behavior)
+  - Add scripts:
+    - `tools/scripts/run-core.ps1`
+    - `tools/scripts/run-core.sh`
+- **Acceptance criteria**:
+  - Worker runs headless and serves API/SSE.
+  - Worker can be launched as console host on Windows.
+  - Desktop can connect to worker localhost API.
+  - Auth/pairing primitive is functional (required auth supported; localhost trust optional; LAN pairing enforced when configured).
+  - Desktop provides a clear UX path when core is not running.
+  - Closing desktop UI does not stop worker background jobs (when configured).
+
+### M3 - Server API Skeleton + Contract First
+
+- **Status**: ✅ Complete
+- **Goal**: Introduce API seam as primary integration boundary.
+- **Scope**:
+  - Define initial `shared/api/openapi.yaml`.
+  - Implement `ReelRoulette.Server` host with:
+    - health endpoint
+    - initial query/command endpoints
+    - SSE endpoint envelope with revision model
+  - Map existing DTOs to OpenAPI contract.
+- **Acceptance criteria**:
+  - OpenAPI validates and documents live endpoints.
+  - SSE event envelope stable (`revision`, `eventType`, timestamp, payload).
+  - Client reconnect behavior is explicitly defined (minimum: reconnect detects missed revisions and re-fetches state; optional replay endpoint may be added later).
+  - Desktop can call at least one state query via HTTP locally.
+
+### M2 - Storage and State Service Layer
+
+- **Status**: ✅ Complete
+- **Goal**: Centralize data access and persistence logic behind core services.
+- **Scope**:
+  - Move library/settings read-write and consistency logic to `Core/Storage`.
+  - Define state services for:
+    - library index
+    - settings
+    - runtime randomization states
+  - Keep JSON schema compatibility with existing files.
+  - Establish hybrid verification structure for migration safety:
+    - make `dotnet test` the default quality gate using a standard test project (xUnit/NUnit/MSTest)
+    - cover fast unit checks for randomization logic, filter evaluation, tag operations, and DTO mapping rules
+    - create reusable verification modules (for example, `CoreVerification.RunAll(...)`) shared by test and harness flows
+    - add a console system-check harness for fixture-driven migration checks, fingerprint pipeline invariants, `RefreshSource` reconciliation checks, and performance sanity checks
+- **Acceptance criteria**:
+  - Desktop no longer directly mutates raw JSON files in migrated flows.
+  - Existing `library.json` and `settings.json` are read/written without schema break.
+  - Migration tests cover load/save round trips.
+  - `dotnet test` runs the default fast verification suite and is treated as the primary gate.
+  - Console harness runs the same reusable verification checks with optional verbose logging and scenario/performance options (no duplicated assertion logic).
+
+### M1 - Core Domain Extraction (Pure Library)
+
+- **Status**: ✅ Complete
+- **Goal**: Move pure business logic from desktop code-behind into reusable core library.
+- **Scope**:
+  - Move non-UI logic into `ReelRoulette.Core`:
+    - randomization engine/state
+    - filter evaluation
+    - tag/preset mutation operations
+    - fingerprint comparison helpers
+  - Introduce interfaces for storage and background operations.
+  - Keep UI consuming adapters around moved logic.
+- **Acceptance criteria**:
+  - `ReelRoulette.Core` has no Avalonia references.
+  - Desktop behavior remains functionally equivalent for migrated paths.
+  - Unit tests added for extracted logic hotspots (randomization, tag updates, filter set building).
+
+### M0 - Repo and Solution Foundation
+
+- **Status**: ✅ Complete
+- **Goal**: Introduce target project layout and baseline docs without changing runtime behavior.
+- **Scope**:
+  - Create/organize solution folders: `src/core`, `src/clients`, `shared`, `docs`, `tools`.
+  - Add project stubs:
+    - `ReelRoulette.Core`
+    - `ReelRoulette.Server`
+    - `ReelRoulette.Worker`
+    - `ReelRoulette.WindowsApp` (can initially point to existing desktop project strategy)
+    - `ReelRoulette.WebUI` (structure only)
+  - Add baseline docs:
+    - `docs/architecture.md`
+    - `docs/api.md`
+    - `docs/dev-setup.md`
+- **Acceptance criteria**:
+  - Solution builds successfully.
+  - Existing app startup/playback unchanged.
+  - Documentation includes current-state and target-state diagrams.

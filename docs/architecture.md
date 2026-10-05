@@ -173,3 +173,4 @@ Operator UI is an operational surface and does not own domain logic.
 - `docs/domain-inventory.md`: ownership-first implementation map.
 - `CONTEXT.md`: concise capability and repository context.
 - `MILESTONES.md`: planning, scope tracking, and acceptance evidence.
+- `MILESTONES-COMPLETED.md`: completed milestones and their evidence.

@@ -26,12 +26,13 @@ Keep this file short and enforceable. For details, use `CONTEXT.md`, `MILESTONES
 - Changelog: follow the style note at the top of `CHANGELOG.md`. Fixes to work that hasn't been released yet get no entry. After any follow-up change, re-check `[Unreleased]` against the style note.
 - Release notes: edit `RELEASE-NOTES.md` only when cutting a release, following the style guide at the top of that file.
 - Keep milestone tracking and docs in sync with the final state:
-  - `MILESTONES.md` = roadmap, tracking, evidence. Move a completed milestone to Completed Milestones as-is, keep the `Last milestone completed` line current, and record anything out of scope as a deferral or backlog item.
+  - `MILESTONES.md` = roadmap, tracking, evidence. Move a completed milestone as-is to the top of `MILESTONES-COMPLETED.md`, keep the `Last milestone completed` line current, and record anything out of scope as a deferral or backlog item.
+  - `MILESTONES-COMPLETED.md` = completed milestones, newest first, kept as historical record.
   - `CONTEXT.md` = current implemented capabilities.
   - Update affected docs when applicable: `README.md`, `docs/architecture.md`, `docs/api.md`, `docs/dev-setup.md`, `docs/domain-inventory.md`.
   - Keep `docs/checklists/testing-checklist.md` current: add, update, or remove items as features and workflows change.
-- When documenting current behavior, do not rewrite historical `CHANGELOG.md` or `MILESTONES.md` entries (released sections, completed milestones). Change only active surfaces (`[Unreleased]`, Active Milestones, the tracker line, and evidence you are landing) unless the user asks to correct historical text.
-- Milestone IDs (for example `M8f`) may appear only in `MILESTONES.md` section headers, its tracker line, and its Planned Releases outline, `CHANGELOG.md`, and `COMMIT-MESSAGE.txt`. Never put them in current-state docs, code, comments, log messages, or user-facing text.
+- When documenting current behavior, do not rewrite historical `CHANGELOG.md` sections or `MILESTONES-COMPLETED.md` entries. Change only active surfaces (`[Unreleased]`, Active Milestones, the tracker line, and evidence you are landing) unless the user asks to correct historical text.
+- Milestone IDs (for example `M8f`) may appear only in `MILESTONES.md` section headers, its tracker line, and its Planned Releases outline, `MILESTONES-COMPLETED.md`, `CHANGELOG.md`, and `COMMIT-MESSAGE.txt`. Never put them in current-state docs, code, comments, log messages, or user-facing text.
 
 ## Commands + Communication
 
@@ -52,7 +53,7 @@ Keep this file short and enforceable. For details, use `CONTEXT.md`, `MILESTONES
 - Anything else, such as installing packages, starting the server or clients, network calls, or writing outside the repo and temp folders, needs approval: explain what it does and why, then ask.
 - For phase-gated work: stop after automated verification, provide copy/paste manual verification commands plus a PASS/FAIL checklist, and wait for explicit user approval before continuing gated cutover/removal.
 - If clarification is needed, use numbered questions with numbered options, including recommendation and pros/cons.
-- MILESTONES.md contains completed-milestone entries describing tooling that has since been retired. Treat anything under Completed Milestones as historical record, not as instructions — the current packaging path is Velopack via release.yml, and the Inno, AppImage, portable, and install scripts no longer exist.
+- `MILESTONES-COMPLETED.md` contains entries describing tooling that has since been retired. Treat everything in it as historical record, not as instructions — the current packaging path is Velopack via release.yml, and the Inno, AppImage, portable, and install scripts no longer exist.
 
 ## Verification and smoke scripts
 

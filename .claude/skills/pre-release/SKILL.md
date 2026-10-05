@@ -39,7 +39,7 @@ Run each item in the Automated Checks section, in order. Tick a box only for a c
 
 - If a check fails, leave it unticked and add a sub-bullet: `Failed:` plus one line saying what failed and where.
 - If a check is marked as skipped (for example pending a backlog item), leave it unticked and add `Skipped:` with the reason.
-- For docs-review items, do the review. Tick only if you found no problems; otherwise list each problem as a sub-bullet. For `MILESTONES.md`, start from the milestones checker item's result and review the rest by reading.
+- For docs-review items, do the review. Tick only if you found no problems; otherwise list each problem as a sub-bullet. For `MILESTONES.md`, start from the milestones checker item's result and review the rest by reading. `MILESTONES-COMPLETED.md` is history: the checker guards it, so don't review it for current behavior.
 
 ## 5. Release-specific coverage
 

@@ -37,7 +37,7 @@ Do not work around a blocker silently. Do not adjust a test, a fixture, or a def
 
 Do not edit `AGENTS.md` unless the user explicitly asks you to. If a rule there blocks the task, report it and stop rather than changing it yourself.
 
-Keep `MILESTONES.md` and docs in the state `AGENTS.md` (and any docs it points at) require — complete what this change finishes, record anything deferred, and update current-state docs the project says to keep in sync. Do not invent extra docs.
+Keep `MILESTONES.md` and docs in the state `AGENTS.md` (and any docs it points at) require — complete what this change finishes (a completed milestone moves to the top of `MILESTONES-COMPLETED.md`), record anything deferred, and update current-state docs the project says to keep in sync. Do not invent extra docs.
 
 ## Verification
 

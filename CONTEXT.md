@@ -111,6 +111,7 @@ For full setup/run details use `README.md` and `docs/dev-setup.md`. Core command
 ## Related Docs and Ownership
 
 - `MILESTONES.md`: roadmap, scope, acceptance criteria, verification evidence.
+- `MILESTONES-COMPLETED.md`: completed milestones and their evidence.
 - `README.md`: practical onboarding/run/test commands.
 - `docs/api.md`: endpoint/event/contract baseline.
 - `docs/dev-setup.md`: development setup and workflow details.

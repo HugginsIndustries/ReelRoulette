@@ -38,6 +38,6 @@ Present it and stop. Show: each finding and where it goes (existing item or new 
 
 ## After confirmation
 
-Make the edits, then run `pwsh ./tools/scripts/check-milestones.ps1 -BaseRef HEAD` and fix everything it reports. It checks that milestone IDs appear only in section headers, the tracker line, and the Planned Releases outline; that the outline and the sections agree; that every `Depends on` names an existing milestone title; and that Completed Milestones only grew by entries moved in. It cannot check milestone names mentioned in other prose, so check any name reference you added or changed by reading. Say what you ran and its result.
+Make the edits, then run `pwsh ./tools/scripts/check-milestones.ps1 -BaseRef HEAD` and fix everything it reports. It checks that milestone IDs appear only in section headers, the tracker line, and the Planned Releases outline; that the outline and the sections agree; that every `Depends on` names an existing milestone title; and that `MILESTONES-COMPLETED.md` only grew by entries moved in. It cannot check milestone names mentioned in other prose, so check any name reference you added or changed by reading. Say what you ran and its result.
 
 Start or update the `COMMIT-MESSAGE.txt` entry per `AGENTS.md`. No changelog entry; planning changes nothing user-visible.
