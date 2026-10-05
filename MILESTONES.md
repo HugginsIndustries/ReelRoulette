@@ -454,6 +454,7 @@ Last milestone completed: M10j11
   - The Operator page is about 780 lines of HTML, CSS, and JavaScript inside a raw string in `src/core/ReelRoulette.ServerApp/Program.cs`, and no test covers `/operator`.
   - Admin section slice:
     - Move every Operator section into the admin section as Preact screens: server updates, runtime status with restart and stop, web runtime settings, control settings (control token, dev channel, Launch Server on Startup), the testing suite, connected clients, server logs, and incoming and outgoing API events. They call the same control routes, so there is no contract change.
+    - The Operator's update download needs two attempts every time: click Download and confirm, and nothing happens; click Download and confirm again, and it downloads. Find the cause before building the admin section's update controls, so they don't inherit it.
     - Gating: localhost is trusted. From another machine, the admin section shows nothing until the control token is entered through `POST /control/pair`. The accounts release replaces the token with admin accounts.
     - Later admin work lands here: refresh, backup, and duplicate review, source and item management, catalog transfer, the Log Viewer, and account administration.
   - Recovery page slice:
@@ -463,6 +464,7 @@ Last milestone completed: M10j11
     - Update the README Known Issues entry that points to `/operator` when the tray is missing.
 - **Acceptance criteria**:
   - The admin section offers every action and setting the Operator page offers today and calls the same routes.
+  - In the admin section, one Download click and one confirmation start the update download.
   - From another machine, nothing in the admin section is shown until a valid control token is entered; on localhost it opens without one.
   - With the WebUI's files removed, the recovery page restarts, stops, shows logs, and checks, downloads, and applies updates.
   - The recovery page renders settings, status, and log text without `innerHTML` interpolation.

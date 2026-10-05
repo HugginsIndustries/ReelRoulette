@@ -21,6 +21,7 @@ Keep this file short and enforceable. For details, use `CONTEXT.md`, `MILESTONES
 
 ## Commit + Docs Discipline
 
+- Agents do not commit or push; the user does. A best-effort hook asks for approval before any `git commit` or `git push`.
 - Determine commit state from git rather than assuming. Before editing `COMMIT-MESSAGE.txt` or the `[Unreleased]` changelog, run `git status` and `git log -1`: if `COMMIT-MESSAGE.txt` has no uncommitted changes and its current entry matches the HEAD commit message, that entry is committed, so start a new entry. Otherwise, update the uncommitted entry in place (final state only). If the result is ambiguous, ask.
 - Keep the existing entry style in `COMMIT-MESSAGE.txt` unless the user asks to replace it.
 - Changelog: follow the style note at the top of `CHANGELOG.md`. Fixes to work that hasn't been released yet get no entry. After any follow-up change, re-check `[Unreleased]` against the style note.

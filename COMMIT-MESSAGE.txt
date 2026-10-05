@@ -19,7 +19,9 @@ Instructions:
 
 Commit Message:
 
-Bugfix: Stop the log sink tests breaking the headless tray menu test
+Chore: Ask before agents commit or push, and plan the update download fix
 
-- The Avalonia log sink tests created Avalonia controls on the test thread. When they ran while the tray menu test was starting its headless app, Avalonia's UI thread was claimed by the test thread, and the tray test failed with "a different thread owns it", as seen once on Windows CI.
-- Use plain objects as log sources in the sink tests, so they no longer touch Avalonia's UI thread.
+- Add a project PreToolUse hook that asks for approval before any Bash call that runs `git commit` or `git push`, including global options before the subcommand, quoted option values, chained commands, backslash-continued lines, and `--amend`.
+- Like the real-data guard, the hook is best-effort and asks on every call if `jq` is missing.
+- AGENTS.md now states that agents do not commit or push.
+- Admin Section in WebUI Settings now records that the Operator's update download only starts on the second Download and confirmation, requires finding the cause before building the admin section's update controls, and adds an acceptance criterion that one Download and one confirmation start the download.
