@@ -170,10 +170,10 @@ An agent runs these and ticks them.
 
 ## Release Flow
 
-- [ ] Version set with `pwsh ./tools/scripts/set-release-version.ps1 -Version {VERSION}`, and `.version` matches the tag you will push.
-- [ ] `CHANGELOG.md` `[Unreleased]` is cut into the new release section titled with the release name, and a fresh `[Unreleased]` with empty headings is above it.
-- [ ] `CHANGELOG.md` footer links: `[Unreleased]` compares the new version with `HEAD`, and a new line for this version compares the previous version with it.
-- [ ] `RELEASE-NOTES.md` has the new release entry, it follows the style guide at the top of that file, and its Verification section is filled in from this pass.
+- [x] Version set with `pwsh ./tools/scripts/set-release-version.ps1 -Version {VERSION}`, and `.version` matches the tag you will push.
+- [x] `CHANGELOG.md` `[Unreleased]` is cut into the new release section titled with the release name, and a fresh `[Unreleased]` with empty headings is above it.
+- [x] `CHANGELOG.md` footer links: `[Unreleased]` compares the new version with `HEAD`, and a new line for this version compares the previous version with it.
+- [x] `RELEASE-NOTES.md` has the new release entry, it follows the style guide at the top of that file, and its Verification section is filled in from this pass.
 
 After committing the release, before tagging:
 
@@ -197,7 +197,7 @@ If any check fails, record:
 ## Sign-Off
 
 - Overall result:
-  - [ ] PASS
+  - [x] PASS
   - [ ] FAIL
-- [ ] All failures and skipped checks documented.
-- [ ] Ready to tag.
+- [x] All failures and skipped checks documented.
+- [x] Ready to tag.

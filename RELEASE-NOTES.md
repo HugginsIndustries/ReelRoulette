@@ -47,6 +47,7 @@ v0.14.0 finishes the move to the new library format, locks the Operator to peopl
 - Opening desktop Settings a second time no longer freezes the app.
 - Desktop hides the source and library removal options, which only showed an error, until the server supports them.
 - Set `REELROULETTE_DATA_DIR` to run the server from any folder you like. Its settings, library, backups, log, and thumbnails all live there.
+- File names and paths from the WebUI and desktop stay out of the server log, desktop log lines no longer blank out volume levels and version numbers, and log lines written at the same moment no longer overwrite each other.
 
 ## What's Coming
 
@@ -58,7 +59,15 @@ v0.14.0 finishes the move to the new library format, locks the Operator to peopl
 
 ## Verification
 
-<!-- TODO: manual validation -->
+Full build, test, and WebUI verify passed, along with the packaged server smoke test. Manual testing covered the desktop app, server, and WebUI in Firefox on CachyOS; the WebUI in Firefox on a second CachyOS machine over the home network; a Pixel 8 Pro in Firefox and an iPad Pro with the WebUI installed from Safari, both over Tailscale; and a Windows 11 VM, including a fresh `Setup.exe` install and an in-app update from v0.13.0.
+
+The Operator's testing scenarios weren't run this time. They're due for a rebuild alongside the new WebUI.
+
+A few known issues are still open:
+
+- Installing the WebUI on Android still adds a shortcut that opens in the browser instead of a standalone app. It works as a standalone app on iOS.
+- On desktop, keyboard shortcuts stop working while the pointer is over the video, so player view combined with fullscreen can't be left from the keyboard. Move the pointer to the thin line at the top of the screen to get them back.
+- The WebUI status line can flip between messages when the server is stopped or unavailable.
 
 ## Notes
 

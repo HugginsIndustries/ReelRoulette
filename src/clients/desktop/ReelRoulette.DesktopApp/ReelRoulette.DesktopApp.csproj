@@ -12,7 +12,7 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
-    <Version>0.14.0-dev.2</Version>
+    <Version>0.14.0</Version>
     <AssemblyName>ReelRoulette.DesktopApp</AssemblyName>
     <Nullable>enable</Nullable>
     <ApplicationManifest>app.manifest</ApplicationManifest>

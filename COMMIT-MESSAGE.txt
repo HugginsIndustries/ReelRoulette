@@ -19,8 +19,10 @@ Instructions:
 
 Commit Message:
 
-Docs: Plan log categories, a minimum log level, and multi-value log viewer filters
+Docs: Release v0.14.0 Loose Ends
 
-- The structured log schema gets a required `cat` category (`action`, `access`, `job`, `lifecycle`, `connection`, or `general`, which the writer sets when an entry has none) and a configurable minimum level for `last.log`, `info` by default; the WebUI log methods take an optional category, and server code can set one through `ILogger`.
-- The Admin Log Viewer replaces the free-text level box with one checkbox per level, adds multi-select category and source filters, and its `lvl`, `cat`, and `svc` filters take several values.
-- Library Query Performance keeps one library query line per request and adds its elapsed time, so a reload writes one line once it is a single request; in the v0.14.0 manual pass a six-page reload from two WebUI clients wrote twelve lines.
+- Set the release version to v0.14.0.
+- Cut the changelog into the v0.14.0 Loose Ends section with a fresh `[Unreleased]`.
+- Release notes add the log privacy fix and fill in Verification from the manual pass, including the skipped testing scenarios and the known issues still open.
+- Remove the README Known Issues section, since the Windows tray now works, and the admin section milestone's step to update it.
+- Remove v0.14.0 from Planned Releases and tick the Release Flow checklist items.

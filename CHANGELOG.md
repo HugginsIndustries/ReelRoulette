@@ -9,6 +9,22 @@ Write **[Unreleased]** bullets at the same level as the released sections below.
 
 ### Added
 
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+
+---
+
+## [0.14.0] — Loose Ends (2026-10-05)
+
+### Added
+
 - **Server data folder setting:** Set the `REELROULETTE_DATA_DIR` environment variable to run the server from another folder. Its settings, library, backups, log, and thumbnails all go there. The web deploy check uses it, so it no longer touches your real library on Windows.
 
 ### Changed
@@ -16,8 +32,6 @@ Write **[Unreleased]** bullets at the same level as the released sections below.
 - **Desktop hides source and item removal:** **Rename** and **Remove** in Manage Sources and **Remove from Library** in the library grid menu are hidden until the server supports them, since they only showed an error.
 - **Less reloading on library changes:** On desktop and in the WebUI, a favorite, play, or tag change updates that tile in place, and reloads the loaded tiles only when it can change which files show or their order. Playing a file in a library sorted by name no longer reloads the whole view on every client. Library totals and refresh progress also update less often during bursts of changes.
 - **Preset matching ignores tag order and case:** Both clients recognize a saved preset when its tags differ only in order or capitalization, or its sources or tag categories are listed in a different order, including presets saved before the categories were reordered. The desktop now matches presets the same way the WebUI does.
-
-### Deprecated
 
 ### Removed
 
@@ -1053,7 +1067,8 @@ Write **[Unreleased]** bullets at the same level as the released sections below.
 
 ---
 
-[Unreleased]: https://github.com/HugginsIndustries/ReelRoulette/compare/v0.13.0...HEAD
+[Unreleased]: https://github.com/HugginsIndustries/ReelRoulette/compare/v0.14.0...HEAD
+[0.14.0]: https://github.com/HugginsIndustries/ReelRoulette/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/HugginsIndustries/ReelRoulette/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/HugginsIndustries/ReelRoulette/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/HugginsIndustries/ReelRoulette/compare/v0.10.0...v0.11.0

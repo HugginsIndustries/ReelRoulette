@@ -5,11 +5,10 @@ It tracks scope, sequencing, acceptance criteria, and evidence by milestone.
 
 ## Planned Releases
 
-An outline of upcoming releases and the milestones each one ships, in order. v0.14.0 closes the M10 series; each later release becomes a new `M*` series when it is promoted.
+An outline of upcoming releases and the milestones each one ships, in order. Each release becomes a new `M*` series when it is promoted.
 
 The WebUI becomes the only client on every device. The desktop client is frozen to bug fixes (crashes, data loss, broken playback, security) until the desktop removal release, and until then server contract changes only add fields, so the last desktop build keeps working. The native Android client is dropped.
 
-- **v0.14.0 — Cleanup and polish**: Finish the SQLite migration cleanup, fix the defects found since, cut redundant client and refresh event work, and close the control plane to the LAN without a token. M10j1, M10j2, M10j3, M10j4, M10j5, M10j6, M10j7, M10j8, M10j9, M10j10, M10j11, M10j12.
 - **v0.14.1 — Performance**: Make library browse, window reloads, and random selection cheap on large catalogs, cache thumbnails until they change, and identify items by ID in every event and response. M11a, M11b, M11c, M11d.
 - **v0.15.0 — WebUI overhaul**: Serve the WebUI over HTTPS so it installs as an app, move it to Preact, give it a responsive layout with side panels and phone overlays, and add keyboard shortcuts, stats, settings, an admin section that replaces the Operator page, duplicate review, and Show in File Manager. P28a, P38, P39, P34, P20, P26a, P40, P41, P42, P43, P44, P45, P31.
 - **v0.15.1 — Desktop parity**: Give the WebUI everything else the desktop does, including source management, catalog transfer, multi-select, and a browser-playable filter, while the desktop still ships as a fallback. P26b, P26c, P26d, P37, P46, P47.
@@ -536,7 +535,6 @@ Last milestone completed: M10j12
     - The server keeps a minimal built-in page with restart, stop, a log tail, and updates, at a fixed path such as `/recovery` (decided here). It does not load the WebUI's files, so it works when they are missing or broken, and it has the same control-token gating.
     - It renders settings and status text without `innerHTML` interpolation (found by the repository audit: Operator HTML page interpolates user input via `innerHTML`).
     - Retire the Operator page: `/operator` redirects to the admin section, the tray's Operator shortcut opens the admin section, and `verify-linux-packaged-server-smoke.sh` checks the recovery page and the admin section entry instead of `/operator`.
-    - Update the README Known Issues entry that points to `/operator` when the tray is missing.
 - **Acceptance criteria**:
   - The admin section offers every action and setting the Operator page offers today and calls the same routes.
   - In the admin section, one Download click and one confirmation start the update download.

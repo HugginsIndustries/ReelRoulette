@@ -140,7 +140,7 @@ pwsh ./tools/scripts/run-server-rebuild.ps1
 Set release-aligned version surfaces in one step (repo-root `.version` is the source of truth; bare semver is written to consumers):
 
 ```bash
-pwsh ./tools/scripts/set-release-version.ps1 -Version v0.14.0-dev.2
+pwsh ./tools/scripts/set-release-version.ps1 -Version v0.14.0
 ```
 
 Omit `-Version` to read the current value from `.version` and fan out without changing the file. By default this also updates the desktop app `<Version>`, regenerates WebUI OpenAPI contracts (`npm run generate:contracts`), and runs solution build/test, WebUI verify, and deploy smoke. Pass `-NoUpdateDesktopVersion`, `-NoRegenerateContracts`, and/or `-NoRunVerify` to skip any of those. Use `-NoDocUpdates` to leave `README.md` / `docs/dev-setup.md` release command examples unchanged.
@@ -185,14 +185,6 @@ Manual test guide:
 - `pwsh ./tools/scripts/check-milestones.ps1` checks `MILESTONES.md` and `MILESTONES-COMPLETED.md` against their maintenance rules (ID placement, release outline, `Depends on` titles). Add `-BaseRef <ref>` to also check that `MILESTONES-COMPLETED.md` only grew by moved entries, with `-Release` when the base is a release tag.
 - `pwsh ./tools/scripts/tests/test-scripts.ps1` runs the milestones checker and changelog cut script against their fixtures.
 
-## Known Issues
-
-### Windows: Avalonia system tray reliability
-
-`ReelRoulette.ServerApp` shows a **system tray** icon when a desktop session is available. On **Windows**, that UI uses **Avalonia** (`TrayIcon` / notification area integration). On some setups the tray can be **unreliable** compared to Linux or macOS—for example the icon or context menu may not appear, may appear late, or may not survive Explorer/shell restarts the way native Win32 tray apps typically do.
-
-The **HTTP server and Operator UI are unaffected**. If the tray is missing or unusable, open **[http://localhost:45123/operator](http://localhost:45123/operator)** (or your configured listen URL with `/operator`) for refresh, restart, stop, and settings. The process may still be running even when no tray icon is visible; use Operator or Task Manager to confirm.
-
 ## Packaging and releases
 
 ReelRoulette ships through **Velopack** only. The **`.github/workflows/release.yml`** workflow (tag push or manual dispatch) builds self-contained **ServerApp** and **DesktopApp** outputs for **Windows** and **Linux**, stages WebUI assets for server legs, bundles Windows native dependencies in CI, packs with **`vpk`**, and publishes update feeds to **Backblaze B2**. Stable tag releases also mirror **`Setup.exe`** and **`.AppImage`** onto the existing **GitHub release** (not update packages, feed JSON, or portable zips). **Velopack-installed** builds check those feeds (background check-only, plus operator/Settings **Check → Download → Apply**); both hosts also call **`VelopackApp` hooks** at startup so install/update/uninstall hook invocations work.
@@ -202,7 +194,7 @@ ReelRoulette ships through **Velopack** only. The **`.github/workflows/release.y
 1. Set the repo version and align contract/project surfaces:
 
    ```bash
-   pwsh ./tools/scripts/set-release-version.ps1 -Version v0.14.0-dev.2
+   pwsh ./tools/scripts/set-release-version.ps1 -Version v0.14.0
    ```
 
 2. Cut the changelog's `[Unreleased]` section into the release:
