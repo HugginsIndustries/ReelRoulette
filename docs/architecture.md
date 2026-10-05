@@ -42,8 +42,8 @@ flowchart LR
 - Serves Operator UI and control-plane endpoints.
 - Owns runtime lifecycle and settings apply/restart orchestration.
 - Uses a thin host-UI abstraction:
-  - Windows host path uses native tray runtime controls (`NotifyIcon`) for operator shortcuts.
-  - non-Windows host path remains headless-compatible.
+  - An Avalonia tray provides operator shortcuts on Windows and on Linux desktop sessions.
+  - Without a tray, the host runs headless.
 - Owns host-level startup-launch registration behavior:
   - Windows path uses per-user startup registration and exposes immediate toggle control via tray and Operator UI.
   - Linux path uses XDG autostart (`*.desktop`) with `Exec=`/`Path=` aimed at the stable binary (AppImage: **`APPIMAGE`** on-disk path, not the `/tmp/.mount_*` process path); the host pins ASP.NET content root to `AppContext.BaseDirectory` so autostart works when the session manager uses a non-install cwd.

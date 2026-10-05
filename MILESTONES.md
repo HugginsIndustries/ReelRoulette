@@ -109,50 +109,7 @@ Do not use this file for detailed architecture explanation or current capability
 
 ## Active Milestones
 
-Last milestone completed: M10j10
-
-### M10j11 - Server Shutdown Fixes
-
-- **Status**: ⏳ Planned
-- **Goal**: Stopping the server finishes in a few seconds with clients connected, the Windows tray survives its right-click menu, and Operator **Stop**, Operator **Restart**, and in-app update apply shut the tray down on its UI thread, so they cannot deadlock the server's shutdown.
-- **Scope**:
-  - Ships in v0.14.0. Three slices in this order: slow shutdown, the Windows tray right-click, then the tray shutdown race. The right-click slice goes before the race because both change the tray's exit path.
-  - Add Release Specific checklist items:
-    - "With clients connected, tray and Operator Stop exit within a few seconds, and Operator Restart relaunches the server, on Linux and Windows."
-    - "On Windows, right-clicking the server tray icon opens the menu, menu items work, and the icon stays."
-  - Slow shutdown with connected clients:
-    - Observed: stopping the server from the tray or the Operator UI takes about 25 seconds while clients are connected.
-    - Likely cause, observed but not confirmed: open event streams are only closed when the host shutdown timeout runs out, not when shutdown starts. The `/api/events` loop only watches the request's abort token, not application stopping.
-  - Windows tray right-click:
-    - Observed on Windows since the tray moved to Avalonia: right-clicking the server tray icon shows no menu and the icon disappears, while the server and WebUI keep running. The Avalonia tray has never worked on Windows. Dispatcher hardening, an Avalonia version bump, and removing the checkbox menu item all reproduced it.
-    - Cause, read from the Avalonia 12.0.0 binaries and reproduced in a headless experiment, not yet confirmed on Windows: on Windows, Avalonia draws the tray menu as a temporary top-level window that closes itself when it loses focus or an item is clicked. The tray starts its desktop lifetime with the default `ShutdownMode.OnLastWindowClose` and has no main window, so closing the menu shuts down the tray's UI loop, which removes the icon. The UI loop then returns normally and nothing is logged. Linux is unaffected because the desktop shell draws its menu over D-Bus and no Avalonia window opens. The same menu design is in Avalonia 11.3.12 through 12.0.4.
-    - Supporting evidence: the original tray was pure WinForms, with no Avalonia, and worked on Windows, including all menu actions. The problem started when the tray moved to Avalonia, which is when the menu became an Avalonia window under the last-window rule. None of the earlier attempts changed that rule.
-    - The tray thread is already STA, so apartment state is not the cause.
-    - Fix: start the tray with `ShutdownMode.OnExplicitShutdown`. Every intended exit already calls the desktop lifetime's `Shutdown()` explicitly, so no exit path relies on the last-window rule, and Linux never opens a window.
-    - Log to `last.log` when the tray's UI loop exits without a requested shutdown, so a silent exit is visible. Today the tray's logger reaches only the console and, for warnings and errors, the Windows Event Log.
-    - Once the Release Specific check confirms the fix on Windows, update the README Known Issues entry, which attributes the problem to Avalonia's notification area integration.
-  - Tray shutdown race:
-    - No hang has been observed. A suspected hang on CachyOS after Operator **Stop** was most likely the terminal not redrawing its prompt after the server exited: pressing Enter brings the prompt back.
-    - Suspected risk from code reading, not confirmed: these paths call `StopApplication` while the tray is still running, so the stopping callback shuts the Avalonia tray down from a non-UI thread. That calls `ClassicDesktopStyleApplicationLifetime.Shutdown()` off the UI thread, which cancels the UI main loop and then waits with no timeout in `Dispatcher.UIThread.InvokeShutdown()` for a job the UI thread may never run. If that happens, the blocked callback holds the `StopApplication` lock, so the host never stops its hosted services, `RunAsync` never returns, and a restart or update never relaunches. The tray menu paths avoid this because they shut the tray down on its UI thread before calling `StopApplication`.
-    - `AvaloniaTrayHostUi.RequestUiExitAsync` posts the shutdown to the UI thread and then also calls the desktop lifetime's `Shutdown()` directly as an unconditional fallback.
-    - The code path is unchanged since v0.12.0: the ServerApp code and the Avalonia version are the same at that tag.
-    - Likely fix: always shut the tray down on its UI thread, and never call the desktop lifetime's `Shutdown()` from another thread.
-    - Windows has the same code path and is untested. Headless runs are not affected, because the headless host UI does nothing on stop.
-- **Acceptance criteria**:
-  - With desktop and WebUI clients connected, tray **Stop Server / Exit** and Operator **Stop** exit the process within a few seconds.
-  - Connected clients see the server go offline and reconnect after a restart, as they do now.
-  - Operator **Stop** exits the process, and Operator **Restart** and update apply relaunch it, on Linux with the tray and on Windows.
-  - Tray **Stop Server / Exit** and **Restart Server** still exit and relaunch cleanly.
-  - No code path calls the tray's desktop lifetime `Shutdown()` from a non-UI thread.
-  - On Windows, right-clicking the tray icon opens the menu, menu items work, and the icon stays, across repeated right-clicks and dismissals.
-  - The tray starts with `ShutdownMode.OnExplicitShutdown`, and its UI loop ending without a requested shutdown writes a `last.log` line.
-  - The Linux tray menu behaves as it does now.
-- **Verification evidence**:
-  - Completion evidence must include a test that an open event stream closes when the application starts stopping, a test or code check that the tray starts with `ShutdownMode.OnExplicitShutdown` and that an unrequested UI loop exit writes the `last.log` line, a test or code check that the tray's desktop lifetime `Shutdown()` is only reached on the UI thread, shutdown timings on Linux with and without a connected client before and after the fix, and one quick Linux spot check of the tray menu and of Operator **Stop** and **Restart** with the tray.
-  - Repeated runs and the Windows pass are the Release Specific checklist items above, run in the pre-release pass.
-  - If a hang is ever reproduced, include a thread dump of the hung process to confirm the cause.
-- **Deferrals / Follow-ups**:
-  - If the Windows tray icon survives right-click but the menu still closes instantly, the menu window is losing focus as it opens, which ServerApp cannot change inside Avalonia. The fallback is a Windows-only native menu, such as the WinForms `NotifyIcon` tray that passed Windows verification before the move to Avalonia.
+Last milestone completed: M10j11
 
 ### M10j12 - Drop the Old Milestones Layout From the Checker
 
@@ -320,7 +277,11 @@ Last milestone completed: M10j10
 - **Verification evidence**:
   - Completion evidence must include server tests for recording, clearing, and the loop rule, and client tests for resume.
 - **Deferrals / Follow-ups**:
-  - None yet.
+  - Follow-up to pick up in this milestone: recover WebUI playback when the server restarts mid-video.
+    - Observed: when the server restarts mid-video, the WebUI player does not recover, even when the server is back before the buffered part runs out.
+    - Expected: the player notices the media error, waits for the server to come back, requests a fresh media link for the same item, and continues from the same position.
+    - Media tokens are held only in memory, so a link issued before the restart returns not found afterward. The server cuts media downloads still in progress when it starts stopping, so the player's download fails as the stop begins rather than when a timeout runs out.
+    - Requesting the fresh link must not count as a new play. `POST /api/play/{itemId}` records one today.
 
 ### P2h - Playback Concurrency, Diagnostics, and Hardening
 

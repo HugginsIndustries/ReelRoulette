@@ -373,24 +373,8 @@ public static class ServerHostComposition
             return Results.Ok(playResponse);
         });
 
-        app.MapGet("/api/media/{idOrToken}", (string idOrToken, LibraryPlaybackService playback, OperatorTestingService testingService) =>
-        {
-            var testing = testingService.GetSnapshot();
-            if (testing.TestingModeEnabled && testing.ForceMediaMissing)
-            {
-                return Results.NotFound(new { error = "Media not found" });
-            }
-
-            if (!playback.TryResolveMediaPath(idOrToken, out var fullPath) || !File.Exists(fullPath))
-            {
-                return Results.NotFound(new { error = "Media not found" });
-            }
-
-            var contentType = ContentTypeProvider.TryGetContentType(fullPath, out var resolvedType)
-                ? resolvedType
-                : "application/octet-stream";
-            return Results.File(fullPath, contentType, enableRangeProcessing: true);
-        });
+        app.MapGet("/api/media/{idOrToken}", (HttpContext context, string idOrToken, LibraryPlaybackService playback, OperatorTestingService testingService, IHostApplicationLifetime lifetime) =>
+            ServeMedia(context, idOrToken, playback, testingService, lifetime.ApplicationStopping));
 
         app.MapPost("/api/favorite", (FavoriteRequest request, ServerStateService state, LibraryOperationsService operations) =>
         {
@@ -826,15 +810,44 @@ public static class ServerHostComposition
             return Results.File(path, "image/jpeg");
         });
 
-        app.MapGet("/api/events", (HttpContext context, ServerStateService state, ConnectedClientTracker clients, OperatorTestingService testingService) =>
-            StreamEventsAsync(context, state, clients, testingService));
+        app.MapGet("/api/events", (HttpContext context, ServerStateService state, ConnectedClientTracker clients, OperatorTestingService testingService, IHostApplicationLifetime lifetime) =>
+            StreamEventsAsync(context, state, clients, testingService, lifetime.ApplicationStopping));
+    }
+
+    internal static IResult ServeMedia(
+        HttpContext context,
+        string idOrToken,
+        LibraryPlaybackService playback,
+        OperatorTestingService testingService,
+        CancellationToken serverStopping)
+    {
+        var testing = testingService.GetSnapshot();
+        if (testing.TestingModeEnabled && testing.ForceMediaMissing)
+        {
+            return Results.NotFound(new { error = "Media not found" });
+        }
+
+        if (!playback.TryResolveMediaPath(idOrToken, out var fullPath) || !File.Exists(fullPath))
+        {
+            return Results.NotFound(new { error = "Media not found" });
+        }
+
+        // A player with a full buffer stops reading, and stopping the server waits for every open response.
+        // Cut this one when the server starts stopping so stop and restart do not wait on the player.
+        context.Response.RegisterForDispose(serverStopping.Register(context.Abort));
+
+        var contentType = ContentTypeProvider.TryGetContentType(fullPath, out var resolvedType)
+            ? resolvedType
+            : "application/octet-stream";
+        return Results.File(fullPath, contentType, enableRangeProcessing: true);
     }
 
     internal static async Task StreamEventsAsync(
         HttpContext context,
         ServerStateService state,
         ConnectedClientTracker clients,
-        OperatorTestingService testingService)
+        OperatorTestingService testingService,
+        CancellationToken serverStopping)
     {
         var testing = testingService.GetSnapshot();
         if (testing.TestingModeEnabled && testing.ForceSseDisconnect)
@@ -848,7 +861,9 @@ public static class ServerHostComposition
         context.Response.Headers.Append("Cache-Control", "no-cache");
         context.Response.Headers.Append("Connection", "keep-alive");
 
-        var cancellationToken = context.RequestAborted;
+        // Stopping the server waits for every open response, so the stream also ends when the server starts stopping.
+        using var streamEnd = CancellationTokenSource.CreateLinkedTokenSource(context.RequestAborted, serverStopping);
+        var cancellationToken = streamEnd.Token;
         var serializerOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
         var lastEventHeader = context.Request.Headers["Last-Event-ID"].ToString();
         var lastEventQuery = context.Request.Query["lastEventId"].ToString();
@@ -918,8 +933,14 @@ public static class ServerHostComposition
                 }
             }
         }
+        catch (OperationCanceledException) when (serverStopping.IsCancellationRequested && !context.RequestAborted.IsCancellationRequested)
+        {
+            // The server is stopping: end the response normally, and the client reconnects as after any dropped stream.
+        }
         finally
         {
+            // Disposing the linked source would detach it without cancelling, so the subscription would never end.
+            streamEnd.Cancel();
             clients.UnregisterSseClient(connectionId);
         }
     }

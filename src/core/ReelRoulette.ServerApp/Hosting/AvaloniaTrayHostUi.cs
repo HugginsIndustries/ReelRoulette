@@ -4,12 +4,14 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Threading;
+using ReelRoulette.Server.Services;
 
 namespace ReelRoulette.ServerApp.Hosting;
 
 internal sealed class AvaloniaTrayHostUi : IHostUi
 {
     private readonly ILogger _logger;
+    private readonly ServerLogService _serverLog;
     private readonly string _operatorUrl;
     private readonly string _iconPath;
     private readonly Func<CancellationToken, Task> _onRefreshLibrary;
@@ -24,12 +26,14 @@ internal sealed class AvaloniaTrayHostUi : IHostUi
     private TaskCompletionSource<bool>? _closedTcs;
     private bool _started;
     private int _shutdownRequested;
+    private Exception? _uiFailure;
     private TrayIcon? _trayIcon;
     private NativeMenuItem? _startupItem;
     private IClassicDesktopStyleApplicationLifetime? _desktopLifetime;
 
     public AvaloniaTrayHostUi(
         ILogger logger,
+        ServerLogService serverLog,
         string operatorUrl,
         string iconPath,
         Func<CancellationToken, Task> onRefreshLibrary,
@@ -39,6 +43,7 @@ internal sealed class AvaloniaTrayHostUi : IHostUi
         Func<bool, CancellationToken, Task<StartupLaunchResult>> setStartupLaunchEnabled)
     {
         _logger = logger;
+        _serverLog = serverLog;
         _operatorUrl = operatorUrl;
         _iconPath = iconPath;
         _onRefreshLibrary = onRefreshLibrary;
@@ -90,7 +95,7 @@ internal sealed class AvaloniaTrayHostUi : IHostUi
         try
         {
             await WaitForReadyAsync(cancellationToken);
-            await RequestUiExitAsync(cancellationToken);
+            RequestUiExit();
             await closedTask.WaitAsync(cancellationToken);
 
             Thread? uiThread;
@@ -134,19 +139,29 @@ internal sealed class AvaloniaTrayHostUi : IHostUi
         try
         {
             TrayApp.Owner = this;
+            // On Windows the tray menu is a temporary window, so the default last-window rule would end the tray
+            // when the menu closes. Every intended exit shuts the tray down explicitly.
             AppBuilder
                 .Configure<TrayApp>()
                 .UsePlatformDetect()
                 .LogToTrace()
-                .StartWithClassicDesktopLifetime(Array.Empty<string>());
+                .StartWithClassicDesktopLifetime(Array.Empty<string>(), ShutdownMode.OnExplicitShutdown);
         }
         catch (Exception ex)
         {
+            _uiFailure = ex;
             _readyTcs?.TrySetException(ex);
             _logger.LogError(ex, "Avalonia tray UI failed to initialize.");
         }
         finally
         {
+            if (Volatile.Read(ref _shutdownRequested) == 0)
+            {
+                var reason = _uiFailure?.Message ?? "no error";
+                _logger.LogWarning("Tray UI ended without a requested shutdown ({Reason}); the server keeps running.", reason);
+                _serverLog.Append("warn", $"Tray UI ended without a requested shutdown ({reason}); the tray icon is gone and the server keeps running.");
+            }
+
             _trayIcon = null;
             _startupItem = null;
             _desktopLifetime = null;
@@ -170,14 +185,15 @@ internal sealed class AvaloniaTrayHostUi : IHostUi
         await readyTask.WaitAsync(cancellationToken);
     }
 
-    private Task RequestUiExitAsync(CancellationToken cancellationToken)
+    private void RequestUiExit()
     {
         Interlocked.Exchange(ref _shutdownRequested, 1);
         // During shutdown, the UI thread/dispatcher can already be stopping (especially on Linux/DBus-backed
         // tray integration). Avoid synchronous dispatcher waits that can throw/cascade TaskCanceledException.
         //
-        // Also, ensure we always request the classic desktop lifetime to shut down; otherwise Avalonia-created
-        // non-background threads can keep `dotnet run` alive after the server host stops.
+        // The shutdown runs only on the UI thread. Shutting the lifetime down from another thread can wait forever
+        // for the UI thread, which would block server shutdown. If the UI loop has already ended, the posted job
+        // never runs, and StopAsync finds the tray closed.
         try
         {
             Dispatcher.UIThread.Post(() =>
@@ -197,7 +213,7 @@ internal sealed class AvaloniaTrayHostUi : IHostUi
                         _trayIcon = null;
                     }
 
-                    _desktopLifetime?.Shutdown();
+                    ShutdownUiLoop();
                 }
                 catch (Exception ex)
                 {
@@ -209,19 +225,13 @@ internal sealed class AvaloniaTrayHostUi : IHostUi
         {
             _logger.LogDebug(ex, "Tray UI shutdown dispatch encountered a non-fatal error.");
         }
+    }
 
-        // Fallback: if posting to the dispatcher isn't possible (or doesn't run because the dispatcher is already
-        // shutting down), attempt to request shutdown directly. We still keep this non-throwing.
-        try
-        {
-            _desktopLifetime?.Shutdown();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogDebug(ex, "Tray UI lifetime shutdown fallback encountered a non-fatal error.");
-        }
-
-        return Task.CompletedTask;
+    private void ShutdownUiLoop()
+    {
+        // Throws off the UI thread instead of risking a shutdown that never finishes.
+        Dispatcher.UIThread.VerifyAccess();
+        _desktopLifetime?.Shutdown();
     }
 
     private void OnTrayAppInitialized(Application application, IClassicDesktopStyleApplicationLifetime desktopLifetime)
@@ -252,9 +262,10 @@ internal sealed class AvaloniaTrayHostUi : IHostUi
         }
         catch (Exception ex)
         {
+            _uiFailure = ex;
             _readyTcs?.TrySetException(ex);
             _logger.LogError(ex, "Failed to initialize tray icon/menu.");
-            _desktopLifetime?.Shutdown();
+            ShutdownUiLoop();
         }
     }
 
@@ -371,7 +382,7 @@ internal sealed class AvaloniaTrayHostUi : IHostUi
             _logger.LogInformation("Tray menu action completed ({Action}): {Message}", actionName, result.Message);
             if (requestExit)
             {
-                await RequestUiExitAsync(CancellationToken.None);
+                RequestUiExit();
             }
         }
         catch (Exception ex)

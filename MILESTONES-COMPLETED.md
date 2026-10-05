@@ -6,6 +6,67 @@ The archive of finished milestones, moved here from `MILESTONES.md` as-is. The r
 
 Latest completions first:
 
+### M10j11 - Server Shutdown Fixes
+
+- **Status**: ✅ Complete
+- **Goal**: Stopping the server finishes in a few seconds with clients connected, the Windows tray survives its right-click menu, and Operator **Stop**, Operator **Restart**, and in-app update apply shut the tray down on its UI thread, so they cannot deadlock the server's shutdown.
+- **Scope**:
+  - Ships in v0.14.0. Three slices in this order: slow shutdown, the Windows tray right-click, then the tray shutdown race. The right-click slice goes before the race because both change the tray's exit path.
+  - Add Release Specific checklist items:
+    - "With clients connected, tray and Operator Stop exit within a few seconds, and Operator Restart relaunches the server, on Linux and Windows."
+    - "On Windows, right-clicking the server tray icon opens the menu, menu items work, and the icon stays. If it passes, update the README Known Issues tray entry. If it fails, remove the Windows tray menu bullet from `CHANGELOG.md`."
+  - Slow shutdown with connected clients:
+    - Observed: stopping the server from the tray or the Operator UI takes about 25 seconds while clients are connected.
+    - Likely cause, observed but not confirmed: open event streams are only closed when the host shutdown timeout runs out, not when shutdown starts. The `/api/events` loop only watches the request's abort token, not application stopping.
+    - Confirmed by timings before the fix: shutdown waits for every open response until the 30-second host shutdown timeout. An open event stream holds it, and so does a media download the player has stopped reading, on its own.
+    - Fix: end open event streams normally when the application starts stopping, and cut media responses still being sent. Media was added after the timings showed it holds shutdown on its own.
+  - Windows tray right-click:
+    - Observed on Windows since the tray moved to Avalonia: right-clicking the server tray icon shows no menu and the icon disappears, while the server and WebUI keep running. The Avalonia tray has never worked on Windows. Dispatcher hardening, an Avalonia version bump, and removing the checkbox menu item all reproduced it.
+    - Cause, read from the Avalonia 12.0.0 binaries and reproduced in a headless experiment, not yet confirmed on Windows: on Windows, Avalonia draws the tray menu as a temporary top-level window that closes itself when it loses focus or an item is clicked. The tray starts its desktop lifetime with the default `ShutdownMode.OnLastWindowClose` and has no main window, so closing the menu shuts down the tray's UI loop, which removes the icon. The UI loop then returns normally and nothing is logged. Linux is unaffected because the desktop shell draws its menu over D-Bus and no Avalonia window opens. The same menu design is in Avalonia 11.3.12 through 12.0.4.
+    - Supporting evidence: the original tray was pure WinForms, with no Avalonia, and worked on Windows, including all menu actions. The problem started when the tray moved to Avalonia, which is when the menu became an Avalonia window under the last-window rule. None of the earlier attempts changed that rule.
+    - The tray thread is already STA, so apartment state is not the cause.
+    - Fix: start the tray with `ShutdownMode.OnExplicitShutdown`. Every intended exit already calls the desktop lifetime's `Shutdown()` explicitly, so no exit path relies on the last-window rule, and Linux never opens a window.
+    - Log to `last.log` when the tray's UI loop exits without a requested shutdown, so a silent exit is visible. Today the tray's logger reaches only the console and, for warnings and errors, the Windows Event Log.
+    - Once the Release Specific check confirms the fix on Windows, update the README Known Issues entry, which attributes the problem to Avalonia's notification area integration.
+  - Tray shutdown race:
+    - No hang has been observed. A suspected hang on CachyOS after Operator **Stop** was most likely the terminal not redrawing its prompt after the server exited: pressing Enter brings the prompt back.
+    - Suspected risk from code reading, not confirmed: these paths call `StopApplication` while the tray is still running, so the stopping callback shuts the Avalonia tray down from a non-UI thread. That calls `ClassicDesktopStyleApplicationLifetime.Shutdown()` off the UI thread, which cancels the UI main loop and then waits with no timeout in `Dispatcher.UIThread.InvokeShutdown()` for a job the UI thread may never run. If that happens, the blocked callback holds the `StopApplication` lock, so the host never stops its hosted services, `RunAsync` never returns, and a restart or update never relaunches. The tray menu paths avoid this because they shut the tray down on its UI thread before calling `StopApplication`.
+    - `AvaloniaTrayHostUi.RequestUiExitAsync` posts the shutdown to the UI thread and then also calls the desktop lifetime's `Shutdown()` directly as an unconditional fallback.
+    - The code path is unchanged since v0.12.0: the ServerApp code and the Avalonia version are the same at that tag.
+    - Likely fix: always shut the tray down on its UI thread, and never call the desktop lifetime's `Shutdown()` from another thread.
+    - Windows has the same code path and is untested. Headless runs are not affected, because the headless host UI does nothing on stop.
+- **Acceptance criteria**:
+  - With desktop and WebUI clients connected, tray **Stop Server / Exit** and Operator **Stop** exit the process within a few seconds.
+  - Connected clients see the server go offline and reconnect after a restart, as they do now.
+  - Operator **Stop** exits the process, and Operator **Restart** and update apply relaunch it, on Linux with the tray and on Windows.
+  - Tray **Stop Server / Exit** and **Restart Server** still exit and relaunch cleanly.
+  - No code path calls the tray's desktop lifetime `Shutdown()` from a non-UI thread.
+  - On Windows, right-clicking the tray icon opens the menu, menu items work, and the icon stays, across repeated right-clicks and dismissals.
+  - The tray starts with `ShutdownMode.OnExplicitShutdown`, and its UI loop ending without a requested shutdown writes a `last.log` line.
+  - The Linux tray menu behaves as it does now.
+- **Verification evidence**:
+  - Completion evidence must include a test that an open event stream closes when the application starts stopping, a test or code check that the tray starts with `ShutdownMode.OnExplicitShutdown` and that an unrequested UI loop exit writes the `last.log` line, a test or code check that the tray's desktop lifetime `Shutdown()` is only reached on the UI thread, shutdown timings on Linux with and without a connected client before and after the fix, and one quick Linux spot check of the tray menu and of Operator **Stop** and **Restart** with the tray.
+  - Repeated runs and the Windows pass are the Release Specific checklist items above, run in the pre-release pass.
+  - If a hang is ever reproduced, include a thread dump of the hung process to confirm the cause.
+  - `dotnet build ReelRoulette.sln` (0 warnings), `dotnet test ReelRoulette.sln` (desktop 252, Core 297 passed).
+  - Shutdown timings on Linux, headless server with isolated data, from `POST /control/stop` to process exit:
+    - Before: no client 0.4 s; one open event stream 30.4 s; an event stream plus a media download throttled to 50 KB/s 30.4 s; the throttled media download alone 30.4 s.
+    - After: 0.4 s in all four cases. The server output shows the event stream ending with 200 and the media response ending, with no warnings or errors.
+  - Event streams: `EventStreamTests` show an open stream ends without an error and unregisters its client when the application starts stopping, without the client disconnecting, and that a stream opened while stopping ends at once.
+  - A stream whose write fails with an `IOException` while the client is still connected removes its event subscription. Without cancelling the stream's linked token on exit, the subscription stayed.
+  - Media: `MediaResponseTests` shows a media response whose player stopped reading is cut when the application starts stopping.
+  - Removing the stopping link from the event stream and the cut-off from media failed all three tests by timeout.
+  - Tray code check (`git grep` in `AvaloniaTrayHostUi.cs`):
+    - The tray starts with `StartWithClassicDesktopLifetime(..., ShutdownMode.OnExplicitShutdown)`.
+    - The only `Shutdown()` call is in a helper that calls `Dispatcher.UIThread.VerifyAccess()` first. It is reached only from the job posted to the UI thread and from the startup-failure path, which runs in `OnFrameworkInitializationCompleted` on the UI thread. The direct fallback call from another thread is removed.
+    - When the UI loop ends and no shutdown was requested, the tray writes a `warn` line to `last.log` through `ServerLogService`, with the error message when it failed.
+  - Clients: by code reading, the desktop treats a stream that ends normally as a disconnect and reconnects every 2 seconds, and the WebUI's event stream reports an error on a normal end and reconnects the same way.
+  - Linux spot check with the tray: PASS. With the WebUI and desktop connected, tray and Operator **Stop** and **Restart** took 1–2 seconds, both clients reconnected after a restart, repeated right-clicks opened the tray menu and the icon stayed, and `last.log` had no line for a tray that ended without a requested shutdown.
+  - Docs updated: `CHANGELOG.md`, `CONTEXT.md`, `docs/api.md`, `docs/domain-inventory.md`, `docs/architecture.md` (its out-of-date WinForms `NotifyIcon` line), and the Release Specific checklist items. The Windows right-click item also says to update the README Known Issues tray entry once it passes.
+- **Deferrals / Follow-ups**:
+  - Update apply cannot be checked before a release that contains this fix, because an update runs the installed version's shutdown. It stops the same way as Operator **Stop**.
+  - If the Windows tray icon survives right-click but the menu still closes instantly, the menu window is losing focus as it opens, which ServerApp cannot change inside Avalonia. The fallback is a Windows-only native menu, such as the WinForms `NotifyIcon` tray that passed Windows verification before the move to Avalonia.
+
 ### M10j10 - Desktop Sound on Video Start
 
 - **Status**: ✅ Complete

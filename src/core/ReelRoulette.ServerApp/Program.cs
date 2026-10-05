@@ -196,6 +196,7 @@ static IHostUi CreateHostUi(
         {
             return new AvaloniaTrayHostUi(
                 loggerFactory.CreateLogger<AvaloniaTrayHostUi>(),
+                app.Services.GetRequiredService<ServerLogService>(),
                 operatorUrl,
                 sharedIconPath,
                 onRefreshLibrary: cancellationToken =>

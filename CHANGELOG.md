@@ -32,6 +32,8 @@ Write **[Unreleased]** bullets at the same level as the released sections below.
 - **WebUI catches up after a lost connection:** When the WebUI's connection to the server drops, for example while the server restarts, it now picks up the favorite, tag, and playback changes made in the meantime, or reloads if it missed too many. It used to keep showing the old state until something else reloaded. After a server restart, both clients now catch up or reload instead of missing changes, including when nothing had changed since they connected.
 - **Desktop videos starting silent:** A video started by random play, next, previous, or autoplay on the desktop no longer sometimes plays with no sound while the mute button shows unmuted. Volume and mute are applied again once the video is actually playing, including after turning loop on or off. A saved mute still keeps every video silent.
 - **Desktop Settings reopen hang:** Opening Settings a second time no longer freezes the desktop app so that it has to be force-closed.
+- **Slow server stop with clients connected:** Stopping or restarting the server from the tray or the Operator no longer takes about 30 seconds while the desktop app or WebUI is connected or a video is playing; it now stops right away. Connected clients show the server as offline and reconnect after a restart as before.
+- **Windows tray menu:** Right-clicking the server tray icon on Windows now opens its menu. It used to show nothing and remove the icon, while the server kept running.
 
 ### Security
 

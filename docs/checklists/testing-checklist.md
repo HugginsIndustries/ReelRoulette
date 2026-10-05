@@ -164,6 +164,8 @@ An agent runs these and ticks them.
 - [ ] From another machine, the Operator asks for the control token, works after it is entered, and refuses a wrong one; on the server machine it opens without one, testing panel included. Run on Linux and Windows.
 - [ ] With the WebUI open, stop and restart the server, change a favorite and a tag on the desktop while the WebUI reconnects, and the WebUI shows both.
 - [ ] Switching videos repeatedly with random, next, and previous never starts a video silently, and the mute button matches what you hear. Run on Linux and Windows.
+- [ ] With clients connected, tray and Operator Stop exit within a few seconds, and Operator Restart relaunches the server, on Linux and Windows.
+- [ ] On Windows, right-clicking the server tray icon opens the menu, menu items work, and the icon stays. If it passes, update the README Known Issues tray entry. If it fails, remove the Windows tray menu bullet from `CHANGELOG.md`.
 
 ## Release Flow
 

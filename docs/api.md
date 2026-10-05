@@ -118,12 +118,14 @@ Reconnect/resync behavior:
 - `refreshStatusChanged` progress for each refresh stage is published at most every 400–500 ms; each stage's completion event is always published.
 - WebUI reloads the loaded library list and does not post an item-state read with an empty path list. Desktop still requests favorite and blacklist for a specific path via `POST /api/library-states`.
 - WebUI library overlay: `resyncRequired` reloads the loaded list-query window whether the overlay is shown or hidden. It does not post an empty item-state read. Favorite, blacklist, playback, and tag updates patch that window or reload it the same way.
+- When the server starts stopping, it ends every open stream normally. Clients reconnect as after any dropped stream.
 - `playbackRecorded` includes `playCount`, `lastPlayedUtc`, and `previousLastPlayedUtc`. `previousLastPlayedUtc` is the last-played time from before this play, and is null when the file had never been played. Clients copy `playCount` and `lastPlayedUtc` onto a loaded tile when those fields are present. Desktop shows `previousLastPlayedUtc` on the current file.
 
 ## Error and Simulation Semantics
 
 - Deterministic missing-media behavior returns:
   - `404 { "error": "Media not found" }` on `GET /api/media/{idOrToken}`.
+- A `GET /api/media/{idOrToken}` response still being sent when the server starts stopping is cut off, so a player that has stopped reading does not hold up shutdown.
 - API/version/capability/disconnect simulation controls are exposed via control-plane testing endpoints.
 - Simulation behavior is intended to exercise real client error-handling paths.
 

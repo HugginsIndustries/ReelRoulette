@@ -69,7 +69,7 @@ Boundary:
 - `src/core/ReelRoulette.ServerApp/Hosting/IHostUi.cs`
   - host-UI abstraction boundary keeping server runtime tray-agnostic.
 - `src/core/ReelRoulette.ServerApp/Hosting/AvaloniaTrayHostUi.cs`
-  - Cross-platform tray runtime controls (Open Operator UI, Launch Server on Startup, Refresh Library, Restart Server, Stop Server / Exit) using shared `assets/HI.ico`, with deterministic headless fallback when tray is unavailable.
+  - Cross-platform tray runtime controls (Open Operator UI, Launch Server on Startup, Refresh Library, Restart Server, Stop Server / Exit) using shared `assets/HI.ico`, with deterministic headless fallback when tray is unavailable. The tray ends only when shut down explicitly, on its UI thread, and an unrequested end is written to `last.log`.
 - `src/core/ReelRoulette.ServerApp/Hosting/HeadlessHostUi.cs`
   - non-Windows headless host path for runtime compatibility.
 - `src/core/ReelRoulette.ServerApp/Hosting/WindowsStartupLaunchService.cs`

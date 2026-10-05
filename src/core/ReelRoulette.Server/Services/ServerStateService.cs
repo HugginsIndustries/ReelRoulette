@@ -246,6 +246,17 @@ public sealed class ServerStateService
         return ApiContractMapper.MapSource(id, rootPath, displayName, source.IsEnabled);
     }
 
+    internal int SubscriberCount
+    {
+        get
+        {
+            lock (_subscribersLock)
+            {
+                return _subscribers.Count;
+            }
+        }
+    }
+
     public ChannelReader<ServerEventEnvelope> Subscribe(CancellationToken cancellationToken)
     {
         var channel = Channel.CreateUnbounded<ServerEventEnvelope>();

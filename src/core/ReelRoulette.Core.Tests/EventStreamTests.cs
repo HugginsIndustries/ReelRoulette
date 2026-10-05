@@ -76,27 +76,97 @@ public sealed class EventStreamTests
         Assert.True(state.GetReplayAfter(0).GapDetected);
     }
 
-    private static ItemStateChangedPayload Favorite(string path)
+    [Fact]
+    public async Task AnOpenStreamEndsWhenTheServerStartsStopping()
     {
-        return new ItemStateChangedPayload { ItemId = path, Path = path, IsFavorite = true, IsBlacklisted = false };
+        var clients = new ConnectedClientTracker();
+        var body = new FrameCapture();
+        using var aborted = new CancellationTokenSource();
+        using var stopping = new CancellationTokenSource();
+        var context = NewStreamContext(body, aborted.Token);
+
+        var stream = ServerHostComposition.StreamEventsAsync(context, new ServerStateService(), clients, new OperatorTestingService(), stopping.Token);
+        await body.WaitForFramesAsync(1).WaitAsync(Wait);
+        Assert.Single(clients.GetActiveSseClients());
+
+        stopping.Cancel();
+
+        // Ends without an error and without the client disconnecting.
+        await stream.WaitAsync(Wait);
+        Assert.False(aborted.IsCancellationRequested);
+        Assert.Empty(clients.GetActiveSseClients());
     }
 
-    private static async Task<List<StreamFrame>> ReadStreamAsync(ServerStateService state, long? lastEventId, int frames)
+    [Fact]
+    public async Task AStreamOpenedWhileTheServerIsStoppingEndsAtOnce()
     {
+        var clients = new ConnectedClientTracker();
         var body = new FrameCapture();
+        using var aborted = new CancellationTokenSource();
+        using var stopping = new CancellationTokenSource();
+        stopping.Cancel();
+        var context = NewStreamContext(body, aborted.Token);
+
+        await ServerHostComposition.StreamEventsAsync(context, new ServerStateService(), clients, new OperatorTestingService(), stopping.Token)
+            .WaitAsync(Wait);
+
+        Assert.Empty(clients.GetActiveSseClients());
+    }
+
+    [Fact]
+    public async Task AStreamThatFailsOnWriteRemovesItsSubscription()
+    {
+        var state = new ServerStateService();
         using var aborted = new CancellationTokenSource();
         var context = new DefaultHttpContext
         {
             RequestServices = new ServiceCollection().AddSingleton<ApiTelemetryService>().BuildServiceProvider(),
             RequestAborted = aborted.Token
         };
+        // The first write comes before the stream subscribes; the next one fails.
+        context.Response.Body = new FailingBody(writesBeforeFailure: 1);
+
+        await Assert.ThrowsAsync<IOException>(() =>
+            ServerHostComposition.StreamEventsAsync(context, state, new ConnectedClientTracker(), new OperatorTestingService(), CancellationToken.None)
+                .WaitAsync(Wait));
+
+        var deadline = DateTime.UtcNow + Wait;
+        while (state.SubscriberCount > 0 && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(10);
+        }
+
+        Assert.Equal(0, state.SubscriberCount);
+        Assert.False(aborted.IsCancellationRequested);
+    }
+
+    private static ItemStateChangedPayload Favorite(string path)
+    {
+        return new ItemStateChangedPayload { ItemId = path, Path = path, IsFavorite = true, IsBlacklisted = false };
+    }
+
+    private static DefaultHttpContext NewStreamContext(FrameCapture body, CancellationToken requestAborted)
+    {
+        var context = new DefaultHttpContext
+        {
+            RequestServices = new ServiceCollection().AddSingleton<ApiTelemetryService>().BuildServiceProvider(),
+            RequestAborted = requestAborted
+        };
         context.Response.Body = body;
+        return context;
+    }
+
+    private static async Task<List<StreamFrame>> ReadStreamAsync(ServerStateService state, long? lastEventId, int frames)
+    {
+        var body = new FrameCapture();
+        using var aborted = new CancellationTokenSource();
+        var context = NewStreamContext(body, aborted.Token);
         if (lastEventId.HasValue)
         {
             context.Request.QueryString = new QueryString($"?lastEventId={lastEventId.Value}");
         }
 
-        var stream = ServerHostComposition.StreamEventsAsync(context, state, new ConnectedClientTracker(), new OperatorTestingService());
+        var stream = ServerHostComposition.StreamEventsAsync(context, state, new ConnectedClientTracker(), new OperatorTestingService(), CancellationToken.None);
         await body.WaitForFramesAsync(frames).WaitAsync(Wait);
         aborted.Cancel();
         try
@@ -111,6 +181,45 @@ public sealed class EventStreamTests
     }
 
     private sealed record StreamFrame(string EventType, long Revision, JsonElement Payload);
+
+    /// <summary>
+    /// A response body whose connection breaks after a number of writes, while the request is not aborted.
+    /// </summary>
+    private sealed class FailingBody(int writesBeforeFailure) : Stream
+    {
+        private int _writes;
+
+        public override void Write(byte[] buffer, int offset, int count)
+        {
+            if (Interlocked.Increment(ref _writes) > writesBeforeFailure)
+            {
+                throw new IOException("Connection reset.");
+            }
+        }
+
+        public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+        {
+            Write(buffer, offset, count);
+            return Task.CompletedTask;
+        }
+
+        public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            Write([], 0, 0);
+            return ValueTask.CompletedTask;
+        }
+
+        public override bool CanRead => false;
+        public override bool CanSeek => false;
+        public override bool CanWrite => true;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+        public override void Flush() { }
+        public override Task FlushAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+    }
 
     /// <summary>
     /// A response body that collects the event frames the stream writes.

@@ -19,11 +19,11 @@ Instructions:
 
 Commit Message:
 
-M10j10: Reapply desktop volume and mute once a video starts playing
+M10j11: Stop the server promptly with clients connected and fix the Windows tray menu
 
-- Reapply volume and mute when a new video starts playing and again when its playback time first advances, once per new media and not on resume from pause, so a video no longer starts silent while the mute button shows unmuted.
-- Cover the loop-toggle and Settings media rebuilds, which never applied volume or mute before.
-- Set mute without reading it first, since the player reports unmuted until its audio output exists.
-- Drop the first-video volume check that read the player's volume before an audio output existed.
-- Log LibVLC mute and volume events and the player's mute and volume before each reapply to `last.log`.
-- Add tests for the once-per-media reapply rule and a Release Specific checklist item for repeated video switching on Linux and Windows.
+- End open event streams normally and cut media responses still being sent when the server starts stopping, so stop and restart no longer wait about 30 seconds for connected clients.
+- Start the tray with explicit shutdown, so closing its menu window on Windows no longer ends the tray and removes the icon.
+- Write a `last.log` line when the tray ends without a requested shutdown.
+- Shut the tray down only on its UI thread and drop the direct shutdown call from other threads, so Operator Stop, Restart, and update apply cannot hang the server's shutdown.
+- Add event stream and media tests for stopping, and Release Specific checklist items for stop timing and the Windows tray menu.
+- Record a follow-up in the playback resume milestone for WebUI recovery when the server restarts mid-video.
