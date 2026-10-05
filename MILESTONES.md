@@ -26,7 +26,7 @@ Use this file for:
 
 - milestone status (⏳ Planned | 🚧 In Progress | ✅ Complete),
 - scope and acceptance criteria,
-- verification evidence and explicit deferrals.
+- verification evidence.
 
 Do not use this file for detailed architecture explanation or current capability inventory.
 
@@ -43,23 +43,25 @@ Do not use this file for detailed architecture explanation or current capability
 ## Maintenance Rules
 
 - Keep entries **current-state accurate**: update statuses and evidence as work progresses.
-- Keep scope locked to milestone intent; record out-of-scope items as explicit deferrals.
+- Keep scope locked to milestone intent.
+- Record future work found during a milestone as its own backlog item in `## Planned Milestones`, or as an addition to the existing milestone that will do it. Check existing items first so the work is not recorded twice.
+- Record scope boundaries in Scope as a `Not included:` line. When another milestone covers the boundary, name it by its exact title after "which is" (for example `Not included: rebinding, which is Customizable Keyboard Shortcuts.`), which `check-milestones.ps1` enforces.
 - Organize milestone sections as:
   - `## Planned Releases`: the release outline at the top of this file; keep it in sync when milestones are added, moved, promoted, completed, or removed.
   - `## Active Milestones`: milestones currently being worked, using `M*` IDs in historical order.
   - `## Planned Milestones`: backlog candidates not yet started, using `P*` IDs in numerical order (for example base phases and lettered sub-slices).
-- Finished milestones live in `MILESTONES-COMPLETED.md` under `## Completed Milestones`, newest completions first. These rules apply there too.
+- Finished milestones live in `MILESTONES-COMPLETED.md` under `## Completed Milestones`, newest completions first. These rules apply there too, except that completed entries keep their `Deferrals / Follow-ups` sections as historical record.
 - Keep `## Active Milestones` updated with `Last milestone completed: Mx` so the next `M*` assignment is unambiguous.
 - When promoting planned work to active work, assign the next `M*` ID at promotion time and keep planned `P*` IDs stable until then. Promote a planned release as a new `M*` series, with lettered milestones in its outline order.
 - When a milestone is completed, move it to the top of `MILESTONES-COMPLETED.md` as-is: keep existing scope/acceptance/evidence detail unchanged except final-state corrections, and preserve newest completions first.
-- In milestone body content (scope/acceptance/evidence/deferrals), do not reference milestone IDs; use milestone names/descriptions (or "this milestone"/"this series") so ID reassignment does not require copy edits.
+- In milestone body content (scope/acceptance/evidence), do not reference milestone IDs; use milestone names/descriptions (or "this milestone"/"this series") so ID reassignment does not require copy edits.
 - ID references are allowed only in milestone section headers, the `Last milestone completed: Mx` tracker line, and the `## Planned Releases` outline.
 - `Depends on` lines name milestones by their exact titles, which `check-milestones.ps1` enforces.
 - Keep acceptance criteria testable and outcome-focused (avoid implementation-narrative bloat).
 - Keep verification evidence concrete:
   - commands/checks run,
   - artifacts/docs updated,
-  - waivers/deferrals explicitly called out.
+  - waivers explicitly called out.
 - Avoid duplicating architecture/runtime detail already owned by `CONTEXT.md` and docs under `docs/`.
 - Prefer referencing owning docs instead of copying long explanatory sections into this file.
 - Keep historical entries intact except for final-state correction of inaccurate facts.
@@ -75,6 +77,7 @@ Do not use this file for detailed architecture explanation or current capability
   - {key deliverable 1}
   - {key deliverable 2}
   - {key deliverable 3}
+  - Not included: {scope boundary}, which is {covering milestone title}. Leave out the "which is" part when no milestone covers it.
 - **Acceptance criteria**:
   - {testable outcome 1}
   - {testable outcome 2}
@@ -83,8 +86,6 @@ Do not use this file for detailed architecture explanation or current capability
   - {automated checks run}
   - {manual checks/evidence notes}
   - {docs/artifacts updated}
-- **Deferrals / Follow-ups**:
-  - {deferred item -> target milestone}
 
 ### Px - {Planned Milestone Title}
 
@@ -94,6 +95,7 @@ Do not use this file for detailed architecture explanation or current capability
   - {key deliverable 1}
   - {key deliverable 2}
   - {key deliverable 3}
+  - Not included: {scope boundary}, which is {covering milestone title}. Leave out the "which is" part when no milestone covers it.
 - **Acceptance criteria**:
   - {testable outcome 1}
   - {testable outcome 2}
@@ -102,8 +104,6 @@ Do not use this file for detailed architecture explanation or current capability
   - {automated checks run}
   - {manual checks/evidence notes}
   - {docs/artifacts updated}
-- **Deferrals / Follow-ups**:
-  - {deferred item -> target milestone}
 
 ---
 
@@ -127,8 +127,6 @@ Last milestone completed: M10j11
   - `check-milestones.ps1 -BaseRef HEAD` and `tools/scripts/tests/test-scripts.ps1` pass.
 - **Verification evidence**:
   - Completion evidence must include the passing release-wide check against v0.13.0 from the pre-release pass, run before this change, then `check-milestones.ps1 -BaseRef HEAD`, `tools/scripts/tests/test-scripts.ps1`, and a run against v0.13.0 showing the refusal.
-- **Deferrals / Follow-ups**:
-  - None.
 
 ## Planned Milestones
 
@@ -159,8 +157,6 @@ Last milestone completed: M10j11
 - **Verification evidence**:
   - Completion evidence must include a check that every script in `tools/scripts/` is listed in `docs/dev-setup.md`, and a search showing no retired packaging names in current-state docs.
   - A fresh-install walkthrough on Windows and one Linux distribution from the README alone is a Release Specific checklist item.
-- **Deferrals / Follow-ups**:
-  - None yet.
 
 ### P2a - Playback Session Contracts and Capability Surface
 
@@ -178,8 +174,6 @@ Last milestone completed: M10j11
   - The WebUI detects a server without playback sessions from the capability list.
 - **Verification evidence**:
   - Completion evidence must include contract tests, `npm run verify:contracts`, and a capability check against a server without the feature.
-- **Deferrals / Follow-ups**:
-  - None yet.
 
 ### P2b - Server Playback Decision Engine
 
@@ -197,8 +191,6 @@ Last milestone completed: M10j11
   - Each decision appears in `last.log` as a structured entry without file names or paths.
 - **Verification evidence**:
   - Completion evidence must include decision tests over a fixture of probe results and client hints, and probe-cache tests for unchanged and changed files.
-- **Deferrals / Follow-ups**:
-  - None yet.
 
 ### P2c - Media Token Lifetime and Direct-Stream Sessions
 
@@ -216,8 +208,6 @@ Last milestone completed: M10j11
   - The token store size stays bounded under repeated plays.
 - **Verification evidence**:
   - Completion evidence must include token expiry, eviction, and size-cap tests, and a range-request test on a session URL.
-- **Deferrals / Follow-ups**:
-  - None yet.
 
 ### P2d - Remux/Transcode and Segmented Streaming (HLS fMP4 Baseline)
 
@@ -235,8 +225,6 @@ Last milestone completed: M10j11
   - No ffmpeg process or segment or transcode file is left after a session expires or the server stops.
 - **Verification evidence**:
   - Completion evidence must include remux and transcode tests on a small media fixture set and a cleanup test after session expiry and after shutdown.
-- **Deferrals / Follow-ups**:
-  - None yet.
 
 ### P2f - WebUI Playback Cutover and Format Resilience
 
@@ -255,8 +243,6 @@ Last milestone completed: M10j11
   - Looping behaves the same on progressive and HLS playback.
 - **Verification evidence**:
   - Completion evidence must include WebUI tests of session start and fallback, and `npm run verify`. The long-form validation set pass is a Release Specific checklist item.
-- **Deferrals / Follow-ups**:
-  - None yet.
 
 ### P2g - Resume Position and Session Continuity
 
@@ -269,19 +255,19 @@ Last milestone completed: M10j11
   - Add resume settings (on or off, threshold windows, retention) through server settings.
   - Loop iterations do not count as plays and do not create resume points.
   - Decide whether resume positions are per account.
+  - Recover WebUI playback when the server restarts mid-video:
+    - Observed: when the server restarts mid-video, the WebUI player does not recover, even when the server is back before the buffered part runs out.
+    - Expected: the player notices the media error, waits for the server to come back, requests a fresh media link for the same item, and continues from the same position.
+    - Media tokens are held only in memory, so a link issued before the restart returns not found afterward. The server cuts media downloads still in progress when it starts stopping, so the player's download fails as the stop begins rather than when a timeout runs out.
+    - Requesting the fresh link must not count as a new play. `POST /api/play/{itemId}` records one today.
 - **Acceptance criteria**:
   - Resume position survives reconnects and restarts through server state.
   - The WebUI resumes from the server's position on every device.
   - Clearing a resume position works and is visible on every device.
   - Resume settings are documented, stored, and enforced by the server.
+  - After a server restart mid-video, the WebUI continues the same item from the same position without recording a new play.
 - **Verification evidence**:
-  - Completion evidence must include server tests for recording, clearing, and the loop rule, and client tests for resume.
-- **Deferrals / Follow-ups**:
-  - Follow-up to pick up in this milestone: recover WebUI playback when the server restarts mid-video.
-    - Observed: when the server restarts mid-video, the WebUI player does not recover, even when the server is back before the buffered part runs out.
-    - Expected: the player notices the media error, waits for the server to come back, requests a fresh media link for the same item, and continues from the same position.
-    - Media tokens are held only in memory, so a link issued before the restart returns not found afterward. The server cuts media downloads still in progress when it starts stopping, so the player's download fails as the stop begins rather than when a timeout runs out.
-    - Requesting the fresh link must not count as a new play. `POST /api/play/{itemId}` records one today.
+  - Completion evidence must include server tests for recording, clearing, and the loop rule, client tests for resume, and a WebUI test that a media error during a server restart fetches a fresh link and continues from the same position without recording a play.
 
 ### P2h - Playback Concurrency, Diagnostics, and Hardening
 
@@ -298,8 +284,6 @@ Last milestone completed: M10j11
   - After the server stops, no ffmpeg worker remains, and temporary playback and transcode folders are cleaned or expire.
 - **Verification evidence**:
   - Completion evidence must include concurrency-limit and queueing tests and a shutdown cleanup test. The multi-client matrix is the Release Specific checklist item above.
-- **Deferrals / Follow-ups**:
-  - None yet.
 
 ### P4 - File Metadata Sync and Extended Metadata
 
@@ -324,8 +308,6 @@ Last milestone completed: M10j11
   - Batch operations follow the conflict and error policy and report success and failure counts with reasons.
 - **Verification evidence**:
   - Completion evidence must include schema migration tests, format mapping tests, and merge-policy tests.
-- **Deferrals / Follow-ups**:
-  - None yet.
 
 ### P5 - Customizable Keyboard Shortcuts
 
@@ -344,8 +326,6 @@ Last milestone completed: M10j11
   - Browser-reserved keys cannot be bound.
 - **Verification evidence**:
   - Completion evidence must include binding-map, conflict, and reset tests, and `npm run verify`.
-- **Deferrals / Follow-ups**:
-  - None yet.
 
 ### P6 - Playback History and Analytics
 
@@ -366,8 +346,6 @@ Last milestone completed: M10j11
   - Exports match the current query.
 - **Verification evidence**:
   - Completion evidence must include schema migration tests, history write and retention tests, and aggregate tests per range.
-- **Deferrals / Follow-ups**:
-  - None yet.
 
 ### P9a - Photo Face Detection Baseline
 
@@ -391,8 +369,6 @@ Last milestone completed: M10j11
   - Performance impact is bounded and documented.
 - **Verification evidence**:
   - Completion evidence must include detection job, storage, and query tests on a photo fixture set.
-- **Deferrals / Follow-ups**:
-  - None yet.
 
 ### P9b - Video Face Detection Expansion
 
@@ -411,15 +387,13 @@ Last milestone completed: M10j11
   - Long media processing can resume and retry and is visible in the admin section.
 - **Verification evidence**:
   - Completion evidence must include sampling, resume, and resource-limit tests.
-- **Deferrals / Follow-ups**:
-  - None yet.
 
 ### P10 - Ordinal Path Identity on Linux
 
 - **Status**: ⏳ Planned
 - **Goal**: On Linux, treat paths that differ only by case as different paths in folder import and in refresh, and keep the ignore-case path compare on Windows.
 - **Scope**:
-  - Unscheduled.
+  - Unscheduled. Deferred past v0.14.0: Windows enumeration casing has not been measured, an ordinal compare there risks removing and re-adding items, and a v0.14.0 planning query of a real 48,938-item catalog found no case-only path collisions.
   - Folder import and refresh use ordinal path identity on Linux. Windows keeps the ignore-case compare.
   - A case-only rename on Linux rewrites the stored full path, relative path, and file name together. Two files that differ only by case stay two items.
   - Source roots have the same case problem: `/Media` and `/media` can be different directories on Linux and are still compared ignoring case.
@@ -434,8 +408,6 @@ Last milestone completed: M10j11
 - **Verification evidence**:
   - Measured on Linux before this backlog item, for both v0.12.0 import and the current import: after `Clip.mp4` is renamed to `clip.mp4`, the stored full path stays `Clip.mp4` while the relative path and file name become `clip.mp4`. Refresh then reports 0 added, 0 removed, 0 renamed, and 0 moved. The thumbnail stage reports 1 missing source. An ignore-case set of a folder that contains both `clip.mp4` and `Clip.mp4` keeps one path; an ordinal set keeps both.
   - Completion evidence must include those Linux cases after the fix, schema migration tests, plus a Windows VM pass for the ignore-case compare.
-- **Deferrals / Follow-ups**:
-  - Deferred past v0.14.0: Windows enumeration casing has not been measured, an ordinal compare there risks removing and re-adding items, and a v0.14.0 planning query of a real 48,938-item catalog found no case-only path collisions.
 
 ### P20 - WebUI Settings Panel
 
@@ -454,8 +426,6 @@ Last milestone completed: M10j11
 - **Verification evidence**:
   - Completion evidence must include WebUI tests for preference storage and the remember option, `npm run verify`, and one quick spot check on a phone.
   - A desktop browser and phone pass, with the remember option checked across a browser restart, is a Release Specific checklist item.
-- **Deferrals / Follow-ups**:
-  - None yet.
 
 ### P25 - Per-Preset Preset Writes
 
@@ -474,8 +444,6 @@ Last milestone completed: M10j11
   - The WebUI never posts the whole preset list, and the whole-list replace route is gone.
 - **Verification evidence**:
   - Completion evidence must include server tests for each write, a two-session test of concurrent saves, and `npm run verify`.
-- **Deferrals / Follow-ups**:
-  - None yet.
 
 ### P26a - Admin Section in WebUI Settings
 
@@ -502,8 +470,6 @@ Last milestone completed: M10j11
 - **Verification evidence**:
   - Completion evidence must include admin section UI tests for loading status and settings, saving settings, the testing panel, and control-token gating in `npm run verify`, server tests that the recovery page is served without WebUI assets and keeps control-token gating, `dotnet test ReelRoulette.sln`, and `./tools/scripts/verify-linux-packaged-server-smoke.sh`.
   - Add a Release Specific checklist item: "From another machine, the admin section asks for the control token and works after it is entered; with the WebUI files removed, the recovery page restarts, stops, shows logs, and applies an update, on Linux and Windows."
-- **Deferrals / Follow-ups**:
-  - None yet.
 
 ### P26b - WebUI Source State Sync
 
@@ -520,8 +486,6 @@ Last milestone completed: M10j11
   - A source imported elsewhere appears in the WebUI filter source list.
 - **Verification evidence**:
   - Completion evidence must include WebUI tests for `sourceStateChanged` handling and `npm run verify`, plus one quick spot check of an admin section source toggle seen in another WebUI tab.
-- **Deferrals / Follow-ups**:
-  - None yet.
 
 ### P26c - Admin Source and Item Management
 
@@ -536,6 +500,7 @@ Last milestone completed: M10j11
   - Adding a folder takes a path on the server machine. A browser folder picker returns paths on the browser's machine (inferred), and the desktop's Import Folder has the same flaw today: it sends its own folder picker path to the server (read from code), so it only works on the server machine. Whether the admin section takes a typed path that the server checks, or browses the server's folders through a new admin-only route, is decided here; a browse route is a contract change in its own slice.
   - The item removal route also serves bulk removal in WebUI Multi-Select and Remaining Desktop Features.
   - Source and item changes publish events so connected clients update.
+  - Not included: per-user source visibility, which is Per-User Source Permissions.
 - **Acceptance criteria**:
   - From the admin section, sources can be added by server path, renamed, removed, enabled, disabled, and refreshed, with per-source statistics.
   - Removing a source removes its items from the catalog and leaves its files.
@@ -545,8 +510,6 @@ Last milestone completed: M10j11
 - **Verification evidence**:
   - Completion evidence must include server tests for each new route, admin section UI tests for Manage Sources, `dotnet test ReelRoulette.sln`, and `npm run verify`.
   - Add a Release Specific checklist item: "From the admin section, add, rename, disable, refresh, and remove a source, and other open WebUI sessions update without a reload."
-- **Deferrals / Follow-ups**:
-  - Per-user source visibility is Per-User Source Permissions.
 
 ### P26d - Admin Library Catalog Transfer
 
@@ -571,8 +534,6 @@ Last milestone completed: M10j11
 - **Verification evidence**:
   - Completion evidence must include server tests for checkpoint export, running-server import, rejection of a file that is not a library database, and interrupted-replace recovery, plus admin section UI tests for export and import, including an upload larger than 30 MB.
   - Add a Release Specific checklist item: "With no desktop app, export the library from the admin section and import it into a fresh server, on Linux and Windows."
-- **Deferrals / Follow-ups**:
-  - None yet.
 
 ### P27a - Structured Log Schema, Writer, and Ingestion
 
@@ -600,6 +561,7 @@ Last milestone completed: M10j11
   - Rotation: rotate at 25 MB, keep the current file plus 10 uncompressed archives, enforce retention at startup before writing, and define what happens to a single oversized entry and to concurrent appends.
   - Human-readable rendering is a view over the fields (admin section, console), not what is stored.
   - Contract change for `POST /api/logs/client` in OpenAPI and the generated WebUI types.
+  - Not included: moving the admin section's log view off its current route, which is Admin Log Viewer.
 - **Acceptance criteria**:
   - Every `last.log` line is a JSON object with the required fields and canonical field order.
   - `lvl` and `svc` values are always from their fixed lists.
@@ -611,8 +573,6 @@ Last milestone completed: M10j11
 - **Verification evidence**:
   - Completion evidence must include schema and order tests, rejection tests for each invalid case, correlation and time-field tests, rotation and retention edge-case tests, `dotnet test ReelRoulette.sln`, and `npm run verify:contracts`.
   - Docs evidence must include the schema, ingestion contract, and rotation rules in `docs/api.md` and `docs/architecture.md`.
-- **Deferrals / Follow-ups**:
-  - The admin section's log view keeps reading the file through its current route until Admin Log Viewer.
 
 ### P27b - Structured Log API and Privacy Rules
 
@@ -636,6 +596,7 @@ Last milestone completed: M10j11
     - `ex` on `LogError` and `LogFatal` becomes `data.error` with `type`, `code`, `messageSafe`, and an optional fingerprint; raw stack traces, local paths, and payload fragments are not emitted,
     - `data` is checked for size and shape before serialization.
   - Until WebUI Instrumentation, the WebUI status relay keeps working by emitting through the new API as `comp` `legacy`, `op` `unmigrated`, level `info`. This is the only inferred path, and that milestone removes it.
+  - Not included: migrating WebUI call sites, which is WebUI Instrumentation.
 - **Acceptance criteria**:
   - The WebUI has the level-typed API with explicit `comp` and `op`, optional `evt`, and typed context.
   - `ex` is always written as privacy-safe `data.error`, never as a top-level field.
@@ -644,8 +605,6 @@ Last milestone completed: M10j11
   - The `comp` baseline and privacy rules are documented.
 - **Verification evidence**:
   - Completion evidence must include API tests per level, `ex` normalization tests, context mapping tests, negative tests that paths, names, and secrets in the shapes above are refused, `dotnet test ReelRoulette.sln`, and `npm run verify`.
-- **Deferrals / Follow-ups**:
-  - Migrating WebUI call sites is WebUI Instrumentation.
 
 ### P27d - Server Instrumentation
 
@@ -662,8 +621,6 @@ Last milestone completed: M10j11
   - Server entries contain no file names, paths, tag names, or secrets.
 - **Verification evidence**:
   - Completion evidence must include a captured entry per listed area, correlation checks, and a scan of a captured `last.log` for paths, names, and secrets.
-- **Deferrals / Follow-ups**:
-  - None yet.
 
 ### P27e - WebUI Instrumentation
 
@@ -682,8 +639,6 @@ Last milestone completed: M10j11
   - WebUI entries contain no file names, paths, tag names, search text, or PINs.
 - **Verification evidence**:
   - Completion evidence must include one captured entry per flow and `MutateItemState` case, the guard test, and `npm run verify`.
-- **Deferrals / Follow-ups**:
-  - None yet.
 
 ### P27f - Admin Log Viewer
 
@@ -705,8 +660,6 @@ Last milestone completed: M10j11
   - Controls start collapsed and show active filters; rows expand to raw JSON; auto-refresh pauses and resumes as described.
 - **Verification evidence**:
   - Completion evidence must include paging tests across page and archive boundaries, replay tests for identical filters, a read-cost test on a large log, admin section UI tests for the view, and `npm run verify`.
-- **Deferrals / Follow-ups**:
-  - None yet.
 
 ### P27g - Client Log Relay Reliability
 
@@ -722,8 +675,6 @@ Last milestone completed: M10j11
   - `last.log` holds server and WebUI entries through the same writer.
 - **Verification evidence**:
   - Completion evidence must include relay tests with a failing and a slow endpoint in the WebUI, `dotnet test ReelRoulette.sln`, and `npm run verify`. The end-to-end trace and failure simulation are the Release Specific checklist items above.
-- **Deferrals / Follow-ups**:
-  - None yet.
 
 ### P28a - Reverse Proxy and HTTPS Access
 
@@ -751,8 +702,6 @@ Last milestone completed: M10j11
   - The docs give working `tailscale serve` and general proxy setups.
 - **Verification evidence**:
   - Completion evidence must include server tests for forwarded-header trust, proxied-localhost handling, missing remote address, the merged localhost helper, cookie flags, and HTTPS CORS origins, plus one quick spot check through `tailscale serve`. The proxy matrix and the Android and iOS install pass are the Release Specific checklist items above.
-- **Deferrals / Follow-ups**:
-  - None yet.
 
 ### P28b - Source Access Policy
 
@@ -764,14 +713,13 @@ Last milestone completed: M10j11
   - Add one policy that takes the request's session context and returns the sources it may see, and apply it on every item path: library list query, random selection, item play, `GET /api/media/{idOrToken}` (tokens and raw ids), `GET /api/thumbnail/{itemId}`, `POST /api/library/item`, `POST /api/library-states`, the tag-editor model, auto-tag and duplicate scans, library stats, and `GET /api/sources`.
   - The default policy allows every enabled source, so behavior does not change, except that a raw item id of a disabled source no longer streams.
   - No accounts or permission UI yet.
+  - Not included: per-user grants, which is Per-User Source Permissions.
 - **Acceptance criteria**:
   - Every listed path goes through the policy, and a test policy that denies a source hides that source's items on every one of them.
   - Current behavior is unchanged with the default policy, except that disabled-source items no longer stream by raw id.
   - Docs separate implemented source state from future per-user access.
 - **Verification evidence**:
   - Completion evidence must include a denying-policy test per listed path, a raw-id media test for a disabled source, and `dotnet test ReelRoulette.sln`.
-- **Deferrals / Follow-ups**:
-  - Per-user grants are Per-User Source Permissions.
 
 ### P28c - Account Store
 
@@ -799,8 +747,6 @@ Last milestone completed: M10j11
 - **Verification evidence**:
   - Completion evidence must include store tests for creation, an empty new store, hashing, levels, lockout, and backups, and tests that a catalog export, import, and backup neither contain nor change accounts.
   - Docs evidence must describe account storage, backups, and the empty first-run state without describing login flows as implemented.
-- **Deferrals / Follow-ups**:
-  - None yet.
 
 ### P28d - PIN Login API and Sessions
 
@@ -826,8 +772,6 @@ Last milestone completed: M10j11
 - **Verification evidence**:
   - Completion evidence must include server tests for login, wrong PIN, lockout and its expiry, logout, restart, localhost and proxied requests, and rejection of old pairing tokens.
   - Contract evidence must include OpenAPI and `docs/api.md` for the login and session payloads and the lockout error.
-- **Deferrals / Follow-ups**:
-  - None yet.
 
 ### P28e - Auth Cutover for API and Admin
 
@@ -848,7 +792,7 @@ Last milestone completed: M10j11
     - The WebUI ships `"pairToken": "reelroulette-dev-token"` in `public/runtime-config.json`, which any browser can fetch, and `src/config/runtimeConfig.ts` parses `pairToken` as a config field. Remove both and the example in the WebUI `README.md`.
     - The same `reelroulette-dev-token` default is in `src/core/ReelRoulette.ServerApp/appsettings.json` and the `-PairingToken` parameter of `tools/scripts/run-server.ps1` and `run-server-rebuild.ps1`.
     - `src/auth/authBootstrap.ts` lets errors from `pairWithToken` and `getVersionJson` throw instead of returning the `{ authorized: false, message }` result it uses elsewhere. The login flow that replaces it returns a typed result on every failure.
-  - External programmatic API access stays out of scope.
+  - Not included: external programmatic API access.
 - **Acceptance criteria**:
   - LAN and remote requests without a valid session get a deterministic auth error on every API and control route and on the event stream.
   - The admin section and the recovery page use account sessions, and no control token is accepted anywhere.
@@ -858,8 +802,6 @@ Last milestone completed: M10j11
   - Active docs no longer describe pairing or control tokens.
 - **Verification evidence**:
   - Completion evidence must include authorization tests across library, playback, source, event stream, admin, and testing routes for localhost, admin, user, and no session.
-- **Deferrals / Follow-ups**:
-  - None yet.
 
 ### P28f - Admin First-Run Setup
 
@@ -884,8 +826,6 @@ Last milestone completed: M10j11
   - LAN and remote WebUI logins report setup-incomplete and are refused until setup finishes.
 - **Verification evidence**:
   - Completion evidence must include server tests for code generation, logging, replacement on restart, constant-time comparison, lockout, refusal after the first admin exists, and setup-only access before setup, plus admin section UI tests for setup from localhost and from another machine with the code.
-- **Deferrals / Follow-ups**:
-  - None yet.
 
 ### P28g - Account Administration
 
@@ -903,8 +843,6 @@ Last milestone completed: M10j11
   - Changes persist across restart and apply to later logins.
 - **Verification evidence**:
   - Completion evidence must include server tests for account changes, last-admin protection, level changes, and PIN resets, and admin section UI tests for the section and its errors.
-- **Deferrals / Follow-ups**:
-  - None yet.
 
 ### P28h - Self-Service PIN Change
 
@@ -916,6 +854,7 @@ Last milestone completed: M10j11
   - The flow in the WebUI settings panel for admins and users.
   - Reuse server hashing, validation, and lockout, and never return a PIN.
   - Define what happens to the current session after a change.
+  - Not included: profile editing beyond name and PIN.
 - **Acceptance criteria**:
   - Admins and users can change their own PIN with the old PIN, a new PIN, and a matching confirmation.
   - Wrong old PIN, mismatched confirmation, invalid new PIN, and lockout return clear errors.
@@ -923,8 +862,6 @@ Last milestone completed: M10j11
   - The flow is available in the WebUI without admin rights.
 - **Verification evidence**:
   - Completion evidence must include server tests for each success and failure path and client tests for the validation messages.
-- **Deferrals / Follow-ups**:
-  - Profile editing beyond name and PIN stays out of scope.
 
 ### P28j - WebUI Login Gate
 
@@ -937,6 +874,7 @@ Last milestone completed: M10j11
   - PIN prompt, setup-incomplete message, and no persisted session: log in on every open or reload.
   - API and event stream calls carry the session after login.
   - Add a Release Specific checklist item: "The WebUI from another device needs a PIN on every open and reload, on desktop and phone browsers; from the server machine it does not."
+  - Not included: offline PWA login, remember-me sessions, remembered accounts, and biometrics.
 - **Acceptance criteria**:
   - From another device, no library, random, or player surface is reachable before login; from localhost, no login is shown.
   - Tiles use the required icons and names at desktop and mobile widths.
@@ -945,8 +883,6 @@ Last milestone completed: M10j11
   - API and event stream traffic uses the logged-in session.
 - **Verification evidence**:
   - Completion evidence must include WebUI tests for gating, login, setup incomplete, wrong PIN, lockout, session use, and reload, and `npm run verify`.
-- **Deferrals / Follow-ups**:
-  - Offline PWA login, remember-me sessions, remembered accounts, and biometrics are out of scope.
 
 ### P28k - Per-User Source Permissions
 
@@ -958,7 +894,7 @@ Last milestone completed: M10j11
   - Grants are stored in the account store against account ids and catalog source ids. A grant for a source id that is not in the catalog (for example after a catalog import) is ignored and shown as stale in the admin section.
   - Enforce denied sources through the source access policy on every path it covers, including `GET /api/media/{idOrToken}`, `GET /api/thumbnail/{itemId}`, and `POST /api/play/{itemId}`.
   - Admins and localhost connections see every source.
-  - Groups, invitations, and audit reporting stay out of scope.
+  - Not included: groups, invitations, and audit reporting.
 - **Acceptance criteria**:
   - Admins can grant or deny each user each source in the admin section.
   - Denied sources and their items are invisible to that user on every policy path.
@@ -967,8 +903,6 @@ Last milestone completed: M10j11
   - Grants survive account and source renames, and a catalog import leaves grants for missing sources inert.
 - **Verification evidence**:
   - Completion evidence must include policy tests for every path with a denied source, direct-id bypass tests, a catalog-import test for stale grants, and admin section UI tests for permission editing.
-- **Deferrals / Follow-ups**:
-  - None yet.
 
 ### P28l - Permission-Aware WebUI
 
@@ -981,6 +915,7 @@ Last milestone completed: M10j11
   - Messages for a user with no visible sources and for an item that becomes inaccessible.
   - Update docs and the testing checklist for per-user source visibility.
   - Add a Release Specific checklist item: "An admin and a user account in the WebUI on two devices see only their allowed sources, and a permission change in the admin section reaches both without a reload."
+  - Not included: client requests for source access, approval workflows, and external sharing.
 - **Acceptance criteria**:
   - The WebUI never shows denied sources or plays denied items.
   - Permission changes made in the admin section reach open WebUI sessions through events or requery.
@@ -988,8 +923,6 @@ Last milestone completed: M10j11
   - Users without admin rights do not see the admin section.
 - **Verification evidence**:
   - Completion evidence must include WebUI tests for hidden sources, inaccessible items, and the admin section's visibility.
-- **Deferrals / Follow-ups**:
-  - Client requests for source access, approval workflows, and external sharing remain out of scope.
 
 ### P29a - Library Query Performance
 
@@ -1007,6 +940,7 @@ Last milestone completed: M10j11
   - Reload the loaded window in one request. Whether that raises the query limit or adds a reload request with its own bound is decided here; either is a contract change in its own slice.
   - Library stats: the per-source figures join items to sources by path prefix and re-derive video or photo from the file extension in SQL. Measured: about 90 ms in `sqlite3` and 138 ms through the service. Every item in the measured catalog has a source id and a media type of 0 or 1. Group by source id and media type instead, with the same results.
   - Drop `idx_item_tags_item_id`, which duplicates the leading `item_id` column of the `item_tags` primary key.
+  - Fallback if deep offsets still cost much more than the first page after the sort key: add a keyset cursor (the last row's sort values) beside offset paging, and move the WebUI to it. Offset paging stays until Desktop Client Removal, so the frozen desktop keeps working. This is a contract change in its own slice and only adds fields.
   - Measured trap for the tag filter: the tag filter compares `item_tags.name` with the managed collation inside a correlated `EXISTS`, which the planner runs through `idx_item_tags_item_id` and which takes 45 ms for a 22,476-item tag. Rewriting it as `item_tags.name_fold = ?` inside the same `EXISTS` makes the planner use `idx_item_tags_name_fold` for every item, and the same filter took 55 s. The form `items.id IN (SELECT item_id FROM item_tags WHERE name_fold = ?)` takes 35 ms. Any tag filter change keeps a plan of that shape, and after `idx_item_tags_item_id` is dropped the filter still looks up tags by item id through the primary key, both checked with `EXPLAIN QUERY PLAN`.
 - **Acceptance criteria**:
   - Name, last played, play count, duration, and date added sorts return the same items in the same order as before, including names that differ only by case and names containing `_`, `[`, `\`, `]`, `^`, or `` ` ``.
@@ -1019,8 +953,6 @@ Last milestone completed: M10j11
 - **Verification evidence**:
   - Completion evidence must include before-and-after timings and allocations, on a copy of a large catalog in a temp folder, for the first page, offset 10,000, offset 40,000, a 5,000-tile reload, a common-tag filter, a search, and library stats, plus `EXPLAIN QUERY PLAN` for the list, count, and tag filter queries.
   - Completion evidence must include tests that each sort order matches the previous order on a fixture with case-only and punctuation differences, the schema migration tests, `dotnet test ReelRoulette.sln`, and `npm run verify` after any contract change.
-- **Deferrals / Follow-ups**:
-  - Keyset paging instead of offsets, if the measured cost of deep offsets is still high after the sort key.
 
 ### P29b - Random Selection Performance
 
@@ -1039,8 +971,6 @@ Last milestone completed: M10j11
   - A random pick over the measured catalog with the default filter takes a few tens of milliseconds, measured before and after.
 - **Verification evidence**:
   - Completion evidence must include before-and-after timings and allocations per randomization mode on a copy of a large catalog in a temp folder, tests that the selection rules are unchanged, and `dotnet test ReelRoulette.sln`.
-- **Deferrals / Follow-ups**:
-  - None yet.
 
 ### P29c - Thumbnail Caching
 
@@ -1051,14 +981,13 @@ Last milestone completed: M10j11
   - Found by the efficiency and divergence report from code reading, not measured: `GET /api/thumbnail/{itemId}` sends no cache headers, and its URL has no revision, so the WebUI and the desktop fetch a thumbnail again every time a tile shows it.
   - Add cache headers to thumbnail responses, or a revision to the thumbnail URL so it can be cached until the thumbnail changes. A revision in the URL needs the thumbnail revision in the list query page, which is a contract change in its own slice and only adds a field.
   - The desktop's own thumbnail problems found by the same report are not fixed, because the desktop is frozen to bug fixes: decoded bitmaps kept after tiles scroll out of view (about 645 KB each at the measured average of 370×436, so about 3 GB for 5,000 tiles, inferred), full-size decoding, and overlapping fetch loops.
+  - Not included: WebUI grid rendering, which is WebUI Grid Rendering, in the WebUI overhaul release.
 - **Acceptance criteria**:
   - A thumbnail the WebUI has shown is not fetched again while it stays unchanged, including after it scrolls back into view.
   - A regenerated thumbnail is shown without a restart.
   - Grid layout and placeholders behave as before.
 - **Verification evidence**:
   - Completion evidence must include a server test for the thumbnail cache headers or revision, a WebUI test or browser network check that an unchanged thumbnail is not fetched again, `dotnet test ReelRoulette.sln`, and `npm run verify` after any contract change.
-- **Deferrals / Follow-ups**:
-  - WebUI grid rendering is WebUI Grid Rendering, in the WebUI overhaul release.
 
 ### P29d - Item IDs in the Contract
 
@@ -1070,17 +999,17 @@ Last milestone completed: M10j11
   - Add the item id to every event and response that refers to an item, including `playbackRecorded` and the random and play responses. The item id is a new field beside the random and play responses' `id`, which keeps the full path the frozen desktop reads.
   - Return duration in seconds next to the `hh:mm:ss` string the WebUI parses back into seconds.
   - The WebUI matches loaded tiles, the current item, and pending tag saves by item id, and stops folding paths to match them. The frozen desktop keeps matching by path.
+  - Add the previous favorite and blacklist values to item-state events. Today a favorite on an item that is not in the loaded window reloads that window under the default filter, because the client cannot tell whether the item was blacklisted before; with the previous values it can patch. Recorded by the client event efficiency milestone.
+  - Not included: the server treating paths that differ only by case as one path on Linux, which is Ordinal Path Identity on Linux. Matching by id in the WebUI removes its part of that problem.
 - **Acceptance criteria**:
   - Every item-related event and response in `shared/api/openapi.yaml` has an item id, and `npm run verify:contracts` passes.
   - The WebUI applies favorite, blacklist, playback, and tag events to the right tile by item id, including for two items whose paths differ only by case.
   - The WebUI does not normalize paths to match items.
   - Duration reaches the WebUI as a number of seconds.
+  - Item-state events carry the previous favorite and blacklist values, and a favorite on an item outside the loaded window patches the window under the default filter instead of reloading it.
 - **Verification evidence**:
-  - Completion evidence must include contract tests for each changed event and response, WebUI tests that match by id with two paths that differ only by case, `dotnet test ReelRoulette.sln`, and `npm run verify`.
+  - Completion evidence must include contract tests for each changed event and response, WebUI tests that match by id with two paths that differ only by case, a WebUI test that a favorite on an item outside the loaded window patches the window from the previous favorite and blacklist values instead of reloading it, `dotnet test ReelRoulette.sln`, and `npm run verify`.
   - Docs evidence must include `docs/api.md` for the changed events and responses.
-- **Deferrals / Follow-ups**:
-  - The server still treats paths that differ only by case as one path on Linux until Ordinal Path Identity on Linux. Matching by id in the WebUI removes its part of that problem.
-  - Add the previous favorite and blacklist values to item-state events. Today a favorite on an item that is not in the loaded window reloads that window under the default filter, because the client cannot tell whether the item was blacklisted before; with the previous values it can patch. Recorded by the client event efficiency milestone. This is a contract change.
 
 ### P31 - WebUI Grid Rendering
 
@@ -1098,8 +1027,6 @@ Last milestone completed: M10j11
   - Layout results match the current layout for the same items and width.
 - **Verification evidence**:
   - Completion evidence must include WebUI tests for row reuse, tile patching, and append layout, before-and-after timings for rendering a large window in a browser, and `npm run verify`.
-- **Deferrals / Follow-ups**:
-  - None yet.
 
 ---
 
@@ -1118,8 +1045,6 @@ Last milestone completed: M10j11
   - A corrupt catalog is not written over the last good backup.
 - **Verification evidence**:
   - Evidence placeholders maintained at planned state; completion evidence must include a corrupt-item-page test and a startup timing comparison on a large catalog.
-- **Deferrals / Follow-ups**:
-  - None yet.
 
 ---
 
@@ -1139,8 +1064,6 @@ Last milestone completed: M10j11
   - The dialogs match the WebUI's theme and work in an installed web app on desktop and mobile.
 - **Verification evidence**:
   - Evidence placeholders maintained at planned state; completion evidence must include WebUI tests for confirm and cancel on the shared dialog, a check that no native dialog calls remain, `npm run verify`, and a spot check in an installed web app.
-- **Deferrals / Follow-ups**:
-  - None yet.
 
 ---
 
@@ -1185,8 +1108,6 @@ Last milestone completed: M10j11
   - Each finding above is fixed or explicitly declined with a reason in this entry.
 - **Verification evidence**:
   - Evidence placeholders maintained at planned state; completion evidence must include a test per fixed finding, `dotnet test ReelRoulette.sln`, and `npm run verify` for the settings contract change.
-- **Deferrals / Follow-ups**:
-  - None yet.
 
 ---
 
@@ -1209,8 +1130,6 @@ Last milestone completed: M10j11
   - Each finding above is fixed or explicitly declined with a reason in this entry.
 - **Verification evidence**:
   - Evidence placeholders maintained at planned state; completion evidence must include a test per fixed finding and `npm run verify`.
-- **Deferrals / Follow-ups**:
-  - None yet.
 
 ---
 
@@ -1239,8 +1158,6 @@ Last milestone completed: M10j11
 - **Verification evidence**:
   - Completion evidence must include WebUI tests for selection and each bulk action, and `npm run verify`.
   - Add a Release Specific checklist item: "In the WebUI on a desktop browser and a phone, select several items, apply each bulk action, and the tiles update."
-- **Deferrals / Follow-ups**:
-  - None yet.
 
 ### P38 - WebUI Preact Migration
 
@@ -1267,8 +1184,6 @@ Last milestone completed: M10j11
   - Playback continues uninterrupted while overlays open and close.
 - **Verification evidence**:
   - Completion evidence must include component tests per slice, `npm run verify`, and one quick spot check per slice on a desktop browser and a phone.
-- **Deferrals / Follow-ups**:
-  - None yet.
 
 ### P39 - WebUI Responsive Layout and Panels
 
@@ -1292,8 +1207,6 @@ Last milestone completed: M10j11
   - The layout does not depend on the user agent.
 - **Verification evidence**:
   - Completion evidence must include component tests for panel host breakpoints and panel state, `npm run verify`, and one quick spot check on a phone and a desktop browser.
-- **Deferrals / Follow-ups**:
-  - None yet.
 
 ### P40 - Admin Refresh, Backup, and Duplicate Review
 
@@ -1315,8 +1228,6 @@ Last milestone completed: M10j11
   - The duplicate default is a per-device preference.
 - **Verification evidence**:
   - Completion evidence must include admin section UI tests for each slice, `npm run verify`, and one quick spot check of a refresh and a duplicate scan.
-- **Deferrals / Follow-ups**:
-  - None yet.
 
 ### P41 - WebUI Stats Panel
 
@@ -1329,14 +1240,13 @@ Last milestone completed: M10j11
   - Current file: file name and full path, plays, last played (the time before this play, or Never), favorite, blacklisted, duration, has audio, loudness, adjustment, peak, and tags.
   - Refresh after events and actions is coalesced as the desktop does it: a short wait gathers a burst, one request is in flight at a time, and requests during it get one more.
   - No contract change.
+  - Not included: playback history charts, which is Playback History and Analytics.
 - **Acceptance criteria**:
   - The library stats match the library stats response.
   - The current file section updates on play, favorite, blacklist, tag, and playback events.
   - A burst of events causes one stats request, plus at most one more for events during it.
 - **Verification evidence**:
   - Completion evidence must include component tests for both sections, coalescing tests, `npm run verify`, and one quick spot check.
-- **Deferrals / Follow-ups**:
-  - Playback history charts are Playback History and Analytics.
 
 ### P42 - WebUI Keyboard Shortcuts and Player Controls
 
@@ -1352,6 +1262,7 @@ Last milestone completed: M10j11
   - J and L seek by a seek step preference in seconds. Frame stepping, which the desktop offers through LibVLC, is only approximate in a browser (inferred); build or decline it here.
   - Changes to user-facing UX need approval.
   - Add a Release Specific checklist item: "In Chrome, Firefox, and Safari on a desktop, every listed shortcut works in normal view, with a panel open, and in fullscreen, and does nothing while typing in a text field."
+  - Not included: rebinding, which is Customizable Keyboard Shortcuts.
 - **Acceptance criteria**:
   - Each bound shortcut does what the desktop's does.
   - Shortcuts are ignored while a text field has focus.
@@ -1359,8 +1270,6 @@ Last milestone completed: M10j11
   - The shortcut reference matches the bindings.
 - **Verification evidence**:
   - Completion evidence must include keyboard tests per binding under `happy-dom`, `npm run verify`, and one quick spot check.
-- **Deferrals / Follow-ups**:
-  - Rebinding is Customizable Keyboard Shortcuts.
 
 ### P43 - Show in File Manager from the WebUI
 
@@ -1381,8 +1290,6 @@ Last milestone completed: M10j11
   - No process is started through a shell.
 - **Verification evidence**:
   - Completion evidence must include server tests for loopback, the server's own address, another LAN address, proxied, unknown-id, and headless requests with the launcher faked, contract tests, `npm run verify`, and one quick Linux spot check.
-- **Deferrals / Follow-ups**:
-  - None yet.
 
 ### P44 - WebUI Status Line Overhaul
 
@@ -1402,8 +1309,6 @@ Last milestone completed: M10j11
   - The precedence rule and the per-event messages are documented.
 - **Verification evidence**:
   - Completion evidence must include WebUI tests of the precedence rule and the per-event messages, covering the server stopped, the API unavailable, a version or capability mismatch, and refresh progress and results, plus one quick spot check with the server stopped.
-- **Deferrals / Follow-ups**:
-  - Testing Suite Overhaul checks these messages in its scenarios.
 
 ### P45 - Testing Suite Overhaul
 
@@ -1422,8 +1327,6 @@ Last milestone completed: M10j11
   - Running and resetting each scenario leaves the WebUI connected and working.
 - **Verification evidence**:
   - Completion evidence must include automated tests that each scenario sets and resets the server state it describes, and that SSE disconnect closes and reconnects the same way on repeated runs, plus one quick spot check of one scenario.
-- **Deferrals / Follow-ups**:
-  - None yet.
 
 ### P46 - Browser-Playable Filter
 
@@ -1447,8 +1350,6 @@ Last milestone completed: M10j11
   - The profile is documented in `docs/api.md`.
 - **Verification evidence**:
   - Completion evidence must include server tests for the option in the list query, counts, and random selection, contract tests, WebUI tests for the option and both error messages, `dotnet test ReelRoulette.sln`, and `npm run verify`.
-- **Deferrals / Follow-ups**:
-  - Revisit when Remux/Transcode and Segmented Streaming (HLS fMP4 Baseline) lands: files the server can remux or transcode play in every browser.
 
 ### P47 - Desktop Retirement Notice
 
@@ -1464,8 +1365,6 @@ Last milestone completed: M10j11
   - Open Web UI from the notice opens the WebUI in the browser.
 - **Verification evidence**:
   - Completion evidence must include a headless desktop test that the notice shows once per version, `dotnet test ReelRoulette.sln`, and one quick spot check.
-- **Deferrals / Follow-ups**:
-  - None yet.
 
 ### P48 - Desktop Client Removal
 
@@ -1479,6 +1378,7 @@ Last milestone completed: M10j11
   - Fixture slice: `event-revision.json`, `library-tile-effect.json`, `preset-filter-equality.json`, and `sort-direction-labels.json` lose their C# readers and stay as WebUI test data. `tag-name-order.json` stays, read by Core and the WebUI.
   - Docs slice: `CONTEXT.md`, `docs/architecture.md`, `docs/domain-inventory.md`, `docs/api.md`, `docs/dev-setup.md`, `README.md` (desktop install and the LibVLC prerequisite), the testing checklist's Desktop and Cross-Client sections and desktop Packaging items, and `AGENTS.md`: remove the desktop freeze rule and the desktop test-isolation note, and keep the shared-fixture rule for rules implemented in server C# and the WebUI.
   - Add a Release Specific checklist item: "On Linux and Windows, the release publishes only the server, every former desktop workflow works in the WebUI, and an existing desktop install keeps its last version."
+  - Not included: rewriting historical `CHANGELOG.md` sections and completed milestones, which keep their desktop references.
 - **Acceptance criteria**:
   - The solution has no desktop projects, and `dotnet build ReelRoulette.sln`, `dotnet test ReelRoulette.sln`, and `npm run verify` pass.
   - A release builds and publishes only server packages and feeds.
@@ -1487,5 +1387,3 @@ Last milestone completed: M10j11
   - The four former desktop fixtures are read by WebUI tests.
 - **Verification evidence**:
   - Completion evidence must include the build, test, and verify runs, `./tools/scripts/verify-linux-packaged-server-smoke.sh`, a dev-channel release run of `release.yml`, and a search of current-state docs for the desktop client.
-- **Deferrals / Follow-ups**:
-  - Historical `CHANGELOG.md` sections and completed milestones keep their desktop references.

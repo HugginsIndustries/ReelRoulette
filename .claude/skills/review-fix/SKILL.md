@@ -24,6 +24,7 @@ If a fix turns out larger than the finding described, needs a decision the user 
 - Update the uncommitted `COMMIT-MESSAGE.txt` entry in place if the fixes change what it describes; check commit state from git per `AGENTS.md`.
 - Re-check the `[Unreleased]` changelog against the style note at the top of `CHANGELOG.md` if any fix touches it.
 - Update milestone evidence in `MILESTONES.md` if the milestone is part of this change.
+- When the user asks to record a finding as future work, add it as a backlog item or to the existing milestone that will do it, following the maintenance rules in `MILESTONES.md`.
 - Leave the fixes unstaged so the user can see them separately from what was already staged.
 
 ## Verification

@@ -6,7 +6,7 @@ Keep this file short and enforceable. For details, use `CONTEXT.md`, `MILESTONES
 
 - For milestone work, read `CONTEXT.md`, then the milestone's full entry in `MILESTONES.md`.
 - Milestone verification is automated tests plus, at most, a quick manual spot check. Longer manual checks, repeated runs, and Windows VM passes go into the Release Specific section of `docs/checklists/testing-checklist.md` as one-line checks, to be run in the pre-release pass.
-- Stay within the requested milestone or task unless the user expands scope. Record anything out of scope as a deferral or backlog item instead of doing it.
+- Stay within the requested milestone or task unless the user expands scope. Record future work as a backlog item, or as an addition to the milestone that will do it, instead of doing it. Scope boundaries go in Scope as a `Not included:` line.
 - Before sign-off, verify each acceptance criterion explicitly and call out any that are unmet.
 
 ## Architecture Guardrails
@@ -26,7 +26,7 @@ Keep this file short and enforceable. For details, use `CONTEXT.md`, `MILESTONES
 - Changelog: follow the style note at the top of `CHANGELOG.md`. Fixes to work that hasn't been released yet get no entry. After any follow-up change, re-check `[Unreleased]` against the style note.
 - Release notes: edit `RELEASE-NOTES.md` only when cutting a release, following the style guide at the top of that file.
 - Keep milestone tracking and docs in sync with the final state:
-  - `MILESTONES.md` = roadmap, tracking, evidence. Move a completed milestone as-is to the top of `MILESTONES-COMPLETED.md`, keep the `Last milestone completed` line current, and record anything out of scope as a deferral or backlog item.
+  - `MILESTONES.md` = roadmap, tracking, evidence. Move a completed milestone as-is to the top of `MILESTONES-COMPLETED.md`, keep the `Last milestone completed` line current, and record future work and scope boundaries as its maintenance rules describe.
   - `MILESTONES-COMPLETED.md` = completed milestones, newest first, kept as historical record.
   - `CONTEXT.md` = current implemented capabilities.
   - Update affected docs when applicable: `README.md`, `docs/architecture.md`, `docs/api.md`, `docs/dev-setup.md`, `docs/domain-inventory.md`.

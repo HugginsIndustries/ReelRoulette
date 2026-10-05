@@ -175,6 +175,16 @@ try {
         Assert-Check (Invoke-Tool $checker (Get-CheckArgs $path)) 1 @("no milestone title matches 'plan cleanup'") 1
     }
 
+    Test-Case "a Not included line naming no milestone after 'which is' fails" {
+        $path = New-FixtureCopy $validMilestones "not-included-unknown.md" @(, @("which is Lay the Groundwork,", "which is Lay the Foundations,"))
+        Assert-Check (Invoke-Tool $checker (Get-CheckArgs $path)) 1 @("not-included-unknown.md:50: Not included: no milestone title matches 'lay the foundations") 1
+    }
+
+    Test-Case "a Not included title followed by text that is not an explanation fails" {
+        $path = New-FixtureCopy $validMilestones "not-included-trailing.md" @(, @("Export, and Import. Sharing", "Export, and Import twice. Sharing"))
+        Assert-Check (Invoke-Tool $checker (Get-CheckArgs $path)) 1 @("not-included-trailing.md:63: Not included: unexpected text after a milestone title: ' twice. sharing ships first'") 1
+    }
+
     Test-Case "a Completed Milestones section left in MILESTONES.md fails" {
         Assert-Check (Invoke-Tool $checker (Get-CheckArgs $legacyMilestones)) 1 @("legacy.md:63: the Completed Milestones section belongs in MILESTONES-COMPLETED.md")
     }

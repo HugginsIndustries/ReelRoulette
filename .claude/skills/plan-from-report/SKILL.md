@@ -21,12 +21,12 @@ For each finding, check whether an existing milestone or backlog item already co
 
 ## Writing entries
 
-- Use the file's template: Status, Goal, Scope (with a `Depends on:` line), Acceptance criteria, Verification evidence, Deferrals / Follow-ups.
+- Use the file's template: Status, Goal, Scope (with a `Depends on:` line, and `Not included:` lines for scope boundaries), Acceptance criteria, Verification evidence.
 - Write `Depends on:` as exact milestone titles joined by commas or "and". An explanation may follow a title after ", which", ", whose", or ", so".
 - Refer to other milestones by name, never by ID, except in section headers, the tracker line, and the Planned Releases outline.
 - Carry over the report's measured numbers and evidence, and keep its measured-versus-inferred labels. Record known traps (an approach measured to be slow or wrong) in the entry that will hit them.
 - Verification is automated tests plus at most a quick spot check. Longer manual checks, repeated runs, and Windows VM passes become one-line notes for the release's Release Specific checklist, not milestone steps.
-- Record anything out of scope as a deferral or backlog item, never silently.
+- Record anything out of scope, never silently: future work as its own backlog item or as an addition to the existing milestone that will do it, after checking existing items so nothing is recorded twice, and scope boundaries as a `Not included:` line naming the covering milestone by its exact title after "which is".
 
 ## IDs and renumbering
 

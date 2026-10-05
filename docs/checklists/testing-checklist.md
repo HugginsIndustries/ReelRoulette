@@ -2,7 +2,7 @@
 
 This checklist is a regression check plus release-specific checks, run before a release.
 
-**Rule:** Every item is a check that passes or fails. Roadmap text, deferrals, and known issues go in `MILESTONES.md`, not here.
+**Rule:** Every item is a check that passes or fails. Roadmap text, future work, and known issues go in `MILESTONES.md`, not here.
 
 **Rule:** One line per check. Do not repeat implementation details, file paths, or platform notes that other docs already cover.
 

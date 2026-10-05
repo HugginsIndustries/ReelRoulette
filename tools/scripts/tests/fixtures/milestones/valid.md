@@ -47,6 +47,7 @@ Last milestone completed: M1a
 - **Status**: ⏳ Planned
 - **Scope**:
   - Planned for v1.1.0.
+  - Not included: changes to the groundwork, which is Lay the Groundwork, already complete.
 
 ### P2b - Widget Sharing, Export, and Import
 
@@ -59,3 +60,4 @@ Last milestone completed: M1a
 - **Status**: ⏳ Planned
 - **Scope**:
   - Unscheduled. Depends on: Widget Sharing, Export, and Import, so sharing exists first.
+  - Not included: sharing changes, which is Widget Sharing, Export, and Import. Sharing ships first.

@@ -189,6 +189,27 @@ function Test-DependsOn {
     }
 }
 
+# A Not included value names the milestone that covers the boundary after "which is". The title may
+# be followed by more explanation after ", " or ". ". Returns $null when every reference resolves,
+# otherwise the problem.
+function Test-NotIncluded {
+    param([string]$Value, [string[]]$Titles)
+
+    $text = (Get-NormalizedTitle $Value).TrimEnd('.')
+    foreach ($match in [regex]::Matches($text, '(?<![a-z])which is ')) {
+        $position = $match.Index + $match.Length
+        $length = Get-TitleMatchLength -Text $text -Position $position -Titles $Titles
+        if ($length -lt 0) {
+            return "no milestone title matches '$($text.Substring($position))'"
+        }
+        $rest = $text.Substring($position + $length)
+        if ($rest -and $rest -notmatch '^(, |\. )') {
+            return "unexpected text after a milestone title: '$rest'"
+        }
+    }
+    return $null
+}
+
 
 function Test-GitFile {
     param([string]$Spec)
@@ -352,20 +373,28 @@ foreach ($milestone in $doc.Milestones) {
     }
 }
 
-# 4. Every Depends on reference in Active and Planned names an existing milestone, completed ones included.
+# 4. Every Depends on reference, and every milestone a Not included line names after "which is", in
+# Active and Planned names an existing milestone, completed ones included.
 $titles = @($allMilestones | ForEach-Object { Get-NormalizedTitle $_.Milestone.Title } | Sort-Object -Unique | Sort-Object Length -Descending)
 for ($i = 0; $i -lt $doc.Lines.Count; $i++) {
     if ($doc.LineSections[$i] -notin $trackedSections) {
         continue
     }
     $at = $doc.Lines[$i].IndexOf("Depends on:")
-    if ($at -lt 0) {
-        continue
+    if ($at -ge 0) {
+        $value = $doc.Lines[$i].Substring($at + "Depends on:".Length).Trim()
+        $problem = Test-DependsOn -Value $value -Titles $titles
+        if ($problem) {
+            Add-Problem $i "Depends on: $problem"
+        }
     }
-    $value = $doc.Lines[$i].Substring($at + "Depends on:".Length).Trim()
-    $problem = Test-DependsOn -Value $value -Titles $titles
-    if ($problem) {
-        Add-Problem $i "Depends on: $problem"
+    $at = $doc.Lines[$i].IndexOf("Not included:")
+    if ($at -ge 0) {
+        $value = $doc.Lines[$i].Substring($at + "Not included:".Length).Trim()
+        $problem = Test-NotIncluded -Value $value -Titles $titles
+        if ($problem) {
+            Add-Problem $i "Not included: $problem"
+        }
     }
 }
 

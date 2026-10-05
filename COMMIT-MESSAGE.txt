@@ -19,11 +19,10 @@ Instructions:
 
 Commit Message:
 
-M10j11: Stop the server promptly with clients connected and fix the Windows tray menu
+Chore: Replace milestone deferrals with backlog items and Not included lines
 
-- End open event streams normally and cut media responses still being sent when the server starts stopping, so stop and restart no longer wait about 30 seconds for connected clients.
-- Start the tray with explicit shutdown, so closing its menu window on Windows no longer ends the tray and removes the icon.
-- Write a `last.log` line when the tray ends without a requested shutdown.
-- Shut the tray down only on its UI thread and drop the direct shutdown call from other threads, so Operator Stop, Restart, and update apply cannot hang the server's shutdown.
-- Add event stream and media tests for stopping, and Release Specific checklist items for stop timing and the Windows tray menu.
-- Record a follow-up in the playback resume milestone for WebUI recovery when the server restarts mid-video.
+- Remove the Deferrals / Follow-ups section from active and planned milestones and from the milestone template; completed milestones keep theirs as history.
+- Move future work into the milestones that will do it: WebUI recovery after a mid-video server restart into resume position, previous favorite and blacklist values into item IDs in the contract, and keyset paging as a fallback slice in library query performance, with acceptance criteria where needed.
+- Turn scope boundaries into `Not included:` lines in Scope, and drop two entries already recorded in the milestones they pointed to.
+- Check in `check-milestones.ps1` that a `Not included:` line names an existing milestone after "which is", with fixture cases.
+- Update the maintenance rules, `AGENTS.md`, the implement, plan-from-report, and review-fix skills, the testing checklist rule, and `docs/dev-setup.md` to match.
