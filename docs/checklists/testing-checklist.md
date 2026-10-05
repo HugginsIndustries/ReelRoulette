@@ -12,9 +12,9 @@ Run `pwsh ./tools/scripts/reset-checklist.ps1` to clear check states and fill in
 
 ## Test Run Metadata
 
-- Test date/time: 2026-10-01 14:20:30
+- Test date/time: 2026-10-05 01:08:42
 - Tester: Christian Huggins
-- Release version: v0.13.0
+- Release version: v0.14.0
 - Environment (OS + device(s) + browser(s)): CachyOS desktop (desktop app, server, WebUI in Firefox); CachyOS laptop on home LAN (WebUI in Firefox via .local); Pixel 8 Pro (WebUI in Firefox over Tailscale); iPad Pro 13-inch M4 (WebUI installed from Safari, over Tailscale); Windows 11 VM (desktop and server, Setup.exe install and in-app update from the previous release)
 
 ---
@@ -28,9 +28,9 @@ An agent runs these and ticks them.
 - [x] `dotnet run --project src/core/ReelRoulette.Core.SystemChecks -- --verbose` passes.
 - [x] `npm run verify` passes in `src/clients/web/ReelRoulette.WebUI`.
 - [x] `./tools/scripts/verify-linux-packaged-server-smoke.sh` passes.
-- [ ] `pwsh ./tools/scripts/verify-web-deploy.ps1` passes.
-- [ ] `pwsh ./tools/scripts/tests/test-scripts.ps1` passes.
-- [ ] `pwsh ./tools/scripts/check-milestones.ps1 -BaseRef {previous release tag} -Release` passes.
+- [x] `pwsh ./tools/scripts/verify-web-deploy.ps1` passes.
+- [x] `pwsh ./tools/scripts/tests/test-scripts.ps1` passes.
+- [x] `pwsh ./tools/scripts/check-milestones.ps1 -BaseRef {previous release tag} -Release` passes.
 - [x] Workflow YAML files in `.github/workflows` are valid, and default CI runs build, test, and web verify.
 - [x] `release.yml` runs on a tag and on `workflow_dispatch`, and publishes Velopack feeds.
 - [x] Docs review: `AGENTS.md`, `README.md`, `CONTEXT.md`, `MILESTONES.md`, `docs/api.md`, `docs/architecture.md`, `docs/dev-setup.md`, and `docs/domain-inventory.md` match current behavior.
@@ -41,24 +41,24 @@ An agent runs these and ticks them.
 
 ### Server and Tray
 
-- [x] Server starts without errors and serves the WebUI at `/` and Operator at `/operator`.
-- [x] Server starts with no console window on Windows.
-- [x] Tray icon appears with the right icon.
-- [x] Tray **Open Operator UI** opens the browser at `/operator`.
-- [x] Tray **Launch Server on Startup** takes effect right away.
-- [x] Tray **Refresh Library** starts a refresh.
-- [x] Tray **Restart Server** restarts and clients reconnect.
-- [x] Tray **Stop Server / Exit** shuts down cleanly.
-- [x] Installed server runs with a tray when a desktop session is available and headless otherwise.
+- [ ] Server starts without errors and serves the WebUI at `/` and Operator at `/operator`.
+- [ ] Server starts with no console window on Windows.
+- [ ] Tray icon appears with the right icon.
+- [ ] Tray **Open Operator UI** opens the browser at `/operator`.
+- [ ] Tray **Launch Server on Startup** takes effect right away.
+- [ ] Tray **Refresh Library** starts a refresh.
+- [ ] Tray **Restart Server** restarts and clients reconnect.
+- [ ] Tray **Stop Server / Exit** shuts down cleanly.
+- [ ] Installed server runs with a tray when a desktop session is available and headless otherwise.
 
 ### Operator
 
-- [x] Page layout renders correctly.
-- [x] Connected Clients lists desktop and WebUI clients separately, and **Copy** works.
-- [x] Server Logs refresh keeps filters, and copy works.
-- [x] Incoming and outgoing event tables update during activity.
-- [x] Control settings apply, including **Launch Server on Startup**.
-- [x] Restart and stop buttons work.
+- [ ] Page layout renders correctly.
+- [ ] Connected Clients lists desktop and WebUI clients separately, and **Copy** works.
+- [ ] Server Logs refresh keeps filters, and copy works.
+- [ ] Incoming and outgoing event tables update during activity.
+- [ ] Control settings apply, including **Launch Server on Startup**.
+- [ ] Restart and stop buttons work.
 
 ### Operator Testing Suite
 
@@ -75,83 +75,79 @@ An agent runs these and ticks them.
 
 ### WebUI
 
-- [x] WebUI loads from another device on the LAN.
+- [ ] WebUI loads from another device on the LAN.
 - [ ] Over HTTPS, Add to Home Screen / Install app opens a standalone app with the app icon.
-  - Failed: Android install still creates a shortcut; see the reverse proxy and HTTPS access milestone.
-- [x] Pairing or sign-in works for the current auth mode.
-- [x] Controls are usable on touch.
-- [x] Random play follows the current filter, including after editing a selected preset without saving.
-- [x] Filter Media opens, and its General, Tags, and Presets tabs work.
-- [x] Preset add, rename, delete, reorder, and load work, and the header list stays in order.
-- [x] Previous, next, loop, autoplay, favorite, and blacklist work.
-- [x] Mute toggles and its icon updates.
-- [x] Tag editor opens, edits, saves, and closes; category reorder persists after save.
-- [x] Auto Tag scan and apply work.
-- [x] Fullscreen keeps overlays usable on desktop browsers, and pseudo-fullscreen works on iOS.
-- [x] Connection status reads clearly when connected, reconnecting, and resyncing.
-- [x] After a refresh, the status line shows the refresh summary.
-- [x] Switching the system theme updates the shell and tag editor.
-- [x] On a mobile browser, the diagnostics panel appears below the status line.
-- [x] Library overlay opens and closes from the player controls, in fullscreen and in both themes.
-- [x] Library overlay **Showing N of M** matches the filter and search, and search and sort persist across close and reopen.
-- [x] Changing search, sort, filter, or preset scrolls the overlay grid to the top.
-- [x] Library grid shows portrait and landscape thumbnails at their own shape, not stretched or cropped to one shape, and reflows on resize.
-- [x] Library grid shows a placeholder for a missing thumbnail, favorite and blacklist badges, and a readable filename bar in both themes.
-- [x] Library grid looks like the desktop grid at the same width.
-- [x] Clicking a tile plays it and closes the overlay; a missing or unsupported file shows a message and keeps the overlay open.
-- [x] Escape closes the overlay; Tab to a tile and Enter or Space plays it.
-- [x] With the overlay open, favorite, blacklist, and playback changes from the desktop update tiles, sort, and the **Only never played** filter.
-- [x] With LAN access and mDNS on, the WebUI loads from another device at `http://<LAN hostname>.local:<port>`.
+- [ ] Pairing or sign-in works for the current auth mode.
+- [ ] Controls are usable on touch.
+- [ ] Random play follows the current filter, including after editing a selected preset without saving.
+- [ ] Filter Media opens, and its General, Tags, and Presets tabs work.
+- [ ] Preset add, rename, delete, reorder, and load work, and the header list stays in order.
+- [ ] Previous, next, loop, autoplay, favorite, and blacklist work.
+- [ ] Mute toggles and its icon updates.
+- [ ] Tag editor opens, edits, saves, and closes; category reorder persists after save.
+- [ ] Auto Tag scan and apply work.
+- [ ] Fullscreen keeps overlays usable on desktop browsers, and pseudo-fullscreen works on iOS.
+- [ ] Connection status reads clearly when connected, reconnecting, and resyncing.
+- [ ] After a refresh, the status line shows the refresh summary.
+- [ ] Switching the system theme updates the shell and tag editor.
+- [ ] On a mobile browser, the diagnostics panel appears below the status line.
+- [ ] Library overlay opens and closes from the player controls, in fullscreen and in both themes.
+- [ ] Library overlay **Showing N of M** matches the filter and search, and search and sort persist across close and reopen.
+- [ ] Changing search, sort, filter, or preset scrolls the overlay grid to the top.
+- [ ] Library grid shows portrait and landscape thumbnails at their own shape, not stretched or cropped to one shape, and reflows on resize.
+- [ ] Library grid shows a placeholder for a missing thumbnail, favorite and blacklist badges, and a readable filename bar in both themes.
+- [ ] Library grid looks like the desktop grid at the same width.
+- [ ] Clicking a tile plays it and closes the overlay; a missing or unsupported file shows a message and keeps the overlay open.
+- [ ] Escape closes the overlay; Tab to a tile and Enter or Space plays it.
+- [ ] With the overlay open, favorite, blacklist, and playback changes from the desktop update tiles, sort, and the **Only never played** filter.
+- [ ] With LAN access and mDNS on, the WebUI loads from another device at `http://<LAN hostname>.local:<port>`.
 
 ### Desktop
 
-- [x] Desktop connects to the server and shows current status.
-- [x] Random play follows the active filter, including right after a playback.
-- [x] Playing a library item starts that item; a missing or unsupported file shows a clear error.
-- [x] Previous, next, loop, autoplay, volume, and mute work.
+- [ ] Desktop connects to the server and shows current status.
+- [ ] Random play follows the active filter, including right after a playback.
+- [ ] Playing a library item starts that item; a missing or unsupported file shows a clear error.
+- [ ] Previous, next, loop, autoplay, volume, and mute work.
 - [ ] Fullscreen and player view switch correctly.
-  - Failed: combined fullscreen and player view traps keyboard input; not fixed while the desktop is frozen, see the desktop sound on video start milestone's deferrals.
-- [x] Status text stays correct after playback actions.
-- [x] **View → Diagnostics** shows the client and session ids.
-- [x] Import folder adds new files, names the source after the folder, and keeps tags, favorites, and stats on files already imported.
-- [x] Library browse keeps responding while a large folder imports.
-- [x] Manage Sources enable and disable persists.
-- [x] Thumbnails appear in the library panel after a refresh, without restarting.
-- [x] Duplicate scan shows thumbnail and info pairs per group, allows Keep All or a chosen file per group, and confirms counts before deleting.
-- [x] Auto Tag scan and apply work.
-- [x] Favorite and blacklist toggles update the item.
-- [x] Tag editor adds and removes tags.
-- [x] Tag editor category rows and tag chips are readable in both themes.
-- [x] Filter dialog Tags tab has per-category collapse toggles.
-- [x] Clear playback stats asks for confirmation and clears stats.
-- [x] With backups on, a library change writes a `library.db.backup.*` file to the backups folder after the backup gap.
+- [ ] Status text stays correct after playback actions.
+- [ ] **View → Diagnostics** shows the client and session ids.
+- [ ] Import folder adds new files, names the source after the folder, and keeps tags, favorites, and stats on files already imported.
+- [ ] Library browse keeps responding while a large folder imports.
+- [ ] Manage Sources enable and disable persists.
+- [ ] Thumbnails appear in the library panel after a refresh, without restarting.
+- [ ] Duplicate scan shows thumbnail and info pairs per group, allows Keep All or a chosen file per group, and confirms counts before deleting.
+- [ ] Auto Tag scan and apply work.
+- [ ] Favorite and blacklist toggles update the item.
+- [ ] Tag editor adds and removes tags.
+- [ ] Tag editor category rows and tag chips are readable in both themes.
+- [ ] Filter dialog Tags tab has per-category collapse toggles.
+- [ ] Clear playback stats asks for confirmation and clears stats.
+- [ ] With backups on, a library change writes a `library.db.backup.*` file to the backups folder after the backup gap.
 
 ### Cross-Client
 
 - [ ] Desktop and WebUI look and behave alike for the same features.
-  - Failed: several parity gaps found this pass; the desktop is frozen, so only the WebUI side is planned, in the WebUI status line overhaul and settings panel milestones.
-- [x] Favorite and blacklist changes show in the other client.
-- [x] Tag edits show in the other client.
+- [ ] Favorite and blacklist changes show in the other client.
+- [ ] Tag edits show in the other client.
 - [ ] Refresh status matches in both clients.
-  - Failed: refresh status differs between desktop and WebUI; see the WebUI status line overhaul milestone.
 
 ### Logging
 
-- [x] Operator Server Logs shows entries during a test run, with timestamp, level, and source.
-- [x] Desktop and WebUI entries both appear in the server log.
-- [x] No tokens, secrets, or cookies appear in logs.
+- [ ] Operator Server Logs shows entries during a test run, with timestamp, level, and source.
+- [ ] Desktop and WebUI entries both appear in the server log.
+- [ ] No tokens, secrets, or cookies appear in logs.
 
 ### Packaging
 
-- [x] Windows `Setup.exe` installs per user without elevation, and its shortcuts appear when offered.
-- [x] Linux `.AppImage` runs after `chmod +x`; desktop plays video with system LibVLC and refresh works with system `ffmpeg`.
-- [x] After first launch, both Linux AppImages appear under Multimedia in the app menu with their icons and launch the right AppImage.
-- [x] Without LibVLC on Linux, the desktop AppImage shows a dependency dialog with a copyable install command and exits cleanly.
-- [x] Moving a Linux AppImage and running it updates its menu entry; relaunching without moving does not rewrite it.
-- [x] After an in-app update on Linux, menu entries still launch the updated AppImage.
-- [x] Server in-app update: the check finds the new version without downloading, Download reaches ready, and Apply & Restart relaunches on it.
-- [x] Desktop in-app update: Settings finds the new version without downloading, Download reaches ready, and Apply & Restart relaunches on it.
-- [x] Icons match across shortcuts, menus, and the WebUI.
+- [ ] Windows `Setup.exe` installs per user without elevation, and its shortcuts appear when offered.
+- [ ] Linux `.AppImage` runs after `chmod +x`; desktop plays video with system LibVLC and refresh works with system `ffmpeg`.
+- [ ] After first launch, both Linux AppImages appear under Multimedia in the app menu with their icons and launch the right AppImage.
+- [ ] Without LibVLC on Linux, the desktop AppImage shows a dependency dialog with a copyable install command and exits cleanly.
+- [ ] Moving a Linux AppImage and running it updates its menu entry; relaunching without moving does not rewrite it.
+- [ ] After an in-app update on Linux, menu entries still launch the updated AppImage.
+- [ ] Server in-app update: the check finds the new version without downloading, Download reaches ready, and Apply & Restart relaunches on it.
+- [ ] Desktop in-app update: Settings finds the new version without downloading, Download reaches ready, and Apply & Restart relaunches on it.
+- [ ] Icons match across shortcuts, menus, and the WebUI.
 
 ## Release Specific
 
@@ -165,14 +161,16 @@ An agent runs these and ticks them.
 - [ ] With the WebUI open, stop and restart the server, change a favorite and a tag on the desktop while the WebUI reconnects, and the WebUI shows both.
 - [ ] Switching videos repeatedly with random, next, and previous never starts a video silently, and the mute button matches what you hear. Run on Linux and Windows.
 - [ ] With clients connected, tray and Operator Stop exit within a few seconds, and Operator Restart relaunches the server, on Linux and Windows.
-- [ ] On Windows, right-clicking the server tray icon opens the menu, menu items work, the icon stays, and `last.log` shows `Tray menu opened` with a non-zero size. If it passes, update the README Known Issues tray entry. If it fails, remove the Windows tray menu bullet from `CHANGELOG.md`.
+- [ ] On Windows, right-clicking the server tray icon opens the menu, menu items work, the icon stays, and `last.log` shows `Tray menu opened` with a non-zero size. If it passes, update the README Known Issues tray entry. If it fails, remove the Windows tray menu bullet from `CHANGELOG.md` and the tray menu sentence from the `RELEASE-NOTES.md` entry.
+- [ ] Opening desktop Settings, closing it, and opening it again does not freeze the app.
+- [ ] In the desktop filter dialog, deleting, renaming, or moving a preset keeps unsaved filter changes and **Update Preset**.
 
 ## Release Flow
 
-- [x] Version set with `pwsh ./tools/scripts/set-release-version.ps1 -Version {VERSION}`, and `.version` matches the tag you will push.
-- [x] `CHANGELOG.md` `[Unreleased]` is cut into the new release section titled with the release name, and a fresh `[Unreleased]` with empty headings is above it.
-- [x] `CHANGELOG.md` footer links: `[Unreleased]` compares the new version with `HEAD`, and a new line for this version compares the previous version with it.
-- [x] `RELEASE-NOTES.md` has the new release entry, it follows the style guide at the top of that file, and its Verification section is filled in from this pass.
+- [ ] Version set with `pwsh ./tools/scripts/set-release-version.ps1 -Version {VERSION}`, and `.version` matches the tag you will push.
+- [ ] `CHANGELOG.md` `[Unreleased]` is cut into the new release section titled with the release name, and a fresh `[Unreleased]` with empty headings is above it.
+- [ ] `CHANGELOG.md` footer links: `[Unreleased]` compares the new version with `HEAD`, and a new line for this version compares the previous version with it.
+- [ ] `RELEASE-NOTES.md` has the new release entry, it follows the style guide at the top of that file, and its Verification section is filled in from this pass.
 
 After committing the release, before tagging:
 
@@ -196,7 +194,7 @@ If any check fails, record:
 ## Sign-Off
 
 - Overall result:
-  - [x] PASS
+  - [ ] PASS
   - [ ] FAIL
-- [x] All failures and skipped checks documented.
-- [x] Ready to tag.
+- [ ] All failures and skipped checks documented.
+- [ ] Ready to tag.

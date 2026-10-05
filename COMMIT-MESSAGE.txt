@@ -19,9 +19,10 @@ Instructions:
 
 Commit Message:
 
-Chore: Ask before agents commit or push, and plan the update download fix
+Docs: Prepare the v0.14.0 Loose Ends pre-release pass
 
-- Add a project PreToolUse hook that asks for approval before any Bash call that runs `git commit` or `git push`, including global options before the subcommand, quoted option values, chained commands, backslash-continued lines, and `--amend`.
-- Like the real-data guard, the hook is best-effort and asks on every call if `jq` is missing.
-- AGENTS.md now states that agents do not commit or push.
-- Admin Section in WebUI Settings now records that the Operator's update download only starts on the second Download and confirmation, requires finding the cause before building the admin section's update controls, and adds an acceptance criterion that one Download and one confirmation start the download.
+- Consolidate `[Unreleased]` in `CHANGELOG.md` to one user-visible outcome per bullet, splitting the source list and refresh settings fixes.
+- Draft the v0.14.0 — Loose Ends entry in `RELEASE-NOTES.md`, with Verification left for the manual pass.
+- Reset the testing checklist for v0.14.0, tick the automated checks that passed, and drop the previous pass's failure notes.
+- Add Release Specific checks for reopening desktop Settings and for desktop filter dialog preset edits keeping unsaved changes.
+- Fix the docs review findings: `docs/api.md` no longer mentions the removed desktop list view or desktop favorites and recently played, and `docs/domain-inventory.md` says the headless host is used on any OS when no tray can be created.

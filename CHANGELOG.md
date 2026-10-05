@@ -9,35 +9,36 @@ Write **[Unreleased]** bullets at the same level as the released sections below.
 
 ### Added
 
-- **Server data folder setting:** Set the `REELROULETTE_DATA_DIR` environment variable to run the server from a different folder. Its settings, library, backups, log, and thumbnails all go there. The web deploy check now uses it, so it no longer touches your real library on Windows.
+- **Server data folder setting:** Set the `REELROULETTE_DATA_DIR` environment variable to run the server from another folder. Its settings, library, backups, log, and thumbnails all go there. The web deploy check uses it, so it no longer touches your real library on Windows.
 
 ### Changed
 
-- **Desktop hides unavailable source and item removal:** **Rename** and **Remove** in Manage Sources and **Remove from Library** in the library grid menu are hidden, since the server cannot do them yet and they only showed an error. They come back when the server supports them.
-- **Less reloading on library changes:** On desktop and in the WebUI, a favorite, play, or tag change now updates that tile in place unless it can change which files the library shows or their order, instead of reloading every loaded tile. With thousands of tiles loaded and the library sorted by name, playing a file no longer reloads the whole library view on every client. The desktop also refreshes its library totals once per burst of changes instead of once per change, and duration and loudness scans update refresh progress at most twice a second instead of once per file.
-- **Preset matching ignores tag order and case:** Both clients now recognize a saved preset when its included or excluded tags differ only in order or capitalization, or its sources or tag categories are listed in a different order, such as an older preset saved before the categories were reordered. The desktop also stops showing a starred preset when an empty tag category setting, a missing tag list, or an empty tag or source name is all that differs, so it matches presets the same way the WebUI does.
+- **Desktop hides source and item removal:** **Rename** and **Remove** in Manage Sources and **Remove from Library** in the library grid menu are hidden until the server supports them, since they only showed an error.
+- **Less reloading on library changes:** On desktop and in the WebUI, a favorite, play, or tag change updates that tile in place, and reloads the loaded tiles only when it can change which files show or their order. Playing a file in a library sorted by name no longer reloads the whole view on every client. Library totals and refresh progress also update less often during bursts of changes.
+- **Preset matching ignores tag order and case:** Both clients recognize a saved preset when its tags differ only in order or capitalization, or its sources or tag categories are listed in a different order, including presets saved before the categories were reordered. The desktop now matches presets the same way the WebUI does.
 
 ### Deprecated
 
 ### Removed
 
-- **Preset match API:** `POST /api/presets/match` is gone. No client used it; each client already decides which saved preset the current filter equals.
-- **`library.json` libraries:** The server no longer converts a `library.json` library from v0.12.0 or earlier, and a missing `library.db` now starts as an empty library. If you are on v0.12.0 or earlier, start v0.13.0 once before updating so your library is converted. Desktop import no longer counts or renames a leftover `library.json`.
+- **Preset match API:** `POST /api/presets/match` is gone. No client used it; each client decides which saved preset matches the current filter.
+- **`library.json` libraries:** The server no longer converts a `library.json` library from v0.12.0 or earlier, and starts with an empty library when `library.db` is missing. If you are on v0.12.0 or earlier, start v0.13.0 once before updating so your library is converted. Desktop import ignores a leftover `library.json`.
 
 ### Fixed
 
-- **Server sources and refresh settings:** A folder you import now shows up in the source list right away and can be enabled or disabled without restarting the server. Changing the auto-refresh interval or turning auto-refresh on now schedules the next refresh from the new setting. A forced duration or loudness rescan no longer resets the fingerprint scan parallelism to its default.
-- **Desktop filter dialog presets:** Deleting a preset, renaming one, or moving the selected one up or down no longer throws away your unsaved filter changes or turns off **Update Preset**. A saved preset whose minimum or maximum duration is stored in seconds keeps its settings on the desktop instead of loading as **None**.
-- **Desktop playback and sort labels:** The desktop shows a file as a photo or video based on what the server reports, as the WebUI does, and its library sort labels use the same arrows and dashes as the WebUI.
-- **WebUI catches up after a lost connection:** When the WebUI's connection to the server drops, for example while the server restarts, it now picks up the favorite, tag, and playback changes made in the meantime, or reloads if it missed too many. It used to keep showing the old state until something else reloaded. After a server restart, both clients now catch up or reload instead of missing changes, including when nothing had changed since they connected.
-- **Desktop videos starting silent:** A video started by random play, next, previous, or autoplay on the desktop no longer sometimes plays with no sound while the mute button shows unmuted. Volume and mute are applied again once the video is actually playing, including after turning loop on or off. A saved mute still keeps every video silent.
-- **Desktop Settings reopen hang:** Opening Settings a second time no longer freezes the desktop app so that it has to be force-closed.
-- **Slow server stop with clients connected:** Stopping or restarting the server from the tray or the Operator no longer takes about 30 seconds while the desktop app or WebUI is connected or a video is playing; it now stops right away. Connected clients show the server as offline and reconnect after a restart as before.
-- **Windows tray menu:** Right-clicking the server tray icon on Windows now opens its menu. It used to show nothing and remove the icon, while the server kept running.
+- **Imported sources:** A folder you import shows up in the source list right away and can be enabled or disabled without restarting the server.
+- **Refresh settings:** Changing the auto-refresh interval or turning auto-refresh on schedules the next refresh from the new setting. A forced duration or loudness rescan no longer resets fingerprint scan parallelism to its default.
+- **Desktop filter dialog presets:** Deleting, renaming, or moving a preset no longer throws away unsaved filter changes or turns off **Update Preset**. A preset whose duration limits are stored in seconds no longer loads as **None**.
+- **Desktop photo detection and sort labels:** The desktop shows a file as a photo or video based on what the server reports, and its library sort labels match the WebUI's.
+- **WebUI catches up after a lost connection:** When the WebUI loses its connection, for example while the server restarts, it picks up the favorite, tag, and playback changes made in the meantime, or reloads if it missed too many, instead of showing the old state. After a server restart, both clients catch up instead of missing changes.
+- **Desktop videos starting silent:** A video started by random play, next, previous, or autoplay no longer sometimes plays with no sound while the mute button shows unmuted. A saved mute still keeps every video silent.
+- **Desktop Settings reopen hang:** Opening Settings a second time no longer freezes the desktop app.
+- **Slow server stop with clients connected:** Stopping or restarting the server from the tray or the Operator no longer takes about 30 seconds while a client is connected or a video is playing.
+- **Windows tray menu:** Right-clicking the server tray icon on Windows now opens its menu, instead of showing nothing and removing the icon.
 
 ### Security
 
-- **Control token for the Operator from other machines:** Stopping, restarting, or updating the server, changing its settings, and running testing scenarios from another machine now always need the control token, even on installs that had admin auth set to `Off`, and the server creates a token on first start if it has none. The Operator on another machine asks for the token, which is shown in the Operator on the server machine or in `core-settings.json`; the server machine still opens it without one. Changing the token signs out every other machine.
+- **Control token for the Operator from other machines:** Stopping, restarting, or updating the server, changing its settings, and running testing scenarios from another machine now always need the control token, even on installs that had admin auth set to `Off`. The Operator on another machine asks for the token, which is shown in the Operator on the server machine or in `core-settings.json`; the server creates one on first start if it has none. The server machine still opens the Operator without it, and changing the token signs out every other machine.
 
 ---
 

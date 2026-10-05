@@ -20,6 +20,53 @@ Use this document for public GitHub releases. Rules:
 
 ---
 
+## v0.14.0 — Loose Ends
+
+Nothing flashy this time, just a long list of things that should have worked all along and now do.
+
+v0.14.0 finishes the move to the new library format, locks the Operator to people who have the control token, and fixes the annoyances that kept coming back, from videos that start silent to a Windows tray menu that wouldn't open.
+
+## What's New
+
+**Your server answers to you.** Before, on installs with admin auth turned off, anyone on your network could stop, restart, or reconfigure your server from the Operator. Now the Operator asks for the control token from any other machine, every time. The token is shown in the Operator on the server machine, and on that machine nothing changes.
+
+**Sound when you expect it.** On desktop, a video started by random play, next, previous, or autoplay could play with no sound while the mute button said it was on. That's fixed. A saved mute still keeps everything quiet.
+
+**Stop means stop.** Stopping or restarting the server used to hang for about 30 seconds whenever a client was connected or a video was playing. Now it stops right away. On Windows, right-clicking the tray icon finally opens the menu instead of making the icon disappear.
+
+**Less reloading.** Favoriting, tagging, or playing a file now updates just that tile, on desktop and in the WebUI, instead of reloading everything you've scrolled through. In a big library sorted by name, playing a file no longer reloads the view on every connected client.
+
+**The WebUI catches up after a dropout.** If the WebUI loses its connection, say while the server restarts, it now picks up the favorites, tags, and plays that happened in the meantime instead of showing you stale tiles.
+
+## Also in This Release
+
+- Presets are recognized even when their tags are in a different order or capitalization, and both apps now agree on when a preset matches.
+- A folder you import shows up in the source list right away, and you can turn it on or off without restarting the server.
+- Changing the auto-refresh interval, or turning auto-refresh on, takes effect from that moment.
+- In the desktop filter dialog, deleting, renaming, or moving a preset keeps your unsaved changes.
+- Opening desktop Settings a second time no longer freezes the app.
+- Desktop hides the source and library removal options, which only showed an error, until the server supports them.
+- Set `REELROULETTE_DATA_DIR` to run the server from any folder you like. Its settings, library, backups, log, and thumbnails all live there.
+
+## What's Coming
+
+- Faster browsing and random play on huge libraries, with thumbnails that load once and stay cached.
+- A rebuilt WebUI that installs as a real app, with side panels on big screens, keyboard shortcuts, stats, settings, and an admin section that replaces the Operator page.
+- Everything the desktop app does, in the WebUI, so one client works on every device.
+- Accounts and a PIN, with control over who sees which sources.
+- Playback that picks the right format for each device.
+
+## Verification
+
+<!-- TODO: manual validation -->
+
+## Notes
+
+- **On v0.12.0 or earlier? Stop at v0.13.0 first.** v0.14.0 no longer converts the old library format and starts with an empty library instead. Start v0.13.0 once so your library gets converted, then update.
+- **Opening the Operator from another machine?** Have the control token ready. Find it under Control Settings in the Operator on the server machine, or in `core-settings.json` on a server without a browser. A proxy on the server machine, such as Tailscale Serve, counts as local and won't ask.
+
+---
+
 ## v0.13.0 — Moving Day
 
 Your library just moved into a new home, and you don't have to lift a thing.
