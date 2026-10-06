@@ -112,7 +112,7 @@ Last milestone completed: M11c
 
 ### M11d - Dependency Updates
 
-- **Status**: 🚧 In Progress (slices 1 and 2 complete, slice 3 implemented)
+- **Status**: 🚧 In Progress (slices 1, 2, and 3 complete, slice 4 implemented)
 - **Goal**: Dependencies are on their latest safe versions, the shipped server carries one stable SkiaSharp with matching natives, and builds use the same SDK, Node, and FFmpeg every run.
 - **Scope**:
   - Ships in v0.14.1, after the random selection performance milestone and before Thumbnail Caching, whose server thumbnails use SkiaSharp. Each slice is verified on its own. Slices 3, 4, and 5 can be cut to a later release if v0.14.1 runs long; slices 1 and 2 cannot.
@@ -180,6 +180,14 @@ Last milestone completed: M11c
     - The Velopack library compiled unchanged. All three targets resolve Velopack 1.2.161. `dotnet build ReelRoulette.sln` has no warnings, and `dotnet test ReelRoulette.sln` ran 383, 269, and 3 tests, all passing.
     - `./tools/scripts/verify-linux-packaged-server-smoke.sh` passed, packing with `Velopack CLI 1.2.161`.
     - Release run, upload, and the delta update from v0.14.x: the Release Specific checklist item "The release run packs and uploads every leg, and an installed v0.14.x server and desktop take the in-app delta update to this release, on Linux and Windows."
+    - CI run 37518838688 passed on Linux, Windows, and WebUI verify, with the same 383, 269, and 3 tests on both OSes.
+  - Slice 4:
+    - Vite 8.3.3, the latest stable, and Vitest 5.0.3. The Vite 8 and Vitest 4 and 5 migration guides were read. The WebUI config sets none of the changed options, and its tests use none of the changed APIs. Vitest 5 clearing mock history before each test changed no result.
+    - Typecheck failed after the update: five tests import `node:fs` for shared fixtures, and `tsconfig.app.json` loads only `vite/client` types. `tsc --explainFiles` on the old lockfile showed that `@types/node` reached the app typecheck only through Vite 7's Node-side types, which Vite 8 no longer pulls in. `tsconfig.app.json` now excludes `src/test`, a new `tsconfig.test.json` checks `src/test` with Node types, and `npm run typecheck` runs both. The app check lists 92 source files with no tests and no `@types/node`, the test check lists all 20 test files, and an injected type error in a test fails only the test check.
+    - `npm audit`: 9 findings before (2 moderate, 5 high, 2 critical: `@redocly/openapi-core`, `@vitest/mocker`, brace-expansion, js-yaml, nanoid, postcss, source-map-js, tinypool, vitest), 0 after. The brace-expansion pin is ^5.0.12 and the js-yaml pin ^4.3.2, which resolve 5.0.12 and 4.3.2. Vite 8 resolves postcss 8.5.29, nanoid 3.3.20, and source-map-js 1.2.2, and Vitest 5 no longer uses tinypool, so `npm audit fix` was not needed.
+    - `npm run verify` passed with 232 tests in 20 files before and after. The build keeps the same files: the JS bundle went from 120,395 to 118,200 bytes and the CSS from 23,722 to 24,353 bytes, which the Vite 8 guide attributes to Lightning CSS minification. `pwsh ./tools/scripts/verify-web-deploy.ps1` passed with the new build.
+    - `dotnet build ReelRoulette.sln` has no warnings, and `dotnet test ReelRoulette.sln` ran 383, 269, and 3 tests, all passing.
+    - The newer default browser targets and the CSS minifier are covered by the Release Specific checklist item "After the Vite 8 build change, the WebUI looks and works as before in a desktop browser and on a phone."
     - CI run: pending.
 
 ### M11e - Thumbnail Caching

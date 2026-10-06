@@ -12,7 +12,7 @@
     "preview": "vite preview",
     "generate:contracts": "openapi-typescript ../../../../shared/api/openapi.yaml -o ./src/types/openapi.generated.ts",
     "verify:contracts": "node ./scripts/verify-openapi-contracts-fresh.mjs",
-    "typecheck": "tsc --noEmit -p tsconfig.app.json",
+    "typecheck": "tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.test.json",
     "test": "vitest run",
     "verify:build-output": "node ./scripts/verify-build-output.mjs",
     "verify": "npm run verify:contracts && npm run typecheck && npm run test && npm run build && npm run verify:build-output"
@@ -22,12 +22,12 @@
     "openapi-typescript": "^7.13.0",
     "sharp": "^0.35.5",
     "typescript": "^5.9.2",
-    "vite": "^7.3.7",
-    "vitest": "^3.2.4"
+    "vite": "^8.3.3",
+    "vitest": "^5.0.3"
   },
   "overrides": {
-    "js-yaml": "^4.3.0",
-    "brace-expansion": "^5.0.8",
+    "js-yaml": "^4.3.2",
+    "brace-expansion": "^5.0.12",
     "minimatch": "^10.2.5"
   }
 }

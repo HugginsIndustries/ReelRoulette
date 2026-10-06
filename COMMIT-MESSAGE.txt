@@ -19,8 +19,9 @@ Instructions:
 
 Commit Message:
 
-M11d: Move Velopack and vpk to 1.2.161
+M11d: Move the WebUI to Vite 8 and Vitest 5 and clear npm audit
 
-- The Velopack library and the release workflow's vpk move from 1.2.0 to 1.2.161; the library API and every vpk option the release passes are unchanged.
-- Release packs pass --runtime from the leg's RID, since 1.2.161 otherwise warns that it defaults to x86; Windows Setup.exe is now 64-bit.
-- The Linux packaged-server smoke installs the pinned vpk under artifacts/velopack-smoke/tools and uses it, instead of whatever vpk is installed globally.
+- Vite 7.3.7 to 8.3.3 and Vitest 3.2.7 to 5.0.3; the WebUI config and tests needed no changes, and the build keeps the same files.
+- Tests typecheck under their own tsconfig.test.json with Node types, and the app typecheck excludes them, since Node types only reached it through Vite 7.
+- The brace-expansion and js-yaml pins move to 5.0.12 and 4.3.2, and npm audit goes from 9 findings to 0.
+- A Release Specific check covers the WebUI in desktop and phone browsers after the Vite 8 build change.

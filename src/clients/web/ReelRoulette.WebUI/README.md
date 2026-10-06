@@ -56,7 +56,7 @@ npm run verify
 
 `npm run verify` performs:
 
-1. type-check
+1. type-check: app code with browser types only (`tsconfig.app.json`), and `src/test` with Node types as well (`tsconfig.test.json`)
 2. runtime-config schema tests
 3. production build
 4. build-output verification (`dist` artifacts + runtime-config presence)

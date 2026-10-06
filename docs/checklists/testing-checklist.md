@@ -177,6 +177,7 @@ An agent runs these and ticks them.
 - [ ] On Windows, the server tray menu still opens and its items work after the Avalonia update.
 - [ ] The Windows server release's bundled `ffprobe -version`, printed in the release log, names the pinned FFmpeg build.
 - [ ] The release run packs and uploads every leg, and an installed v0.14.x server and desktop take the in-app delta update to this release, on Linux and Windows.
+- [ ] After the Vite 8 build change, the WebUI looks and works as before in a desktop browser and on a phone.
 
 ## Release Flow
 
