@@ -10,11 +10,14 @@ namespace ReelRoulette.Core.Tests;
 /// </summary>
 public sealed class LibraryCatalogVersionSafetyTests
 {
+    private const int Current = LibraryCatalogStore.SchemaVersion;
+    private const int Newer = LibraryCatalogStore.SchemaVersion + 1;
+
     [Fact]
     public void Open_NewerLiveCatalog_IsLeftUnchangedAndReportedNewer()
     {
         using var dir = new TempDirectory();
-        CatalogSeed.WriteAtVersion(dir.Path, 3, items: [new SeedItem("item-1", "/clips/a.mp4")]);
+        CatalogSeed.WriteAtVersion(dir.Path, Newer, items: [new SeedItem("item-1", "/clips/a.mp4")]);
         var before = FolderSnapshot.Take(dir.Path);
 
         var opened = CatalogOpen.Open(dir.Path);
@@ -27,8 +30,8 @@ public sealed class LibraryCatalogVersionSafetyTests
     public void Open_NewerLiveCatalogWithAnOlderPrevious_LeavesBoth()
     {
         using var dir = new TempDirectory();
-        CatalogSeed.WriteAtVersion(dir.Path, 3, items: [new SeedItem("newer", "/clips/a.mp4")]);
-        CatalogSeed.WriteAtVersion(dir.Path, 2, "library.db.previous", items: [new SeedItem("older", "/clips/b.mp4")], standalone: true);
+        CatalogSeed.WriteAtVersion(dir.Path, Newer, items: [new SeedItem("newer", "/clips/a.mp4")]);
+        CatalogSeed.WriteAtVersion(dir.Path, Current, "library.db.previous", items: [new SeedItem("older", "/clips/b.mp4")], standalone: true);
         var before = FolderSnapshot.Take(dir.Path);
 
         var opened = CatalogOpen.Open(dir.Path);
@@ -41,8 +44,8 @@ public sealed class LibraryCatalogVersionSafetyTests
     public void Open_NewerLiveCatalogWithIncoming_LeavesBoth()
     {
         using var dir = new TempDirectory();
-        CatalogSeed.WriteAtVersion(dir.Path, 3, items: [new SeedItem("newer", "/clips/a.mp4")]);
-        CatalogSeed.WriteAtVersion(dir.Path, 2, "library.db.incoming", items: [new SeedItem("incoming", "/clips/b.mp4")], standalone: true);
+        CatalogSeed.WriteAtVersion(dir.Path, Newer, items: [new SeedItem("newer", "/clips/a.mp4")]);
+        CatalogSeed.WriteAtVersion(dir.Path, Current, "library.db.incoming", items: [new SeedItem("incoming", "/clips/b.mp4")], standalone: true);
         var before = FolderSnapshot.Take(dir.Path);
 
         var opened = CatalogOpen.Open(dir.Path);
@@ -57,7 +60,7 @@ public sealed class LibraryCatalogVersionSafetyTests
     public void Open_NoLiveCatalogWithANewerReplaceFile_LeavesItAndCreatesNoCatalog(string fileName)
     {
         using var dir = new TempDirectory();
-        CatalogSeed.WriteAtVersion(dir.Path, 3, fileName, items: [new SeedItem("newer", "/clips/a.mp4")], standalone: true);
+        CatalogSeed.WriteAtVersion(dir.Path, Newer, fileName, items: [new SeedItem("newer", "/clips/a.mp4")], standalone: true);
         var before = FolderSnapshot.Take(dir.Path);
 
         var opened = CatalogOpen.Open(dir.Path);
@@ -72,8 +75,8 @@ public sealed class LibraryCatalogVersionSafetyTests
     public void Open_CurrentLiveCatalogWithANewerReplaceFile_LeavesBoth(string fileName)
     {
         using var dir = new TempDirectory();
-        CatalogSeed.WriteAtVersion(dir.Path, 2, items: [new SeedItem("current", "/clips/a.mp4")]);
-        CatalogSeed.WriteAtVersion(dir.Path, 3, fileName, items: [new SeedItem("newer", "/clips/b.mp4")], standalone: true);
+        CatalogSeed.WriteAtVersion(dir.Path, Current, items: [new SeedItem("current", "/clips/a.mp4")]);
+        CatalogSeed.WriteAtVersion(dir.Path, Newer, fileName, items: [new SeedItem("newer", "/clips/b.mp4")], standalone: true);
         var before = FolderSnapshot.Take(dir.Path);
 
         var opened = CatalogOpen.Open(dir.Path);
@@ -95,7 +98,7 @@ public sealed class LibraryCatalogVersionSafetyTests
             writer.Open();
             Execute(writer, "PRAGMA wal_autocheckpoint=0;");
             Execute(writer, "ALTER TABLE items ADD COLUMN file_name_key TEXT NULL;");
-            Execute(writer, "PRAGMA user_version = 3;");
+            Execute(writer, $"PRAGMA user_version = {Newer};");
 
             // Copied while the writer is open, as a newer build that stopped without closing leaves them.
             CopyOpenFile(sourceDatabase, database);
@@ -120,8 +123,8 @@ public sealed class LibraryCatalogVersionSafetyTests
     public void Open_NewerCatalogThatCannotBeReadWithAUsablePrevious_LeavesBothAndReportsUnreadable()
     {
         using var dir = new TempDirectory();
-        var live = CatalogSeed.WriteAtVersion(dir.Path, 3, items: [new SeedItem("newer", "/clips/a.mp4")]);
-        CatalogSeed.WriteAtVersion(dir.Path, 2, "library.db.previous", items: [new SeedItem("older", "/clips/b.mp4")], standalone: true);
+        var live = CatalogSeed.WriteAtVersion(dir.Path, Newer, items: [new SeedItem("newer", "/clips/a.mp4")]);
+        CatalogSeed.WriteAtVersion(dir.Path, Current, "library.db.previous", items: [new SeedItem("older", "/clips/b.mp4")], standalone: true);
         var before = FolderSnapshot.Take(dir.Path);
 
         LibraryCatalogOpenResult opened;
@@ -138,7 +141,7 @@ public sealed class LibraryCatalogVersionSafetyTests
     public void Open_CurrentCatalogSqliteCannotReadNow_ReportsUnreadableAndChangesNothing()
     {
         using var dir = new TempDirectory();
-        var live = CatalogSeed.WriteAtVersion(dir.Path, 2, items: [new SeedItem("current", "/clips/a.mp4")], standalone: true);
+        var live = CatalogSeed.WriteAtVersion(dir.Path, Current, items: [new SeedItem("current", "/clips/a.mp4")], standalone: true);
         var before = FolderSnapshot.Take(dir.Path);
 
         LibraryCatalogOpenResult opened;
@@ -155,8 +158,8 @@ public sealed class LibraryCatalogVersionSafetyTests
     public void Open_CurrentCatalogSqliteCannotReadNowWithAUsablePrevious_LeavesBoth()
     {
         using var dir = new TempDirectory();
-        var live = CatalogSeed.WriteAtVersion(dir.Path, 2, items: [new SeedItem("current", "/clips/a.mp4")], standalone: true);
-        CatalogSeed.WriteAtVersion(dir.Path, 2, "library.db.previous", items: [new SeedItem("older", "/clips/b.mp4")], standalone: true);
+        var live = CatalogSeed.WriteAtVersion(dir.Path, Current, items: [new SeedItem("current", "/clips/a.mp4")], standalone: true);
+        CatalogSeed.WriteAtVersion(dir.Path, Current, "library.db.previous", items: [new SeedItem("older", "/clips/b.mp4")], standalone: true);
         var before = FolderSnapshot.Take(dir.Path);
 
         LibraryCatalogOpenResult opened;
@@ -174,8 +177,8 @@ public sealed class LibraryCatalogVersionSafetyTests
     {
         using var dir = new TempDirectory();
         using var source = new TempDirectory();
-        var live = CatalogSeed.WriteAtVersion(dir.Path, 2, items: [new SeedItem("current", "/clips/a.mp4")], standalone: true);
-        var checkpoint = CatalogSeed.WriteAtVersion(source.Path, 2, items: [new SeedItem("import", "/clips/b.mp4")], standalone: true);
+        var live = CatalogSeed.WriteAtVersion(dir.Path, Current, items: [new SeedItem("current", "/clips/a.mp4")], standalone: true);
+        var checkpoint = CatalogSeed.WriteAtVersion(source.Path, Current, items: [new SeedItem("import", "/clips/b.mp4")], standalone: true);
         var before = FolderSnapshot.Take(dir.Path);
 
         using (CatalogSeed.HoldBusy(live))
@@ -192,7 +195,7 @@ public sealed class LibraryCatalogVersionSafetyTests
         using var dir = new TempDirectory();
         File.WriteAllText(Path.Combine(dir.Path, "library.db"), "not a database");
         var backups = Path.Combine(dir.Path, "backups");
-        CatalogSeed.WriteAtVersion(backups, 2, "library.db.backup.2026-10-01_10-00-00", standalone: true);
+        CatalogSeed.WriteAtVersion(backups, Current, "library.db.backup.2026-10-01_10-00-00", standalone: true);
 
         var first = CatalogOpen.Open(dir.Path);
 
@@ -229,8 +232,9 @@ public sealed class LibraryCatalogVersionSafetyTests
     }
 
     [Theory]
-    [InlineData(2)]
-    [InlineData(3)]
+    [InlineData(LibraryCatalogStore.MigratableSchemaVersion)]
+    [InlineData(Current)]
+    [InlineData(Newer)]
     [InlineData(0)]
     public void Open_FolderWithOnlyACatalogBackup_CreatesNoCatalog(int backupVersion)
     {
@@ -274,7 +278,7 @@ public sealed class LibraryCatalogVersionSafetyTests
     public void InspectCatalogFile_NewerCatalog_IsNewerAndLeftUnchanged()
     {
         using var dir = new TempDirectory();
-        var path = CatalogSeed.WriteAtVersion(dir.Path, 3);
+        var path = CatalogSeed.WriteAtVersion(dir.Path, Newer);
         var before = FolderSnapshot.Take(dir.Path);
 
         Assert.Equal(LibraryCatalogStore.CatalogFileInspection.Newer, LibraryCatalogStore.InspectCatalogFile(path));
@@ -287,8 +291,8 @@ public sealed class LibraryCatalogVersionSafetyTests
     {
         using var dir = new TempDirectory();
         using var source = new TempDirectory();
-        CatalogSeed.WriteAtVersion(dir.Path, 3, items: [new SeedItem("newer", "/clips/a.mp4")]);
-        var checkpoint = CatalogSeed.WriteAtVersion(source.Path, 2, items: [new SeedItem("import", "/clips/b.mp4")], standalone: true);
+        CatalogSeed.WriteAtVersion(dir.Path, Newer, items: [new SeedItem("newer", "/clips/a.mp4")]);
+        var checkpoint = CatalogSeed.WriteAtVersion(source.Path, Current, items: [new SeedItem("import", "/clips/b.mp4")], standalone: true);
         var before = FolderSnapshot.Take(dir.Path);
 
         Assert.True(LibraryCatalogStore.RecoverAndHasLiveDatabase(dir.Path));
@@ -302,8 +306,8 @@ public sealed class LibraryCatalogVersionSafetyTests
     {
         using var dir = new TempDirectory();
         using var source = new TempDirectory();
-        CatalogSeed.WriteAtVersion(dir.Path, 3, "library.db.incoming", items: [new SeedItem("newer", "/clips/a.mp4")], standalone: true);
-        var checkpoint = CatalogSeed.WriteAtVersion(source.Path, 2, items: [new SeedItem("import", "/clips/b.mp4")], standalone: true);
+        CatalogSeed.WriteAtVersion(dir.Path, Newer, "library.db.incoming", items: [new SeedItem("newer", "/clips/a.mp4")], standalone: true);
+        var checkpoint = CatalogSeed.WriteAtVersion(source.Path, Current, items: [new SeedItem("import", "/clips/b.mp4")], standalone: true);
         var before = FolderSnapshot.Take(dir.Path);
 
         Assert.Throws<LibraryCatalogNewerException>(() => LibraryCatalogStore.PrepareIncomingFromFile(dir.Path, checkpoint));
@@ -315,8 +319,8 @@ public sealed class LibraryCatalogVersionSafetyTests
     public void PublishIncoming_OverANewerLiveCatalog_IsRefusedAndChangesNothing()
     {
         using var dir = new TempDirectory();
-        CatalogSeed.WriteAtVersion(dir.Path, 3, items: [new SeedItem("newer", "/clips/a.mp4")]);
-        CatalogSeed.WriteAtVersion(dir.Path, 2, "library.db.incoming", items: [new SeedItem("import", "/clips/b.mp4")], standalone: true);
+        CatalogSeed.WriteAtVersion(dir.Path, Newer, items: [new SeedItem("newer", "/clips/a.mp4")]);
+        CatalogSeed.WriteAtVersion(dir.Path, Current, "library.db.incoming", items: [new SeedItem("import", "/clips/b.mp4")], standalone: true);
         var before = FolderSnapshot.Take(dir.Path);
 
         Assert.Throws<LibraryCatalogNewerException>(() => LibraryCatalogStore.PublishIncoming(dir.Path));

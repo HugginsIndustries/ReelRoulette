@@ -39,7 +39,7 @@ public sealed class LibraryUnavailableServerTests : IDisposable
     public async Task RefreshPipeline_WithoutALibrary_NeitherRunsOnItsScheduleNorStartsManually()
     {
         var dataDirectory = Path.Combine(_root, "data");
-        CatalogSeed.WriteAtVersion(dataDirectory, 3);
+        CatalogSeed.WriteAtVersion(dataDirectory, LibraryCatalogStore.SchemaVersion + 1);
         var catalog = LibraryCatalogHost.Open(dataDirectory);
         var settings = new CoreSettingsService(
             new ServerRuntimeOptions { AutoRefreshEnabled = true, AutoRefreshIntervalMinutes = 15 },
@@ -171,16 +171,16 @@ public sealed class LibraryUnavailableServerTests : IDisposable
         switch (state)
         {
             case "newer":
-                CatalogSeed.WriteAtVersion(dataDirectory, 3);
+                CatalogSeed.WriteAtVersion(dataDirectory, LibraryCatalogStore.SchemaVersion + 1);
                 break;
             case "damaged":
                 File.WriteAllText(Path.Combine(dataDirectory, "library.db"), "not a database");
                 break;
             case "missing":
-                CatalogSeed.WriteAtVersion(Path.Combine(dataDirectory, "backups"), 2, "library.db.backup.2026-10-01_10-00-00", standalone: true);
+                CatalogSeed.WriteAtVersion(Path.Combine(dataDirectory, "backups"), LibraryCatalogStore.SchemaVersion, "library.db.backup.2026-10-01_10-00-00", standalone: true);
                 break;
             case "unreadable":
-                using (CatalogSeed.HoldUnreadable(CatalogSeed.WriteAtVersion(dataDirectory, 3)))
+                using (CatalogSeed.HoldUnreadable(CatalogSeed.WriteAtVersion(dataDirectory, LibraryCatalogStore.SchemaVersion + 1)))
                 {
                     return LibraryCatalogHost.Open(dataDirectory);
                 }
@@ -230,15 +230,15 @@ public sealed class LibraryUnavailableCompositionTests : IDisposable
             Path.Combine(_dataDirectory, "core-settings.json"),
             """{"backup":{"enabled":true,"minimumBackupGapMinutes":1,"numberOfBackups":1}}""");
         var backups = Path.Combine(_dataDirectory, "backups");
-        var oldBackup = CatalogSeed.WriteAtVersion(backups, 2, "library.db.backup.2026-10-01_10-00-00", standalone: true);
+        var oldBackup = CatalogSeed.WriteAtVersion(backups, LibraryCatalogStore.SchemaVersion, "library.db.backup.2026-10-01_10-00-00", standalone: true);
         File.SetCreationTimeUtc(oldBackup, DateTime.UtcNow.AddDays(-2));
         File.SetLastWriteTimeUtc(oldBackup, DateTime.UtcNow.AddDays(-2));
-        CatalogSeed.WriteAtVersion(backups, 3, "library.db.backup.2026-10-02_10-00-00", standalone: true);
+        CatalogSeed.WriteAtVersion(backups, LibraryCatalogStore.SchemaVersion + 1, "library.db.backup.2026-10-02_10-00-00", standalone: true);
         var expectedStatus = LibraryCatalogOpenStatus.Newer;
         var expectedMessage = LibraryCatalogStore.NewerMessage;
         if (state == "newer")
         {
-            CatalogSeed.WriteAtVersion(_dataDirectory, 3, items: [new SeedItem("item-1", "/clips/a.mp4")]);
+            CatalogSeed.WriteAtVersion(_dataDirectory, LibraryCatalogStore.SchemaVersion + 1, items: [new SeedItem("item-1", "/clips/a.mp4")]);
         }
         else
         {

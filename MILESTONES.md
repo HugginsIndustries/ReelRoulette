@@ -108,49 +108,7 @@ Do not use this file for detailed architecture explanation or current capability
 
 ## Active Milestones
 
-Last milestone completed: M11a
-
-### M11b - Library Query Performance
-
-- **Status**: ⏳ Planned
-- **Goal**: Library browse pages in every sort mode and loaded-window reloads cost about the same at any scroll depth, and a reload of the loaded window is one request.
-- **Scope**:
-  - Ships in v0.14.1, after the catalog open and backup safety milestone. Depends on: Catalog Open and Backup Safety, so every build that can meet a schema version 3 library leaves it and its backups untouched when it cannot open it.
-  - Measured by the efficiency and divergence report on a copy of a 48,938-item catalog, through the real list query in a Release build: the first 200-item page takes about 50 ms and allocates about 11 MB. The page at offset 10,000 takes 177 ms and 104 MB, and at offset 40,000 takes 221 ms and 154 MB. Reloading 5,000 loaded tiles takes 2.45 s and 1.1 GB.
-  - Causes measured in the same run:
-    - Name order uses `COLLATE ORDINAL_IGNORE_CASE`, a managed collation callback with no index, so every page sorts the whole filtered set. The same page ordered by an indexed binary column takes 0.1 ms, against 19.9 ms with the callback.
-    - Every page also runs two `COUNT(*)` queries of about 13.5 ms each, including on later pages of the same query.
-  - The measurements were not re-run when this milestone was promoted. The code paths they measured are unchanged since the report. The client event efficiency milestone made reloads rarer, but each reload costs the same.
-    - A reload re-reads the window in 200-item pages, one request each, and the query limit is 500.
-  - Schema version 3 slice:
-    - Bump the catalog to schema version 3. The migration from schema version 2 adds the stored file name sort key column and its index and fills every key once. Item insert and rename compute the key with the row. A new refresh pipeline stage fills any empty keys, and recomputes every key when a stored key version changes. Nothing else new runs at startup.
-    - The key reproduces today's `OrdinalIgnoreCase` name order exactly: per code point, uppercase only where `OrdinalIgnoreCase` treats the pair as equal, written as code-point-ordered bytes. Plain `ToUpperInvariant` changes the order. A `ToLowerInvariant` key such as the existing `file_name_fold` changes it too, for names containing `_`, `[`, `\`, `]`, `^`, or `` ` ``, which sort after letters today and would sort before them.
-    - Name sorts and name tie-breaks order by the key.
-    - Drop `idx_item_tags_item_id`, which duplicates the leading `item_id` column of the `item_tags` primary key.
-    - The migration never leaves a schema version 2 `library.db.previous` beside a schema version 3 `library.db`, including when interrupted: a build without the catalog open and backup safety fix deletes the newer catalog in that case. Schema version 2 backups stay, since rotation deletes only current-version backups.
-  - Every sort mode: measure name, last played, play count, duration, and date added, ascending and descending, at the first page and at offset 40,000, and add an index for each sort that needs one, including the name-key tie-break, so no sort mode sorts the whole library per request.
-  - Cache both counts on the server, keyed by catalog revision, search, and filter, so later pages, appends, and reloads at the same revision do not count again. No contract change. Neither client keeps the totals from the first page: both read `totalCount` from every page and stop a reload once they have that many items, so a later page without counts would end a desktop reload after its second page with a total of 0. Every page keeps returning both counts, and their meaning does not change.
-  - Reload slice: raise the query limit to 10,000 so a reload of the loaded window is one request, and the WebUI reloads with it. This is a contract change in its own slice. The frozen desktop keeps its smaller pages.
-  - Library query logging: the server writes one `info` line per library query request (`Library query offset=… limit=… …`), so today a reload writes one line per page; in the v0.14.0 manual pass, a reload of six pages from two WebUI clients wrote twelve near-identical lines. Keep one line per request and add the request's elapsed time to it. Once a reload is a single request, it writes one line.
-  - Library stats: the per-source figures join items to sources by path prefix and re-derive video or photo from the file extension in SQL. Measured: about 90 ms in `sqlite3` and 138 ms through the service. Every item in the measured catalog has a source id and a media type of 0 or 1. Group by source id and media type instead, with the same results.
-  - Fallback if deep offsets still cost much more than the first page after the sort indexes: add a keyset cursor (the last row's sort values) beside offset paging, and move the WebUI to it. Offset paging stays until Desktop Client Removal, so the frozen desktop keeps working. This is a contract change in its own slice and only adds fields.
-  - Measured trap for the tag filter: the tag filter compares `item_tags.name` with the managed collation inside a correlated `EXISTS`, which the planner runs through `idx_item_tags_item_id` and which takes 45 ms for a 22,476-item tag. Rewriting it as `item_tags.name_fold = ?` inside the same `EXISTS` makes the planner use `idx_item_tags_name_fold` for every item, and the same filter took 55 s. The form `items.id IN (SELECT item_id FROM item_tags WHERE name_fold = ?)` takes 35 ms. Any tag filter change keeps a plan of that shape, and after `idx_item_tags_item_id` is dropped the filter still looks up tags by item id through the primary key, both checked with `EXPLAIN QUERY PLAN`.
-  - Release notes for v0.14.1 tell v0.14.0 users to update by installing the new version directly rather than through the in-app updater, since v0.14.0 does not have the catalog open and backup safety fix.
-- **Acceptance criteria**:
-  - Name, last played, play count, duration, and date added sorts, in both directions, return the same items in the same order as before, including names that differ only by case, names containing `_`, `[`, `\`, `]`, `^`, or `` ` ``, and names where `ToUpperInvariant` and `OrdinalIgnoreCase` disagree.
-  - Every sort mode in both directions costs within a small factor of its first page at offset 40,000 of the measured catalog, measured, and none sorts the whole library per request.
-  - A schema version 2 catalog opens as schema version 3 with every sort key filled. Insert and rename write the key with the row, and the refresh stage fills empty keys and recomputes every key after a key version change. Startup runs nothing else new.
-  - An interrupted migration never leaves a schema version 2 `library.db.previous` beside a schema version 3 `library.db`.
-  - A repeat query with the same search and filter at the same catalog revision runs no count queries and returns the same totals, and a write that changes the revision counts again.
-  - A reload of the loaded window is one request, for windows of up to 10,000 items.
-  - A reload writes exactly one library query line to `last.log`, with its elapsed time.
-  - Library stats return the same global and per-source figures as before on the measured catalog.
-  - Tag filters return the same items as before, and none takes longer than the current form on the measured catalog.
-  - `item_tags` has one index on `item_id`.
-  - The v0.14.1 release notes tell v0.14.0 users to install the new version directly.
-- **Verification evidence**:
-  - Completion evidence must include before-and-after timings and allocations, on a copy of a large catalog in a temp folder, for every sort mode in both directions at the first page and at offset 40,000, name order at offset 10,000, a 5,000-tile reload, a common-tag filter, a search, and library stats, plus `EXPLAIN QUERY PLAN` for each sort's list query, the count, and the tag filter queries.
-  - Completion evidence must include tests that each sort order matches the previous order on a fixture with case-only, punctuation, and `ToUpperInvariant`-versus-`OrdinalIgnoreCase` differences, the schema migration tests including an interrupted migration, tests for the key on insert and rename and for the refresh stage, `dotnet test ReelRoulette.sln`, and `npm run verify` for the reload slice.
+Last milestone completed: M11b
 
 ### M11c - Random Selection Performance
 

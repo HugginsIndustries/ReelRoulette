@@ -64,10 +64,14 @@ internal static class LibraryCatalogListSql
         return where.ToString();
     }
 
+    /// <summary>
+    /// Name order is the stored name sort key, which orders like OrdinalIgnoreCase on the file name.
+    /// Each sort mode and direction has an index on these expressions in the catalog schema.
+    /// </summary>
     public static string BuildOrderBy(LibraryListRequest request)
     {
         var direction = request.SortDescending ? "DESC" : "ASC";
-        var fileName = $"items.file_name COLLATE {CollationName}";
+        const string fileName = "items.file_name_sort_key";
         var primary = request.Sort switch
         {
             LibraryListSort.LastPlayed => $"COALESCE(items.last_played_utc, 0) {direction}",
@@ -265,6 +269,19 @@ internal static class LibraryCatalogListSql
             {
                 command.Parameters.AddWithValue(name, value);
             }
+        }
+
+        /// <summary>The bound values as text that differs whenever a value or its type does.</summary>
+        public string Describe()
+        {
+            var builder = new StringBuilder();
+            foreach (var (name, value) in _values)
+            {
+                var text = Convert.ToString(value, CultureInfo.InvariantCulture) ?? string.Empty;
+                builder.Append(CultureInfo.InvariantCulture, $"{name}={value.GetType().Name}:{text.Length}:{text};");
+            }
+
+            return builder.ToString();
         }
     }
 }

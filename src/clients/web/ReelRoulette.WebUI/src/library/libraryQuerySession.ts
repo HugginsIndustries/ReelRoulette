@@ -12,6 +12,8 @@ import { applyItemStateChanged, applyPlaybackRecorded, findProjectionItem } from
 import type { ItemStateChangedPayload, PlaybackRecordedPayload } from "./libraryProjectionSync";
 
 export const LIBRARY_QUERY_WINDOW_SIZE = 200;
+/** The server's query limit, so a reload of up to this many loaded tiles is one request. */
+export const LIBRARY_QUERY_RELOAD_LIMIT = 10_000;
 export const LIBRARY_QUERY_SEARCH_DEBOUNCE_MS = 300;
 
 export type LibraryQueryKind = "reset" | "reload" | "append";
@@ -134,7 +136,7 @@ export function libraryQueryReloadWindows(loadedCount: number): Array<{ offset: 
   const windows: Array<{ offset: number; limit: number }> = [];
   let offset = 0;
   while (offset < loadedCount) {
-    const limit = Math.min(LIBRARY_QUERY_WINDOW_SIZE, loadedCount - offset);
+    const limit = Math.min(LIBRARY_QUERY_RELOAD_LIMIT, loadedCount - offset);
     windows.push({ offset, limit });
     offset += limit;
   }

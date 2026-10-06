@@ -10,11 +10,14 @@ public sealed class LibraryCatalogSession
 {
     private const int ItemStatePathChunk = 500;
     private const double DefaultBaselineLoudnessLufs = -18.0;
-    private const string PhotoExtensionsSql =
-        "'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.tiff', '.tif', '.heic', '.heif', '.avif', '.ico', '.svg', '.raw', '.cr2', '.nef', '.orf', '.sr2'";
+    private const int ListCountCacheCapacity = 64;
 
     private readonly string _databasePath;
     private readonly AsyncLocal<WriteScope?> _writeScope = new();
+    private readonly object _listCountLock = new();
+    private readonly Dictionary<string, int> _listCounts = new(StringComparer.Ordinal);
+    private long _listCountRevision = -1;
+    private int _listCountQueries;
 
     public LibraryCatalogSession(string databasePath)
     {
@@ -31,27 +34,34 @@ public sealed class LibraryCatalogSession
         get
         {
             using var connection = LibraryCatalogStore.OpenWrite(_databasePath);
-            using var command = connection.CreateCommand();
-            command.CommandText = "SELECT value FROM catalog_meta WHERE key = 'revision';";
-            var value = command.ExecuteScalar() as string;
-            return long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var revision) ? revision : 0;
+            return ReadRevision(connection);
         }
     }
 
+    /// <summary>How many count queries <see cref="QueryList"/> has run, so tests can see the cache work.</summary>
+    internal int ListCountQueries => Volatile.Read(ref _listCountQueries);
+
+    /// <summary>
+    /// One page of the browse query, with the counts after search and after search and filter. The
+    /// counts are cached by catalog revision, so later pages of the same query do not count again; every
+    /// committed write raises the revision. The page, the counts, and the revision come from one read.
+    /// </summary>
     public LibraryListResult QueryList(LibraryListRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
         using var connection = LibraryCatalogStore.OpenWrite(_databasePath);
         LibraryCatalogListSql.RegisterCollation(connection);
+        using var transaction = connection.BeginTransaction(deferred: true);
 
+        var revision = ReadRevision(connection);
         var catalogTags = ReadCatalogTags(connection);
         var searchArgs = new LibraryCatalogListSql.SqlArgs();
         var searchWhere = LibraryCatalogListSql.BuildWhere(request, includeFilter: false, catalogTags, searchArgs);
-        var searchBaselineCount = ScalarCount(connection, searchWhere, searchArgs);
+        var searchBaselineCount = CachedListCount(connection, revision, searchWhere, searchArgs);
 
         var filterArgs = new LibraryCatalogListSql.SqlArgs();
         var filterWhere = LibraryCatalogListSql.BuildWhere(request, includeFilter: true, catalogTags, filterArgs);
-        var totalCount = ScalarCount(connection, filterWhere, filterArgs);
+        var totalCount = CachedListCount(connection, revision, filterWhere, filterArgs);
 
         var pageArgs = new LibraryCatalogListSql.SqlArgs();
         var pageWhere = LibraryCatalogListSql.BuildWhere(request, includeFilter: true, catalogTags, pageArgs);
@@ -82,12 +92,53 @@ public sealed class LibraryCatalogSession
         }
 
         AttachTags(connection, items);
+        transaction.Commit();
         return new LibraryListResult
         {
             Items = items,
             TotalCount = totalCount,
             SearchBaselineCount = searchBaselineCount
         };
+    }
+
+    private int CachedListCount(SqliteConnection connection, long revision, string where, LibraryCatalogListSql.SqlArgs args)
+    {
+        var key = where + "\u0000" + args.Describe();
+        lock (_listCountLock)
+        {
+            if (_listCountRevision == revision && _listCounts.TryGetValue(key, out var cached))
+            {
+                return cached;
+            }
+        }
+
+        var count = ScalarCount(connection, where, args);
+        Interlocked.Increment(ref _listCountQueries);
+        lock (_listCountLock)
+        {
+            if (revision < _listCountRevision)
+            {
+                return count;
+            }
+
+            if (revision != _listCountRevision || _listCounts.Count >= ListCountCacheCapacity)
+            {
+                _listCounts.Clear();
+                _listCountRevision = revision;
+            }
+
+            _listCounts[key] = count;
+        }
+
+        return count;
+    }
+
+    private static long ReadRevision(SqliteConnection connection)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT value FROM catalog_meta WHERE key = 'revision';";
+        var value = command.ExecuteScalar() as string;
+        return long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var revision) ? revision : 0;
     }
 
     public IReadOnlyList<LibraryCatalogItem> QueryEligible(FilterStateModel filter, MediaTypeValue? requiredMediaType = null)
@@ -184,16 +235,23 @@ public sealed class LibraryCatalogSession
         return LibraryCatalogStore.ExecuteScalarInt(connection, "SELECT COUNT(*) FROM items;");
     }
 
+    /// <summary>
+    /// Global and per-source figures from one pass over the items, grouped by source id and media type.
+    /// An item counts toward the source whose id it holds, and is a photo when its media type is photo
+    /// and a video otherwise.
+    /// </summary>
     public CatalogLibraryStats ReadLibraryStats()
     {
         using var connection = LibraryCatalogStore.OpenWrite(_databasePath);
-        var global = ReadGlobalStats(connection);
-        var sources = ReadSourceStats(connection);
-        return new CatalogLibraryStats
+        using var transaction = connection.BeginTransaction(deferred: true);
+        var groups = ReadStatsGroups(connection);
+        var stats = new CatalogLibraryStats
         {
-            Global = global,
-            Sources = sources
+            Global = BuildGlobalStats(groups, ReadBaselineLoudness(connection)),
+            Sources = BuildSourceStats(connection, groups)
         };
+        transaction.Commit();
+        return stats;
     }
 
     public IReadOnlyList<CatalogItemState> ReadItemStates(IReadOnlyList<string>? paths)
@@ -590,6 +648,88 @@ public sealed class LibraryCatalogSession
 
     public static JsonObject ToItemJson(LibraryCatalogItem item) => ToItem(item);
 
+    /// <summary>
+    /// The items whose name sort key needs computing: every item when the key version stored in the
+    /// catalog is not <see cref="LibraryCatalogNameSortKey.Version"/>, otherwise those without a key.
+    /// </summary>
+    public CatalogNameSortKeyWork ReadNameSortKeyWork()
+    {
+        using var connection = LibraryCatalogStore.OpenWrite(_databasePath);
+        using var transaction = connection.BeginTransaction(deferred: true);
+        var stored = ScalarString(
+            connection,
+            transaction,
+            "SELECT value FROM catalog_meta WHERE key = $key;",
+            ("$key", LibraryCatalogStore.NameSortKeyVersionKey));
+        var versionChanged = !string.Equals(
+            stored,
+            LibraryCatalogNameSortKey.Version.ToString(CultureInfo.InvariantCulture),
+            StringComparison.Ordinal);
+        using var command = connection.CreateCommand();
+        command.CommandText = versionChanged
+            ? "SELECT id, file_name FROM items ORDER BY position;"
+            : "SELECT id, file_name FROM items WHERE file_name_sort_key IS NULL ORDER BY position;";
+        var items = new List<CatalogNameSortKeyItem>();
+        using (var reader = command.ExecuteReader())
+        {
+            while (reader.Read())
+            {
+                items.Add(new CatalogNameSortKeyItem(reader.GetString(0), reader.GetString(1)));
+            }
+        }
+
+        transaction.Commit();
+        return new CatalogNameSortKeyWork { Items = items, VersionChanged = versionChanged };
+    }
+
+    /// <summary>
+    /// Writes each item's name sort key, skipping an item renamed since it was read and a key that is
+    /// already right. Returns how many keys changed.
+    /// </summary>
+    public int WriteNameSortKeys(IReadOnlyList<CatalogNameSortKeyItem> items)
+    {
+        ArgumentNullException.ThrowIfNull(items);
+        var written = 0;
+        Commit((connection, transaction) =>
+        {
+            written = 0;
+            using var command = connection.CreateCommand();
+            command.Transaction = transaction;
+            command.CommandText = """
+                UPDATE items
+                SET file_name_sort_key = $key
+                WHERE id = $id
+                  AND file_name = $name
+                  AND (file_name_sort_key IS NULL OR file_name_sort_key != $key);
+                """;
+            var key = command.Parameters.Add("$key", SqliteType.Blob);
+            var id = command.Parameters.Add("$id", SqliteType.Text);
+            var name = command.Parameters.Add("$name", SqliteType.Text);
+            foreach (var item in items)
+            {
+                key.Value = LibraryCatalogNameSortKey.Compute(item.FileName);
+                id.Value = item.Id;
+                name.Value = item.FileName;
+                written += command.ExecuteNonQuery();
+            }
+
+            return written > 0;
+        });
+        return written;
+    }
+
+    /// <summary>Records that every stored name sort key is at <see cref="LibraryCatalogNameSortKey.Version"/>.</summary>
+    public bool SetNameSortKeyVersion()
+    {
+        return Commit((connection, transaction) =>
+            LibraryCatalogStore.Execute(
+                connection,
+                transaction,
+                "INSERT OR REPLACE INTO catalog_meta (key, value) VALUES ($key, $value);",
+                ("$key", LibraryCatalogStore.NameSortKeyVersionKey),
+                ("$value", LibraryCatalogNameSortKey.Version.ToString(CultureInfo.InvariantCulture))) > 0);
+    }
+
     public void RunInTransaction(Action work)
     {
         ArgumentNullException.ThrowIfNull(work);
@@ -710,13 +850,13 @@ public sealed class LibraryCatalogSession
                     is_favorite, is_blacklisted, play_count, last_played_utc, media_type, fingerprint,
                     fingerprint_algorithm, fingerprint_version, file_size_bytes, last_write_time_utc,
                     fingerprint_last_utc, fingerprint_status, loudness_error,
-                    thumbnail_revision, thumbnail_width, thumbnail_height)
+                    thumbnail_revision, thumbnail_width, thumbnail_height, file_name_sort_key)
                 VALUES (
                     $id, $position, $source, $full, $fullFold, $relative, $relativeFold,
                     $file, $fileFold, $duration, $audio, $loudness, $peak,
                     $favorite, $blacklisted, $plays, $played, $media, $fingerprint,
                     $algorithm, $fpVersion, $size, $write, $fpLast, $fpStatus, $loudnessError,
-                    $thumbRevision, $thumbWidth, $thumbHeight);
+                    $thumbRevision, $thumbWidth, $thumbHeight, $fileKey);
                 """,
                 ("$id", item.Id),
                 ("$position", position),
@@ -746,7 +886,8 @@ public sealed class LibraryCatalogSession
                 ("$loudnessError", (object?)item.LoudnessError ?? DBNull.Value),
                 ("$thumbRevision", (object?)item.ThumbnailRevision ?? DBNull.Value),
                 ("$thumbWidth", (object?)item.ThumbnailWidth ?? DBNull.Value),
-                ("$thumbHeight", (object?)item.ThumbnailHeight ?? DBNull.Value)) > 0;
+                ("$thumbHeight", (object?)item.ThumbnailHeight ?? DBNull.Value),
+                ("$fileKey", LibraryCatalogNameSortKey.Compute(item.FileName))) > 0;
             if (!inserted)
             {
                 return false;
@@ -772,7 +913,7 @@ public sealed class LibraryCatalogSession
                 UPDATE items
                 SET source_id = $source, full_path = $full, full_path_fold = $fullFold,
                     relative_path = $relative, relative_path_fold = $relativeFold,
-                    file_name = $file, file_name_fold = $fileFold, media_type = $media
+                    file_name = $file, file_name_fold = $fileFold, file_name_sort_key = $fileKey, media_type = $media
                 WHERE id = $id;
                 """,
                 ("$id", id),
@@ -783,6 +924,7 @@ public sealed class LibraryCatalogSession
                 ("$relativeFold", LibraryCatalogStore.Fold(relativePath)),
                 ("$file", fileName),
                 ("$fileFold", LibraryCatalogStore.Fold(fileName)),
+                ("$fileKey", LibraryCatalogNameSortKey.Compute(fileName)),
                 ("$media", mediaType)) > 0);
     }
 
@@ -2405,71 +2547,85 @@ public sealed class LibraryCatalogSession
         return string.Format(CultureInfo.InvariantCulture, "{0:00}:{1:00}:{2:00}", hours, minutes, secs);
     }
 
-    private static CatalogGlobalStats ReadGlobalStats(SqliteConnection connection)
+    private readonly record struct StatsGroup(
+        string SourceId,
+        bool IsPhoto,
+        long Total,
+        long Favorites,
+        long Blacklisted,
+        long Played,
+        long Plays,
+        long WithAudio,
+        long WithoutAudio,
+        long DurationSeconds,
+        long DurationCount);
+
+    private static List<StatsGroup> ReadStatsGroups(SqliteConnection connection)
     {
+        var ticks = TimeSpan.TicksPerSecond.ToString(CultureInfo.InvariantCulture);
         using var command = connection.CreateCommand();
         command.CommandText = $"""
-            WITH flagged AS (
-            {FlaggedItemsSql()}
-            )
             SELECT
-              COUNT(*) AS total_media,
-              COALESCE(SUM(is_video), 0) AS total_videos,
-              COALESCE(SUM(1 - is_video), 0) AS total_photos,
-              COALESCE(SUM(CASE WHEN is_favorite != 0 THEN 1 ELSE 0 END), 0) AS favorites,
-              COALESCE(SUM(CASE WHEN is_blacklisted != 0 THEN 1 ELSE 0 END), 0) AS blacklisted,
-              COALESCE(SUM(CASE WHEN is_video = 1 AND play_count > 0 THEN 1 ELSE 0 END), 0) AS unique_played_videos,
-              COALESCE(SUM(CASE WHEN is_video = 0 AND play_count > 0 THEN 1 ELSE 0 END), 0) AS unique_played_photos,
-              COALESCE(SUM(CASE WHEN play_count > 0 THEN 1 ELSE 0 END), 0) AS unique_played_media,
-              COALESCE(SUM(CASE WHEN play_count > 0 THEN play_count ELSE 0 END), 0) AS total_plays,
-              COALESCE(SUM(CASE WHEN is_video = 1 AND has_audio IS NOT NULL AND has_audio != 0 THEN 1 ELSE 0 END), 0) AS videos_with_audio,
-              COALESCE(SUM(CASE WHEN is_video = 1 AND has_audio IS NOT NULL AND has_audio = 0 THEN 1 ELSE 0 END), 0) AS videos_without_audio
-            FROM flagged;
+              source_id,
+              media_type,
+              COUNT(*),
+              SUM(CASE WHEN is_favorite != 0 THEN 1 ELSE 0 END),
+              SUM(CASE WHEN is_blacklisted != 0 THEN 1 ELSE 0 END),
+              SUM(CASE WHEN play_count > 0 THEN 1 ELSE 0 END),
+              SUM(CASE WHEN play_count > 0 THEN play_count ELSE 0 END),
+              SUM(CASE WHEN has_audio IS NOT NULL AND has_audio != 0 THEN 1 ELSE 0 END),
+              SUM(CASE WHEN has_audio IS NOT NULL AND has_audio = 0 THEN 1 ELSE 0 END),
+              COALESCE(SUM((CASE WHEN duration_ticks < 0 THEN 0 ELSE duration_ticks END) / {ticks}), 0),
+              COUNT(duration_ticks)
+            FROM items
+            GROUP BY source_id, media_type;
             """;
-        int totalVideos;
-        int totalPhotos;
-        int totalMedia;
-        int favorites;
-        int blacklisted;
-        int uniquePlayedVideos;
-        int uniquePlayedPhotos;
-        int uniquePlayedMedia;
-        int totalPlays;
-        int videosWithAudio;
-        int videosWithoutAudio;
-        using (var reader = command.ExecuteReader())
+        using var reader = command.ExecuteReader();
+        var groups = new List<StatsGroup>();
+        while (reader.Read())
         {
-            reader.Read();
-            totalVideos = ReadCount(reader, 1);
-            totalPhotos = ReadCount(reader, 2);
-            totalMedia = ReadCount(reader, 0);
-            favorites = ReadCount(reader, 3);
-            blacklisted = ReadCount(reader, 4);
-            uniquePlayedVideos = ReadCount(reader, 5);
-            uniquePlayedPhotos = ReadCount(reader, 6);
-            uniquePlayedMedia = ReadCount(reader, 7);
-            totalPlays = ReadCount(reader, 8);
-            videosWithAudio = ReadCount(reader, 9);
-            videosWithoutAudio = ReadCount(reader, 10);
+            groups.Add(new StatsGroup(
+                reader.GetString(0),
+                reader.GetInt32(1) == (int)MediaTypeValue.Photo,
+                reader.GetInt64(2),
+                reader.GetInt64(3),
+                reader.GetInt64(4),
+                reader.GetInt64(5),
+                reader.GetInt64(6),
+                reader.GetInt64(7),
+                reader.GetInt64(8),
+                reader.GetInt64(9),
+                reader.GetInt64(10)));
         }
 
+        return groups;
+    }
+
+    private static CatalogGlobalStats BuildGlobalStats(IReadOnlyList<StatsGroup> groups, double baselineLoudness)
+    {
+        var videos = groups.Where(group => !group.IsPhoto).ToList();
+        var photos = groups.Where(group => group.IsPhoto).ToList();
+        var totalVideos = ToCount(videos.Sum(group => group.Total));
+        var totalPhotos = ToCount(photos.Sum(group => group.Total));
+        var uniquePlayedVideos = ToCount(videos.Sum(group => group.Played));
+        var uniquePlayedPhotos = ToCount(photos.Sum(group => group.Played));
         return new CatalogGlobalStats
         {
             TotalVideos = totalVideos,
             TotalPhotos = totalPhotos,
-            TotalMedia = totalMedia,
-            Favorites = favorites,
-            Blacklisted = blacklisted,
+            TotalMedia = totalVideos + totalPhotos,
+            Favorites = ToCount(groups.Sum(group => group.Favorites)),
+            Blacklisted = ToCount(groups.Sum(group => group.Blacklisted)),
             UniquePlayedVideos = uniquePlayedVideos,
             UniquePlayedPhotos = uniquePlayedPhotos,
-            UniquePlayedMedia = uniquePlayedMedia,
+            UniquePlayedMedia = uniquePlayedVideos + uniquePlayedPhotos,
             NeverPlayedVideos = Math.Max(0, totalVideos - uniquePlayedVideos),
             NeverPlayedPhotos = Math.Max(0, totalPhotos - uniquePlayedPhotos),
-            NeverPlayedMedia = Math.Max(0, totalMedia - uniquePlayedMedia),
-            TotalPlays = totalPlays,
-            VideosWithAudio = videosWithAudio,
-            VideosWithoutAudio = videosWithoutAudio,
-            BaselineLoudnessLufs = ReadBaselineLoudness(connection)
+            NeverPlayedMedia = Math.Max(0, totalVideos + totalPhotos - uniquePlayedVideos - uniquePlayedPhotos),
+            TotalPlays = ToCount(groups.Sum(group => group.Plays)),
+            VideosWithAudio = ToCount(videos.Sum(group => group.WithAudio)),
+            VideosWithoutAudio = ToCount(videos.Sum(group => group.WithoutAudio)),
+            BaselineLoudnessLufs = baselineLoudness
         };
     }
 
@@ -2503,52 +2659,42 @@ public sealed class LibraryCatalogSession
         return values[index];
     }
 
-    private static List<CatalogSourceStats> ReadSourceStats(SqliteConnection connection)
+    private static List<CatalogSourceStats> BuildSourceStats(SqliteConnection connection, IReadOnlyList<StatsGroup> groups)
     {
         using var command = connection.CreateCommand();
-        command.CommandText = $"""
-            WITH flagged AS (
-            {FlaggedItemsSql()}
-            )
-            SELECT
-              sources.id,
-              sources.root_path,
-              sources.display_name,
-              sources.is_enabled,
-              COUNT(flagged.id) AS total_media,
-              COALESCE(SUM(CASE WHEN flagged.id IS NOT NULL THEN flagged.is_video ELSE 0 END), 0) AS total_videos,
-              COALESCE(SUM(CASE WHEN flagged.id IS NOT NULL THEN 1 - flagged.is_video ELSE 0 END), 0) AS total_photos,
-              COALESCE(SUM(CASE WHEN flagged.is_video = 1 AND flagged.has_audio IS NOT NULL AND flagged.has_audio != 0 THEN 1 ELSE 0 END), 0) AS videos_with_audio,
-              COALESCE(SUM(CASE WHEN flagged.is_video = 1 AND flagged.has_audio IS NOT NULL AND flagged.has_audio = 0 THEN 1 ELSE 0 END), 0) AS videos_without_audio,
-              COALESCE(SUM(CASE WHEN flagged.is_video = 1 AND flagged.whole_seconds IS NOT NULL THEN flagged.whole_seconds ELSE 0 END), 0) AS duration_seconds,
-              COALESCE(SUM(CASE WHEN flagged.is_video = 1 AND flagged.whole_seconds IS NOT NULL THEN 1 ELSE 0 END), 0) AS duration_count
+        command.CommandText = """
+            SELECT id, root_path, display_name, is_enabled
             FROM sources
-            LEFT JOIN flagged ON {ItemBelongsToSourceSql()}
-            WHERE TRIM(sources.id) != ''
-            GROUP BY sources.position, sources.id, sources.root_path, sources.display_name, sources.is_enabled
-            ORDER BY sources.position;
+            WHERE TRIM(id) != ''
+            ORDER BY position;
             """;
         using var reader = command.ExecuteReader();
         var sources = new List<CatalogSourceStats>();
         while (reader.Read())
         {
-            var durationSeconds = reader.GetInt64(9);
-            var durationCount = reader.GetInt64(10);
-            var totalVideos = ReadCount(reader, 5);
-            var totalPhotos = ReadCount(reader, 6);
+            var sourceId = reader.GetString(0);
+            var videos = groups
+                .Where(group => !group.IsPhoto && string.Equals(group.SourceId, sourceId, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            var photos = groups
+                .Where(group => group.IsPhoto && string.Equals(group.SourceId, sourceId, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            var totalVideos = ToCount(videos.Sum(group => group.Total));
+            var totalPhotos = ToCount(photos.Sum(group => group.Total));
+            var durationSeconds = videos.Sum(group => group.DurationSeconds);
             sources.Add(new CatalogSourceStats
             {
-                SourceId = reader.GetString(0),
+                SourceId = sourceId,
                 RootPath = reader.GetString(1),
                 DisplayName = reader.IsDBNull(2) ? null : reader.GetString(2),
                 IsEnabled = reader.GetInt64(3) != 0,
                 TotalVideos = totalVideos,
                 TotalPhotos = totalPhotos,
-                TotalMedia = ReadCount(reader, 4),
-                VideosWithAudio = ReadCount(reader, 7),
-                VideosWithoutAudio = ReadCount(reader, 8),
+                TotalMedia = totalVideos + totalPhotos,
+                VideosWithAudio = ToCount(videos.Sum(group => group.WithAudio)),
+                VideosWithoutAudio = ToCount(videos.Sum(group => group.WithoutAudio)),
                 TotalDurationSeconds = durationSeconds,
-                AverageDurationSeconds = AverageDurationSeconds(durationSeconds, durationCount)
+                AverageDurationSeconds = AverageDurationSeconds(durationSeconds, videos.Sum(group => group.DurationCount))
             });
         }
 
@@ -2566,77 +2712,7 @@ public sealed class LibraryCatalogSession
         return TimeSpan.FromTicks(averageTicks).TotalSeconds;
     }
 
-    private static int ReadCount(SqliteDataReader reader, int ordinal) =>
-        Convert.ToInt32(reader.GetInt64(ordinal), CultureInfo.InvariantCulture);
-
-    private static string FlaggedItemsSql()
-    {
-        var ticks = TimeSpan.TicksPerSecond.ToString(CultureInfo.InvariantCulture);
-        return $"""
-            SELECT
-              items.id,
-              items.source_id,
-              items.full_path,
-              items.has_audio,
-              items.is_favorite,
-              items.is_blacklisted,
-              items.play_count,
-              {IsVideoSql("items")} AS is_video,
-              CASE
-                WHEN items.duration_ticks IS NULL THEN NULL
-                ELSE (CASE WHEN items.duration_ticks < 0 THEN 0 ELSE items.duration_ticks END) / {ticks}
-              END AS whole_seconds
-            FROM items
-            """;
-    }
-
-    private static string IsVideoSql(string itemAlias)
-    {
-        var path = $"{itemAlias}.full_path";
-        var media = $"{itemAlias}.media_type";
-        var slashPath = $"REPLACE({path}, '\\', '/')";
-        var fileName = $"""
-            CASE
-              WHEN INSTR({slashPath}, '/') = 0 THEN {slashPath}
-              ELSE REPLACE({slashPath}, RTRIM({slashPath}, REPLACE({slashPath}, '/', '')), '')
-            END
-            """;
-        var extension = $"""
-            CASE
-              WHEN INSTR({fileName}, '.') = 0 THEN ''
-              ELSE '.' || LOWER(REPLACE({fileName}, RTRIM({fileName}, REPLACE({fileName}, '.', '')), ''))
-            END
-            """;
-        return $"""
-            (CASE
-              WHEN {media} = {(int)MediaTypeValue.Photo} THEN 0
-              WHEN {media} = {(int)MediaTypeValue.Video} THEN 1
-              WHEN {extension} IN ({PhotoExtensionsSql}) THEN 0
-              ELSE 1
-            END)
-            """;
-    }
-
-    private static string ItemBelongsToSourceSql()
-    {
-        const string itemPath = "RTRIM(REPLACE(flagged.full_path, '\\', '/'), '/')";
-        const string rootPath = "RTRIM(REPLACE(sources.root_path, '\\', '/'), '/')";
-        return $"""
-            (
-              TRIM(flagged.source_id) != ''
-              AND flagged.source_id = sources.id COLLATE NOCASE
-            )
-            OR
-            (
-              TRIM(flagged.source_id) = ''
-              AND {rootPath} != ''
-              AND (
-                LOWER({itemPath}) = LOWER({rootPath})
-                OR INSTR(LOWER({itemPath}), LOWER({rootPath}) || '/') = 1
-              )
-            )
-            """;
-    }
+    private static int ToCount(long value) => Convert.ToInt32(value, CultureInfo.InvariantCulture);
 
     private static string FormatUtc(DateTime value)
     {
@@ -2756,6 +2832,16 @@ public sealed class CatalogDuplicateScanItem
     public int PlayCount { get; init; }
     public int TagCount { get; init; }
 }
+
+public sealed class CatalogNameSortKeyWork
+{
+    public IReadOnlyList<CatalogNameSortKeyItem> Items { get; init; } = [];
+
+    /// <summary>The stored key version differs, so every item is listed and the version is written after.</summary>
+    public bool VersionChanged { get; init; }
+}
+
+public readonly record struct CatalogNameSortKeyItem(string Id, string FileName);
 
 public sealed class CatalogStoredItem
 {

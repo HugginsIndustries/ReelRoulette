@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.InteropServices;
 using Microsoft.Data.Sqlite;
@@ -82,6 +83,11 @@ public sealed class LibraryCatalogOpenResult
     public LibraryCatalogOpenStatus Status { get; init; }
     public string? Message { get; init; }
     public LibraryCatalogSession? Session { get; init; }
+
+    /// <summary>The schema version this open migrated the catalog from, or null when it was current.</summary>
+    public int? MigratedFromSchemaVersion { get; init; }
+
+    public TimeSpan MigrationElapsed { get; init; }
 }
 
 public sealed class LibraryCatalogSnapshot
@@ -156,7 +162,11 @@ public sealed class LibraryCatalogPreset
 
 public static class LibraryCatalogStore
 {
-    public const int SchemaVersion = 2;
+    public const int SchemaVersion = 3;
+
+    /// <summary>The schema version before the stored name sort key. Open migrates it in place.</summary>
+    public const int MigratableSchemaVersion = 2;
+
     public const string DatabaseFileName = "library.db";
     public const string IncomingFileName = "library.db.incoming";
     public const string PreviousFileName = "library.db.previous";
@@ -183,8 +193,26 @@ public static class LibraryCatalogStore
     private const string RefusedFileName = "library.db.refused";
     internal const string UncategorizedCategoryId = "uncategorized";
     internal const string UncategorizedCategoryName = "Uncategorized";
+    internal const string NameSortKeyVersionKey = "name_sort_key_version";
 
-    private static readonly string[] Schema2Tables =
+    /// <summary>
+    /// One index per sort mode and direction, each followed by the name key tie-break, so no sort reads
+    /// the whole library. The item id tie-break is left out to keep the indexes small: SQLite sorts only
+    /// rows whose name ties exactly. The expressions must match the list query's ORDER BY.
+    /// </summary>
+    private const string SortIndexesSql = """
+        CREATE INDEX idx_items_name_sort ON items(file_name_sort_key);
+        CREATE INDEX idx_items_last_played_asc ON items(COALESCE(last_played_utc, 0), file_name_sort_key);
+        CREATE INDEX idx_items_last_played_desc ON items(COALESCE(last_played_utc, 0) DESC, file_name_sort_key);
+        CREATE INDEX idx_items_play_count_asc ON items(play_count, file_name_sort_key);
+        CREATE INDEX idx_items_play_count_desc ON items(play_count DESC, file_name_sort_key);
+        CREATE INDEX idx_items_duration_asc ON items(COALESCE(duration_ticks, 0), file_name_sort_key);
+        CREATE INDEX idx_items_duration_desc ON items(COALESCE(duration_ticks, 0) DESC, file_name_sort_key);
+        CREATE INDEX idx_items_date_added_asc ON items(COALESCE(last_write_time_utc, 0), file_name_sort_key);
+        CREATE INDEX idx_items_date_added_desc ON items(COALESCE(last_write_time_utc, 0) DESC, file_name_sort_key);
+        """;
+
+    private static readonly string[] CatalogTables =
     [
         "sources",
         "items",
@@ -202,6 +230,14 @@ public static class LibraryCatalogStore
         "thumbnail_width",
         "thumbnail_height"
     ];
+
+    private static readonly string[] Schema3ItemColumns = [.. Schema2ItemColumns, "file_name_sort_key"];
+
+    /// <summary>
+    /// Runs inside the migration transaction after every change and before it commits, with the path of
+    /// the database being migrated. Tests use it to interrupt a migration.
+    /// </summary>
+    internal static Action<string>? BeforeMigrationCommit { get; set; }
 
     public static LibraryCatalogOpenResult Open(string directory)
     {
@@ -221,7 +257,7 @@ public static class LibraryCatalogStore
             switch (CheckCatalogFile(databasePath))
             {
                 case CatalogFileState.Usable:
-                    return Opened(databasePath);
+                    return OpenUsable(databasePath);
                 case CatalogFileState.Unreadable:
                     return Unavailable(LibraryCatalogOpenStatus.Unreadable, UnreadableMessage);
             }
@@ -245,6 +281,94 @@ public static class LibraryCatalogStore
 
         CreateEmpty(directory, databasePath);
         return Opened(databasePath);
+    }
+
+    /// <summary>
+    /// Opens a usable catalog, migrating an older schema in place first. The migration is one SQLite
+    /// transaction, so an interrupted one leaves the older catalog as it was, and no replace file is
+    /// ever written beside it. One that cannot run leaves the catalog unchanged and reports it unreadable.
+    /// </summary>
+    private static LibraryCatalogOpenResult OpenUsable(string databasePath)
+    {
+        int? version;
+        var stopwatch = Stopwatch.StartNew();
+        try
+        {
+            version = ReadSchemaVersion(databasePath);
+            if (version == SchemaVersion)
+            {
+                return Opened(databasePath);
+            }
+
+            MigrateToCurrentSchema(databasePath);
+        }
+        catch (Exception ex) when (ex is SqliteException or IOException or UnauthorizedAccessException)
+        {
+            return Unavailable(LibraryCatalogOpenStatus.Unreadable, UnreadableMessage);
+        }
+
+        return new LibraryCatalogOpenResult
+        {
+            Status = LibraryCatalogOpenStatus.Opened,
+            Session = new LibraryCatalogSession(databasePath),
+            MigratedFromSchemaVersion = version,
+            MigrationElapsed = stopwatch.Elapsed
+        };
+    }
+
+    /// <summary>
+    /// Moves a schema version 2 catalog to the current schema: adds the name sort key column and fills
+    /// every key, adds the sort indexes, and drops the item tag index that duplicates the primary key and
+    /// the file name fold index, which no query uses since search matches with <c>instr</c>.
+    /// </summary>
+    private static void MigrateToCurrentSchema(string databasePath)
+    {
+        using var connection = OpenWrite(databasePath);
+        using (var transaction = connection.BeginTransaction())
+        {
+            Execute(connection, transaction, "ALTER TABLE items ADD COLUMN file_name_sort_key BLOB NULL;");
+            var names = new List<(string Id, string FileName)>();
+            using (var read = connection.CreateCommand())
+            {
+                read.Transaction = transaction;
+                read.CommandText = "SELECT id, file_name FROM items;";
+                using var reader = read.ExecuteReader();
+                while (reader.Read())
+                {
+                    names.Add((reader.GetString(0), reader.GetString(1)));
+                }
+            }
+
+            using (var update = connection.CreateCommand())
+            {
+                update.Transaction = transaction;
+                update.CommandText = "UPDATE items SET file_name_sort_key = $key WHERE id = $id;";
+                var key = update.Parameters.Add("$key", SqliteType.Blob);
+                var id = update.Parameters.Add("$id", SqliteType.Text);
+                foreach (var (itemId, fileName) in names)
+                {
+                    key.Value = LibraryCatalogNameSortKey.Compute(fileName);
+                    id.Value = itemId;
+                    update.ExecuteNonQuery();
+                }
+            }
+
+            Execute(connection, transaction, "DROP INDEX IF EXISTS idx_item_tags_item_id;");
+            Execute(connection, transaction, "DROP INDEX IF EXISTS idx_items_file_name_fold;");
+            Execute(connection, transaction, SortIndexesSql);
+            Execute(
+                connection,
+                transaction,
+                "INSERT OR REPLACE INTO catalog_meta (key, value) VALUES ($key, $value);",
+                ("$key", NameSortKeyVersionKey),
+                ("$value", LibraryCatalogNameSortKey.Version.ToString(CultureInfo.InvariantCulture)));
+            Execute(connection, transaction, $"PRAGMA user_version = {SchemaVersion};");
+            BeforeMigrationCommit?.Invoke(databasePath);
+            transaction.Commit();
+        }
+
+        // Filling every key rewrites most item pages into the WAL.
+        Execute(connection, "PRAGMA wal_checkpoint(TRUNCATE);");
     }
 
     /// <summary>
@@ -337,7 +461,7 @@ public static class LibraryCatalogStore
             return DatabaseContentRead.Unreadable;
         }
 
-        if (InspectCatalogFile(databasePath) != CatalogFileInspection.Usable)
+        if (InspectCatalogFile(databasePath) is not (CatalogFileInspection.Usable or CatalogFileInspection.Older))
         {
             return DatabaseContentRead.Unreadable;
         }
@@ -370,6 +494,21 @@ public static class LibraryCatalogStore
         {
             DeleteSidecars(incoming);
             throw new InvalidDataException("Incoming catalog is not a usable database.");
+        }
+
+        // An export from an older build is migrated here, so the published catalog is always current.
+        if (ReadSchemaVersion(incoming) < SchemaVersion)
+        {
+            try
+            {
+                MigrateToCurrentSchema(incoming);
+                CheckpointStandalone(incoming);
+            }
+            catch
+            {
+                DeleteSidecars(incoming);
+                throw;
+            }
         }
 
         SyncFile(incoming);
@@ -741,7 +880,8 @@ public static class LibraryCatalogStore
                 loudness_error TEXT NULL,
                 thumbnail_revision TEXT NULL,
                 thumbnail_width INTEGER NULL,
-                thumbnail_height INTEGER NULL
+                thumbnail_height INTEGER NULL,
+                file_name_sort_key BLOB NULL
             );
             CREATE TABLE categories (
                 id TEXT PRIMARY KEY,
@@ -775,11 +915,10 @@ public static class LibraryCatalogStore
             CREATE INDEX idx_sources_root_path_fold ON sources(root_path_fold);
             CREATE INDEX idx_items_full_path_fold ON items(full_path_fold);
             CREATE INDEX idx_items_relative_path_fold ON items(relative_path_fold);
-            CREATE INDEX idx_items_file_name_fold ON items(file_name_fold);
             CREATE INDEX idx_tags_name_fold ON tags(name_fold);
-            CREATE INDEX idx_item_tags_item_id ON item_tags(item_id);
             CREATE INDEX idx_item_tags_name_fold ON item_tags(name_fold);
             """);
+        Execute(connection, SortIndexesSql);
 
         Execute(
             connection,
@@ -789,6 +928,12 @@ public static class LibraryCatalogStore
             ("$name", UncategorizedCategoryName),
             ("$sort", int.MaxValue));
         Execute(connection, transaction, "INSERT INTO catalog_meta (key, value) VALUES ('revision', '0');");
+        Execute(
+            connection,
+            transaction,
+            "INSERT INTO catalog_meta (key, value) VALUES ($key, $value);",
+            ("$key", NameSortKeyVersionKey),
+            ("$value", LibraryCatalogNameSortKey.Version.ToString(CultureInfo.InvariantCulture)));
         Execute(connection, transaction, $"PRAGMA user_version = {SchemaVersion};");
         transaction.Commit();
         Execute(connection, "PRAGMA wal_checkpoint(TRUNCATE);");
@@ -819,7 +964,10 @@ public static class LibraryCatalogStore
         Unavailable,
 
         /// <summary>A newer build wrote this file.</summary>
-        Newer
+        Newer,
+
+        /// <summary>A usable catalog at the older schema version that open and import migrate.</summary>
+        Older
     }
 
     public static CatalogFileInspection InspectCatalogFile(string databasePath)
@@ -837,16 +985,19 @@ public static class LibraryCatalogStore
                 return CatalogFileInspection.Newer;
             }
 
-            if (version != SchemaVersion)
+            if (version is not (SchemaVersion or MigratableSchemaVersion))
             {
                 return CatalogFileInspection.NotADatabase;
             }
 
             using var connection = OpenReadOnly(databasePath);
             connection.DefaultTimeout = 1;
-            return HasRequiredCatalogSchema(connection)
-                ? CatalogFileInspection.Usable
-                : CatalogFileInspection.NotADatabase;
+            if (!HasRequiredCatalogSchema(connection))
+            {
+                return CatalogFileInspection.NotADatabase;
+            }
+
+            return version == SchemaVersion ? CatalogFileInspection.Usable : CatalogFileInspection.Older;
         }
         catch (SqliteException ex) when (ex.SqliteErrorCode == SqliteNotADatabase)
         {
@@ -1008,24 +1159,29 @@ public static class LibraryCatalogStore
         return BinaryPrimitives.ReadInt32BigEndian(header.AsSpan(SqliteUserVersionOffset, 4));
     }
 
+    /// <summary>
+    /// The current schema, or the older one that open migrates. Any other version is not a catalog this
+    /// build can use; a newer one is caught before this by the header check.
+    /// </summary>
     private static bool HasRequiredCatalogSchema(SqliteConnection connection)
     {
-        return HasStrictSchema2(connection);
-    }
-
-    private static bool HasStrictSchema2(SqliteConnection connection)
-    {
-        if (ExecuteScalarInt(connection, "PRAGMA user_version;") != SchemaVersion)
+        var itemColumns = ExecuteScalarInt(connection, "PRAGMA user_version;") switch
+        {
+            SchemaVersion => Schema3ItemColumns,
+            MigratableSchemaVersion => Schema2ItemColumns,
+            _ => null
+        };
+        if (itemColumns == null)
         {
             return false;
         }
 
-        if (!HasTables(connection, Schema2Tables) || HasTables(connection, ["available_tags"]))
+        if (!HasTables(connection, CatalogTables) || HasTables(connection, ["available_tags"]))
         {
             return false;
         }
 
-        return Schema2ItemColumns.All(column => HasItemColumn(connection, column));
+        return itemColumns.All(column => HasItemColumn(connection, column));
     }
 
     private static LibraryCatalogSnapshot ReadSnapshot(SqliteConnection connection)

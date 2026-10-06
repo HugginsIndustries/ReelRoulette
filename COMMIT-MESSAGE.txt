@@ -19,13 +19,12 @@ Instructions:
 
 Commit Message:
 
-M11a: Leave a newer or damaged catalog untouched and run without a library
+M11b: Make library browse cheap at any depth and reload the window in one request
 
-- A `library.db`, `library.db.previous`, or `library.db.incoming` saved by a newer version, or one that cannot be opened or read at the moment, is left byte-identical by open, replace recovery, and import, and the version is read from the file header so no sidecar files are created.
-- A catalog that is not a database or is corrupt is still moved to `library.db.refused`, and an empty catalog is created only on a fresh install with no `library.db`, refused file, or catalog backup.
-- Without a library the server keeps running: library routes return 503 with the reason and a `library_*` code, catalog backups and refresh don't run, and `last.log` gets a warning.
-- `/control/status` adds `libraryState` and `libraryMessage`, and the Operator page shows the message.
-- Backup rotation trims only valid current-version backups; other-version and unrecognized files stay and are not counted toward the limit or the gap.
-- Desktop import refuses to replace a newer catalog, or one it cannot open to check, and changes nothing.
-- Docs cover restoring a backup by hand; the Admin Refresh, Backup, and Duplicate Review milestone adds daily backup retention.
-- `AGENTS.md` adds a best-effort rule: handle what can realistically happen in normal use, and leave improbable cases such as storage corruption out of code, tests, and reviews.
+- The catalog moves to schema version 3: opening a version 2 catalog migrates it in place in one transaction, adding a stored file name sort key that orders like OrdinalIgnoreCase and one index per sort mode and direction, and dropping the item tag index that duplicates its primary key and the file name fold index that no query uses; an interrupted migration leaves version 2 untouched and never writes a previous file.
+- Insert and rename write the key with the row, and a new `nameSortKeys` refresh stage fills missing keys and recomputes them all after a key version change.
+- Desktop import migrates a version 2 export; backup rotation still counts and trims only current-version backups, so version 2 backups stay.
+- Browse counts are cached by catalog revision, search, and filter, so later pages, appends, and reloads at the same revision skip them.
+- Library stats come from one pass grouped by source id and media type instead of matching paths and file extensions.
+- The query limit rises to 10,000 and the WebUI reloads its loaded window in one request; each query writes one `last.log` line with its elapsed time.
+- On a 49,053-item catalog, a page at offset 40,000 drops from 157-320 ms to 36-43 ms, a 5,000-tile reload from 2.7 s to about 0.1 s, and every sort order, filter, and stats figure is unchanged.

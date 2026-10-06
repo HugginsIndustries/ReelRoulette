@@ -1203,6 +1203,7 @@ export interface components {
             offset: number;
             /**
              * Format: int32
+             * @description Up to 10,000, so a client can reload the window it has loaded in one request.
              * @default 100
              */
             limit: number;

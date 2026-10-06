@@ -120,7 +120,7 @@ public sealed class RefreshPipelineServiceTests
         var final = await WaitForCompletionAsync(service, TimeSpan.FromSeconds(10));
         Assert.False(final.IsRunning);
         Assert.Equal(
-            ["sourceRefresh", "fingerprintScan", "durationScan", "loudnessScan", "thumbnailGeneration"],
+            ["sourceRefresh", "nameSortKeys", "fingerprintScan", "durationScan", "loudnessScan", "thumbnailGeneration"],
             final.Stages.Select(s => s.Stage).ToArray());
         Assert.All(final.Stages, stage => Assert.True(stage.IsComplete));
 
@@ -490,6 +490,58 @@ public sealed class RefreshPipelineServiceTests
         Assert.False(stageEvents[0].IsComplete);
         Assert.True(stageEvents[1].IsComplete);
         Assert.Equal(completionMessage, stageEvents[1].Message);
+    }
+
+    [Fact]
+    public void NameSortKeyStage_FillsMissingKeys_AndRecomputesEveryKeyAfterAKeyVersionChange()
+    {
+        using var scope = new DataFolderScope();
+        CatalogSeed.Write(
+            scope.RootPath,
+            items:
+            [
+                new SeedItem("a", Path.Combine(scope.RootPath, "Alpha.mp4")),
+                new SeedItem("b", Path.Combine(scope.RootPath, "beta.mp4")),
+                new SeedItem("c", Path.Combine(scope.RootPath, "\u017Figma.mp4"))
+            ]);
+        var databasePath = Path.Combine(scope.RootPath, "library.db");
+        ExecuteSql(databasePath, "UPDATE items SET file_name_sort_key = NULL WHERE id = 'b';");
+        var state = new ServerStateService();
+        var service = CreateService(state, scope.RootPath);
+
+        service.RunNameSortKeyStage(CancellationToken.None);
+
+        Assert.Equal("Name sort keys complete (1 updated)", service.GetStatus().Stages.Single(s => s.Stage == "nameSortKeys").Message);
+        Assert.Equal(LibraryCatalogNameSortKey.Compute("beta.mp4"), ReadSortKey(databasePath, "b"));
+
+        ExecuteSql(databasePath, "UPDATE items SET file_name_sort_key = x'00' WHERE id IN ('a', 'c');");
+        ExecuteSql(databasePath, "UPDATE catalog_meta SET value = '0' WHERE key = 'name_sort_key_version';");
+
+        service.RunNameSortKeyStage(CancellationToken.None);
+
+        Assert.Equal("Name sort keys complete (2 updated)", service.GetStatus().Stages.Single(s => s.Stage == "nameSortKeys").Message);
+        Assert.Equal(LibraryCatalogNameSortKey.Compute("Alpha.mp4"), ReadSortKey(databasePath, "a"));
+        Assert.Equal(LibraryCatalogNameSortKey.Compute("\u017Figma.mp4"), ReadSortKey(databasePath, "c"));
+        Assert.Empty(CatalogOpen.Host(scope.RootPath).Session.ReadNameSortKeyWork().Items);
+    }
+
+    private static void ExecuteSql(string databasePath, string sql)
+    {
+        using var connection = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={databasePath};Pooling=False");
+        connection.Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        command.ExecuteNonQuery();
+    }
+
+    private static byte[]? ReadSortKey(string databasePath, string id)
+    {
+        using var connection = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={databasePath};Mode=ReadOnly;Pooling=False");
+        connection.Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT file_name_sort_key FROM items WHERE id = $id;";
+        command.Parameters.AddWithValue("$id", id);
+        return command.ExecuteScalar() as byte[];
     }
 
     [Fact]

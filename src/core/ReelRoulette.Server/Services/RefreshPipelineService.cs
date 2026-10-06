@@ -16,6 +16,7 @@ public sealed class RefreshPipelineService : BackgroundService
 {
     private const int ThumbnailMaxEdge = 480;
     private static readonly TimeSpan ScanProgressInterval = TimeSpan.FromMilliseconds(500);
+    private const int NameSortKeyBatchSize = 1000;
 
     private static SemaphoreSlim? _ffprobeSemaphore;
     private static readonly object FfprobeSemaphoreLock = new();
@@ -288,6 +289,7 @@ public sealed class RefreshPipelineService : BackgroundService
                 Stages =
                 [
                     NewStage("sourceRefresh"),
+                    NewStage("nameSortKeys"),
                     NewStage("fingerprintScan"),
                     NewStage("durationScan"),
                     NewStage("loudnessScan"),
@@ -306,6 +308,7 @@ public sealed class RefreshPipelineService : BackgroundService
         try
         {
             await RunSourceRefreshAsync(cancellationToken);
+            RunNameSortKeyStage(cancellationToken);
             await RunFingerprintStageAsync(cancellationToken);
             await RunDurationStageWithOneShotAsync(cancellationToken);
             await RunLoudnessStageWithOneShotAsync(cancellationToken);
@@ -646,6 +649,36 @@ public sealed class RefreshPipelineService : BackgroundService
         CompleteStage("sourceRefresh",
             $"Source refresh complete ({added} added, {removed} removed, {renamed} renamed, {moved} moved, {updated} updated, {unresolvedQueued} unresolved)");
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Fills name sort keys that are missing, and recomputes every key when the key version changed.
+    /// Insert and rename write the key with the row, so this usually finds nothing to do.
+    /// </summary>
+    internal void RunNameSortKeyStage(CancellationToken cancellationToken)
+    {
+        var work = _catalog.Session.ReadNameSortKeyWork();
+        var total = work.Items.Count;
+        var processed = 0;
+        var updated = 0;
+        var progressThrottle = new RefreshProgressThrottle(ScanProgressInterval, _progressClock);
+        foreach (var batch in work.Items.Chunk(NameSortKeyBatchSize))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            updated += _catalog.Session.WriteNameSortKeys(batch);
+            processed += batch.Length;
+            if (progressThrottle.TryEnter())
+            {
+                UpdateStage("nameSortKeys", (int)Math.Round(processed / (double)total * 100.0), $"Name sort keys {processed}/{total}");
+            }
+        }
+
+        if (work.VersionChanged)
+        {
+            _catalog.Session.SetNameSortKeyVersion();
+        }
+
+        CompleteStage("nameSortKeys", $"Name sort keys complete ({updated} updated)");
     }
 
     internal async Task RunFingerprintStageAsync(CancellationToken cancellationToken)

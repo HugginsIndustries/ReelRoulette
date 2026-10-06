@@ -684,7 +684,7 @@ public sealed class LibraryOperationsServiceTests
     }
 
     [Fact]
-    public void GetLibraryStats_ShouldHandleLegacyMediaTypeAndMissingSourceId()
+    public void GetLibraryStats_CountsAnItemByItsSourceIdAndMediaType()
     {
         var appDataRoot = CreateTempAppDataRoot();
         try
@@ -695,29 +695,39 @@ public sealed class LibraryOperationsServiceTests
                 sources: [new SeedSource("src-a", @"C:\media\a", "A")],
                 items:
                 [
-                    new SeedItem("video-legacy", @"C:\media\a\video-legacy.mp4")
+                    new SeedItem("video", @"C:\media\a\video.mp4")
                     {
+                        SourceId = "SRC-A",
                         PlayCount = 1
                     },
-                    new SeedItem("photo-legacy", @"C:\media\a\photo-legacy.jpg")
+                    new SeedItem("photo", @"C:\media\a\photo.jpg")
                     {
+                        SourceId = "src-a",
                         MediaType = 1
-                    }
+                    },
+                    new SeedItem("odd-media-type", @"C:\media\a\odd.jpg")
+                    {
+                        SourceId = "src-a",
+                        MediaType = 2
+                    },
+                    new SeedItem("no-source-id", @"C:\media\a\no-source.mp4")
                 ]);
 
             var host = LibraryCatalogHost.Open(appDataRoot);
             var service = new LibraryOperationsService(host, NullLogger<LibraryOperationsService>.Instance, appDataRoot);
             var stats = service.GetLibraryStats();
 
-            Assert.Equal(1, stats.Global.TotalVideos);
+            // Media type photo is a photo and any other is a video, whatever the extension. An item
+            // counts toward the source whose id it holds, ignoring case, and not by its path.
+            Assert.Equal(3, stats.Global.TotalVideos);
             Assert.Equal(1, stats.Global.TotalPhotos);
-            Assert.Equal(2, stats.Global.TotalMedia);
+            Assert.Equal(4, stats.Global.TotalMedia);
             Assert.Equal(1, stats.Global.UniquePlayedMedia);
 
             var sourceA = Assert.Single(stats.Sources, source => source.SourceId == "src-a");
-            Assert.Equal(1, sourceA.TotalVideos);
+            Assert.Equal(2, sourceA.TotalVideos);
             Assert.Equal(1, sourceA.TotalPhotos);
-            Assert.Equal(2, sourceA.TotalMedia);
+            Assert.Equal(3, sourceA.TotalMedia);
         }
         finally
         {
@@ -756,7 +766,8 @@ public sealed class LibraryOperationsServiceTests
                     },
                     new SeedItem("photo-odd", @"C:\media\a\odd.jpg")
                     {
-                        MediaType = 2
+                        SourceId = "src-a",
+                        MediaType = 1
                     }
                 ]);
 
@@ -1175,9 +1186,9 @@ public sealed class LibraryOperationsServiceTests
             SeedCoreSettings(appDataRoot, enabled: true, minimumGapMinutes: 60, numberOfBackups: 2);
             CatalogSeed.Write(appDataRoot, items: [new SeedItem("item-1", @"C:\media\movie.mp4")]);
             var backupDir = Path.Combine(appDataRoot, "backups");
-            var oldest = SeedBackup(backupDir, "library.db.backup.current-oldest", 2, DateTime.UtcNow.AddHours(-5));
-            var middle = SeedBackup(backupDir, "library.db.backup.current-middle", 2, DateTime.UtcNow.AddHours(-4));
-            var newest = SeedBackup(backupDir, "library.db.backup.current-newest", 2, DateTime.UtcNow.AddHours(-3));
+            var oldest = SeedBackup(backupDir, "library.db.backup.current-oldest", LibraryCatalogStore.SchemaVersion, DateTime.UtcNow.AddHours(-5));
+            var middle = SeedBackup(backupDir, "library.db.backup.current-middle", LibraryCatalogStore.SchemaVersion, DateTime.UtcNow.AddHours(-4));
+            var newest = SeedBackup(backupDir, "library.db.backup.current-newest", LibraryCatalogStore.SchemaVersion, DateTime.UtcNow.AddHours(-3));
 
             // Each is older than every current backup, so rotation would take them first if they counted
             // toward the limit, and one is recent, so it would block the copy if it counted toward the gap.
@@ -1215,7 +1226,7 @@ public sealed class LibraryOperationsServiceTests
             SeedCoreSettings(appDataRoot, enabled: true, minimumGapMinutes: 60, numberOfBackups: 1);
             CatalogSeed.Write(appDataRoot, items: [new SeedItem("item-1", @"C:\media\movie.mp4")]);
             var backupDir = Path.Combine(appDataRoot, "backups");
-            var recent = SeedBackup(backupDir, "library.db.backup.current-recent", 2, DateTime.UtcNow.AddMinutes(-5));
+            var recent = SeedBackup(backupDir, "library.db.backup.current-recent", LibraryCatalogStore.SchemaVersion, DateTime.UtcNow.AddMinutes(-5));
             var others = SeedOtherBackups(backupDir, DateTime.UtcNow.AddHours(-6), DateTime.UtcNow.AddHours(-5));
             string[] seeded = [.. others, recent];
             var before = SnapshotFiles(seeded);
@@ -2076,17 +2087,19 @@ public sealed class LibraryOperationsServiceTests
     }
 
     /// <summary>
-    /// A newer-version backup, an older-version backup, and a file that is not a database, the first
-    /// two stamped <paramref name="olderUtc"/> and the last <paramref name="recentUtc"/>.
+    /// A newer-version backup, a schema version 2 backup that open would migrate, an older-version
+    /// backup, and a file that is not a database, the first three stamped <paramref name="olderUtc"/>
+    /// and the last <paramref name="recentUtc"/>.
     /// </summary>
     private static string[] SeedOtherBackups(string backupDir, DateTime olderUtc, DateTime recentUtc)
     {
-        var newer = SeedBackup(backupDir, "library.db.backup.newer-version", 3, olderUtc);
+        var newer = SeedBackup(backupDir, "library.db.backup.newer-version", LibraryCatalogStore.SchemaVersion + 1, olderUtc);
+        var schema2 = SeedBackup(backupDir, "library.db.backup.schema-2", LibraryCatalogStore.MigratableSchemaVersion, olderUtc);
         var older = SeedBackup(backupDir, "library.db.backup.older-version", 1, olderUtc);
         var junk = Path.Combine(backupDir, "library.db.backup.not-a-database");
         File.WriteAllText(junk, "not a database");
         SetBackupTimestampUtc(junk, recentUtc);
-        return [newer, older, junk];
+        return [newer, schema2, older, junk];
     }
 
     private static Dictionary<string, string> SnapshotFiles(IEnumerable<string> paths)

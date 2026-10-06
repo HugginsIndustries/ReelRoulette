@@ -169,6 +169,10 @@ An agent runs these and ticks them.
 - [x] In the desktop filter dialog, deleting, renaming, or moving a preset keeps unsaved filter changes and **Update Preset**.
 - [ ] With a copy of the data folder upgraded by a newer build, the installed build runs without a library, shows the message on the Operator page, leaves the library and backups byte-identical, and updates in-app, on Linux and Windows.
 - [ ] Without a library, a library route answers 503 with the message, the open routes answer, and an unpaired LAN caller gets 401.
+- [ ] A copy of a v0.14.0 data folder opens in this build with its items, tags, presets, and stats intact, `last.log` shows the migration and its time, and every sort order on desktop and WebUI lists files as v0.14.0 did, on Linux and Windows.
+- [ ] Desktop import of a library exported from v0.14.0 is accepted and opens with its items after the server starts.
+- [ ] In the WebUI with a few thousand tiles loaded, a change that reloads the window sends one library query and writes one `Library query` line with `elapsedMs` to `last.log`, and scrolling deep in each sort order stays smooth.
+- [ ] The release notes warn not to go back to v0.14.0 or earlier after upgrading, since those versions would set the upgraded library aside.
 
 ## Release Flow
 

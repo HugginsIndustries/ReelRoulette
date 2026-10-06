@@ -1,4 +1,5 @@
 using Microsoft.Data.Sqlite;
+using ReelRoulette.Core.Library;
 
 namespace ReelRoulette.Core.Tests;
 
@@ -45,8 +46,9 @@ internal sealed record SeedItem(string Id, string FullPath)
 }
 
 /// <summary>
-/// Writes a schema version 2 <c>library.db</c> with SQL so tests start from a known catalog.
-/// A test checks that its schema (tables, columns with types, indexes, and user version) matches a catalog the store creates.
+/// Writes a current-schema <c>library.db</c> with SQL so tests start from a known catalog, or a schema
+/// version 2 one for migration tests. A test checks that the current schema (tables, columns with types,
+/// indexes, and user version) matches a catalog the store creates.
 /// </summary>
 internal static class CatalogSeed
 {
@@ -64,6 +66,36 @@ internal static class CatalogSeed
         IEnumerable<SeedTag>? tags = null,
         IEnumerable<SeedPreset>? presets = null)
     {
+        WriteSchema(directory, LibraryCatalogStore.SchemaVersion, sources, items, categories, tags, presets);
+    }
+
+    /// <summary>As <see cref="Write"/>, at schema version 2: no name sort key and the old item tag index.</summary>
+    public static void WriteSchema2(
+        string directory,
+        IEnumerable<SeedSource>? sources = null,
+        IEnumerable<SeedItem>? items = null,
+        IEnumerable<SeedCategory>? categories = null,
+        IEnumerable<SeedTag>? tags = null,
+        IEnumerable<SeedPreset>? presets = null)
+    {
+        WriteSchema(directory, 2, sources, items, categories, tags, presets);
+    }
+
+    private static void WriteSchema(
+        string directory,
+        int schemaVersion,
+        IEnumerable<SeedSource>? sources,
+        IEnumerable<SeedItem>? items,
+        IEnumerable<SeedCategory>? categories,
+        IEnumerable<SeedTag>? tags,
+        IEnumerable<SeedPreset>? presets)
+    {
+        var current = schemaVersion == LibraryCatalogStore.SchemaVersion;
+        if (!current && schemaVersion != 2)
+        {
+            throw new ArgumentOutOfRangeException(nameof(schemaVersion));
+        }
+
         Directory.CreateDirectory(directory);
         var databasePath = Path.Combine(directory, "library.db");
         if (File.Exists(databasePath))
@@ -87,7 +119,7 @@ internal static class CatalogSeed
             connection.Open();
             Execute(connection, "PRAGMA journal_mode=WAL;");
             Execute(connection, "BEGIN;");
-            Execute(connection, Schema);
+            Execute(connection, current ? Schema : Schema2);
 
             foreach (var (source, position) in (sources ?? []).Select((row, index) => (row, index)))
             {
@@ -127,15 +159,16 @@ internal static class CatalogSeed
             foreach (var (item, position) in (items ?? []).Select((row, index) => (row, index)))
             {
                 var fileName = item.FileName ?? Path.GetFileName(item.FullPath);
+                var fileKey = current ? ", $fileKey" : string.Empty;
                 Execute(
                     connection,
-                    """
+                    $"""
                     INSERT INTO items VALUES (
                         $id, $position, $source, $full, $fullFold, $relative, $relativeFold,
                         $file, $fileFold, $duration, $audio, $loudness, $peak,
                         $favorite, $blacklisted, $plays, $played, $media, $fingerprint,
                         $algorithm, $fpVersion, $size, $write, $fpLast, $fpStatus, $loudnessError,
-                        $thumbRevision, $thumbWidth, $thumbHeight);
+                        $thumbRevision, $thumbWidth, $thumbHeight{fileKey});
                     """,
                     ("$id", item.Id),
                     ("$position", position),
@@ -165,7 +198,8 @@ internal static class CatalogSeed
                     ("$loudnessError", item.LoudnessError),
                     ("$thumbRevision", item.ThumbnailRevision),
                     ("$thumbWidth", item.ThumbnailWidth),
-                    ("$thumbHeight", item.ThumbnailHeight));
+                    ("$thumbHeight", item.ThumbnailHeight),
+                    ("$fileKey", LibraryCatalogNameSortKey.Compute(fileName)));
 
                 foreach (var (name, tagPosition) in item.Tags.Select((row, index) => (row, index)))
                 {
@@ -191,8 +225,15 @@ internal static class CatalogSeed
             }
 
             Execute(connection, "INSERT INTO catalog_meta VALUES ('revision', '0');");
+            if (current)
+            {
+                Execute(
+                    connection,
+                    "INSERT INTO catalog_meta VALUES ('name_sort_key_version', $version);",
+                    ("$version", LibraryCatalogNameSortKey.Version.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+            }
 
-            Execute(connection, "PRAGMA user_version = 2;");
+            Execute(connection, $"PRAGMA user_version = {schemaVersion};");
             Execute(connection, "COMMIT;");
             Execute(connection, "PRAGMA wal_checkpoint(TRUNCATE);");
         }
@@ -200,9 +241,10 @@ internal static class CatalogSeed
 
     /// <summary>
     /// Writes a catalog as <paramref name="fileName"/> in <paramref name="directory"/> and stamps it with
-    /// <paramref name="userVersion"/>. Above schema version 2 it also gains one <c>items</c> column, as a
-    /// later schema would. The file is closed cleanly, so no sidecar files remain. A live catalog is in
-    /// WAL mode; <paramref name="standalone"/> writes it in rollback-journal mode, as backups and replace files are.
+    /// <paramref name="userVersion"/>. Version 2 has the schema version 2 tables; any other version has
+    /// the current ones, and above the current version it also gains one <c>items</c> column, as a later
+    /// schema would. The file is closed cleanly, so no sidecar files remain. A live catalog is in WAL
+    /// mode; <paramref name="standalone"/> writes it in rollback-journal mode, as backups and replace files are.
     /// </summary>
     public static string WriteAtVersion(
         string directory,
@@ -215,7 +257,15 @@ internal static class CatalogSeed
         var staging = Path.Combine(Path.GetTempPath(), "rr-seed-" + Guid.NewGuid().ToString("N"));
         try
         {
-            Write(staging, items: items);
+            if (userVersion == 2)
+            {
+                WriteSchema2(staging, items: items);
+            }
+            else
+            {
+                Write(staging, items: items);
+            }
+
             var staged = Path.Combine(staging, "library.db");
             using (var connection = new SqliteConnection(new SqliteConnectionStringBuilder
             {
@@ -225,9 +275,9 @@ internal static class CatalogSeed
             }.ToString()))
             {
                 connection.Open();
-                if (userVersion > 2)
+                if (userVersion > LibraryCatalogStore.SchemaVersion)
                 {
-                    Execute(connection, "ALTER TABLE items ADD COLUMN file_name_key TEXT NULL;");
+                    Execute(connection, "ALTER TABLE items ADD COLUMN later_column TEXT NULL;");
                 }
 
                 Execute(connection, $"PRAGMA user_version = {userVersion};");
@@ -325,7 +375,7 @@ internal static class CatalogSeed
         command.ExecuteNonQuery();
     }
 
-    private const string Schema = """
+    private const string SharedTables = """
         CREATE TABLE sources (
             id TEXT PRIMARY KEY,
             position INTEGER NOT NULL,
@@ -333,37 +383,6 @@ internal static class CatalogSeed
             root_path_fold TEXT NOT NULL,
             display_name TEXT NULL,
             is_enabled INTEGER NOT NULL
-        );
-        CREATE TABLE items (
-            id TEXT PRIMARY KEY,
-            position INTEGER NOT NULL,
-            source_id TEXT NOT NULL,
-            full_path TEXT NOT NULL,
-            full_path_fold TEXT NOT NULL,
-            relative_path TEXT NOT NULL,
-            relative_path_fold TEXT NOT NULL,
-            file_name TEXT NOT NULL,
-            file_name_fold TEXT NOT NULL,
-            duration_ticks INTEGER NULL,
-            has_audio INTEGER NULL,
-            integrated_loudness REAL NULL,
-            peak_db REAL NULL,
-            is_favorite INTEGER NOT NULL,
-            is_blacklisted INTEGER NOT NULL,
-            play_count INTEGER NOT NULL,
-            last_played_utc INTEGER NULL,
-            media_type INTEGER NOT NULL,
-            fingerprint TEXT NULL,
-            fingerprint_algorithm TEXT NOT NULL,
-            fingerprint_version INTEGER NOT NULL,
-            file_size_bytes INTEGER NULL,
-            last_write_time_utc INTEGER NULL,
-            fingerprint_last_utc INTEGER NULL,
-            fingerprint_status INTEGER NULL,
-            loudness_error TEXT NULL,
-            thumbnail_revision TEXT NULL,
-            thumbnail_width INTEGER NULL,
-            thumbnail_height INTEGER NULL
         );
         CREATE TABLE categories (
             id TEXT PRIMARY KEY,
@@ -397,9 +416,60 @@ internal static class CatalogSeed
         CREATE INDEX idx_sources_root_path_fold ON sources(root_path_fold);
         CREATE INDEX idx_items_full_path_fold ON items(full_path_fold);
         CREATE INDEX idx_items_relative_path_fold ON items(relative_path_fold);
-        CREATE INDEX idx_items_file_name_fold ON items(file_name_fold);
         CREATE INDEX idx_tags_name_fold ON tags(name_fold);
-        CREATE INDEX idx_item_tags_item_id ON item_tags(item_id);
         CREATE INDEX idx_item_tags_name_fold ON item_tags(name_fold);
+        """;
+
+    private const string Schema2ItemColumns = """
+            id TEXT PRIMARY KEY,
+            position INTEGER NOT NULL,
+            source_id TEXT NOT NULL,
+            full_path TEXT NOT NULL,
+            full_path_fold TEXT NOT NULL,
+            relative_path TEXT NOT NULL,
+            relative_path_fold TEXT NOT NULL,
+            file_name TEXT NOT NULL,
+            file_name_fold TEXT NOT NULL,
+            duration_ticks INTEGER NULL,
+            has_audio INTEGER NULL,
+            integrated_loudness REAL NULL,
+            peak_db REAL NULL,
+            is_favorite INTEGER NOT NULL,
+            is_blacklisted INTEGER NOT NULL,
+            play_count INTEGER NOT NULL,
+            last_played_utc INTEGER NULL,
+            media_type INTEGER NOT NULL,
+            fingerprint TEXT NULL,
+            fingerprint_algorithm TEXT NOT NULL,
+            fingerprint_version INTEGER NOT NULL,
+            file_size_bytes INTEGER NULL,
+            last_write_time_utc INTEGER NULL,
+            fingerprint_last_utc INTEGER NULL,
+            fingerprint_status INTEGER NULL,
+            loudness_error TEXT NULL,
+            thumbnail_revision TEXT NULL,
+            thumbnail_width INTEGER NULL,
+            thumbnail_height INTEGER NULL
+        """;
+
+    private const string Schema2 =
+        "CREATE TABLE items (\n" + Schema2ItemColumns + "\n);\n" +
+        SharedTables +
+        "CREATE INDEX idx_items_file_name_fold ON items(file_name_fold);\n" +
+        "CREATE INDEX idx_item_tags_item_id ON item_tags(item_id);\n";
+
+    private const string Schema =
+        "CREATE TABLE items (\n" + Schema2ItemColumns + ",\n    file_name_sort_key BLOB NULL\n);\n" +
+        SharedTables +
+        """
+        CREATE INDEX idx_items_name_sort ON items(file_name_sort_key);
+        CREATE INDEX idx_items_last_played_asc ON items(COALESCE(last_played_utc, 0), file_name_sort_key);
+        CREATE INDEX idx_items_last_played_desc ON items(COALESCE(last_played_utc, 0) DESC, file_name_sort_key);
+        CREATE INDEX idx_items_play_count_asc ON items(play_count, file_name_sort_key);
+        CREATE INDEX idx_items_play_count_desc ON items(play_count DESC, file_name_sort_key);
+        CREATE INDEX idx_items_duration_asc ON items(COALESCE(duration_ticks, 0), file_name_sort_key);
+        CREATE INDEX idx_items_duration_desc ON items(COALESCE(duration_ticks, 0) DESC, file_name_sort_key);
+        CREATE INDEX idx_items_date_added_asc ON items(COALESCE(last_write_time_utc, 0), file_name_sort_key);
+        CREATE INDEX idx_items_date_added_desc ON items(COALESCE(last_write_time_utc, 0) DESC, file_name_sort_key);
         """;
 }

@@ -135,24 +135,25 @@ Per-user data uses .NET `Environment.SpecialFolder` mappings:
 
 **Server data folder override:** Set `REELROULETTE_DATA_DIR` to run the server against another folder on any OS. The server then keeps its settings, catalog, backups, `last.log`, and thumbnails (in `thumbnails/`) under that folder and does not use the folders above. A relative path resolves against the working directory. Setting `APPDATA` does not move anything on Windows, because .NET resolves that folder through the OS. Scripts that start a server for verification or smoke testing set this variable to a fresh temporary folder, stop the server they started, and remove that folder afterward, including on failure. On Linux they also set `XDG_CONFIG_HOME` and `XDG_DATA_HOME`. Dev-run helpers such as `run-server.ps1` use your real data on purpose. The desktop client does not read this variable.
 
-The server opens `library.db` in that roaming directory at startup (`user_version` 2). Presets and thumbnail revision, width, and height live in the catalog. Core settings stay in `core-settings.json`. Desktop export saves a checkpoint of `library.db`, so presets and thumbnail metadata travel with it. Import replaces that database while the server is stopped, including the preset list, and refuses to replace a catalog that a newer version saved. JPEG files stay in `thumbnails/` until the next completed thumbnail stage. Run a refresh after import. Server catalog backups are `library.db.backup.*` files in `backups/`.
+The server opens `library.db` in that roaming directory at startup (`user_version` 3). A `user_version` 2 catalog, from v0.14.0 or earlier, is migrated in place on that start in one transaction, and `last.log` records how long it took; an interrupted migration leaves the version 2 catalog as it was. After a newer build has opened a data folder, do not run v0.14.0 against it: v0.14.0 moves a catalog it does not recognize aside and then deletes its backups. Presets and thumbnail revision, width, and height live in the catalog. Core settings stay in `core-settings.json`. Desktop export saves a checkpoint of `library.db`, so presets and thumbnail metadata travel with it. Import replaces that database while the server is stopped, including the preset list, migrates a version 2 export as it imports it, and refuses to replace a catalog that a newer version saved. JPEG files stay in `thumbnails/` until the next completed thumbnail stage. Run a refresh after import. Server catalog backups are `library.db.backup.*` files in `backups/`.
 
 When the server cannot use its catalog, it keeps running without a library instead of stopping:
 
 - A `library.db`, `library.db.previous`, or `library.db.incoming` saved by a newer version of ReelRoulette (a higher `user_version`) is left exactly as it is. Updating ReelRoulette opens it.
 - One of those files that ReelRoulette cannot open or read at the moment, for example because another program holds or locks it or the folder's permissions block it, is also left exactly as it is, since it cannot be checked.
-- A `library.db` that is not a database, is corrupt, or has another schema, including an older schema version, is moved aside to `library.db.refused` (or `library.db.refused.1`, and so on).
+- A `library.db` that is not a database, is corrupt, or has another schema, including a schema version before 2, is moved aside to `library.db.refused` (or `library.db.refused.1`, and so on).
+- A migration from version 2 that cannot run, for example because another program holds the file, leaves `library.db` unchanged, like a file that cannot be read.
 - An empty `library.db` is created only on a fresh install: no `library.db`, no `library.db.refused*` file, and no `library.db.backup.*` file in `backups/`.
 
 Without a library, `last.log` has a warning with the reason, the Operator page shows it, and `/control/status` reports it in `libraryState` and `libraryMessage`. Library API routes answer 503 with that message. Catalog backups and refresh do not run, and settings, logs, restart, stop, and in-app update keep working.
 
-Catalog backup rotation deletes only valid current-version backups beyond the backup count, oldest first. Backups at another schema version, such as ones from before a schema change, and files it does not recognize stay in `backups/` until you remove them by hand, and they count toward neither the backup count nor the time between backups.
+Catalog backup rotation deletes only valid current-version backups beyond the backup count, oldest first. Backups at another schema version, such as version 2 backups from before the migration, and files it does not recognize stay in `backups/` until you remove them by hand, and they count toward neither the backup count nor the time between backups.
 
 **Restoring a catalog backup by hand:**
 
 1. Stop the server.
 2. In the data folder, move `library.db`, `library.db.previous`, and `library.db.incoming`, each with any `-wal` and `-shm` file beside it, and any `library.db.refused*` files somewhere outside the data folder. Keep them until the restored library looks right.
-3. Copy the backup you want from `backups/`, usually the newest `library.db.backup.*` file, into the data folder as `library.db`. A backup saved by a newer version opens only in that version or later.
+3. Copy the backup you want from `backups/`, usually the newest `library.db.backup.*` file, into the data folder as `library.db`. A backup saved by a newer version opens only in that version or later. A version 2 backup is migrated when the server starts.
 4. Start the server. If the Operator page still shows that there is no library, read the message there and in `last.log`.
 
 To start over with an empty library instead, move `library.db`, `library.db.previous`, and `library.db.incoming` with their `-wal` and `-shm` files, every `library.db.refused*` file, and every `library.db.backup.*` file out of the data folder and `backups/`, then start the server.

@@ -18,6 +18,9 @@ public sealed class LibraryCatalogHost
         UnavailableMessage = unavailableMessage;
     }
 
+    /// <summary>Set when this open migrated the catalog from an older schema version, for <c>last.log</c>.</summary>
+    public string? MigrationMessage { get; private init; }
+
     /// <summary>The open catalog. Without a library this throws with <see cref="UnavailableMessage"/>.</summary>
     public LibraryCatalogSession Session =>
         _session ?? throw new InvalidOperationException(UnavailableMessage);
@@ -57,7 +60,12 @@ public sealed class LibraryCatalogHost
         var result = LibraryCatalogStore.Open(directory);
         if (result.Status == LibraryCatalogOpenStatus.Opened && result.Session != null)
         {
-            return new LibraryCatalogHost(result.Session, result.Status, null);
+            return new LibraryCatalogHost(result.Session, result.Status, null)
+            {
+                MigrationMessage = result.MigratedFromSchemaVersion is int from
+                    ? $"Library migrated from schema version {from} to {LibraryCatalogStore.SchemaVersion} in {(long)result.MigrationElapsed.TotalMilliseconds} ms."
+                    : null
+            };
         }
 
         return new LibraryCatalogHost(null, result.Status, result.Message ?? LibraryCatalogStore.RefusedMessage);

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging.Abstractions;
 using ReelRoulette.Core.Fingerprints;
@@ -11,7 +12,8 @@ namespace ReelRoulette.Server.Services;
 public static class LibraryQueryLimits
 {
     public const int DefaultLimit = 100;
-    public const int MaxLimit = 500;
+    /// <summary>Large enough that a client reloads the window it has loaded in one request.</summary>
+    public const int MaxLimit = 10_000;
 }
 
 public sealed class LibraryQueryOutcome
@@ -131,8 +133,13 @@ public sealed class LibraryOperationsService
         return item == null ? null : LibraryCatalogSession.ToItemJson(item);
     }
 
-    public LibraryQueryOutcome QueryLibrary(LibraryQueryRequest? request)
+    /// <summary>
+    /// One browse page. <paramref name="enrichItems"/> adds the per-request item fields, such as
+    /// thumbnails, before the request's one <c>last.log</c> line, so its elapsed time covers them.
+    /// </summary>
+    public LibraryQueryOutcome QueryLibrary(LibraryQueryRequest? request, Action<JsonArray>? enrichItems = null)
     {
+        var stopwatch = Stopwatch.StartNew();
         request ??= new LibraryQueryRequest();
         if (!TryParseSort(request.SortMode, out var sort, out var sortError))
         {
@@ -183,9 +190,10 @@ public sealed class LibraryOperationsService
             items.Add(node);
         }
 
+        enrichItems?.Invoke(items);
         _serverLog.Append(
             "info",
-            $"Library query offset={offset} limit={limit} sort={sort} descending={request.SortDescending ?? false} total={page.TotalCount} baseline={page.SearchBaselineCount} returned={page.Items.Count}.");
+            $"Library query offset={offset} limit={limit} sort={sort} descending={request.SortDescending ?? false} total={page.TotalCount} baseline={page.SearchBaselineCount} returned={page.Items.Count} elapsedMs={stopwatch.ElapsedMilliseconds}.");
         return LibraryQueryOutcome.Ok(new JsonObject
         {
             ["items"] = items,

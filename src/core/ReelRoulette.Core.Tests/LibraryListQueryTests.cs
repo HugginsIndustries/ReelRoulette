@@ -449,7 +449,8 @@ public sealed class LibraryListQueryTests
             var operations = new LibraryOperationsService(CatalogOpen.Host(appData), NullLogger<LibraryOperationsService>.Instance, appData);
             Assert.False(operations.QueryLibrary(new LibraryQueryRequest { Offset = -1 }).Accepted);
             Assert.False(operations.QueryLibrary(new LibraryQueryRequest { Limit = 0 }).Accepted);
-            Assert.False(operations.QueryLibrary(new LibraryQueryRequest { Limit = 501 }).Accepted);
+            Assert.False(operations.QueryLibrary(new LibraryQueryRequest { Limit = 10_001 }).Accepted);
+            Assert.True(operations.QueryLibrary(new LibraryQueryRequest { Limit = 10_000 }).Accepted);
             Assert.False(operations.QueryLibrary(new LibraryQueryRequest { SortMode = "Size" }).Accepted);
             Assert.False(operations.QueryLibrary(new LibraryQueryRequest
             {
@@ -487,6 +488,33 @@ public sealed class LibraryListQueryTests
                 Directory.Delete(appData, recursive: true);
             }
         }
+    }
+
+    [Fact]
+    public void QueryLibrary_WritesOneLineWithItsElapsedTime_AfterEnrichingTheItems()
+    {
+        using var dir = new TempDirectory();
+        var session = Open(dir);
+        session.InsertSource("on", "/media", "On", true);
+        Add(session, "a", "on", "a.mp4", "a.mp4");
+        Add(session, "b", "on", "b.mp4", "b.mp4");
+        var operations = new LibraryOperationsService(CatalogOpen.Host(dir.Path), NullLogger<LibraryOperationsService>.Instance, dir.Path);
+        var enrichedBeforeLog = false;
+
+        var outcome = operations.QueryLibrary(
+            new LibraryQueryRequest { Limit = 10 },
+            items =>
+            {
+                var log = Path.Combine(dir.Path, "last.log");
+                enrichedBeforeLog = !File.Exists(log) ||
+                    !File.ReadAllText(log).Contains("Library query", StringComparison.Ordinal);
+                Assert.Equal(2, items.Count);
+            });
+
+        Assert.True(outcome.Accepted);
+        Assert.True(enrichedBeforeLog);
+        var line = Assert.Single(File.ReadAllLines(Path.Combine(dir.Path, "last.log")), line => line.Contains("Library query", StringComparison.Ordinal));
+        Assert.Matches(@"Library query offset=0 limit=10 sort=Name descending=False total=2 baseline=2 returned=2 elapsedMs=\d+\.$", line);
     }
 
     [Fact]
@@ -621,6 +649,41 @@ public sealed class LibraryListQueryTests
         Assert.Null(operations.ReadLibraryItem("  "));
         var serviceStats = operations.GetLibraryStats();
         Assert.Equal(-16.0, serviceStats.Global.BaselineLoudnessLufs);
+    }
+
+    [Fact]
+    public void Query_RepeatAtTheSameRevision_RunsNoCountQueries_AndAWriteCountsAgain()
+    {
+        using var dir = new TempDirectory();
+        var session = Open(dir);
+        session.InsertSource("on", "/media", "On", true);
+        Add(session, "a", "on", "Alpha.mp4", "Alpha.mp4");
+        Add(session, "b", "on", "Beta.mp4", "Beta.mp4", favorite: true);
+        Add(session, "c", "on", "Gamma.mp4", "Gamma.mp4");
+        var favorites = new FilterStateModel { FavoritesOnly = true };
+        var counted = session.ListCountQueries;
+
+        var first = session.QueryList(new LibraryListRequest { Filter = favorites, Limit = 1 });
+        Assert.Equal(counted + 2, session.ListCountQueries);
+
+        var repeat = session.QueryList(new LibraryListRequest { Filter = favorites, Limit = 1 });
+        var nextPage = session.QueryList(new LibraryListRequest { Filter = favorites, Offset = 1, Limit = 1 });
+        var reload = session.QueryList(new LibraryListRequest { Filter = favorites, Limit = 50 });
+        Assert.Equal(counted + 2, session.ListCountQueries);
+        foreach (var page in new[] { first, repeat, nextPage, reload })
+        {
+            Assert.Equal((1, 3), (page.TotalCount, page.SearchBaselineCount));
+        }
+
+        // The same search with another filter counts only the filtered total.
+        Assert.Equal(3, session.QueryList(new LibraryListRequest { Filter = new FilterStateModel(), Limit = 1 }).TotalCount);
+        Assert.Equal(counted + 3, session.ListCountQueries);
+
+        Assert.True(session.SetFavorite("a", true));
+        var afterWrite = session.QueryList(new LibraryListRequest { Filter = favorites, Limit = 1 });
+
+        Assert.Equal(counted + 5, session.ListCountQueries);
+        Assert.Equal((2, 3), (afterWrite.TotalCount, afterWrite.SearchBaselineCount));
     }
 
     private static RefreshPipelineService CreateRefresh(string appData)

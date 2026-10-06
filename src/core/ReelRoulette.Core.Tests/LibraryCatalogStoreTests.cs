@@ -7,7 +7,7 @@ namespace ReelRoulette.Core.Tests;
 public sealed class LibraryCatalogStoreTests
 {
     [Fact]
-    public void Open_MissingDatabase_CreatesEmptySchema2Catalog()
+    public void Open_MissingDatabase_CreatesEmptyCurrentCatalog()
     {
         using var dir = new TempDirectory();
 
@@ -25,9 +25,9 @@ public sealed class LibraryCatalogStoreTests
         Assert.Equal(int.MaxValue, category.SortOrder);
         Assert.Empty(result.Session!.ReadPresets());
         Assert.Equal(0, result.Session.Revision);
-        Assert.Equal("2", ReadPragma(dir.Path, "user_version"));
+        Assert.Equal(LibraryCatalogStore.SchemaVersion.ToString(System.Globalization.CultureInfo.InvariantCulture), ReadPragma(dir.Path, "user_version"));
         Assert.Equal(LibraryCatalogStore.CatalogFileInspection.Usable, LibraryCatalogStore.InspectCatalogFile(result.Session.DatabasePath));
-        Assert.Equal(["revision"], ReadMetaKeys(dir.Path));
+        Assert.Equal(["name_sort_key_version", "revision"], ReadMetaKeys(dir.Path));
         Assert.DoesNotContain("available_tags", ReadSchema(dir.Path), StringComparison.Ordinal);
         Assert.DoesNotContain(
             Directory.GetFiles(dir.Path).Select(Path.GetFileName),
@@ -88,7 +88,7 @@ public sealed class LibraryCatalogStoreTests
             items: [new SeedItem("kept", "/kept.mp4") { Fingerprint = new string('x', 20_000) }]);
         CorruptPagesAfterHeader(live);
         var damagedBytes = File.ReadAllBytes(live);
-        var previous = CatalogSeed.WriteAtVersion(dir.Path, 2, "library.db.previous", items: [new SeedItem("previous", "/previous.mp4")], standalone: true);
+        var previous = CatalogSeed.WriteAtVersion(dir.Path, LibraryCatalogStore.SchemaVersion, "library.db.previous", items: [new SeedItem("previous", "/previous.mp4")], standalone: true);
         var previousBytes = File.ReadAllBytes(previous);
 
         var opened = CatalogOpen.Open(dir.Path);
@@ -130,7 +130,7 @@ public sealed class LibraryCatalogStoreTests
         var opened = CatalogOpen.Open(dir.Path);
 
         Assert.Equal(LibraryCatalogOpenStatus.Opened, opened.Status);
-        Assert.Equal(["revision", "side_files_copied"], ReadMetaKeys(dir.Path));
+        Assert.Equal(["name_sort_key_version", "revision", "side_files_copied"], ReadMetaKeys(dir.Path));
         Assert.Empty(opened.Session!.ReadPresets());
         Assert.Null(Assert.Single(opened.Snapshot()!.Items).ThumbnailRevision);
     }

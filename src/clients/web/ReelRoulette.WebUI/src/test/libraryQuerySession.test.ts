@@ -4,6 +4,7 @@ import { createDefaultFilterState } from "../filter/filterStateModel";
 import { createDefaultBrowseControls, type LibraryBrowseControls } from "../library/libraryBrowseModel";
 import type { LibraryProjectionItem } from "../library/libraryProjectionModel";
 import {
+  LIBRARY_QUERY_RELOAD_LIMIT,
   LIBRARY_QUERY_WINDOW_SIZE,
   createAutoTagScanRequest,
   createLibraryQuerySession,
@@ -433,12 +434,41 @@ describe("library query decisions", () => {
     expect(libraryQueryTagSaveEffect({ ...open, excludedTags: ["Skip"] })).toBe("reload");
   });
 
-  it("sizes a reload to the loaded count", () => {
+  it("sizes a reload to the loaded count, one request for up to the reload limit", () => {
     expect(libraryQueryReloadWindows(0)).toEqual([{ offset: 0, limit: LIBRARY_QUERY_WINDOW_SIZE }]);
     expect(libraryQueryReloadWindows(LIBRARY_QUERY_WINDOW_SIZE + 20)).toEqual([
-      { offset: 0, limit: LIBRARY_QUERY_WINDOW_SIZE },
-      { offset: LIBRARY_QUERY_WINDOW_SIZE, limit: 20 }
+      { offset: 0, limit: LIBRARY_QUERY_WINDOW_SIZE + 20 }
     ]);
+    expect(libraryQueryReloadWindows(LIBRARY_QUERY_RELOAD_LIMIT)).toEqual([
+      { offset: 0, limit: LIBRARY_QUERY_RELOAD_LIMIT }
+    ]);
+    expect(libraryQueryReloadWindows(12_000)).toEqual([
+      { offset: 0, limit: LIBRARY_QUERY_RELOAD_LIMIT },
+      { offset: LIBRARY_QUERY_RELOAD_LIMIT, limit: 2_000 }
+    ]);
+  });
+
+  it("reloads 5,000 loaded tiles in one request", async () => {
+    const calls: Array<{ offset: number; limit: number }> = [];
+    const session = createLibraryQuerySession(async (request) => {
+      calls.push({ offset: request.offset, limit: request.limit });
+      return page(
+        Array.from({ length: request.limit }, (_, index) => item(`tile-${request.offset + index}`)),
+        8_000,
+        8_000
+      );
+    });
+    await session.ensureLoaded(createDefaultFilterState(), controls());
+    session.setOverlayVisible(true);
+    while (session.snapshot().items.length < 5_000) {
+      await session.considerFill(0, 1);
+    }
+    calls.length = 0;
+
+    await session.reloadLoaded();
+
+    expect(calls).toEqual([{ offset: 0, limit: 5_000 }]);
+    expect(session.snapshot().items).toHaveLength(5_000);
   });
 
   it("sends scoped auto-tag with no path list", () => {

@@ -11,6 +11,9 @@ Write **[Unreleased]** bullets at the same level as the released sections below.
 
 ### Changed
 
+- **Faster library browsing:** Library pages cost about the same at any scroll depth in every sort order. On a 49,000-item library, a page deep in the list takes about 40 ms instead of up to 320 ms, a WebUI reload of 5,000 loaded tiles is one request taking about 0.1 s instead of 25 requests taking 2.7 s, and library totals load about three times faster. The library file grows by about a third for the indexes that make this possible.
+- **Library upgrade:** The first start of this version upgrades the library in place, which takes about a second on a large library and leaves it as it was if interrupted. After upgrading, don't go back to v0.14.0 or earlier, since those versions would set the upgraded library aside. Libraries exported from v0.14.0 still import.
+
 ### Deprecated
 
 ### Removed

@@ -1,3 +1,4 @@
+using ReelRoulette.Core.Library;
 using ReelRoulette.Core.Tests;
 using ReelRoulette.LibraryArchive;
 using Xunit;
@@ -6,6 +7,48 @@ namespace ReelRoulette.DesktopApp.Tests;
 
 public sealed class LibraryArchiveMigrationTests
 {
+    [Fact]
+    public void Import_Schema2Export_IsMigratedRemappedAndPublished()
+    {
+        var temp = Path.Combine(Path.GetTempPath(), "rr-import-schema2-" + Guid.NewGuid().ToString("N"));
+        var dest = Path.Combine(temp, "dest");
+        var source = Path.Combine(temp, "source");
+        Directory.CreateDirectory(dest);
+        try
+        {
+            var fromRoot = Path.Combine(temp, "from");
+            var toRoot = Path.Combine(temp, "to");
+            CatalogSeed.WriteSchema2(
+                source,
+                sources: [new SeedSource("s1", fromRoot, "x")],
+                items: [new SeedItem("clip", Path.Combine(fromRoot, "Clip.mp4")) { SourceId = "s1", RelativePath = "Clip.mp4" }]);
+            var export = Path.Combine(source, "library.db");
+
+            Assert.True(LibraryArchiveMigration.TryReadSourceRootPaths(export, out var roots, out var error), error);
+            Assert.Equal(fromRoot, Assert.Single(roots));
+            var result = LibraryArchiveMigration.ImportDatabase(
+                export,
+                new Dictionary<string, string>(StringComparer.Ordinal) { [fromRoot] = toRoot },
+                new HashSet<string>(StringComparer.Ordinal),
+                force: true,
+                dest);
+
+            Assert.True(result.Accepted, result.Message);
+            Assert.False(File.Exists(Path.Combine(dest, "library.db.previous")));
+            Assert.False(File.Exists(Path.Combine(dest, "library.db.incoming")));
+            Assert.Equal(
+                LibraryCatalogStore.CatalogFileInspection.Usable,
+                LibraryCatalogStore.InspectCatalogFile(Path.Combine(dest, "library.db")));
+            var imported = OpenCatalog(dest);
+            Assert.Null(imported.MigratedFromSchemaVersion);
+            Assert.Equal(Path.Combine(toRoot, "Clip.mp4"), Assert.Single(Snapshot(imported).Items).FullPath);
+        }
+        finally
+        {
+            Directory.Delete(temp, recursive: true);
+        }
+    }
+
     [Fact]
     public void OverwriteConfirmation_NamesTheCatalog()
     {
@@ -187,7 +230,7 @@ public sealed class LibraryArchiveMigrationTests
         Directory.CreateDirectory(source);
         try
         {
-            CatalogSeed.WriteAtVersion(dest, 3, items: [new SeedItem("newer", "/clips/newer.mp4")]);
+            CatalogSeed.WriteAtVersion(dest, LibraryCatalogStore.SchemaVersion + 1, items: [new SeedItem("newer", "/clips/newer.mp4")]);
             var fromRoot = Path.Combine(temp, "from");
             var checkpoint = CreateCheckpoint(source, temp, fromRoot);
             var remap = new Dictionary<string, string>(StringComparer.Ordinal) { [fromRoot] = Path.Combine(temp, "to") };
@@ -218,7 +261,7 @@ public sealed class LibraryArchiveMigrationTests
         Directory.CreateDirectory(source);
         try
         {
-            var live = CatalogSeed.WriteAtVersion(dest, 3, items: [new SeedItem("newer", "/clips/newer.mp4")]);
+            var live = CatalogSeed.WriteAtVersion(dest, LibraryCatalogStore.SchemaVersion + 1, items: [new SeedItem("newer", "/clips/newer.mp4")]);
             var fromRoot = Path.Combine(temp, "from");
             var checkpoint = CreateCheckpoint(source, temp, fromRoot);
             var remap = new Dictionary<string, string>(StringComparer.Ordinal) { [fromRoot] = Path.Combine(temp, "to") };
@@ -252,7 +295,7 @@ public sealed class LibraryArchiveMigrationTests
         try
         {
             // Standalone, so checking it creates no sidecar files and the folder snapshot holds.
-            CatalogSeed.WriteAtVersion(dest, 2, items: [new SeedItem("existing", "/clips/existing.mp4")], standalone: true);
+            CatalogSeed.WriteAtVersion(dest, LibraryCatalogStore.SchemaVersion, items: [new SeedItem("existing", "/clips/existing.mp4")], standalone: true);
             var fromRoot = Path.Combine(temp, "from");
             var checkpoint = CreateCheckpoint(source, temp, fromRoot);
             CatalogSeed.CorruptRevisionRow(checkpoint);

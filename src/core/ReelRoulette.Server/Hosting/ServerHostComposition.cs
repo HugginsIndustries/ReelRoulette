@@ -31,6 +31,12 @@ public static class ServerHostComposition
             logger.LogInformation(
                 "Opened library catalog {DatabasePath}.",
                 host.Session.DatabasePath);
+            if (host.MigrationMessage != null)
+            {
+                logger.LogInformation("{Message}", host.MigrationMessage);
+                new ServerLogService(appDataRoot, logger).Append("info", host.MigrationMessage);
+            }
+
             LibraryCatalogBackup.Attach(host.Session, appDataRoot, logger);
             return host;
         });
@@ -284,15 +290,10 @@ public static class ServerHostComposition
 
         app.MapPost("/api/library/query", (LibraryQueryRequest? request, LibraryOperationsService operations, RefreshPipelineService refresh) =>
         {
-            var outcome = operations.QueryLibrary(request);
+            var outcome = operations.QueryLibrary(request, refresh.EnrichListedItems);
             if (!outcome.Accepted || outcome.Body == null)
             {
                 return Results.BadRequest(new { error = outcome.Error ?? "Invalid library query" });
-            }
-
-            if (outcome.Body["items"] is JsonArray items)
-            {
-                refresh.EnrichListedItems(items);
             }
 
             return Results.Json(outcome.Body);

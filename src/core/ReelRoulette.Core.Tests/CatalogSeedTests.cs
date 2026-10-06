@@ -130,9 +130,10 @@ public sealed class CatalogSeedTests
     }
 
     /// <summary>
-    /// Lists the user version, then each table with its columns (type, nullability, key, default) and its indexes with their columns.
+    /// Lists the user version, then each table with its columns (type, nullability, key, default) and its
+    /// indexes with their columns and, since an expression column has no name, their SQL.
     /// </summary>
-    private static List<string> DescribeSchema(string databasePath)
+    internal static List<string> DescribeSchema(string databasePath)
     {
         using var connection = new SqliteConnection(new SqliteConnectionStringBuilder
         {
@@ -158,6 +159,12 @@ public sealed class CatalogSeedTests
                 var columns = Query(connection, "SELECT name FROM pragma_index_info($name) ORDER BY seqno;", (string)index[0]!)
                     .Select(row => row[0]);
                 lines.Add($"  index {index[0]} unique={index[1]} origin={index[2]} partial={index[3]} ({string.Join(", ", columns)})");
+                var sql = Query(connection, "SELECT sql FROM sqlite_master WHERE type = 'index' AND name = $name;", (string)index[0]!)
+                    .Single()[0] as string;
+                if (sql != null)
+                {
+                    lines.Add("    " + string.Join(' ', sql.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)));
+                }
             }
         }
 
