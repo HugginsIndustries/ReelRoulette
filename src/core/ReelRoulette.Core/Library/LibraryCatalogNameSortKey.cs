@@ -1,24 +1,31 @@
+using System.Runtime.CompilerServices;
+
 namespace ReelRoulette.Core.Library;
 
 /// <summary>
-/// The stored file name sort key. Comparing two keys byte by byte gives the same order as
-/// <see cref="StringComparer.OrdinalIgnoreCase"/> on the names, so SQLite can sort names with an index
-/// instead of a managed collation.
+/// The stored file name sort key. Comparing two keys byte by byte orders the names like
+/// <see cref="StringComparer.OrdinalIgnoreCase"/> (see <see cref="Compute"/>), so SQLite can sort names
+/// with an index instead of a managed collation.
 /// </summary>
 public static class LibraryCatalogNameSortKey
 {
     /// <summary>
-    /// Raise this when <see cref="Compute"/> changes. The refresh pipeline recomputes every stored key
-    /// when the version stored in the catalog differs.
+    /// Raise this when the output of <see cref="Compute"/> changes, including when a .NET update changes
+    /// its casing table. The refresh pipeline recomputes every stored key when the version stored in the
+    /// catalog differs.
     /// </summary>
     public const int Version = 1;
 
     /// <summary>
-    /// OrdinalIgnoreCase compares code point by code point, after uppercasing each one only where it
-    /// treats the uppercase as equal. That is not always <see cref="char.ToUpperInvariant(char)"/>: it
-    /// keeps U+017F (long s) apart from S. Each code point, including a lone surrogate, is written in the
-    /// UTF-8 bit layout, whose bytes compare in code point order. UTF-16 order would put supplementary
-    /// characters such as emoji before U+E000-U+FFFF, where OrdinalIgnoreCase puts them after.
+    /// OrdinalIgnoreCase uppercases each code point and compares them in order. Above U+FFFF it takes the
+    /// uppercase from .NET's built-in Unicode table, and below it from the system's ICU, as
+    /// <see cref="char.ToUpperInvariant(char)"/> does everywhere. The key uses the built-in table for
+    /// every code point, so it is the same whatever the ICU version, and differs from OrdinalIgnoreCase
+    /// only on a letter that the ICU or the table is too old to know. The table keeps U+0131 (dotless i)
+    /// and U+017F (long s) apart from I and S, as OrdinalIgnoreCase does. Each code point, including a
+    /// lone surrogate, is written in the UTF-8 bit layout, whose bytes compare in code point order. UTF-16
+    /// order would put supplementary characters such as emoji before U+E000-U+FFFF, where
+    /// OrdinalIgnoreCase puts them after.
     /// </summary>
     public static byte[] Compute(string fileName)
     {
@@ -27,33 +34,26 @@ public static class LibraryCatalogNameSortKey
         for (var i = 0; i < fileName.Length; i++)
         {
             var current = fileName[i];
-            int codePoint;
+            uint codePoint = current;
             if (char.IsHighSurrogate(current) && i + 1 < fileName.Length && char.IsLowSurrogate(fileName[i + 1]))
             {
-                var pair = fileName.Substring(i, 2);
-                var upper = pair.ToUpperInvariant();
-                var folded = upper.Length == 2 &&
-                             char.IsSurrogatePair(upper[0], upper[1]) &&
-                             string.Equals(pair, upper, StringComparison.OrdinalIgnoreCase)
-                    ? upper
-                    : pair;
-                codePoint = char.ConvertToUtf32(folded[0], folded[1]);
+                codePoint = (uint)char.ConvertToUtf32(current, fileName[i + 1]);
                 i++;
             }
-            else
-            {
-                var upper = char.ToUpperInvariant(current);
-                codePoint = upper != current &&
-                            string.Equals(current.ToString(), upper.ToString(), StringComparison.OrdinalIgnoreCase)
-                    ? upper
-                    : current;
-            }
 
-            Append(bytes, codePoint);
+            Append(bytes, (int)BuiltInToUpper(null, codePoint));
         }
 
         return bytes.ToArray();
     }
+
+    /// <summary>
+    /// .NET's built-in simple uppercase mapping. It is internal, and every public uppercase method uses ICU.
+    /// </summary>
+    [UnsafeAccessor(UnsafeAccessorKind.StaticMethod, Name = "ToUpper")]
+    private static extern uint BuiltInToUpper(
+        [UnsafeAccessorType("System.Globalization.CharUnicodeInfo, System.Private.CoreLib")] object? declaringType,
+        uint codePoint);
 
     private static void Append(List<byte> bytes, int codePoint)
     {

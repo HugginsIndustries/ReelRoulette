@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using Microsoft.Data.Sqlite;
 using ReelRoulette.Core.Filtering;
 using ReelRoulette.Core.Library;
@@ -35,21 +36,24 @@ public sealed class LibraryCatalogNameSortKeyTests
     /// <summary>SQLite stores text as UTF-8, so a lone surrogate cannot be in a stored name; the key still orders it.</summary>
     private static readonly string[] LoneSurrogateNames = ["x\uD800.mp4", "x\uDC00.mp4", "\uDBFF"];
 
+    private const string EveryCodePointKeysSha256 = "9B1EDD8287952149A461E86A8C1B05703F086BE27968AFB3153A8AB56CBED129";
+
+    /// <summary>
+    /// The key of every code point, lone surrogates included, hashed. It comes only from .NET's built-in
+    /// casing table, so it is the same on every system whatever its ICU version. When it changes, raise
+    /// <see cref="LibraryCatalogNameSortKey.Version"/> so stored keys are recomputed, then pin the new value.
+    /// </summary>
     [Fact]
-    public void Compute_OrdersEveryCodePointLikeOrdinalIgnoreCase()
+    public void Compute_EveryCodePoint_MatchesThePinnedKeys()
     {
-        var strings = new List<string>();
-        for (var i = 0; i <= 0xFFFF; i++)
+        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        for (var codePoint = 0; codePoint <= 0x10FFFF; codePoint++)
         {
-            strings.Add(((char)i).ToString());
+            var value = codePoint <= 0xFFFF ? ((char)codePoint).ToString() : char.ConvertFromUtf32(codePoint);
+            hash.AppendData(LibraryCatalogNameSortKey.Compute(value));
         }
 
-        for (var codePoint = 0x10000; codePoint <= 0x10FFFF; codePoint++)
-        {
-            strings.Add(char.ConvertFromUtf32(codePoint));
-        }
-
-        AssertKeyOrderMatches(strings);
+        Assert.Equal(EveryCodePointKeysSha256, Convert.ToHexString(hash.GetHashAndReset()));
     }
 
     [Fact]

@@ -161,42 +161,24 @@ public sealed class LibraryCatalogStoreTests
     }
 
     [Fact]
-    public async Task Open_LockedDatabase_IsUnreadableWithinASecondAndLeavesFile()
+    public void Open_LockedDatabase_IsUnreadableWithinASecondAndLeavesFile()
     {
         using var dir = new TempDirectory();
         var databasePath = Path.Combine(dir.Path, "library.db");
         CreateEmptyDatabase(databasePath);
 
-        using var locked = new ManualResetEventSlim(false);
-        using var release = new ManualResetEventSlim(false);
-        var holder = Task.Run(() =>
-        {
-            using var connection = new SqliteConnection($"Data Source={databasePath};Pooling=False");
-            connection.Open();
-            using var begin = connection.CreateCommand();
-            begin.CommandText = "BEGIN EXCLUSIVE;";
-            begin.ExecuteNonQuery();
-            locked.Set();
-            release.Wait();
-        });
-        Assert.True(locked.Wait(TimeSpan.FromSeconds(5)));
-
         LibraryCatalogOpenResult opened;
-        var started = System.Diagnostics.Stopwatch.StartNew();
-        try
+        TimeSpan elapsed;
+        using (CatalogSeed.HoldBusy(databasePath))
         {
+            var started = System.Diagnostics.Stopwatch.StartNew();
             opened = CatalogOpen.Open(dir.Path);
-        }
-        finally
-        {
-            release.Set();
-            await holder;
+            elapsed = started.Elapsed;
         }
 
-        started.Stop();
         Assert.Equal(LibraryCatalogOpenStatus.Unreadable, opened.Status);
         Assert.Null(opened.Session);
-        Assert.True(started.Elapsed < TimeSpan.FromSeconds(5), $"locked open waited {started.Elapsed.TotalSeconds:0.0}s");
+        Assert.True(elapsed < TimeSpan.FromSeconds(5), $"locked open waited {elapsed.TotalSeconds:0.0}s");
         Assert.True(File.Exists(databasePath));
         Assert.Empty(Directory.GetFiles(dir.Path, "library.db.refused*"));
     }
