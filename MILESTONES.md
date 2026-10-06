@@ -9,7 +9,7 @@ An outline of upcoming releases and the milestones each one ships, in order. Eac
 
 The WebUI becomes the only client on every device. The desktop client is frozen to bug fixes (crashes, data loss, broken playback, security) until the desktop removal release, and until then server contract changes only add fields, so the last desktop build keeps working. The native Android client is dropped.
 
-- **v0.14.1 — Performance**: Make library browse, window reloads, and random selection cheap on large catalogs, cache thumbnails until they change, and identify items by ID in every event and response. M11a, M11b, M11c, M11d.
+- **v0.14.1 — Catalog safety and performance**: Leave a catalog written by a newer build, or a damaged one, untouched with its backups while the server keeps running without a library, make library browse, window reloads, and random selection cheap on large catalogs, cache thumbnails until they change, and identify items by ID in every event and response. M11a, M11b, M11c, M11d, M11e.
 - **v0.15.0 — WebUI overhaul**: Serve the WebUI over HTTPS so it installs as an app, move it to Preact, give it a responsive layout with side panels and phone overlays, and add keyboard shortcuts, stats, settings, an admin section that replaces the Operator page, duplicate review, and Show in File Manager. P28a, P38, P39, P34, P20, P26a, P40, P41, P42, P43, P44, P45, P31.
 - **v0.15.1 — Desktop parity**: Give the WebUI everything else the desktop does, including source management, catalog transfer, multi-select, and a browser-playable filter, while the desktop still ships as a fallback. P26b, P26c, P26d, P37, P46, P47.
 - **v0.16.0 — Desktop removal**: Remove the desktop client, its packaging, and its tests, then move preset writes to per-preset routes. P48, P25.
@@ -110,40 +110,107 @@ Do not use this file for detailed architecture explanation or current capability
 
 Last milestone completed: M10j12
 
-### M11a - Library Query Performance
+### M11a - Catalog Open and Backup Safety
 
 - **Status**: ⏳ Planned
-- **Goal**: Library browse pages and loaded-window reloads cost about the same at any scroll depth, and a reload of the loaded window is one request.
+- **Goal**: A build that finds a catalog it cannot use, because a newer build wrote it or because it is damaged, leaves the library and its backups untouched and keeps running without a library, and backup rotation deletes only its own current backups.
 - **Scope**:
-  - Ships in v0.14.1, first in the series.
+  - Ships in v0.14.1, first in the series. Library Query Performance moves the catalog to schema version 3, and no build without this milestone may open a schema version 3 library. Developing against the real library is fine as long as every build used contains this milestone and the installed v0.14.0 is not run until it is replaced by installing the new version directly.
+  - Found by the catalog schema safety report, which measured today's behavior with throwaway tests against a schema version 2 catalog given one extra `items` column and `user_version` 3:
+    - Server startup: `LibraryCatalogStore.Open` treats any `user_version` other than 2 as damaged and moves the catalog to `library.db.refused`, then `LibraryCatalogHost.Open` throws, so the host fails to start with "The live database was refused." (measured). The process then exits, since the ServerApp's top-level handler catches only `OperationCanceledException` (inferred; the real app was not started). The next start opens an empty catalog, deletes the newer backups, and backs up the empty catalog (measured).
+    - Replace recovery at open: a newer live catalog with an older `library.db.previous` beside it is deleted and replaced by the older file, and no copy of the newer catalog remains (measured). A newer live catalog with `library.db.incoming` beside it loses the incoming file and is quarantined (measured). With no live catalog, a newer incoming file is deleted (inferred from code).
+    - Desktop import: a newer file is rejected as "not a library database" and nothing is written (measured). Importing an older file over a newer live catalog asks the usual overwrite question and, when confirmed, deletes the newer catalog (measured).
+    - Backup rotation deletes every `library.db.backup.*` file that catalog inspection rejects, which includes valid backups at any other schema version and files that are not SQLite. The listing runs before the gap check, so this happens even when no new backup is written (measured: newer, older, and non-SQLite files all deleted while the gap blocked a copy). With the same check, a schema version 3 build would delete every schema version 2 backup on its first start (inferred).
+    - After an empty catalog replaces a quarantined one, the next completed refresh deletes every thumbnail JPEG, since none belongs to a catalog item (inferred from code).
+    - Nothing deletes `library.db.refused` files (measured with `git grep`).
+  - Catalog files slice (no contract change):
+    - Read `user_version` before the schema checks. A version above the one this build knows is newer. Anything else that fails the checks is damaged, including schema version 1, which never shipped and stays refused.
+    - Newer: when `library.db`, `library.db.previous`, or `library.db.incoming` is newer, open and replace recovery change nothing and report the catalog as newer.
+    - Damaged: quarantine to `library.db.refused` as today, and report it as damaged.
+    - An empty catalog is created only on a fresh install: no `library.db`, no `library.db.refused*` file, and no `library.db.backup.*` file in `backups/`, whatever its version or state.
+    - Replacing the live catalog refuses when the live catalog is newer and leaves it in place, so a forced desktop import over it fails without changes.
+    - Backup rotation deletes only valid current-version backups beyond the limit, oldest first. Every other `library.db.backup.*` file stays and counts toward neither the limit nor the gap, including files that are not SQLite. The checkpoint writer still removes its own failed copy.
+  - Server slice (no contract change):
+    - With a newer or damaged catalog, or a refused file that blocks an empty catalog, the server runs without a library. The Operator page, settings, logs, restart, stop, and in-app update work. Neither place that attaches catalog backups (the catalog host and the library operations service) attaches them, so no backup or rotation runs. The refresh pipeline does not run on its schedule, and a manual or tray refresh is refused with the message.
+    - Trap (inferred): by .NET's default, an exception that escapes a background service stops the host, and the scheduled refresh reads the catalog session first, so the refresh pipeline checks for a library before it runs instead of catching the failure.
+    - Library routes return 503 `{ error, code }` with the message, the body shape the testing mode's API unavailable simulation already returns. Routes that work without a library stay open: version, capabilities, pair, the web runtime, backup, and refresh settings, and client log relay. Every other `/api` route returns 503, including events, sources, and presets, which without a catalog would answer with empty data and keep preset edits only in memory.
+    - The message is written to `last.log` as a warning and returned in each 503. Newer: the library was saved by a newer version of ReelRoulette, was left unchanged, and opens after updating ReelRoulette. Damaged: the library could not be read and was moved aside to `library.db.refused`; restore a backup from the backups folder, or, with no backups, move the refused file away to start with an empty library. The final wording is decided here.
+    - Document restoring a backup by hand in `docs/dev-setup.md`.
+  - Contract slice: `ControlStatusResponse` gains optional library state and message fields, the 503 on library routes is documented in `shared/api/openapi.yaml` and `docs/api.md`, and the Operator page shows the message. It only adds; the frozen desktop treats a 503 like any failed request. `isHealthy` keeps its meaning.
+  - Library Query Performance must not leave a schema version 2 `library.db.previous` beside a schema version 3 `library.db`: a build without this milestone deletes the newer catalog in that case.
+  - Not included: showing the message in the WebUI, which is WebUI Status Line Overhaul.
+  - Not included: carrying the message into the admin section, which is Admin Section in WebUI Settings.
+  - Not included: restoring a backup from the admin section, which is Admin Library Catalog Transfer.
+  - Not included: corruption the startup check cannot see, which is Catalog Corruption Detection Off the Startup Path.
+  - Not included: a clearer desktop import message for a newer file. The desktop is frozen, and the file is already rejected without changes.
+- **Acceptance criteria**:
+  - A newer `library.db`, alone or with `library.db.previous` or `library.db.incoming` beside it, and a newer `library.db.previous` or `library.db.incoming` with no live catalog, are byte-identical after open, nothing is created or removed, and the open reports the catalog as newer.
+  - A damaged `library.db` is quarantined, and no empty catalog is created on that start or a later one while a backup or a refused file exists.
+  - With no `library.db`, no refused file, and no backups, an empty catalog is created as today.
+  - Replacing a newer live catalog is refused and leaves it byte-identical.
+  - Rotation deletes only valid current-version backups beyond the limit. Newer, older, and unrecognized files in `backups/` are byte-identical afterward and count toward neither the limit nor the gap.
+  - With a newer or damaged catalog, the server starts, the Operator page and update routes answer, library routes return 503 with the message, and no backup or refresh runs, on that start and the next.
+  - `/control/status` reports the library state and message, and the Operator page shows it.
+- **Verification evidence**:
+  - Completion evidence must include these tests, each shown failing before the fix:
+    - A newer live catalog opens as newer, byte-identical, with no `library.db.refused` and no new database (today it is quarantined, measured).
+    - A newer live catalog with an older `library.db.previous`: both unchanged (today the newer one is deleted, measured).
+    - A newer live catalog with `library.db.incoming`: both unchanged (today the incoming file is deleted and the live one quarantined, measured).
+    - No live catalog with a newer `library.db.incoming` or `library.db.previous`: both unchanged and no empty catalog (today the incoming file is deleted, inferred from code).
+    - A damaged live catalog with backups is quarantined with no empty catalog on that open or the next, and a data folder with only a refused file gets no empty catalog.
+    - Rotation keeps newer, older, and non-SQLite files, with and without the gap blocking a copy, and does not count them (today they are deleted, measured).
+    - A forced desktop import over a newer live catalog is refused and leaves it unchanged (today it replaces it, measured).
+    - The server composition with a newer or a damaged catalog starts its hosted services, reports no library, writes no backup, and stays that way on a second start (today the host start throws, measured).
+    - The refresh pipeline neither runs on its schedule nor starts manually without a library.
+    - The `/api` gate answers 503 for library routes and passes the allowed ones, tested as a function: no HTTP test host exists, and adding `Microsoft.AspNetCore.TestHost` needs approval.
+  - `TryCreate_IgnoresAnUnhealthyBackupFile`, which asserts that a non-SQLite backup file is deleted, is renamed (for example `TryCreate_KeepsABackupFileItDoesNotRecognize`) and asserts the file stays byte-identical and uncounted. The existing quarantine tests and `UnrecognizedSchemaFile_IsNotALibraryDatabase_AndIsNotPrepared` keep passing.
+  - `dotnet test ReelRoulette.sln`, plus `npm run generate:contracts` and `npm run verify` for the contract slice.
+  - Docs evidence must include `CONTEXT.md`, `docs/dev-setup.md`, and `docs/domain-inventory.md`, which say a refused database stops startup, and `docs/api.md` for the 503 and the status fields.
+  - Add a Release Specific checklist item: "With a copy of the data folder upgraded by a newer build, the installed build runs without a library, shows the message on the Operator page, leaves the library and backups byte-identical, and updates in-app, on Linux and Windows."
+
+### M11b - Library Query Performance
+
+- **Status**: ⏳ Planned
+- **Goal**: Library browse pages in every sort mode and loaded-window reloads cost about the same at any scroll depth, and a reload of the loaded window is one request.
+- **Scope**:
+  - Ships in v0.14.1, after the catalog open and backup safety milestone. Depends on: Catalog Open and Backup Safety, so every build that can meet a schema version 3 library leaves it and its backups untouched when it cannot open it.
   - Measured by the efficiency and divergence report on a copy of a 48,938-item catalog, through the real list query in a Release build: the first 200-item page takes about 50 ms and allocates about 11 MB. The page at offset 10,000 takes 177 ms and 104 MB, and at offset 40,000 takes 221 ms and 154 MB. Reloading 5,000 loaded tiles takes 2.45 s and 1.1 GB.
   - Causes measured in the same run:
     - Name order uses `COLLATE ORDINAL_IGNORE_CASE`, a managed collation callback with no index, so every page sorts the whole filtered set. The same page ordered by an indexed binary column takes 0.1 ms, against 19.9 ms with the callback.
     - Every page also runs two `COUNT(*)` queries of about 13.5 ms each, including on later pages of the same query.
   - The measurements were not re-run when this milestone was promoted. The code paths they measured are unchanged since the report. The client event efficiency milestone made reloads rarer, but each reload costs the same.
     - A reload re-reads the window in 200-item pages, one request each, and the query limit is 500.
-  - Add a stored, indexed sort key for file name whose order matches today's `OrdinalIgnoreCase` order, and order name sorts and name tie-breaks by it. A `ToLowerInvariant` key such as the existing `file_name_fold` would change today's order for names containing `_`, `[`, `\`, `]`, `^`, or `` ` ``, which sort after letters today and would sort before them. An uppercase-invariant key should keep it; the sort order tests confirm it. This is a catalog schema change with its own migration.
+  - Schema version 3 slice:
+    - Bump the catalog to schema version 3. The migration from schema version 2 adds the stored file name sort key column and its index and fills every key once. Item insert and rename compute the key with the row. A new refresh pipeline stage fills any empty keys, and recomputes every key when a stored key version changes. Nothing else new runs at startup.
+    - The key reproduces today's `OrdinalIgnoreCase` name order exactly: per code point, uppercase only where `OrdinalIgnoreCase` treats the pair as equal, written as code-point-ordered bytes. Plain `ToUpperInvariant` changes the order. A `ToLowerInvariant` key such as the existing `file_name_fold` changes it too, for names containing `_`, `[`, `\`, `]`, `^`, or `` ` ``, which sort after letters today and would sort before them.
+    - Name sorts and name tie-breaks order by the key.
+    - Drop `idx_item_tags_item_id`, which duplicates the leading `item_id` column of the `item_tags` primary key.
+    - The migration never leaves a schema version 2 `library.db.previous` beside a schema version 3 `library.db`, including when interrupted: a build without the catalog open and backup safety fix deletes the newer catalog in that case. Schema version 2 backups stay, since rotation deletes only current-version backups.
+  - Every sort mode: measure name, last played, play count, duration, and date added, ascending and descending, at the first page and at offset 40,000, and add an index for each sort that needs one, including the name-key tie-break, so no sort mode sorts the whole library per request.
   - Cache both counts on the server, keyed by catalog revision, search, and filter, so later pages, appends, and reloads at the same revision do not count again. No contract change. Neither client keeps the totals from the first page: both read `totalCount` from every page and stop a reload once they have that many items, so a later page without counts would end a desktop reload after its second page with a total of 0. Every page keeps returning both counts, and their meaning does not change.
-  - Reload the loaded window in one request. Whether that raises the query limit or adds a reload request with its own bound is decided here; either is a contract change in its own slice.
-  - Library query logging: the server writes one `info` line per library query request (`Library query offset=… limit=… …`), so today a reload writes one line per page; in the v0.14.0 manual pass, a reload of six pages from two WebUI clients wrote twelve near-identical lines. Keep one line per request and add the request's elapsed time to it. Once a reload is a single request, a multi-page reload writes one line.
+  - Reload slice: raise the query limit to 10,000 so a reload of the loaded window is one request, and the WebUI reloads with it. This is a contract change in its own slice. The frozen desktop keeps its smaller pages.
+  - Library query logging: the server writes one `info` line per library query request (`Library query offset=… limit=… …`), so today a reload writes one line per page; in the v0.14.0 manual pass, a reload of six pages from two WebUI clients wrote twelve near-identical lines. Keep one line per request and add the request's elapsed time to it. Once a reload is a single request, it writes one line.
   - Library stats: the per-source figures join items to sources by path prefix and re-derive video or photo from the file extension in SQL. Measured: about 90 ms in `sqlite3` and 138 ms through the service. Every item in the measured catalog has a source id and a media type of 0 or 1. Group by source id and media type instead, with the same results.
-  - Drop `idx_item_tags_item_id`, which duplicates the leading `item_id` column of the `item_tags` primary key.
-  - Fallback if deep offsets still cost much more than the first page after the sort key: add a keyset cursor (the last row's sort values) beside offset paging, and move the WebUI to it. Offset paging stays until Desktop Client Removal, so the frozen desktop keeps working. This is a contract change in its own slice and only adds fields.
+  - Fallback if deep offsets still cost much more than the first page after the sort indexes: add a keyset cursor (the last row's sort values) beside offset paging, and move the WebUI to it. Offset paging stays until Desktop Client Removal, so the frozen desktop keeps working. This is a contract change in its own slice and only adds fields.
   - Measured trap for the tag filter: the tag filter compares `item_tags.name` with the managed collation inside a correlated `EXISTS`, which the planner runs through `idx_item_tags_item_id` and which takes 45 ms for a 22,476-item tag. Rewriting it as `item_tags.name_fold = ?` inside the same `EXISTS` makes the planner use `idx_item_tags_name_fold` for every item, and the same filter took 55 s. The form `items.id IN (SELECT item_id FROM item_tags WHERE name_fold = ?)` takes 35 ms. Any tag filter change keeps a plan of that shape, and after `idx_item_tags_item_id` is dropped the filter still looks up tags by item id through the primary key, both checked with `EXPLAIN QUERY PLAN`.
+  - Release notes for v0.14.1 tell v0.14.0 users to update by installing the new version directly rather than through the in-app updater, since v0.14.0 does not have the catalog open and backup safety fix.
 - **Acceptance criteria**:
-  - Name, last played, play count, duration, and date added sorts return the same items in the same order as before, including names that differ only by case and names containing `_`, `[`, `\`, `]`, `^`, or `` ` ``.
-  - A page at offset 40,000 of the measured catalog costs within a small factor of the first page, measured.
+  - Name, last played, play count, duration, and date added sorts, in both directions, return the same items in the same order as before, including names that differ only by case, names containing `_`, `[`, `\`, `]`, `^`, or `` ` ``, and names where `ToUpperInvariant` and `OrdinalIgnoreCase` disagree.
+  - Every sort mode in both directions costs within a small factor of its first page at offset 40,000 of the measured catalog, measured, and none sorts the whole library per request.
+  - A schema version 2 catalog opens as schema version 3 with every sort key filled. Insert and rename write the key with the row, and the refresh stage fills empty keys and recomputes every key after a key version change. Startup runs nothing else new.
+  - An interrupted migration never leaves a schema version 2 `library.db.previous` beside a schema version 3 `library.db`.
   - A repeat query with the same search and filter at the same catalog revision runs no count queries and returns the same totals, and a write that changes the revision counts again.
-  - A reload of the loaded window is one request.
-  - A reload of several pages writes exactly one library query line to `last.log`, with its elapsed time.
+  - A reload of the loaded window is one request, for windows of up to 10,000 items.
+  - A reload writes exactly one library query line to `last.log`, with its elapsed time.
   - Library stats return the same global and per-source figures as before on the measured catalog.
   - Tag filters return the same items as before, and none takes longer than the current form on the measured catalog.
   - `item_tags` has one index on `item_id`.
+  - The v0.14.1 release notes tell v0.14.0 users to install the new version directly.
 - **Verification evidence**:
-  - Completion evidence must include before-and-after timings and allocations, on a copy of a large catalog in a temp folder, for the first page, offset 10,000, offset 40,000, a 5,000-tile reload, a common-tag filter, a search, and library stats, plus `EXPLAIN QUERY PLAN` for the list, count, and tag filter queries.
-  - Completion evidence must include tests that each sort order matches the previous order on a fixture with case-only and punctuation differences, the schema migration tests, `dotnet test ReelRoulette.sln`, and `npm run verify` after any contract change.
+  - Completion evidence must include before-and-after timings and allocations, on a copy of a large catalog in a temp folder, for every sort mode in both directions at the first page and at offset 40,000, name order at offset 10,000, a 5,000-tile reload, a common-tag filter, a search, and library stats, plus `EXPLAIN QUERY PLAN` for each sort's list query, the count, and the tag filter queries.
+  - Completion evidence must include tests that each sort order matches the previous order on a fixture with case-only, punctuation, and `ToUpperInvariant`-versus-`OrdinalIgnoreCase` differences, the schema migration tests including an interrupted migration, tests for the key on insert and rename and for the refresh stage, `dotnet test ReelRoulette.sln`, and `npm run verify` for the reload slice.
 
-### M11b - Random Selection Performance
+### M11c - Random Selection Performance
 
 - **Status**: ⏳ Planned
 - **Goal**: A random pick over the whole library reads only what selection needs and costs a few tens of milliseconds.
@@ -162,7 +229,7 @@ Last milestone completed: M10j12
 - **Verification evidence**:
   - Completion evidence must include before-and-after timings and allocations per randomization mode on a copy of a large catalog in a temp folder, tests that the selection rules are unchanged, and `dotnet test ReelRoulette.sln`.
 
-### M11c - Thumbnail Caching
+### M11d - Thumbnail Caching
 
 - **Status**: ⏳ Planned
 - **Goal**: Thumbnails are fetched again only when they change.
@@ -180,7 +247,7 @@ Last milestone completed: M10j12
 - **Verification evidence**:
   - Completion evidence must include a server test for the thumbnail cache headers or revision, a WebUI test or browser network check that an unchanged thumbnail is not fetched again, `dotnet test ReelRoulette.sln`, and `npm run verify` after any contract change.
 
-### M11d - Item IDs in the Contract
+### M11e - Item IDs in the Contract
 
 - **Status**: ⏳ Planned
 - **Goal**: Every event and response that refers to a library item carries its item id, and the WebUI matches items by id instead of by path.
@@ -524,10 +591,10 @@ Last milestone completed: M10j12
 - **Status**: ⏳ Planned
 - **Goal**: Everything the Operator page does moves into an admin section of the WebUI settings panel, and the server keeps a minimal recovery page for when the WebUI's files are broken.
 - **Scope**:
-  - Planned for v0.15.0. Depends on: WebUI Settings Panel.
+  - Planned for v0.15.0. Depends on: WebUI Settings Panel, and Catalog Open and Backup Safety, whose library state and message the admin section shows.
   - The Operator page is about 780 lines of HTML, CSS, and JavaScript inside a raw string in `src/core/ReelRoulette.ServerApp/Program.cs`, and no test covers `/operator`.
   - Admin section slice:
-    - Move every Operator section into the admin section as Preact screens: server updates, runtime status with restart and stop, web runtime settings, control settings (control token, dev channel, Launch Server on Startup), the testing suite, connected clients, server logs, and incoming and outgoing API events. They call the same control routes, so there is no contract change.
+    - Move every Operator section into the admin section as Preact screens: server updates, runtime status with restart and stop (including the message when the server runs without a library), web runtime settings, control settings (control token, dev channel, Launch Server on Startup), the testing suite, connected clients, server logs, and incoming and outgoing API events. They call the same control routes, so there is no contract change.
     - The Operator's update download needs two attempts every time: click Download and confirm, and nothing happens; click Download and confirm again, and it downloads. Find the cause before building the admin section's update controls, so they don't inherit it.
     - Gating: localhost is trusted. From another machine, the admin section shows nothing until the control token is entered through `POST /control/pair`. The accounts release replaces the token with admin accounts.
     - Later admin work lands here: refresh, backup, and duplicate review, source and item management, catalog transfer, the Log Viewer, and account administration.
@@ -591,12 +658,13 @@ Last milestone completed: M10j12
 - **Status**: ⏳ Planned
 - **Goal**: Export and import the library from the WebUI admin section, with the server applying the catalog, so catalog transfer does not need the desktop app.
 - **Scope**:
-  - Planned for v0.15.1. Depends on: Admin Section in WebUI Settings, and Remove library.json Library Support.
+  - Planned for v0.15.1. Depends on: Admin Section in WebUI Settings, Remove library.json Library Support, and Catalog Open and Backup Safety, so import can restore a library while the server runs without one.
   - Gated like the rest of the admin section.
   - Today import is desktop-only and needs the server stopped: `LibraryArchiveMigration.ImportDatabase` writes the server's `library.db` from the desktop process (read from code). This is the main blocker for removing the desktop.
   - Move the `library.db` checkpoint transfer onto server operations. The server writes the checkpoint while it has `library.db` open. Settings and backups are not part of the transfer. Presets and thumbnail revision and dimensions travel with `library.db`. JPEG files stay in the local thumbnail directory.
   - Reuse the replace-and-recover protocol already in `LibraryCatalogStore` (incoming file, finished-file rename, recovery), which the desktop import uses today with the server stopped. What is new is replacing the database while the server's catalog session is open.
   - Import runs while the server is up. The previous database stays aside until the new file is in place and opens. A crash between those renames restores the previous file, or promotes the finished temporary file if that is the one that landed. A file that is not a library database is rejected.
+  - Import also works while the server runs without a library, and can import one of the server's own backups, which is how the admin section restores a backup.
   - Import keeps the source folder remap the desktop import offers.
   - Add export and import actions to the admin section. Desktop Client Removal removes the desktop's Library Export and Import menus.
   - Trap: measured on the developer's catalog, `library.db` is 70.5 MB for 49,050 items, larger than ASP.NET Core's default request body limit of about 30 MB (the framework default, not tested here). The import upload needs its own limit and should stream to the incoming file rather than buffer in memory.
@@ -1042,7 +1110,7 @@ Last milestone completed: M10j12
 - **Scope**:
   - Unscheduled.
   - Startup reads only the schema and the catalog's `revision` row, so corruption confined to item, tag, or preset pages passes the open and surfaces at the first query that reads those pages. A full check on every open reads the whole file and slows startup on large catalogs.
-  - Candidate: run a full integrity check when a catalog backup is made, and on failure keep the last good backup, log it, and report it on the admin section's status. Decide whether a failed check also refuses the next startup.
+  - Candidate: run a full integrity check when a catalog backup is made, and on failure keep the last good backup, log it, and report it on the admin section's status. Decide whether a failed check also refuses the next startup; if it does, the server runs without a library as it does for a damaged catalog (Catalog Open and Backup Safety).
   - Startup keeps its revision-row read.
 - **Acceptance criteria**:
   - A catalog with corrupt item pages is reported without opening it in full at startup.
@@ -1301,15 +1369,16 @@ Last milestone completed: M10j12
 - **Status**: ⏳ Planned
 - **Goal**: The WebUI status line shows one stable message per situation.
 - **Scope**:
-  - Planned for v0.15.0. Depends on: WebUI Responsive Layout and Panels.
+  - Planned for v0.15.0. Depends on: WebUI Responsive Layout and Panels, and Catalog Open and Backup Safety, whose 503 message the status line shows.
   - Can be cut from the release if it runs long; Testing Suite Overhaul is then cut with it.
   - Moved here from v0.14.0 when the desktop was frozen. The desktop half and the shared fixture are dropped, and the status line moves with the panel layout.
   - Observed in the v0.13.0 manual regression pass: with the server stopped, the WebUI shows "library load failed: HTTP 503" only briefly before "SSE reconnecting...". The desktop alternates between "core runtime unavailable" and "core runtime is required to browse the library", and stays as it is.
   - Define one precedence rule for which message wins when several apply, so the status line never alternates.
-  - Define the message for each event once: server stopped, API unavailable, version or capability mismatch, and refresh progress and results.
+  - Define the message for each event once: server stopped, API unavailable, the server running without a library (showing the server's message, which says whether the library is from a newer version or damaged), version or capability mismatch, and refresh progress and results.
   - Add a Release Specific checklist item: "With the server stopped, unavailable, or mismatched, and during a refresh, the WebUI settles on one status message."
 - **Acceptance criteria**:
   - With the server stopped, unavailable, or mismatched, the status line settles on one message and does not alternate.
+  - With the server running without a library, the status line shows the server's message.
   - Refresh status reads the same during and after each refresh.
   - The precedence rule and the per-event messages are documented.
 - **Verification evidence**:
