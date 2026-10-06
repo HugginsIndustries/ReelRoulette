@@ -19,12 +19,8 @@ Instructions:
 
 Commit Message:
 
-M11f: Identify items by ID in every event and response
+Chore: Add a promote-milestones skill and point the pre-release skill to it
 
-- Random and play responses, playbackRecorded, auto-tag scan and apply, duplicate-apply failures, and the record-playback response carry the catalog item id; itemTagsChanged adds resolvedItemIds beside itemIds, and library items add durationSeconds. Existing fields keep their meaning, so the desktop is unchanged.
-- itemStateChanged carries the previous favorite and blacklist, so a WebUI favorite outside the loaded window patches it unless the file enters the filter; the shared tile rule and its C# copy take those values.
-- The WebUI matches tiles, the playing item, its item-state cache, and pending tag saves by item id, and names items by id in its requests; path normalization is gone.
-- playbackRecorded.path is always the catalog's path, and direct play records the play by item id.
-- Server contract tests for each changed event and response; WebUI tests for two paths that differ only in case and for the window patch.
-- npm run verify now fails on an undeclared name in the untyped app.js, which typecheck, tests, and build all let through.
-- OpenAPI, api, architecture, domain inventory, CONTEXT, WebUI README, changelog, and testing checklist updated; M11f moves to MILESTONES-COMPLETED.md.
+- New `promote-milestones` skill: checks each milestone of the next planned release against the current code, re-measures the figures its scope depends on, and reports each one as still accurate, already done, changed by later work, or resting on an assumption that no longer holds, then stops for decisions.
+- After confirmation it corrects the entries, assigns the next `M*` series in outline order, moves them to Active Milestones, updates the Planned Releases line, runs `check-milestones.ps1 -BaseRef HEAD`, and starts a `Docs:` commit entry.
+- Pre-release Part 2 now removes the released version from Planned Releases, runs the milestone checker, and ends by naming the next planned release and pointing to `promote-milestones`.

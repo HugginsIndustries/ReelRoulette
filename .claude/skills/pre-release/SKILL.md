@@ -1,6 +1,6 @@
 ---
 name: pre-release
-description: Use only when the user explicitly asks to prepare a release, start the pre-release testing pass, or finish it after their manual checks. Consolidates the changelog, drafts release notes, resets the testing checklist and runs its automated checks; after the user's manual pass, sets the final version, cuts the changelog, and fills in the release notes' verification. Never commits or tags.
+description: Use only when the user explicitly asks to prepare a release, start the pre-release testing pass, or finish it after their manual checks. Consolidates the changelog, drafts release notes, resets the testing checklist and runs its automated checks; after the user's manual pass, sets the final version, cuts the changelog, removes the release from Planned Releases, and fills in the release notes' verification. Never commits or tags.
 ---
 
 # Pre-release
@@ -58,10 +58,12 @@ Run this after the user says their manual pass is done.
 3. Re-check `[Unreleased]` against the style note, since fixes made during testing may have added to it, and update the release notes draft to match.
 4. Set the final version with `pwsh ./tools/scripts/set-release-version.ps1 -Version v{VERSION} -NoRunVerify`, and show what it changed.
 5. Cut the changelog with `pwsh ./tools/scripts/cut-changelog.ps1 -Version {VERSION} -Name "{Release Name}"`. It moves `[Unreleased]` into `## [{VERSION}] — {Release Name} (YYYY-MM-DD)` with today's date, keeping only headings that have entries, leaves a fresh `[Unreleased]` with every heading empty, and updates the footer compare links. If it refuses, fix what it reports and run it again. Show what it changed.
-6. Fill in the release notes' Verification section from the checklist: what was tested and where (from Environment), and any failures or skips users should know about, in plain language. Replace the TODO comment, and check the whole entry against the style guide once more.
-7. Tick the Release Flow items you verified: version, changelog cut and fresh headings, footer links, and release notes. CI is checked after the commit, so it is not a box in this list.
-8. Update the `COMMIT-MESSAGE.txt` entry for the final commit, following `AGENTS.md`.
-9. Tell the user: commit and push, then check CI passes on that commit on Linux and Windows (offer to check with `gh run list`). Then create the release on GitHub: tag `v{VERSION}` on that commit, title `v{VERSION} — {Release Name}`, and the new `RELEASE-NOTES.md` entry as the body. Creating it tags the commit, runs the release workflow, and attaches the installers. Print the release notes entry in a fenced code block so it can be pasted straight into GitHub.
+6. Remove the released version's line from the Planned Releases outline in `MILESTONES.md`, then run `pwsh ./tools/scripts/check-milestones.ps1 -BaseRef HEAD` and fix what it reports. If it reports one of this release's milestones missing from the outline, that milestone didn't finish: ask where it goes rather than choosing. Say what you ran and its result.
+7. Fill in the release notes' Verification section from the checklist: what was tested and where (from Environment), and any failures or skips users should know about, in plain language. Replace the TODO comment, and check the whole entry against the style guide once more.
+8. Tick the Release Flow items you verified: version, changelog cut and fresh headings, footer links, and release notes. CI is checked after the commit, so it is not a box in this list.
+9. Update the `COMMIT-MESSAGE.txt` entry for the final commit, following `AGENTS.md`.
+10. Tell the user: commit and push, then check CI passes on that commit on Linux and Windows (offer to check with `gh run list`). Then create the release on GitHub: tag `v{VERSION}` on that commit, title `v{VERSION} — {Release Name}`, and the new `RELEASE-NOTES.md` entry as the body. Creating it tags the commit, runs the release workflow, and attaches the installers. Print the release notes entry in a fenced code block so it can be pasted straight into GitHub.
+11. End by naming the next planned release, the first line now in the Planned Releases outline, and pointing to the `promote-milestones` skill to promote it to Active Milestones. If its milestones already have `M*` IDs, it was promoted during this pass: say so instead.
 
 # Rules
 
