@@ -19,10 +19,8 @@ Instructions:
 
 Commit Message:
 
-M11d: Pin the .NET SDK, Node, and bundled FFmpeg for builds
+M11d: Move Velopack and vpk to 1.2.161
 
-- global.json pins SDK 10.0.112 with latestPatch, and CI and release install from it instead of 10.0.x, which resolved to the 10.0.401 feature band.
-- CI and release run Node 24 to match local, and CI prints the SDK and Node versions.
-- The Windows server release bundles a pinned BtbN month-end FFmpeg build, checks its SHA-256, and fails unless the bundled ffprobe -version names that build, replacing setup-ffmpeg's daily build.
-- README and dev setup name the SDK band and Node version, and Release Specific checks cover the bundled ffprobe version and the in-app delta update from v0.14.x.
-- AGENTS.md sends checks that need a release build or dev release to Release Specific checklist items instead of pending milestone evidence.
+- The Velopack library and the release workflow's vpk move from 1.2.0 to 1.2.161; the library API and every vpk option the release passes are unchanged.
+- Release packs pass --runtime from the leg's RID, since 1.2.161 otherwise warns that it defaults to x86; Windows Setup.exe is now 64-bit.
+- The Linux packaged-server smoke installs the pinned vpk under artifacts/velopack-smoke/tools and uses it, instead of whatever vpk is installed globally.

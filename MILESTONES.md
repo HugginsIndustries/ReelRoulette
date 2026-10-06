@@ -112,7 +112,7 @@ Last milestone completed: M11c
 
 ### M11d - Dependency Updates
 
-- **Status**: 🚧 In Progress (slice 1 complete)
+- **Status**: 🚧 In Progress (slices 1 and 2 complete, slice 3 implemented)
 - **Goal**: Dependencies are on their latest safe versions, the shipped server carries one stable SkiaSharp with matching natives, and builds use the same SDK, Node, and FFmpeg every run.
 - **Scope**:
   - Ships in v0.14.1, after the random selection performance milestone and before Thumbnail Caching, whose server thumbnails use SkiaSharp. Each slice is verified on its own. Slices 3, 4, and 5 can be cut to a later release if v0.14.1 runs long; slices 1 and 2 cannot.
@@ -132,6 +132,7 @@ Last milestone completed: M11c
     - Move the Velopack library and the `vpk` tool from 1.2.0 to 1.2.161 together.
     - Check `release.yml`'s `vpk` usage against the release notes first: `vpk download s3`, `vpk upload s3 --keepMaxReleases`, and `pack --noPortable true`. Version 1.2.158 moved argument validation into the command layer and renamed the MSI image flags.
     - Trap: 1.2.158 removes the bsdiff delta fallback, so zstd is the only delta patch format. Installed v0.14.x apps run the 1.2.0 updater.
+    - Checked: the 1.2.158 change (velopack/velopack#1010) says the Rust updater that applies deltas only ever supported zstd patches, and bsdiff was a `vpk pack` fallback that produced deltas no client could apply. Installed v0.14.x apps therefore apply deltas from `vpk` 1.2.161, and `vpk pack` now fails instead of falling back.
     - The Release Specific checklist item "The release run packs and uploads every leg, and an installed v0.14.x server and desktop take the in-app delta update to this release, on Linux and Windows." covers this.
   - Slice 4, Vite 8 and Vitest 5:
     - Move them together, because Vitest 3 only supports Vite 7 and earlier.
@@ -169,8 +170,17 @@ Last milestone completed: M11c
   - Slice 2:
     - `dotnet --version` in the repo prints 10.0.112 through `global.json`. A copy pinned to 10.0.113 is refused, so the file is read. `dotnet build ReelRoulette.sln` has no warnings, and `dotnet test ReelRoulette.sln` ran 383, 269, and 3 tests, all passing. `npm run verify` passed with 232 tests on Node 24.21.0.
     - The pinned FFmpeg is `ffmpeg-n9.0.2-17-g2a571b6068-win64-gpl-9.0.zip` from BtbN's `autobuild-2026-09-30-13-08`. The downloaded file matched BtbN's published SHA-256, holds `bin/ffmpeg.exe` and `bin/ffprobe.exe`, and its `ffprobe.exe` embeds `n9.0.2-17-g2a571b6068-20260930`. The release step's script, run under pwsh with the download swapped for that file and canned `ffprobe -version` output, bundled both executables for that version line and failed for a wrong hash, a different build, and the version without its date.
-    - CI run showing `dotnet --version` and Node 24: pending.
+    - CI run 37516933133 passed on Linux, Windows, and WebUI verify, with the same 383, 269, and 3 tests on both OSes. Both .NET jobs printed SDK 10.0.112 from `global.json`, and WebUI verify ran on Node 24.21.0.
     - The release run check is the Release Specific checklist item "The Windows server release's bundled `ffprobe -version`, printed in the release log, names the pinned FFmpeg build."
+  - Slice 3:
+    - The release notes list pull requests only. The argument validation and deployment command refactor (velopack/velopack#934) has no description, so every option `release.yml` passes was checked against `--help` from `vpk` 1.2.0 and 1.2.161, and the hidden `--noPortable` against the `PackCommand` source at both tags. Every option keeps its name and value. `--disablePathStyle` became a flag, which `release.yml` does not use.
+    - `upload s3` and `download s3` with the release's options, fake credentials, and a closed local endpoint parse on both versions and stop only at the connection.
+    - A Windows server publish packed with the release's Windows options under `vpk [win] pack` 1.2.161 produced a full package, a 64-bit `Setup.exe` (32-bit under 1.2.0), and, on a second version with one changed file, a delta whose changed files are `.zsdiff` patches. 1.2.161 warns "No architecture specified with --runtime, defaulting to x86" although the package still records `win-x64`, so `release.yml` now passes `--runtime` from the leg's RID, which clears the warning with the same output. The smoke script passes `--runtime linux-x64` to match.
+    - The smoke script ignored its `VPK_VERSION`: its global install failed silently while 1.2.0 was installed, so it packed with whatever `vpk` was on the path. It now installs that version under `artifacts/velopack-smoke/tools/` and runs it, and a version that does not exist fails the run before publishing.
+    - The Velopack library compiled unchanged. All three targets resolve Velopack 1.2.161. `dotnet build ReelRoulette.sln` has no warnings, and `dotnet test ReelRoulette.sln` ran 383, 269, and 3 tests, all passing.
+    - `./tools/scripts/verify-linux-packaged-server-smoke.sh` passed, packing with `Velopack CLI 1.2.161`.
+    - Release run, upload, and the delta update from v0.14.x: the Release Specific checklist item "The release run packs and uploads every leg, and an installed v0.14.x server and desktop take the in-app delta update to this release, on Linux and Windows."
+    - CI run: pending.
 
 ### M11e - Thumbnail Caching
 

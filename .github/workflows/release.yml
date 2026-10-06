@@ -11,7 +11,7 @@ on:
       - "v*"
 
 env:
-  VPK_VERSION: "1.2.0"
+  VPK_VERSION: "1.2.161"
   B2_BUCKET: hugginsindustries-releases
   B2_ENDPOINT: https://s3.us-west-004.backblazeb2.com
   PUBLIC_FEED_BASE: https://f004.backblazeb2.com/file/hugginsindustries-releases
@@ -438,6 +438,7 @@ jobs:
             --packId "${{ matrix.pack_id }}"
             --packVersion "$BARE_VERSION"
             --packDir "$PUBLISH_DIR"
+            --runtime "${{ matrix.rid }}"
             --mainExe "${{ matrix.main_exe }}"
             --packTitle "${{ matrix.pack_title }}"
           )

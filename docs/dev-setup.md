@@ -182,7 +182,7 @@ After local changes that affect server packaging, run:
 ./tools/scripts/verify-linux-packaged-server-smoke.sh
 ```
 
-With no argument, the script publishes and `vpk pack`s a server AppImage (matching the workflow shape), then runs it headlessly with `--appimage-extract-and-run` when FUSE is unavailable. It checks `/health`, `/api/version`, `/control/status`, and `/operator`. It isolates **`XDG_CONFIG_HOME`** and **`XDG_DATA_HOME`** so menu registration and settings do not touch your real `~/.config` or `~/.local/share` tree.
+With no argument, the script publishes and `vpk pack`s a server AppImage (matching the workflow shape), using the workflow's `vpk` version, which it installs once under `artifacts/velopack-smoke/tools/` without touching a global `vpk` (override with `VPK_VERSION`). It then runs the AppImage headlessly with `--appimage-extract-and-run` when FUSE is unavailable. It checks `/health`, `/api/version`, `/control/status`, and `/operator`. It isolates **`XDG_CONFIG_HOME`** and **`XDG_DATA_HOME`** so menu registration and settings do not touch your real `~/.config` or `~/.local/share` tree.
 
 ## Release Versioning
 

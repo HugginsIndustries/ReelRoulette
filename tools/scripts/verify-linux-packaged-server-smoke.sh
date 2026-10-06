@@ -12,7 +12,7 @@ usage() {
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-VPK_VERSION="${VPK_VERSION:-1.2.0}"
+VPK_VERSION="${VPK_VERSION:-1.2.161}"
 
 appimage=""
 if [[ $# -gt 1 ]]; then
@@ -45,6 +45,12 @@ build_velopack_server_appimage() {
   bare="${version_file#v}"
   assembly="$(printf '%s' "$bare" | sed -E 's/^([0-9]+\.[0-9]+\.[0-9]+).*/\1/').0"
 
+  # A versioned tool path, so the pack always uses VPK_VERSION whatever vpk is installed globally.
+  local vpk_dir="$REPO_ROOT/artifacts/velopack-smoke/tools/vpk-$VPK_VERSION"
+  if [[ ! -x "$vpk_dir/vpk" ]]; then
+    dotnet tool install vpk --version "$VPK_VERSION" --tool-path "$vpk_dir" >/dev/null
+  fi
+
   publish_dir="$(mktemp -d)"
   out_dir="$(mktemp -d)"
   trap 'rm -rf "$publish_dir" "$out_dir"' RETURN
@@ -59,15 +65,13 @@ build_velopack_server_appimage() {
 
   pwsh "$REPO_ROOT/tools/scripts/stage-webui-assets.ps1" -RepoRoot "$REPO_ROOT" -PublishDir "$publish_dir"
 
-  dotnet tool install --global vpk --version "$VPK_VERSION" >/dev/null 2>&1 || true
-  export PATH="${HOME}/.dotnet/tools:${PATH}"
-
-  vpk pack \
+  "$vpk_dir/vpk" pack \
     -o "$out_dir" \
     --channel linux-server-smoke \
     --packId ReelRoulette.Server \
     --packVersion "$bare" \
     --packDir "$publish_dir" \
+    --runtime linux-x64 \
     --mainExe ReelRoulette.ServerApp \
     --packTitle "ReelRoulette Server" \
     --icon "$REPO_ROOT/assets/HI-256.png"
