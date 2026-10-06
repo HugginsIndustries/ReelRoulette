@@ -518,7 +518,7 @@ export function createLibraryQuerySession(query: LibraryQueryFn): LibraryQuerySe
       if (!hasResult && !inFlight) {
         return;
       }
-      await run("reload");
+      await run(inFlight === "reset" ? "reset" : "reload");
     },
     async applyTags(payload) {
       const ids = (payload.itemIds ?? []).map((id) => String(id).trim()).filter(Boolean);

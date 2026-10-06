@@ -1506,10 +1506,20 @@ paths:
     get:
       summary: Get generated thumbnail by item id
       operationId: getThumbnailByItemId
+      description: >-
+        Every 200 and 304 response carries an ETag and Last-Modified. A request whose `v` matches the thumbnail's current
+        version is cacheable for a year as immutable. Any other request gets `Cache-Control: no-cache` and is
+        revalidated against the ETag.
       parameters:
         - name: itemId
           in: path
           required: true
+          schema:
+            type: string
+        - name: v
+          in: query
+          required: false
+          description: The item's `thumbnailVersion` from the list query page.
           schema:
             type: string
       responses:
@@ -1520,6 +1530,8 @@ paths:
               schema:
                 type: string
                 format: binary
+        "304":
+          description: The thumbnail matches the request's If-None-Match or If-Modified-Since.
         "404":
           description: Thumbnail not found
         "503":
@@ -2229,6 +2241,9 @@ components:
         hasThumbnail:
           type: boolean
           description: True when a generated thumbnail JPEG exists for this item id.
+        thumbnailVersion:
+          type: string
+          description: Opaque version of the thumbnail JPEG, present when it exists. It changes whenever the thumbnail is written again. Pass it as `v` to the thumbnail route.
         thumbnailWidth:
           type: integer
           format: int32

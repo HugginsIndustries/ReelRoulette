@@ -19,7 +19,10 @@ Instructions:
 
 Commit Message:
 
-Docs: Complete the dependency updates milestone
+M11e: Cache thumbnails until they change
 
-- M11d moves to MILESTONES-COMPLETED.md with slice 5's CI run recorded, and the tracker line reads M11d.
-- CONTEXT.md notes the pinned SDK, Node, and Windows FFmpeg in CI and release.
+- Library query items carry a thumbnailVersion that changes whenever the thumbnail JPEG is written again.
+- The thumbnail route sends an ETag and Last-Modified, is cacheable as immutable when requested at the current version, and is no-cache otherwise; the desktop is unchanged.
+- The WebUI puts the version in each tile's thumbnail URL and reloads the loaded window once per finished refresh run; a reload that arrives while a new query is loading reads that query again from the top instead of replacing it.
+- Server tests for the cache headers, 304, and the listed version; WebUI tests for versioned tile URLs and the once-per-run reload.
+- OpenAPI, api, architecture, CONTEXT, changelog, and testing checklist updated; M11e moves to MILESTONES-COMPLETED.md.

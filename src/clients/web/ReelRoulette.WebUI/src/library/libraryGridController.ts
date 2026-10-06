@@ -314,6 +314,7 @@ export function getVisibleRowCountForFixture(
     integratedLoudness: null,
     tags: [],
     hasThumbnail: false,
+    thumbnailVersion: null,
     thumbnailWidth: null,
     thumbnailHeight: null
   }));

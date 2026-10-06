@@ -53,6 +53,7 @@ function item(id: string, overrides: Partial<LibraryProjectionItem> = {}): Libra
     integratedLoudness: null,
     tags: [],
     hasThumbnail: true,
+    thumbnailVersion: "v1",
     thumbnailWidth: 160,
     thumbnailHeight: 90,
     ...overrides
@@ -362,6 +363,48 @@ describe("libraryQuerySession", () => {
 
     expect(calls).toEqual([0, 0]);
     expect(session.snapshot().items.map((entry) => entry.id)).toEqual(["fresh"]);
+  });
+
+  it("reads an open new query again from the top when the loaded window reloads", async () => {
+    let holdSearch = true;
+    let releaseSearch: (page: LibraryQueryPage) => void = () => {};
+    const calls: Array<{ search: string; offset: number; limit: number }> = [];
+    const scrolls: string[] = [];
+    const session = createLibraryQuerySession(async (request) => {
+      calls.push({ search: request.search, offset: request.offset, limit: request.limit });
+      if (request.search === "clip" && holdSearch) {
+        holdSearch = false;
+        return await new Promise<LibraryQueryPage>((resolve) => {
+          releaseSearch = resolve;
+        });
+      }
+      return page(
+        Array.from({ length: request.limit }, (_, index) => item(`tile-${request.offset + index}`)),
+        8_000,
+        8_000
+      );
+    });
+    session.setListener((event) => scrolls.push(event.scroll));
+    await session.ensureLoaded(createDefaultFilterState(), controls());
+    session.setOverlayVisible(true);
+    await session.considerFill(0, 1);
+    expect(session.snapshot().items.length).toBeGreaterThan(LIBRARY_QUERY_WINDOW_SIZE);
+    session.noteScroll(400);
+    calls.length = 0;
+    scrolls.length = 0;
+
+    const searching = session.resetQuery(createDefaultFilterState(), controls({ searchQuery: "clip" }));
+    const reloading = session.reloadLoaded();
+    releaseSearch(page([item("stale")], 1, 1));
+    await Promise.all([searching, reloading]);
+
+    expect(calls).toEqual([
+      { search: "clip", offset: 0, limit: LIBRARY_QUERY_WINDOW_SIZE },
+      { search: "clip", offset: 0, limit: LIBRARY_QUERY_WINDOW_SIZE }
+    ]);
+    expect(session.snapshot().items).toHaveLength(LIBRARY_QUERY_WINDOW_SIZE);
+    expect(session.snapshot().scrollTop).toBe(0);
+    expect(scrolls.at(-1)).toBe("top");
   });
 
   it("reloads a tag filter and patches tags when no tag filter is active", async () => {

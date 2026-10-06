@@ -6,6 +6,32 @@ The archive of finished milestones, moved here from `MILESTONES.md` as-is. The r
 
 Latest completions first:
 
+### M11e - Thumbnail Caching
+
+- **Status**: ✅ Complete
+- **Goal**: Thumbnails are fetched again only when they change.
+- **Scope**:
+  - Ships in v0.14.1, after the dependency updates milestone. Depends on: Dependency Updates, whose SkiaSharp alignment the server's thumbnails build on. Can be cut to a later release if v0.14.1 runs long.
+  - Found by the efficiency and divergence report from code reading, not measured: `GET /api/thumbnail/{itemId}` sends no cache headers, and its URL has no revision, so the WebUI and the desktop fetch a thumbnail again every time a tile shows it.
+  - Inferred, not checked: the route serves the file with `Results.File` from a physical path, which probably sends `Last-Modified`, so browsers may already cache thumbnails heuristically for a while, and a regenerated thumbnail could then show stale. Before changing anything, check in a browser network panel which thumbnail requests reach the server today.
+  - Add cache headers to thumbnail responses, or a revision to the thumbnail URL so it can be cached until the thumbnail changes. A revision in the URL needs the thumbnail revision in the list query page, which is a contract change in its own slice and only adds a field.
+  - The desktop's own thumbnail problems found by the same report are not fixed, because the desktop is frozen to bug fixes: decoded bitmaps kept after tiles scroll out of view (about 645 KB each at the measured average of 370×436, so about 3 GB for 5,000 tiles, inferred), full-size decoding, and overlapping fetch loops.
+  - Not included: WebUI grid rendering, which is WebUI Grid Rendering, in the WebUI overhaul release.
+- **Acceptance criteria**:
+  - A thumbnail the WebUI has shown is not fetched again while it stays unchanged, including after it scrolls back into view.
+  - A regenerated thumbnail is shown without a restart.
+  - Grid layout and placeholders behave as before.
+- **Verification evidence**:
+  - Completion evidence must include a server test for the thumbnail cache headers or revision, a WebUI test or browser network check that an unchanged thumbnail is not fetched again, `dotnet test ReelRoulette.sln`, and `npm run verify` after any contract change.
+  - Measured before the change, with the route called directly in a test: it sent `Last-Modified` only, with no `Cache-Control` and no ETag, and answered `If-None-Match` with a full 200. The browser network panel check before the change was skipped by decision, since explicit headers and a versioned URL decide the outcome whatever browsers do today.
+  - The list query page carries `thumbnailVersion`, built from the JPEG's write time and size, so it changes whenever the stage writes the file, including a regenerated missing JPEG, which the stored source revision would not show. The thumbnail route takes it as `v`: a current `v` gets `Cache-Control: private, max-age=31536000, immutable`, and no `v` or an older one gets `no-cache`. Every response has an ETag and `Last-Modified`. The desktop sends no `v` and is unchanged.
+  - The WebUI puts the version in each tile's thumbnail URL and reloads the loaded window once per finished refresh run, as the desktop does, so rewritten thumbnails and new items reach the grid without reloading the page.
+  - Server tests in `ThumbnailResponseTests`: a current version is immutable with an ETag and `Last-Modified`, no version and an old version are `no-cache`, the old version serves the new JPEG, a matching `If-None-Match` gets 304 with no body, and a missing JPEG is 404 with no version. Four of the five failed against the route before the change. `EnrichListedItems` and list query tests assert the version is present for an existing JPEG and absent otherwise.
+  - WebUI tests: a rebuilt row keeps the same versioned URL for an unchanged thumbnail and a new URL for a rewritten one, which both fail when the row drops the version; an item without a thumbnail keeps its placeholder; the projection parses the version; a finished refresh run is reported once, while a running or canceled run and a repeated snapshot are not; and a reload that arrives while a new query is loading reads that query again from the top instead of replacing it, which fails against the reload before the fix.
+  - `dotnet build ReelRoulette.sln` has no warnings, and `dotnet test ReelRoulette.sln` ran 388 Core, 269 DesktopApp, and 3 ServerApp tests, all passing. `npm run generate:contracts` and `npm run verify` passed with 238 WebUI tests.
+  - The browser check is the Release Specific checklist item "In the WebUI library overlay, scrolling tiles away and back sends no new thumbnail requests in the browser network panel, and after a file changes and a refresh finishes, its tile shows the new thumbnail without reloading the page."
+  - Docs: `shared/api/openapi.yaml`, `docs/api.md`, `docs/architecture.md`, `CONTEXT.md`, and the testing checklist.
+
 ### M11d - Dependency Updates
 
 - **Status**: ✅ Complete

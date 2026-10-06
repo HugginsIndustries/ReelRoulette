@@ -242,6 +242,14 @@ public sealed class RefreshPipelineService : BackgroundService
         return Path.Combine(_thumbnailDir, $"{itemId}.jpg");
     }
 
+    /// <summary>
+    /// The version clients put in a thumbnail URL. Every thumbnail write replaces the JPEG, which changes it.
+    /// </summary>
+    public static string ThumbnailVersion(FileInfo thumbnail)
+    {
+        return $"{thumbnail.LastWriteTimeUtc.Ticks:x}-{thumbnail.Length:x}";
+    }
+
     public void EnrichListedItems(JsonArray items)
     {
         foreach (var node in items)
@@ -255,12 +263,23 @@ public sealed class RefreshPipelineService : BackgroundService
             if (string.IsNullOrWhiteSpace(itemId))
             {
                 item["hasThumbnail"] = false;
+                item.Remove("thumbnailVersion");
                 item.Remove("thumbnailWidth");
                 item.Remove("thumbnailHeight");
                 continue;
             }
 
-            item["hasThumbnail"] = File.Exists(GetThumbnailPath(itemId));
+            var thumbnail = new FileInfo(GetThumbnailPath(itemId));
+            item["hasThumbnail"] = thumbnail.Exists;
+            if (thumbnail.Exists)
+            {
+                item["thumbnailVersion"] = ThumbnailVersion(thumbnail);
+            }
+            else
+            {
+                item.Remove("thumbnailVersion");
+            }
+
             if (!PositiveThumbnailDimension(item["thumbnailWidth"]) || !PositiveThumbnailDimension(item["thumbnailHeight"]))
             {
                 item.Remove("thumbnailWidth");

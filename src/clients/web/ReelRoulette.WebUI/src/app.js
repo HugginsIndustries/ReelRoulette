@@ -1,4 +1,8 @@
-import { buildRefreshStatusMessage, coerceRefreshSnapshot } from "./events/refreshStatusProjection";
+import {
+  buildRefreshStatusMessage,
+  coerceRefreshSnapshot,
+  newRefreshCompletionRunId
+} from "./events/refreshStatusProjection";
 import {
   AUDIO_FILTER,
   MEDIA_TYPE_FILTER,
@@ -2977,6 +2981,7 @@ export function startApp(config) {
   }
 
   function createEventStream() {
+    let lastAppliedRefreshRunId = null;
     return createSseClient({
       sseUrl,
       identity: {
@@ -3000,9 +3005,16 @@ export function startApp(config) {
         refreshStatusChanged(payload) {
           const raw = payload?.snapshot || payload?.Snapshot;
           if (!raw) return;
-          const message = buildRefreshStatusMessage(coerceRefreshSnapshot(raw));
+          const snapshot = coerceRefreshSnapshot(raw);
+          const message = buildRefreshStatusMessage(snapshot);
           // The server's refresh error text can name a file or folder, so the log leaves it out.
           setStatus(message, message.startsWith("Core refresh failed:") ? "Core refresh failed" : message);
+          // A finished refresh can add items and rewrite thumbnails, so the loaded window reloads once per run.
+          const completedRunId = newRefreshCompletionRunId(snapshot, lastAppliedRefreshRunId);
+          if (completedRunId) {
+            lastAppliedRefreshRunId = completedRunId;
+            void librarySession.reloadLoaded();
+          }
         },
         resyncRequired() {
           void loadPresets();

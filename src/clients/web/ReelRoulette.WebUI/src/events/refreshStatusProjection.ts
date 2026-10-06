@@ -258,3 +258,19 @@ export function buildRefreshStatusMessage(snapshotInput: RefreshSnapshotInput): 
 
   return "Core refresh idle.";
 }
+
+/**
+ * The run id of a refresh run this snapshot reports as finished, when it differs from the last one applied,
+ * so the library window reloads once per run. Otherwise null.
+ */
+export function newRefreshCompletionRunId(
+  snapshotInput: RefreshSnapshotInput,
+  lastAppliedRunId: string | null
+): string | null {
+  const snapshot = normalizeSnapshot(snapshotInput);
+  if (snapshot.isRunning || !snapshot.completedUtc) {
+    return null;
+  }
+  const runId = snapshot.runId?.trim() || "__no-run-id__";
+  return runId === lastAppliedRunId ? null : runId;
+}

@@ -928,7 +928,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get generated thumbnail by item id */
+        /**
+         * Get generated thumbnail by item id
+         * @description Every 200 and 304 response carries an ETag and Last-Modified. A request whose `v` matches the thumbnail's current version is cacheable for a year as immutable. Any other request gets `Cache-Control: no-cache` and is revalidated against the ETag.
+         */
         get: operations["getThumbnailByItemId"];
         put?: never;
         post?: never;
@@ -1234,6 +1237,8 @@ export interface components {
             mediaType?: number | string;
             /** @description True when a generated thumbnail JPEG exists for this item id. */
             hasThumbnail?: boolean;
+            /** @description Opaque version of the thumbnail JPEG, present when it exists. It changes whenever the thumbnail is written again. Pass it as `v` to the thumbnail route. */
+            thumbnailVersion?: string;
             /**
              * Format: int32
              * @description Generated thumbnail width in pixels when the catalog has it.
@@ -3705,7 +3710,10 @@ export interface operations {
     };
     getThumbnailByItemId: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description The item's `thumbnailVersion` from the list query page. */
+                v?: string;
+            };
             header?: never;
             path: {
                 itemId: string;
@@ -3722,6 +3730,13 @@ export interface operations {
                 content: {
                     "image/jpeg": string;
                 };
+            };
+            /** @description The thumbnail matches the request's If-None-Match or If-Modified-Since. */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Thumbnail not found */
             404: {

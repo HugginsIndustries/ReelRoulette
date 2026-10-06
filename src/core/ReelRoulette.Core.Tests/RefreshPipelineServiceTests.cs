@@ -306,6 +306,7 @@ public sealed class RefreshPipelineServiceTests
 
         var item2 = items[1]!.AsObject();
         Assert.False(item2["hasThumbnail"]!.GetValue<bool>());
+        Assert.Null(item2["thumbnailVersion"]);
         Assert.Null(item2["thumbnailWidth"]);
         Assert.Null(item2["thumbnailHeight"]);
     }

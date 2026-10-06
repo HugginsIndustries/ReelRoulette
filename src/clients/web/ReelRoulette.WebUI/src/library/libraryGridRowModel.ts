@@ -13,7 +13,7 @@ export function renderGridRowHtml(
       if (!item) {
         return "";
       }
-      const thumbnailUrl = item.hasThumbnail ? buildThumbnailUrl(apiBaseUrl, item.id) : null;
+      const thumbnailUrl = item.hasThumbnail ? buildThumbnailUrl(apiBaseUrl, item.id, item.thumbnailVersion) : null;
       return renderGridTileHtml(
         {
           tileWidth: tileLayout.tileWidth,

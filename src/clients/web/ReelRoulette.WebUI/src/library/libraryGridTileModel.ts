@@ -1,7 +1,12 @@
-export function buildThumbnailUrl(apiBaseUrl: string, itemId: string): string {
+export function buildThumbnailUrl(apiBaseUrl: string, itemId: string, version: string | null = null): string {
   const normalizedBase = apiBaseUrl.replace(/\/+$/, "");
   const encodedId = encodeURIComponent(itemId);
-  return new URL(`/api/thumbnail/${encodedId}`, `${normalizedBase}/`).toString();
+  const url = new URL(`/api/thumbnail/${encodedId}`, `${normalizedBase}/`);
+  // The server lets the browser keep a thumbnail requested at its current version until it changes.
+  if (version) {
+    url.searchParams.set("v", version);
+  }
+  return url.toString();
 }
 
 function escapeHtml(value: string): string {

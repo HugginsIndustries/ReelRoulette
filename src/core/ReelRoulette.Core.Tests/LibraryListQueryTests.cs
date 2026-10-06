@@ -508,6 +508,9 @@ public sealed class LibraryListQueryTests
             var refresh = CreateRefresh(appData);
             refresh.EnrichListedItems(items);
             Assert.True(items[0]!["hasThumbnail"]!.GetValue<bool>());
+            Assert.Equal(
+                RefreshPipelineService.ThumbnailVersion(new FileInfo(Path.Combine(thumbs, "a.jpg"))),
+                items[0]!["thumbnailVersion"]!.GetValue<string>());
             Assert.Equal(320, items[0]!["thumbnailWidth"]!.GetValue<int>());
             Assert.Equal(180, items[0]!["thumbnailHeight"]!.GetValue<int>());
             Assert.False(File.Exists(Path.Combine(thumbs, "b.jpg")));

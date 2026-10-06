@@ -108,25 +108,7 @@ Do not use this file for detailed architecture explanation or current capability
 
 ## Active Milestones
 
-Last milestone completed: M11d
-
-### M11e - Thumbnail Caching
-
-- **Status**: ⏳ Planned
-- **Goal**: Thumbnails are fetched again only when they change.
-- **Scope**:
-  - Ships in v0.14.1, after the dependency updates milestone. Depends on: Dependency Updates, whose SkiaSharp alignment the server's thumbnails build on. Can be cut to a later release if v0.14.1 runs long.
-  - Found by the efficiency and divergence report from code reading, not measured: `GET /api/thumbnail/{itemId}` sends no cache headers, and its URL has no revision, so the WebUI and the desktop fetch a thumbnail again every time a tile shows it.
-  - Inferred, not checked: the route serves the file with `Results.File` from a physical path, which probably sends `Last-Modified`, so browsers may already cache thumbnails heuristically for a while, and a regenerated thumbnail could then show stale. Before changing anything, check in a browser network panel which thumbnail requests reach the server today.
-  - Add cache headers to thumbnail responses, or a revision to the thumbnail URL so it can be cached until the thumbnail changes. A revision in the URL needs the thumbnail revision in the list query page, which is a contract change in its own slice and only adds a field.
-  - The desktop's own thumbnail problems found by the same report are not fixed, because the desktop is frozen to bug fixes: decoded bitmaps kept after tiles scroll out of view (about 645 KB each at the measured average of 370×436, so about 3 GB for 5,000 tiles, inferred), full-size decoding, and overlapping fetch loops.
-  - Not included: WebUI grid rendering, which is WebUI Grid Rendering, in the WebUI overhaul release.
-- **Acceptance criteria**:
-  - A thumbnail the WebUI has shown is not fetched again while it stays unchanged, including after it scrolls back into view.
-  - A regenerated thumbnail is shown without a restart.
-  - Grid layout and placeholders behave as before.
-- **Verification evidence**:
-  - Completion evidence must include a server test for the thumbnail cache headers or revision, a WebUI test or browser network check that an unchanged thumbnail is not fetched again, `dotnet test ReelRoulette.sln`, and `npm run verify` after any contract change.
+Last milestone completed: M11e
 
 ### M11f - Item IDs in the Contract
 

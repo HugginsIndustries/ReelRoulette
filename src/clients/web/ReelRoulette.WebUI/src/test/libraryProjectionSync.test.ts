@@ -25,6 +25,7 @@ function item(overrides: Partial<LibraryProjectionItem> = {}): LibraryProjection
     integratedLoudness: null,
     tags: [],
     hasThumbnail: false,
+    thumbnailVersion: null,
     thumbnailWidth: null,
     thumbnailHeight: null,
     ...overrides

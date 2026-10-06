@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildEventsUrl, parseEventEnvelope } from "../events/eventEnvelope";
-import { buildRefreshStatusMessage } from "../events/refreshStatusProjection";
+import { buildRefreshStatusMessage, newRefreshCompletionRunId } from "../events/refreshStatusProjection";
 
 describe("event helpers", () => {
   it("builds SSE URL with last revision query", () => {
@@ -94,5 +94,18 @@ describe("event helpers", () => {
       stages: []
     });
     expect(line).toBe("Core refresh: initializing (0%)");
+  });
+
+  it("reports each finished refresh run once", () => {
+    const running = { isRunning: true, runId: "run-1", completedUtc: null, stages: [] };
+    const finished = { isRunning: false, runId: "run-1", completedUtc: "2026-10-06T12:00:00Z", stages: [] };
+    const failed = { isRunning: false, runId: "run-2", completedUtc: "2026-10-06T12:05:00Z", lastError: "boom", stages: [] };
+    const canceled = { isRunning: false, runId: "run-3", completedUtc: null, stages: [] };
+
+    expect(newRefreshCompletionRunId(running, null)).toBeNull();
+    expect(newRefreshCompletionRunId(finished, null)).toBe("run-1");
+    expect(newRefreshCompletionRunId(finished, "run-1")).toBeNull();
+    expect(newRefreshCompletionRunId(failed, "run-1")).toBe("run-2");
+    expect(newRefreshCompletionRunId(canceled, "run-2")).toBeNull();
   });
 });

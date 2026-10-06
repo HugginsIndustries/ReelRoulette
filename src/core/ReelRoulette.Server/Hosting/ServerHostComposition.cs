@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Net;
 using Microsoft.AspNetCore.StaticFiles;
+using Microsoft.Net.Http.Headers;
 using ReelRoulette.Server.Auth;
 using ReelRoulette.Server.Contracts;
 using ReelRoulette.Server.Services;
@@ -820,24 +821,37 @@ public static class ServerHostComposition
             return Results.Ok(settings.UpdateWebRuntimeSettings(snapshot));
         });
 
-        app.MapGet("/api/thumbnail/{itemId}", (string itemId, RefreshPipelineService refresh) =>
-        {
-            if (string.IsNullOrWhiteSpace(itemId))
-            {
-                return Results.BadRequest(new { error = "itemId is required" });
-            }
-
-            var path = refresh.GetThumbnailPath(itemId);
-            if (!File.Exists(path))
-            {
-                return Results.NotFound();
-            }
-
-            return Results.File(path, "image/jpeg");
-        });
+        app.MapGet("/api/thumbnail/{itemId}", (HttpContext context, string itemId, RefreshPipelineService refresh) =>
+            ServeThumbnail(context, itemId, refresh));
 
         app.MapGet("/api/events", (HttpContext context, ServerStateService state, ConnectedClientTracker clients, OperatorTestingService testingService, IHostApplicationLifetime lifetime) =>
             StreamEventsAsync(context, state, clients, testingService, lifetime.ApplicationStopping));
+    }
+
+    internal static IResult ServeThumbnail(HttpContext context, string itemId, RefreshPipelineService refresh)
+    {
+        if (string.IsNullOrWhiteSpace(itemId))
+        {
+            return Results.BadRequest(new { error = "itemId is required" });
+        }
+
+        var file = new FileInfo(refresh.GetThumbnailPath(itemId));
+        if (!file.Exists)
+        {
+            return Results.NotFound();
+        }
+
+        // A URL carrying the current version never changes content, so the browser keeps it.
+        // Any other request revalidates against the ETag.
+        var version = RefreshPipelineService.ThumbnailVersion(file);
+        context.Response.Headers.CacheControl = string.Equals(context.Request.Query["v"].ToString(), version, StringComparison.Ordinal)
+            ? "private, max-age=31536000, immutable"
+            : "no-cache";
+        return Results.File(
+            file.FullName,
+            "image/jpeg",
+            lastModified: file.LastWriteTimeUtc,
+            entityTag: new EntityTagHeaderValue($"\"{version}\""));
     }
 
     internal static IResult ServeMedia(

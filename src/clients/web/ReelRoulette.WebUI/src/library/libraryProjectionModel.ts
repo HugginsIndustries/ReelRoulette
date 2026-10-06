@@ -40,6 +40,8 @@ export interface LibraryProjectionItem {
   integratedLoudness: number | null;
   tags: string[];
   hasThumbnail: boolean;
+  /** Changes whenever the thumbnail is written again; part of the thumbnail URL so it can be cached. */
+  thumbnailVersion: string | null;
   thumbnailWidth: number | null;
   thumbnailHeight: number | null;
 }
@@ -220,6 +222,7 @@ function parseQueryItem(row: Record<string, unknown>): LibraryProjectionItem {
         : null,
     tags: parseStringArray(row.tags),
     hasThumbnail: row.hasThumbnail === true,
+    thumbnailVersion: typeof row.thumbnailVersion === "string" && row.thumbnailVersion !== "" ? row.thumbnailVersion : null,
     thumbnailWidth: parseOptionalPositiveInt(row.thumbnailWidth),
     thumbnailHeight: parseOptionalPositiveInt(row.thumbnailHeight)
   };

@@ -21,6 +21,13 @@ describe("libraryGridTileModel", () => {
     expect(url).toBe("http://localhost:51301/api/thumbnail/abc%2Fdef");
   });
 
+  it("buildThumbnailUrl adds the thumbnail version when there is one", () => {
+    expect(buildThumbnailUrl("http://localhost:51301/", "abc/def", "1a-2b")).toBe(
+      "http://localhost:51301/api/thumbnail/abc%2Fdef?v=1a-2b"
+    );
+    expect(buildThumbnailUrl("http://localhost:51301", "abc", null)).toBe("http://localhost:51301/api/thumbnail/abc");
+  });
+
   it("renders favorite badge when item is favorite", () => {
     const html = renderGridTileHtml(
       { ...baseTile, isFavorite: true },

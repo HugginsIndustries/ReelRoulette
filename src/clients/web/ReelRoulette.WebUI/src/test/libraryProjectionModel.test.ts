@@ -94,6 +94,7 @@ describe("libraryProjectionModel", () => {
           sourceId: "s1",
           fileName: "clip.mp4",
           hasThumbnail: true,
+          thumbnailVersion: "1a-2b",
           thumbnailWidth: 480,
           thumbnailHeight: 270
         },
@@ -108,11 +109,13 @@ describe("libraryProjectionModel", () => {
 
     expect(result.items[0]).toMatchObject({
       hasThumbnail: true,
+      thumbnailVersion: "1a-2b",
       thumbnailWidth: 480,
       thumbnailHeight: 270
     });
     expect(result.items[1]).toMatchObject({
       hasThumbnail: false,
+      thumbnailVersion: null,
       thumbnailWidth: null,
       thumbnailHeight: null
     });
