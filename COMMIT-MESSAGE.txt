@@ -19,7 +19,7 @@ Instructions:
 
 Commit Message:
 
-M11d: Move xunit.runner.visualstudio to 4.0.0
+Docs: Complete the dependency updates milestone
 
-- The three test projects move from xunit.runner.visualstudio 3.1.5 to 4.0.0, which still runs their xUnit v2 tests.
-- The same 655 tests pass by name before and after, on the 4.0.0 adapter.
+- M11d moves to MILESTONES-COMPLETED.md with slice 5's CI run recorded, and the tracker line reads M11d.
+- CONTEXT.md notes the pinned SDK, Node, and Windows FFmpeg in CI and release.
