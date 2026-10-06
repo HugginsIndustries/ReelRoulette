@@ -15,5 +15,6 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="..\..\..\core\ReelRoulette.Core.Tests\CatalogSeed.cs" Link="CatalogSeed.cs" />
+    <Compile Include="..\..\..\core\ReelRoulette.Core.Tests\FolderSnapshot.cs" Link="FolderSnapshot.cs" />
   </ItemGroup>
 </Project>

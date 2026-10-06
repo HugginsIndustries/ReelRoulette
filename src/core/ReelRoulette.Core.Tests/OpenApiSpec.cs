@@ -13,6 +13,7 @@ internal static class OpenApiSpec
     private static readonly Regex PathLine = new(@"^  (/\S*):\s*$", RegexOptions.Compiled);
     private static readonly Regex MethodLine = new(@"^    (get|post|put|patch|delete):\s*$", RegexOptions.Compiled);
     private static readonly Regex SchemaPropertyLine = new(@"^        ([A-Za-z0-9_]+):\s*$", RegexOptions.Compiled);
+    private static readonly Regex ResponseCodeLine = new(@"^        ""(\d{3})"":\s*$", RegexOptions.Compiled);
 
     public static JsonSerializerOptions ServerJsonOptions { get; } =
         new Microsoft.AspNetCore.Http.Json.JsonOptions().SerializerOptions;
@@ -63,6 +64,56 @@ internal static class OpenApiSpec
             if (methodMatch.Success && currentPath != null)
             {
                 operations.Add($"{methodMatch.Groups[1].Value.ToUpperInvariant()} {currentPath}");
+            }
+        }
+
+        return operations;
+    }
+
+    /// <summary>Returns the operations under <c>paths:</c> that list <paramref name="statusCode"/> as a response.</summary>
+    public static SortedSet<string> ReadOperationsWithResponse(string statusCode)
+    {
+        var operations = new SortedSet<string>(StringComparer.Ordinal);
+        string? currentPath = null;
+        string? currentOperation = null;
+        var inPaths = false;
+        foreach (var line in ReadLines())
+        {
+            if (line == "paths:")
+            {
+                inPaths = true;
+                continue;
+            }
+
+            if (inPaths && line.Length > 0 && !char.IsWhiteSpace(line[0]))
+            {
+                break;
+            }
+
+            if (!inPaths)
+            {
+                continue;
+            }
+
+            var pathMatch = PathLine.Match(line);
+            if (pathMatch.Success)
+            {
+                currentPath = pathMatch.Groups[1].Value;
+                currentOperation = null;
+                continue;
+            }
+
+            var methodMatch = MethodLine.Match(line);
+            if (methodMatch.Success && currentPath != null)
+            {
+                currentOperation = $"{methodMatch.Groups[1].Value.ToUpperInvariant()} {currentPath}";
+                continue;
+            }
+
+            var codeMatch = ResponseCodeLine.Match(line);
+            if (codeMatch.Success && currentOperation != null && codeMatch.Groups[1].Value == statusCode)
+            {
+                operations.Add(currentOperation);
             }
         }
 

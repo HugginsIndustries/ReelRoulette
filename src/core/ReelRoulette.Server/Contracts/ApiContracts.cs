@@ -328,6 +328,8 @@ public sealed class ControlStatusResponse
     public List<ApiEventTelemetryEntry> IncomingApiEvents { get; set; } = [];
     public List<ApiEventTelemetryEntry> OutgoingApiEvents { get; set; } = [];
     public OperatorTestingStateSnapshot Testing { get; set; } = new();
+    public string LibraryState { get; set; } = "ready";
+    public string? LibraryMessage { get; set; }
 }
 
 public sealed class SessionInfoSnapshot

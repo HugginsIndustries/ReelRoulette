@@ -20,6 +20,14 @@ public static class ServerHostComposition
             var appDataRoot = ServerDataPaths.DataDirectory();
             var host = LibraryCatalogHost.Open(appDataRoot);
             var logger = sp.GetRequiredService<ILogger<LibraryCatalogHost>>();
+            if (!host.HasLibrary)
+            {
+                // No backup is attached, so neither a backup nor rotation runs against these files.
+                logger.LogWarning("Running without a library: {Reason}", host.UnavailableMessage);
+                new ServerLogService(appDataRoot, logger).Append("warn", host.UnavailableMessage!);
+                return host;
+            }
+
             logger.LogInformation(
                 "Opened library catalog {DatabasePath}.",
                 host.Session.DatabasePath);
@@ -30,7 +38,7 @@ public static class ServerHostComposition
         {
             var logger = sp.GetRequiredService<ILogger<ServerStateService>>();
             var catalog = sp.GetRequiredService<LibraryCatalogHost>();
-            return new ServerStateService(logger, catalog);
+            return new ServerStateService(logger, catalog.HasLibrary ? catalog : null);
         });
         services.AddSingleton(sp =>
         {
@@ -111,6 +119,21 @@ public static class ServerHostComposition
             return new ServerPairingAuthMiddleware(next, options, sessions, settings).InvokeAsync(context);
         });
 
+        // After pairing, so a caller that is not paired still gets 401 rather than the library state.
+        app.Use(async (context, next) =>
+        {
+            var catalog = context.RequestServices.GetRequiredService<LibraryCatalogHost>();
+            var refusal = LibraryRouteGate.Refusal(context.Request.Path, catalog);
+            if (refusal == null)
+            {
+                await next();
+                return;
+            }
+
+            context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+            await context.Response.WriteAsJsonAsync(new { error = refusal.Error, code = refusal.Code });
+        });
+
         app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
         app.MapGet("/api/pair", (HttpContext context, string? token, ServerSessionStore sessions) =>
@@ -165,7 +188,7 @@ public static class ServerHostComposition
             });
         });
 
-        app.MapGet("/control/status", (ServerRuntimeOptions runtime, CoreSettingsService settings, ServerSessionStore sessions, ServerStateService state, ApiTelemetryService telemetry, ConnectedClientTracker clients, OperatorTestingService testingService) =>
+        app.MapGet("/control/status", (ServerRuntimeOptions runtime, CoreSettingsService settings, ServerSessionStore sessions, ServerStateService state, ApiTelemetryService telemetry, ConnectedClientTracker clients, OperatorTestingService testingService, LibraryCatalogHost catalog) =>
         {
             var webSettings = settings.GetWebRuntimeSettings();
             var nowUtc = DateTimeOffset.UtcNow;
@@ -191,7 +214,9 @@ public static class ServerHostComposition
                 ConnectedClients = connected,
                 IncomingApiEvents = telemetry.GetIncoming(100),
                 OutgoingApiEvents = telemetry.GetOutgoing(100),
-                Testing = testingService.GetSnapshot()
+                Testing = testingService.GetSnapshot(),
+                LibraryState = catalog.StateName,
+                LibraryMessage = catalog.UnavailableMessage
             });
         });
 

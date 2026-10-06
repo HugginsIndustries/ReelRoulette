@@ -48,7 +48,10 @@ public sealed class LibraryOperationsService
         _serverLog = new ServerLogService(appData, _logger);
         _catalog = catalog;
         _enumerateFiles = enumerateMediaFiles ?? EnumerateAllFiles;
-        LibraryCatalogBackup.Attach(_catalog.Session, appData, _logger);
+        if (_catalog.HasLibrary)
+        {
+            LibraryCatalogBackup.Attach(_catalog.Session, appData, _logger);
+        }
     }
 
     public void WriteCatalogCheckpoint(string destinationPath)

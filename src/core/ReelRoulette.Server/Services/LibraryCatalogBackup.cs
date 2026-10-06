@@ -139,7 +139,7 @@ public static class LibraryCatalogBackup
                 return new BackupResult(BackupDisposition.Skipped, null);
             }
 
-            var backupDirectory = Path.Combine(appDataDirectory, "backups");
+            var backupDirectory = Path.Combine(appDataDirectory, LibraryCatalogStore.BackupDirectoryName);
             long epoch;
             lock (ScheduleGate)
             {
@@ -168,7 +168,7 @@ public static class LibraryCatalogBackup
 
                 if (!blocked)
                 {
-                    var backupPath = Path.Combine(backupDirectory, "library.db.backup." + BackupFileNaming.FormatNowForBackupSuffix());
+                    var backupPath = Path.Combine(backupDirectory, LibraryCatalogStore.BackupFilePrefix + BackupFileNaming.FormatNowForBackupSuffix());
                     LibraryCatalogStore.WriteCheckpoint(databasePath, backupPath);
                     existing = ListCatalogBackups(backupDirectory);
                     while (existing.Count > Math.Max(1, settings.NumberOfBackups))
@@ -224,7 +224,7 @@ public static class LibraryCatalogBackup
         retryAt = DateTime.MaxValue;
         if (schedule.FolderSignature == null ||
             schedule.NewestHealthyUtc == null ||
-            schedule.FolderSignature != FolderSignature(Path.Combine(schedule.AppDataDirectory, "backups")))
+            schedule.FolderSignature != FolderSignature(Path.Combine(schedule.AppDataDirectory, LibraryCatalogStore.BackupDirectoryName)))
         {
             return false;
         }
@@ -329,7 +329,7 @@ public static class LibraryCatalogBackup
         }
 
         var parts = new List<string>();
-        foreach (var path in Directory.GetFiles(backupDirectory, "library.db.backup.*"))
+        foreach (var path in Directory.GetFiles(backupDirectory, LibraryCatalogStore.BackupFilePrefix + "*"))
         {
             if (IsSidecar(path))
             {
@@ -454,32 +454,28 @@ public static class LibraryCatalogBackup
         return (enabled, gap, count);
     }
 
+    /// <summary>
+    /// Valid current-version catalog backups, oldest first. Only these count toward the backup limit
+    /// and gap, and only these are trimmed. Backups at another schema version, files that are not a
+    /// catalog, and files that cannot be read stay where they are.
+    /// </summary>
     private static List<FileInfo> ListCatalogBackups(string backupDirectory)
     {
-        var healthy = new List<FileInfo>();
-        foreach (var path in Directory.GetFiles(backupDirectory, "library.db.backup.*"))
+        var current = new List<FileInfo>();
+        foreach (var path in Directory.GetFiles(backupDirectory, LibraryCatalogStore.BackupFilePrefix + "*"))
         {
-            if (path.EndsWith("-wal", StringComparison.Ordinal) ||
-                path.EndsWith("-shm", StringComparison.Ordinal) ||
-                path.EndsWith("-journal", StringComparison.Ordinal))
+            if (IsSidecar(path))
             {
                 continue;
             }
 
-            switch (LibraryCatalogStore.InspectCatalogFile(path))
+            if (LibraryCatalogStore.InspectCatalogFile(path) == LibraryCatalogStore.CatalogFileInspection.Usable)
             {
-                case LibraryCatalogStore.CatalogFileInspection.NotADatabase:
-                    DeleteCheckpoint(path);
-                    continue;
-                case LibraryCatalogStore.CatalogFileInspection.Unavailable:
-                    continue;
-                default:
-                    healthy.Add(new FileInfo(path));
-                    break;
+                current.Add(new FileInfo(path));
             }
         }
 
-        return healthy
+        return current
             .OrderBy(BackupFileNaming.GetFileOrderingUtcTimestamp)
             .ToList();
     }

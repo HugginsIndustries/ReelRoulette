@@ -178,6 +178,101 @@ public sealed class LibraryArchiveMigrationTests
     }
 
     [Fact]
+    public void Import_ForcedOverANewerLiveCatalog_IsRefusedAndChangesNothing()
+    {
+        var temp = Path.Combine(Path.GetTempPath(), "rr-import-newer-" + Guid.NewGuid().ToString("N"));
+        var dest = Path.Combine(temp, "dest");
+        var source = Path.Combine(temp, "source");
+        Directory.CreateDirectory(dest);
+        Directory.CreateDirectory(source);
+        try
+        {
+            CatalogSeed.WriteAtVersion(dest, 3, items: [new SeedItem("newer", "/clips/newer.mp4")]);
+            var fromRoot = Path.Combine(temp, "from");
+            var checkpoint = CreateCheckpoint(source, temp, fromRoot);
+            var remap = new Dictionary<string, string>(StringComparer.Ordinal) { [fromRoot] = Path.Combine(temp, "to") };
+            var skipped = new HashSet<string>(StringComparer.Ordinal);
+            var before = FolderSnapshot.Take(dest);
+
+            var asked = LibraryArchiveMigration.ImportDatabase(checkpoint, remap, skipped, force: false, dest);
+            Assert.True(asked.NeedsForceConfirmation);
+            var result = LibraryArchiveMigration.ImportDatabase(checkpoint, remap, skipped, force: true, dest);
+
+            Assert.False(result.Accepted);
+            Assert.Contains(ReelRoulette.Core.Library.LibraryCatalogStore.NewerMessage, result.Message, StringComparison.Ordinal);
+            Assert.Equal(before, FolderSnapshot.Take(dest));
+        }
+        finally
+        {
+            Directory.Delete(temp, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Import_ForcedOverALiveCatalogThatCannotBeRead_IsRefusedAndChangesNothing()
+    {
+        var temp = Path.Combine(Path.GetTempPath(), "rr-import-unreadable-" + Guid.NewGuid().ToString("N"));
+        var dest = Path.Combine(temp, "dest");
+        var source = Path.Combine(temp, "source");
+        Directory.CreateDirectory(dest);
+        Directory.CreateDirectory(source);
+        try
+        {
+            var live = CatalogSeed.WriteAtVersion(dest, 3, items: [new SeedItem("newer", "/clips/newer.mp4")]);
+            var fromRoot = Path.Combine(temp, "from");
+            var checkpoint = CreateCheckpoint(source, temp, fromRoot);
+            var remap = new Dictionary<string, string>(StringComparer.Ordinal) { [fromRoot] = Path.Combine(temp, "to") };
+            var skipped = new HashSet<string>(StringComparer.Ordinal);
+            var before = FolderSnapshot.Take(dest);
+
+            LibraryArchiveImportResult result;
+            using (CatalogSeed.HoldUnreadable(live))
+            {
+                result = LibraryArchiveMigration.ImportDatabase(checkpoint, remap, skipped, force: true, dest);
+            }
+
+            Assert.False(result.Accepted);
+            Assert.Contains(ReelRoulette.Core.Library.LibraryCatalogStore.UnreadableMessage, result.Message, StringComparison.Ordinal);
+            Assert.Equal(before, FolderSnapshot.Take(dest));
+        }
+        finally
+        {
+            Directory.Delete(temp, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Import_FileWithACorruptRevisionRow_IsRefusedBeforeAnythingIsReplaced()
+    {
+        var temp = Path.Combine(Path.GetTempPath(), "rr-import-corrupt-revision-" + Guid.NewGuid().ToString("N"));
+        var dest = Path.Combine(temp, "dest");
+        var source = Path.Combine(temp, "source");
+        Directory.CreateDirectory(dest);
+        Directory.CreateDirectory(source);
+        try
+        {
+            // Standalone, so checking it creates no sidecar files and the folder snapshot holds.
+            CatalogSeed.WriteAtVersion(dest, 2, items: [new SeedItem("existing", "/clips/existing.mp4")], standalone: true);
+            var fromRoot = Path.Combine(temp, "from");
+            var checkpoint = CreateCheckpoint(source, temp, fromRoot);
+            CatalogSeed.CorruptRevisionRow(checkpoint);
+            var remap = new Dictionary<string, string>(StringComparer.Ordinal) { [fromRoot] = Path.Combine(temp, "to") };
+            var skipped = new HashSet<string>(StringComparer.Ordinal);
+            var before = FolderSnapshot.Take(dest);
+
+            var result = LibraryArchiveMigration.ImportDatabase(checkpoint, remap, skipped, force: true, dest);
+
+            Assert.False(result.Accepted);
+            Assert.Contains("not a usable database", result.Message, StringComparison.Ordinal);
+            Assert.Equal(before, FolderSnapshot.Take(dest));
+        }
+        finally
+        {
+            Directory.Delete(temp, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Import_IntoAnEmptyFolder_NeedsNoConfirmation_AndRemaps()
     {
         var temp = Path.Combine(Path.GetTempPath(), "rr-import-empty-" + Guid.NewGuid().ToString("N"));

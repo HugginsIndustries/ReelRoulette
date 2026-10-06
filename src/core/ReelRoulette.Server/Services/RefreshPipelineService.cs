@@ -103,6 +103,15 @@ public sealed class RefreshPipelineService : BackgroundService
 
     public RefreshStartResponse TryStartManual()
     {
+        if (!_catalog.HasLibrary)
+        {
+            return new RefreshStartResponse
+            {
+                Accepted = false,
+                Message = _catalog.UnavailableMessage
+            };
+        }
+
         if (!TryReserveRun("manual", out var runId))
         {
             lock (_runLock)
@@ -135,8 +144,11 @@ public sealed class RefreshPipelineService : BackgroundService
                 bool shouldRun;
                 lock (_runLock)
                 {
+                    // A run reads the catalog first, and an exception that escapes this loop stops the host,
+                    // so without a library the run never starts.
                     var refreshSettings = _coreSettings.GetRefreshSettings();
-                    shouldRun = refreshSettings.AutoRefreshEnabled &&
+                    shouldRun = _catalog.HasLibrary &&
+                                refreshSettings.AutoRefreshEnabled &&
                                 !_status.IsRunning &&
                                 !_isRunLoopActive &&
                                 DateTimeOffset.UtcNow >= _nextAutoRunUtc;

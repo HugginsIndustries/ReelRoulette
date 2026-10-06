@@ -17,6 +17,10 @@ Write **[Unreleased]** bullets at the same level as the released sections below.
 
 ### Fixed
 
+- **Library from a newer version:** A library saved by a newer version of ReelRoulette is no longer moved aside and replaced with an empty one, which also cost its backups. The server leaves the library and its backups untouched, keeps running without a library, and shows why on the Operator page, and in-app update still works. Desktop import refuses to replace such a library.
+- **Damaged or locked library:** A damaged library is still moved aside, but the server now keeps running without a library instead of stopping, and does not start an empty one while the moved file or a backup is there, so a later refresh no longer deletes every thumbnail. A library another program has open at startup is left unchanged, and the server runs without it until restarted. The setup guide explains how to restore a backup by hand.
+- **Catalog backups:** Backup rotation deletes only its own backups beyond the backup count. Backups from another version and other files in the backups folder stay.
+
 ### Security
 
 ---

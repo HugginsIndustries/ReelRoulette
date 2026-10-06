@@ -167,6 +167,8 @@ An agent runs these and ticks them.
 - [x] On Windows, right-clicking the server tray icon opens the menu, menu items work, the icon stays, and `last.log` shows `Tray menu opened` with a non-zero size. If it passes, update the README Known Issues tray entry. If it fails, remove the Windows tray menu bullet from `CHANGELOG.md` and the tray menu sentence from the `RELEASE-NOTES.md` entry.
 - [x] Opening desktop Settings, closing it, and opening it again does not freeze the app.
 - [x] In the desktop filter dialog, deleting, renaming, or moving a preset keeps unsaved filter changes and **Update Preset**.
+- [ ] With a copy of the data folder upgraded by a newer build, the installed build runs without a library, shows the message on the Operator page, leaves the library and backups byte-identical, and updates in-app, on Linux and Windows.
+- [ ] Without a library, a library route answers 503 with the message, the open routes answer, and an unpaired LAN caller gets 401.
 
 ## Release Flow
 

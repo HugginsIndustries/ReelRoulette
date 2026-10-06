@@ -101,6 +101,16 @@ public static class LibraryArchiveMigration
             BeforeDiscardingPreviousCatalog?.Invoke(roamingDir);
             LibraryCatalogStore.DiscardPrevious(roamingDir);
         }
+        catch (Exception ex) when (!importPlaced && ex is LibraryCatalogNewerException or LibraryCatalogUnreadableException)
+        {
+            // A newer build's catalog files, and ones that could not be read to tell, are left exactly as
+            // they are, including any incoming file.
+            return new LibraryArchiveImportResult
+            {
+                Accepted = false,
+                Message = $"Import failed: {ex.Message}"
+            };
+        }
         catch (Exception ex)
         {
             if (importPlaced)

@@ -19,11 +19,13 @@ Instructions:
 
 Commit Message:
 
-Docs: Plan catalog open and backup safety ahead of library query performance
+M11a: Leave a newer or damaged catalog untouched and run without a library
 
-- Add Catalog Open and Backup Safety as M11a, first in v0.14.1, and renumber the unstarted v0.14.1 milestones to M11b through M11e; the release becomes Catalog safety and performance.
-- A catalog written by a newer build, or a damaged one, leaves the library and its backups untouched and the server runs without a library: the Operator page and in-app update keep working, library routes return 503 with a message, and refresh and backups don't run.
-- An empty catalog is created only on a fresh install, with no `library.db`, refused file, or backup; backup rotation deletes only its own current-version backups.
-- Library Query Performance records the schema version 3 migration and sort key rules, measuring and indexing every sort mode, a 10,000-item query limit for one-request reloads, and never leaving a schema version 2 `library.db.previous` beside a schema version 3 catalog.
-- v0.14.1 release notes will tell v0.14.0 users to install the new version directly, and no build without the safety fix may open a schema version 3 library.
-- The admin section, admin catalog transfer, WebUI status line, and catalog corruption detection milestones pick up the library state, restoring a backup, and its message.
+- A `library.db`, `library.db.previous`, or `library.db.incoming` saved by a newer version, or one that cannot be opened or read at the moment, is left byte-identical by open, replace recovery, and import, and the version is read from the file header so no sidecar files are created.
+- A catalog that is not a database or is corrupt is still moved to `library.db.refused`, and an empty catalog is created only on a fresh install with no `library.db`, refused file, or catalog backup.
+- Without a library the server keeps running: library routes return 503 with the reason and a `library_*` code, catalog backups and refresh don't run, and `last.log` gets a warning.
+- `/control/status` adds `libraryState` and `libraryMessage`, and the Operator page shows the message.
+- Backup rotation trims only valid current-version backups; other-version and unrecognized files stay and are not counted toward the limit or the gap.
+- Desktop import refuses to replace a newer catalog, or one it cannot open to check, and changes nothing.
+- Docs cover restoring a backup by hand; the Admin Refresh, Backup, and Duplicate Review milestone adds daily backup retention.
+- `AGENTS.md` adds a best-effort rule: handle what can realistically happen in normal use, and leave improbable cases such as storage corruption out of code, tests, and reviews.

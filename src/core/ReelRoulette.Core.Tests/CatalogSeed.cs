@@ -198,6 +198,118 @@ internal static class CatalogSeed
         }
     }
 
+    /// <summary>
+    /// Writes a catalog as <paramref name="fileName"/> in <paramref name="directory"/> and stamps it with
+    /// <paramref name="userVersion"/>. Above schema version 2 it also gains one <c>items</c> column, as a
+    /// later schema would. The file is closed cleanly, so no sidecar files remain. A live catalog is in
+    /// WAL mode; <paramref name="standalone"/> writes it in rollback-journal mode, as backups and replace files are.
+    /// </summary>
+    public static string WriteAtVersion(
+        string directory,
+        int userVersion,
+        string fileName = "library.db",
+        IEnumerable<SeedItem>? items = null,
+        bool standalone = false)
+    {
+        Directory.CreateDirectory(directory);
+        var staging = Path.Combine(Path.GetTempPath(), "rr-seed-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            Write(staging, items: items);
+            var staged = Path.Combine(staging, "library.db");
+            using (var connection = new SqliteConnection(new SqliteConnectionStringBuilder
+            {
+                DataSource = staged,
+                Mode = SqliteOpenMode.ReadWrite,
+                Pooling = false
+            }.ToString()))
+            {
+                connection.Open();
+                if (userVersion > 2)
+                {
+                    Execute(connection, "ALTER TABLE items ADD COLUMN file_name_key TEXT NULL;");
+                }
+
+                Execute(connection, $"PRAGMA user_version = {userVersion};");
+                Execute(connection, "PRAGMA wal_checkpoint(TRUNCATE);");
+                if (standalone)
+                {
+                    Execute(connection, "PRAGMA journal_mode=DELETE;");
+                }
+            }
+
+            if (File.Exists(staged + "-wal") || File.Exists(staged + "-shm"))
+            {
+                throw new InvalidOperationException("The seeded catalog kept a sidecar file.");
+            }
+
+            var destination = Path.Combine(directory, fileName);
+            File.Move(staged, destination);
+            return destination;
+        }
+        finally
+        {
+            Directory.Delete(staging, recursive: true);
+        }
+    }
+
+    /// <summary>
+    /// Holds <paramref name="path"/> open so that .NET cannot open it for reading until the handle is
+    /// disposed: Windows refuses the share, and on Linux the advisory lock .NET takes blocks other .NET
+    /// opens. SQLite on Linux does not use that lock and can still read the file.
+    /// </summary>
+    public static FileStream HoldUnreadable(string path) =>
+        new(path, FileMode.Open, FileAccess.Read, FileShare.None);
+
+    /// <summary>
+    /// Holds an exclusive SQLite lock on a rollback-journal catalog (one written with <c>standalone</c>),
+    /// so another connection that reads it fails with SQLITE_BUSY until the handle is disposed. Its
+    /// header can still be read, and disposing it changes nothing.
+    /// </summary>
+    public static SqliteConnection HoldBusy(string databasePath)
+    {
+        var connection = new SqliteConnection(new SqliteConnectionStringBuilder
+        {
+            DataSource = databasePath,
+            Mode = SqliteOpenMode.ReadWrite,
+            Pooling = false
+        }.ToString());
+        connection.Open();
+        Execute(connection, "BEGIN EXCLUSIVE;");
+        return connection;
+    }
+
+    /// <summary>
+    /// Overwrites the <c>catalog_meta</c> table page of a standalone catalog, so the schema check and
+    /// the other tables still read, but reading the revision row fails as corrupt.
+    /// </summary>
+    public static void CorruptRevisionRow(string databasePath)
+    {
+        int rootPage;
+        using (var connection = new SqliteConnection(new SqliteConnectionStringBuilder
+        {
+            DataSource = databasePath,
+            Mode = SqliteOpenMode.ReadOnly,
+            Pooling = false
+        }.ToString()))
+        {
+            connection.Open();
+            using var command = connection.CreateCommand();
+            command.CommandText = "SELECT rootpage FROM sqlite_master WHERE type = 'table' AND name = 'catalog_meta';";
+            rootPage = Convert.ToInt32(command.ExecuteScalar());
+        }
+
+        var bytes = File.ReadAllBytes(databasePath);
+        var pageSize = (bytes[16] << 8) | bytes[17];
+        if (pageSize == 1)
+        {
+            pageSize = 65536;
+        }
+
+        bytes.AsSpan((rootPage - 1) * pageSize, pageSize).Fill(0xFF);
+        File.WriteAllBytes(databasePath, bytes);
+    }
+
     /// <summary>The catalog store's case fold; a test keeps the two in step.</summary>
     public static string Fold(string value) => value.ToLowerInvariant();
 

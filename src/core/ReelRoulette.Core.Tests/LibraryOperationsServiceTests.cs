@@ -1117,7 +1117,7 @@ public sealed class LibraryOperationsServiceTests
     }
 
     [Fact]
-    public void TryCreate_IgnoresAnUnhealthyBackupFile()
+    public void TryCreate_KeepsABackupFileItDoesNotRecognize()
     {
         var appDataRoot = CreateTempAppDataRoot();
         try
@@ -1140,6 +1140,7 @@ public sealed class LibraryOperationsServiceTests
                 File.Delete(existing);
             }
 
+            // Written just now, so it would block the copy if it counted toward the gap.
             var partial = Path.Combine(backupDir, "library.db.backup.partial");
             File.WriteAllText(partial, "not a database");
             LibraryCatalogBackup.TryCreate(
@@ -1147,15 +1148,84 @@ public sealed class LibraryOperationsServiceTests
                 appDataRoot,
                 NullLogger.Instance);
 
-            Assert.False(File.Exists(partial));
+            Assert.Equal("not a database", File.ReadAllText(partial));
             var backup = Assert.Single(
-                Directory.GetFiles(backupDir, "library.db.backup.*"),
-                path => !path.EndsWith("-wal", StringComparison.Ordinal) &&
-                        !path.EndsWith("-shm", StringComparison.Ordinal) &&
-                        !path.EndsWith("-journal", StringComparison.Ordinal));
+                ListCatalogBackupFiles(backupDir),
+                path => !string.Equals(path, partial, StringComparison.Ordinal));
             Assert.Equal(
                 ReelRoulette.Core.Library.LibraryCatalogStore.CatalogFileInspection.Usable,
                 ReelRoulette.Core.Library.LibraryCatalogStore.InspectCatalogFile(backup));
+        }
+        finally
+        {
+            LibraryCatalogBackup.WaitForPending();
+            if (Directory.Exists(appDataRoot))
+            {
+                Directory.Delete(appDataRoot, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void Rotation_KeepsOtherVersionAndUnrecognizedBackups_AndDoesNotCountThem()
+    {
+        var appDataRoot = CreateTempAppDataRoot();
+        try
+        {
+            SeedCoreSettings(appDataRoot, enabled: true, minimumGapMinutes: 60, numberOfBackups: 2);
+            CatalogSeed.Write(appDataRoot, items: [new SeedItem("item-1", @"C:\media\movie.mp4")]);
+            var backupDir = Path.Combine(appDataRoot, "backups");
+            var oldest = SeedBackup(backupDir, "library.db.backup.current-oldest", 2, DateTime.UtcNow.AddHours(-5));
+            var middle = SeedBackup(backupDir, "library.db.backup.current-middle", 2, DateTime.UtcNow.AddHours(-4));
+            var newest = SeedBackup(backupDir, "library.db.backup.current-newest", 2, DateTime.UtcNow.AddHours(-3));
+
+            // Each is older than every current backup, so rotation would take them first if they counted
+            // toward the limit, and one is recent, so it would block the copy if it counted toward the gap.
+            var others = SeedOtherBackups(backupDir, DateTime.UtcNow.AddHours(-6), DateTime.UtcNow.AddMinutes(-1));
+            var othersBefore = SnapshotFiles(others);
+
+            LibraryCatalogBackup.TryCreate(Path.Combine(appDataRoot, "library.db"), appDataRoot, NullLogger.Instance);
+
+            Assert.Equal(othersBefore, SnapshotFiles(others));
+            Assert.False(File.Exists(oldest));
+            Assert.False(File.Exists(middle));
+            Assert.True(File.Exists(newest));
+            var current = ListCatalogBackupFiles(backupDir)
+                .Where(path => LibraryCatalogStore.InspectCatalogFile(path) == LibraryCatalogStore.CatalogFileInspection.Usable)
+                .ToList();
+            Assert.Equal(2, current.Count);
+            Assert.Contains(newest, current);
+        }
+        finally
+        {
+            LibraryCatalogBackup.WaitForPending();
+            if (Directory.Exists(appDataRoot))
+            {
+                Directory.Delete(appDataRoot, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void Rotation_WhenTheGapBlocksACopy_KeepsOtherVersionAndUnrecognizedBackups()
+    {
+        var appDataRoot = CreateTempAppDataRoot();
+        try
+        {
+            SeedCoreSettings(appDataRoot, enabled: true, minimumGapMinutes: 60, numberOfBackups: 1);
+            CatalogSeed.Write(appDataRoot, items: [new SeedItem("item-1", @"C:\media\movie.mp4")]);
+            var backupDir = Path.Combine(appDataRoot, "backups");
+            var recent = SeedBackup(backupDir, "library.db.backup.current-recent", 2, DateTime.UtcNow.AddMinutes(-5));
+            var others = SeedOtherBackups(backupDir, DateTime.UtcNow.AddHours(-6), DateTime.UtcNow.AddHours(-5));
+            string[] seeded = [.. others, recent];
+            var before = SnapshotFiles(seeded);
+
+            LibraryCatalogBackup.TryCreate(Path.Combine(appDataRoot, "library.db"), appDataRoot, NullLogger.Instance);
+
+            Assert.Equal(before, SnapshotFiles(seeded));
+            Assert.Equal(
+                seeded.Order(StringComparer.Ordinal).ToArray(),
+                ListCatalogBackupFiles(backupDir).Order(StringComparer.Ordinal).ToArray());
         }
         finally
         {
@@ -1996,6 +2066,35 @@ public sealed class LibraryOperationsServiceTests
                            !path.EndsWith("-shm", StringComparison.Ordinal) &&
                            !path.EndsWith("-journal", StringComparison.Ordinal))
             .ToArray();
+    }
+
+    private static string SeedBackup(string backupDir, string fileName, int userVersion, DateTime timestampUtc)
+    {
+        var path = CatalogSeed.WriteAtVersion(backupDir, userVersion, fileName, standalone: true);
+        SetBackupTimestampUtc(path, timestampUtc);
+        return path;
+    }
+
+    /// <summary>
+    /// A newer-version backup, an older-version backup, and a file that is not a database, the first
+    /// two stamped <paramref name="olderUtc"/> and the last <paramref name="recentUtc"/>.
+    /// </summary>
+    private static string[] SeedOtherBackups(string backupDir, DateTime olderUtc, DateTime recentUtc)
+    {
+        var newer = SeedBackup(backupDir, "library.db.backup.newer-version", 3, olderUtc);
+        var older = SeedBackup(backupDir, "library.db.backup.older-version", 1, olderUtc);
+        var junk = Path.Combine(backupDir, "library.db.backup.not-a-database");
+        File.WriteAllText(junk, "not a database");
+        SetBackupTimestampUtc(junk, recentUtc);
+        return [newer, older, junk];
+    }
+
+    private static Dictionary<string, string> SnapshotFiles(IEnumerable<string> paths)
+    {
+        return paths.ToDictionary(
+            path => path,
+            path => Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(path))),
+            StringComparer.Ordinal);
     }
 
     private static void SetBackupTimestampUtc(string path, DateTime timestampUtc)

@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Globalization;
 using System.Runtime.InteropServices;
 using Microsoft.Data.Sqlite;
@@ -8,8 +9,52 @@ namespace ReelRoulette.Core.Library;
 public enum LibraryCatalogOpenStatus
 {
     Opened,
+
+    /// <summary>
+    /// The live catalog could not be used and was moved aside to <c>library.db.refused</c>, or a refused
+    /// file from an earlier open keeps an empty catalog from being created.
+    /// </summary>
     Refused,
-    Absent
+
+    /// <summary>
+    /// <c>library.db</c>, <c>library.db.previous</c>, or <c>library.db.incoming</c> was written by a newer
+    /// build. Nothing was changed.
+    /// </summary>
+    Newer,
+
+    /// <summary>
+    /// There is no <c>library.db</c>, but catalog backups exist, so no empty catalog was created.
+    /// </summary>
+    Missing,
+
+    /// <summary>
+    /// <c>library.db</c>, <c>library.db.previous</c>, or <c>library.db.incoming</c> could not be read to
+    /// tell whether a newer build wrote it. Nothing was changed.
+    /// </summary>
+    Unreadable
+}
+
+/// <summary>
+/// A catalog file in the data folder was written by a newer build, so it was left unchanged.
+/// </summary>
+public sealed class LibraryCatalogNewerException : InvalidOperationException
+{
+    public LibraryCatalogNewerException()
+        : base(LibraryCatalogStore.NewerMessage)
+    {
+    }
+}
+
+/// <summary>
+/// A catalog file in the data folder could not be read to tell whether a newer build wrote it, so it
+/// was left unchanged.
+/// </summary>
+public sealed class LibraryCatalogUnreadableException : InvalidOperationException
+{
+    public LibraryCatalogUnreadableException()
+        : base(LibraryCatalogStore.UnreadableMessage)
+    {
+    }
 }
 
 public sealed class LibraryCatalogReplaceOptions
@@ -115,13 +160,24 @@ public static class LibraryCatalogStore
     public const string DatabaseFileName = "library.db";
     public const string IncomingFileName = "library.db.incoming";
     public const string PreviousFileName = "library.db.previous";
+    public const string BackupDirectoryName = "backups";
+    public const string BackupFilePrefix = "library.db.backup.";
     public const string RefusedMessage =
-        "The live database was refused.";
+        "The library is damaged and was moved aside to library.db.refused. Restore a backup from the backups folder, or, if there are no backups, move the refused file out of the data folder to start with an empty library.";
+    public const string NewerMessage =
+        "The library was saved by a newer version of ReelRoulette and was left unchanged. Update ReelRoulette to open it.";
+    public const string MissingMessage =
+        "No library was found, but the backups folder has library backups, so an empty library was not created. Restore a backup, or move the library backups out of the backups folder to start with an empty library.";
+    public const string UnreadableMessage =
+        "A library file in the data folder could not be read, so the library was left unchanged. Make sure no other program has it open and ReelRoulette can read the data folder, then restart ReelRoulette.";
 
     internal const uint WindowsPublishMoveFlags = 0x8;
 
     private const int SqliteNotADatabase = 26;
     private const int SqliteCorrupt = 11;
+    private const int SqliteHeaderLength = 100;
+    private const int SqliteUserVersionOffset = 60;
+    private static readonly byte[] SqliteHeaderMagic = "SQLite format 3\0"u8.ToArray();
 
     private const string CreatingFileName = "library.db.creating";
     private const string RefusedFileName = "library.db.refused";
@@ -151,30 +207,57 @@ public static class LibraryCatalogStore
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(directory);
         Directory.CreateDirectory(directory);
-        RecoverReplace(directory);
+        switch (RecoverReplace(directory))
+        {
+            case CatalogFilesCheck.Newer:
+                return Unavailable(LibraryCatalogOpenStatus.Newer, NewerMessage);
+            case CatalogFilesCheck.Unreadable:
+                return Unavailable(LibraryCatalogOpenStatus.Unreadable, UnreadableMessage);
+        }
 
         var databasePath = Path.Combine(directory, DatabaseFileName);
         if (File.Exists(databasePath))
         {
-            try
+            switch (CheckCatalogFile(databasePath))
             {
-                if (IsHealthy(databasePath))
-                {
-                    ReadRevisionRow(databasePath);
+                case CatalogFileState.Usable:
                     return Opened(databasePath);
-                }
-            }
-            catch (SqliteException ex) when (ex.SqliteErrorCode is SqliteNotADatabase or SqliteCorrupt)
-            {
-                // The schema check passed, and the revision row read found a corrupt or non-database file.
+                case CatalogFileState.Unreadable:
+                    return Unavailable(LibraryCatalogOpenStatus.Unreadable, UnreadableMessage);
             }
 
             Quarantine(databasePath);
-            return Refused(RefusedMessage);
+            return Unavailable(LibraryCatalogOpenStatus.Refused, RefusedMessage);
+        }
+
+        // An empty catalog is only for a fresh install. A refused file or a backup means there was a
+        // library here, and an empty one would let the next completed refresh delete its thumbnails.
+        if (Directory.EnumerateFiles(directory, RefusedFileName + "*").Any())
+        {
+            return Unavailable(LibraryCatalogOpenStatus.Refused, RefusedMessage);
+        }
+
+        var backupDirectory = Path.Combine(directory, BackupDirectoryName);
+        if (Directory.Exists(backupDirectory) && Directory.EnumerateFiles(backupDirectory, BackupFilePrefix + "*").Any())
+        {
+            return Unavailable(LibraryCatalogOpenStatus.Missing, MissingMessage);
         }
 
         CreateEmpty(directory, databasePath);
         return Opened(databasePath);
+    }
+
+    /// <summary>
+    /// Whether a newer build wrote the live catalog or a replace file beside it. A newer build may
+    /// still need them, so this build changes none of them, and none of them either when one cannot
+    /// be read to tell.
+    /// </summary>
+    private static CatalogFilesCheck CheckNewerCatalog(string directory)
+    {
+        return CheckNewerFiles(
+            Path.Combine(directory, DatabaseFileName),
+            Path.Combine(directory, PreviousFileName),
+            Path.Combine(directory, IncomingFileName));
     }
 
     public static void WriteCheckpoint(string sourceDatabasePath, string destinationPath, Action? afterCopyStarted = null)
@@ -278,7 +361,7 @@ public static class LibraryCatalogStore
         ArgumentException.ThrowIfNullOrWhiteSpace(directory);
         ArgumentException.ThrowIfNullOrWhiteSpace(checkpointPath);
         Directory.CreateDirectory(directory);
-        RecoverReplace(directory);
+        ThrowIfLeftUnchanged(RecoverReplace(directory));
         var incoming = Path.Combine(directory, IncomingFileName);
         DeleteSidecars(incoming);
         File.Copy(checkpointPath, incoming, overwrite: true);
@@ -357,6 +440,7 @@ public static class LibraryCatalogStore
         var live = Path.Combine(directory, DatabaseFileName);
         var incoming = Path.Combine(directory, IncomingFileName);
         var previous = Path.Combine(directory, PreviousFileName);
+        ThrowIfLeftUnchanged(CheckNewerFiles(live, previous));
         if (!IsHealthyFile(incoming))
         {
             throw new InvalidDataException("Incoming catalog is not a usable database.");
@@ -580,11 +664,11 @@ public static class LibraryCatalogStore
         };
     }
 
-    private static LibraryCatalogOpenResult Refused(string message)
+    private static LibraryCatalogOpenResult Unavailable(LibraryCatalogOpenStatus status, string message)
     {
         return new LibraryCatalogOpenResult
         {
-            Status = LibraryCatalogOpenStatus.Refused,
+            Status = status,
             Message = message
         };
     }
@@ -713,25 +797,10 @@ public static class LibraryCatalogStore
         DeleteIfExists(tempPath + "-shm");
     }
 
-    private static bool IsHealthy(string databasePath)
-    {
-        try
-        {
-            using var connection = OpenReadOnly(databasePath);
-            // This provider treats a timeout of 0 as wait-forever. One second is its shortest finite busy wait.
-            connection.DefaultTimeout = 1;
-            return HasRequiredCatalogSchema(connection);
-        }
-        catch (SqliteException ex) when (ex.SqliteErrorCode is SqliteNotADatabase or SqliteCorrupt)
-        {
-            return false;
-        }
-    }
-
     /// <summary>
     /// The schema check reads only the header and the first page, so a database whose row pages are
     /// corrupt passes it. Reading one row from a later page makes that corruption surface here, where
-    /// open can quarantine the file, instead of at the first query. It reads only the revision row so
+    /// the usability check counts the file as damaged, instead of at the first query. It reads only the revision row so
     /// startup stays quick on a large catalog; corruption confined to item pages can still pass.
     /// </summary>
     private static void ReadRevisionRow(string databasePath)
@@ -747,7 +816,10 @@ public static class LibraryCatalogStore
     {
         Usable,
         NotADatabase,
-        Unavailable
+        Unavailable,
+
+        /// <summary>A newer build wrote this file.</summary>
+        Newer
     }
 
     public static CatalogFileInspection InspectCatalogFile(string databasePath)
@@ -759,6 +831,17 @@ public static class LibraryCatalogStore
 
         try
         {
+            var version = ReadSchemaVersion(databasePath);
+            if (version > SchemaVersion)
+            {
+                return CatalogFileInspection.Newer;
+            }
+
+            if (version != SchemaVersion)
+            {
+                return CatalogFileInspection.NotADatabase;
+            }
+
             using var connection = OpenReadOnly(databasePath);
             connection.DefaultTimeout = 1;
             return HasRequiredCatalogSchema(connection)
@@ -773,6 +856,156 @@ public static class LibraryCatalogStore
         {
             return CatalogFileInspection.Unavailable;
         }
+    }
+
+    /// <summary>Whether this build may change the catalog files, and if not, why.</summary>
+    private enum CatalogFilesCheck
+    {
+        Clear,
+        Newer,
+
+        /// <summary>A file could not be read to tell what it is, so it is treated like a newer one and left unchanged.</summary>
+        Unreadable
+    }
+
+    /// <summary>What SQLite makes of one catalog file.</summary>
+    private enum CatalogFileState
+    {
+        Missing,
+        Usable,
+
+        /// <summary>Not a database, corrupt, or without this build's catalog schema.</summary>
+        Damaged,
+
+        /// <summary>SQLite could not open or read it at the moment, for example because it is busy or locked, so it may be fine.</summary>
+        Unreadable
+    }
+
+    /// <summary>
+    /// The one usability rule for open, replace recovery, imports, and checkpoints. Only a file that is
+    /// not a database, is corrupt, or lacks the catalog schema is damaged, and the revision row is read
+    /// too; see <see cref="ReadRevisionRow"/>. One that SQLite cannot open or read at the moment is
+    /// unreadable.
+    /// </summary>
+    private static CatalogFileState CheckCatalogFile(string databasePath)
+    {
+        if (!File.Exists(databasePath))
+        {
+            return CatalogFileState.Missing;
+        }
+
+        try
+        {
+            using (var connection = OpenReadOnly(databasePath))
+            {
+                // This provider treats a timeout of 0 as wait-forever. One second is its shortest finite busy wait.
+                connection.DefaultTimeout = 1;
+                if (!HasRequiredCatalogSchema(connection))
+                {
+                    return CatalogFileState.Damaged;
+                }
+            }
+
+            ReadRevisionRow(databasePath);
+            return CatalogFileState.Usable;
+        }
+        catch (SqliteException ex) when (ex.SqliteErrorCode is SqliteNotADatabase or SqliteCorrupt)
+        {
+            return CatalogFileState.Damaged;
+        }
+        catch (Exception ex) when (ex is SqliteException or IOException or UnauthorizedAccessException)
+        {
+            return CatalogFileState.Unreadable;
+        }
+    }
+
+    /// <summary>Newer when any file is newer, otherwise unreadable when any file cannot be read.</summary>
+    private static CatalogFilesCheck CheckNewerFiles(params string[] databasePaths)
+    {
+        var result = CatalogFilesCheck.Clear;
+        foreach (var databasePath in databasePaths)
+        {
+            var check = CheckNewerFile(databasePath);
+            if (check == CatalogFilesCheck.Newer)
+            {
+                return CatalogFilesCheck.Newer;
+            }
+
+            if (check == CatalogFilesCheck.Unreadable)
+            {
+                result = CatalogFilesCheck.Unreadable;
+            }
+        }
+
+        return result;
+    }
+
+    private static CatalogFilesCheck CheckNewerFile(string databasePath)
+    {
+        if (!File.Exists(databasePath))
+        {
+            return CatalogFilesCheck.Clear;
+        }
+
+        try
+        {
+            return ReadSchemaVersion(databasePath) > SchemaVersion ? CatalogFilesCheck.Newer : CatalogFilesCheck.Clear;
+        }
+        catch (Exception ex) when (ex is SqliteException or IOException or UnauthorizedAccessException)
+        {
+            return CatalogFilesCheck.Unreadable;
+        }
+    }
+
+    private static void ThrowIfLeftUnchanged(CatalogFilesCheck check)
+    {
+        switch (check)
+        {
+            case CatalogFilesCheck.Newer:
+                throw new LibraryCatalogNewerException();
+            case CatalogFilesCheck.Unreadable:
+                throw new LibraryCatalogUnreadableException();
+        }
+    }
+
+    /// <summary>
+    /// The file's <c>user_version</c>, or null when it is not a SQLite database. It reads the header
+    /// directly, because a read-only SQLite open of a WAL database creates <c>-wal</c> and <c>-shm</c>
+    /// files beside it. Only when a <c>-wal</c> file with content is already there, where a newer
+    /// header may be waiting to be checkpointed, does it read through SQLite.
+    /// </summary>
+    private static int? ReadSchemaVersion(string databasePath)
+    {
+        var wal = new FileInfo(databasePath + "-wal");
+        if (wal.Exists && wal.Length > 0)
+        {
+            try
+            {
+                using var connection = OpenReadOnly(databasePath);
+                connection.DefaultTimeout = 1;
+                return ExecuteScalarInt(connection, "PRAGMA user_version;");
+            }
+            catch (SqliteException ex) when (ex.SqliteErrorCode is SqliteNotADatabase or SqliteCorrupt)
+            {
+                return null;
+            }
+        }
+
+        var header = new byte[SqliteHeaderLength];
+        using (var stream = new FileStream(databasePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+        {
+            if (stream.ReadAtLeast(header, header.Length, throwOnEndOfStream: false) < header.Length)
+            {
+                return null;
+            }
+        }
+
+        if (!header.AsSpan(0, SqliteHeaderMagic.Length).SequenceEqual(SqliteHeaderMagic))
+        {
+            return null;
+        }
+
+        return BinaryPrimitives.ReadInt32BigEndian(header.AsSpan(SqliteUserVersionOffset, 4));
     }
 
     private static bool HasRequiredCatalogSchema(SqliteConnection connection)
@@ -1025,52 +1258,83 @@ public static class LibraryCatalogStore
         return value is long number ? (int)number : Convert.ToInt32(value, CultureInfo.InvariantCulture);
     }
 
-    private static void RecoverReplace(string directory)
+    /// <summary>
+    /// Finishes or rolls back a replace that stopped part way. When a newer build wrote one of the
+    /// files, or a file it needs to judge could not be read to tell what it is, it changes nothing and
+    /// says why. It judges each file with the same check as open, so a file open would refuse never
+    /// takes the place of a usable one, and a damaged library.db it replaces is kept as a refused file.
+    /// </summary>
+    private static CatalogFilesCheck RecoverReplace(string directory)
     {
+        var newer = CheckNewerCatalog(directory);
+        if (newer != CatalogFilesCheck.Clear)
+        {
+            return newer;
+        }
+
         var live = Path.Combine(directory, DatabaseFileName);
         var incoming = Path.Combine(directory, IncomingFileName);
         var previous = Path.Combine(directory, PreviousFileName);
-        if (IsHealthyFile(live))
+        var liveState = CheckCatalogFile(live);
+        if (liveState == CatalogFileState.Unreadable)
+        {
+            return CatalogFilesCheck.Unreadable;
+        }
+
+        if (liveState == CatalogFileState.Usable)
         {
             DeleteSidecars(incoming);
             DeleteSidecars(previous);
-            return;
+            return CatalogFilesCheck.Clear;
         }
 
-        if (IsHealthyFile(previous))
+        var previousState = CheckCatalogFile(previous);
+        if (previousState == CatalogFileState.Unreadable)
         {
-            DeleteSidecars(live);
+            return CatalogFilesCheck.Unreadable;
+        }
+
+        if (previousState == CatalogFileState.Usable)
+        {
+            // A damaged library.db is kept as a refused file, as open keeps one.
+            if (liveState == CatalogFileState.Damaged)
+            {
+                Quarantine(live);
+            }
+            else
+            {
+                DeleteSidecars(live);
+            }
+
             MoveDatabase(previous, live);
             DeleteSidecars(incoming);
             SyncDirectory(directory);
-            return;
+            return CatalogFilesCheck.Clear;
         }
 
-        if (!File.Exists(live) && IsHealthyFile(incoming))
+        if (liveState == CatalogFileState.Missing)
         {
-            MoveDatabase(incoming, live);
-            SyncDirectory(directory);
-            return;
+            var incomingState = CheckCatalogFile(incoming);
+            if (incomingState == CatalogFileState.Unreadable)
+            {
+                return CatalogFilesCheck.Unreadable;
+            }
+
+            if (incomingState == CatalogFileState.Usable)
+            {
+                MoveDatabase(incoming, live);
+                SyncDirectory(directory);
+                return CatalogFilesCheck.Clear;
+            }
         }
 
         DeleteSidecars(incoming);
+        return CatalogFilesCheck.Clear;
     }
 
     private static bool IsHealthyFile(string databasePath)
     {
-        if (!File.Exists(databasePath))
-        {
-            return false;
-        }
-
-        try
-        {
-            return IsHealthy(databasePath);
-        }
-        catch (Exception ex) when (ex is SqliteException or IOException or InvalidDataException)
-        {
-            return false;
-        }
+        return CheckCatalogFile(databasePath) == CatalogFileState.Usable;
     }
 
     private static void CheckpointStandalone(string databasePath)

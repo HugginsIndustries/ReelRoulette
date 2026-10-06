@@ -126,6 +126,7 @@ Reconnect/resync behavior:
 - Deterministic missing-media behavior returns:
   - `404 { "error": "Media not found" }` on `GET /api/media/{idOrToken}`.
 - A `GET /api/media/{idOrToken}` response still being sent when the server starts stopping is cut off, so a player that has stopped reading does not hold up shutdown.
+- **Running without a library:** when the server cannot use its catalog, every `/api` route answers **503** `ErrorResponse` with the reason in `error` and `code` set to `library_newer` (a newer version of ReelRoulette saved the catalog, and it was left unchanged), `library_damaged` (the catalog is not a database, is corrupt, or has another schema, and was moved aside to `library.db.refused`, or a refused file from an earlier start is still there), `library_missing` (there is no catalog, but catalog backups exist), or `library_unreadable` (a catalog file could not be opened or read at the moment, for example because another program has it locked, and it was left unchanged). Routes that work without a library stay open: `/api/version`, `/api/capabilities`, `/api/pair`, `/api/web-runtime/settings`, `/api/backup/settings`, `/api/refresh/settings`, and `/api/logs/client`. Events, sources, and presets are refused too. A caller that is not paired still gets **401** first. `GET /control/status` reports the same state, and `/control/*` routes, including restart, stop, and update, keep working.
 - API/version/capability/disconnect simulation controls are exposed via control-plane testing endpoints.
 - Simulation behavior is intended to exercise real client error-handling paths.
 
@@ -174,7 +175,7 @@ Reconnect/resync behavior:
 
 - `GET /api/backup/settings`
 - `POST /api/backup/settings`
-- Backup snapshot fields are `enabled` (default `true`), `minimumBackupGapMinutes` (default 360, clamped to 1–10080), and `numberOfBackups` (default 8, clamped to 1–100). `POST` returns the stored snapshot after clamping. Settings persist in `core-settings.json`. The same settings govern both catalog backups (`library.db.backup.*`) and settings backups (`core-settings.json.backup.*`), each kept in `backups/` with its own gap and count.
+- Backup snapshot fields are `enabled` (default `true`), `minimumBackupGapMinutes` (default 360, clamped to 1–10080), and `numberOfBackups` (default 8, clamped to 1–100). `POST` returns the stored snapshot after clamping. Settings persist in `core-settings.json`. The same settings govern both catalog backups (`library.db.backup.*`) and settings backups (`core-settings.json.backup.*`), each kept in `backups/` with its own gap and count. Catalog backup rotation counts and trims only valid backups at the current catalog schema version, oldest first. Backups at another schema version and files it does not recognize stay in `backups/` and count toward neither the limit nor the gap.
 
 ### Tag editor
 
@@ -232,7 +233,7 @@ Reconnect/resync behavior:
 - `POST /control/update/download` — download the update from the last successful check; does not apply.
 - `POST /control/update/apply` — apply a downloaded update and restart the server process (operator UI disconnects).
 
-- `GET /control/status`
+- `GET /control/status` — `ControlStatusResponse`. `libraryState` is `ready`, `newer`, `damaged`, `missing`, or `unreadable`, with the same meanings as the `library_*` error codes, and `libraryMessage` says why there is no library and what to do, or is null when the state is `ready`. The Operator page shows that message. `isHealthy` does not change with the library state.
 - `GET /control/settings`
 - `POST /control/settings`
 - `GET /control/startup`

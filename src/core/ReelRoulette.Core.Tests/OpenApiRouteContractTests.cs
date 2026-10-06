@@ -40,6 +40,19 @@ public sealed class OpenApiRouteContractTests : IDisposable
     }
 
     [Fact]
+    public void ControlStatus_ResponseMatchesSpec()
+    {
+        OpenApiSpec.AssertMatchesSchema(OpenApiSpec.SerializeAsServer(new ControlStatusResponse()), "ControlStatusResponse");
+        OpenApiSpec.AssertMatchesSchema(
+            OpenApiSpec.SerializeAsServer(new ControlStatusResponse
+            {
+                LibraryState = "newer",
+                LibraryMessage = ReelRoulette.Core.Library.LibraryCatalogStore.NewerMessage
+            }),
+            "ControlStatusResponse");
+    }
+
+    [Fact]
     public void BackupSettings_ResponseMatchesSpec()
     {
         var settings = CreateSettingsService();

@@ -205,7 +205,8 @@ static IHostUi CreateHostUi(
                     var result = refresh.TryStartManual();
                     if (!result.Accepted)
                     {
-                        throw new InvalidOperationException("Refresh is already in progress.");
+                        var catalog = app.Services.GetRequiredService<LibraryCatalogHost>();
+                        throw new InvalidOperationException(catalog.HasLibrary ? "Refresh is already in progress." : result.Message);
                     }
 
                     return Task.CompletedTask;
@@ -550,6 +551,7 @@ static void MapOperatorUi(WebApplication app, ServerAppOptions options, bool web
           <button id="applyUpdate" type="button" style="display:none;">Apply &amp; Restart</button>
         </div>
       </div>
+      <p id="libraryStatus" class="status-note error" hidden></p>
       <h3>Runtime Status</h3>
       <div id="status" class="status-box">Loading...</div>
       <div class="row-actions">
@@ -739,6 +741,13 @@ static void MapOperatorUi(WebApplication app, ServerAppOptions options, bool web
 
     function setStatus(text) {
       document.getElementById("status").textContent = text;
+    }
+
+    function renderLibraryStatus(status) {
+      const element = document.getElementById("libraryStatus");
+      const message = status.libraryState && status.libraryState !== "ready" ? status.libraryMessage : null;
+      element.textContent = message ? "Running without a library. " + message : "";
+      element.hidden = !message;
     }
 
     function formatRunningVersion(status) {
@@ -1026,6 +1035,7 @@ static void MapOperatorUi(WebApplication app, ServerAppOptions options, bool web
         "webUiEnabledAtStartup:\\n" + JSON.stringify(webUiEnabledAtStartup, null, 2)
       ].join("\\n\\n");
       setStatus(statusText);
+      renderLibraryStatus(status);
       renderConnectedClients(status.connectedClients);
       renderEvents("incomingEventsBody", status.incomingApiEvents);
       renderEvents("outgoingEventsBody", status.outgoingApiEvents);

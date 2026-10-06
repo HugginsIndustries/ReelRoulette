@@ -79,6 +79,31 @@ public sealed class LibraryCatalogStoreTests
     }
 
     [Fact]
+    public void Open_CorruptRowPageWithAUsablePrevious_PutsThePreviousBackAndKeepsTheDamagedFile()
+    {
+        using var dir = new TempDirectory();
+        var live = Path.Combine(dir.Path, "library.db");
+        CatalogSeed.Write(
+            dir.Path,
+            items: [new SeedItem("kept", "/kept.mp4") { Fingerprint = new string('x', 20_000) }]);
+        CorruptPagesAfterHeader(live);
+        var damagedBytes = File.ReadAllBytes(live);
+        var previous = CatalogSeed.WriteAtVersion(dir.Path, 2, "library.db.previous", items: [new SeedItem("previous", "/previous.mp4")], standalone: true);
+        var previousBytes = File.ReadAllBytes(previous);
+
+        var opened = CatalogOpen.Open(dir.Path);
+
+        // The schema check passes and the revision row read fails, so open would refuse this
+        // library.db. Recovery judges it the same way, keeps it as a refused file, and puts the
+        // usable previous catalog back.
+        Assert.Equal(LibraryCatalogOpenStatus.Opened, opened.Status);
+        Assert.False(File.Exists(previous));
+        Assert.Equal(previousBytes, File.ReadAllBytes(live));
+        Assert.Equal(damagedBytes, File.ReadAllBytes(Path.Combine(dir.Path, "library.db.refused")));
+        Assert.Equal("previous", Assert.Single(opened.Snapshot()!.Items).Id);
+    }
+
+    [Fact]
     public void Open_UnversionedDatabase_IsQuarantinedAndRefused()
     {
         using var dir = new TempDirectory();
@@ -136,7 +161,7 @@ public sealed class LibraryCatalogStoreTests
     }
 
     [Fact]
-    public async Task Open_LockedDatabase_FailsWithinASecondAndLeavesFile()
+    public async Task Open_LockedDatabase_IsUnreadableWithinASecondAndLeavesFile()
     {
         using var dir = new TempDirectory();
         var databasePath = Path.Combine(dir.Path, "library.db");
@@ -156,11 +181,11 @@ public sealed class LibraryCatalogStoreTests
         });
         Assert.True(locked.Wait(TimeSpan.FromSeconds(5)));
 
-        SqliteException ex;
+        LibraryCatalogOpenResult opened;
         var started = System.Diagnostics.Stopwatch.StartNew();
         try
         {
-            ex = Assert.Throws<SqliteException>(() => CatalogOpen.Open(dir.Path));
+            opened = CatalogOpen.Open(dir.Path);
         }
         finally
         {
@@ -169,7 +194,8 @@ public sealed class LibraryCatalogStoreTests
         }
 
         started.Stop();
-        Assert.Equal(5, ex.SqliteErrorCode);
+        Assert.Equal(LibraryCatalogOpenStatus.Unreadable, opened.Status);
+        Assert.Null(opened.Session);
         Assert.True(started.Elapsed < TimeSpan.FromSeconds(5), $"locked open waited {started.Elapsed.TotalSeconds:0.0}s");
         Assert.True(File.Exists(databasePath));
         Assert.Empty(Directory.GetFiles(dir.Path, "library.db.refused*"));

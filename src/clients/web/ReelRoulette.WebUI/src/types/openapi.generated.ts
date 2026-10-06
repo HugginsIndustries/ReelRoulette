@@ -1089,6 +1089,13 @@ export interface components {
             incomingApiEvents?: components["schemas"]["ApiEventTelemetryEntry"][];
             outgoingApiEvents?: components["schemas"]["ApiEventTelemetryEntry"][];
             testing?: components["schemas"]["OperatorTestingStateSnapshot"];
+            /**
+             * @description Whether the server has a library. `newer`: a newer version of ReelRoulette saved the catalog, and it was left unchanged. `damaged`: the catalog is not a database, is corrupt, or has another schema, and was moved aside, or a catalog moved aside earlier is still there. `missing`: there is no catalog, but catalog backups exist. `unreadable`: a catalog file could not be opened or read at the moment, for example because another program has it locked, and it was left unchanged. Without a library, library routes answer 503. `isHealthy` does not change with it.
+             * @enum {string}
+             */
+            libraryState?: "ready" | "newer" | "damaged" | "missing" | "unreadable";
+            /** @description Why there is no library and what to do about it, or null when `libraryState` is `ready`. */
+            libraryMessage?: string | null;
         };
         SessionInfoSnapshot: {
             sessionId: string;
@@ -1639,7 +1646,17 @@ export interface components {
             snapshot: components["schemas"]["RefreshStatusSnapshot"];
         };
     };
-    responses: never;
+    responses: {
+        /** @description The server is running without a library. `error` says why and what to do, and `code` is `library_newer`, `library_damaged`, `library_missing`, or `library_unreadable`. */
+        LibraryUnavailable: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
+    };
     parameters: never;
     requestBodies: never;
     headers: never;
@@ -2492,6 +2509,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            503: components["responses"]["LibraryUnavailable"];
         };
     };
     postPresets: {
@@ -2523,6 +2541,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            503: components["responses"]["LibraryUnavailable"];
         };
     };
     getSources: {
@@ -2552,6 +2571,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            503: components["responses"]["LibraryUnavailable"];
         };
     };
     postSourceImport: {
@@ -2585,6 +2605,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            503: components["responses"]["LibraryUnavailable"];
         };
     };
     postLibraryQuery: {
@@ -2618,6 +2639,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            503: components["responses"]["LibraryUnavailable"];
         };
     };
     postLibraryItem: {
@@ -2660,6 +2682,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            503: components["responses"]["LibraryUnavailable"];
         };
     };
     getLibraryStats: {
@@ -2680,6 +2703,7 @@ export interface operations {
                     "application/json": components["schemas"]["LibraryStatsResponse"];
                 };
             };
+            503: components["responses"]["LibraryUnavailable"];
         };
     };
     getLibraryCatalogCheckpoint: {
@@ -2707,6 +2731,7 @@ export interface operations {
                 };
                 content?: never;
             };
+            503: components["responses"]["LibraryUnavailable"];
         };
     };
     postSourceEnabled: {
@@ -2751,6 +2776,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            503: components["responses"]["LibraryUnavailable"];
         };
     };
     postRandom: {
@@ -2793,6 +2819,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            503: components["responses"]["LibraryUnavailable"];
         };
     };
     postPlayItem: {
@@ -2865,6 +2892,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            503: components["responses"]["LibraryUnavailable"];
         };
     };
     getMediaByIdOrToken: {
@@ -2905,6 +2933,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            503: components["responses"]["LibraryUnavailable"];
         };
     };
     postFavorite: {
@@ -2945,6 +2974,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            503: components["responses"]["LibraryUnavailable"];
         };
     };
     postBlacklist: {
@@ -2985,6 +3015,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            503: components["responses"]["LibraryUnavailable"];
         };
     };
     postRecordPlayback: {
@@ -3025,6 +3056,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            503: components["responses"]["LibraryUnavailable"];
         };
     };
     postClearPlaybackStats: {
@@ -3058,6 +3090,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            503: components["responses"]["LibraryUnavailable"];
         };
     };
     postLibraryStates: {
@@ -3091,6 +3124,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            503: components["responses"]["LibraryUnavailable"];
         };
     };
     postTagEditorModel: {
@@ -3124,6 +3158,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            503: components["responses"]["LibraryUnavailable"];
         };
     };
     postTagEditorApplyItemTags: {
@@ -3155,6 +3190,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            503: components["responses"]["LibraryUnavailable"];
         };
     };
     postTagEditorUpsertCategory: {
@@ -3186,6 +3222,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            503: components["responses"]["LibraryUnavailable"];
         };
     };
     postTagEditorUpsertTag: {
@@ -3217,6 +3254,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            503: components["responses"]["LibraryUnavailable"];
         };
     };
     postTagEditorRenameTag: {
@@ -3248,6 +3286,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            503: components["responses"]["LibraryUnavailable"];
         };
     };
     postTagEditorDeleteTag: {
@@ -3279,6 +3318,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            503: components["responses"]["LibraryUnavailable"];
         };
     };
     postTagEditorDeleteCategory: {
@@ -3310,6 +3350,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            503: components["responses"]["LibraryUnavailable"];
         };
     };
     postRefreshStart: {
@@ -3343,6 +3384,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            503: components["responses"]["LibraryUnavailable"];
         };
     };
     getRefreshStatus: {
@@ -3363,6 +3405,7 @@ export interface operations {
                     "application/json": components["schemas"]["RefreshStatusSnapshot"];
                 };
             };
+            503: components["responses"]["LibraryUnavailable"];
         };
     };
     getRefreshSettings: {
@@ -3484,6 +3527,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            503: components["responses"]["LibraryUnavailable"];
         };
     };
     postDuplicateApply: {
@@ -3517,6 +3561,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            503: components["responses"]["LibraryUnavailable"];
         };
     };
     postAutoTagScan: {
@@ -3550,6 +3595,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            503: components["responses"]["LibraryUnavailable"];
         };
     };
     postAutoTagApply: {
@@ -3583,6 +3629,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            503: components["responses"]["LibraryUnavailable"];
         };
     };
     postClientLog: {
@@ -3682,6 +3729,7 @@ export interface operations {
                 };
                 content?: never;
             };
+            503: components["responses"]["LibraryUnavailable"];
         };
     };
     getEventsSse: {
@@ -3725,6 +3773,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            503: components["responses"]["LibraryUnavailable"];
         };
     };
 }

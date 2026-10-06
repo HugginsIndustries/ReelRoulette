@@ -108,65 +108,7 @@ Do not use this file for detailed architecture explanation or current capability
 
 ## Active Milestones
 
-Last milestone completed: M10j12
-
-### M11a - Catalog Open and Backup Safety
-
-- **Status**: ⏳ Planned
-- **Goal**: A build that finds a catalog it cannot use, because a newer build wrote it or because it is damaged, leaves the library and its backups untouched and keeps running without a library, and backup rotation deletes only its own current backups.
-- **Scope**:
-  - Ships in v0.14.1, first in the series. Library Query Performance moves the catalog to schema version 3, and no build without this milestone may open a schema version 3 library. Developing against the real library is fine as long as every build used contains this milestone and the installed v0.14.0 is not run until it is replaced by installing the new version directly.
-  - Found by the catalog schema safety report, which measured today's behavior with throwaway tests against a schema version 2 catalog given one extra `items` column and `user_version` 3:
-    - Server startup: `LibraryCatalogStore.Open` treats any `user_version` other than 2 as damaged and moves the catalog to `library.db.refused`, then `LibraryCatalogHost.Open` throws, so the host fails to start with "The live database was refused." (measured). The process then exits, since the ServerApp's top-level handler catches only `OperationCanceledException` (inferred; the real app was not started). The next start opens an empty catalog, deletes the newer backups, and backs up the empty catalog (measured).
-    - Replace recovery at open: a newer live catalog with an older `library.db.previous` beside it is deleted and replaced by the older file, and no copy of the newer catalog remains (measured). A newer live catalog with `library.db.incoming` beside it loses the incoming file and is quarantined (measured). With no live catalog, a newer incoming file is deleted (inferred from code).
-    - Desktop import: a newer file is rejected as "not a library database" and nothing is written (measured). Importing an older file over a newer live catalog asks the usual overwrite question and, when confirmed, deletes the newer catalog (measured).
-    - Backup rotation deletes every `library.db.backup.*` file that catalog inspection rejects, which includes valid backups at any other schema version and files that are not SQLite. The listing runs before the gap check, so this happens even when no new backup is written (measured: newer, older, and non-SQLite files all deleted while the gap blocked a copy). With the same check, a schema version 3 build would delete every schema version 2 backup on its first start (inferred).
-    - After an empty catalog replaces a quarantined one, the next completed refresh deletes every thumbnail JPEG, since none belongs to a catalog item (inferred from code).
-    - Nothing deletes `library.db.refused` files (measured with `git grep`).
-  - Catalog files slice (no contract change):
-    - Read `user_version` before the schema checks. A version above the one this build knows is newer. Anything else that fails the checks is damaged, including schema version 1, which never shipped and stays refused.
-    - Newer: when `library.db`, `library.db.previous`, or `library.db.incoming` is newer, open and replace recovery change nothing and report the catalog as newer.
-    - Damaged: quarantine to `library.db.refused` as today, and report it as damaged.
-    - An empty catalog is created only on a fresh install: no `library.db`, no `library.db.refused*` file, and no `library.db.backup.*` file in `backups/`, whatever its version or state.
-    - Replacing the live catalog refuses when the live catalog is newer and leaves it in place, so a forced desktop import over it fails without changes.
-    - Backup rotation deletes only valid current-version backups beyond the limit, oldest first. Every other `library.db.backup.*` file stays and counts toward neither the limit nor the gap, including files that are not SQLite. The checkpoint writer still removes its own failed copy.
-  - Server slice (no contract change):
-    - With a newer or damaged catalog, or a refused file that blocks an empty catalog, the server runs without a library. The Operator page, settings, logs, restart, stop, and in-app update work. Neither place that attaches catalog backups (the catalog host and the library operations service) attaches them, so no backup or rotation runs. The refresh pipeline does not run on its schedule, and a manual or tray refresh is refused with the message.
-    - Trap (inferred): by .NET's default, an exception that escapes a background service stops the host, and the scheduled refresh reads the catalog session first, so the refresh pipeline checks for a library before it runs instead of catching the failure.
-    - Library routes return 503 `{ error, code }` with the message, the body shape the testing mode's API unavailable simulation already returns. Routes that work without a library stay open: version, capabilities, pair, the web runtime, backup, and refresh settings, and client log relay. Every other `/api` route returns 503, including events, sources, and presets, which without a catalog would answer with empty data and keep preset edits only in memory.
-    - The message is written to `last.log` as a warning and returned in each 503. Newer: the library was saved by a newer version of ReelRoulette, was left unchanged, and opens after updating ReelRoulette. Damaged: the library could not be read and was moved aside to `library.db.refused`; restore a backup from the backups folder, or, with no backups, move the refused file away to start with an empty library. The final wording is decided here.
-    - Document restoring a backup by hand in `docs/dev-setup.md`.
-  - Contract slice: `ControlStatusResponse` gains optional library state and message fields, the 503 on library routes is documented in `shared/api/openapi.yaml` and `docs/api.md`, and the Operator page shows the message. It only adds; the frozen desktop treats a 503 like any failed request. `isHealthy` keeps its meaning.
-  - Library Query Performance must not leave a schema version 2 `library.db.previous` beside a schema version 3 `library.db`: a build without this milestone deletes the newer catalog in that case.
-  - Not included: showing the message in the WebUI, which is WebUI Status Line Overhaul.
-  - Not included: carrying the message into the admin section, which is Admin Section in WebUI Settings.
-  - Not included: restoring a backup from the admin section, which is Admin Library Catalog Transfer.
-  - Not included: corruption the startup check cannot see, which is Catalog Corruption Detection Off the Startup Path.
-  - Not included: a clearer desktop import message for a newer file. The desktop is frozen, and the file is already rejected without changes.
-- **Acceptance criteria**:
-  - A newer `library.db`, alone or with `library.db.previous` or `library.db.incoming` beside it, and a newer `library.db.previous` or `library.db.incoming` with no live catalog, are byte-identical after open, nothing is created or removed, and the open reports the catalog as newer.
-  - A damaged `library.db` is quarantined, and no empty catalog is created on that start or a later one while a backup or a refused file exists.
-  - With no `library.db`, no refused file, and no backups, an empty catalog is created as today.
-  - Replacing a newer live catalog is refused and leaves it byte-identical.
-  - Rotation deletes only valid current-version backups beyond the limit. Newer, older, and unrecognized files in `backups/` are byte-identical afterward and count toward neither the limit nor the gap.
-  - With a newer or damaged catalog, the server starts, the Operator page and update routes answer, library routes return 503 with the message, and no backup or refresh runs, on that start and the next.
-  - `/control/status` reports the library state and message, and the Operator page shows it.
-- **Verification evidence**:
-  - Completion evidence must include these tests, each shown failing before the fix:
-    - A newer live catalog opens as newer, byte-identical, with no `library.db.refused` and no new database (today it is quarantined, measured).
-    - A newer live catalog with an older `library.db.previous`: both unchanged (today the newer one is deleted, measured).
-    - A newer live catalog with `library.db.incoming`: both unchanged (today the incoming file is deleted and the live one quarantined, measured).
-    - No live catalog with a newer `library.db.incoming` or `library.db.previous`: both unchanged and no empty catalog (today the incoming file is deleted, inferred from code).
-    - A damaged live catalog with backups is quarantined with no empty catalog on that open or the next, and a data folder with only a refused file gets no empty catalog.
-    - Rotation keeps newer, older, and non-SQLite files, with and without the gap blocking a copy, and does not count them (today they are deleted, measured).
-    - A forced desktop import over a newer live catalog is refused and leaves it unchanged (today it replaces it, measured).
-    - The server composition with a newer or a damaged catalog starts its hosted services, reports no library, writes no backup, and stays that way on a second start (today the host start throws, measured).
-    - The refresh pipeline neither runs on its schedule nor starts manually without a library.
-    - The `/api` gate answers 503 for library routes and passes the allowed ones, tested as a function: no HTTP test host exists, and adding `Microsoft.AspNetCore.TestHost` needs approval.
-  - `TryCreate_IgnoresAnUnhealthyBackupFile`, which asserts that a non-SQLite backup file is deleted, is renamed (for example `TryCreate_KeepsABackupFileItDoesNotRecognize`) and asserts the file stays byte-identical and uncounted. The existing quarantine tests and `UnrecognizedSchemaFile_IsNotALibraryDatabase_AndIsNotPrepared` keep passing.
-  - `dotnet test ReelRoulette.sln`, plus `npm run generate:contracts` and `npm run verify` for the contract slice.
-  - Docs evidence must include `CONTEXT.md`, `docs/dev-setup.md`, and `docs/domain-inventory.md`, which say a refused database stops startup, and `docs/api.md` for the 503 and the status fields.
-  - Add a Release Specific checklist item: "With a copy of the data folder upgraded by a newer build, the installed build runs without a library, shows the message on the Operator page, leaves the library and backups byte-identical, and updates in-app, on Linux and Windows."
+Last milestone completed: M11a
 
 ### M11b - Library Query Performance
 
@@ -1290,13 +1232,16 @@ Last milestone completed: M10j12
   - Measured: only the desktop calls `POST /api/refresh/start`, `/api/refresh/settings`, `/api/backup/settings`, `/api/duplicates/scan`, and `/api/duplicates/apply`. The routes exist, so this needs no contract change. The tray can also start a refresh.
   - Gated like the rest of the admin section.
   - Refresh slice: Refresh Now with the refresh status, and the refresh settings the desktop Settings dialog shows: auto-refresh and its interval, forced loudness and duration rescans on the next refresh, and fingerprint scan parallelism.
-  - Backup slice: server backups on or off, the time between backups, and the number kept.
+  - Backup slice: server backups on or off, the time between backups, the number kept, and the days of daily backups kept.
+  - Daily retention, in the backup slice: on top of the existing count limit, catalog backup rotation keeps one backup per date for a number of days set in the server's backup settings. It applies to current- and older-version backups alike, so older-version backups, which rotation keeps and does not count today, age out with their dates. Newer-version backups and files rotation does not recognize are never touched. The days setting adds a field to the backup settings, a contract change that only adds.
   - Trap: the refresh and backup settings routes assign every field from the posted snapshot, so a partial post writes defaults (Server Robustness Findings). Until that is fixed, the admin section posts the full settings it read.
   - Duplicate review slice: scan the whole library or one source, show each group with thumbnails and the comparison details the desktop shows (file name, plays, tags, favorite, blacklisted), choose Keep All or a file to keep per group, default to Keep All or Select Best from a per-device preference, and confirm counts before deleting. It uses the panel layout.
   - Add a Release Specific checklist item: "From the admin section, start a refresh, change refresh and backup settings, and scan and apply duplicates with Keep All and with a chosen file, and the library updates."
 - **Acceptance criteria**:
   - Refresh Now starts a refresh, and the status line shows its progress and result.
   - Refresh and backup settings load and save, and saving one field leaves the others as they were on the server.
+  - With daily retention set to a number of days, rotation keeps the count limit's newest current-version backups plus the newest backup of each date in that window, current-version or older-version, and deletes older-version backups whose dates fall outside it.
+  - Newer-version backups and unrecognized files in `backups/` are byte-identical after rotation, with daily retention on or off.
   - Duplicate apply deletes only the files not kept, after confirming counts, and Keep All deletes nothing in that group.
   - The duplicate default is a per-device preference.
 - **Verification evidence**:

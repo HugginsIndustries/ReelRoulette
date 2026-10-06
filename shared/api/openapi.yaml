@@ -578,6 +578,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          $ref: "#/components/responses/LibraryUnavailable"
     post:
       summary: Replace preset catalog
       operationId: postPresets
@@ -598,6 +600,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          $ref: "#/components/responses/LibraryUnavailable"
 
   /api/sources:
     get:
@@ -618,6 +622,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          $ref: "#/components/responses/LibraryUnavailable"
 
   /api/sources/import:
     post:
@@ -642,6 +648,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          $ref: "#/components/responses/LibraryUnavailable"
 
   /api/library/query:
     post:
@@ -671,6 +679,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          $ref: "#/components/responses/LibraryUnavailable"
 
   /api/library/item:
     post:
@@ -705,6 +715,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          $ref: "#/components/responses/LibraryUnavailable"
 
   /api/library/stats:
     get:
@@ -720,6 +732,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/LibraryStatsResponse"
+        "503":
+          $ref: "#/components/responses/LibraryUnavailable"
 
   /api/library/catalog-checkpoint:
     get:
@@ -738,6 +752,8 @@ paths:
                 format: binary
         "500":
           description: The checkpoint could not be written
+        "503":
+          $ref: "#/components/responses/LibraryUnavailable"
 
   /api/sources/{sourceId}/enabled:
     post:
@@ -774,6 +790,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          $ref: "#/components/responses/LibraryUnavailable"
 
   /api/random:
     post:
@@ -804,6 +822,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          $ref: "#/components/responses/LibraryUnavailable"
 
   /api/play/{itemId}:
     post:
@@ -892,6 +912,8 @@ paths:
                   value:
                     error: Unsupported media type
                     code: play_unsupported_media
+        "503":
+          $ref: "#/components/responses/LibraryUnavailable"
 
   /api/media/{idOrToken}:
     get:
@@ -923,6 +945,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          $ref: "#/components/responses/LibraryUnavailable"
 
   /api/favorite:
     post:
@@ -949,6 +973,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          $ref: "#/components/responses/LibraryUnavailable"
 
   /api/blacklist:
     post:
@@ -975,6 +1001,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          $ref: "#/components/responses/LibraryUnavailable"
 
   /api/record-playback:
     post:
@@ -1001,6 +1029,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          $ref: "#/components/responses/LibraryUnavailable"
 
   /api/playback/clear-stats:
     post:
@@ -1025,6 +1055,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          $ref: "#/components/responses/LibraryUnavailable"
 
   /api/library-states:
     post:
@@ -1054,6 +1086,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          $ref: "#/components/responses/LibraryUnavailable"
 
   /api/tag-editor/model:
     post:
@@ -1078,6 +1112,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          $ref: "#/components/responses/LibraryUnavailable"
 
   /api/tag-editor/apply-item-tags:
     post:
@@ -1098,6 +1134,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          $ref: "#/components/responses/LibraryUnavailable"
 
   /api/tag-editor/upsert-category:
     post:
@@ -1118,6 +1156,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          $ref: "#/components/responses/LibraryUnavailable"
 
   /api/tag-editor/upsert-tag:
     post:
@@ -1138,6 +1178,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          $ref: "#/components/responses/LibraryUnavailable"
 
   /api/tag-editor/rename-tag:
     post:
@@ -1158,6 +1200,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          $ref: "#/components/responses/LibraryUnavailable"
 
   /api/tag-editor/delete-tag:
     post:
@@ -1178,6 +1222,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          $ref: "#/components/responses/LibraryUnavailable"
 
   /api/tag-editor/delete-category:
     post:
@@ -1198,6 +1244,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          $ref: "#/components/responses/LibraryUnavailable"
 
   /api/refresh/start:
     post:
@@ -1222,6 +1270,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          $ref: "#/components/responses/LibraryUnavailable"
 
   /api/refresh/status:
     get:
@@ -1234,6 +1284,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/RefreshStatusSnapshot"
+        "503":
+          $ref: "#/components/responses/LibraryUnavailable"
 
   /api/refresh/settings:
     get:
@@ -1317,6 +1369,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          $ref: "#/components/responses/LibraryUnavailable"
 
   /api/duplicates/apply:
     post:
@@ -1341,6 +1395,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          $ref: "#/components/responses/LibraryUnavailable"
 
   /api/autotag/scan:
     post:
@@ -1365,6 +1421,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          $ref: "#/components/responses/LibraryUnavailable"
 
   /api/autotag/apply:
     post:
@@ -1389,6 +1447,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          $ref: "#/components/responses/LibraryUnavailable"
 
   /api/logs/client:
     post:
@@ -1462,6 +1522,8 @@ paths:
                 format: binary
         "404":
           description: Thumbnail not found
+        "503":
+          $ref: "#/components/responses/LibraryUnavailable"
 
   /api/events:
     get:
@@ -1536,6 +1598,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          $ref: "#/components/responses/LibraryUnavailable"
 
 components:
   schemas:
@@ -1854,6 +1918,25 @@ components:
             $ref: "#/components/schemas/ApiEventTelemetryEntry"
         testing:
           $ref: "#/components/schemas/OperatorTestingStateSnapshot"
+        libraryState:
+          type: string
+          enum:
+            - ready
+            - newer
+            - damaged
+            - missing
+            - unreadable
+          description: >
+            Whether the server has a library. `newer`: a newer version of ReelRoulette saved the catalog,
+            and it was left unchanged. `damaged`: the catalog is not a database, is corrupt, or has another
+            schema, and was moved aside, or a catalog moved aside earlier is still there. `missing`: there is
+            no catalog, but catalog backups exist. `unreadable`: a catalog file could not be opened or read at
+            the moment, for example because another program has it locked, and it was left unchanged.
+            Without a library, library routes answer 503. `isHealthy` does not change with it.
+        libraryMessage:
+          type: string
+          nullable: true
+          description: Why there is no library and what to do about it, or null when `libraryState` is `ready`.
 
     SessionInfoSnapshot:
       type: object
@@ -3062,3 +3145,13 @@ components:
       properties:
         snapshot:
           $ref: "#/components/schemas/RefreshStatusSnapshot"
+
+  responses:
+    LibraryUnavailable:
+      description: >
+        The server is running without a library. `error` says why and what to do, and `code` is
+        `library_newer`, `library_damaged`, `library_missing`, or `library_unreadable`.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"

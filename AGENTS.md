@@ -7,6 +7,7 @@ Keep this file short and enforceable. For details, use `CONTEXT.md`, `MILESTONES
 - For milestone work, read `CONTEXT.md`, then the milestone's full entry in `MILESTONES.md`.
 - Milestone verification is automated tests plus, at most, a quick manual spot check. Longer manual checks, repeated runs, and Windows VM passes go into the Release Specific section of `docs/checklists/testing-checklist.md` as one-line checks, to be run in the pre-release pass.
 - Stay within the requested milestone or task unless the user expands scope. Record future work as a backlog item, or as an addition to the milestone that will do it, instead of doing it. Scope boundaries go in Scope as a `Not included:` line.
+- Solutions are best-effort. Handle what can realistically happen in normal use; don't add code, tests, or findings for improbable edge cases such as storage corruption, a failing disk, or files damaged by something outside the app. In summaries and reviews, leave such cases out rather than listing them as "noticed but not fixed".
 - Before sign-off, verify each acceptance criterion explicitly and call out any that are unmet.
 
 ## Architecture Guardrails
