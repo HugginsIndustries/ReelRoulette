@@ -1235,6 +1235,13 @@ export interface components {
             fileName?: string;
             relativePath?: string;
             mediaType?: number | string;
+            /** @description Duration as `hh:mm:ss`, in whole seconds, present when the catalog has it. */
+            duration?: string;
+            /**
+             * Format: double
+             * @description Duration in seconds, present when the catalog has it.
+             */
+            durationSeconds?: number;
             /** @description True when a generated thumbnail JPEG exists for this item id. */
             hasThumbnail?: boolean;
             /** @description Opaque version of the thumbnail JPEG, present when it exists. It changes whenever the thumbnail is written again. Pass it as `v` to the thumbnail route. */
@@ -1270,7 +1277,10 @@ export interface components {
             sessionId?: string | null;
         };
         RandomResponse: {
+            /** @description Full path of the file. */
             id: string;
+            /** @description Catalog item id. */
+            itemId: string;
             displayName: string;
             /** @enum {string} */
             mediaType: "video" | "photo";
@@ -1293,6 +1303,26 @@ export interface components {
             sessionId?: string | null;
             path: string;
         };
+        RecordPlaybackResponse: {
+            accepted: boolean;
+            /** @description Catalog item id of the file that was played. */
+            itemId: string;
+            /**
+             * Format: int64
+             * @description Revision of the `playbackRecorded` event.
+             */
+            revision: number;
+            /**
+             * Format: int32
+             * @description Play count after this play.
+             */
+            playCount: number;
+            /**
+             * Format: date-time
+             * @description Last-played time after this play.
+             */
+            lastPlayedUtc?: string | null;
+        };
         ClearPlaybackStatsRequest: {
             itemPaths?: string[] | null;
         };
@@ -1313,8 +1343,15 @@ export interface components {
             path: string;
             isFavorite: boolean;
             isBlacklisted: boolean;
+            /** @description Favorite before this change. */
+            previousIsFavorite: boolean;
+            /** @description Blacklist before this change. */
+            previousIsBlacklisted: boolean;
         };
         PlaybackRecordedPayload: {
+            /** @description Catalog item id of the file that was played. */
+            itemId: string;
+            /** @description Full path of the file that was played. */
             path: string;
             clientId?: string | null;
             sessionId?: string | null;
@@ -1562,6 +1599,7 @@ export interface components {
             failures: components["schemas"]["DuplicateApplyFailure"][];
         };
         DuplicateApplyFailure: {
+            itemId: string;
             fullPath: string;
             reason: string;
         };
@@ -1583,6 +1621,7 @@ export interface components {
             files: components["schemas"]["AutoTagMatchedFileResponse"][];
         };
         AutoTagMatchedFileResponse: {
+            itemId: string;
             fullPath: string;
             displayPath: string;
             needsChange: boolean;
@@ -1598,11 +1637,15 @@ export interface components {
             tagName: string;
             /** @description Files that gained this tag. */
             changedItemPaths: string[];
+            /** @description Catalog item ids of the files that gained this tag. */
+            changedItemIds: string[];
         };
         AutoTagApplyResponse: {
             /** Format: int32 */
             assignmentsAdded: number;
             changedItemPaths: string[];
+            /** @description Catalog item ids of the files that gained a tag. */
+            changedItemIds: string[];
             /** @description One entry per tag that was newly written, listing only the files that gained that tag. */
             applied: components["schemas"]["AutoTagAppliedAssignment"][];
         };
@@ -1631,7 +1674,10 @@ export interface components {
             stages: components["schemas"]["RefreshStageProgress"][];
         };
         ItemTagsChangedPayload: {
+            /** @description The files as the change named them. A tag apply lists the item ids or full paths the request sent, and auto-tag apply lists full paths. */
             itemIds: string[];
+            /** @description Catalog item ids of the listed files that are in the catalog. */
+            resolvedItemIds: string[];
             addedTags: string[];
             removedTags: string[];
             /** @description Set when this event renames or deletes the tag in the catalog. Absent for a per-item edit. */
@@ -3042,7 +3088,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["RecordPlaybackResponse"];
+                };
             };
             /** @description Invalid request */
             400: {

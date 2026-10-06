@@ -6,6 +6,38 @@ The archive of finished milestones, moved here from `MILESTONES.md` as-is. The r
 
 Latest completions first:
 
+### M11f - Item IDs in the Contract
+
+- **Status**: ✅ Complete
+- **Goal**: Every event and response that refers to a library item carries its item id, and the WebUI matches items by id instead of by path.
+- **Scope**:
+  - Ships in v0.14.1, last in the series. Contract change in its own slice. It only adds fields, so the frozen desktop keeps working.
+  - Found by the efficiency and divergence report and checked against the code at promotion: `playbackRecorded` carries only a path, and the random and play responses put the full path in `id`. Item-state events already carry the catalog `itemId` beside `path`, and item tag events and `POST /api/play/{itemId}` use item ids. The WebUI's loaded-tile lookup already tries the item id first and falls back to a folded path. Its current item, its item-state cache, and playback events still match by path, ignoring case and treating `/` and `\` as the same. The desktop matches by path, ignoring case.
+  - Add the item id to every event and response that refers to an item that lacks it, including `playbackRecorded` and the random and play responses. The item id is a new field beside the random and play responses' `id`, which keeps the full path the frozen desktop reads.
+  - Return duration in seconds on library items, next to the `duration` string the WebUI parses back into seconds. The random and play responses already carry `durationSeconds`.
+  - The WebUI matches loaded tiles, the current item, its item-state cache, and pending tag saves by item id, and drops the folded-path fallback. The frozen desktop keeps matching by path.
+  - Add the previous favorite and blacklist values to item-state events. Today a favorite on an item that is not in the loaded window reloads that window under the default filter, because the client cannot tell whether the item was blacklisted before; with the previous values it can patch. Recorded by the client event efficiency milestone.
+  - Not included: the server treating paths that differ only by case as one path on Linux, which is Ordinal Path Identity on Linux. Matching by id in the WebUI removes its part of that problem.
+- **Acceptance criteria**:
+  - Every item-related event and response in `shared/api/openapi.yaml` has an item id, existing fields keep their meaning, and `npm run verify:contracts` passes.
+  - The WebUI applies favorite, blacklist, playback, and tag events to the right tile by item id, including for two items whose paths differ only by case.
+  - The WebUI does not normalize paths to match items.
+  - Library item duration reaches the WebUI as a number of seconds.
+  - Item-state events carry the previous favorite and blacklist values, and a favorite on an item outside the loaded window patches the window under the default filter instead of reloading it.
+- **Verification evidence**:
+  - Completion evidence must include contract tests for each changed event and response, WebUI tests that match by id with two paths that differ only by case, a WebUI test that a favorite on an item outside the loaded window patches the window from the previous favorite and blacklist values instead of reloading it, `dotnet test ReelRoulette.sln`, and `npm run verify`.
+  - Docs evidence must include `docs/api.md` for the changed events and responses.
+  - Checked at implementation: only rename and delete tag events carried item ids. A tag apply put the identifiers the request sent into `itemIds`, which were full paths from the desktop and for the WebUI's playing item, and auto-tag apply sent full paths, so the WebUI's grid missed those events. The desktop recognizes its own tag saves by comparing `itemIds` with the paths it sent, so `itemIds` keeps its meaning and `itemTagsChanged` gains `resolvedItemIds`.
+  - Added fields: `RandomResponse.itemId` (its `id` stays the full path), `playbackRecorded.itemId`, `itemStateChanged.previousIsFavorite` and `previousIsBlacklisted`, `itemTagsChanged.resolvedItemIds`, library item `durationSeconds`, `itemId` on auto-tag scan files and duplicate-apply failures, `changedItemIds` on the auto-tag apply response and each applied tag, and a `RecordPlaybackResponse` schema with `itemId`. `playbackRecorded.path` is now the catalog's full path, so it stays a path when the WebUI names the item by id, and direct play records the play by item id. The tag-editor model's `items[].itemId` still echoes what the request named, which is an item id from the WebUI.
+  - The WebUI matches loaded tiles, the playing item, its item-state cache, pending tag saves (auto-tag by the scan rows' item ids), and auto-tag checkboxes by item id, and names items by id in favorite, blacklist, record-playback, and tag-editor requests. `normalizeLibraryPath`, `normalizePath`, and the duration string parser are gone.
+  - The shared tile rule takes the previous values for an item that is not loaded and reloads only when the item enters the filter. The desktop's C# copy changed with it so both stay locked to `shared/fixtures/library-tile-effect.json`; the desktop passes no previous values for an item that is not loaded, so its behavior is unchanged. Six fixture cases were added.
+  - Server tests in `ItemIdContractTests` build each changed event and response through the real handler or service and check it against its OpenAPI schema: random and play `itemId`, `playbackRecorded` from direct play and from record-playback by item id with two catalog paths that differ only in case (only that item's play count changes and the event names its path), the previous favorite and blacklist, `resolvedItemIds` for a request that named a file by path, auto-tag scan and apply ids, a duplicate-apply failure id, and `durationSeconds` on listed and single-item reads.
+  - WebUI tests: favorite, playback, and tag events and the playing item's state and cache apply to the item with that id when two paths differ only in case; a favorite outside the loaded window patches from the previous values without a query and reloads when the item was blacklisted; pending item-tag and auto-tag saves match by id; duration is read as seconds.
+  - Checked that the tests fail when the guarded behavior is put back: playback matched by folded path, the old tile rule, and auto-tag saves matched by path failed seven WebUI tests; `playbackRecorded.path` from the request, `resolvedItemIds` from the request, and previous values from the new state failed three server tests; the old C# rule failed two desktop fixture tests.
+  - `dotnet build ReelRoulette.sln` has no warnings, and `dotnet test ReelRoulette.sln` ran 396 Core, 275 DesktopApp, and 3 ServerApp tests, all passing. SystemChecks passed. `npm run generate:contracts` and `npm run verify` passed with 253 WebUI tests.
+  - Manual checks are the Release Specific checklist items "Under a WebUI tag filter, removing that tag from a file on the desktop takes it out of the WebUI tiles.", "A favorite, a play, and a tag edit from the WebUI player show on the desktop's tiles and current file.", and "With the WebUI library overlay open under the default filter, a desktop favorite on a file outside the loaded tiles sends no library query, and a desktop favorite on a blacklisted file reloads the tiles."
+  - Docs: `shared/api/openapi.yaml`, `docs/api.md`, `docs/architecture.md`, `docs/domain-inventory.md`, `CONTEXT.md`, the testing checklist, and the desktop removal milestone's contract slice candidates.
+
 ### M11e - Thumbnail Caching
 
 - **Status**: ✅ Complete

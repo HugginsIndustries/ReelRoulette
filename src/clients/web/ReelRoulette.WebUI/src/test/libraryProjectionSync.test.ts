@@ -2,8 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   applyItemStateChanged,
   applyPlaybackRecorded,
-  findProjectionItem,
-  normalizeLibraryPath
+  findProjectionItem
 } from "../library/libraryProjectionSync";
 import type { LibraryProjectionItem } from "../library/libraryProjectionModel";
 
@@ -33,18 +32,28 @@ function item(overrides: Partial<LibraryProjectionItem> = {}): LibraryProjection
 }
 
 describe("libraryProjectionSync", () => {
-  it("normalizeLibraryPath lowercases and normalizes separators", () => {
-    expect(normalizeLibraryPath("/Media/Clip.MP4")).toBe("\\media\\clip.mp4");
-  });
-
-  it("findProjectionItem matches itemId first", () => {
+  it("findProjectionItem matches by item id", () => {
     const items = [item({ id: "abc" }), item({ id: "def", fileName: "other.mp4" })];
-    expect(findProjectionItem(items, { itemId: "def" })?.fileName).toBe("other.mp4");
+    expect(findProjectionItem(items, "def")?.fileName).toBe("other.mp4");
   });
 
-  it("findProjectionItem matches fullPath when itemId missing", () => {
-    const items = [item({ fullPath: "D:\\Library\\clip.mp4" })];
-    expect(findProjectionItem(items, { path: "d:/library/clip.mp4" })?.id).toBe("i1");
+  it("findProjectionItem does not match a path", () => {
+    const items = [item({ fullPath: "/media/videos/clip.mp4" })];
+    expect(findProjectionItem(items, "/media/videos/clip.mp4")).toBeNull();
+    expect(findProjectionItem(items, null)).toBeNull();
+  });
+
+  it("applies favorite and playback to the item with that id when two paths differ only in case", () => {
+    const items = [
+      item({ id: "id-upper", fileName: "Clip.mp4", fullPath: "/media/Clip.mp4" }),
+      item({ id: "id-lower", fileName: "clip.mp4", fullPath: "/media/clip.mp4" })
+    ];
+
+    applyItemStateChanged(items, { itemId: "id-lower", path: "/media/clip.mp4", isFavorite: true, isBlacklisted: false });
+    applyPlaybackRecorded(items, { itemId: "id-lower", path: "/media/clip.mp4", playCount: 3, lastPlayedUtc: 5000 });
+
+    expect(items.map((entry) => entry.isFavorite)).toEqual([false, true]);
+    expect(items.map((entry) => entry.playCount)).toEqual([0, 3]);
   });
 
   it("applyItemStateChanged patches favorite and blacklist", () => {
@@ -73,6 +82,7 @@ describe("libraryProjectionSync", () => {
     const items = [item({ playCount: 1, lastPlayedUtcMs: 1000 })];
     const lastPlayedUtc = "2024-06-01T00:00:00.000Z";
     const result = applyPlaybackRecorded(items, {
+      itemId: "i1",
       path: "/media/videos/clip.mp4",
       playCount: 5,
       lastPlayedUtc
@@ -84,7 +94,7 @@ describe("libraryProjectionSync", () => {
 
   it("applyPlaybackRecorded leaves playCount and lastPlayedUtc when those fields are missing", () => {
     const items = [item({ playCount: 2, lastPlayedUtcMs: 1000 })];
-    const result = applyPlaybackRecorded(items, { path: "/media/videos/clip.mp4" });
+    const result = applyPlaybackRecorded(items, { itemId: "i1", path: "/media/videos/clip.mp4" });
     expect(result.changed).toBe(false);
     expect(items[0]?.playCount).toBe(2);
     expect(items[0]?.lastPlayedUtcMs).toBe(1000);

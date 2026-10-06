@@ -28,6 +28,7 @@ public static class ApiContractMapper
 
     public static RandomResponse MapRandomResult(
         string id,
+        string itemId,
         string displayName,
         string mediaType,
         double? durationSeconds,
@@ -38,6 +39,7 @@ public static class ApiContractMapper
         return new RandomResponse
         {
             Id = id,
+            ItemId = itemId,
             DisplayName = displayName,
             MediaType = mediaType,
             DurationSeconds = durationSeconds,

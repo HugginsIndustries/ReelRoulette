@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  parseDurationSeconds,
   parseLibraryProjection,
   parseLibraryQueryPage,
   parseMediaType,
@@ -26,6 +25,7 @@ describe("libraryProjectionModel", () => {
           lastPlayedUtc: "2024-01-15T12:00:00Z",
           lastWriteTimeUtc: "2023-06-01T00:00:00Z",
           duration: "00:02:30",
+          durationSeconds: 150.48,
           mediaType: 0,
           isFavorite: true,
           isBlacklisted: false,
@@ -42,7 +42,7 @@ describe("libraryProjectionModel", () => {
     expect(result.items[0]).toMatchObject({
       id: "i1",
       fileName: "clip.mp4",
-      durationSeconds: 150,
+      durationSeconds: 150.48,
       mediaType: "video",
       isFavorite: true,
       tags: ["Action"]
@@ -51,10 +51,17 @@ describe("libraryProjectionModel", () => {
     expect(result.catalog.tags[0]?.name).toBe("Action");
   });
 
-  it("parseDurationSeconds handles HH:MM:SS and null", () => {
-    expect(parseDurationSeconds("00:02:30")).toBe(150);
-    expect(parseDurationSeconds(null)).toBeNull();
-    expect(parseDurationSeconds("bad")).toBeNull();
+  it("reads duration as seconds and does not parse the duration string", () => {
+    const page = parseLibraryQueryPage({
+      items: [
+        { id: "i1", sourceId: "s1", fileName: "clip.mp4", duration: "00:02:30", durationSeconds: 150.48 },
+        { id: "i2", sourceId: "s1", fileName: "unprobed.mp4", duration: "00:02:30" },
+        { id: "i3", sourceId: "s1", fileName: "photo.jpg" }
+      ],
+      totalCount: 3,
+      searchBaselineCount: 3
+    });
+    expect(page.items.map((item) => item.durationSeconds)).toEqual([150.48, null, null]);
   });
 
   it("parseUtcMs parses ISO strings", () => {

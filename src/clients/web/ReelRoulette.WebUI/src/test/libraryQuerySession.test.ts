@@ -196,7 +196,7 @@ describe("libraryQuerySession", () => {
     await session.ensureLoaded(createDefaultFilterState(), controls());
 
     await session.applyFavorite({ itemId: "a", path: "/media/a.mp4", isFavorite: true, isBlacklisted: false });
-    await session.applyPlayback({ path: "/media/b.mp4", playCount: 1 });
+    await session.applyPlayback({ itemId: "b", path: "/media/b.mp4", playCount: 1 });
 
     expect(calls).toBe(1);
     expect(session.snapshot().items[0]?.isFavorite).toBe(true);
@@ -235,6 +235,68 @@ describe("libraryQuerySession", () => {
     expect(calls).toBe(2);
   });
 
+  it("patches a favorite on an item outside the loaded window from the event's previous values", async () => {
+    let calls = 0;
+    const session = createLibraryQuerySession(async () => {
+      calls += 1;
+      return page([item("a")], 1, 1);
+    });
+    await session.ensureLoaded(createDefaultFilterState(), controls());
+
+    await session.applyFavorite({
+      itemId: "other",
+      isFavorite: true,
+      isBlacklisted: false,
+      previousIsFavorite: false,
+      previousIsBlacklisted: false
+    });
+    expect(calls).toBe(1);
+    expect(session.snapshot().items.map((entry) => entry.id)).toEqual(["a"]);
+
+    // A favorite clears blacklist, so a blacklisted item enters the default filter and the window reloads.
+    await session.applyFavorite({
+      itemId: "blacklisted",
+      isFavorite: true,
+      isBlacklisted: false,
+      previousIsFavorite: false,
+      previousIsBlacklisted: true
+    });
+    expect(calls).toBe(2);
+  });
+
+  it("applies favorite, playback, and tag events to the tile with that id when two paths differ only in case", async () => {
+    let calls = 0;
+    const session = createLibraryQuerySession(async () => {
+      calls += 1;
+      return page(
+        [
+          item("id-upper", { fileName: "Clip.mp4", fullPath: "/media/Clip.mp4" }),
+          item("id-lower", { fileName: "clip.mp4", fullPath: "/media/clip.mp4" })
+        ],
+        2,
+        2
+      );
+    });
+    await session.ensureLoaded(createDefaultFilterState(), controls());
+
+    await session.applyFavorite({
+      itemId: "id-lower",
+      path: "/media/clip.mp4",
+      isFavorite: true,
+      isBlacklisted: false,
+      previousIsFavorite: false,
+      previousIsBlacklisted: false
+    });
+    await session.applyPlayback({ itemId: "id-lower", path: "/media/clip.mp4", playCount: 2 });
+    await session.applyTags({ resolvedItemIds: ["id-lower"], addedTags: ["Night"], removedTags: [] });
+
+    const [upper, lower] = session.snapshot().items;
+    expect(calls).toBe(1);
+    expect([upper?.isFavorite, lower?.isFavorite]).toEqual([false, true]);
+    expect([upper?.playCount, lower?.playCount]).toEqual([0, 2]);
+    expect([upper?.tags, lower?.tags]).toEqual([[], ["Night"]]);
+  });
+
   it("patches playback while hidden and reloads when the sort can change order", async () => {
     let calls = 0;
     const session = createLibraryQuerySession(async () => {
@@ -244,13 +306,13 @@ describe("libraryQuerySession", () => {
     await session.ensureLoaded(createDefaultFilterState(), controls());
     session.setOverlayVisible(false);
 
-    await session.applyPlayback({ path: "/media/a.mp4", playCount: 3 });
+    await session.applyPlayback({ itemId: "a", path: "/media/a.mp4", playCount: 3 });
     expect(calls).toBe(1);
     expect(session.snapshot().items[0]?.playCount).toBe(3);
 
     await session.resetQuery(createDefaultFilterState(), controls({ sortMode: "PlayCount", sortDescending: true }));
     const afterSort = calls;
-    await session.applyPlayback({ path: "/media/a.mp4", playCount: 4 });
+    await session.applyPlayback({ itemId: "a", path: "/media/a.mp4", playCount: 4 });
     expect(calls).toBe(afterSort + 1);
     expect(session.snapshot().scrollTop).toBe(0);
   });
@@ -297,7 +359,7 @@ describe("libraryQuerySession", () => {
     await Promise.resolve();
     expect(calls).toContain(LIBRARY_QUERY_WINDOW_SIZE);
 
-    const reloading = session.applyPlayback({ path: "/media/kept-0.mp4", playCount: 2 });
+    const reloading = session.applyPlayback({ itemId: "kept-0", path: "/media/kept-0.mp4", playCount: 2 });
     await reloading;
     releaseAppend(page([item("stale-append")], 450, 450));
     await filling;
@@ -414,19 +476,19 @@ describe("libraryQuerySession", () => {
       return page([item("a", { tags: calls.length > 1 ? ["Night"] : ["Day"] })], 1, 1);
     });
     await session.ensureLoaded(createDefaultFilterState(), controls());
-    await session.applyTags({ itemIds: ["a"], addedTags: ["Night"], removedTags: ["Day"] });
+    await session.applyTags({ resolvedItemIds: ["a"], addedTags: ["Night"], removedTags: ["Day"] });
     expect(session.snapshot().items[0]?.tags).toEqual(["Night"]);
     expect(calls).toHaveLength(1);
 
     await session.resetQuery({ ...createDefaultFilterState(), selectedTags: ["Night"] }, controls());
-    await session.applyTags({ itemIds: ["other"], addedTags: ["Night"], removedTags: [] });
+    await session.applyTags({ resolvedItemIds: ["other"], addedTags: ["Night"], removedTags: [] });
     expect(calls).toHaveLength(3);
 
-    await session.applyTags({ itemIds: ["a"], addedTags: ["Beach"], removedTags: [] });
+    await session.applyTags({ resolvedItemIds: ["a"], addedTags: ["Beach"], removedTags: [] });
     expect(calls).toHaveLength(3);
     expect(session.snapshot().items[0]?.tags).toEqual(["Night", "Beach"]);
 
-    await session.applyTags({ itemIds: ["a"], addedTags: [], removedTags: ["Night"] });
+    await session.applyTags({ resolvedItemIds: ["a"], addedTags: [], removedTags: ["Night"] });
     expect(calls).toHaveLength(4);
   });
 
@@ -438,7 +500,7 @@ describe("libraryQuerySession", () => {
     });
     await session.ensureLoaded({ ...createDefaultFilterState(), selectedTags: ["Beach"] }, controls());
 
-    await session.applyTags({ itemIds: ["a"], addedTags: ["Dawn"], removedTags: ["Day"], catalogReplacedTag: "Day" });
+    await session.applyTags({ resolvedItemIds: ["a"], addedTags: ["Dawn"], removedTags: ["Day"], catalogReplacedTag: "Day" });
 
     expect(calls).toBe(2);
   });

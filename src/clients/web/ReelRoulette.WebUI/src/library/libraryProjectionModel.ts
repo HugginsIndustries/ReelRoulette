@@ -52,51 +52,6 @@ export interface ParsedLibraryProjection {
   summary: LibraryProjectionSummary;
 }
 
-export function parseDurationSeconds(value: unknown): number | null {
-  if (value == null) {
-    return null;
-  }
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value >= 0 ? value : null;
-  }
-  if (typeof value !== "string") {
-    return null;
-  }
-  const raw = value.trim();
-  if (!raw) {
-    return null;
-  }
-  const parts = raw.split(":");
-  if (parts.length === 2) {
-    const minutes = Number.parseInt(parts[0]!, 10);
-    const seconds = Number.parseInt(parts[1]!, 10);
-    if (Number.isFinite(minutes) && Number.isFinite(seconds) && minutes >= 0 && seconds >= 0 && seconds < 60) {
-      return minutes * 60 + seconds;
-    }
-    return null;
-  }
-  if (parts.length === 3) {
-    const hours = Number.parseInt(parts[0]!, 10);
-    const minutes = Number.parseInt(parts[1]!, 10);
-    const secs = Number.parseInt(parts[2]!, 10);
-    if (
-      Number.isFinite(hours) &&
-      Number.isFinite(minutes) &&
-      Number.isFinite(secs) &&
-      hours >= 0 &&
-      minutes >= 0 &&
-      minutes < 60 &&
-      secs >= 0 &&
-      secs < 60
-    ) {
-      return hours * 3600 + minutes * 60 + secs;
-    }
-    return null;
-  }
-  const numeric = Number.parseFloat(raw);
-  return Number.isFinite(numeric) && numeric >= 0 ? numeric : null;
-}
-
 export function parseUtcMs(value: unknown): number | null {
   if (value == null) {
     return null;
@@ -211,7 +166,10 @@ function parseQueryItem(row: Record<string, unknown>): LibraryProjectionItem {
     playCount: typeof row.playCount === "number" && Number.isFinite(row.playCount) ? Math.max(0, Math.trunc(row.playCount)) : 0,
     lastPlayedUtcMs: parseUtcMs(row.lastPlayedUtc),
     lastWriteTimeUtcMs: parseUtcMs(row.lastWriteTimeUtc),
-    durationSeconds: parseDurationSeconds(row.duration),
+    durationSeconds:
+      typeof row.durationSeconds === "number" && Number.isFinite(row.durationSeconds) && row.durationSeconds >= 0
+        ? row.durationSeconds
+        : null,
     mediaType: parseMediaType(row.mediaType),
     isFavorite: row.isFavorite === true,
     isBlacklisted: row.isBlacklisted === true,

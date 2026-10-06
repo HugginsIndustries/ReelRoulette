@@ -1017,6 +1017,10 @@ paths:
       responses:
         "200":
           description: Playback recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecordPlaybackResponse"
         "400":
           description: Invalid request
           content:
@@ -2238,6 +2242,13 @@ components:
           oneOf:
             - type: integer
             - type: string
+        duration:
+          type: string
+          description: Duration as `hh:mm:ss`, in whole seconds, present when the catalog has it.
+        durationSeconds:
+          type: number
+          format: double
+          description: Duration in seconds, present when the catalog has it.
         hasThumbnail:
           type: boolean
           description: True when a generated thumbnail JPEG exists for this item id.
@@ -2294,6 +2305,7 @@ components:
       type: object
       required:
         - id
+        - itemId
         - displayName
         - mediaType
         - mediaUrl
@@ -2302,6 +2314,10 @@ components:
       properties:
         id:
           type: string
+          description: Full path of the file.
+        itemId:
+          type: string
+          description: Catalog item id.
         displayName:
           type: string
         mediaType:
@@ -2356,6 +2372,33 @@ components:
         path:
           type: string
 
+    RecordPlaybackResponse:
+      type: object
+      required:
+        - accepted
+        - itemId
+        - revision
+        - playCount
+      properties:
+        accepted:
+          type: boolean
+        itemId:
+          type: string
+          description: Catalog item id of the file that was played.
+        revision:
+          type: integer
+          format: int64
+          description: Revision of the `playbackRecorded` event.
+        playCount:
+          type: integer
+          format: int32
+          description: Play count after this play.
+        lastPlayedUtc:
+          type: string
+          format: date-time
+          nullable: true
+          description: Last-played time after this play.
+
     ClearPlaybackStatsRequest:
       type: object
       properties:
@@ -2408,6 +2451,8 @@ components:
         - path
         - isFavorite
         - isBlacklisted
+        - previousIsFavorite
+        - previousIsBlacklisted
       properties:
         itemId:
           type: string
@@ -2417,14 +2462,25 @@ components:
           type: boolean
         isBlacklisted:
           type: boolean
+        previousIsFavorite:
+          type: boolean
+          description: Favorite before this change.
+        previousIsBlacklisted:
+          type: boolean
+          description: Blacklist before this change.
 
     PlaybackRecordedPayload:
       type: object
       required:
+        - itemId
         - path
       properties:
+        itemId:
+          type: string
+          description: Catalog item id of the file that was played.
         path:
           type: string
+          description: Full path of the file that was played.
         clientId:
           type: string
           nullable: true
@@ -2944,8 +3000,10 @@ components:
 
     DuplicateApplyFailure:
       type: object
-      required: [fullPath, reason]
+      required: [itemId, fullPath, reason]
       properties:
+        itemId:
+          type: string
         fullPath:
           type: string
         reason:
@@ -2991,8 +3049,10 @@ components:
 
     AutoTagMatchedFileResponse:
       type: object
-      required: [fullPath, displayPath, needsChange]
+      required: [itemId, fullPath, displayPath, needsChange]
       properties:
+        itemId:
+          type: string
         fullPath:
           type: string
         displayPath:
@@ -3022,7 +3082,7 @@ components:
 
     AutoTagAppliedAssignment:
       type: object
-      required: [tagName, changedItemPaths]
+      required: [tagName, changedItemPaths, changedItemIds]
       properties:
         tagName:
           type: string
@@ -3031,16 +3091,26 @@ components:
           description: Files that gained this tag.
           items:
             type: string
+        changedItemIds:
+          type: array
+          description: Catalog item ids of the files that gained this tag.
+          items:
+            type: string
 
     AutoTagApplyResponse:
       type: object
-      required: [assignmentsAdded, changedItemPaths, applied]
+      required: [assignmentsAdded, changedItemPaths, changedItemIds, applied]
       properties:
         assignmentsAdded:
           type: integer
           format: int32
         changedItemPaths:
           type: array
+          items:
+            type: string
+        changedItemIds:
+          type: array
+          description: Catalog item ids of the files that gained a tag.
           items:
             type: string
         applied:
@@ -3106,10 +3176,16 @@ components:
 
     ItemTagsChangedPayload:
       type: object
-      required: [itemIds, addedTags, removedTags]
+      required: [itemIds, resolvedItemIds, addedTags, removedTags]
       properties:
         itemIds:
           type: array
+          description: The files as the change named them. A tag apply lists the item ids or full paths the request sent, and auto-tag apply lists full paths.
+          items:
+            type: string
+        resolvedItemIds:
+          type: array
+          description: Catalog item ids of the listed files that are in the catalog.
           items:
             type: string
         addedTags:

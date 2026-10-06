@@ -105,6 +105,66 @@
     "expected": "patch"
   },
   {
+    "name": "favorite on an unloaded item that was not blacklisted under excludeBlacklisted patches",
+    "event": "favorite",
+    "loaded": false,
+    "before": { "isFavorite": false, "isBlacklisted": false },
+    "after": { "isFavorite": true, "isBlacklisted": false },
+    "filter": { "favoritesOnly": false, "excludeBlacklisted": true, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
+    "sortMode": "Name",
+    "expected": "patch"
+  },
+  {
+    "name": "favorite on an unloaded blacklisted item under excludeBlacklisted reloads because it enters",
+    "event": "favorite",
+    "loaded": false,
+    "before": { "isFavorite": false, "isBlacklisted": true },
+    "after": { "isFavorite": true, "isBlacklisted": false },
+    "filter": { "favoritesOnly": false, "excludeBlacklisted": true, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
+    "sortMode": "Name",
+    "expected": "reload"
+  },
+  {
+    "name": "unblacklist on an unloaded item under excludeBlacklisted reloads because it enters",
+    "event": "favorite",
+    "loaded": false,
+    "before": { "isFavorite": false, "isBlacklisted": true },
+    "after": { "isFavorite": false, "isBlacklisted": false },
+    "filter": { "favoritesOnly": false, "excludeBlacklisted": true, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
+    "sortMode": "Name",
+    "expected": "reload"
+  },
+  {
+    "name": "favorite on an unloaded item under favoritesOnly with previous values reloads because it enters",
+    "event": "favorite",
+    "loaded": false,
+    "before": { "isFavorite": false, "isBlacklisted": false },
+    "after": { "isFavorite": true, "isBlacklisted": false },
+    "filter": { "favoritesOnly": true, "excludeBlacklisted": true, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
+    "sortMode": "Name",
+    "expected": "reload"
+  },
+  {
+    "name": "an unchanged echo on an unloaded favorite under favoritesOnly patches",
+    "event": "favorite",
+    "loaded": false,
+    "before": { "isFavorite": true, "isBlacklisted": false },
+    "after": { "isFavorite": true, "isBlacklisted": false },
+    "filter": { "favoritesOnly": true, "excludeBlacklisted": true, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
+    "sortMode": "Name",
+    "expected": "patch"
+  },
+  {
+    "name": "blacklist on an unloaded item under excludeBlacklisted with previous values patches",
+    "event": "favorite",
+    "loaded": false,
+    "before": { "isFavorite": true, "isBlacklisted": false },
+    "after": { "isFavorite": false, "isBlacklisted": true },
+    "filter": { "favoritesOnly": false, "excludeBlacklisted": true, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
+    "sortMode": "Name",
+    "expected": "patch"
+  },
+  {
     "name": "playback on a loaded tile under name sort patches",
     "event": "playback",
     "loaded": true,

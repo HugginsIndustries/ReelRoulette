@@ -1,6 +1,6 @@
 # ReelRoulette.WebUI
 
-Canonical web client project for M7a (`Vite + TypeScript`).
+Canonical web client project (`Vite + TypeScript`).
 
 This app is served by `ReelRoulette.ServerApp` as part of the consolidated runtime.
 
@@ -25,7 +25,7 @@ Runtime config loading order:
 
 `pairToken` is optional, but if provided the app can bootstrap pairing automatically.
 
-## M7b Auth + SSE Notes
+## Auth + SSE Notes
 
 - Pairing flow:
   - Probe `/api/version` with credentials.
@@ -56,7 +56,9 @@ npm run verify
 
 `npm run verify` performs:
 
-1. type-check: app code with browser types only (`tsconfig.app.json`), and `src/test` with Node types as well (`tsconfig.test.json`)
-2. runtime-config schema tests
-3. production build
-4. build-output verification (`dist` artifacts + runtime-config presence)
+1. contract freshness: `src/types/openapi.generated.ts` matches `shared/api/openapi.yaml`
+2. type-check: app code with browser types only (`tsconfig.app.json`), and `src/test` with Node types as well (`tsconfig.test.json`)
+3. undeclared names in `src/app.js` (`npm run verify:app-js-names`): `app.js` is untyped, so type-check skips it. This step runs TypeScript over it and fails only on "Cannot find name" errors, so an undeclared or misspelled variable fails here instead of at runtime. It goes away with `app.js` in the WebUI Preact migration.
+4. unit tests (Vitest)
+5. production build
+6. build-output verification (`dist` artifacts + runtime-config presence)

@@ -155,13 +155,13 @@ WebUI is runtime-config-driven API/SSE client orchestration.
 - `src/clients/web/ReelRoulette.WebUI/src/library/libraryOverlayModel.ts`
   - library overlay status HTML and projection summary parsing.
 - `src/clients/web/ReelRoulette.WebUI/src/library/libraryProjectionModel.ts`
-  - projection item parse and list-query page parse (includes optional `fullPath` for SSE path matching).
+  - projection item parse and list-query page parse, with duration read as seconds.
 - `src/clients/web/ReelRoulette.WebUI/src/library/libraryProjectionSync.ts`
-  - pure SSE patch helpers for favorite, blacklist, and playback fields on loaded tiles.
+  - pure SSE patch helpers for favorite, blacklist, and playback fields on loaded tiles, matched by item id only.
 - `src/clients/web/ReelRoulette.WebUI/src/library/libraryQuerySession.ts`
-  - list-query window: first page, fill-on-scroll, hide/show, patch or reload, and resync. Scoped auto-tag scan sends no path list. Tag save writes the tiles loaded now, updates the stored filter when a tag is renamed or deleted, and reloads that window once when a tag filter can change which files are shown.
+  - list-query window: first page, fill-on-scroll, hide/show, patch or reload, and resync. A favorite or blacklist on an item that is not loaded uses the event's previous values. Scoped auto-tag scan sends no path list. Tag save writes the tiles loaded now, updates the stored filter when a tag is renamed or deleted, and reloads that window once when a tag filter can change which files are shown.
 - `src/clients/web/ReelRoulette.WebUI/src/library/tagSave.ts`
-  - pending-only tag-editor save plan, the same local delta, a confirmed tag kept when the request fails, failed-tail undo, the same filter retarget, and the same own-event skip for an exact item-tag echo. An incoming rename or delete retargets that filter before the reload. A rename or delete event for a wider set of files still applies.
+  - pending-only tag-editor save plan, the same local delta matched by item id (auto-tag by the scan rows' item ids), a confirmed tag kept when the request fails, failed-tail undo, the same filter retarget, and the same own-event skip for an exact item-tag echo. An incoming rename or delete retargets that filter before the reload. A rename or delete event for a wider set of files still applies.
 - `src/clients/web/ReelRoulette.WebUI/src/library/libraryBrowseModel.ts`
   - sort mode, direction labels, and search text held by the library overlay.
 - `src/clients/web/ReelRoulette.WebUI/src/library/libraryGridLayout.ts`
@@ -176,6 +176,8 @@ WebUI is runtime-config-driven API/SSE client orchestration.
   - library overlay grid DOM lifecycle (mount, scroll, fill coverage, deferred layout while hidden, optional scroll reset on a new query, resize debounce, destroy).
 - `src/clients/web/ReelRoulette.WebUI/src/library/libraryPlayModel.ts`
   - play-item error status mapping and request identity helpers for library tile activation.
+- `src/clients/web/ReelRoulette.WebUI/src/library/currentItemState.ts`
+  - the playing item's favorite and blacklist from item-state events, and the per-item cache applied when an item plays again, both by item id.
 - `src/clients/web/ReelRoulette.WebUI/src/shell.ts`
   - static layout including library overlay header browse count, toolbar (search/sort cluster), tabbed tag overlay, and filter overlay chrome.
 - `src/clients/web/ReelRoulette.WebUI/src/main.ts`

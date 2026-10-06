@@ -11,7 +11,7 @@ Write **[Unreleased]** bullets at the same level as the released sections below.
 
 ### Changed
 
-- **Faster library browsing:** Library pages cost about the same at any scroll depth in every sort order. On a 49,000-item library, a page deep in the list takes about 40 ms instead of up to 320 ms, a WebUI reload of 5,000 loaded tiles is one request taking about 0.1 s instead of 25 requests taking 2.7 s, and library totals load about three times faster. The library file grows by about a third for the indexes that make this possible.
+- **Faster library browsing:** Library pages cost about the same at any scroll depth in every sort order. On a 49,000-item library, a page deep in the list takes about 40 ms instead of up to 320 ms, a WebUI reload of 5,000 loaded tiles is one request taking about 0.1 s instead of 25 requests taking 2.7 s, and library totals load about three times faster. Favoriting a file outside the loaded part of the WebUI library no longer reloads it. The library file grows by about a third for the indexes that make this possible.
 - **Faster random playback:** Picking a random item reads only what the pick needs. On a 49,000-item library, a pick takes about 55-65 ms instead of about 230 ms in every randomization mode, and uses a fifth of the memory. The odds, shuffle order, and folder spread are unchanged.
 - **Thumbnails load once:** The WebUI library grid keeps each thumbnail in the browser until it changes, so scrolling back or reopening the library no longer downloads it again. When a refresh finishes, the grid picks up new items and new thumbnails without reloading the page.
 - **Library upgrade:** The first start of this version upgrades the library in place, which takes about a second on a large library and leaves it as it was if interrupted. After upgrading, don't go back to v0.14.0 or earlier, since those versions would set the upgraded library aside. Libraries exported from v0.14.0 still import.
@@ -25,6 +25,7 @@ Write **[Unreleased]** bullets at the same level as the released sections below.
 - **Library from a newer version:** A library saved by a newer version of ReelRoulette is no longer moved aside and replaced with an empty one, which also cost its backups. The server leaves the library and its backups untouched, keeps running without a library, and shows why on the Operator page, and in-app update still works. Desktop import refuses to replace such a library.
 - **Damaged or locked library:** A damaged library is still moved aside, but the server now keeps running without a library instead of stopping, and does not start an empty one while the moved file or a backup is there, so a later refresh no longer deletes every thumbnail. A library another program has open at startup is left unchanged, and the server runs without it until restarted. The setup guide explains how to restore a backup by hand.
 - **Catalog backups:** Backup rotation deletes only its own backups beyond the backup count. Backups from another version and other files in the backups folder stay.
+- **Desktop tag edits in the WebUI library:** Tag edits made on the desktop now reach the WebUI library. Under a WebUI tag filter, removing that tag from a file on the desktop takes the file out of the WebUI library instead of leaving it there until the next reload.
 
 ### Security
 

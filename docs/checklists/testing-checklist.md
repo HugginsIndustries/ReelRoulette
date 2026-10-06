@@ -179,6 +179,9 @@ An agent runs these and ticks them.
 - [ ] The release run packs and uploads every leg, and an installed v0.14.x server and desktop take the in-app delta update to this release, on Linux and Windows.
 - [ ] After the Vite 8 build change, the WebUI looks and works as before in a desktop browser and on a phone.
 - [ ] In the WebUI library overlay, scrolling tiles away and back sends no new thumbnail requests in the browser network panel, and after a file changes and a refresh finishes, its tile shows the new thumbnail without reloading the page.
+- [ ] Under a WebUI tag filter, removing that tag from a file on the desktop takes it out of the WebUI tiles.
+- [ ] A favorite, a play, and a tag edit from the WebUI player show on the desktop's tiles and current file.
+- [ ] With the WebUI library overlay open under the default filter, a desktop favorite on a file outside the loaded tiles sends no library query, and a desktop favorite on a blacklisted file reloads the tiles.
 
 ## Release Flow
 

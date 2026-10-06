@@ -31,6 +31,7 @@ import {
 import { parseLibraryQueryPage } from "./library/libraryProjectionModel.ts";
 import { createLibraryGridController } from "./library/libraryGridController.ts";
 import { mapPlayItemErrorToStatus } from "./library/libraryPlayModel.ts";
+import { applyItemStateToCurrent, createItemStateCache } from "./library/currentItemState.ts";
 import { compareTagNames } from "./library/tagNameOrder.ts";
 import {
   LIBRARY_OVERLAY_FETCH_ERROR,
@@ -110,10 +111,6 @@ function getDeviceName() {
   const platform = typeof navigator === "undefined" ? "unknown-platform" : navigator.platform || "unknown-platform";
   const label = isMobileBrowser() ? "Mobile Browser" : "Web Browser";
   return `${label} (${platform}${ua ? `; ${ua.slice(0, 40)}` : ""})`;
-}
-
-function normalizePath(path) {
-  return String(path || "").replace(/\//g, "\\").toLowerCase();
 }
 
 function fmtTime(seconds) {
@@ -197,7 +194,6 @@ export function startApp(config) {
     autoplay: false,
     randomizationMode: "SmartShuffle",
     photoDurationSeconds: 15,
-    itemStates: new Map(),
     tagEditorModel: null,
     tagEditorOpen: false,
     tagEditorCategoryOrder: [],
@@ -222,6 +218,7 @@ export function startApp(config) {
     libraryOverlayOpen: false
   };
 
+  const itemStateCache = createItemStateCache();
   let libraryBrowseControls = createDefaultBrowseControls();
   const tagSaveSession = createTagSaveSession();
   let libraryGridController = null;
@@ -1534,13 +1531,13 @@ export function startApp(config) {
 
   /** Matches desktop: record on play start so /api/random weights and filters use fresh library stats. */
   function notifyPlaybackStarted(item) {
-    if (!item?.id || state.compatibilityBlocked) return;
+    if (!item?.itemId || state.compatibilityBlocked) return;
     void fetch(buildApiUrl("/api/record-playback"), {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        path: item.id,
+        path: item.itemId,
         clientId: state.clientId,
         sessionId: state.sessionId
       })
@@ -1563,19 +1560,11 @@ export function startApp(config) {
   }
 
   function cacheItemState(itemId, isFavorite, isBlacklisted) {
-    if (!itemId) return;
-    state.itemStates.set(normalizePath(itemId), {
-      isFavorite: !!isFavorite,
-      isBlacklisted: !!isBlacklisted
-    });
+    itemStateCache.remember(itemId, { isFavorite: !!isFavorite, isBlacklisted: !!isBlacklisted });
   }
 
   function applyCachedState(item) {
-    if (!item?.id) return;
-    const cached = state.itemStates.get(normalizePath(item.id));
-    if (!cached) return;
-    item.isFavorite = cached.isFavorite;
-    item.isBlacklisted = cached.isBlacklisted;
+    itemStateCache.applyTo(item);
   }
 
   function updateToggleButtons() {
@@ -1901,13 +1890,13 @@ export function startApp(config) {
   }
 
   async function toggleFavorite() {
-    if (!state.current?.id) return;
+    if (!state.current?.itemId) return;
     const nextValue = !state.current.isFavorite;
     const response = await fetch(buildApiUrl("/api/favorite"), {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ path: state.current.id, isFavorite: nextValue })
+      body: JSON.stringify({ path: state.current.itemId, isFavorite: nextValue })
     });
     if (!response.ok) {
       setStatus(`Favorite update failed (${response.status}).`);
@@ -1915,19 +1904,19 @@ export function startApp(config) {
     }
     state.current.isFavorite = nextValue;
     if (nextValue) state.current.isBlacklisted = false;
-    cacheItemState(state.current.id, state.current.isFavorite, state.current.isBlacklisted);
+    cacheItemState(state.current.itemId, state.current.isFavorite, state.current.isBlacklisted);
     updateToggleButtons();
     setStatus(nextValue ? "Added to favorites" : "Removed from favorites");
   }
 
   async function toggleBlacklist() {
-    if (!state.current?.id) return;
+    if (!state.current?.itemId) return;
     const nextValue = !state.current.isBlacklisted;
     const response = await fetch(buildApiUrl("/api/blacklist"), {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ path: state.current.id, isBlacklisted: nextValue })
+      body: JSON.stringify({ path: state.current.itemId, isBlacklisted: nextValue })
     });
     if (!response.ok) {
       setStatus(`Blacklist update failed (${response.status}).`);
@@ -1935,7 +1924,7 @@ export function startApp(config) {
     }
     state.current.isBlacklisted = nextValue;
     if (nextValue) state.current.isFavorite = false;
-    cacheItemState(state.current.id, state.current.isFavorite, state.current.isBlacklisted);
+    cacheItemState(state.current.itemId, state.current.isFavorite, state.current.isBlacklisted);
     updateToggleButtons();
     setStatus(nextValue ? "Blacklisted" : "Removed from blacklist");
   }
@@ -2074,7 +2063,7 @@ export function startApp(config) {
     if (Array.isArray(state.tagEditorItemIds) && state.tagEditorItemIds.length > 0) {
       return state.tagEditorItemIds.slice();
     }
-    return state.current?.id ? [state.current.id] : [];
+    return state.current?.itemId ? [state.current.itemId] : [];
   }
 
   function computeTagStateForItems(tagName, items) {
@@ -2276,11 +2265,15 @@ export function startApp(config) {
     const assignments = [];
     for (const row of state.autoTagRows) {
       const paths = [];
+      const itemIds = [];
       for (const f of getVisibleAutoTagFiles(row)) {
-        if (f.selected && f.fullPath) paths.push(String(f.fullPath));
+        if (f.selected && f.fullPath && f.itemId) {
+          paths.push(String(f.fullPath));
+          itemIds.push(String(f.itemId));
+        }
       }
       if (paths.length > 0) {
-        assignments.push({ tagName: String(row.tagName || ""), itemPaths: paths });
+        assignments.push({ tagName: String(row.tagName || ""), itemPaths: paths, itemIds });
       }
     }
     return assignments;
@@ -2330,8 +2323,7 @@ export function startApp(config) {
       const filesHtml = visibleFiles
         .map((f) => {
           const rid = row._rowId;
-          const pathAttr = encodeURIComponent(String(f.fullPath || ""));
-          return `<div class="tag-autotag-file-row"><label><input type="checkbox" data-autotag-file data-row-id="${rid}" data-path="${pathAttr}" ${f.selected ? "checked" : ""}></label><span class="tag-autotag-file-path" title="${escapeHtml(f.fullPath || "")}">${escapeHtml(f.displayPath || f.fullPath || "")}</span></div>`;
+          return `<div class="tag-autotag-file-row"><label><input type="checkbox" data-autotag-file data-row-id="${rid}" data-item-id="${escapeHtml(f.itemId || "")}" ${f.selected ? "checked" : ""}></label><span class="tag-autotag-file-path" title="${escapeHtml(f.fullPath || "")}">${escapeHtml(f.displayPath || f.fullPath || "")}</span></div>`;
         })
         .join("");
       const rowHtml = `<div class="tag-autotag-row" data-autotag-row="${row._rowId}">
@@ -2400,6 +2392,7 @@ export function startApp(config) {
           wouldChangeCount: r.wouldChangeCount,
           expanded: false,
           files: files.map((f) => ({
+            itemId: f.itemId,
             fullPath: f.fullPath,
             displayPath: f.displayPath,
             needsChange: !!f.needsChange,
@@ -2468,7 +2461,6 @@ export function startApp(config) {
   function loadedTagItems() {
     return librarySession.snapshot().items.map((item) => ({
       id: item.id,
-      fullPath: item.fullPath,
       tags: item.tags.slice()
     }));
   }
@@ -2544,7 +2536,12 @@ export function startApp(config) {
       });
     } else if (step.kind === "apply-auto-tag") {
       label = "Auto-tag apply";
-      response = await apiPost("/api/autotag/apply", { assignments: step.assignments });
+      response = await apiPost("/api/autotag/apply", {
+        assignments: step.assignments.map((assignment) => ({
+          tagName: assignment.tagName,
+          itemPaths: assignment.itemPaths
+        }))
+      });
       if (!response.ok) {
         tagSaveError = `${label} failed (${response.status})`;
         return false;
@@ -2554,10 +2551,10 @@ export function startApp(config) {
       const applied = Array.isArray(rows)
         ? rows.map((row) => ({
             tagName: String(row?.tagName || row?.TagName || ""),
-            changedItemPaths: Array.isArray(row?.changedItemPaths)
-              ? row.changedItemPaths
-              : Array.isArray(row?.ChangedItemPaths)
-                ? row.ChangedItemPaths
+            changedItemIds: Array.isArray(row?.changedItemIds)
+              ? row.changedItemIds
+              : Array.isArray(row?.ChangedItemIds)
+                ? row.ChangedItemIds
                 : []
           }))
         : [];
@@ -3025,16 +3022,14 @@ export function startApp(config) {
   }
 
   function applyItemStateEvent(payload) {
-    const itemPath = payload?.path || payload?.itemId;
-    if (!itemPath) return;
-    cacheItemState(itemPath, payload.isFavorite, payload.isBlacklisted);
-    if (state.current && normalizePath(state.current.id) === normalizePath(itemPath)) {
-      state.current.isFavorite = !!payload.isFavorite;
-      state.current.isBlacklisted = !!payload.isBlacklisted;
+    const itemId = payload?.itemId;
+    if (!itemId) return;
+    cacheItemState(itemId, payload.isFavorite, payload.isBlacklisted);
+    if (applyItemStateToCurrent(state.current, payload)) {
       updateToggleButtons();
     }
     void librarySession.applyFavorite(payload);
-    const fileName = basenameFromPath(itemPath);
+    const fileName = basenameFromPath(payload.path || "");
     if (payload.isBlacklisted) {
       setStatus(`Synced: Blacklisted: ${fileName}`, "Synced: Blacklisted");
     } else if (payload.isFavorite) {
@@ -3046,12 +3041,12 @@ export function startApp(config) {
 
   function applyItemTagsEvent(payload) {
     const echo = {
-      itemIds: payload.itemIds || payload.ItemIds || [],
+      itemIds: payload.resolvedItemIds || payload.ResolvedItemIds || [],
       addedTags: payload.addedTags || payload.AddedTags || [],
       removedTags: payload.removedTags || payload.RemovedTags || []
     };
     handleIncomingItemTags({
-      itemIds: echo.itemIds,
+      resolvedItemIds: echo.itemIds,
       addedTags: echo.addedTags,
       removedTags: echo.removedTags,
       catalogReplacedTag: payload.catalogReplacedTag || payload.CatalogReplacedTag || null,
@@ -3073,7 +3068,9 @@ export function startApp(config) {
         }
         tagSaveSession.sweep();
         void librarySession.applyTags({
-          ...echo,
+          resolvedItemIds: echo.itemIds,
+          addedTags: echo.addedTags,
+          removedTags: echo.removedTags,
           catalogReplacedTag: payload.catalogReplacedTag || payload.CatalogReplacedTag || null
         });
         if (handling.reloadBecauseFilterCleared) {
@@ -3396,14 +3393,9 @@ export function startApp(config) {
     }
     if (t.hasAttribute("data-autotag-file")) {
       const row = findAutoTagRowByRowId(t.getAttribute("data-row-id"));
-      let path = "";
-      try {
-        path = decodeURIComponent(t.getAttribute("data-path") || "");
-      } catch {
-        path = t.getAttribute("data-path") || "";
-      }
-      if (!row || !path) return;
-      const f = row.files.find((x) => normalizePath(x.fullPath) === normalizePath(path));
+      const itemId = t.getAttribute("data-item-id") || "";
+      if (!row || !itemId) return;
+      const f = row.files.find((x) => x.itemId === itemId);
       if (f) f.selected = t.checked;
       syncAutoTagRowHeaderCheckbox(row);
       updateAutoTagStatusSummary();

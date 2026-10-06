@@ -249,6 +249,13 @@ public sealed class LibraryOperationsService
 
     public LibraryStateResponse? SetFavorite(string path, bool isFavorite)
     {
+        return SetFavorite(path, isFavorite, out _);
+    }
+
+    /// <summary><paramref name="previous"/> is the item's favorite and blacklist before this change.</summary>
+    public LibraryStateResponse? SetFavorite(string path, bool isFavorite, out LibraryStateResponse? previous)
+    {
+        previous = null;
         if (string.IsNullOrWhiteSpace(path))
         {
             return null;
@@ -256,12 +263,19 @@ public sealed class LibraryOperationsService
 
         lock (_lock)
         {
-            return UpdateItemFlag(path, () => _catalog.Session.SetFavorite(path, isFavorite));
+            return UpdateItemFlag(path, () => _catalog.Session.SetFavorite(path, isFavorite), out previous);
         }
     }
 
     public LibraryStateResponse? SetBlacklist(string path, bool isBlacklisted)
     {
+        return SetBlacklist(path, isBlacklisted, out _);
+    }
+
+    /// <summary><paramref name="previous"/> is the item's favorite and blacklist before this change.</summary>
+    public LibraryStateResponse? SetBlacklist(string path, bool isBlacklisted, out LibraryStateResponse? previous)
+    {
+        previous = null;
         if (string.IsNullOrWhiteSpace(path))
         {
             return null;
@@ -269,7 +283,7 @@ public sealed class LibraryOperationsService
 
         lock (_lock)
         {
-            return UpdateItemFlag(path, () => _catalog.Session.SetBlacklist(path, isBlacklisted));
+            return UpdateItemFlag(path, () => _catalog.Session.SetBlacklist(path, isBlacklisted), out previous);
         }
     }
 
@@ -338,7 +352,13 @@ public sealed class LibraryOperationsService
 
     public bool ApplyItemTags(ApplyItemTagsRequest request, out bool catalogChanged)
     {
+        return ApplyItemTags(request, out catalogChanged, out _);
+    }
+
+    public bool ApplyItemTags(ApplyItemTagsRequest request, out bool catalogChanged, out List<string> resolvedItemIds)
+    {
         catalogChanged = false;
+        resolvedItemIds = [];
         var itemIds = request.ItemIds
             .Where(id => !string.IsNullOrWhiteSpace(id))
             .Select(id => id.Trim())
@@ -362,7 +382,7 @@ public sealed class LibraryOperationsService
 
         lock (_lock)
         {
-            return _catalog.Session.ApplyItemTagEdits(itemIds, addTags, removeTags, out catalogChanged);
+            return _catalog.Session.ApplyItemTagEdits(itemIds, addTags, removeTags, out catalogChanged, out resolvedItemIds);
         }
     }
 
@@ -472,6 +492,8 @@ public sealed class LibraryOperationsService
             return new RecordPlaybackResult
             {
                 Found = true,
+                ItemId = recorded.Id,
+                FullPath = recorded.FullPath,
                 PlayCount = recorded.PlayCount,
                 LastPlayedUtc = recorded.LastPlayedUtc,
                 PreviousLastPlayedUtc = recorded.PreviousLastPlayedUtc
@@ -587,7 +609,7 @@ public sealed class LibraryOperationsService
                         }
                         else
                         {
-                            response.Failures.Add(new DuplicateApplyFailure { FullPath = item.FullPath, Reason = "File not found" });
+                            response.Failures.Add(new DuplicateApplyFailure { ItemId = item.Id, FullPath = item.FullPath, Reason = "File not found" });
                             continue;
                         }
 
@@ -598,7 +620,7 @@ public sealed class LibraryOperationsService
                     }
                     catch (Exception ex)
                     {
-                        response.Failures.Add(new DuplicateApplyFailure { FullPath = item.FullPath, Reason = ex.Message });
+                        response.Failures.Add(new DuplicateApplyFailure { ItemId = item.Id, FullPath = item.FullPath, Reason = ex.Message });
                     }
                 }
             }
@@ -662,6 +684,7 @@ public sealed class LibraryOperationsService
 
                     row.Files.Add(new AutoTagMatchedFileResponse
                     {
+                        ItemId = item.Id,
                         FullPath = item.FullPath,
                         DisplayPath = item.RelativePath,
                         NeedsChange = !ItemHasTag(item, tagName)
@@ -703,11 +726,13 @@ public sealed class LibraryOperationsService
                 .ToList());
             response.AssignmentsAdded = result.AssignmentsAdded;
             response.ChangedItemPaths = result.ChangedItemPaths;
+            response.ChangedItemIds = result.ChangedItemIds;
             response.Applied = result.Applied
                 .Select(row => new AutoTagAppliedAssignment
                 {
                     TagName = row.TagName,
-                    ChangedItemPaths = row.ChangedItemPaths
+                    ChangedItemPaths = row.ChangedItemPaths,
+                    ChangedItemIds = row.ChangedItemIds
                 })
                 .ToList();
             applied = result.Applied;
@@ -798,8 +823,9 @@ public sealed class LibraryOperationsService
     private static bool ItemHasTag(CatalogAutoTagScanItem item, string tagName) =>
         item.Tags.Any(tag => string.Equals(tag, tagName, StringComparison.OrdinalIgnoreCase));
 
-    private LibraryStateResponse? UpdateItemFlag(string identifier, Action update)
+    private LibraryStateResponse? UpdateItemFlag(string identifier, Action update, out LibraryStateResponse? previous)
     {
+        previous = null;
         var before = _catalog.Session.ReadItemState(identifier);
         if (before == null)
         {
@@ -813,12 +839,18 @@ public sealed class LibraryOperationsService
             return null;
         }
 
+        previous = ToStateResponse(before);
+        return ToStateResponse(after);
+    }
+
+    private static LibraryStateResponse ToStateResponse(CatalogItemState state)
+    {
         return new LibraryStateResponse
         {
-            ItemId = after.Id,
-            Path = after.FullPath,
-            IsFavorite = after.IsFavorite,
-            IsBlacklisted = after.IsBlacklisted
+            ItemId = state.Id,
+            Path = state.FullPath,
+            IsFavorite = state.IsFavorite,
+            IsBlacklisted = state.IsBlacklisted
         };
     }
 

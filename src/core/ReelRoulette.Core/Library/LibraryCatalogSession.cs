@@ -1658,7 +1658,21 @@ public sealed class LibraryCatalogSession
         IReadOnlyList<string> removeTags,
         out bool catalogChanged)
     {
+        return ApplyItemTagEdits(identifiers, addTags, removeTags, out catalogChanged, out _);
+    }
+
+    /// <summary>
+    /// <paramref name="resolvedItemIds"/> is the catalog id of each named item that is in the catalog, in request order.
+    /// </summary>
+    public bool ApplyItemTagEdits(
+        IReadOnlyList<string> identifiers,
+        IReadOnlyList<string> addTags,
+        IReadOnlyList<string> removeTags,
+        out bool catalogChanged,
+        out List<string> resolvedItemIds)
+    {
         catalogChanged = false;
+        resolvedItemIds = [];
         var ids = identifiers
             .Where(id => !string.IsNullOrWhiteSpace(id))
             .Select(id => id.Trim())
@@ -1672,6 +1686,8 @@ public sealed class LibraryCatalogSession
         }
 
         var insertedCatalog = false;
+        var resolved = new List<string>();
+        var seenIds = new HashSet<string>(StringComparer.Ordinal);
         var committed = Commit((connection, transaction) =>
         {
             var changed = false;
@@ -1687,11 +1703,12 @@ public sealed class LibraryCatalogSession
             foreach (var identifier in ids)
             {
                 var itemId = ResolveItemId(connection, transaction, identifier);
-                if (itemId == null)
+                if (itemId == null || !seenIds.Add(itemId))
                 {
                     continue;
                 }
 
+                resolved.Add(itemId);
                 foreach (var remove in removes)
                 {
                     changed |= LibraryCatalogStore.Execute(
@@ -1711,6 +1728,11 @@ public sealed class LibraryCatalogSession
             return changed;
         });
         catalogChanged = committed && insertedCatalog;
+        if (committed)
+        {
+            resolvedItemIds = resolved;
+        }
+
         return committed;
     }
 
@@ -1718,6 +1740,7 @@ public sealed class LibraryCatalogSession
     {
         var added = 0;
         var paths = new List<string>();
+        var ids = new List<string>();
         var applied = new List<CatalogAutoTagAppliedAssignment>();
         var committed = Commit((connection, transaction) =>
         {
@@ -1732,6 +1755,7 @@ public sealed class LibraryCatalogSession
                 var tagName = assignment.TagName.Trim();
                 changed |= InsertCatalogTagIfMissing(connection, transaction, tagName);
                 var changedPaths = new List<string>();
+                var changedIds = new List<string>();
                 var seenPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 foreach (var itemPath in assignment.ItemPaths)
                 {
@@ -1756,6 +1780,8 @@ public sealed class LibraryCatalogSession
                     var path = itemPath.Trim();
                     changedPaths.Add(path);
                     paths.Add(path);
+                    changedIds.Add(itemId);
+                    ids.Add(itemId);
                 }
 
                 if (changedPaths.Count > 0)
@@ -1763,7 +1789,8 @@ public sealed class LibraryCatalogSession
                     applied.Add(new CatalogAutoTagAppliedAssignment
                     {
                         TagName = tagName,
-                        ChangedItemPaths = changedPaths
+                        ChangedItemPaths = changedPaths,
+                        ChangedItemIds = changedIds
                     });
                 }
             }
@@ -1779,6 +1806,7 @@ public sealed class LibraryCatalogSession
         {
             AssignmentsAdded = added,
             ChangedItemPaths = paths.Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
+            ChangedItemIds = ids.Distinct(StringComparer.Ordinal).ToList(),
             Applied = applied
         };
     }
@@ -2500,6 +2528,7 @@ public sealed class LibraryCatalogSession
         if (item.DurationTicks is long ticks)
         {
             node["duration"] = FormatDuration(ticks);
+            node["durationSeconds"] = ticks / (double)TimeSpan.TicksPerSecond;
         }
 
         if (item.HasAudio is bool hasAudio)
@@ -2913,12 +2942,14 @@ public sealed class CatalogAutoTagAppliedAssignment
 {
     public string TagName { get; init; } = string.Empty;
     public List<string> ChangedItemPaths { get; init; } = [];
+    public List<string> ChangedItemIds { get; init; } = [];
 }
 
 public sealed class CatalogAutoTagApplyResult
 {
     public int AssignmentsAdded { get; init; }
     public List<string> ChangedItemPaths { get; init; } = [];
+    public List<string> ChangedItemIds { get; init; } = [];
     public List<CatalogAutoTagAppliedAssignment> Applied { get; init; } = [];
 }
 

@@ -13,7 +13,10 @@ export type TagSaveStep =
   | { kind: "rename-tag"; oldName: string; newName: string; newCategoryId: string | null }
   | { kind: "delete-tag"; name: string }
   | { kind: "apply-item-tags"; itemIds: string[]; addTags: string[]; removeTags: string[] }
-  | { kind: "apply-auto-tag"; assignments: Array<{ tagName: string; itemPaths: string[] }> };
+  | { kind: "apply-auto-tag"; assignments: AutoTagSaveAssignment[] };
+
+/** The request names the files by path. Their item ids match tiles and the save's own events. */
+export type AutoTagSaveAssignment = { tagName: string; itemPaths: string[]; itemIds: string[] };
 
 export type TagSavePlanInput = {
   baselineCategories: readonly TagSaveCategory[];
@@ -25,12 +28,11 @@ export type TagSavePlanInput = {
   itemIds: readonly string[];
   addTags: readonly string[];
   removeTags: readonly string[];
-  autoTagAssignments: readonly { tagName: string; itemPaths: readonly string[] }[];
+  autoTagAssignments: readonly { tagName: string; itemPaths: readonly string[]; itemIds: readonly string[] }[];
 };
 
 export type TaggedItem = {
   id: string;
-  fullPath?: string | null;
   tags: string[];
 };
 
@@ -38,7 +40,7 @@ export type TagEcho = {
   itemIds: readonly string[];
   addedTags: readonly string[];
   removedTags: readonly string[];
-  subsetPaths?: boolean;
+  subsetIds?: boolean;
   supersetIds?: boolean;
 };
 
@@ -145,7 +147,8 @@ export function planTagEditorSave(input: TagSavePlanInput): TagSaveStep[] {
   const assignments = input.autoTagAssignments
     .map((assignment) => ({
       tagName: assignment.tagName.trim(),
-      itemPaths: assignment.itemPaths.map((path) => path.trim()).filter(Boolean)
+      itemPaths: assignment.itemPaths.map((path) => path.trim()).filter(Boolean),
+      itemIds: assignment.itemIds.map((id) => id.trim()).filter(Boolean)
     }))
     .filter((assignment) => assignment.tagName && assignment.itemPaths.length > 0);
   if (assignments.length > 0) {
@@ -175,15 +178,9 @@ export async function runTagEditorSave(
   return { ok: true, accepted, failed: null };
 }
 
-function itemMatches(item: TaggedItem, identifier: string): boolean {
-  const key = identifier.trim().toLowerCase();
-  if (!key) {
-    return false;
-  }
-  if (item.id.trim().toLowerCase() === key) {
-    return true;
-  }
-  return (item.fullPath ?? "").trim().toLowerCase() === key;
+function itemMatches(item: TaggedItem, itemId: string): boolean {
+  const key = itemId.trim().toLowerCase();
+  return key !== "" && item.id.trim().toLowerCase() === key;
 }
 
 function hasTag(tags: readonly string[], name: string): boolean {
@@ -247,7 +244,7 @@ function recordTagStep(items: TaggedItem[], step: TagSaveStep): TagUndo[] {
   if (step.kind === "apply-auto-tag") {
     for (const assignment of step.assignments) {
       for (const item of items) {
-        if (!assignment.itemPaths.some((path) => itemMatches(item, path))) {
+        if (!assignment.itemIds.some((id) => itemMatches(item, id))) {
           continue;
         }
         const before = item.tags.slice();
@@ -280,7 +277,7 @@ export function undoTagChanges(items: TaggedItem[], undos: readonly TagUndo[]): 
 }
 
 export type IncomingItemTags = {
-  itemIds?: readonly string[] | null;
+  resolvedItemIds?: readonly string[] | null;
   addedTags?: readonly string[] | null;
   removedTags?: readonly string[] | null;
   catalogReplacedTag?: string | null;
@@ -373,7 +370,7 @@ function removeFilterTag(tags: string[], name: string): boolean {
 
 export type TagSaveAppliedTag = {
   tagName: string;
-  changedItemPaths: readonly string[];
+  changedItemIds: readonly string[];
 };
 
 export function replaceWithLiveTags(loaded: TaggedItem[], current: readonly TaggedItem[]): void {
@@ -430,17 +427,7 @@ export function echoesForSave(steps: readonly TagSaveStep[]): TagEcho[] {
       if (!tagName) {
         continue;
       }
-      const seen = new Set<string>();
-      const itemIds: string[] = [];
-      for (const path of assignment.itemPaths) {
-        const trimmed = path.trim();
-        const key = trimmed.toLowerCase();
-        if (!trimmed || seen.has(key)) {
-          continue;
-        }
-        seen.add(key);
-        itemIds.push(trimmed);
-      }
+      const itemIds = distinctIds(assignment.itemIds);
       if (itemIds.length === 0) {
         continue;
       }
@@ -448,11 +435,26 @@ export function echoesForSave(steps: readonly TagSaveStep[]): TagEcho[] {
         itemIds,
         addedTags: [tagName],
         removedTags: [],
-        subsetPaths: true
+        subsetIds: true
       });
     }
   }
   return echoes;
+}
+
+function distinctIds(values: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const value of values) {
+    const trimmed = value.trim();
+    const key = trimmed.toLowerCase();
+    if (!trimmed || seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    result.push(trimmed);
+  }
+  return result;
 }
 
 function norm(values: readonly string[]): string[] {
@@ -492,7 +494,7 @@ function matchesEcho(expected: TagEcho, incoming: TagEcho): boolean {
     const incomingIds = new Set(norm(incoming.itemIds));
     return expectedIds.every((id) => incomingIds.has(id));
   }
-  if (!expected.subsetPaths) {
+  if (!expected.subsetIds) {
     return sameList(expected.itemIds, incoming.itemIds);
   }
   const incomingIds = norm(incoming.itemIds);
@@ -526,7 +528,6 @@ export function createTagSaveSession() {
   function copyItems(items: readonly TaggedItem[]): TaggedItem[] {
     return items.map((item) => ({
       id: item.id,
-      fullPath: item.fullPath,
       tags: item.tags.slice()
     }));
   }
@@ -658,22 +659,22 @@ export function createTagSaveSession() {
           continue;
         }
         const key = tags[0] ?? "";
-        let paths = changedByTag.get(key);
-        if (!paths) {
-          paths = new Set<string>();
-          changedByTag.set(key, paths);
+        let ids = changedByTag.get(key);
+        if (!ids) {
+          ids = new Set<string>();
+          changedByTag.set(key, ids);
         }
-        for (const path of norm(row.changedItemPaths)) {
-          paths.add(path);
+        for (const id of norm(row.changedItemIds)) {
+          ids.add(id);
         }
       }
       for (const slot of save.echoes) {
-        if (slot.seen || !slot.echo.subsetPaths) {
+        if (slot.seen || !slot.echo.subsetIds) {
           continue;
         }
         const tags = norm(slot.echo.addedTags);
-        const paths = tags.length === 1 ? changedByTag.get(tags[0] ?? "") : undefined;
-        if (!paths || !norm(slot.echo.itemIds).some((path) => paths.has(path))) {
+        const ids = tags.length === 1 ? changedByTag.get(tags[0] ?? "") : undefined;
+        if (!ids || !norm(slot.echo.itemIds).some((id) => ids.has(id))) {
           slot.seen = true;
         }
       }
@@ -733,17 +734,7 @@ function buildPendingEchoes(steps: readonly TagSaveStep[], undos: TagUndo[][]): 
         if (!tagName) {
           continue;
         }
-        const seen = new Set<string>();
-        const itemIds: string[] = [];
-        for (const path of assignment.itemPaths) {
-          const trimmed = path.trim();
-          const key = trimmed.toLowerCase();
-          if (!trimmed || seen.has(key)) {
-            continue;
-          }
-          seen.add(key);
-          itemIds.push(trimmed);
-        }
+        const itemIds = distinctIds(assignment.itemIds);
         if (itemIds.length === 0) {
           continue;
         }
@@ -757,7 +748,7 @@ function buildPendingEchoes(steps: readonly TagSaveStep[], undos: TagUndo[][]): 
         }
         mine.reverse();
         echoes.push({
-          echo: { itemIds, addedTags: [tagName], removedTags: [], subsetPaths: true },
+          echo: { itemIds, addedTags: [tagName], removedTags: [], subsetIds: true },
           seen: false,
           confirmed: false,
           stepIndex,

@@ -108,29 +108,7 @@ Do not use this file for detailed architecture explanation or current capability
 
 ## Active Milestones
 
-Last milestone completed: M11e
-
-### M11f - Item IDs in the Contract
-
-- **Status**: ⏳ Planned
-- **Goal**: Every event and response that refers to a library item carries its item id, and the WebUI matches items by id instead of by path.
-- **Scope**:
-  - Ships in v0.14.1, last in the series. Contract change in its own slice. It only adds fields, so the frozen desktop keeps working.
-  - Found by the efficiency and divergence report and checked against the code at promotion: `playbackRecorded` carries only a path, and the random and play responses put the full path in `id`. Item-state events already carry the catalog `itemId` beside `path`, and item tag events and `POST /api/play/{itemId}` use item ids. The WebUI's loaded-tile lookup already tries the item id first and falls back to a folded path. Its current item, its item-state cache, and playback events still match by path, ignoring case and treating `/` and `\` as the same. The desktop matches by path, ignoring case.
-  - Add the item id to every event and response that refers to an item that lacks it, including `playbackRecorded` and the random and play responses. The item id is a new field beside the random and play responses' `id`, which keeps the full path the frozen desktop reads.
-  - Return duration in seconds on library items, next to the `duration` string the WebUI parses back into seconds. The random and play responses already carry `durationSeconds`.
-  - The WebUI matches loaded tiles, the current item, its item-state cache, and pending tag saves by item id, and drops the folded-path fallback. The frozen desktop keeps matching by path.
-  - Add the previous favorite and blacklist values to item-state events. Today a favorite on an item that is not in the loaded window reloads that window under the default filter, because the client cannot tell whether the item was blacklisted before; with the previous values it can patch. Recorded by the client event efficiency milestone.
-  - Not included: the server treating paths that differ only by case as one path on Linux, which is Ordinal Path Identity on Linux. Matching by id in the WebUI removes its part of that problem.
-- **Acceptance criteria**:
-  - Every item-related event and response in `shared/api/openapi.yaml` has an item id, existing fields keep their meaning, and `npm run verify:contracts` passes.
-  - The WebUI applies favorite, blacklist, playback, and tag events to the right tile by item id, including for two items whose paths differ only by case.
-  - The WebUI does not normalize paths to match items.
-  - Library item duration reaches the WebUI as a number of seconds.
-  - Item-state events carry the previous favorite and blacklist values, and a favorite on an item outside the loaded window patches the window under the default filter instead of reloading it.
-- **Verification evidence**:
-  - Completion evidence must include contract tests for each changed event and response, WebUI tests that match by id with two paths that differ only by case, a WebUI test that a favorite on an item outside the loaded window patches the window from the previous favorite and blacklist values instead of reloading it, `dotnet test ReelRoulette.sln`, and `npm run verify`.
-  - Docs evidence must include `docs/api.md` for the changed events and responses.
+Last milestone completed: M11f
 
 ## Planned Milestones
 
@@ -1109,7 +1087,7 @@ Last milestone completed: M11e
     - Library overlay.
     - Filter dialog.
     - Tag editor and Auto Tag.
-  - Delete `app.js` after the last slice.
+  - Delete `app.js` after the last slice, along with its undeclared-name check (`verify:app-js-names`) in `npm run verify`.
   - Trap, inferred, not measured: moving a `<video>` element to another place in the page can interrupt or reload playback. The player component owns one video element that is never moved.
 - **Acceptance criteria**:
   - After each slice, the migrated screen looks and behaves as before, and the WebUI section of the testing checklist still passes.
@@ -1313,7 +1291,7 @@ Last milestone completed: M11e
   - First milestone of the desktop removal release, planned for v0.16.0. Depends on: WebUI Keyboard Shortcuts and Player Controls, WebUI Stats Panel, WebUI Settings Panel, Admin Refresh, Backup, and Duplicate Review, Show in File Manager from the WebUI, Admin Source and Item Management, Admin Library Catalog Transfer, WebUI Multi-Select and Remaining Desktop Features, and Browser-Playable Filter.
   - Code and tests slice, measured: remove `ReelRoulette.DesktopApp`, `ReelRoulette.LibraryArchive`, and `ReelRoulette.DesktopApp.Tests` from the solution and the repository, about 30,300 lines of C# and AXAML including 3,267 test lines and 134 tests. Remove Core's `LibraryGridLayout` and its tests, which only the desktop uses, and `JsonFileStorageService` and `CoreStorageServices` if nothing else uses them.
   - Packaging slice: remove the `desktop` component from the `release.yml` matrix, including the Windows LibVLC relocation step, stop publishing the desktop update feed, and remove the desktop references in `set-release-version.ps1` and `verify-linux-packaged-server-smoke.sh`. CI has no desktop job: desktop tests run inside the solution test on the Ubuntu and Windows jobs, so `ci.yml` needs no change.
-  - Contract slice: remove routes and fields that no remaining caller uses, each checked against the WebUI and the admin section. Candidates: `/api/library-states`, `/api/library/item`, `/api/library/catalog-checkpoint` if Admin Library Catalog Transfer replaced it, and the full path kept in the random and play responses' `id` for the desktop. OpenAPI and generated WebUI types.
+  - Contract slice: remove routes and fields that no remaining caller uses, each checked against the WebUI and the admin section. Candidates: `/api/library-states`, `/api/library/item`, `/api/library/catalog-checkpoint` if Admin Library Catalog Transfer replaced it, the full path kept in the random and play responses' `id` for the desktop, and `itemTagsChanged.itemIds` and the auto-tag apply response's `changedItemPaths`, which the WebUI no longer reads beside their item id fields. OpenAPI and generated WebUI types.
   - Fixture slice: `event-revision.json`, `library-tile-effect.json`, `preset-filter-equality.json`, and `sort-direction-labels.json` lose their C# readers and stay as WebUI test data. `tag-name-order.json` stays, read by Core and the WebUI.
   - Docs slice: `CONTEXT.md`, `docs/architecture.md`, `docs/domain-inventory.md`, `docs/api.md`, `docs/dev-setup.md`, `README.md` (desktop install and the LibVLC prerequisite), the testing checklist's Desktop and Cross-Client sections and desktop Packaging items, and `AGENTS.md`: remove the desktop freeze rule and the desktop test-isolation note, and keep the shared-fixture rule for rules implemented in server C# and the WebUI.
   - Add a Release Specific checklist item: "On Linux and Windows, the release publishes only the server, every former desktop workflow works in the WebUI, and an existing desktop install keeps its last version."

@@ -1,22 +1,16 @@
 import type { LibraryProjectionItem } from "./libraryProjectionModel";
 
-export function normalizeLibraryPath(path: string | null | undefined): string {
-  return String(path || "").replace(/\//g, "\\").toLowerCase();
-}
-
-export interface ProjectionItemLookup {
-  itemId?: string | null;
-  path?: string | null;
-}
-
 export interface ItemStateChangedPayload {
   itemId?: string | null;
   path?: string | null;
   isFavorite?: boolean;
   isBlacklisted?: boolean;
+  previousIsFavorite?: boolean | null;
+  previousIsBlacklisted?: boolean | null;
 }
 
 export interface PlaybackRecordedPayload {
+  itemId?: string | null;
   path?: string | null;
   playCount?: number | null;
   lastPlayedUtc?: string | number | null;
@@ -33,42 +27,23 @@ export interface PlaybackPatchResult {
   item: LibraryProjectionItem | null;
 }
 
+/** Items are matched by catalog id only, so two files whose paths differ only in case stay apart. */
 export function findProjectionItem(
   items: readonly LibraryProjectionItem[],
-  lookup: ProjectionItemLookup
+  itemId: string | null | undefined
 ): LibraryProjectionItem | null {
-  const itemId = lookup.itemId != null ? String(lookup.itemId).trim() : "";
-  if (itemId) {
-    const byId = items.find((item) => item.id === itemId);
-    if (byId) {
-      return byId;
-    }
-  }
-
-  const path = lookup.path != null ? String(lookup.path).trim() : "";
-  if (!path) {
+  const id = itemId != null ? String(itemId).trim() : "";
+  if (!id) {
     return null;
   }
-
-  const normalizedPath = normalizeLibraryPath(path);
-  return (
-    items.find((item) => {
-      if (item.fullPath && normalizeLibraryPath(item.fullPath) === normalizedPath) {
-        return true;
-      }
-      return normalizeLibraryPath(item.id) === normalizedPath;
-    }) ?? null
-  );
+  return items.find((item) => item.id === id) ?? null;
 }
 
 export function applyItemStateChanged(
   items: LibraryProjectionItem[],
   payload: ItemStateChangedPayload
 ): ItemStatePatchResult {
-  const item = findProjectionItem(items, {
-    itemId: payload.itemId,
-    path: payload.path
-  });
+  const item = findProjectionItem(items, payload.itemId);
   if (!item) {
     return { changed: false, item: null, before: null };
   }
@@ -89,7 +64,7 @@ export function applyPlaybackRecorded(
   items: LibraryProjectionItem[],
   payload: PlaybackRecordedPayload
 ): PlaybackPatchResult {
-  const item = findProjectionItem(items, { path: payload.path });
+  const item = findProjectionItem(items, payload.itemId);
   if (!item) {
     return { changed: false, item: null };
   }

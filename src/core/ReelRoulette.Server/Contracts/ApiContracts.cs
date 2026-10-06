@@ -91,7 +91,9 @@ public sealed class RandomRequest
 
 public sealed class RandomResponse
 {
+    /// <summary>Full path of the file, which the desktop reads.</summary>
     public string Id { get; set; } = string.Empty;
+    public string ItemId { get; set; } = string.Empty;
     public string DisplayName { get; set; } = string.Empty;
     public string MediaType { get; set; } = "video";
     public double? DurationSeconds { get; set; }
@@ -135,9 +137,20 @@ public sealed class ClearPlaybackStatsResponse
     public int ClearedCount { get; set; }
 }
 
+public sealed class RecordPlaybackResponse
+{
+    public bool Accepted { get; set; } = true;
+    public string ItemId { get; set; } = string.Empty;
+    public long Revision { get; set; }
+    public int PlayCount { get; set; }
+    public DateTime? LastPlayedUtc { get; set; }
+}
+
 public sealed class RecordPlaybackResult
 {
     public bool Found { get; set; }
+    public string ItemId { get; set; } = string.Empty;
+    public string FullPath { get; set; } = string.Empty;
     public int PlayCount { get; set; }
     public DateTime? LastPlayedUtc { get; set; }
     public DateTime? PreviousLastPlayedUtc { get; set; }
@@ -421,10 +434,13 @@ public sealed class ItemStateChangedPayload
     public string Path { get; set; } = string.Empty;
     public bool IsFavorite { get; set; }
     public bool IsBlacklisted { get; set; }
+    public bool PreviousIsFavorite { get; set; }
+    public bool PreviousIsBlacklisted { get; set; }
 }
 
 public sealed class PlaybackRecordedPayload
 {
+    public string ItemId { get; set; } = string.Empty;
     public string Path { get; set; } = string.Empty;
     public string? ClientId { get; set; }
     public string? SessionId { get; set; }
@@ -435,7 +451,9 @@ public sealed class PlaybackRecordedPayload
 
 public sealed class ItemTagsChangedPayload
 {
+    /// <summary>The files as the change named them, which can be full paths.</summary>
     public List<string> ItemIds { get; set; } = [];
+    public List<string> ResolvedItemIds { get; set; } = [];
     public List<string> AddedTags { get; set; } = [];
     public List<string> RemovedTags { get; set; } = [];
     public string? CatalogReplacedTag { get; set; }
@@ -532,6 +550,7 @@ public sealed class DuplicateApplyResponse
 
 public sealed class DuplicateApplyFailure
 {
+    public string ItemId { get; set; } = string.Empty;
     public string FullPath { get; set; } = string.Empty;
     public string Reason { get; set; } = string.Empty;
 }
@@ -557,6 +576,7 @@ public sealed class AutoTagMatchRowResponse
 
 public sealed class AutoTagMatchedFileResponse
 {
+    public string ItemId { get; set; } = string.Empty;
     public string FullPath { get; set; } = string.Empty;
     public string DisplayPath { get; set; } = string.Empty;
     public bool NeedsChange { get; set; }
@@ -577,12 +597,14 @@ public sealed class AutoTagAppliedAssignment
 {
     public string TagName { get; set; } = string.Empty;
     public List<string> ChangedItemPaths { get; set; } = [];
+    public List<string> ChangedItemIds { get; set; } = [];
 }
 
 public sealed class AutoTagApplyResponse
 {
     public int AssignmentsAdded { get; set; }
     public List<string> ChangedItemPaths { get; set; } = [];
+    public List<string> ChangedItemIds { get; set; } = [];
     public List<AutoTagAppliedAssignment> Applied { get; set; } = [];
 }
 

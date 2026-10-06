@@ -368,121 +368,16 @@ public static class ServerHostComposition
             return Results.Ok(response);
         });
 
-        app.MapPost("/api/play/{itemId}", (string itemId, PlayItemRequest? body, LibraryPlaybackService playback, LibraryOperationsService operations, ServerStateService state, OperatorTestingService testingService) =>
-        {
-            var testing = testingService.GetSnapshot();
-            var forceMediaMissing = testing.TestingModeEnabled && testing.ForceMediaMissing;
-            body ??= new PlayItemRequest();
-            body.ClientId = NormalizeOptionalIdentity(body.ClientId);
-            body.SessionId = NormalizeOptionalIdentity(body.SessionId);
-
-            if (!playback.TryPlayItem(itemId, forceMediaMissing, out var playResponse, out var statusCode, out var error, out var errorCode))
-            {
-                return Results.Json(new { error, code = errorCode }, statusCode: statusCode);
-            }
-
-            var path = playResponse!.Id;
-            var recorded = operations.RecordPlayback(path);
-            if (!recorded.Found)
-            {
-                return Results.Json(new { error = "Playback could not be recorded", code = "play_record_failed" }, statusCode: StatusCodes.Status500InternalServerError);
-            }
-
-            state.PublishExternal("playbackRecorded", new PlaybackRecordedPayload
-            {
-                Path = path,
-                ClientId = body.ClientId,
-                SessionId = body.SessionId,
-                PlayCount = recorded.PlayCount,
-                LastPlayedUtc = recorded.LastPlayedUtc,
-                PreviousLastPlayedUtc = recorded.PreviousLastPlayedUtc
-            });
-            return Results.Ok(playResponse);
-        });
+        app.MapPost("/api/play/{itemId}", PlayItem);
 
         app.MapGet("/api/media/{idOrToken}", (HttpContext context, string idOrToken, LibraryPlaybackService playback, OperatorTestingService testingService, IHostApplicationLifetime lifetime) =>
             ServeMedia(context, idOrToken, playback, testingService, lifetime.ApplicationStopping));
 
-        app.MapPost("/api/favorite", (FavoriteRequest request, ServerStateService state, LibraryOperationsService operations) =>
-        {
-            if (string.IsNullOrWhiteSpace(request.Path))
-            {
-                return Results.BadRequest(new { error = "path is required" });
-            }
+        app.MapPost("/api/favorite", SetFavorite);
 
-            var persisted = operations.SetFavorite(request.Path, request.IsFavorite);
-            if (persisted == null)
-            {
-                return Results.NotFound(new { error = "path not found in library" });
-            }
+        app.MapPost("/api/blacklist", SetBlacklist);
 
-            var envelope = state.PublishExternal("itemStateChanged", new ItemStateChangedPayload
-            {
-                ItemId = persisted.ItemId,
-                Path = persisted.Path,
-                IsFavorite = persisted.IsFavorite,
-                IsBlacklisted = persisted.IsBlacklisted
-            });
-            persisted.Revision = envelope.Revision;
-            return Results.Ok(persisted);
-        });
-
-        app.MapPost("/api/blacklist", (BlacklistRequest request, ServerStateService state, LibraryOperationsService operations) =>
-        {
-            if (string.IsNullOrWhiteSpace(request.Path))
-            {
-                return Results.BadRequest(new { error = "path is required" });
-            }
-
-            var persisted = operations.SetBlacklist(request.Path, request.IsBlacklisted);
-            if (persisted == null)
-            {
-                return Results.NotFound(new { error = "path not found in library" });
-            }
-
-            var envelope = state.PublishExternal("itemStateChanged", new ItemStateChangedPayload
-            {
-                ItemId = persisted.ItemId,
-                Path = persisted.Path,
-                IsFavorite = persisted.IsFavorite,
-                IsBlacklisted = persisted.IsBlacklisted
-            });
-            persisted.Revision = envelope.Revision;
-            return Results.Ok(persisted);
-        });
-
-        app.MapPost("/api/record-playback", (RecordPlaybackRequest request, ServerStateService state, LibraryOperationsService operations) =>
-        {
-            if (string.IsNullOrWhiteSpace(request.Path))
-            {
-                return Results.BadRequest(new { error = "path is required" });
-            }
-
-            request.ClientId = NormalizeOptionalIdentity(request.ClientId);
-            request.SessionId = NormalizeOptionalIdentity(request.SessionId);
-            var recorded = operations.RecordPlayback(request.Path);
-            if (!recorded.Found)
-            {
-                return Results.NotFound(new { error = "path not found in library" });
-            }
-
-            var envelope = state.PublishExternal("playbackRecorded", new PlaybackRecordedPayload
-            {
-                Path = request.Path,
-                ClientId = request.ClientId,
-                SessionId = request.SessionId,
-                PlayCount = recorded.PlayCount,
-                LastPlayedUtc = recorded.LastPlayedUtc,
-                PreviousLastPlayedUtc = recorded.PreviousLastPlayedUtc
-            });
-            return Results.Ok(new
-            {
-                accepted = true,
-                revision = envelope.Revision,
-                playCount = recorded.PlayCount,
-                lastPlayedUtc = recorded.LastPlayedUtc
-            });
-        });
+        app.MapPost("/api/record-playback", RecordPlayback);
 
         app.MapPost("/api/playback/clear-stats", (ClearPlaybackStatsRequest request, LibraryOperationsService operations, ServerStateService state) =>
         {
@@ -512,46 +407,7 @@ public static class ServerHostComposition
             return Results.Ok(model);
         });
 
-        app.MapPost("/api/tag-editor/apply-item-tags", (ApplyItemTagsRequest request, ServerStateService state, LibraryOperationsService operations) =>
-        {
-            if (request.ItemIds.Count == 0)
-            {
-                return Results.BadRequest(new { error = "itemIds must contain at least one id" });
-            }
-
-            var accepted = operations.ApplyItemTags(request, out var catalogChanged);
-            if (!accepted)
-            {
-                return Results.Json(new { error = "apply rejected or produced no changes" }, statusCode: StatusCodes.Status409Conflict);
-            }
-
-            var itemTagsEnvelope = state.PublishExternal("itemTagsChanged", new ItemTagsChangedPayload
-            {
-                ItemIds = request.ItemIds,
-                AddedTags = request.AddTags,
-                RemovedTags = request.RemoveTags
-            });
-            var model = operations.GetTagEditorModel(new TagEditorModelRequest());
-            ServerEventEnvelope? catalogEnvelope = null;
-            if (catalogChanged)
-            {
-                catalogEnvelope = state.PublishExternal("tagCatalogChanged", new TagCatalogChangedPayload
-                {
-                    Reason = "applyItemTags",
-                    Categories = model.Categories,
-                    Tags = model.Tags
-                });
-            }
-
-            return Results.Ok(new
-            {
-                accepted = true,
-                itemTagsRevision = itemTagsEnvelope.Revision,
-                tagCatalogRevision = catalogEnvelope?.Revision,
-                categories = model.Categories,
-                tags = model.Tags
-            });
-        });
+        app.MapPost("/api/tag-editor/apply-item-tags", ApplyItemTags);
 
         app.MapPost("/api/tag-editor/upsert-category", (UpsertCategoryRequest request, ServerStateService state, LibraryOperationsService operations) =>
         {
@@ -632,6 +488,7 @@ public static class ServerHostComposition
                 state.PublishExternal("itemTagsChanged", new ItemTagsChangedPayload
                 {
                     ItemIds = changedItemIds,
+                    ResolvedItemIds = changedItemIds,
                     AddedTags = [newName],
                     RemovedTags = [oldName],
                     CatalogReplacedTag = oldName,
@@ -674,6 +531,7 @@ public static class ServerHostComposition
                 state.PublishExternal("itemTagsChanged", new ItemTagsChangedPayload
                 {
                     ItemIds = changedItemIds,
+                    ResolvedItemIds = changedItemIds,
                     AddedTags = [],
                     RemovedTags = [request.Name.Trim()],
                     CatalogReplacedTag = request.Name.Trim()
@@ -773,37 +631,7 @@ public static class ServerHostComposition
             return Results.Ok(operations.ScanAutoTags(request));
         });
 
-        app.MapPost("/api/autotag/apply", (AutoTagApplyRequest request, LibraryOperationsService operations, ServerStateService state) =>
-        {
-            var response = operations.ApplyAutoTags(request, out var applied);
-            if (response.AssignmentsAdded > 0)
-            {
-                foreach (var assignment in applied)
-                {
-                    if (assignment.ChangedItemPaths.Count == 0)
-                    {
-                        continue;
-                    }
-
-                    state.PublishExternal("itemTagsChanged", new ItemTagsChangedPayload
-                    {
-                        ItemIds = assignment.ChangedItemPaths,
-                        AddedTags = [assignment.TagName],
-                        RemovedTags = []
-                    });
-                }
-
-                var model = operations.GetTagEditorModel(new TagEditorModelRequest());
-                state.PublishExternal("tagCatalogChanged", new TagCatalogChangedPayload
-                {
-                    Reason = "autotagApply",
-                    Categories = model.Categories,
-                    Tags = model.Tags
-                });
-            }
-
-            return Results.Ok(response);
-        });
+        app.MapPost("/api/autotag/apply", ApplyAutoTags);
 
         app.MapPost("/api/logs/client", (ClientLogRequest request, LibraryOperationsService operations) =>
         {
@@ -826,6 +654,196 @@ public static class ServerHostComposition
 
         app.MapGet("/api/events", (HttpContext context, ServerStateService state, ConnectedClientTracker clients, OperatorTestingService testingService, IHostApplicationLifetime lifetime) =>
             StreamEventsAsync(context, state, clients, testingService, lifetime.ApplicationStopping));
+    }
+
+    internal static IResult PlayItem(
+        string itemId,
+        PlayItemRequest? body,
+        LibraryPlaybackService playback,
+        LibraryOperationsService operations,
+        ServerStateService state,
+        OperatorTestingService testingService)
+    {
+        var testing = testingService.GetSnapshot();
+        var forceMediaMissing = testing.TestingModeEnabled && testing.ForceMediaMissing;
+        body ??= new PlayItemRequest();
+        body.ClientId = NormalizeOptionalIdentity(body.ClientId);
+        body.SessionId = NormalizeOptionalIdentity(body.SessionId);
+
+        if (!playback.TryPlayItem(itemId, forceMediaMissing, out var playResponse, out var statusCode, out var error, out var errorCode))
+        {
+            return Results.Json(new { error, code = errorCode }, statusCode: statusCode);
+        }
+
+        var recorded = operations.RecordPlayback(playResponse!.ItemId);
+        if (!recorded.Found)
+        {
+            return Results.Json(new { error = "Playback could not be recorded", code = "play_record_failed" }, statusCode: StatusCodes.Status500InternalServerError);
+        }
+
+        state.PublishExternal("playbackRecorded", new PlaybackRecordedPayload
+        {
+            ItemId = recorded.ItemId,
+            Path = recorded.FullPath,
+            ClientId = body.ClientId,
+            SessionId = body.SessionId,
+            PlayCount = recorded.PlayCount,
+            LastPlayedUtc = recorded.LastPlayedUtc,
+            PreviousLastPlayedUtc = recorded.PreviousLastPlayedUtc
+        });
+        return Results.Ok(playResponse);
+    }
+
+    internal static IResult SetFavorite(FavoriteRequest request, ServerStateService state, LibraryOperationsService operations)
+    {
+        if (string.IsNullOrWhiteSpace(request.Path))
+        {
+            return Results.BadRequest(new { error = "path is required" });
+        }
+
+        var persisted = operations.SetFavorite(request.Path, request.IsFavorite, out var previous);
+        return PublishItemState(state, persisted, previous);
+    }
+
+    internal static IResult SetBlacklist(BlacklistRequest request, ServerStateService state, LibraryOperationsService operations)
+    {
+        if (string.IsNullOrWhiteSpace(request.Path))
+        {
+            return Results.BadRequest(new { error = "path is required" });
+        }
+
+        var persisted = operations.SetBlacklist(request.Path, request.IsBlacklisted, out var previous);
+        return PublishItemState(state, persisted, previous);
+    }
+
+    private static IResult PublishItemState(ServerStateService state, LibraryStateResponse? persisted, LibraryStateResponse? previous)
+    {
+        if (persisted == null || previous == null)
+        {
+            return Results.NotFound(new { error = "path not found in library" });
+        }
+
+        var envelope = state.PublishExternal("itemStateChanged", new ItemStateChangedPayload
+        {
+            ItemId = persisted.ItemId,
+            Path = persisted.Path,
+            IsFavorite = persisted.IsFavorite,
+            IsBlacklisted = persisted.IsBlacklisted,
+            PreviousIsFavorite = previous.IsFavorite,
+            PreviousIsBlacklisted = previous.IsBlacklisted
+        });
+        persisted.Revision = envelope.Revision;
+        return Results.Ok(persisted);
+    }
+
+    internal static IResult RecordPlayback(RecordPlaybackRequest request, ServerStateService state, LibraryOperationsService operations)
+    {
+        if (string.IsNullOrWhiteSpace(request.Path))
+        {
+            return Results.BadRequest(new { error = "path is required" });
+        }
+
+        request.ClientId = NormalizeOptionalIdentity(request.ClientId);
+        request.SessionId = NormalizeOptionalIdentity(request.SessionId);
+        var recorded = operations.RecordPlayback(request.Path);
+        if (!recorded.Found)
+        {
+            return Results.NotFound(new { error = "path not found in library" });
+        }
+
+        // The path is the catalog's, so the event names the file by path even when the request named it by id.
+        var envelope = state.PublishExternal("playbackRecorded", new PlaybackRecordedPayload
+        {
+            ItemId = recorded.ItemId,
+            Path = recorded.FullPath,
+            ClientId = request.ClientId,
+            SessionId = request.SessionId,
+            PlayCount = recorded.PlayCount,
+            LastPlayedUtc = recorded.LastPlayedUtc,
+            PreviousLastPlayedUtc = recorded.PreviousLastPlayedUtc
+        });
+        return Results.Ok(new RecordPlaybackResponse
+        {
+            ItemId = recorded.ItemId,
+            Revision = envelope.Revision,
+            PlayCount = recorded.PlayCount,
+            LastPlayedUtc = recorded.LastPlayedUtc
+        });
+    }
+
+    internal static IResult ApplyItemTags(ApplyItemTagsRequest request, ServerStateService state, LibraryOperationsService operations)
+    {
+        if (request.ItemIds.Count == 0)
+        {
+            return Results.BadRequest(new { error = "itemIds must contain at least one id" });
+        }
+
+        var accepted = operations.ApplyItemTags(request, out var catalogChanged, out var resolvedItemIds);
+        if (!accepted)
+        {
+            return Results.Json(new { error = "apply rejected or produced no changes" }, statusCode: StatusCodes.Status409Conflict);
+        }
+
+        var itemTagsEnvelope = state.PublishExternal("itemTagsChanged", new ItemTagsChangedPayload
+        {
+            ItemIds = request.ItemIds,
+            ResolvedItemIds = resolvedItemIds,
+            AddedTags = request.AddTags,
+            RemovedTags = request.RemoveTags
+        });
+        var model = operations.GetTagEditorModel(new TagEditorModelRequest());
+        ServerEventEnvelope? catalogEnvelope = null;
+        if (catalogChanged)
+        {
+            catalogEnvelope = state.PublishExternal("tagCatalogChanged", new TagCatalogChangedPayload
+            {
+                Reason = "applyItemTags",
+                Categories = model.Categories,
+                Tags = model.Tags
+            });
+        }
+
+        return Results.Ok(new
+        {
+            accepted = true,
+            itemTagsRevision = itemTagsEnvelope.Revision,
+            tagCatalogRevision = catalogEnvelope?.Revision,
+            categories = model.Categories,
+            tags = model.Tags
+        });
+    }
+
+    internal static IResult ApplyAutoTags(AutoTagApplyRequest request, LibraryOperationsService operations, ServerStateService state)
+    {
+        var response = operations.ApplyAutoTags(request, out var applied);
+        if (response.AssignmentsAdded > 0)
+        {
+            foreach (var assignment in applied)
+            {
+                if (assignment.ChangedItemPaths.Count == 0)
+                {
+                    continue;
+                }
+
+                state.PublishExternal("itemTagsChanged", new ItemTagsChangedPayload
+                {
+                    ItemIds = assignment.ChangedItemPaths,
+                    ResolvedItemIds = assignment.ChangedItemIds,
+                    AddedTags = [assignment.TagName],
+                    RemovedTags = []
+                });
+            }
+
+            var model = operations.GetTagEditorModel(new TagEditorModelRequest());
+            state.PublishExternal("tagCatalogChanged", new TagCatalogChangedPayload
+            {
+                Reason = "autotagApply",
+                Categories = model.Categories,
+                Tags = model.Tags
+            });
+        }
+
+        return Results.Ok(response);
     }
 
     internal static IResult ServeThumbnail(HttpContext context, string itemId, RefreshPipelineService refresh)

@@ -18,8 +18,8 @@ const people = { id: "people", name: "People", sortOrder: 0 };
 const places = { id: "places", name: "Places", sortOrder: 1 };
 const years = { id: "years", name: "Years", sortOrder: 2 };
 
-function item(id: string, tags: string[], fullPath?: string): TaggedItem {
-  return { id, fullPath: fullPath ?? `/media/${id}.mp4`, tags: tags.slice() };
+function item(id: string, tags: string[]): TaggedItem {
+  return { id, tags: tags.slice() };
 }
 
 describe("planTagEditorSave", () => {
@@ -277,7 +277,7 @@ describe("tag save apply", () => {
     expect(session.succeed(handle, false).reload).toBe(false);
   });
 
-  it("treats a per-tag auto-tag event for a subset of paths as its own and leaves another item tag alone", () => {
+  it("treats a per-tag auto-tag event for a subset of items as its own and leaves another item tag alone", () => {
     const session = createTagSaveSession();
     session.begin([item("a", ["Day"])], [autoTags([
       ["Cat", ["a", "b"]],
@@ -309,26 +309,26 @@ describe("tag save apply", () => {
     expect(decision).toEqual({ skipPatch: true, reload: true });
   });
 
-  it("retires an auto-tag assignment with no changed paths and applies a later event for that tag", () => {
+  it("retires an auto-tag assignment with no changed items and applies a later event for that tag", () => {
     const session = createTagSaveSession();
     const handle = session.begin([item("a", ["Day"])], [autoTags([
       ["Cat", ["a", "b"]],
       ["Dog", ["c"]]
     ])], false);
-    session.noteAutoTagResult(handle, [{ tagName: "Dog", changedItemPaths: ["c"] }]);
+    session.noteAutoTagResult(handle, [{ tagName: "Dog", changedItemIds: ["c"] }]);
     const cat = session.onEcho({ itemIds: ["a"], addedTags: ["Cat"], removedTags: [] }, false);
     const dog = session.onEcho({ itemIds: ["c"], addedTags: ["Dog"], removedTags: [] }, false);
     expect(cat).toEqual({ skipPatch: false, reload: false });
     expect(dog).toEqual({ skipPatch: true, reload: false });
   });
 
-  it("retires an auto-tag whose tag was not written when another tag changed the same path", () => {
+  it("retires an auto-tag whose tag was not written when another tag changed the same item", () => {
     const session = createTagSaveSession();
     const handle = session.begin([item("a", ["Day"])], [autoTags([
       ["Cat", ["a"]],
       ["Dog", ["a"]]
     ])], false);
-    session.noteAutoTagResult(handle, [{ tagName: "Dog", changedItemPaths: ["a"] }]);
+    session.noteAutoTagResult(handle, [{ tagName: "Dog", changedItemIds: ["a"] }]);
     const cat = session.onEcho({ itemIds: ["a"], addedTags: ["Cat"], removedTags: [] }, false);
     const dog = session.onEcho({ itemIds: ["a"], addedTags: ["Dog"], removedTags: [] }, false);
     expect(cat).toEqual({ skipPatch: false, reload: false });
@@ -398,6 +398,30 @@ describe("tag save apply", () => {
     expect(items[0]?.tags).toEqual(["Day"]);
   });
 
+  it("applies an item-tag save to the tile with that item id, not to one whose path differs only in case", () => {
+    const items = [item("id-upper", ["Day"]), item("id-lower", ["Day"])];
+    applyTagSaveLocally(items, [{ kind: "apply-item-tags", itemIds: ["id-lower"], addTags: ["Night"], removeTags: [] }]);
+    expect(items.map((entry) => entry.tags)).toEqual([["Day"], ["Day", "Night"]]);
+  });
+
+  it("applies an auto-tag save by the scan rows' item ids, not by the paths it sends", () => {
+    const items = [item("id-upper", ["Day"]), item("id-lower", ["Day"])];
+    applyTagSaveLocally(items, [{
+      kind: "apply-auto-tag",
+      assignments: [{ tagName: "Cat", itemPaths: ["/media/Clip.mp4"], itemIds: ["id-lower"] }]
+    }]);
+    expect(items.map((entry) => entry.tags)).toEqual([["Day"], ["Day", "Cat"]]);
+  });
+
+  it("does not treat an auto-tag event for another item id as that save", () => {
+    const session = createTagSaveSession();
+    session.begin([item("id-lower", ["Day"])], [auto("Cat", ["id-lower"])], false);
+    const other = session.onEcho({ itemIds: ["id-upper"], addedTags: ["Cat"], removedTags: [] }, false);
+    const own = session.onEcho({ itemIds: ["id-lower"], addedTags: ["Cat"], removedTags: [] }, false);
+    expect(other).toEqual({ skipPatch: false, reload: false });
+    expect(own).toEqual({ skipPatch: true, reload: false });
+  });
+
   it("copies a live empty tag list over the optimistic tags", () => {
     const loaded = [item("a", ["Day", "Night"])];
     replaceWithLiveTags(loaded, [item("a", [])]);
@@ -428,7 +452,7 @@ describe("handleIncomingItemTags", () => {
 
   it("renames the filter before the other client reloads", () => {
     expect(applyIncoming({
-      itemIds: ["a"],
+      resolvedItemIds: ["a"],
       addedTags: ["Late"],
       removedTags: ["Night"],
       catalogReplacedTag: "Night",
@@ -442,7 +466,7 @@ describe("handleIncomingItemTags", () => {
 
   it("leaves the filter in place when a per-item edit adds and removes tags", () => {
     expect(applyIncoming({
-      itemIds: ["a"],
+      resolvedItemIds: ["a"],
       addedTags: ["Late"],
       removedTags: ["Night"]
     })).toEqual({
@@ -454,7 +478,7 @@ describe("handleIncomingItemTags", () => {
 
   it("removes a deleted tag before the other client reloads", () => {
     expect(applyIncoming({
-      itemIds: ["a"],
+      resolvedItemIds: ["a"],
       addedTags: [],
       removedTags: ["Night"],
       catalogReplacedTag: "Night"
@@ -486,13 +510,17 @@ function add(tag: string): TagSaveStep {
   return { kind: "apply-item-tags", itemIds: ["a"], addTags: [tag], removeTags: [] };
 }
 
-function auto(tag: string, paths: string[]): TagSaveStep {
-  return autoTags([[tag, paths]]);
+function auto(tag: string, itemIds: string[]): TagSaveStep {
+  return autoTags([[tag, itemIds]]);
 }
 
 function autoTags(assignments: Array<[string, string[]]>): TagSaveStep {
   return {
     kind: "apply-auto-tag",
-    assignments: assignments.map(([tagName, itemPaths]) => ({ tagName, itemPaths }))
+    assignments: assignments.map(([tagName, itemIds]) => ({
+      tagName,
+      itemPaths: itemIds.map((id) => `/media/${id}.mp4`),
+      itemIds
+    }))
   };
 }

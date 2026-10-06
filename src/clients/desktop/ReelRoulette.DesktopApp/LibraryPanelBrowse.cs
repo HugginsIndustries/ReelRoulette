@@ -20,7 +20,8 @@ public enum LibraryPanelBrowseEffect
 
 /// <summary>
 /// One item's change from a favorite, blacklist, playback, or tag event.
-/// <see cref="Before"/> is the loaded tile's favorite and blacklist before the event, and is unknown for an item that is not loaded.
+/// <see cref="Before"/> is the favorite and blacklist before the event: the loaded tile's, or the event's previous values
+/// for an item that is not loaded. The desktop leaves it unknown for an item that is not loaded.
 /// </summary>
 public sealed class LibraryTileChange
 {
@@ -275,13 +276,22 @@ public static class LibraryPanelBrowse
             return true;
         }
 
-        if (change.Loaded && change.Before is LibraryTileFlags before)
+        bool Matches(LibraryTileFlags flags) =>
+            (!favoritesOnly || flags.IsFavorite) && (!excludeBlacklisted || !flags.IsBlacklisted);
+
+        if (change.Before is LibraryTileFlags before)
         {
-            return (favoritesOnly && before.IsFavorite != after.IsFavorite) ||
-                   (excludeBlacklisted && before.IsBlacklisted != after.IsBlacklisted);
+            if (change.Loaded)
+            {
+                return (favoritesOnly && before.IsFavorite != after.IsFavorite) ||
+                       (excludeBlacklisted && before.IsBlacklisted != after.IsBlacklisted);
+            }
+
+            // With the previous values known, an item that is not loaded reloads only when it enters the filter.
+            return !Matches(before) && Matches(after);
         }
 
-        return (!favoritesOnly || after.IsFavorite) && (!excludeBlacklisted || !after.IsBlacklisted);
+        return Matches(after);
     }
 
     /// <summary>

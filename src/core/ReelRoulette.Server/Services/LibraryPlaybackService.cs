@@ -149,6 +149,7 @@ public sealed class LibraryPlaybackService
         var token = _tokenStore.CreateToken(selected.FullPath);
         response = ApiContractMapper.MapRandomResult(
             id: selected.FullPath,
+            itemId: selected.Id,
             displayName: string.IsNullOrWhiteSpace(selected.FileName) ? Path.GetFileName(selected.FullPath) : selected.FileName,
             mediaType: MediaTypeName(selected.MediaType),
             durationSeconds: DurationSeconds(selected.DurationTicks),
@@ -230,6 +231,7 @@ public sealed class LibraryPlaybackService
         var token = _tokenStore.CreateToken(match.FullPath);
         response = ApiContractMapper.MapRandomResult(
             id: match.FullPath,
+            itemId: match.Id,
             displayName: string.IsNullOrWhiteSpace(match.FileName) ? Path.GetFileName(match.FullPath) : match.FileName,
             mediaType: MediaTypeName(match.MediaType),
             durationSeconds: DurationSeconds(match.DurationTicks),

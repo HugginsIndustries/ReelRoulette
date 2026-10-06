@@ -56,7 +56,8 @@ export interface LibraryQuerySessionEvent {
 }
 
 export interface ItemTagsChangedPayload {
-  itemIds?: readonly string[] | null;
+  /** Catalog item ids of the changed files. */
+  resolvedItemIds?: readonly string[] | null;
   addedTags?: readonly string[] | null;
   removedTags?: readonly string[] | null;
   /** Set when a catalog rename or delete caused the change. */
@@ -69,8 +70,8 @@ export interface LibraryTileFlags {
 }
 
 /**
- * One item's change from a favorite, blacklist, playback, or tag event. `before` is the loaded tile's
- * favorite and blacklist before the event, and is unknown for an item that is not loaded.
+ * One item's change from a favorite, blacklist, playback, or tag event. `before` is the favorite and blacklist
+ * before the event: the loaded tile's, or the event's previous values for an item that is not loaded.
  */
 export interface LibraryTileChange {
   kind: LibraryQueryTileEvent;
@@ -182,14 +183,20 @@ function flagChangeReloads(change: LibraryTileChange, filter: LibraryTileEffectF
   if (!after) {
     return true;
   }
+  const matches = (flags: LibraryTileFlags) =>
+    (!favoritesOnly || flags.isFavorite) && (!excludeBlacklisted || !flags.isBlacklisted);
   const before = change.before;
-  if (change.loaded && before) {
-    return (
-      (favoritesOnly && before.isFavorite !== after.isFavorite) ||
-      (excludeBlacklisted && before.isBlacklisted !== after.isBlacklisted)
-    );
+  if (before) {
+    if (change.loaded) {
+      return (
+        (favoritesOnly && before.isFavorite !== after.isFavorite) ||
+        (excludeBlacklisted && before.isBlacklisted !== after.isBlacklisted)
+      );
+    }
+    // With the previous values known, an item that is not loaded reloads only when it enters the filter.
+    return !matches(before) && matches(after);
   }
-  return (!favoritesOnly || after.isFavorite) && (!excludeBlacklisted || !after.isBlacklisted);
+  return matches(after);
 }
 
 /** Adding a selected tag or removing an excluded one can only bring an item in; the reverse can only take it out. */
@@ -219,6 +226,14 @@ export function libraryQueryReplayKind(
     return "reload";
   }
   return null;
+}
+
+/** The event's favorite and blacklist from before the change, when it carries both. */
+function eventPreviousFlags(payload: ItemStateChangedPayload): LibraryTileFlags | null {
+  if (typeof payload.previousIsFavorite !== "boolean" || typeof payload.previousIsBlacklisted !== "boolean") {
+    return null;
+  }
+  return { isFavorite: payload.previousIsFavorite, isBlacklisted: payload.previousIsBlacklisted };
 }
 
 export function mergeLibraryItemTags(
@@ -462,11 +477,13 @@ export function createLibraryQuerySession(query: LibraryQueryFn): LibraryQuerySe
       if (!hasResult && !inFlight) {
         return;
       }
-      const loaded = findProjectionItem(items, { itemId: payload.itemId, path: payload.path });
+      const loaded = findProjectionItem(items, payload.itemId);
       const change: LibraryTileChange = {
         kind: "favorite",
         loaded: loaded != null,
-        before: loaded ? { isFavorite: !!loaded.isFavorite, isBlacklisted: !!loaded.isBlacklisted } : null,
+        before: loaded
+          ? { isFavorite: !!loaded.isFavorite, isBlacklisted: !!loaded.isBlacklisted }
+          : eventPreviousFlags(payload),
         after: { isFavorite: !!payload.isFavorite, isBlacklisted: !!payload.isBlacklisted }
       };
       const replay = libraryQueryReplayKind(inFlight, libraryQueryTileEffect(change, filterState, controls.sortMode));
@@ -485,7 +502,7 @@ export function createLibraryQuerySession(query: LibraryQueryFn): LibraryQuerySe
       }
       const change: LibraryTileChange = {
         kind: "playback",
-        loaded: findProjectionItem(items, { path: payload.path }) != null
+        loaded: findProjectionItem(items, payload.itemId) != null
       };
       const replay = libraryQueryReplayKind(inFlight, libraryQueryTileEffect(change, filterState, controls.sortMode));
       if (replay) {
@@ -503,7 +520,7 @@ export function createLibraryQuerySession(query: LibraryQueryFn): LibraryQuerySe
     writeTags(updates) {
       let changed = false;
       for (const update of updates) {
-        const item = findProjectionItem(items, { itemId: update.itemId, path: update.itemId });
+        const item = findProjectionItem(items, update.itemId);
         if (!item) {
           continue;
         }
@@ -521,7 +538,7 @@ export function createLibraryQuerySession(query: LibraryQueryFn): LibraryQuerySe
       await run(inFlight === "reset" ? "reset" : "reload");
     },
     async applyTags(payload) {
-      const ids = (payload.itemIds ?? []).map((id) => String(id).trim()).filter(Boolean);
+      const ids = (payload.resolvedItemIds ?? []).map((id) => String(id).trim()).filter(Boolean);
       if (ids.length === 0 || (!hasResult && !inFlight)) {
         return;
       }
@@ -534,7 +551,7 @@ export function createLibraryQuerySession(query: LibraryQueryFn): LibraryQuerySe
       for (const id of ids) {
         const change: LibraryTileChange = {
           kind: "tags",
-          loaded: findProjectionItem(items, { itemId: id }) != null,
+          loaded: findProjectionItem(items, id) != null,
           addedTags: added,
           removedTags: removed
         };
@@ -549,7 +566,7 @@ export function createLibraryQuerySession(query: LibraryQueryFn): LibraryQuerySe
       }
       let changed = false;
       for (const id of ids) {
-        const item = findProjectionItem(items, { itemId: id });
+        const item = findProjectionItem(items, id);
         if (!item) {
           continue;
         }

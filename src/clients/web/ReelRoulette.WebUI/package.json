@@ -13,9 +13,10 @@
     "generate:contracts": "openapi-typescript ../../../../shared/api/openapi.yaml -o ./src/types/openapi.generated.ts",
     "verify:contracts": "node ./scripts/verify-openapi-contracts-fresh.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.test.json",
+    "verify:app-js-names": "node ./scripts/verify-app-js-names.mjs",
     "test": "vitest run",
     "verify:build-output": "node ./scripts/verify-build-output.mjs",
-    "verify": "npm run verify:contracts && npm run typecheck && npm run test && npm run build && npm run verify:build-output"
+    "verify": "npm run verify:contracts && npm run typecheck && npm run verify:app-js-names && npm run test && npm run build && npm run verify:build-output"
   },
   "devDependencies": {
     "@types/node": "^24.5.2",
