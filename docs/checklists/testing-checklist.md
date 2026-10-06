@@ -175,6 +175,8 @@ An agent runs these and ticks them.
 - [ ] The release notes warn not to go back to v0.14.0 or earlier after upgrading, since those versions would set the upgraded library aside.
 - [ ] Desktop plays video after the Avalonia and LibVLC update, on Linux and Windows.
 - [ ] On Windows, the server tray menu still opens and its items work after the Avalonia update.
+- [ ] The Windows server release's bundled `ffprobe -version`, printed in the release log, names the pinned FFmpeg build.
+- [ ] The release run packs and uploads every leg, and an installed v0.14.x server and desktop take the in-app delta update to this release, on Linux and Windows.
 
 ## Release Flow
 

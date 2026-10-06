@@ -17,8 +17,9 @@ ReelRoulette is a server-first media randomizer with thin desktop and web client
 
 ## Prerequisites
 
-- .NET SDK version compatible with this repo's `TargetFramework` values.
-- Node.js and npm (for WebUI build/verify flows).
+- .NET SDK 10.0.1xx, 10.0.112 or a later patch, as pinned in `global.json`. A 10.0.4xx SDK, such as the one Visual Studio installs, is not used.
+- Node.js 24, which CI and release use.
+- npm (for WebUI build/verify flows).
 - PowerShell Core (`pwsh`) for `tools/scripts/*.ps1` helpers (for example `pwsh ./tools/scripts/run-server.ps1`).
   - Linux (Arch Linux, CachyOS, and similar): install from the AUR, for example `paru -S powershell-bin` or `yay -S powershell-bin`; that package provides `pwsh` on your PATH.
 - **VLC / LibVLC** for **desktop** video playback when running from source. **FFmpeg** (including **`ffprobe` on your `PATH`**) on the **server** host for library refresh (duration, loudness, thumbnails, and related probes). Install these from your OS packages on Linux—AppImages do **not** bundle them. The desktop app loads the system **`libvlc.so.5`** soname directly; on most distros you install **LibVLC libraries and plugins** only (not the full VLC media player metapackage where packages are split). On **Arch-like** distros the **`vlc`** package remains monolithic. On **Windows**, use distro-equivalent installs on your `PATH` for local `dotnet run` (official **Velopack** server packages bundle FFmpeg/ffprobe; desktop packages bundle LibVLC).

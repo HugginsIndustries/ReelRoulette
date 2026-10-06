@@ -112,7 +112,7 @@ Last milestone completed: M11c
 
 ### M11d - Dependency Updates
 
-- **Status**: 🚧 In Progress (slice 1 implemented, awaiting a green CI run)
+- **Status**: 🚧 In Progress (slice 1 complete)
 - **Goal**: Dependencies are on their latest safe versions, the shipped server carries one stable SkiaSharp with matching natives, and builds use the same SDK, Node, and FFmpeg every run.
 - **Scope**:
   - Ships in v0.14.1, after the random selection performance milestone and before Thumbnail Caching, whose server thumbnails use SkiaSharp. Each slice is verified on its own. Slices 3, 4, and 5 can be cut to a later release if v0.14.1 runs long; slices 1 and 2 cannot.
@@ -124,14 +124,15 @@ Last milestone completed: M11c
     - actions/checkout v5 to v7, actions/setup-dotnet v5 to v6, and actions/setup-node v5 to v7. Their notes show ESM migration, credentials kept in a separate file, fork checkouts blocked on `pull_request_target`, and automatic caching limited to npm, which is what CI uses. Remove `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24`, which is a no-op with these majors (inferred).
     - Slice 1 touches the frozen desktop through Avalonia and LibVLC. Add a Release Specific checklist item: "Desktop plays video after the Avalonia and LibVLC update, on Linux and Windows."
   - Slice 2, build reproducibility:
-    - Add a `global.json` with `rollForward: latestFeature`. Measured: there is none today, local builds use SDK 10.0.112 and CI's `10.0.x` resolves to 10.0.401, a different feature band. Both run runtime 10.0.12.
+    - Add a `global.json` pinning 10.0.112 with `rollForward: latestPatch`, and have CI and release install the SDK from it. Measured: there is none today, local builds use SDK 10.0.112 and CI's `10.0.x` resolves to 10.0.401, a different feature band. Both run runtime 10.0.12. `latestFeature` would have let CI keep 10.0.401, and distro-built SDKs ship only the 10.0.1xx band, so the 1xx band is pinned. A machine with only a 10.0.4xx SDK cannot build the repo.
     - Run CI and release on Node 24 to match local (24.21.0), instead of Node 22 (22.23.3 in CI). `@types/node` stays on ^24.
     - Pin the Windows server's bundled FFmpeg to a release tag. Measured: `AnimMouse/setup-ffmpeg` with `version: "release"` shipped `n9.0.2-22-g46d8f462ee-20261005` in v0.14.0, a daily build from the release branch, so each release can ship a different ffprobe. The latest FFmpeg tag on 2026-10-05 was n9.0.2. Trap, inferred: the action may not accept a tag. If it doesn't, download a tagged build directly.
+    - Checked: the action takes only a major and minor version on Windows, and BtbN builds only branch heads, never an exact tag. BtbN keeps daily releases for about two weeks and month-end releases long term (back to 2024-11-30 on 2026-10-06), so the release downloads a pinned month-end BtbN build, checks its SHA-256, and fails unless the bundled `ffprobe -version` names that build. gyan.dev builds are not used, since they caused dependency problems before.
   - Slice 3, Velopack:
     - Move the Velopack library and the `vpk` tool from 1.2.0 to 1.2.161 together.
     - Check `release.yml`'s `vpk` usage against the release notes first: `vpk download s3`, `vpk upload s3 --keepMaxReleases`, and `pack --noPortable true`. Version 1.2.158 moved argument validation into the command layer and renamed the MSI image flags.
     - Trap: 1.2.158 removes the bsdiff delta fallback, so zstd is the only delta patch format. Installed v0.14.x apps run the 1.2.0 updater.
-    - Add a Release Specific checklist item: "An installed v0.14.x server and desktop take the in-app delta update to this release, on Linux and Windows."
+    - The Release Specific checklist item "The release run packs and uploads every leg, and an installed v0.14.x server and desktop take the in-app delta update to this release, on Linux and Windows." covers this.
   - Slice 4, Vite 8 and Vitest 5:
     - Move them together, because Vitest 3 only supports Vite 7 and earlier.
     - Vite 8 replaces Rollup and esbuild with Rolldown. Vitest 5 needs Node ^22.12 or 24 and later.
@@ -150,13 +151,13 @@ Last milestone completed: M11c
   - Not included: migrating to xUnit v3, a different package that turns test projects into executables.
 - **Acceptance criteria**:
   - Slice 1: Every project resolves Avalonia 12.1.3 and SkiaSharp 3.119.4. ServerApp's resolved packages hold one SkiaSharp version, no preview, and no `SkiaSharp.NativeAssets.Linux.NoDependencies` beside `SkiaSharp.NativeAssets.Linux`. The listed packages and Actions are at their target versions, and CI passes on Linux and Windows.
-  - Slice 2: `dotnet --version` in the repo resolves through `global.json` locally and in CI. CI and release run Node 24. The bundled `ffprobe -version` in the Windows server release names the pinned tag.
-  - Slice 3: The Velopack library and `vpk` are both 1.2.161. Every `vpk` command in `release.yml` matches the 1.2.161 options, and a release run packs and uploads all legs.
+  - Slice 2: `dotnet --version` in the repo resolves through `global.json` locally and in CI. CI and release run Node 24. The bundled `ffprobe -version` in the Windows server release names the pinned build.
+  - Slice 3: The Velopack library and `vpk` are both 1.2.161. Every `vpk` command in `release.yml` has been checked against the 1.2.161 release notes and updated where they changed. The release run itself, packing and uploading all legs and the in-app delta update from v0.14.x, is covered by the Release Specific checklist item.
   - Slice 4: The WebUI builds and tests on Vite 8 and Vitest 5 with the same test count as before. `npm audit` reports no dev dependency findings that a fix within these limits can clear, and js-yaml stays on 4.x.
   - Slice 5: Every test project runs the same number of xUnit v2 tests on xunit.runner.visualstudio 4.0.0 as on 3.1.5.
 - **Verification evidence**:
-  - Completion evidence must include, per slice, `dotnet test ReelRoulette.sln` and a green CI run. Add `npm run verify` for slices 1, 2, and 4, and `./tools/scripts/verify-linux-packaged-server-smoke.sh` for slices 1 and 3. Slice 1 also needs the resolved SkiaSharp packages from ServerApp's `project.assets.json`, slice 3 a release workflow run, and slice 4 the `npm audit` output before and after.
-  - The desktop playback and in-app delta update checks are Release Specific checklist items.
+  - Completion evidence must include, per slice, `dotnet test ReelRoulette.sln` and a green CI run. Add `npm run verify` for slices 1, 2, and 4, and `./tools/scripts/verify-linux-packaged-server-smoke.sh` for slices 1 and 3. Slice 1 also needs the resolved SkiaSharp packages from ServerApp's `project.assets.json`, and slice 4 the `npm audit` output before and after.
+  - Checks that need a release run are Release Specific checklist items: desktop playback and the Windows tray menu after the safe batch, the bundled `ffprobe -version` naming the pinned build for build reproducibility, and the release run packing and uploading every leg with the in-app delta update from v0.14.x for Velopack.
   - Slice 1:
     - Before and after, `dotnet test ReelRoulette.sln` ran 383 Core, 269 DesktopApp, and 3 ServerApp tests, all passing. `dotnet build ReelRoulette.sln` has no warnings.
     - Resolved from `project.assets.json`: ServerApp, ServerApp.Tests, Server, Core.Tests, DesktopApp, and DesktopApp.Tests all hold SkiaSharp 3.119.4 and its natives only, with `SkiaSharp.NativeAssets.Linux` and no `NoDependencies` or preview. Every Avalonia project resolves 12.1.3, Tmds.DBus.Protocol 0.94.1, and Microsoft.NET.Test.Sdk 18.10.1, and DesktopApp resolves VideoLAN.LibVLC.Windows 3.0.24.
@@ -164,7 +165,12 @@ Last milestone completed: M11c
     - `npm run verify` passed with 232 WebUI tests on Vite 7.3.7 and sharp 0.35.5. The lockfile changed only Vite and the sharp packages.
     - `./tools/scripts/verify-linux-packaged-server-smoke.sh` passed.
     - Release Specific items added for desktop playback and the Windows tray menu after the update.
-    - CI run on Linux and Windows: pending.
+    - CI run 37513096626 passed on Linux, Windows, and WebUI verify, with the same 383, 269, and 3 tests on both OSes.
+  - Slice 2:
+    - `dotnet --version` in the repo prints 10.0.112 through `global.json`. A copy pinned to 10.0.113 is refused, so the file is read. `dotnet build ReelRoulette.sln` has no warnings, and `dotnet test ReelRoulette.sln` ran 383, 269, and 3 tests, all passing. `npm run verify` passed with 232 tests on Node 24.21.0.
+    - The pinned FFmpeg is `ffmpeg-n9.0.2-17-g2a571b6068-win64-gpl-9.0.zip` from BtbN's `autobuild-2026-09-30-13-08`. The downloaded file matched BtbN's published SHA-256, holds `bin/ffmpeg.exe` and `bin/ffprobe.exe`, and its `ffprobe.exe` embeds `n9.0.2-17-g2a571b6068-20260930`. The release step's script, run under pwsh with the download swapped for that file and canned `ffprobe -version` output, bundled both executables for that version line and failed for a wrong hash, a different build, and the version without its date.
+    - CI run showing `dotnet --version` and Node 24: pending.
+    - The release run check is the Release Specific checklist item "The Windows server release's bundled `ffprobe -version`, printed in the release log, names the pinned FFmpeg build."
 
 ### M11e - Thumbnail Caching
 

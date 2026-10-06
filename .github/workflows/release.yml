@@ -282,12 +282,12 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: "10.0.x"
+          global-json-file: global.json
 
       - name: Setup Node
         uses: actions/setup-node@v7
         with:
-          node-version: "22"
+          node-version: "24"
 
       - name: Install vpk CLI
         shell: bash
@@ -337,27 +337,40 @@ jobs:
         run: |
           pwsh ./tools/scripts/stage-webui-assets.ps1 -RepoRoot "$env:GITHUB_WORKSPACE" -PublishDir "$env:PUBLISH_DIR"
 
-      - name: Setup FFmpeg (Windows server)
-        if: matrix.native_component == 'server'
-        uses: AnimMouse/setup-ffmpeg@v1.2.5
-        with:
-          version: "release"
-
       - name: Bundle FFmpeg into publish output (Windows server)
         if: matrix.native_component == 'server'
         shell: pwsh
+        env:
+          # A BtbN month-end build, which BtbN keeps; daily builds are pruned after about two weeks.
+          FFMPEG_RELEASE_TAG: autobuild-2026-09-30-13-08
+          FFMPEG_ASSET: ffmpeg-n9.0.2-17-g2a571b6068-win64-gpl-9.0
+          FFMPEG_SHA256: a0e45723c72141975f51d8666302e614711745f3102b704ca3f82c897a58d278
+          FFMPEG_VERSION: n9.0.2-17-g2a571b6068-20260930
         run: |
           $ErrorActionPreference = 'Stop'
+          $work = Join-Path $env:RUNNER_TEMP 'ffmpeg-download'
+          New-Item -ItemType Directory -Force -Path $work | Out-Null
+          $zip = Join-Path $work "$env:FFMPEG_ASSET.zip"
+          $url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/$env:FFMPEG_RELEASE_TAG/$env:FFMPEG_ASSET.zip"
+          Invoke-WebRequest -Uri $url -OutFile $zip
+          $hash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash
+          if ($hash -ne $env:FFMPEG_SHA256) {
+            throw "FFmpeg download hash $hash does not match the pinned $env:FFMPEG_SHA256"
+          }
+          Expand-Archive -LiteralPath $zip -DestinationPath $work -Force
+          $bin = Join-Path $work "$env:FFMPEG_ASSET/bin"
           $dest = Join-Path $env:PUBLISH_DIR 'runtimes/win-x64/native'
           New-Item -ItemType Directory -Force -Path $dest | Out-Null
-          $ffmpegSrc = (Get-Command ffmpeg).Source
-          $ffprobeSrc = (Get-Command ffprobe).Source
-          Copy-Item -LiteralPath $ffmpegSrc -Destination (Join-Path $dest 'ffmpeg.exe') -Force
-          Copy-Item -LiteralPath $ffprobeSrc -Destination (Join-Path $dest 'ffprobe.exe') -Force
+          Copy-Item -LiteralPath (Join-Path $bin 'ffmpeg.exe') -Destination (Join-Path $dest 'ffmpeg.exe') -Force
+          Copy-Item -LiteralPath (Join-Path $bin 'ffprobe.exe') -Destination (Join-Path $dest 'ffprobe.exe') -Force
           $bundledFfprobe = Join-Path $dest 'ffprobe.exe'
-          & $bundledFfprobe -version
+          $versionOutput = @(& $bundledFfprobe -version)
           if ($LASTEXITCODE -ne 0) {
             throw "ffprobe -version gate failed with exit code $LASTEXITCODE"
+          }
+          $versionOutput | Write-Host
+          if (-not ($versionOutput[0] -like "ffprobe version $env:FFMPEG_VERSION *")) {
+            throw "Bundled ffprobe is '$($versionOutput[0])', expected $env:FFMPEG_VERSION"
           }
 
       - name: Relocate LibVLC into probe path (Windows desktop)

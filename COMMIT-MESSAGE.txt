@@ -19,9 +19,10 @@ Instructions:
 
 Commit Message:
 
-M11d: Update Avalonia, SkiaSharp, test SDK, and CI actions
+M11d: Pin the .NET SDK, Node, and bundled FFmpeg for builds
 
-- Avalonia 12.0.0 to 12.1.3 with Tmds.DBus.Protocol 0.94.1, Microsoft.NET.Test.Sdk 18.10.1, VideoLAN.LibVLC.Windows 3.0.24, Vite 7.3.7, and sharp 0.35.5.
-- The Server moves to SkiaSharp 3.119.4 with SkiaSharp.NativeAssets.Linux in place of the NoDependencies natives, so ServerApp resolves one SkiaSharp version with no preview, and Server tests run against the libSkiaSharp.so the server ships.
-- CI and release use actions/checkout v7, setup-dotnet v6, and setup-node v7, and drop FORCE_JAVASCRIPT_ACTIONS_TO_NODE24.
-- Release Specific checks cover desktop playback and the Windows tray menu after the update.
+- global.json pins SDK 10.0.112 with latestPatch, and CI and release install from it instead of 10.0.x, which resolved to the 10.0.401 feature band.
+- CI and release run Node 24 to match local, and CI prints the SDK and Node versions.
+- The Windows server release bundles a pinned BtbN month-end FFmpeg build, checks its SHA-256, and fails unless the bundled ffprobe -version names that build, replacing setup-ffmpeg's daily build.
+- README and dev setup name the SDK band and Node version, and Release Specific checks cover the bundled ffprobe version and the in-app delta update from v0.14.x.
+- AGENTS.md sends checks that need a release build or dev release to Release Specific checklist items instead of pending milestone evidence.

@@ -4,8 +4,8 @@ This guide covers local setup, run paths, verification gates, packaging, and rel
 
 ## Prerequisites
 
-- .NET SDK (matching solution target; verify with `dotnet --version`)
-- Node.js + npm (for WebUI build/verify; verify with `node --version` and `npm --version`)
+- .NET SDK 10.0.1xx, 10.0.112 or a later patch, as pinned in `global.json` (verify with `dotnet --version` in the repo; a 10.0.4xx SDK alone does not satisfy it)
+- Node.js 24 + npm, matching CI and release (for WebUI build/verify; verify with `node --version` and `npm --version`)
 - PowerShell Core (`pwsh`) for repository scripts under `tools/scripts/` (for example `pwsh ./tools/scripts/run-server.ps1`).
   - Windows: install PowerShell 7+ with `winget install Microsoft.PowerShell` so `pwsh` is on your PATH. Built-in Windows PowerShell 5.1 is not enough for scripts that rely on PowerShell 7+; use `pwsh` after install (restart the terminal or Cursor if `pwsh` is not found until PATH refreshes).
   - Linux (Arch Linux, CachyOS, and similar): install from the AUR, for example `paru -S powershell-bin` or `yay -S powershell-bin`; that package provides `pwsh` on your PATH.
