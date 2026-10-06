@@ -9,7 +9,7 @@ An outline of upcoming releases and the milestones each one ships, in order. Eac
 
 The WebUI becomes the only client on every device. The desktop client is frozen to bug fixes (crashes, data loss, broken playback, security) until the desktop removal release, and until then server contract changes only add fields, so the last desktop build keeps working. The native Android client is dropped.
 
-- **v0.14.1 — Catalog safety and performance**: Leave a catalog written by a newer build, or a damaged one, untouched with its backups while the server keeps running without a library, make library browse, window reloads, and random selection cheap on large catalogs, cache thumbnails until they change, and identify items by ID in every event and response. M11a, M11b, M11c, M11d, M11e.
+- **v0.14.1 — Catalog safety and performance**: Leave a catalog written by a newer build, or a damaged one, untouched with its backups while the server keeps running without a library, make library browse, window reloads, and random selection cheap on large catalogs, update dependencies with matching SkiaSharp natives in the shipped server, cache thumbnails until they change, and identify items by ID in every event and response. M11a, M11b, M11c, M11d, M11e, M11f.
 - **v0.15.0 — WebUI overhaul**: Serve the WebUI over HTTPS so it installs as an app, move it to Preact, give it a responsive layout with side panels and phone overlays, and add keyboard shortcuts, stats, settings, an admin section that replaces the Operator page, duplicate review, and Show in File Manager. P28a, P38, P39, P34, P20, P26a, P40, P41, P42, P43, P44, P45, P31.
 - **v0.15.1 — Desktop parity**: Give the WebUI everything else the desktop does, including source management, catalog transfer, multi-select, and a browser-playable filter, while the desktop still ships as a fallback. P26b, P26c, P26d, P37, P46, P47.
 - **v0.16.0 — Desktop removal**: Remove the desktop client, its packaging, and its tests, then move preset writes to per-preset routes. P48, P25.
@@ -129,12 +129,58 @@ Last milestone completed: M11b
 - **Verification evidence**:
   - Completion evidence must include before-and-after timings and allocations per randomization mode on a copy of a large catalog in a temp folder, tests that the selection rules are unchanged, and `dotnet test ReelRoulette.sln`.
 
-### M11d - Thumbnail Caching
+### M11d - Dependency Updates
+
+- **Status**: ⏳ Planned
+- **Goal**: Dependencies are on their latest safe versions, the shipped server carries one stable SkiaSharp with matching natives, and builds use the same SDK, Node, and FFmpeg every run.
+- **Scope**:
+  - Ships in v0.14.1, after the random selection performance milestone and before Thumbnail Caching, whose server thumbnails use SkiaSharp. Each slice is verified on its own. Slices 3, 4, and 5 can be cut to a later release if v0.14.1 runs long; slices 1 and 2 cannot.
+  - From the dependency inventory report of 2026-10-05. Latest versions were checked against the NuGet, npm, and GitHub release registries that day. Resolved versions were read from `project.assets.json` and `package-lock.json`, and CI and release versions from the logs of CI run 37429751595 and release run 37383133790.
+  - Slice 1, safe batch:
+    - Avalonia, Avalonia.Desktop, Avalonia.Themes.Fluent, Avalonia.Fonts.Inter, and Avalonia.Headless 12.0.0 to 12.1.3. The 12.1.0 notes only remove obsolete and dead code. Avalonia 12.1.3's FreeDesktop package needs Tmds.DBus.Protocol 0.94.1 or later, so raise the explicit 0.92.0 reference with it. That reference is 0.x, so a minor bump can break.
+    - SkiaSharp 3.119.4 everywhere. Measured: ServerApp resolves `SkiaSharp 3.119.3-preview.1.1` through Avalonia 12.0.0 and pulls in both `SkiaSharp.NativeAssets.Linux` 3.119.3-preview and the Server's `SkiaSharp.NativeAssets.Linux.NoDependencies` 3.119.2. The Server project alone builds against 3.119.2, so its tests don't exercise what ships. The release publish passes `-p:ErrorOnDuplicatePublishOutputFiles=false`, so which `libSkiaSharp.so` ships is not checked (inferred; no publish was run). Avalonia 12.1.3 requires SkiaSharp 3.119.4.
+    - Microsoft.NET.Test.Sdk 18.4.0 to 18.10.1, VideoLAN.LibVLC.Windows 3.0.23 to 3.0.24, Vite 7.3.6 to 7.3.7, and sharp 0.35.3 to 0.35.5.
+    - actions/checkout v5 to v7, actions/setup-dotnet v5 to v6, and actions/setup-node v5 to v7. Their notes show ESM migration, credentials kept in a separate file, fork checkouts blocked on `pull_request_target`, and automatic caching limited to npm, which is what CI uses. Remove `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24`, which is a no-op with these majors (inferred).
+    - Slice 1 touches the frozen desktop through Avalonia and LibVLC. Add a Release Specific checklist item: "Desktop plays video after the Avalonia and LibVLC update, on Linux and Windows."
+  - Slice 2, build reproducibility:
+    - Add a `global.json` with `rollForward: latestFeature`. Measured: there is none today, local builds use SDK 10.0.112 and CI's `10.0.x` resolves to 10.0.401, a different feature band. Both run runtime 10.0.12.
+    - Run CI and release on Node 24 to match local (24.21.0), instead of Node 22 (22.23.3 in CI). `@types/node` stays on ^24.
+    - Pin the Windows server's bundled FFmpeg to a release tag. Measured: `AnimMouse/setup-ffmpeg` with `version: "release"` shipped `n9.0.2-22-g46d8f462ee-20261005` in v0.14.0, a daily build from the release branch, so each release can ship a different ffprobe. The latest FFmpeg tag on 2026-10-05 was n9.0.2. Trap, inferred: the action may not accept a tag. If it doesn't, download a tagged build directly.
+  - Slice 3, Velopack:
+    - Move the Velopack library and the `vpk` tool from 1.2.0 to 1.2.161 together.
+    - Check `release.yml`'s `vpk` usage against the release notes first: `vpk download s3`, `vpk upload s3 --keepMaxReleases`, and `pack --noPortable true`. Version 1.2.158 moved argument validation into the command layer and renamed the MSI image flags.
+    - Trap: 1.2.158 removes the bsdiff delta fallback, so zstd is the only delta patch format. Installed v0.14.x apps run the 1.2.0 updater.
+    - Add a Release Specific checklist item: "An installed v0.14.x server and desktop take the in-app delta update to this release, on Linux and Windows."
+  - Slice 4, Vite 8 and Vitest 5:
+    - Move them together, because Vitest 3 only supports Vite 7 and earlier.
+    - Vite 8 replaces Rollup and esbuild with Rolldown. Vitest 5 needs Node ^22.12 or 24 and later.
+    - The WebUI's `vite.config.ts` only sets the dev server port, and its tests only use `vi.fn` and fake timers, so the risk is low (inferred). Release notes not read yet.
+  - Slice 5, xunit.runner.visualstudio:
+    - Move it from 3.1.5 to 4.0.0.
+    - Inferred: the 4.0.0 package still ships `xunit.abstractions`, so it probably still runs xUnit v2 tests. Confirm every test project runs the same number of tests before and after.
+  - Not included: SkiaSharp 4, because Avalonia 12.1.3 still requires SkiaSharp 3.119.x and ServerApp loads Avalonia and the Server in one process.
+  - Not included: TypeScript 7, because `openapi-typescript` 7.13.0 declares a `typescript ^5.x` peer dependency.
+  - Not included: Microsoft.Data.Sqlite 11 and .NET 11, which are release candidates only. Microsoft.Data.Sqlite 10.0.12 bundles SQLite 3.53.3 through SQLitePCLRaw 2.1.12 (measured), and 11 moves to SQLitePCLRaw 3.
+  - Not included: swapping the unmaintained mDNS package `Makaretu.Dns.Multicast` 0.27.0, last published 2019-11-05, which works as is.
+  - Not included: LibVLCSharp.Avalonia 3.10.1, which still targets Avalonia 11.3.13 like 3.9.7, for the frozen desktop.
+  - Not included: the Linux CI test FFmpeg, which stays on Ubuntu's 6.1.1 package.
+  - Not included: migrating to xUnit v3, a different package that turns test projects into executables.
+- **Acceptance criteria**:
+  - Slice 1: Every project resolves Avalonia 12.1.3 and SkiaSharp 3.119.4. ServerApp's resolved packages hold one SkiaSharp version, no preview, and no `SkiaSharp.NativeAssets.Linux.NoDependencies` beside `SkiaSharp.NativeAssets.Linux`. The listed packages and Actions are at their target versions, and CI passes on Linux and Windows.
+  - Slice 2: `dotnet --version` in the repo resolves through `global.json` locally and in CI. CI and release run Node 24. The bundled `ffprobe -version` in the Windows server release names the pinned tag.
+  - Slice 3: The Velopack library and `vpk` are both 1.2.161. Every `vpk` command in `release.yml` matches the 1.2.161 options, and a release run packs and uploads all legs.
+  - Slice 4: The WebUI builds and tests on Vite 8 and Vitest 5 with the same test count as before.
+  - Slice 5: Every test project runs the same number of xUnit v2 tests on xunit.runner.visualstudio 4.0.0 as on 3.1.5.
+- **Verification evidence**:
+  - Completion evidence must include, per slice, `dotnet test ReelRoulette.sln` and a green CI run. Add `npm run verify` for slices 1, 2, and 4, and `./tools/scripts/verify-linux-packaged-server-smoke.sh` for slices 1 and 3. Slice 1 also needs the resolved SkiaSharp packages from ServerApp's `project.assets.json`, and slice 3 a release workflow run.
+  - The desktop playback and in-app delta update checks are Release Specific checklist items.
+
+### M11e - Thumbnail Caching
 
 - **Status**: ⏳ Planned
 - **Goal**: Thumbnails are fetched again only when they change.
 - **Scope**:
-  - Ships in v0.14.1, after the random selection performance milestone. Can be cut to a later release if v0.14.1 runs long.
+  - Ships in v0.14.1, after the dependency updates milestone. Depends on: Dependency Updates, whose SkiaSharp alignment the server's thumbnails build on. Can be cut to a later release if v0.14.1 runs long.
   - Found by the efficiency and divergence report from code reading, not measured: `GET /api/thumbnail/{itemId}` sends no cache headers, and its URL has no revision, so the WebUI and the desktop fetch a thumbnail again every time a tile shows it.
   - Inferred, not checked: the route serves the file with `Results.File` from a physical path, which probably sends `Last-Modified`, so browsers may already cache thumbnails heuristically for a while, and a regenerated thumbnail could then show stale. Before changing anything, check in a browser network panel which thumbnail requests reach the server today.
   - Add cache headers to thumbnail responses, or a revision to the thumbnail URL so it can be cached until the thumbnail changes. A revision in the URL needs the thumbnail revision in the list query page, which is a contract change in its own slice and only adds a field.
@@ -147,7 +193,7 @@ Last milestone completed: M11b
 - **Verification evidence**:
   - Completion evidence must include a server test for the thumbnail cache headers or revision, a WebUI test or browser network check that an unchanged thumbnail is not fetched again, `dotnet test ReelRoulette.sln`, and `npm run verify` after any contract change.
 
-### M11e - Item IDs in the Contract
+### M11f - Item IDs in the Contract
 
 - **Status**: ⏳ Planned
 - **Goal**: Every event and response that refers to a library item carries its item id, and the WebUI matches items by id instead of by path.
