@@ -112,7 +112,7 @@ Last milestone completed: M11c
 
 ### M11d - Dependency Updates
 
-- **Status**: 🚧 In Progress (slices 1, 2, and 3 complete, slice 4 implemented)
+- **Status**: 🚧 In Progress (slices 1 to 4 complete, slice 5 implemented)
 - **Goal**: Dependencies are on their latest safe versions, the shipped server carries one stable SkiaSharp with matching natives, and builds use the same SDK, Node, and FFmpeg every run.
 - **Scope**:
   - Ships in v0.14.1, after the random selection performance milestone and before Thumbnail Caching, whose server thumbnails use SkiaSharp. Each slice is verified on its own. Slices 3, 4, and 5 can be cut to a later release if v0.14.1 runs long; slices 1 and 2 cannot.
@@ -188,6 +188,10 @@ Last milestone completed: M11c
     - `npm run verify` passed with 232 tests in 20 files before and after. The build keeps the same files: the JS bundle went from 120,395 to 118,200 bytes and the CSS from 23,722 to 24,353 bytes, which the Vite 8 guide attributes to Lightning CSS minification. `pwsh ./tools/scripts/verify-web-deploy.ps1` passed with the new build.
     - `dotnet build ReelRoulette.sln` has no warnings, and `dotnet test ReelRoulette.sln` ran 383, 269, and 3 tests, all passing.
     - The newer default browser targets and the CSS minifier are covered by the Release Specific checklist item "After the Vite 8 build change, the WebUI looks and works as before in a desktop browser and on a phone."
+    - CI run 37522394099 passed on Linux, Windows, and WebUI verify, with the same 383, 269, and 3 tests on both OSes, and 232 WebUI tests in 20 files on Node 24.21.0.
+  - Slice 5:
+    - The 3.1.5 and 4.0.0 packages have the same layout and dependencies, both ship `xunit.abstractions` and describe themselves as running xUnit v1, v2, and v3 tests, and the MSBuild files they add are byte-identical. The 4.0.0 release notes add xUnit v3 4.0 support and fix shutdown message ordering under VSTest, with no change for v2 projects.
+    - `dotnet test ReelRoulette.sln` with detailed console output ran on `xUnit.net VSTest Adapter v3.1.5` before and `v4.0.0` after in all three test projects, and every project resolves 4.0.0. Both runs passed the same 655 tests by name: 383 Core, 269 DesktopApp, and 3 ServerApp. `dotnet build ReelRoulette.sln` has no warnings.
     - CI run: pending.
 
 ### M11e - Thumbnail Caching
