@@ -19,8 +19,11 @@ Instructions:
 
 Commit Message:
 
-Docs: Plan dependency updates ahead of thumbnail caching
+M11c: Make random selection read only what it needs
 
-- Add a Dependency Updates milestone to v0.14.1 after Random Selection Performance, in five slices: a safe batch that also gives the shipped server one stable SkiaSharp with matching Linux natives, reproducible builds (global.json, Node 24 in CI, a pinned FFmpeg tag), Velopack and vpk 1.2.161, Vite 8 with Vitest 5, and xunit.runner.visualstudio 4.
-- Record the dependency report's measured versions, the traps (Velopack's zstd-only deltas, an FFmpeg action that may not take a tag), and what stays out: SkiaSharp 4, TypeScript 7, Microsoft.Data.Sqlite 11 and .NET 11, and the mDNS package swap.
-- Thumbnail Caching now depends on Dependency Updates; renumber Thumbnail Caching to M11e and Item IDs in the Contract to M11f.
+- A random pick reads each eligible item's id, path, play count, and last played instead of all 28 columns, sorted by id in C# because ORDER BY id was slower, then reads the picked item by its exact id without taking the write lock.
+- The eligible-set signature hashes item ids instead of lowercasing and sorting every path, and a rebuild no longer computes it twice; the smart shuffle bag holds item ids, so a changed path keeps its place in the cycle.
+- Smart shuffle looks dequeued ids up in a map instead of scanning the eligible list, and the engine returns the picked item, so the service no longer searches for it.
+- Each pick writes one last.log line with the mode, eligible count, and elapsed time.
+- On a 49,053-item catalog, a default-filter pick drops from 221-246 ms and 106-120 MB to 54-66 ms and 19-32 MB in every mode. A harness running the old and new engines on the same candidates matched all 30,000 picks across the five modes.
+- The Server Robustness Findings entry drops the quadratic smart shuffle finding, and its signature finding now names ids.

@@ -6,20 +6,20 @@ public static class RandomSelectionEngineCore
 {
     private const int FolderHistoryLimit = 16;
 
+    /// <summary>
+    /// Identifies the eligible set by its item ids, which callers pass in ordinal id order so the same set
+    /// always gives the same signature. Paths are not part of it: the shuffle bag holds item ids, so an item
+    /// whose path changed is still the same entry.
+    /// </summary>
     public static string ComputeEligibleSignature(IReadOnlyList<RandomizationItem> eligibleItems)
     {
         if (eligibleItems == null || eligibleItems.Count == 0)
             return "empty";
 
-        var normalized = eligibleItems
-            .Select(i => (i.FullPath ?? string.Empty).Trim().ToLowerInvariant())
-            .OrderBy(p => p, StringComparer.Ordinal)
-            .ToArray();
-
         var hash = new HashCode();
-        hash.Add(normalized.Length);
-        foreach (var path in normalized)
-            hash.Add(path, StringComparer.Ordinal);
+        hash.Add(eligibleItems.Count);
+        for (var i = 0; i < eligibleItems.Count; i++)
+            hash.Add(eligibleItems[i].Id, StringComparer.Ordinal);
         return hash.ToHashCode().ToString("X8");
     }
 
@@ -32,30 +32,31 @@ public static class RandomSelectionEngineCore
         var signature = ComputeEligibleSignature(eligibleItems);
         if (!string.Equals(state.EligibleSignature, signature, StringComparison.Ordinal) || state.Mode != mode)
         {
-            RebuildState(state, mode, eligibleItems, rng);
+            RebuildState(state, mode, eligibleItems, signature, rng);
         }
     }
 
-    public static void RebuildState(
+    private static void RebuildState(
         RandomizationRuntimeStateCore state,
         RandomizationModeValue mode,
         IReadOnlyList<RandomizationItem> eligibleItems,
+        string signature,
         Random rng)
     {
         state.Mode = mode;
-        state.EligibleSignature = ComputeEligibleSignature(eligibleItems);
+        state.EligibleSignature = signature;
         state.ShuffleBag.Clear();
         state.RecentFolders.Clear();
         state.RecentFolderCounts.Clear();
 
         if (mode == RandomizationModeValue.SmartShuffle)
         {
-            foreach (var path in ShufflePaths(eligibleItems.Select(i => i.FullPath).ToList(), rng))
-                state.ShuffleBag.Enqueue(path);
+            FillShuffleBag(state, eligibleItems, rng);
         }
     }
 
-    public static string? SelectPath(
+    /// <summary>Picks one of the eligible items for the mode, or null when there are none.</summary>
+    public static RandomizationItem? SelectItem(
         RandomizationRuntimeStateCore state,
         RandomizationModeValue mode,
         IReadOnlyList<RandomizationItem> eligibleItems,
@@ -66,7 +67,7 @@ public static class RandomSelectionEngineCore
 
         EnsureStateForEligibleSet(state, mode, eligibleItems, rng);
 
-        string? selected = mode switch
+        var selected = mode switch
         {
             RandomizationModeValue.PureRandom => SelectPureRandom(eligibleItems, rng),
             RandomizationModeValue.WeightedRandom => SelectWeighted(eligibleItems, rng, withSpread: false, state),
@@ -76,64 +77,65 @@ public static class RandomSelectionEngineCore
             _ => SelectSmartShuffle(state, eligibleItems, rng)
         };
 
-        if (!string.IsNullOrEmpty(selected))
-            PushFolder(state, selected);
-
+        PushFolder(state, selected.FullPath);
         return selected;
     }
 
-    private static string SelectPureRandom(IReadOnlyList<RandomizationItem> eligibleItems, Random rng)
+    private static RandomizationItem SelectPureRandom(IReadOnlyList<RandomizationItem> eligibleItems, Random rng)
     {
         var idx = rng.Next(eligibleItems.Count);
-        return eligibleItems[idx].FullPath;
+        return eligibleItems[idx];
     }
 
-    private static string SelectSmartShuffle(RandomizationRuntimeStateCore state, IReadOnlyList<RandomizationItem> eligibleItems, Random rng)
+    private static RandomizationItem SelectSmartShuffle(RandomizationRuntimeStateCore state, IReadOnlyList<RandomizationItem> eligibleItems, Random rng)
     {
         if (state.ShuffleBag.Count == 0)
         {
-            foreach (var path in ShufflePaths(eligibleItems.Select(i => i.FullPath).ToList(), rng))
-                state.ShuffleBag.Enqueue(path);
+            FillShuffleBag(state, eligibleItems, rng);
         }
+
+        var byId = new Dictionary<string, RandomizationItem>(eligibleItems.Count, StringComparer.Ordinal);
+        for (var i = 0; i < eligibleItems.Count; i++)
+            byId.TryAdd(eligibleItems[i].Id, eligibleItems[i]);
 
         while (state.ShuffleBag.Count > 0)
         {
-            var path = state.ShuffleBag.Dequeue();
-            if (eligibleItems.Any(i => string.Equals(i.FullPath, path, StringComparison.OrdinalIgnoreCase)))
-                return path;
+            var id = state.ShuffleBag.Dequeue();
+            if (byId.TryGetValue(id, out var item))
+                return item;
         }
 
         return SelectPureRandom(eligibleItems, rng);
     }
 
-    private static string SelectSpread(IReadOnlyList<RandomizationItem> eligibleItems, Random rng, RandomizationRuntimeStateCore state)
+    private static RandomizationItem SelectSpread(IReadOnlyList<RandomizationItem> eligibleItems, Random rng, RandomizationRuntimeStateCore state)
     {
-        var weighted = eligibleItems
-            .Select(item => new WeightedCandidate(item.FullPath, SpreadWeight(item.FullPath, state)))
-            .ToList();
-        return SelectWeightedPath(weighted, rng) ?? SelectPureRandom(eligibleItems, rng);
+        var weights = new double[eligibleItems.Count];
+        for (var i = 0; i < weights.Length; i++)
+            weights[i] = SpreadWeight(eligibleItems[i].FullPath, state);
+        return SelectWeightedItem(eligibleItems, weights, rng) ?? SelectPureRandom(eligibleItems, rng);
     }
 
-    private static string SelectWeighted(
+    private static RandomizationItem SelectWeighted(
         IReadOnlyList<RandomizationItem> eligibleItems,
         Random rng,
         bool withSpread,
         RandomizationRuntimeStateCore state)
     {
         var now = DateTime.UtcNow;
-        var weighted = new List<WeightedCandidate>(eligibleItems.Count);
+        var weights = new double[eligibleItems.Count];
 
-        foreach (var item in eligibleItems)
+        for (var i = 0; i < weights.Length; i++)
         {
+            var item = eligibleItems[i];
             var playScore = 1.0 / (1.0 + Math.Max(0, item.PlayCount));
             var recencyScore = ComputeRecencyScore(item.LastPlayedUtc, now);
             var baseWeight = (playScore * 0.6) + (recencyScore * 0.8);
             var spreadWeight = withSpread ? SpreadWeight(item.FullPath, state) : 1.0;
-            var finalWeight = Math.Max(0.05, baseWeight * spreadWeight);
-            weighted.Add(new WeightedCandidate(item.FullPath, finalWeight));
+            weights[i] = Math.Max(0.05, baseWeight * spreadWeight);
         }
 
-        return SelectWeightedPath(weighted, rng) ?? SelectPureRandom(eligibleItems, rng);
+        return SelectWeightedItem(eligibleItems, weights, rng) ?? SelectPureRandom(eligibleItems, rng);
     }
 
     private static double ComputeRecencyScore(DateTime? lastPlayedUtc, DateTime nowUtc)
@@ -182,36 +184,44 @@ public static class RandomSelectionEngineCore
         }
     }
 
-    private static string? SelectWeightedPath(IReadOnlyList<WeightedCandidate> candidates, Random rng)
+    /// <summary>One roll over the weights, which line up with the items by index.</summary>
+    private static RandomizationItem? SelectWeightedItem(IReadOnlyList<RandomizationItem> items, double[] weights, Random rng)
     {
-        if (candidates == null || candidates.Count == 0)
+        if (weights.Length == 0)
             return null;
 
-        var total = candidates.Sum(c => c.Weight);
+        var total = 0.0;
+        foreach (var weight in weights)
+            total += weight;
         if (total <= 0)
             return null;
 
         var roll = rng.NextDouble() * total;
         var cumulative = 0.0;
-        foreach (var candidate in candidates)
+        for (var i = 0; i < weights.Length; i++)
         {
-            cumulative += candidate.Weight;
+            cumulative += weights[i];
             if (roll <= cumulative)
-                return candidate.Path;
+                return items[i];
         }
 
-        return candidates[candidates.Count - 1].Path;
+        return items[items.Count - 1];
     }
 
-    private static IEnumerable<string> ShufflePaths(List<string> paths, Random rng)
+    private static void FillShuffleBag(RandomizationRuntimeStateCore state, IReadOnlyList<RandomizationItem> eligibleItems, Random rng)
     {
-        for (var i = paths.Count - 1; i > 0; i--)
+        var ids = new string[eligibleItems.Count];
+        for (var i = 0; i < ids.Length; i++)
+            ids[i] = eligibleItems[i].Id;
+
+        for (var i = ids.Length - 1; i > 0; i--)
         {
             var j = rng.Next(i + 1);
-            (paths[i], paths[j]) = (paths[j], paths[i]);
+            (ids[i], ids[j]) = (ids[j], ids[i]);
         }
 
-        return paths;
+        foreach (var id in ids)
+            state.ShuffleBag.Enqueue(id);
     }
 
     private static string GetFolderKey(string? path)
@@ -223,6 +233,4 @@ public static class RandomSelectionEngineCore
             ? string.Empty
             : directory.Trim().ToLowerInvariant();
     }
-
-    private readonly record struct WeightedCandidate(string Path, double Weight);
 }

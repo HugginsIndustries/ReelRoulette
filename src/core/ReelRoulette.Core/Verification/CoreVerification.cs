@@ -29,16 +29,16 @@ public static class CoreVerification
         var state = new RandomizationRuntimeStateCore();
         var items = new List<RandomizationItem>
         {
-            new() { FullPath = @"C:\one.mp4" },
-            new() { FullPath = @"C:\two.mp4" }
+            new() { Id = "one", FullPath = @"C:\one.mp4" },
+            new() { Id = "two", FullPath = @"C:\two.mp4" }
         };
-        var selected = RandomSelectionEngineCore.SelectPath(state, RandomizationModeValue.SmartShuffle, items, rng);
-        if (string.IsNullOrWhiteSpace(selected))
+        var selected = RandomSelectionEngineCore.SelectItem(state, RandomizationModeValue.SmartShuffle, items, rng);
+        if (selected == null)
         {
             result.Issues.Add(new VerificationIssue
             {
                 Name = "Randomization",
-                Message = "Expected SmartShuffle selection to return a path."
+                Message = "Expected SmartShuffle selection to return an item."
             });
         }
     }

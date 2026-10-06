@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
 using ReelRoulette.Core.Library;
 using ReelRoulette.Server.Contracts;
@@ -677,6 +678,135 @@ public sealed class LibraryPlaybackServiceTests : IDisposable
         Assert.True(lightWins >= 35, $"Expected the never-played item to win at least 35 of 40 weighted draws, got {lightWins}.");
     }
 
+    [Theory]
+    [InlineData("PureRandom")]
+    [InlineData("WeightedRandom")]
+    [InlineData("SmartShuffle")]
+    [InlineData("SpreadMode")]
+    [InlineData("WeightedWithSpread")]
+    public void TrySelectRandom_EveryMode_PicksEachEligibleItemAndNothingElse(string mode)
+    {
+        Directory.CreateDirectory(_tempDir);
+        var host = LibraryCatalogHost.Open(_tempDir);
+        host.Session.InsertSource("on", "/media", "On", true);
+        host.Session.InsertSource("off", "/other", "Off", false);
+        InsertItem(host, "a", "on", "/media/one/a.mp4");
+        InsertItem(host, "b", "on", "/media/one/b.mp4", lastPlayed: DateTime.UtcNow.AddDays(-3));
+        InsertItem(host, "c", "on", "/media/two/c.mp4");
+        InsertItem(host, "blocked", "on", "/media/one/blocked.mp4", blacklisted: true);
+        InsertItem(host, "played", "on", "/media/two/played.mp4", playCount: 5);
+        InsertItem(host, "photo", "on", "/media/two/photo.jpg", mediaType: 1);
+        InsertItem(host, "hidden", "off", "/other/hidden.mp4");
+        var playback = new LibraryPlaybackService(
+            new ServerMediaTokenStore(),
+            NullLogger<LibraryPlaybackService>.Instance,
+            host);
+
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        for (var i = 0; i < 60; i++)
+        {
+            Assert.True(playback.TrySelectRandom(new RandomRequest
+            {
+                FilterState = ParseJson("""{"onlyNeverPlayed":true}"""),
+                IncludeVideos = true,
+                IncludePhotos = false,
+                RandomizationMode = mode
+            }, [], out var response, out var statusCode, out var error));
+            Assert.Equal(StatusCodes.Status200OK, statusCode);
+            Assert.Null(error);
+            seen.Add(response!.Id);
+        }
+
+        Assert.Equal(["/media/one/a.mp4", "/media/one/b.mp4", "/media/two/c.mp4"], seen.Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void TrySelectRandom_SmartShuffle_ReturnsTheCurrentPath_AndKeepsItsCycle_AfterPathsChange()
+    {
+        Directory.CreateDirectory(_tempDir);
+        var host = LibraryCatalogHost.Open(_tempDir);
+        host.Session.InsertSource("on", "/media", "On", true);
+        for (var i = 0; i < 6; i++)
+        {
+            InsertItem(host, $"clip-{i}", "on", $"/media/clip-{i}.mp4");
+        }
+
+        var playback = new LibraryPlaybackService(
+            new ServerMediaTokenStore(),
+            NullLogger<LibraryPlaybackService>.Instance,
+            host);
+        var request = new RandomRequest { FilterState = ParseJson("{}"), RandomizationMode = "SmartShuffle" };
+        var first = new List<string>();
+        for (var i = 0; i < 3; i++)
+        {
+            Assert.True(playback.TrySelectRandom(request, [], out var response, out _, out _));
+            first.Add(Path.GetFileNameWithoutExtension(response!.Id));
+        }
+
+        using (var connection = new SqliteConnection(new SqliteConnectionStringBuilder
+        {
+            DataSource = host.Session.DatabasePath,
+            Pooling = false
+        }.ToString()))
+        {
+            connection.Open();
+            using var command = connection.CreateCommand();
+            command.CommandText = """
+                UPDATE items
+                SET full_path = '/moved/' || id || '.mp4', full_path_fold = lower('/moved/' || id || '.mp4');
+                """;
+            Assert.Equal(6, command.ExecuteNonQuery());
+        }
+
+        var rest = new List<string>();
+        for (var i = 0; i < 3; i++)
+        {
+            Assert.True(playback.TrySelectRandom(request, [], out var response, out _, out _));
+            Assert.StartsWith("/moved/", response!.Id, StringComparison.Ordinal);
+            rest.Add(Path.GetFileNameWithoutExtension(response.Id));
+        }
+
+        Assert.Equal(
+            Enumerable.Range(0, 6).Select(i => $"clip-{i}").Except(first).Order(StringComparer.Ordinal),
+            rest.Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void TrySelectRandom_WritesOneLastLogLinePerPick_WithModeEligibleCountAndElapsedTime_AndNoPath()
+    {
+        Directory.CreateDirectory(_tempDir);
+        var host = LibraryCatalogHost.Open(_tempDir);
+        host.Session.InsertSource("on", "/media", "On", true);
+        InsertItem(host, "a", "on", "/media/secret-a.mp4");
+        InsertItem(host, "b", "on", "/media/secret-b.mp4");
+        var logDirectory = Path.Combine(_tempDir, "logs");
+        var playback = new LibraryPlaybackService(
+            new ServerMediaTokenStore(),
+            NullLogger<LibraryPlaybackService>.Instance,
+            host,
+            new ServerLogService(logDirectory));
+
+        Assert.True(playback.TrySelectRandom(new RandomRequest
+        {
+            FilterState = ParseJson("{}"),
+            RandomizationMode = "WeightedRandom"
+        }, [], out var picked, out _, out _));
+        Assert.NotNull(picked);
+        Assert.True(playback.TrySelectRandom(new RandomRequest
+        {
+            FilterState = ParseJson("{}"),
+            IncludeVideos = false,
+            IncludePhotos = true
+        }, [], out var none, out _, out _));
+        Assert.Null(none);
+
+        var lines = File.ReadAllLines(Path.Combine(logDirectory, "last.log"));
+        Assert.Equal(2, lines.Length);
+        Assert.Matches(@"\[server\] \[info\] Random pick mode=WeightedRandom eligible=2 elapsedMs=\d+\.$", lines[0]);
+        Assert.Matches(@"\[server\] \[info\] Random pick mode=SmartShuffle eligible=0 elapsedMs=\d+\.$", lines[1]);
+        Assert.DoesNotContain("secret", string.Join('\n', lines), StringComparison.Ordinal);
+    }
+
     [Fact]
     public void TrySelectRandom_ShouldReturn503_WhenLibraryHasNoItems()
     {
@@ -741,6 +871,30 @@ public sealed class LibraryPlaybackServiceTests : IDisposable
         {
             Directory.Delete(_tempDir, recursive: true);
         }
+    }
+
+    private static void InsertItem(
+        LibraryCatalogHost host,
+        string id,
+        string sourceId,
+        string fullPath,
+        bool blacklisted = false,
+        int playCount = 0,
+        DateTime? lastPlayed = null,
+        int mediaType = 0)
+    {
+        Assert.True(host.Session.InsertItem(new LibraryCatalogItem
+        {
+            Id = id,
+            SourceId = sourceId,
+            FullPath = fullPath,
+            RelativePath = fullPath.TrimStart('/'),
+            FileName = Path.GetFileName(fullPath),
+            IsBlacklisted = blacklisted,
+            PlayCount = playCount,
+            LastPlayedUtc = lastPlayed,
+            MediaType = mediaType
+        }));
     }
 
     private LibraryPlaybackService CreateService()

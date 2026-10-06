@@ -6,6 +6,43 @@ The archive of finished milestones, moved here from `MILESTONES.md` as-is. The r
 
 Latest completions first:
 
+### M11c - Random Selection Performance
+
+- **Status**: ✅ Complete
+- **Goal**: A random pick over the whole library reads only what selection needs and costs a few tens of milliseconds.
+- **Scope**:
+  - Ships in v0.14.1, after the library query performance milestone.
+  - Measured by the efficiency and divergence report on a copy of a 48,938-item catalog: `POST /api/random` selection with the default filter takes about 240 ms and allocates about 105 MB per request, in every randomization mode. Reading the eligible items with all 28 columns takes 207 ms and 91 MB; the eligible-set signature, which lowercases and sorts every path on every request, takes 23 ms. Reading only the four columns selection needs takes 12 ms in `sqlite3`. A selective preset takes 35 ms.
+  - Read only the columns selection and the response need: id, full path, play count, and last played for the eligible set, then the selected item's response fields.
+  - Make the eligible-set signature cheap: build it from item ids read in id order instead of lowercasing and sorting every path, and compute it once per request. Today rebuilding the selection state computes it twice, once to compare and again to store. The shuffle bag must still notice an item whose path changed, so either the signature covers paths or the bag holds item ids.
+  - Trap, inferred from code: caching the signature by catalog revision would miss on almost every pick. Every committed write, including the play that follows each pick, raises the revision.
+  - Replace the linear scans: the smart shuffle check of each dequeued path against the eligible list, and the final lookup of the selected item.
+  - Selection results stay the same: the same modes, weights, shuffle-bag behavior, and folder spread.
+  - Not included: the spread modes' per-pick folder keys, which cost about 6 ms and 13 MB per pick on the measured catalog.
+- **Acceptance criteria**:
+  - Each randomization mode picks from the same eligible set with the same weighting as before.
+  - Smart shuffle still plays every eligible item once before repeating, and rebuilds its bag when the eligible set changes.
+  - A random pick over the measured catalog with the default filter takes a few tens of milliseconds, measured before and after.
+- **Verification evidence**:
+  - Measured on a copy of the 49,053-item catalog in a temp folder, through `LibraryPlaybackService.TrySelectRandom` in a Release build, with the default filter and both media types (49,006 eligible items) unless noted. Each figure is the median of 21 picks after 20 warm-up picks, from two runs of the code before and after this milestone, alternated under the same load, with allocations as managed bytes per pick.
+
+    | Pick | Before | After |
+    | --- | --- | --- |
+    | Pure random | 225-227 ms, 106 MB | 54-57 ms, 19 MB |
+    | Weighted random | 221-232 ms, 107 MB | 54-56 ms, 19 MB |
+    | Smart shuffle | 229 ms, 106 MB | 56-59 ms, 20 MB |
+    | Spread | 234-238 ms, 120 MB | 63-65 ms, 32 MB |
+    | Weighted with spread | 243-246 ms, 120 MB | 65-66 ms, 32 MB |
+    | Smart shuffle, favorites only | 14-15 ms, 1.4 MB | 12.5 ms, 0.3 MB |
+    | Smart shuffle, videos only | 89-90 ms, 40 MB | 26-27 ms, 7.6 MB |
+
+    After the change, the four-column candidate read takes 49-52 ms: the filtered table scan through the bundled SQLite is about 15 ms, decoding ids, play counts, last played, and paths about 27 ms, and the ordinal id sort about 8 ms. The id signature takes 1.6 ms, the smart shuffle id lookup about 1.3 ms, and reading the picked item 0.2 ms. The spread modes keep their folder keys. The report's 12 ms for four columns was in `sqlite3`; through Microsoft.Data.Sqlite the same read takes about 42 ms before the sort.
+  - Measured before implementing: `ORDER BY items.id` walks the id index and looks up every row, 90 ms against 52 ms unordered, so candidates are read unordered and sorted by ordinal id in C#, which keeps the signature's id order. `EXPLAIN QUERY PLAN` for the candidate query shows `SCAN items` and `SEARCH sources USING INDEX sqlite_autoindex_sources_1 (id=?)`. Resolving an id with `COLLATE NOCASE`, as `ReadPlaybackItem` does, scans the id index (0.6 ms) and takes the write lock, so the picked item is read by its exact id without it.
+  - Same selection: a scratchpad harness fed the engine from before this milestone (paths) and the new engine (ids) the same 49,006 id-ordered candidates from the catalog copy and the same seeds. It made 2,000 picks for each of three seeds in all five modes, recorded a play on the picked item after each pick, and changed the eligible set once halfway. All 30,000 picks matched. In the server, candidates now arrive in id order instead of table order, which changes which item a given draw lands on but not any item's odds.
+  - Tests: `RandomSelectionEngineCoreTests` checks that smart shuffle plays every item once per cycle over three cycles, rebuilds when the eligible set changes, and keeps its cycle when only paths and play stats change; that the signature covers ids in order and not paths or play stats; that pure random takes the drawn index; and the weighted, spread, and weighted-with-spread roll boundaries with a scripted `Random`. `TrySelectRandom_EveryMode_PicksEachEligibleItemAndNothingElse` covers all five modes. Also added: `TrySelectRandom_SmartShuffle_ReturnsTheCurrentPath_AndKeepsItsCycle_AfterPathsChange`, `TrySelectRandom_WritesOneLastLogLinePerPick_WithModeEligibleCountAndElapsedTime_AndNoPath`, `QueryRandomCandidates_MatchesListQuery_ForFilterEnabledSourcesAndMediaType_InOrdinalIdOrder`, and `ReadPlaybackItemById_ReadsOnlyThatExactId`. Breaking a guarded rule failed its tests, and each test passed again after revert: a signature that also covers paths (3 tests), no rebuild on a set change (1), the play weight 0.6 changed to 0.5 (3), the spread factor 1.5 changed to 1.0 (4), no 0.05 weight floor (3), and unsorted candidates (1).
+  - `dotnet build ReelRoulette.sln`: pass, no warnings. `dotnet test ReelRoulette.sln`: pass (Core 383, Desktop 269, ServerApp 3). `dotnet run --project src/core/ReelRoulette.Core.SystemChecks -- --verbose`: pass.
+  - Docs: `CONTEXT.md`, `docs/domain-inventory.md`, and the Server Robustness Findings entry, whose signature finding now names ids and whose quadratic smart shuffle finding this milestone closed.
+
 ### M11b - Library Query Performance
 
 - **Status**: ✅ Complete

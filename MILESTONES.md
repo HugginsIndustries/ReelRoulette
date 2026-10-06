@@ -108,26 +108,7 @@ Do not use this file for detailed architecture explanation or current capability
 
 ## Active Milestones
 
-Last milestone completed: M11b
-
-### M11c - Random Selection Performance
-
-- **Status**: ⏳ Planned
-- **Goal**: A random pick over the whole library reads only what selection needs and costs a few tens of milliseconds.
-- **Scope**:
-  - Ships in v0.14.1, after the library query performance milestone.
-  - Measured by the efficiency and divergence report on a copy of a 48,938-item catalog: `POST /api/random` selection with the default filter takes about 240 ms and allocates about 105 MB per request, in every randomization mode. Reading the eligible items with all 28 columns takes 207 ms and 91 MB; the eligible-set signature, which lowercases and sorts every path on every request, takes 23 ms. Reading only the four columns selection needs takes 12 ms in `sqlite3`. A selective preset takes 35 ms.
-  - Read only the columns selection and the response need: id, full path, play count, and last played for the eligible set, then the selected item's response fields.
-  - Make the eligible-set signature cheap: build it from item ids read in id order instead of lowercasing and sorting every path, and compute it once per request. Today rebuilding the selection state computes it twice, once to compare and again to store. The shuffle bag must still notice an item whose path changed, so either the signature covers paths or the bag holds item ids.
-  - Trap, inferred from code: caching the signature by catalog revision would miss on almost every pick. Every committed write, including the play that follows each pick, raises the revision.
-  - Replace the linear scans: the smart shuffle check of each dequeued path against the eligible list, and the final lookup of the selected item.
-  - Selection results stay the same: the same modes, weights, shuffle-bag behavior, and folder spread.
-- **Acceptance criteria**:
-  - Each randomization mode picks from the same eligible set with the same weighting as before.
-  - Smart shuffle still plays every eligible item once before repeating, and rebuilds its bag when the eligible set changes.
-  - A random pick over the measured catalog with the default filter takes a few tens of milliseconds, measured before and after.
-- **Verification evidence**:
-  - Completion evidence must include before-and-after timings and allocations per randomization mode on a copy of a large catalog in a temp folder, tests that the selection rules are unchanged, and `dotnet test ReelRoulette.sln`.
+Last milestone completed: M11c
 
 ### M11d - Dependency Updates
 
@@ -1109,8 +1090,7 @@ Last milestone completed: M11b
     - Uncancellable hashing: `FileFingerprintService.ComputeFingerprint` hashes the whole file synchronously with no cancellation, and the refresh fingerprint stage calls it, so stopping the server during a large file waits for the hash to finish. Hash asynchronously with a `CancellationToken`.
   - Memory and selection:
     - Unbounded randomization state: `LibraryPlaybackService._clientRandomizationStates` keeps one shuffle state per client and session key and never removes any, and the ids come from requests. Cap the count, evict the least recently used, and limit id length.
-    - Weak eligible-set signature: `RandomSelectionEngineCore.ComputeEligibleSignature` uses a 32-bit `HashCode`, so two different eligible sets can collide and reuse the wrong shuffle state. Compare the count plus a SHA-256 over the ordered paths.
-    - Quadratic smart shuffle: `RandomSelectionEngineCore.SelectSmartShuffle` runs `eligibleItems.Any(...)` for every dequeued path, which is O(n) per pick. Build a `HashSet` of eligible paths once per call. Check against Random Selection Performance first, which may replace this path.
+    - Weak eligible-set signature: `RandomSelectionEngineCore.ComputeEligibleSignature` uses a 32-bit `HashCode` over the eligible item ids, so two different eligible sets can collide and reuse the wrong shuffle state. Compare the count plus a SHA-256 over the ids in order.
     - Telemetry reads: `ApiTelemetryService.GetIncoming` and `GetOutgoing` call `Reverse()` over the whole queue on every control status poll. Keep a ring buffer that reads newest first.
     - Session list under lock: `ServerSessionStore.GetActiveSessions` filters, sorts, and projects inside the session lock. Copy the records under the lock and sort outside it.
     - Dead write-back: `DynamicCorsOriginRegistry.RebuildAllowedOrigins` writes the rebuilt list back into the shared `ServerRuntimeOptions.CorsAllowedOrigins`, which nothing reads after the registry's constructor. Keep the list only in the registry.

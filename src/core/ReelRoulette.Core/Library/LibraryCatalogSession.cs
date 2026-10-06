@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json.Nodes;
 using Microsoft.Data.Sqlite;
 using ReelRoulette.Core.Filtering;
+using ReelRoulette.Core.Randomization;
 using ReelRoulette.Core.Storage;
 
 namespace ReelRoulette.Core.Library;
@@ -141,7 +142,12 @@ public sealed class LibraryCatalogSession
         return long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var revision) ? revision : 0;
     }
 
-    public IReadOnlyList<LibraryCatalogItem> QueryEligible(FilterStateModel filter, MediaTypeValue? requiredMediaType = null)
+    /// <summary>
+    /// The items random selection picks from: the list filter over enabled sources, plus the media type,
+    /// with only the columns selection reads, in ordinal id order. The order is applied here rather than
+    /// with ORDER BY, which walks the id index and looks up every row.
+    /// </summary>
+    public List<RandomizationItem> QueryRandomCandidates(FilterStateModel filter, MediaTypeValue? requiredMediaType = null)
     {
         ArgumentNullException.ThrowIfNull(filter);
         using var connection = LibraryCatalogStore.OpenWrite(_databasePath);
@@ -158,25 +164,27 @@ public sealed class LibraryCatalogSession
 
         using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT items.id, items.source_id, items.full_path, items.full_path_fold, items.relative_path, items.relative_path_fold,
-                   items.file_name, items.file_name_fold, items.duration_ticks, items.has_audio, items.integrated_loudness, items.peak_db,
-                   items.is_favorite, items.is_blacklisted, items.play_count, items.last_played_utc, items.media_type, items.fingerprint,
-                   items.fingerprint_algorithm, items.fingerprint_version, items.file_size_bytes, items.last_write_time_utc,
-                   items.fingerprint_last_utc, items.fingerprint_status, items.loudness_error,
-                   items.thumbnail_revision, items.thumbnail_width, items.thumbnail_height
+            SELECT items.id, items.full_path, items.play_count, items.last_played_utc
             {LibraryCatalogListSql.FromClause}
             {where};
             """;
         args.Bind(command);
-        var items = new List<LibraryCatalogItem>();
+        var items = new List<RandomizationItem>();
         using (var reader = command.ExecuteReader())
         {
             while (reader.Read())
             {
-                items.Add(ReadListedItem(reader));
+                items.Add(new RandomizationItem
+                {
+                    Id = reader.GetString(0),
+                    FullPath = reader.GetString(1),
+                    PlayCount = reader.GetInt32(2),
+                    LastPlayedUtc = LibraryCatalogStore.ReadUtc(reader, 3)
+                });
             }
         }
 
+        items.Sort(static (left, right) => string.CompareOrdinal(left.Id, right.Id));
         return items;
     }
 
@@ -1208,6 +1216,28 @@ public sealed class LibraryCatalogSession
             return null;
         }
 
+        var item = ReadPlaybackRow(connection, transaction, id);
+        transaction.Rollback();
+        return item;
+    }
+
+    /// <summary>
+    /// The same fields as <see cref="ReadPlaybackItem"/> for an item id exactly as stored, without
+    /// resolving a path or another casing and without taking the write lock.
+    /// </summary>
+    public CatalogPlaybackItem? ReadPlaybackItemById(string id)
+    {
+        if (string.IsNullOrEmpty(id))
+        {
+            return null;
+        }
+
+        using var connection = LibraryCatalogStore.OpenWrite(_databasePath);
+        return ReadPlaybackRow(connection, transaction: null, id);
+    }
+
+    private static CatalogPlaybackItem? ReadPlaybackRow(SqliteConnection connection, SqliteTransaction? transaction, string id)
+    {
         using var command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = """
@@ -1219,31 +1249,23 @@ public sealed class LibraryCatalogSession
             LIMIT 1;
             """;
         command.Parameters.AddWithValue("$id", id);
-        CatalogPlaybackItem? item;
-        using (var reader = command.ExecuteReader())
+        using var reader = command.ExecuteReader();
+        if (!reader.Read())
         {
-            if (!reader.Read())
-            {
-                item = null;
-            }
-            else
-            {
-                item = new CatalogPlaybackItem
-                {
-                    Id = reader.GetString(0),
-                    FullPath = reader.GetString(1),
-                    FileName = reader.GetString(2),
-                    MediaType = reader.GetInt32(3),
-                    DurationTicks = reader.IsDBNull(4) ? null : reader.GetInt64(4),
-                    IsFavorite = reader.GetInt32(5) != 0,
-                    IsBlacklisted = reader.GetInt32(6) != 0,
-                    IsSourceEnabled = reader.IsDBNull(7) || reader.GetInt32(7) != 0
-                };
-            }
+            return null;
         }
 
-        transaction.Rollback();
-        return item;
+        return new CatalogPlaybackItem
+        {
+            Id = reader.GetString(0),
+            FullPath = reader.GetString(1),
+            FileName = reader.GetString(2),
+            MediaType = reader.GetInt32(3),
+            DurationTicks = reader.IsDBNull(4) ? null : reader.GetInt64(4),
+            IsFavorite = reader.GetInt32(5) != 0,
+            IsBlacklisted = reader.GetInt32(6) != 0,
+            IsSourceEnabled = reader.IsDBNull(7) || reader.GetInt32(7) != 0
+        };
     }
 
     public bool SetFingerprint(string id, string? fingerprint, string algorithm, int version, int? status, DateTime? fingerprintLastUtc)

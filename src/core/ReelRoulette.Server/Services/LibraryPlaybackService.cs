@@ -1,6 +1,6 @@
+using System.Diagnostics;
 using System.Text.Json;
 using ReelRoulette.Core.Filtering;
-using ReelRoulette.Core.Library;
 using ReelRoulette.Core.Randomization;
 using ReelRoulette.Server.Contracts;
 
@@ -11,17 +11,20 @@ public sealed class LibraryPlaybackService
     private readonly LibraryCatalogHost _catalog;
     private readonly ServerMediaTokenStore _tokenStore;
     private readonly ILogger<LibraryPlaybackService> _logger;
+    private readonly ServerLogService? _serverLog;
     private readonly object _randomizationLock = new();
     private readonly Dictionary<string, RandomizationRuntimeStateCore> _clientRandomizationStates = new(StringComparer.OrdinalIgnoreCase);
 
     public LibraryPlaybackService(
         ServerMediaTokenStore tokenStore,
         ILogger<LibraryPlaybackService> logger,
-        LibraryCatalogHost catalog)
+        LibraryCatalogHost catalog,
+        ServerLogService? serverLog = null)
     {
         _tokenStore = tokenStore;
         _logger = logger;
         _catalog = catalog;
+        _serverLog = serverLog;
     }
 
     public IReadOnlyList<PresetResponse> GetPresets(IReadOnlyList<FilterPresetSnapshot> presets)
@@ -45,6 +48,7 @@ public sealed class LibraryPlaybackService
         out int statusCode,
         out string? error)
     {
+        var stopwatch = Stopwatch.StartNew();
         response = null;
         error = null;
         statusCode = StatusCodes.Status200OK;
@@ -89,10 +93,10 @@ public sealed class LibraryPlaybackService
             requiredMediaType = MediaTypeValue.Video;
         }
 
-        IReadOnlyList<LibraryCatalogItem> eligible;
+        List<RandomizationItem> eligible;
         try
         {
-            eligible = _catalog.Session.QueryEligible(filter, requiredMediaType);
+            eligible = _catalog.Session.QueryRandomCandidates(filter, requiredMediaType);
         }
         catch (Exception ex)
         {
@@ -102,21 +106,16 @@ public sealed class LibraryPlaybackService
             return false;
         }
 
+        var randomizationMode = ParseRandomizationMode(request.RandomizationMode);
         if (eligible.Count == 0)
         {
+            LogPick(randomizationMode, eligible.Count, stopwatch);
             return true;
         }
 
-        var randomizationItems = eligible.Select(item => new RandomizationItem
-        {
-            FullPath = item.FullPath,
-            PlayCount = item.PlayCount,
-            LastPlayedUtc = item.LastPlayedUtc
-        }).ToList();
-        var randomizationMode = ParseRandomizationMode(request.RandomizationMode);
         var scopeKey = BuildRandomizationScopeKey(request.ClientId, request.SessionId);
 
-        string? selectedPath;
+        RandomizationItem? picked;
         lock (_randomizationLock)
         {
             if (!_clientRandomizationStates.TryGetValue(scopeKey, out var state))
@@ -125,22 +124,21 @@ public sealed class LibraryPlaybackService
                 _clientRandomizationStates[scopeKey] = state;
             }
 
-            selectedPath = RandomSelectionEngineCore.SelectPath(
+            picked = RandomSelectionEngineCore.SelectItem(
                 state,
                 randomizationMode,
-                randomizationItems,
+                eligible,
                 Random.Shared);
         }
 
-        if (string.IsNullOrWhiteSpace(selectedPath))
+        if (picked == null)
         {
             error = "No media could be selected.";
             statusCode = StatusCodes.Status500InternalServerError;
             return false;
         }
 
-        var selected = eligible.FirstOrDefault(item =>
-            string.Equals(item.FullPath, selectedPath, StringComparison.OrdinalIgnoreCase));
+        var selected = _catalog.Session.ReadPlaybackItemById(picked.Id);
         if (selected == null || string.IsNullOrWhiteSpace(selected.FullPath))
         {
             error = "Selected item not found.";
@@ -157,7 +155,15 @@ public sealed class LibraryPlaybackService
             mediaUrl: $"/api/media/{token}",
             isFavorite: selected.IsFavorite,
             isBlacklisted: selected.IsBlacklisted);
+        LogPick(randomizationMode, eligible.Count, stopwatch);
         return true;
+    }
+
+    private void LogPick(RandomizationModeValue mode, int eligibleCount, Stopwatch stopwatch)
+    {
+        _serverLog?.Append(
+            "info",
+            $"Random pick mode={mode} eligible={eligibleCount} elapsedMs={stopwatch.ElapsedMilliseconds}.");
     }
 
     public const string PlayItemErrorInvalidId = "play_item_id_invalid";

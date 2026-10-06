@@ -244,7 +244,7 @@ public sealed class LibraryListQueryTests
     }
 
     [Fact]
-    public void QueryEligible_MatchesListQuery_ForFilterEnabledSourcesAndMediaType()
+    public void QueryRandomCandidates_MatchesListQuery_ForFilterEnabledSourcesAndMediaType_InOrdinalIdOrder()
     {
         using var dir = new TempDirectory();
         var session = Open(dir);
@@ -252,8 +252,10 @@ public sealed class LibraryListQueryTests
         session.InsertSource("off", "/other", "Off", false);
         session.UpsertCategory("people", "People", 1);
         session.UpsertTag("Ann", "people");
+        var played = new DateTime(2026, 3, 4, 5, 6, 7, DateTimeKind.Utc);
         Add(session, "video", "on", "video.mp4", "video.mp4", favorite: true, tags: ["Ann"]);
-        Add(session, "photo", "on", "photo.jpg", "photo.jpg", favorite: true, mediaType: 1, tags: ["Ann"]);
+        Add(session, "photo", "on", "photo.jpg", "photo.jpg", favorite: true, playCount: 3, lastPlayed: played, mediaType: 1, tags: ["Ann"]);
+        Add(session, "Upper", "on", "upper.mp4", "upper.mp4", favorite: true, tags: ["Ann"]);
         Add(session, "plain", "on", "plain.mp4", "plain.mp4", tags: ["Ann"]);
         Add(session, "blocked", "on", "blocked.mp4", "blocked.mp4", favorite: true, blacklisted: true, tags: ["Ann"]);
         Add(session, "hidden", "off", "hidden.mp4", "hidden.mp4", favorite: true, tags: ["Ann"]);
@@ -266,12 +268,16 @@ public sealed class LibraryListQueryTests
             SelectedTags = ["Ann"]
         };
         var listed = session.QueryList(new LibraryListRequest { Filter = filter, Limit = 50 });
-        var eligible = session.QueryEligible(filter);
+        var eligible = session.QueryRandomCandidates(filter);
         Assert.Equal(
             listed.Items.Select(item => item.Id).OrderBy(id => id, StringComparer.Ordinal).ToArray(),
-            eligible.Select(item => item.Id).OrderBy(id => id, StringComparer.Ordinal).ToArray());
-        Assert.Equal(["photo", "video"], eligible.Select(item => item.Id).OrderBy(id => id, StringComparer.Ordinal).ToArray());
-        Assert.DoesNotContain(eligible, item => item.Id is "plain" or "blocked" or "hidden" or "ghost");
+            eligible.Select(item => item.Id).ToArray());
+        Assert.Equal(["Upper", "photo", "video"], eligible.Select(item => item.Id).ToArray());
+        var photo = eligible[1];
+        Assert.Equal("/media/photo.jpg", photo.FullPath);
+        Assert.Equal(3, photo.PlayCount);
+        Assert.Equal(played, photo.LastPlayedUtc);
+        Assert.Null(eligible[2].LastPlayedUtc);
 
         var videosOnly = new FilterStateModel
         {
@@ -281,14 +287,40 @@ public sealed class LibraryListQueryTests
             MediaTypeFilter = MediaTypeFilterValue.VideosOnly
         };
         var listedVideos = session.QueryList(new LibraryListRequest { Filter = videosOnly, Limit = 50 });
-        var eligibleVideos = session.QueryEligible(filter, MediaTypeValue.Video);
+        var eligibleVideos = session.QueryRandomCandidates(filter, MediaTypeValue.Video);
         Assert.Equal(
-            listedVideos.Items.Select(item => item.Id).ToArray(),
+            listedVideos.Items.Select(item => item.Id).OrderBy(id => id, StringComparer.Ordinal).ToArray(),
             eligibleVideos.Select(item => item.Id).ToArray());
-        Assert.Equal("video", Assert.Single(eligibleVideos).Id);
+        Assert.Equal(["Upper", "video"], eligibleVideos.Select(item => item.Id).ToArray());
 
-        var eligiblePhotos = session.QueryEligible(filter, MediaTypeValue.Photo);
+        var eligiblePhotos = session.QueryRandomCandidates(filter, MediaTypeValue.Photo);
         Assert.Equal("photo", Assert.Single(eligiblePhotos).Id);
+    }
+
+    [Fact]
+    public void ReadPlaybackItemById_ReadsOnlyThatExactId()
+    {
+        using var dir = new TempDirectory();
+        var session = Open(dir);
+        session.InsertSource("on", "/media", "On", true);
+        session.InsertSource("off", "/other", "Off", false);
+        Add(session, "keep", "on", "keep.mp4", "keep.mp4", favorite: true, duration: TimeSpan.FromSeconds(12), mediaType: 1);
+        Add(session, "hidden", "off", "hidden.mp4", "hidden.mp4", blacklisted: true);
+
+        var item = session.ReadPlaybackItemById("keep");
+        Assert.NotNull(item);
+        Assert.Equal("keep", item!.Id);
+        Assert.Equal("/media/keep.mp4", item.FullPath);
+        Assert.Equal("keep.mp4", item.FileName);
+        Assert.Equal(1, item.MediaType);
+        Assert.Equal(TimeSpan.FromSeconds(12).Ticks, item.DurationTicks);
+        Assert.True(item.IsFavorite);
+        Assert.False(item.IsBlacklisted);
+        Assert.True(item.IsSourceEnabled);
+        Assert.True(session.ReadPlaybackItemById("hidden")!.IsBlacklisted);
+        Assert.Null(session.ReadPlaybackItemById("KEEP"));
+        Assert.Null(session.ReadPlaybackItemById("/media/keep.mp4"));
+        Assert.Null(session.ReadPlaybackItemById(""));
     }
 
     [Fact]
@@ -409,7 +441,7 @@ public sealed class LibraryListQueryTests
         {
             var listed = session.QueryList(new LibraryListRequest { Filter = filter, Limit = 50 })
                 .Items.Select(item => item.Id).OrderBy(id => id, StringComparer.Ordinal).ToArray();
-            var eligible = session.QueryEligible(filter)
+            var eligible = session.QueryRandomCandidates(filter)
                 .Select(item => item.Id).OrderBy(id => id, StringComparer.Ordinal).ToArray();
             Assert.Equal(expected, listed);
             Assert.Equal(expected, eligible);
