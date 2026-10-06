@@ -442,7 +442,7 @@ Last milestone completed: M11f
   - Recovery page slice:
     - The server keeps a minimal built-in page with restart, stop, a log tail, and updates, at a fixed path such as `/recovery` (decided here). It does not load the WebUI's files, so it works when they are missing or broken, and it has the same control-token gating.
     - It renders settings and status text without `innerHTML` interpolation (found by the repository audit: Operator HTML page interpolates user input via `innerHTML`).
-    - Retire the Operator page: `/operator` redirects to the admin section, the tray's Operator shortcut opens the admin section, and `verify-linux-packaged-server-smoke.sh` checks the recovery page and the admin section entry instead of `/operator`.
+    - Retire the Operator page: `/operator` redirects to the admin section, the tray's Operator shortcut opens the admin section, `verify-linux-packaged-server-smoke.sh` checks the recovery page and the admin section entry instead of `/operator`, and the testing checklist's Smoke item checks the admin section instead of the Operator page.
 - **Acceptance criteria**:
   - The admin section offers every action and setting the Operator page offers today and calls the same routes.
   - In the admin section, one Download click and one confirmation start the update download.
@@ -1089,8 +1089,9 @@ Last milestone completed: M11f
     - Tag editor and Auto Tag.
   - Delete `app.js` after the last slice, along with its undeclared-name check (`verify:app-js-names`) in `npm run verify`.
   - Trap, inferred, not measured: moving a `<video>` element to another place in the page can interrupt or reload playback. The player component owns one video element that is never moved.
+  - Add a Release Specific checklist item: "After the Preact migration, the player, library overlay, filter dialog, presets, tag editor, and Auto Tag look and work as in the previous release, on a desktop browser and a phone."
 - **Acceptance criteria**:
-  - After each slice, the migrated screen looks and behaves as before, and the WebUI section of the testing checklist still passes.
+  - After each slice, the migrated screen looks and behaves as before, and the testing checklist's Smoke checks still pass.
   - Component tests for each migrated screen run in `npm run verify` under `happy-dom`.
   - `src/app.js` no longer exists.
   - No screen renders server or config text through `innerHTML`.
@@ -1293,7 +1294,7 @@ Last milestone completed: M11f
   - Packaging slice: remove the `desktop` component from the `release.yml` matrix, including the Windows LibVLC relocation step, stop publishing the desktop update feed, and remove the desktop references in `set-release-version.ps1` and `verify-linux-packaged-server-smoke.sh`. CI has no desktop job: desktop tests run inside the solution test on the Ubuntu and Windows jobs, so `ci.yml` needs no change.
   - Contract slice: remove routes and fields that no remaining caller uses, each checked against the WebUI and the admin section. Candidates: `/api/library-states`, `/api/library/item`, `/api/library/catalog-checkpoint` if Admin Library Catalog Transfer replaced it, the full path kept in the random and play responses' `id` for the desktop, and `itemTagsChanged.itemIds` and the auto-tag apply response's `changedItemPaths`, which the WebUI no longer reads beside their item id fields. OpenAPI and generated WebUI types.
   - Fixture slice: `event-revision.json`, `library-tile-effect.json`, `preset-filter-equality.json`, and `sort-direction-labels.json` lose their C# readers and stay as WebUI test data. `tag-name-order.json` stays, read by Core and the WebUI.
-  - Docs slice: `CONTEXT.md`, `docs/architecture.md`, `docs/domain-inventory.md`, `docs/api.md`, `docs/dev-setup.md`, `README.md` (desktop install and the LibVLC prerequisite), the testing checklist's Desktop and Cross-Client sections and desktop Packaging items, and `AGENTS.md`: remove the desktop freeze rule and the desktop test-isolation note, and keep the shared-fixture rule for rules implemented in server C# and the WebUI.
+  - Docs slice: `CONTEXT.md`, `docs/architecture.md`, `docs/domain-inventory.md`, `docs/api.md`, `docs/dev-setup.md`, `README.md` (desktop install and the LibVLC prerequisite), the testing checklist's desktop Smoke item and the desktop in-app update item in Release Flow, and `AGENTS.md`: remove the desktop freeze rule and the desktop test-isolation note, and keep the shared-fixture rule for rules implemented in server C# and the WebUI.
   - Add a Release Specific checklist item: "On Linux and Windows, the release publishes only the server, every former desktop workflow works in the WebUI, and an existing desktop install keeps its last version."
   - Not included: rewriting historical `CHANGELOG.md` sections and completed milestones, which keep their desktop references.
 - **Acceptance criteria**:

@@ -107,7 +107,7 @@ Optional helper scripts:
 
 - `dotnet run --project ./src/core/ReelRoulette.Core.SystemChecks/ReelRoulette.Core.SystemChecks.csproj -- --verbose`
 
-For broader manual passes, use `docs/checklists/testing-checklist.md` and `pwsh ./tools/scripts/reset-checklist.ps1`.
+For the pre-release pass, use `docs/checklists/testing-checklist.md` and `pwsh ./tools/scripts/reset-checklist.ps1`.
 
 ## Auth, CORS, and Runtime Settings Notes
 
@@ -211,7 +211,7 @@ GitHub / B2 release flow:
 - Create/publish the GitHub release notes for the tag.
 - Push the **`v*`** tag matching `.version`. **`release.yml`** builds all matrix legs and publishes to B2 (stable also uploads to GitHub).
 
-Reset manual testing checklist state for a fresh run:
+Reset testing checklist state, including `Failed:` and `Skipped:` notes, for a fresh run:
 
 - `pwsh ./tools/scripts/reset-checklist.ps1`
 - `pwsh ./tools/scripts/reset-checklist.ps1 -KeepMetadata`

@@ -47,8 +47,22 @@ $releaseVersion = "v$version"
 $raw = Get-Content -Path $checklistPath -Raw
 $lines = $raw -split "\r?\n"
 $updatedLines = New-Object System.Collections.Generic.List[string]
+$removedNote = $false
 
 foreach ($line in $lines) {
+    # Failed: and Skipped: notes belong to the previous pass; the backlog item each names tracks the issue.
+    if ($line -match '^\s*-\s*(Failed|Skipped):') {
+        $removedNote = $true
+        continue
+    }
+    # Drop a blank line that removing a note would leave doubled.
+    $previousBlank = $updatedLines.Count -gt 0 -and [string]::IsNullOrWhiteSpace($updatedLines[$updatedLines.Count - 1])
+    if ($removedNote -and $previousBlank -and [string]::IsNullOrWhiteSpace($line)) {
+        $removedNote = $false
+        continue
+    }
+    $removedNote = $false
+
     $nextLine = $line
 
     if (-not $KeepMetadata.IsPresent) {

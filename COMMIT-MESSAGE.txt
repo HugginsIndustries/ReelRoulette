@@ -19,8 +19,11 @@ Instructions:
 
 Commit Message:
 
-Chore: Add a promote-milestones skill and point the pre-release skill to it
+Docs: Thin the testing checklist to automated, smoke, release-specific, and release flow checks
 
-- New `promote-milestones` skill: checks each milestone of the next planned release against the current code, re-measures the figures its scope depends on, and reports each one as still accurate, already done, changed by later work, or resting on an assumption that no longer holds, then stops for decisions.
-- After confirmation it corrects the entries, assigns the next `M*` series in outline order, moves them to Active Milestones, updates the Planned Releases line, runs `check-milestones.ps1 -BaseRef HEAD`, and starts a `Docs:` commit entry.
-- Pre-release Part 2 now removes the released version from Planned Releases, runs the milestone checker, and ends by naming the next planned release and pointing to `promote-milestones`.
+- Replace the Manual Regression sections with a five-item Smoke section: the WebUI in a desktop browser and on a phone, the desktop app, the server tray, and the Operator page; regression coverage comes from automated tests.
+- Release Flow gains the server and desktop in-app update checks from Packaging, run on the dev build during the pass, and Failure Documentation becomes a rule line at the top.
+- Release Specific gains a Windows `Setup.exe` install check, since the Velopack update made it 64-bit in this release.
+- `reset-checklist.ps1` also removes `Failed:` and `Skipped:` notes, since the backlog item each names tracks the issue.
+- The pre-release skill, `AGENTS.md`, `CONTEXT.md`, `README.md`, `docs/dev-setup.md`, and `docs/domain-inventory.md` match the new layout.
+- WebUI Preact Migration checks the Smoke items after each slice and adds one Release Specific parity pass; Admin Section in WebUI Settings moves the Operator Smoke item to the admin section, and Desktop Client Removal names the desktop Smoke and in-app update items.
