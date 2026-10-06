@@ -173,6 +173,8 @@ An agent runs these and ticks them.
 - [ ] Desktop import of a library exported from v0.14.0 is accepted and opens with its items after the server starts.
 - [ ] In the WebUI with a few thousand tiles loaded, a change that reloads the window sends one library query and writes one `Library query` line with `elapsedMs` to `last.log`, and scrolling deep in each sort order stays smooth.
 - [ ] The release notes warn not to go back to v0.14.0 or earlier after upgrading, since those versions would set the upgraded library aside.
+- [ ] Desktop plays video after the Avalonia and LibVLC update, on Linux and Windows.
+- [ ] On Windows, the server tray menu still opens and its items work after the Avalonia update.
 
 ## Release Flow
 

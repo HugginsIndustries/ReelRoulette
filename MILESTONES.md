@@ -112,7 +112,7 @@ Last milestone completed: M11c
 
 ### M11d - Dependency Updates
 
-- **Status**: ⏳ Planned
+- **Status**: 🚧 In Progress (slice 1 implemented, awaiting a green CI run)
 - **Goal**: Dependencies are on their latest safe versions, the shipped server carries one stable SkiaSharp with matching natives, and builds use the same SDK, Node, and FFmpeg every run.
 - **Scope**:
   - Ships in v0.14.1, after the random selection performance milestone and before Thumbnail Caching, whose server thumbnails use SkiaSharp. Each slice is verified on its own. Slices 3, 4, and 5 can be cut to a later release if v0.14.1 runs long; slices 1 and 2 cannot.
@@ -136,6 +136,8 @@ Last milestone completed: M11c
     - Move them together, because Vitest 3 only supports Vite 7 and earlier.
     - Vite 8 replaces Rollup and esbuild with Rolldown. Vitest 5 needs Node ^22.12 or 24 and later.
     - The WebUI's `vite.config.ts` only sets the dev server port, and its tests only use `vi.fn` and fake timers, so the risk is low (inferred). Release notes not read yet.
+    - After the update, run `npm audit` in the WebUI and fix what remains in the dev dependencies. Measured after the safe batch, which fixed sharp's advisory and introduced none: 9 findings (2 moderate, 5 high, 2 critical). The two critical ones, tinypool and `@vitest/mocker`, come from Vitest 3 and should go with Vitest 5. brace-expansion and js-yaml are held by the `overrides` pins in `package.json`. nanoid, postcss, and source-map-js are fixable with `npm audit fix`.
+    - Raise the brace-expansion pin. Keep js-yaml on 4.x.
   - Slice 5, xunit.runner.visualstudio:
     - Move it from 3.1.5 to 4.0.0.
     - Inferred: the 4.0.0 package still ships `xunit.abstractions`, so it probably still runs xUnit v2 tests. Confirm every test project runs the same number of tests before and after.
@@ -150,11 +152,19 @@ Last milestone completed: M11c
   - Slice 1: Every project resolves Avalonia 12.1.3 and SkiaSharp 3.119.4. ServerApp's resolved packages hold one SkiaSharp version, no preview, and no `SkiaSharp.NativeAssets.Linux.NoDependencies` beside `SkiaSharp.NativeAssets.Linux`. The listed packages and Actions are at their target versions, and CI passes on Linux and Windows.
   - Slice 2: `dotnet --version` in the repo resolves through `global.json` locally and in CI. CI and release run Node 24. The bundled `ffprobe -version` in the Windows server release names the pinned tag.
   - Slice 3: The Velopack library and `vpk` are both 1.2.161. Every `vpk` command in `release.yml` matches the 1.2.161 options, and a release run packs and uploads all legs.
-  - Slice 4: The WebUI builds and tests on Vite 8 and Vitest 5 with the same test count as before.
+  - Slice 4: The WebUI builds and tests on Vite 8 and Vitest 5 with the same test count as before. `npm audit` reports no dev dependency findings that a fix within these limits can clear, and js-yaml stays on 4.x.
   - Slice 5: Every test project runs the same number of xUnit v2 tests on xunit.runner.visualstudio 4.0.0 as on 3.1.5.
 - **Verification evidence**:
-  - Completion evidence must include, per slice, `dotnet test ReelRoulette.sln` and a green CI run. Add `npm run verify` for slices 1, 2, and 4, and `./tools/scripts/verify-linux-packaged-server-smoke.sh` for slices 1 and 3. Slice 1 also needs the resolved SkiaSharp packages from ServerApp's `project.assets.json`, and slice 3 a release workflow run.
+  - Completion evidence must include, per slice, `dotnet test ReelRoulette.sln` and a green CI run. Add `npm run verify` for slices 1, 2, and 4, and `./tools/scripts/verify-linux-packaged-server-smoke.sh` for slices 1 and 3. Slice 1 also needs the resolved SkiaSharp packages from ServerApp's `project.assets.json`, slice 3 a release workflow run, and slice 4 the `npm audit` output before and after.
   - The desktop playback and in-app delta update checks are Release Specific checklist items.
+  - Slice 1:
+    - Before and after, `dotnet test ReelRoulette.sln` ran 383 Core, 269 DesktopApp, and 3 ServerApp tests, all passing. `dotnet build ReelRoulette.sln` has no warnings.
+    - Resolved from `project.assets.json`: ServerApp, ServerApp.Tests, Server, Core.Tests, DesktopApp, and DesktopApp.Tests all hold SkiaSharp 3.119.4 and its natives only, with `SkiaSharp.NativeAssets.Linux` and no `NoDependencies` or preview. Every Avalonia project resolves 12.1.3, Tmds.DBus.Protocol 0.94.1, and Microsoft.NET.Test.Sdk 18.10.1, and DesktopApp resolves VideoLAN.LibVLC.Windows 3.0.24.
+    - A linux-x64 ServerApp publish ships one `libSkiaSharp.so`, byte-identical to the 3.119.4 `SkiaSharp.NativeAssets.Linux` one. Without `ErrorOnDuplicatePublishOutputFiles=false` the publish fails only on the Server's and ServerApp's `appsettings.json`, so the flag is still needed for that.
+    - `npm run verify` passed with 232 WebUI tests on Vite 7.3.7 and sharp 0.35.5. The lockfile changed only Vite and the sharp packages.
+    - `./tools/scripts/verify-linux-packaged-server-smoke.sh` passed.
+    - Release Specific items added for desktop playback and the Windows tray menu after the update.
+    - CI run on Linux and Windows: pending.
 
 ### M11e - Thumbnail Caching
 

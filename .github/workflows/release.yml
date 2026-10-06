@@ -11,7 +11,6 @@ on:
       - "v*"
 
 env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   VPK_VERSION: "1.2.0"
   B2_BUCKET: hugginsindustries-releases
   B2_ENDPOINT: https://s3.us-west-004.backblazeb2.com
@@ -29,7 +28,7 @@ jobs:
       matrix: ${{ steps.validate.outputs.matrix }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Validate version and build release matrix
         id: validate
@@ -278,15 +277,15 @@ jobs:
       contents: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: "10.0.x"
 
       - name: Setup Node
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v7
         with:
           node-version: "22"
 
