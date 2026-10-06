@@ -43,7 +43,7 @@ Run each item in the Automated Checks section, in order. Tick a box only for a c
 
 ## 5. Release-specific coverage
 
-Compare the Release Specific section with the user-visible changes in `[Unreleased]`. Remove leftover items from the previous release. For any user-visible change with no matching check, propose a one-line check and ask before adding it. Do not tick anything in this section, in Smoke, or in Release Flow's in-app update items.
+Check that the Release Specific section holds only this release's items; `promote-milestones` clears the previous release's when it promotes the next one. List any item from an earlier release and ask about it rather than removing it. Compare the section with the user-visible changes in `[Unreleased]`. For any user-visible change with no matching check, propose a one-line check and ask before adding it. Do not tick anything in this section, in Smoke, or in Release Flow's in-app update items.
 
 ## Part 1 summary
 

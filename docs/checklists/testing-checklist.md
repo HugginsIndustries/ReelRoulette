@@ -51,19 +51,8 @@ A quick pass over the basics no automated test covers end to end.
 
 ## Release Specific
 
-> Add checks for features or changes in the current release. Clear these items after sign-off. A check that should run every release becomes an automated test.
+> Add checks for features or changes in the current release. They are cleared when the next release is promoted. A check that should run every release becomes an automated test.
 
-- [x] `verify-web-deploy.ps1` on Windows leaves the real data and thumbnail folders unchanged.
-- [x] Desktop hides **Rename** and **Remove** in Manage Sources and **Remove from Library** in the library grid menu; the other Manage Sources actions and grid menu items still show and work.
-- [x] On desktop and WebUI, a saved preset stays selected (not starred) after its tags are re-selected in a different order, and a different tag set still shows it starred.
-- [x] On Windows, first start with no data folder, and with a data folder from v0.12.0 or earlier that has no `library.db`, opens an empty library.
-- [x] From another machine, the Operator asks for the control token, works after it is entered, and refuses a wrong one; on the server machine it opens without one, testing panel included. Run on Linux and Windows.
-- [x] With the WebUI open, stop and restart the server, change a favorite and a tag on the desktop while the WebUI reconnects, and the WebUI shows both.
-- [x] Switching videos repeatedly with random, next, and previous never starts a video silently, and the mute button matches what you hear. Run on Linux and Windows.
-- [x] With clients connected, tray and Operator Stop exit within a few seconds, and Operator Restart relaunches the server, on Linux and Windows.
-- [x] On Windows, right-clicking the server tray icon opens the menu, menu items work, the icon stays, and `last.log` shows `Tray menu opened` with a non-zero size. If it passes, update the README Known Issues tray entry. If it fails, remove the Windows tray menu bullet from `CHANGELOG.md` and the tray menu sentence from the `RELEASE-NOTES.md` entry.
-- [x] Opening desktop Settings, closing it, and opening it again does not freeze the app.
-- [x] In the desktop filter dialog, deleting, renaming, or moving a preset keeps unsaved filter changes and **Update Preset**.
 - [ ] With a copy of the data folder upgraded by a newer build, the installed build runs without a library, shows the message on the Operator page, leaves the library and backups byte-identical, and updates in-app, on Linux and Windows.
 - [ ] Without a library, a library route answers 503 with the message, the open routes answer, and an unpaired LAN caller gets 401.
 - [ ] A copy of a v0.14.0 data folder opens in this build with its items, tags, presets, and stats intact, `last.log` shows the migration and its time, and every sort order on desktop and WebUI lists files as v0.14.0 did, on Linux and Windows.

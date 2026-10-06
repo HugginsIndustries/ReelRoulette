@@ -19,11 +19,8 @@ Instructions:
 
 Commit Message:
 
-Docs: Thin the testing checklist to automated, smoke, release-specific, and release flow checks
+Chore: Clear the released version's checklist items when promoting the next release
 
-- Replace the Manual Regression sections with a five-item Smoke section: the WebUI in a desktop browser and on a phone, the desktop app, the server tray, and the Operator page; regression coverage comes from automated tests.
-- Release Flow gains the server and desktop in-app update checks from Packaging, run on the dev build during the pass, and Failure Documentation becomes a rule line at the top.
-- Release Specific gains a Windows `Setup.exe` install check, since the Velopack update made it 64-bit in this release.
-- `reset-checklist.ps1` also removes `Failed:` and `Skipped:` notes, since the backlog item each names tracks the issue.
-- The pre-release skill, `AGENTS.md`, `CONTEXT.md`, `README.md`, `docs/dev-setup.md`, and `docs/domain-inventory.md` match the new layout.
-- WebUI Preact Migration checks the Smoke items after each slice and adds one Release Specific parity pass; Admin Section in WebUI Settings moves the Operator Smoke item to the admin section, and Desktop Client Removal names the desktop Smoke and in-app update items.
+- `promote-milestones` removes the released version's Release Specific items from the testing checklist before promoting, and lists any unticked item and asks before removing it.
+- Pre-release Part 1 no longer removes the previous release's items; it checks that Release Specific holds only this release's and asks about any that don't.
+- Remove v0.14.0's signed-off items from Release Specific, keeping those added for v0.14.1.
