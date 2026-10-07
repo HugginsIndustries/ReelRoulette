@@ -172,30 +172,38 @@ Last milestone completed: M11f
   - Ships in v0.15.0, after the WebUI Preact migration milestone. Depends on: WebUI Preact Migration.
   - This changes user-facing UX: mockups for phone, tablet, and desktop widths are approved before code.
   - Measured again at promotion: the tag editor, filter, and library overlays are each `position: fixed; inset: 0` with `z-index: 1000`, so they cover the player while it keeps playing underneath. The stylesheet has two `@media (max-width: 600px)` rules, and mobile browsers are detected by user agent (`isMobileBrowser` in `app.js`).
-  - The main page is a header bar, the player with its overlay controls as today, and the footer status line as today. The header holds the app name, the preset dropdown, and the current file name, and at the right a settings icon and an admin icon. The settings icon arrives with the Settings tab in WebUI Settings Panel, and the admin icon with WebUI Admin Section. Randomization mode and photo duration stay in the header until WebUI Settings Panel moves them into the Settings tab, and the pairing token prompt keeps showing there when the server asks for pairing.
+  - The main page is a header bar, the player with its overlay controls as today, and the footer status line as today. The header holds the app name and the current file name, and at the right a settings icon and an admin icon. The settings icon arrives with the Settings tab in WebUI Settings Panel, and the admin icon with WebUI Admin Section. Photo duration stays in the header until WebUI Settings Panel moves it into the Settings tab, and the pairing token prompt keeps showing there when the server asks for pairing.
   - A panel host: at most one side panel is open at a time. At tablet and desktop widths it sits beside the player, on the left or right as a per-device setting, with a width the user adjusts between a minimum and a maximum set with the mockups and that is remembered per device. At phone widths it is a full-screen overlay with the same tabs. Breakpoints use viewport width and pointer type, not the user agent. The side is chosen in the Settings tab, which WebUI Settings Panel adds; until then the panel uses its default side.
   - The panel has a single row of icon-only tabs: Library, Filter, Tags, Stats, and Settings. Each tab uses the icon the WebUI already uses for it, such as the player's grid, filter, and tag icons, and has a tooltip and an accessible name. This milestone builds the Library, Filter, and Tags tabs from the library overlay, filter dialog, and tag editor; WebUI Stats Panel and WebUI Settings Panel add the Stats and Settings tabs.
   - The player's grid, filter, and tag buttons open the panel on the matching tab, and the panel remembers its last tab.
+  - The preset dropdown and randomization mode leave the header for the Library tab, laid out like the desktop library panel: above the grid, the preset, then randomization mode, then sort with its direction toggle, then search.
   - The Library tab fits its column count to the panel width, and choosing a tile plays it in the player beside the panel.
+  - The WebUI remembers its per-device state across a page refresh, as the desktop remembers its own across restarts. This milestone adds one per-device store and remembers the active preset (including None) and applied filter, randomization mode, sort and direction, and the panel's width and last tab. WebUI Settings Panel and WebUI Keyboard Shortcuts and Player Controls remember the client settings they add the same way, and so does duplicate review in Admin Refresh, Backup, and Duplicate Review. The search text is not remembered. The randomization mode already stored per device carries over.
+  - Presets stay on the server: the WebUI remembers only which preset is active and the filter it applied. A remembered preset, tag, or source that was renamed or deleted on another device in the meantime is handled as it is when that happens while the WebUI is open.
+  - Trap, inferred: browser storage is kept per address, so on one device the WebUI opened at `localhost`, at the LAN address, and through an HTTPS proxy remembers three separate sets of state.
+  - Not included: the playing item and its position, which is Resume Position and Session Continuity.
   - Auto Tag opens as an overlay from the Tags tab instead of as a tab of the tag editor.
   - Not included: admin and duplicate review as panel tabs. They open in a full-page admin view, which is WebUI Admin Section.
   - The panel stays inside the fullscreen stage, so it works in fullscreen as the overlays do today, including iOS pseudo-fullscreen.
   - Phone layouts work in an installed app (standalone display, safe-area insets).
   - Add a Release Specific checklist item: "On a phone, a tablet, and a desktop browser, and as an installed app on Android and iOS, the panel opens beside the player on either side or as an overlay by width, and playback keeps going on every tab."
 - **Acceptance criteria**:
-  - The main page shows the header bar with the app name, preset dropdown, and current file name, the player with its overlay controls, and the footer status line.
+  - The main page shows the header bar with the app name and current file name, the player with its overlay controls, and the footer status line, and the header no longer shows the preset dropdown or randomization mode.
   - At most one panel is open at a time.
   - At tablet and desktop widths, the panel opens beside the player on the side set for the device, its width adjusts only between its minimum and maximum and is remembered per device, and the video stays visible and playing.
   - At phone widths, the panel opens as a full-screen overlay with the same tabs, and closing it returns to the player without interrupting playback.
   - The tabs are one row of icons, each with a tooltip and an accessible name, and the Library, Filter, and Tags icons match the player's grid, filter, and tag icons.
   - The player's grid, filter, and tag buttons open the panel on the Library, Filter, and Tags tabs, and the panel reopens on its last tab.
+  - The Library tab shows, above the grid and in this order, the preset dropdown, randomization mode, sort with its direction toggle, and search.
   - The Library tab fits its column count to the panel width, and choosing a tile plays it beside the panel.
+  - After a page refresh, the active preset and applied filter, randomization mode, sort and direction, and the panel's width and last tab are each as they were, and the search box is empty.
+  - After a page refresh, a remembered preset, tag, or source that was renamed or deleted elsewhere is handled as it is when that happens while the WebUI is open.
   - Auto Tag opens as an overlay from the Tags tab.
   - Resizing the window across a breakpoint moves an open panel between side panel and overlay without losing its state.
   - The panel works in fullscreen.
   - The layout does not depend on the user agent.
 - **Verification evidence**:
-  - Completion evidence must include component tests for panel host breakpoints, panel side, width limits and memory, tab selection and the last tab, the tabs' accessible names, and Library tab column fitting, `npm run verify`, and one quick spot check on a phone and a desktop browser.
+  - Completion evidence must include component tests for panel host breakpoints, panel side, width limits and memory, tab selection and the last tab, the tabs' accessible names, the Library tab's control order and column fitting, and a page refresh keeping each remembered setting and clearing the search text, `npm run verify`, and one quick spot check on a phone and a desktop browser.
 
 ### M12d - WebUI In-App Dialogs
 
@@ -224,17 +232,20 @@ Last milestone completed: M11f
   - Not included: admin. It opens as a full-page view from the header's admin icon, which is WebUI Admin Section.
   - Checked against the code at promotion: the diagnostics panel is shown only when `isMobileBrowser()` is true. Photo duration and randomization mode are already kept per device in `localStorage`; autoplay and loop are not kept and start off.
   - Move the diagnostics information to the Settings tab and remove the diagnostics panel from below the main page's status line. That panel is currently shown only on mobile browsers by design; in the v0.13.0 manual regression pass it appeared only on the phone in Firefox.
-  - Client settings live in the Settings tab, all per device: randomization mode and photo duration, which leave the header, autoplay and loop defaults, the side the panel opens on, and an option to remember filter settings across sessions. The option is off by default, so the WebUI keeps opening with default filters unless the user turns it on.
+  - Client settings live in the Settings tab, all per device: photo duration, which leaves the header, and the side the panel opens on. Randomization mode is in the Library tab, which WebUI Responsive Layout and Panels builds.
+  - Every client setting survives a page refresh in the per-device store that WebUI Responsive Layout and Panels adds. Remembering is the default, with no option to turn it off. The photo duration already stored per device carries over.
+  - Loop, autoplay, and mute are only the player's buttons, with no entry in the Settings tab, and each button's state survives a page refresh. The autoplay mode and its timer are Settings tab entries, which WebUI Keyboard Shortcuts and Player Controls adds.
   - Changes to user-facing UX need explicit approval.
 - **Acceptance criteria**:
-  - The Settings tab holds the client settings, including randomization mode, photo duration, and the panel's side, and the header no longer shows randomization mode or photo duration.
+  - The Settings tab holds the client settings, including photo duration and the panel's side, and the header no longer shows photo duration.
+  - The Settings tab has no loop or autoplay entry.
   - The header's settings icon opens the panel on the Settings tab.
   - The Settings tab shows the diagnostics information on desktop and mobile browsers, and the main page no longer shows the diagnostics panel.
-  - With the remember option on, filter settings survive closing and reopening the WebUI on that device. With it off, the WebUI opens with default filter settings.
+  - After a page refresh, photo duration, the panel's side, and the autoplay, loop, and mute buttons' state are each as they were.
   - Preferences are stored per device and do not change other devices.
 - **Verification evidence**:
-  - Completion evidence must include WebUI tests for preference storage and the remember option, `npm run verify`, and one quick spot check on a phone.
-  - A desktop browser and phone pass, with the remember option checked across a browser restart, is a Release Specific checklist item.
+  - Completion evidence must include WebUI tests for preference storage and for a page refresh keeping each setting this milestone adds, `npm run verify`, and one quick spot check on a phone.
+  - Add a Release Specific checklist item: "On a desktop browser and a phone, and as an installed app, every remembered setting is kept after a refresh and a browser restart, and the library search starts empty."
 
 ### M12f - WebUI Admin Section
 
@@ -245,7 +256,7 @@ Last milestone completed: M11f
   - Measured again at promotion: the Operator page is 842 lines of HTML, CSS, and JavaScript inside a raw string in `src/core/ReelRoulette.ServerApp/Program.cs`, up from 779 when this entry was written, after the control token, shutdown, and no-library work. No test covers the page's content; the only test that names `/operator` checks that the library route gate leaves it open. The sections listed below match the page, and `verify-linux-packaged-server-smoke.sh` still requests `/operator`.
   - Admin section slice:
     - Admin is a full-page view opened from the header's admin icon, not a panel tab. The icon is always visible. The view keeps the Operator page's responsive layout (a 12-column grid that changes at 620 and 980 px wide, read from code at this edit), restyled to match the rest of the WebUI.
-    - Move every Operator section into the admin section as Preact screens: server updates, runtime status with restart and stop (including the message when the server runs without a library), web runtime settings, control settings (control token, dev channel, Launch Server on Startup), the testing suite, connected clients, server logs, and incoming and outgoing API events. They call the same control routes, so there is no contract change.
+    - Move every Operator section into the admin section as Preact screens: server updates, runtime status with restart and stop (including the message when the server runs without a library), web runtime settings (port, LAN binding, mDNS advertising and LAN hostname, and auth mode and shared token, without Enable Web UI, which the always-on WebUI slice drops), control settings (control token, dev channel, Launch Server on Startup), the testing suite, connected clients, server logs, and incoming and outgoing API events. They call the same control routes, so there is no contract change.
     - The Operator's update download needs two attempts every time: click Download and confirm, and nothing happens; click Download and confirm again, and it downloads. Find the cause before building the admin section's update controls, so they don't inherit it. No commit has fixed it (checked at promotion).
     - Gating: opening admin from another machine asks for the control token first, through `POST /control/pair`, and shows nothing until it is accepted. On the server machine, which the merged localhost helper decides, it opens directly. The accounts release replaces the token with admin accounts.
     - Later admin work lands here: refresh, backup, and duplicate review, with duplicate review opening within the admin section, source and item management, catalog transfer, the Log Viewer, and account administration.
@@ -253,6 +264,10 @@ Last milestone completed: M11f
     - The server keeps a minimal built-in page with restart, stop, a log tail, and updates, at a fixed path such as `/recovery` (decided here). It does not load the WebUI's files, so it works when they are missing or broken, and it has the same control-token gating.
     - It renders settings and status text without `innerHTML` interpolation (found by the repository audit: Operator HTML page interpolates user input via `innerHTML`).
     - Retire the Operator page: `/operator` redirects to the admin section, the tray's Operator shortcut opens the admin section, `verify-linux-packaged-server-smoke.sh` checks the recovery page and the admin section entry instead of `/operator`, and the testing checklist's Smoke item checks the admin section instead of the Operator page.
+  - Always-on WebUI slice:
+    - The server always serves the WebUI from this release, since the admin section lives there, and ignores the web runtime settings' `enabled` field. Read from code at this edit: turned off, that field stops the server serving the WebUI's files and `/runtime-config.json` from its next start, leaves the WebUI's origins out of CORS, and stops mDNS advertising. Turned off from the admin section, it would remove the admin section itself, and the recovery page has no way to turn it back on.
+    - The field stays in the contract, so the last desktop build keeps working, and the server reports it as on. Trap, read from code: the desktop enables its Open Web UI menu item only when the server reports the WebUI as on, and Desktop Retirement Notice's notice offers that action. Desktop Client Removal drops the field.
+    - The admin section has no Enable Web UI switch, and the frozen desktop's Settings dialog loses its Enable Web UI switch, which would no longer do anything (approved as a desktop change outside bug fixes). `docs/api.md` and `docs/dev-setup.md` stop describing the WebUI as optional.
 - **Acceptance criteria**:
   - The header's admin icon is always visible and opens the admin section as a full-page view, not a panel tab.
   - The admin section keeps the Operator page's layout at phone and desktop widths and matches the rest of the WebUI's styling.
@@ -262,8 +277,10 @@ Last milestone completed: M11f
   - With the WebUI's files removed, the recovery page restarts, stops, shows logs, and checks, downloads, and applies updates.
   - The recovery page renders settings, status, and log text without `innerHTML` interpolation.
   - `/operator` reaches the admin section, and the packaged Linux server smoke passes against the recovery page.
+  - With the web runtime settings' `enabled` stored or posted as off, the server still serves the WebUI and `/runtime-config.json`, allows the WebUI's CORS origins, and, with LAN binding and mDNS on, advertises over mDNS after a restart, and it reports `enabled` as on.
+  - Neither the admin section nor the desktop Settings dialog shows an Enable Web UI switch, and `enabled` is still in OpenAPI.
 - **Verification evidence**:
-  - Completion evidence must include admin section UI tests for the admin icon opening the full-page view, loading status and settings, saving settings, the testing panel, and control-token gating in `npm run verify`, server tests that the recovery page is served without WebUI assets and keeps control-token gating, `dotnet test ReelRoulette.sln`, and `./tools/scripts/verify-linux-packaged-server-smoke.sh`.
+  - Completion evidence must include admin section UI tests for the admin icon opening the full-page view, loading status and settings, saving settings, the testing panel, and control-token gating in `npm run verify`, server tests that the recovery page is served without WebUI assets and keeps control-token gating, server tests that a stored or posted `enabled` of off is ignored and reported as on, a desktop test that the Settings dialog has no Enable Web UI switch, `dotnet test ReelRoulette.sln`, and `./tools/scripts/verify-linux-packaged-server-smoke.sh`.
   - Server tests call the handlers and gating as functions over `DefaultHttpContext`, as the library route gate's tests do. No test project has an HTTP test host, and `Microsoft.AspNetCore.TestHost` is not added (decided at promotion).
   - Add a Release Specific checklist item: "From another machine, the admin section asks for the control token and works after it is entered; with the WebUI files removed, the recovery page restarts, stops, shows logs, and applies an update, on Linux and Windows."
 
@@ -275,22 +292,23 @@ Last milestone completed: M11f
   - Ships in v0.15.0, after the WebUI admin section milestone. Depends on: WebUI Admin Section.
   - Measured again at promotion: only the desktop calls `POST /api/refresh/start`, `/api/refresh/settings`, `/api/backup/settings`, `/api/duplicates/scan`, and `/api/duplicates/apply`. The routes exist, so this needs no contract change. The tray can also start a refresh.
   - Gated like the rest of the admin section.
-  - Refresh slice: Refresh Now with the refresh status, and the refresh settings the desktop Settings dialog shows: auto-refresh and its interval, forced loudness and duration rescans on the next refresh, and fingerprint scan parallelism.
-  - Backup slice: server backups on or off, the time between backups, the number kept, and the days of daily backups kept.
+  - Refresh slice: Refresh Now with the refresh status, and the refresh settings the desktop Settings dialog shows: auto-refresh and its interval (5–1440 minutes), forced loudness and duration rescans on the next refresh, and fingerprint scan parallelism (1–16). The ranges are the ones the server already clamps to (read from code at this edit).
+  - Backup slice: server backups on or off, the time between backups (1–10080 minutes), the number kept (1–100), and the days of daily backups kept. The first two ranges are the server's clamps, as above.
   - Daily retention, in the backup slice: on top of the existing count limit, catalog backup rotation keeps one backup per date for a number of days set in the server's backup settings. It applies to current- and older-version backups alike, so older-version backups, which rotation keeps and does not count today, age out with their dates. Newer-version backups and files rotation does not recognize are never touched. The days setting adds a field to the backup settings, a contract change that only adds.
   - Trap: the refresh and backup settings routes assign every field from the posted snapshot, so a partial post writes defaults (Server Robustness Findings; still the case at promotion). Until that is fixed, the admin section posts the full settings it read.
-  - Duplicate review slice: scan the whole library or one source, show each group with thumbnails and the comparison details the desktop shows (file name, plays, tags, favorite, blacklisted), choose Keep All or a file to keep per group, default to Keep All or Select Best from a per-device preference, and confirm counts before deleting. It opens within the admin section's full-page view, not as a panel tab.
+  - Duplicate review slice: scan the whole library or one source, show each group with thumbnails and the comparison details the desktop shows (file name, plays, tags, favorite, blacklisted), choose Keep All or a file to keep per group, default to Keep All or Select Best from a per-device preference, and confirm counts before deleting. The preference is chosen in duplicate review rather than the Settings tab, since nothing else uses it, starts at Keep All as on the desktop, and survives a page refresh in the per-device store that WebUI Responsive Layout and Panels adds. It opens within the admin section's full-page view, not as a panel tab.
   - Add a Release Specific checklist item: "From the admin section, start a refresh, change refresh and backup settings, and scan and apply duplicates with Keep All and with a chosen file, and the library updates."
 - **Acceptance criteria**:
   - Refresh Now starts a refresh, and the status line shows its progress and result.
   - Refresh and backup settings load and save, and saving one field leaves the others as they were on the server.
+  - Each refresh and backup field accepts the range the server enforces.
   - With daily retention set to a number of days, rotation keeps the count limit's newest current-version backups plus the newest backup of each date in that window, current-version or older-version, and deletes older-version backups whose dates fall outside it.
   - Newer-version backups and unrecognized files in `backups/` are byte-identical after rotation, with daily retention on or off.
   - Duplicate review opens within the admin section.
   - Duplicate apply deletes only the files not kept, after confirming counts, and Keep All deletes nothing in that group.
-  - The duplicate default is a per-device preference.
+  - The duplicate default is chosen in duplicate review, starts at Keep All, is kept per device, and survives a page refresh.
 - **Verification evidence**:
-  - Completion evidence must include admin section UI tests for each slice, `npm run verify`, and one quick spot check of a refresh and a duplicate scan.
+  - Completion evidence must include admin section UI tests for each slice, including the duplicate default surviving a page refresh, `npm run verify`, and one quick spot check of a refresh and a duplicate scan.
 
 ### M12h - Admin Source and Item Management
 
@@ -368,18 +386,23 @@ Last milestone completed: M11f
 ### M12k - WebUI Keyboard Shortcuts and Player Controls
 
 - **Status**: ⏳ Planned
-- **Goal**: The WebUI has the desktop's keyboard shortcuts wherever a browser allows them, plus volume and seek-step controls, and the desktop's Keep Playing and loudness normalization are built or declined.
+- **Goal**: The WebUI has the desktop's keyboard shortcuts wherever a browser allows them, plus volume and seek-step controls and two autoplay modes, and the desktop's loudness normalization is built or declined.
 - **Scope**:
   - Ships in v0.15.0, after the WebUI stats panel milestone. Depends on: WebUI Responsive Layout and Panels, WebUI Settings Panel, and WebUI Stats Panel, so every panel tab exists.
   - Measured again at promotion: the WebUI handles only Escape, which closes overlays, and Enter or Space on a focused library tile. It has a mute button and no volume control. The desktop binds K play or pause, J and L seek, Left and Right previous and next, R random, F favorite, B blacklist, A autoplay, M mute, comma and period volume, T tags, P player view, S settings, O import folder, Q quit, F11 fullscreen, and 1 to 5 to show or hide parts of the window; it also swallows 6 to 8 and Space, which do nothing.
   - Use the desktop keys. Keys the browser keeps (Ctrl+Q, Ctrl+O, and F11 for the browser's own fullscreen; inferred) are not bound, and Q quit and O import folder have no WebUI equivalent. Each panel tab has a shortcut: Library, Filter, Tags, Stats, and Settings. Which key opens each tab (the desktop's T for tags and S for settings, or the number keys it uses to show and hide parts of its window), and which key enters fullscreen, are decided here.
   - Shortcuts do nothing while focus is in a text field.
   - A shortcut reference in the Settings tab.
-  - A volume control where the browser lets a page set volume (not on iOS, where it is read-only; inferred), with comma and period stepping by a volume step preference.
-  - J and L seek by a seek step preference in seconds. Frame stepping, which the desktop offers through LibVLC, is only approximate in a browser (inferred); build or decline it here.
-  - Build or decline, moved here from the desktop parity feature list at promotion, since both are player controls:
-    - Keep Playing: the desktop plays a random item every N seconds until stopped (Playback → Keep Playing (Timer) and Set Interval).
-    - Loudness normalization: the desktop adjusts volume from the server's per-item loudness and the library baseline (`LoudnessNormalizationService`, off by default). The WebUI could apply a gain through the Web Audio API next to the volume control; behavior on iOS is not verified.
+  - A volume control where the browser lets a page set volume (not on iOS, where it is read-only; inferred), with comma and period stepping by a volume step preference. The Settings tab offers the desktop's volume steps: 1, 2, or 5 percent.
+  - J and L seek by a seek step preference in seconds. The Settings tab offers the desktop's seek steps: 1, 5, or 10 seconds, plus frame if frame stepping is built. Frame stepping, which the desktop offers through LibVLC, is only approximate in a browser (inferred); build or decline it here.
+  - Autoplay gets two modes, replacing the desktop's separate Keep Playing, which plays a random item every N seconds until stopped (Playback → Keep Playing (Timer) and Set Interval):
+    - Normal: photos advance after the timer and videos play to the end, as autoplay does today.
+    - Timer: every item advances after the timer, including a video that has not finished. With loop on, a video shorter than the timer repeats until the timer advances. Pausing a video holds the timer.
+    - With loop on in Normal mode, the current item repeats and autoplay waits, as today. Read from code at this edit: the WebUI's video end handler and photo timer both skip advancing while loop is on.
+    - Both modes use one timer setting, today's photo duration, renamed to fit (for example "Advance after"). Its range widens from the WebUI's 1–300 seconds to the desktop's 1–3600, so a Keep Playing interval longer than five minutes still fits. The mode and the timer sit together in the Settings tab, and the player's autoplay button still turns autoplay on and off.
+  - The autoplay mode, the timer, the volume, and the volume and seek steps survive a page refresh in the per-device store that WebUI Responsive Layout and Panels adds.
+  - Build or decline loudness normalization, moved here from the desktop parity feature list at promotion, since it is a player control: the desktop adjusts volume from the server's per-item loudness and the library baseline (`LoudnessNormalizationService`, off by default). The WebUI could apply a gain through the Web Audio API next to the volume control; behavior on iOS is not verified.
+  - If loudness normalization is built, its settings go in the Settings tab, per device and with the desktop's ranges and defaults: on or off (off), maximum reduction (1–30 dB, 15), maximum boost (0–10 dB, 5), and the baseline, automatic or a manual target (−50 to −10 LUFS, −23). The automatic baseline uses the baseline loudness the server's library stats already report (read from code at this edit). Each setting survives a page refresh. If it is declined, these settings go with it.
   - Changes to user-facing UX need approval.
   - Add a Release Specific checklist item: "In Chrome, Firefox, and Safari on a desktop, every listed shortcut works in normal view, with a panel open, and in fullscreen, and does nothing while typing in a text field."
   - Not included: rebinding, which is Customizable Keyboard Shortcuts.
@@ -387,11 +410,15 @@ Last milestone completed: M11f
   - Each bound shortcut does what the desktop's does.
   - Each panel tab's shortcut opens the panel on that tab.
   - Shortcuts are ignored while a text field has focus.
-  - The volume control and seek step work and are saved per device.
+  - The volume control and seek step work, and the Settings tab offers the desktop's volume and seek step choices.
+  - In Normal mode, photos advance after the timer and videos play to the end. In Timer mode, every item advances after the timer, including an unfinished video, and a paused video holds it.
+  - With loop on in Timer mode, a video shorter than the timer repeats until the timer advances. With loop on in Normal mode, the current item repeats and does not advance.
+  - The Settings tab shows the autoplay mode and the timer under its new name, the timer accepts 1 to 3600 seconds, and it starts from the photo duration stored before this milestone.
+  - After a page refresh, the autoplay mode, the timer, the volume, and the volume and seek steps are each as they were.
   - The shortcut reference matches the bindings.
-  - Keep Playing and loudness normalization are each built or explicitly declined with a reason in this entry.
+  - Loudness normalization is built or explicitly declined with a reason in this entry. If built, its settings are in the Settings tab with the desktop's ranges and defaults, and each survives a page refresh.
 - **Verification evidence**:
-  - Completion evidence must include keyboard tests per binding under `happy-dom`, tests for Keep Playing and loudness normalization if built, `npm run verify`, and one quick spot check.
+  - Completion evidence must include keyboard tests per binding under `happy-dom`, autoplay tests for both modes with loop on and off and with a paused video, tests for a page refresh keeping each setting this milestone adds, tests for loudness normalization if built, `npm run verify`, and one quick spot check.
 
 ### M12l - Show in File Manager from the WebUI
 
@@ -511,7 +538,7 @@ Last milestone completed: M11f
   - Tag edits on several items: the desktop `ItemTagsDialog` adds and removes tags across all selected items at once; the WebUI tag editor works on the current item only.
   - Clear playback stats for the whole library, which the desktop offers from its Playback menu through `POST /api/playback/clear-stats` (measured again at promotion: the WebUI never calls it). Whether it is an admin action is decided here.
   - Build or decline the desktop's filter summary line, which lists the active filters above its library panel, and whether the Library tab shows one. The WebUI library's summary today shows only how many items are showing out of how many.
-  - Settled at promotion: Keep Playing and loudness normalization moved to WebUI Keyboard Shortcuts and Player Controls. The FFmpeg log is declined: nothing has written to the desktop's FFmpeg log buffer since the server took over refresh (read from code), so its window is always empty. The desktop features a browser cannot offer are recorded in Desktop Client Removal.
+  - Settled at promotion: Keep Playing and loudness normalization moved to WebUI Keyboard Shortcuts and Player Controls, where autoplay's Timer mode has since replaced Keep Playing. The FFmpeg log is declined: nothing has written to the desktop's FFmpeg log buffer since the server took over refresh (read from code), so its window is always empty. The desktop features a browser cannot offer are recorded in Desktop Client Removal.
 - **Acceptance criteria**:
   - The WebUI selects several library items and applies favorite, blacklist, tag add and remove, clear stats, and, for admins, remove from library to all of them.
   - Tag edits apply across all selected items.
@@ -526,7 +553,7 @@ Last milestone completed: M11f
 - **Status**: ⏳ Planned
 - **Goal**: The last desktop build tells users the desktop app is retired and points them to the WebUI.
 - **Scope**:
-  - Ships in v0.15.0, last in the series. The only desktop change outside bug fixes.
+  - Ships in v0.15.0, last in the series. With the Enable Web UI switch that WebUI Admin Section removes, the only desktop changes outside bug fixes.
   - After Desktop Client Removal no desktop update is published, so installed desktops stay on their last version (inferred: the Velopack desktop feed stops getting releases). Later servers stop working with it, starting with the accounts release, which removes pairing.
   - On start, show a notice once per installed version: the desktop app is retired; use the WebUI. It offers the existing Open Web UI action. The wording needs approval. Checked at promotion: the desktop's Open Web UI menu item exists, and `release.yml` still packages the desktop.
   - Add a Release Specific checklist item: "After updating, the desktop shows the retirement notice once, and Open Web UI opens the WebUI."
@@ -1306,9 +1333,10 @@ Last milestone completed: M11f
 - **Scope**:
   - First milestone of the desktop removal release, planned for v0.16.0. Depends on: WebUI Keyboard Shortcuts and Player Controls, WebUI Stats Panel, WebUI Settings Panel, Admin Refresh, Backup, and Duplicate Review, Show in File Manager from the WebUI, Admin Source and Item Management, Admin Library Catalog Transfer, WebUI Multi-Select and Bulk Actions, and Browser-Playable Filter.
   - Desktop features this drops without a WebUI equivalent, declined during the desktop parity work because a browser cannot offer them: always-on-top (the closest is picture-in-picture, which the WebUI turns off with `disablepictureinpicture`), desktop self-update, the Linux dependency dialog, application menu registration, and the FFmpeg log window, which has been empty since the server took over refresh.
+  - Desktop Settings dialog entries this drops as not useful in the WebUI, decided when the WebUI's settings were planned: the desktop's own dev update channel (the server's is in the admin section), client settings backups (the WebUI's settings are a few values in browser storage), the core server base URL (the WebUI calls the server that served it), Force API playback (the WebUI always plays through `/api/media`), and image scaling (it limits how large the desktop decodes photos, and the browser scales photos to fit by itself).
   - Code and tests slice, measured: remove `ReelRoulette.DesktopApp`, `ReelRoulette.LibraryArchive`, and `ReelRoulette.DesktopApp.Tests` from the solution and the repository, about 30,300 lines of C# and AXAML including 3,267 test lines and 134 tests. Remove Core's `LibraryGridLayout` and its tests, which only the desktop uses, and `JsonFileStorageService` and `CoreStorageServices` if nothing else uses them.
   - Packaging slice: remove the `desktop` component from the `release.yml` matrix, including the Windows LibVLC relocation step, stop publishing the desktop update feed, and remove the desktop references in `set-release-version.ps1` and `verify-linux-packaged-server-smoke.sh`. CI has no desktop job: desktop tests run inside the solution test on the Ubuntu and Windows jobs, so `ci.yml` needs no change.
-  - Contract slice: remove routes and fields that no remaining caller uses, each checked against the WebUI and the admin section. Candidates: `/api/library-states`, `/api/library/item`, the full path kept in the random and play responses' `id` for the desktop, and `itemTagsChanged.itemIds` and the auto-tag apply response's `changedItemPaths`, which the WebUI no longer reads beside their item id fields. `/api/library/catalog-checkpoint` stays for the admin section's export. OpenAPI and generated WebUI types.
+  - Contract slice: remove routes and fields that no remaining caller uses, each checked against the WebUI and the admin section. Remove the web runtime settings' `enabled` field, which the server has ignored and reported as on since WebUI Admin Section. Candidates: `/api/library-states`, `/api/library/item`, the full path kept in the random and play responses' `id` for the desktop, and `itemTagsChanged.itemIds` and the auto-tag apply response's `changedItemPaths`, which the WebUI no longer reads beside their item id fields. `/api/library/catalog-checkpoint` stays for the admin section's export. OpenAPI and generated WebUI types.
   - Fixture slice: `event-revision.json`, `library-tile-effect.json`, `preset-filter-equality.json`, and `sort-direction-labels.json` lose their C# readers and stay as WebUI test data. `tag-name-order.json` stays, read by Core and the WebUI.
   - Docs slice: `CONTEXT.md`, `docs/architecture.md`, `docs/domain-inventory.md`, `docs/api.md`, `docs/dev-setup.md`, `README.md` (desktop install and the LibVLC prerequisite), the testing checklist's desktop Smoke item and the desktop in-app update item in Release Flow, and `AGENTS.md`: remove the desktop freeze rule and the desktop test-isolation note, and keep the shared-fixture rule for rules implemented in server C# and the WebUI.
   - Add a Release Specific checklist item: "On Linux and Windows, the release publishes only the server, every former desktop workflow works in the WebUI, and an existing desktop install keeps its last version."
@@ -1316,7 +1344,7 @@ Last milestone completed: M11f
 - **Acceptance criteria**:
   - The solution has no desktop projects, and `dotnet build ReelRoulette.sln`, `dotnet test ReelRoulette.sln`, and `npm run verify` pass.
   - A release builds and publishes only server packages and feeds.
-  - OpenAPI has no route or field that only the desktop used.
+  - OpenAPI has no route or field that only the desktop used, including the web runtime settings' `enabled` field.
   - No current-state doc describes the desktop client as current.
   - The four former desktop fixtures are read by WebUI tests.
 - **Verification evidence**:

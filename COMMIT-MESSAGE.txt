@@ -19,12 +19,10 @@ Instructions:
 
 Commit Message:
 
-Docs: Lay out the WebUI side panel and fold the desktop parity release into v0.15.0
+Docs: Move the WebUI library controls into the Library tab, remember per-device state, and place the desktop settings
 
-- Record the WebUI layout in the milestones that build it: a header bar with the preset dropdown, current file name, and settings and admin icons, one side panel with icon tabs for Library, Filter, Tags, Stats, and Settings that sits on either side on wide screens and covers the screen on phones, Auto Tag as an overlay from the Tags tab, and a shortcut per tab.
-- Admin becomes a full-page view from an always-visible header icon instead of part of the settings panel, so its milestone is renamed WebUI Admin Section, and the accounts release shows the icon only to admins.
-- Fold v0.15.1 into v0.15.0 so the new WebUI ships as one release, and remove the v0.15.1 line from Planned Releases. Admin Source and Item Management (now including WebUI Source State Sync) and Admin Library Catalog Transfer become M12h and M12i, Browser-Playable Filter M12o, WebUI Multi-Select and Bulk Actions M12q, and Desktop Retirement Notice M12r, with the existing milestones renumbered around them.
-- Split the remaining desktop features: Keep Playing and loudness normalization move to the keyboard shortcuts and player controls milestone, the FFmpeg log is declined because its desktop window has been empty since the server took over refresh, and the features a browser cannot offer are recorded in Desktop Client Removal.
-- Source management notes that importing a source publishes no event today, and that per-source statistics already come from the library stats route.
-- Catalog transfer notes that export already uses the server's checkpoint route, which Desktop Client Removal now keeps, and re-measures `library.db` at 92.5 MB for 49,055 items.
-- The browser-playable filter re-measures the catalog's video containers and ships after the status line overhaul, since its message is a status line message. Multi-select notes that favorite and blacklist take one item per request.
+- The preset dropdown and randomization mode move from the header into the Library tab, laid out like the desktop library panel above the grid, so the header holds only the app name, the current file name, and the settings and admin icons.
+- The WebUI remembers its per-device state across a page refresh by default: the active preset and filter, randomization mode, sort, the panel's side, width, and last tab, and every client setting, but not the search text. This replaces the planned option to remember filter settings. Loop, autoplay, and mute stay player buttons, remembered with no Settings tab entry.
+- Autoplay gets Normal and Timer modes in place of the desktop's Keep Playing, sharing one timer renamed from photo duration and widened to 1–3600 seconds.
+- Place each desktop Settings dialog entry: server backup and refresh settings in the admin section with the server's ranges, the duplicate default in duplicate review, and seek step, volume step, and loudness normalization settings in the Settings tab. Desktop Client Removal records the entries the WebUI drops as not useful.
+- From v0.15.0 the server always serves the WebUI, where the admin section lives, and ignores the Enable Web UI setting while still reporting it as on, so the last desktop build's Open Web UI keeps working. The admin section and the desktop Settings dialog drop the switch, and Desktop Client Removal drops the field.
