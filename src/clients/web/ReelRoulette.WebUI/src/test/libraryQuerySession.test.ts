@@ -68,6 +68,9 @@ function controls(overrides: Partial<LibraryBrowseControls> = {}): LibraryBrowse
   return { ...createDefaultBrowseControls(), ...overrides };
 }
 
+/** Height of the rows holding the last loaded page, as the grid reports it. */
+const LAST_PAGE_HEIGHT = 6_000;
+
 describe("libraryQuerySession", () => {
   it("loads the first window and reads header counts from the server totals", async () => {
     const calls: LibraryQueryRequest[] = [];
@@ -93,7 +96,7 @@ describe("libraryQuerySession", () => {
     expect(snap.phase).toBe("ready");
   });
 
-  it("requests the next window when the loaded rows do not cover the viewport", async () => {
+  it("requests the next window once less than one page of loaded tiles is left below the screen", async () => {
     const calls: number[] = [];
     const session = createLibraryQuerySession(async (request) => {
       calls.push(request.offset);
@@ -109,14 +112,55 @@ describe("libraryQuerySession", () => {
     await session.ensureLoaded(createDefaultFilterState(), controls());
     session.setOverlayVisible(true);
 
-    expect(libraryQueryShouldFill(LIBRARY_QUERY_WINDOW_SIZE, 450, 5000, 100)).toBe(false);
-    await session.considerFill(5000, 100);
+    await session.considerFill(16_000, 10_000, LAST_PAGE_HEIGHT);
     expect(calls).toEqual([0]);
 
-    expect(libraryQueryShouldFill(LIBRARY_QUERY_WINDOW_SIZE, 450, 100, 0)).toBe(true);
-    await session.considerFill(100, 0);
+    await session.considerFill(15_999, 10_000, LAST_PAGE_HEIGHT);
     expect(calls).toEqual([0, LIBRARY_QUERY_WINDOW_SIZE]);
     expect(session.snapshot().items).toHaveLength(LIBRARY_QUERY_WINDOW_SIZE + 1);
+  });
+
+  it("keeps a full page in reserve, and fills no later than the rendered overscan", () => {
+    expect(libraryQueryShouldFill(LIBRARY_QUERY_WINDOW_SIZE, 450, 16_000, 10_000, 6_000)).toBe(false);
+    expect(libraryQueryShouldFill(LIBRARY_QUERY_WINDOW_SIZE, 450, 15_999, 10_000, 6_000)).toBe(true);
+
+    expect(libraryQueryShouldFill(LIBRARY_QUERY_WINDOW_SIZE, 450, 10_900, 10_000, 300)).toBe(false);
+    expect(libraryQueryShouldFill(LIBRARY_QUERY_WINDOW_SIZE, 450, 10_899, 10_000, 300)).toBe(true);
+
+    expect(libraryQueryShouldFill(450, 450, 100, 0, 6_000)).toBe(false);
+  });
+
+  it("requests one further window at a time while scrolling inside the reserve", async () => {
+    let releaseAppend: () => void = () => {};
+    const calls: number[] = [];
+    const session = createLibraryQuerySession(async (request) => {
+      calls.push(request.offset);
+      const loaded = page(
+        Array.from({ length: request.limit }, (_, index) => item(`a-${request.offset + index}`)),
+        1_000,
+        1_000
+      );
+      if (request.offset !== LIBRARY_QUERY_WINDOW_SIZE) {
+        return loaded;
+      }
+      return await new Promise<LibraryQueryPage>((resolve) => {
+        releaseAppend = () => resolve(loaded);
+      });
+    });
+    await session.ensureLoaded(createDefaultFilterState(), controls());
+    session.setOverlayVisible(true);
+
+    const filling = session.considerFill(6_000, 1_000, LAST_PAGE_HEIGHT);
+    void session.considerFill(6_000, 3_000, LAST_PAGE_HEIGHT);
+    void session.considerFill(6_000, 5_000, LAST_PAGE_HEIGHT);
+    expect(calls).toEqual([0, LIBRARY_QUERY_WINDOW_SIZE]);
+
+    releaseAppend();
+    await filling;
+    expect(session.snapshot().items).toHaveLength(2 * LIBRARY_QUERY_WINDOW_SIZE);
+
+    await session.considerFill(12_000, 7_000, LAST_PAGE_HEIGHT);
+    expect(calls).toEqual([0, LIBRARY_QUERY_WINDOW_SIZE, 2 * LIBRARY_QUERY_WINDOW_SIZE]);
   });
 
   it("does not fill while the overlay is hidden", async () => {
@@ -131,7 +175,7 @@ describe("libraryQuerySession", () => {
     });
     await session.ensureLoaded(createDefaultFilterState(), controls());
     session.setOverlayVisible(false);
-    await session.considerFill(100, 0);
+    await session.considerFill(100, 0, LAST_PAGE_HEIGHT);
     expect(calls).toEqual([0]);
   });
 
@@ -355,7 +399,7 @@ describe("libraryQuerySession", () => {
     });
     await session.ensureLoaded(createDefaultFilterState(), controls());
     session.setOverlayVisible(true);
-    const filling = session.considerFill(100, 0);
+    const filling = session.considerFill(100, 0, LAST_PAGE_HEIGHT);
     await Promise.resolve();
     expect(calls).toContain(LIBRARY_QUERY_WINDOW_SIZE);
 
@@ -387,19 +431,19 @@ describe("libraryQuerySession", () => {
     session.setOverlayVisible(true);
     session.noteScroll(10);
 
-    await session.considerFill(100, 0);
+    await session.considerFill(100, 0, LAST_PAGE_HEIGHT);
     const failedAppends = calls.filter((offset) => offset > 0).length;
     expect(failedAppends).toBe(1);
-    await session.considerFill(100, 0);
+    await session.considerFill(100, 0, LAST_PAGE_HEIGHT);
     expect(calls.filter((offset) => offset > 0)).toHaveLength(failedAppends);
 
     session.noteScroll(10);
-    await session.considerFill(100, 0);
+    await session.considerFill(100, 0, LAST_PAGE_HEIGHT);
     expect(calls.filter((offset) => offset > 0)).toHaveLength(failedAppends);
 
     failAppend = false;
     session.noteScroll(80);
-    await session.considerFill(100, 0);
+    await session.considerFill(100, 0, LAST_PAGE_HEIGHT);
     expect(calls.filter((offset) => offset > 0).length).toBeGreaterThan(failedAppends);
     expect(session.snapshot().items.length).toBeGreaterThan(LIBRARY_QUERY_WINDOW_SIZE);
   });
@@ -449,7 +493,7 @@ describe("libraryQuerySession", () => {
     session.setListener((event) => scrolls.push(event.scroll));
     await session.ensureLoaded(createDefaultFilterState(), controls());
     session.setOverlayVisible(true);
-    await session.considerFill(0, 1);
+    await session.considerFill(0, 1, LAST_PAGE_HEIGHT);
     expect(session.snapshot().items.length).toBeGreaterThan(LIBRARY_QUERY_WINDOW_SIZE);
     session.noteScroll(400);
     calls.length = 0;
@@ -566,7 +610,7 @@ describe("library query decisions", () => {
     await session.ensureLoaded(createDefaultFilterState(), controls());
     session.setOverlayVisible(true);
     while (session.snapshot().items.length < 5_000) {
-      await session.considerFill(0, 1);
+      await session.considerFill(0, 1, LAST_PAGE_HEIGHT);
     }
     calls.length = 0;
 

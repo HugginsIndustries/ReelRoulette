@@ -4,6 +4,7 @@ import {
   countVisibleRows,
   createVirtualizerState,
   findVisibleRowRange,
+  measureTrailingItemsHeight,
   rebuildOffsetIndex
 } from "../library/libraryGridVirtualizer";
 import type { LibraryProjectionItem } from "../library/libraryProjectionModel";
@@ -72,6 +73,20 @@ describe("libraryGridVirtualizer", () => {
     expect(window.endExclusive).toBe(0);
     expect(window.topSpacerHeight).toBe(0);
     expect(window.bottomSpacerHeight).toBe(0);
+  });
+
+  it("measures the trailing items from the top of the row holding the first of them", () => {
+    const aspects = Array.from({ length: 40 }, () => 16 / 9);
+    const rows = buildRows(aspects, 0, aspects.length, 640).rows;
+    const state = { rows, offsetIndex: rebuildOffsetIndex(rows) };
+    expect(rows.every((row) => row.itemCount === 2)).toBe(true);
+    const { rowTopOffsets, totalExtentHeight } = state.offsetIndex;
+
+    expect(measureTrailingItemsHeight(state, 10)).toBe(totalExtentHeight - rowTopOffsets[15]!);
+    expect(measureTrailingItemsHeight(state, 11)).toBe(totalExtentHeight - rowTopOffsets[14]!);
+    expect(measureTrailingItemsHeight(state, 40)).toBe(totalExtentHeight);
+    expect(measureTrailingItemsHeight(state, 200)).toBe(totalExtentHeight);
+    expect(measureTrailingItemsHeight(createVirtualizerState([], 640), 200)).toBe(0);
   });
 
   it("includes single row for small libraries", () => {

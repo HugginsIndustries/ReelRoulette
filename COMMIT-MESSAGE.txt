@@ -19,7 +19,10 @@ Instructions:
 
 Commit Message:
 
-Chore: Keep agent scratch work under `artifacts/scratch/` instead of `/tmp`
+Feature: Keep a full page of WebUI library tiles loaded ahead of scrolling
 
-- AGENTS.md sends ad-hoc scratch work (measurement harnesses, catalog copies, extracted packages, downloaded tools) to the gitignored `artifacts/scratch/` folder, since `/tmp` is held in memory on the development machine, and asks for it to be deleted when the task is done.
-- Tests keep using their own self-cleaning temp folders.
+- The WebUI library grid requests the next page once less than one page of loaded tiles is left below the screen, and never later than the 900px rendered overscan, so fast scrolling does not reach the end of the loaded tiles. A new query now loads two pages.
+- Further pages are still requested one at a time. Tests cover the trigger point, the overscan minimum, one request in flight, and the last page's measured height.
+- The WebUI Grid Rendering milestone now also plans placeholder tiles for the full result count and loading the page at the scroll position, so dragging the scrollbar far down works, and records the grid flickering dark on an iPad with the WebUI installed as an app each time scrolling re-renders the visible rows, with no flicker on the iPad as an acceptance criterion.
+- Changelog, CONTEXT.md, and the domain inventory describe the new trigger.
+- Planned milestones are no longer marked as ones that can be cut if a release runs long, and the plan-from-report skill no longer asks for that mark.

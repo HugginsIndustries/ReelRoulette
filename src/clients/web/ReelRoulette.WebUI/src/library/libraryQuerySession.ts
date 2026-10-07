@@ -96,7 +96,7 @@ export interface LibraryQuerySession {
   resetQuery(filter: FilterState, controls: LibraryBrowseControls): Promise<void>;
   setOverlayVisible(visible: boolean): void;
   noteScroll(scrollTop: number): void;
-  considerFill(extentHeight: number, viewportBottom: number): Promise<void>;
+  considerFill(extentHeight: number, viewportBottom: number, lastPageHeight: number): Promise<void>;
   applyFavorite(payload: ItemStateChangedPayload): Promise<void>;
   applyPlayback(payload: PlaybackRecordedPayload): Promise<void>;
   applyTags(payload: ItemTagsChangedPayload): Promise<void>;
@@ -114,16 +114,21 @@ export function isEmptyLibraryResult(totalCount: number, searchBaselineCount: nu
   return totalCount === 0 && searchBaselineCount === 0 && !String(searchQuery || "").trim();
 }
 
+/**
+ * Fill once less than one page of loaded tiles is left below the screen, so fast scrolling does not reach the
+ * end of them, and never later than the rendered overscan.
+ */
 export function libraryQueryShouldFill(
   loadedCount: number,
   totalCount: number,
   loadedExtentHeight: number,
-  viewportBottom: number
+  viewportBottom: number,
+  lastPageHeight: number
 ): boolean {
   if (loadedCount <= 0 || totalCount <= 0 || loadedCount >= totalCount) {
     return false;
   }
-  return loadedExtentHeight < viewportBottom + DEFAULT_GRID_OVERSCAN_PX;
+  return loadedExtentHeight - viewportBottom < Math.max(lastPageHeight, DEFAULT_GRID_OVERSCAN_PX);
 }
 
 export function libraryQueryNextWindow(loadedCount: number): { offset: number; limit: number } {
@@ -464,11 +469,11 @@ export function createLibraryQuerySession(query: LibraryQueryFn): LibraryQuerySe
       }
       scrollTop = clamped;
     },
-    async considerFill(extentHeight, viewportBottom) {
+    async considerFill(extentHeight, viewportBottom, lastPageHeight) {
       if (!overlayVisible || !hasResult || inFlight || appendFailed || exhausted) {
         return;
       }
-      if (!libraryQueryShouldFill(items.length, totalCount, extentHeight, viewportBottom)) {
+      if (!libraryQueryShouldFill(items.length, totalCount, extentHeight, viewportBottom, lastPageHeight)) {
         return;
       }
       await run("append");

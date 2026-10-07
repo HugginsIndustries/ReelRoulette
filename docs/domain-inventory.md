@@ -171,9 +171,9 @@ WebUI is runtime-config-driven API/SSE client orchestration.
 - `src/clients/web/ReelRoulette.WebUI/src/library/libraryGridRowModel.ts`
   - justified grid row HTML composition.
 - `src/clients/web/ReelRoulette.WebUI/src/library/libraryGridVirtualizer.ts`
-  - row offset index and visible-window calculation (900px overscan).
+  - row offset index, visible-window calculation (900px overscan), and the height of the last loaded page.
 - `src/clients/web/ReelRoulette.WebUI/src/library/libraryGridController.ts`
-  - library overlay grid DOM lifecycle (mount, scroll, fill coverage, deferred layout while hidden, optional scroll reset on a new query, resize debounce, destroy).
+  - library overlay grid DOM lifecycle (mount, scroll, fill coverage with the last page's height, deferred layout while hidden, optional scroll reset on a new query, resize debounce, destroy).
 - `src/clients/web/ReelRoulette.WebUI/src/library/libraryPlayModel.ts`
   - play-item error status mapping and request identity helpers for library tile activation.
 - `src/clients/web/ReelRoulette.WebUI/src/library/currentItemState.ts`

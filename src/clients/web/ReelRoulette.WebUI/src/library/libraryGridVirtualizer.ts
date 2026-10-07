@@ -156,3 +156,17 @@ export function createVirtualizerState(
 export function countVisibleRows(window: VisibleGridWindow): number {
   return Math.max(0, window.endExclusive - window.firstVisibleRow);
 }
+
+/** Height from the top of the row holding the first of the last `itemCount` items to the end of the grid. */
+export function measureTrailingItemsHeight(state: LibraryGridVirtualizerState, itemCount: number): number {
+  const { rows, offsetIndex } = state;
+  if (rows.length === 0 || itemCount <= 0) {
+    return 0;
+  }
+  const firstItem = Math.max(0, rows[rows.length - 1]!.endItemIndexExclusive - itemCount);
+  let row = rows.length - 1;
+  while (row > 0 && rows[row - 1]!.endItemIndexExclusive > firstItem) {
+    row--;
+  }
+  return offsetIndex.totalExtentHeight - (offsetIndex.rowTopOffsets[row] ?? 0);
+}

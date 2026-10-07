@@ -1240,7 +1240,7 @@ export function startApp(config) {
     if (!state.libraryOverlayOpen) {
       return;
     }
-    void librarySession.considerFill(coverage.extentHeight, coverage.viewportBottom);
+    void librarySession.considerFill(coverage.extentHeight, coverage.viewportBottom, coverage.lastPageHeight);
   }
 
   function commitLibraryQuery() {
@@ -1293,7 +1293,7 @@ export function startApp(config) {
       }
       const coverage = libraryGridController?.measureCoverage();
       if (coverage) {
-        void librarySession.considerFill(coverage.extentHeight, coverage.viewportBottom);
+        void librarySession.considerFill(coverage.extentHeight, coverage.viewportBottom, coverage.lastPageHeight);
       }
     });
   }

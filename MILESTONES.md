@@ -928,19 +928,24 @@ Last milestone completed: M11f
 ### P31 - WebUI Grid Rendering
 
 - **Status**: ⏳ Planned
-- **Goal**: The WebUI library grid updates only the rows and tiles that change.
+- **Goal**: The WebUI library grid updates only the rows and tiles that change, and dragging the scrollbar reaches any part of the results without loading every page before it.
 - **Scope**:
-  - Planned for v0.15.0, last in the release; can be cut if the release runs long. Depends on: WebUI Responsive Layout and Panels, so it is built in the Preact library panel, which the side panel layout resizes often.
+  - Planned for v0.15.0, last in the release. Depends on: WebUI Responsive Layout and Panels, so it is built in the Preact library panel, which the side panel layout resizes often.
   - Found by the efficiency and divergence report from code reading, not measured: each change of visible rows replaces the rows' HTML, which recreates every tile image. Each patch and each appended page rebuilds the layout and virtualizer for every loaded item, so loading a window page by page costs time that grows with the square of its size.
+  - Seen on an iPad with the WebUI installed as an app: the grid flickers dark each time it re-renders its visible rows while scrolling, about seven times for a screen-height drag in landscape with three to four rows on screen. Desktop browsers and Firefox on Android are fine. Each re-render rebuilds every visible row's HTML, including images that were already showing.
   - Keep row elements that stay visible, add and remove only the rows that enter or leave, update a patched tile in place, and extend the layout for appended items instead of rebuilding it.
-  - Grid layout, scrolling, focus, and tile behavior stay as they are.
+  - Size the grid to the full result count with placeholder tiles, and load the page at the scroll position, so dragging the scrollbar far down works without scrolling through every page.
+  - Apart from placeholder tiles and loading the page at the scroll position, grid layout, scrolling, focus, and tile behavior stay as they are.
+  - Add a Release Specific checklist item: "On an iPad with the WebUI installed as an app, scrolling the library grid a screen height in landscape shows no flicker."
 - **Acceptance criteria**:
   - Scrolling keeps the image elements of rows that stay visible.
   - A favorite, blacklist, playback, or tag patch updates only the affected tile.
   - Appending a page does not lay out the already-loaded items again.
   - Layout results match the current layout for the same items and width.
+  - Dragging the scrollbar far down loads the page at that position without loading the pages before it.
+  - Scrolling the grid on an iPad with the WebUI installed as an app shows no flicker.
 - **Verification evidence**:
-  - Completion evidence must include WebUI tests for row reuse, tile patching, and append layout, before-and-after timings for rendering a large window in a browser, and `npm run verify`.
+  - Completion evidence must include WebUI tests for row reuse, tile patching, append layout, and loading the page at a scrollbar position, before-and-after timings for rendering a large window in a browser, and `npm run verify`.
 
 ---
 
@@ -1214,7 +1219,6 @@ Last milestone completed: M11f
 - **Goal**: The WebUI status line shows one stable message per situation.
 - **Scope**:
   - Planned for v0.15.0. Depends on: WebUI Responsive Layout and Panels, and Catalog Open and Backup Safety, whose 503 message the status line shows.
-  - Can be cut from the release if it runs long; Testing Suite Overhaul is then cut with it.
   - Moved here from v0.14.0 when the desktop was frozen. The desktop half and the shared fixture are dropped, and the status line moves with the panel layout.
   - Observed in the v0.13.0 manual regression pass: with the server stopped, the WebUI shows "library load failed: HTTP 503" only briefly before "SSE reconnecting...". The desktop alternates between "core runtime unavailable" and "core runtime is required to browse the library", and stays as it is.
   - Define one precedence rule for which message wins when several apply, so the status line never alternates.
@@ -1234,7 +1238,7 @@ Last milestone completed: M11f
 - **Goal**: The testing suite produces clear results that match the WebUI's connection and status handling.
 - **Scope**:
   - Planned for v0.15.0. Depends on: WebUI Status Line Overhaul, Server Shutdown Fixes, and Admin Section in WebUI Settings.
-  - The status line overhaul defines the messages these scenarios check, the shutdown fixes change how event streams close, and the suite runs from the admin section. Can be cut from the release if it runs long.
+  - The status line overhaul defines the messages these scenarios check, the shutdown fixes change how event streams close, and the suite runs from the admin section.
   - Moved here from v0.14.0 when the desktop was frozen; the desktop's expected messages are dropped.
   - The suite predates the current client connection and status handling and no longer produces clear results. Observed in the v0.13.0 manual regression pass: with the API unavailable, the WebUI shows "library load failed: HTTP 503" only briefly before settling on "SSE reconnecting...", and SSE disconnect behaves inconsistently and may need redesigning.
   - Redesign the scenarios against current WebUI behavior, define the expected WebUI message for each, and verify the WebUI's behavior as part of the suite.
@@ -1274,7 +1278,7 @@ Last milestone completed: M11f
 - **Status**: ⏳ Planned
 - **Goal**: The last desktop build tells users the desktop app is retired and points them to the WebUI.
 - **Scope**:
-  - Planned for v0.15.1, last in the release. Can be cut if the release runs long. The only desktop change outside bug fixes.
+  - Planned for v0.15.1, last in the release. The only desktop change outside bug fixes.
   - After Desktop Client Removal no desktop update is published, so installed desktops stay on their last version (inferred: the Velopack desktop feed stops getting releases). Later servers stop working with it, starting with the accounts release, which removes pairing.
   - On start, show a notice once per installed version: the desktop app is retired; use the WebUI. It offers the existing Open Web UI action. The wording needs approval.
   - Add a Release Specific checklist item: "After updating, the desktop shows the retirement notice once, and Open Web UI opens the WebUI."

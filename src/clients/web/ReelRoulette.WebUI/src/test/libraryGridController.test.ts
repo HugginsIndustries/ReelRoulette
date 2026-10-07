@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { createLibraryGridController } from "../library/libraryGridController";
 import type { LibraryProjectionItem } from "../library/libraryProjectionModel";
+import { LIBRARY_QUERY_WINDOW_SIZE } from "../library/libraryQuerySession";
 
 class FakeElement {
   className = "";
@@ -201,6 +202,30 @@ describe("libraryGridController empty scroll reset", () => {
     grid.setBrowseContent({ visibleItems: [], searchQuery: "", resetScroll: false });
 
     expect(scroll.scrollTop).toBe(400);
+    grid.destroy();
+  });
+});
+
+describe("libraryGridController coverage", () => {
+  afterEach(() => {
+    restoreDocument();
+  });
+
+  it("reports the height of the rows holding the last page of loaded tiles", () => {
+    installDocument();
+    const container = new FakeElement();
+    container.layoutWidth = 800;
+    const grid = createLibraryGridController(container as unknown as HTMLElement, "http://localhost");
+    const tiles = (count: number) => Array.from({ length: count }, (_, index) => item(`t-${index}`));
+
+    grid.setBrowseContent({ visibleItems: tiles(LIBRARY_QUERY_WINDOW_SIZE), searchQuery: "" });
+    const onePage = grid.measureCoverage();
+    expect(onePage?.lastPageHeight).toBe(onePage?.extentHeight);
+
+    grid.setBrowseContent({ visibleItems: tiles(2 * LIBRARY_QUERY_WINDOW_SIZE), searchQuery: "", resetScroll: false });
+    const twoPages = grid.measureCoverage();
+    expect(twoPages?.extentHeight).toBeGreaterThan(0);
+    expect(twoPages?.lastPageHeight).toBeCloseTo((twoPages?.extentHeight ?? 0) / 2);
     grid.destroy();
   });
 });

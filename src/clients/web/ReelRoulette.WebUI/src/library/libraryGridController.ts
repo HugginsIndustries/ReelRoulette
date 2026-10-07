@@ -4,9 +4,11 @@ import {
   countVisibleRows,
   createVirtualizerState,
   findVisibleRowRange,
+  measureTrailingItemsHeight,
   type LibraryGridVirtualizerState
 } from "./libraryGridVirtualizer";
 import type { LibraryProjectionItem } from "./libraryProjectionModel";
+import { LIBRARY_QUERY_WINDOW_SIZE } from "./libraryQuerySession";
 
 const RESIZE_DEBOUNCE_MS = 90;
 const MIN_FALLBACK_WIDTH = 280;
@@ -15,6 +17,8 @@ export interface LibraryGridCoverage {
   scrollTop: number;
   viewportBottom: number;
   extentHeight: number;
+  /** Height of the rows holding the last page of loaded tiles. */
+  lastPageHeight: number;
 }
 
 export interface LibraryGridController {
@@ -161,7 +165,8 @@ export function createLibraryGridController(
     return {
       scrollTop: scrollEl.scrollTop,
       viewportBottom: scrollEl.scrollTop + Math.max(0, scrollEl.clientHeight),
-      extentHeight: virtualizerState.offsetIndex.totalExtentHeight
+      extentHeight: virtualizerState.offsetIndex.totalExtentHeight,
+      lastPageHeight: measureTrailingItemsHeight(virtualizerState, LIBRARY_QUERY_WINDOW_SIZE)
     };
   }
 

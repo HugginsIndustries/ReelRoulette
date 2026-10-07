@@ -17,7 +17,6 @@ For each finding, check whether an existing milestone or backlog item already co
 - Keep contract changes (OpenAPI and generated client types) in their own slices.
 - Group related small items into one milestone with slices, each with its own acceptance criteria, rather than many tiny milestones or one milestone with many unrelated slices.
 - Note dependencies and order: if one item must land before another, say so in both.
-- Mark items that can be cut if a release runs long.
 
 ## Writing entries
 
